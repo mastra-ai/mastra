@@ -11,7 +11,7 @@ import {
   raisedControlSurfaceStyle,
   sharedFormElementDisabledStyle,
 } from '@/ds/primitives/form-element';
-import { controlStateColorTransition, focusRingOffset } from '@/ds/primitives/transitions';
+import { controlStateColorTransition, focusRing, focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 // Text-mode buttons are pills. Each size sets `--button-px`, the label's side padding. The
@@ -95,6 +95,13 @@ export const buttonVariants = cva(
         ),
         ghost: cn(
           'border border-transparent bg-transparent text-muted-foreground not-disabled:hover:bg-fill-subtle not-disabled:hover:text-foreground not-disabled:active:bg-fill',
+          'disabled:bg-transparent aria-disabled:bg-transparent',
+        ),
+        // A persistent neutral fill for selected controls. Match default's borderless
+        // box so switching between the raised and subtle surfaces keeps labels in place.
+        subtle: cn(
+          'border-0 bg-fill-hover text-foreground not-disabled:hover:bg-fill-hover not-disabled:active:bg-fill',
+          focusRing,
           'disabled:bg-transparent aria-disabled:bg-transparent',
         ),
         link: cn(
