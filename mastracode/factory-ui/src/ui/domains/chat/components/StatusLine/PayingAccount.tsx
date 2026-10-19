@@ -1,5 +1,7 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Building2, User } from 'lucide-react';
 
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
@@ -11,9 +13,9 @@ import { credentialName } from '../../services/reply-credential';
 import type { ThreadOwner } from '../../services/reply-credential';
 
 function PayerMark({ payer }: { payer: Partial<ThreadOwner> | undefined }) {
-  if (!payer) return <Building2 />;
-  if (!payer.name) return <User />;
-  return <Avatar name={payer.name} src={payer.avatarUrl} size="xs" />;
+  if (!payer) return <Building2 className="size-icon-sm" />;
+  if (!payer.name) return <User className="size-icon-sm" />;
+  return <Avatar name={payer.name} src={payer.avatarUrl} size="sm" />;
 }
 
 export function PayingAccount() {
@@ -31,16 +33,25 @@ export function PayingAccount() {
       ? undefined
       : (owner ?? { id: viewer?.userId, name: viewer?.name, avatarUrl: viewer?.avatarUrl });
   const credentialLabel = modelsQuery.data?.find(model => model.id === activeModelId)?.credentialLabel;
+  const name = credentialName(credentialLabel ?? 'account', payer?.id, owner, viewer?.userId);
 
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-sm"
-      tooltip={credentialName(credentialLabel ?? 'account', payer?.id, owner, viewer?.userId)}
-      className="cursor-help"
-    >
-      <PayerMark payer={payer} />
-    </Button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label={name}
+            className={cn(
+              'flex size-avatar-sm shrink-0 cursor-help items-center justify-center rounded-full text-muted-foreground',
+              focusRing,
+            )}
+          />
+        }
+      >
+        <PayerMark payer={payer} />
+      </TooltipTrigger>
+      <TooltipContent>{name}</TooltipContent>
+    </Tooltip>
   );
 }
