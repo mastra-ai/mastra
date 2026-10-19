@@ -35,9 +35,9 @@
     "posttest": "docker compose down -v && docker compose -f docker-compose.vnext.yaml down -v",
     "posttest:perf": "docker compose -f docker-compose.perf.yaml down -v",
     "posttest:pooler": "docker compose -f docker-compose.pooler.yaml down -v",
-    "pretest:watch": "docker compose up -d",
+    "pretest:watch": "docker compose up -d && docker compose -f docker-compose.vnext.yaml up -d timescale",
     "test:watch": "vitest watch",
-    "posttest:watch": "docker compose down -v",
+    "posttest:watch": "docker compose down -v && docker compose -f docker-compose.vnext.yaml down -v",
     "lint": "oxlint --type-aware .",
     "lint:fix": "oxlint --type-aware --fix ."
   },
