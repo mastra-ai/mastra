@@ -43,6 +43,7 @@ export interface ChatChannelRenderContext {
   /** Buffered-text behavior on abort. Absent means `'flush'` (driver-level default). */
   onAbort?: 'flush' | 'discard';
   approvalContext?: { toolCallId: string; messageId: string };
+  linkButtons: boolean;
 }
 
 /** Key the processor reads off `requestContext` to locate its render deps. */
@@ -277,6 +278,7 @@ export class ChatChannelOutputProcessor {
             typingGate: render.typingGate,
             formatError: render.formatError,
             textFormat: render.textFormat,
+            linkButtons: render.linkButtons,
           })
         : runStaticDriver({
             stream: wrapped,
@@ -292,6 +294,7 @@ export class ChatChannelOutputProcessor {
             formatError: render.formatError,
             textFormat: render.textFormat,
             onAbort: render.onAbort,
+            linkButtons: render.linkButtons,
           })
     ).catch(err => {
       // Prevent unhandled rejection if the driver fails before a terminal chunk
