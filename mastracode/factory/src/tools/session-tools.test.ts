@@ -371,7 +371,7 @@ describe('factory_switch_session_model with stored credentials', () => {
     { id: 'amazon-bedrock/claude-sonnet', provider: 'amazon-bedrock', modelName: 'claude-sonnet', hasApiKey: true },
   ];
 
-  async function tenantSetup(modelScope: 'user' | 'factory', deploymentProviders?: ReadonlySet<string>) {
+  async function tenantSetup(modelScope: 'user' | 'factory' | 'hybrid', deploymentProviders?: ReadonlySet<string>) {
     const env = await setup('org', { tenantCredentials: true, deploymentProviders });
     env.controller.listAvailableModels.mockResolvedValue(serverModels);
     await env.seed.projects.update({ orgId: 'org-1', id: env.project.id, input: { modelScope } });
@@ -427,6 +427,40 @@ describe('factory_switch_session_model with stored credentials', () => {
     });
     await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-opus-5-5' })).rejects.toThrow(
       "Model anthropic/claude-opus-5-5 exists, but this session's credential scope (Factory) has no credential for its provider. Models available to it: acme/acme-1, deepseek/deepseek-flash.",
+    );
+  });
+
+  it('resolves the credential scope from the target session, not from a calling work-item run', async () => {
+    const env = await tenantSetup('hybrid');
+    // The caller is a work-item run, which a hybrid Factory bills to the Factory credentials.
+    await env.seed.workItems.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: env.project.id,
+      workItem: {
+        input: {
+          title: 'Task',
+          stages: ['intake'],
+          sessions: {},
+          metadata: {},
+          externalSource: { integrationId: 'github', type: 'issue', externalId: '1' },
+        },
+      },
+      role: 'work',
+      session: { sessionId: env.scope.sessionId, branch: 'user/session-parent-session', threadId: env.scope.threadId },
+      resourceId: env.scope.sessionId,
+      kickoffKey: 'run-1',
+      kickoffMessage: null,
+    });
+
+    // The target is an unbound side session, so it runs on its owner credentials.
+    await expect(
+      env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-opus-5-5' }),
+    ).resolves.toMatchObject({
+      modelId: 'anthropic/claude-opus-5-5',
+    });
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'deepseek/deepseek-flash' })).rejects.toThrow(
+      "this session's credential scope (session owner) has no credential for its provider",
     );
   });
 
