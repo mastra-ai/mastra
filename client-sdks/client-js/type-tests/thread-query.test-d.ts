@@ -1,7 +1,7 @@
 import type { QueryThreadsResult, ThreadQueryResponse } from '@mastra/core/storage';
 import { expectTypeOf, test } from 'vitest';
-import type { MastraClient } from '../client';
-import type { Observability } from './observability';
+import type { MastraClient } from '../src/client';
+import type { Observability } from '../src/resources/observability';
 
 declare const client: MastraClient;
 declare const observability: Observability;
