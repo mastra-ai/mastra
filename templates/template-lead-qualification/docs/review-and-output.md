@@ -2,7 +2,13 @@
 
 Confirmed Qualified, Nurture and Disqualified outcomes apply automatically. Score alone cannot authorize output: the stored facts, resolved identity, captured policy and deterministic classification must agree. Missing buying-intent evidence remains uncertain; Nurture requires supported absence of a recent signal, such as a verified old inquiry. An automatic result has decision source Automatic and review status Not required, without a human approval record.
 
-`GET /lead-qualification/runs/:runId` exposes `business.state` separately from intake status. `intake_received` means the association and research step completed; it can coexist with `awaiting_review`. The business record contains its packet, immutable decision and exact output authorization. Local destination fields live in the operational database, alongside the output journal. Attio mapping, provisioning and connected review callbacks are not included.
+`GET /lead-qualification/runs/:runId` exposes `business.state` separately from intake status. `intake_received` means the association and research step completed; it can coexist with `awaiting_review`. The business record contains its packet, immutable decision and exact output authorization. Local destination fields and readable text/Markdown reports live in the operational database, alongside the output journal. The optional [Attio integration](attio.md) uses the same lifecycle with signed callbacks and exact CRM projections.
+
+## Read local reports
+
+After publication or final application, `GET /lead-qualification/runs/:runId/output` returns `text/markdown`; add `?format=text` for `text/plain`. Production requires the same bearer token as run reads. Reports contain outcome, score, readable findings, sources, review information and next actions. Both representations are projected by LocalOutputProvider and persisted atomically with the operation marker; the shared service verifies exact read-back against its journal and authorization.
+
+An unpublished/pending run returns 404. Unsupported formats return 400. Changed output or a destination now belonging to a later cycle returns 409. An old run URL never returns a newer cycle's report; inspect immutable assessment/history through the run API. Existing unversioned local patches retain their original structured projection and do not acquire reports during recovery.
 
 ## Decide a published review
 
@@ -26,7 +32,7 @@ In Studio, open **Tools → reviewLead**. Copy the following values from `busine
 
 Replace the example references and digest with actual packet values. A decision is `approved`, `rejected` or `changes_requested`. An uncertain classification requires an explicit final override (`qualified`, `nurture` or `disqualified`) and a nonempty reason. For a stricter routing policy that sends an otherwise confirmed classification to review, approval can retain that classification without an override. Every override preserves the computed score and discovered facts. Unresolved company identity blocks final output; correct the input and request requalification instead.
 
-The trusted local operator is recorded as `local-operator`; caller-supplied reviewer identity is rejected. Local mode trusts the person with loopback access, including Studio. Production requires the configured bearer token for both this endpoint and native Studio/tool APIs. It identifies the configured operator, rather than providing individual user accounts. Native workflow resume data cannot create a decision or authorize output.
+The trusted operator for an operator-review output is recorded as `local-operator`; caller-supplied reviewer identity is rejected. Local mode trusts the person with loopback access, including Studio. Production requires the configured bearer token for both this endpoint and native Studio/tool APIs. It identifies the configured operator, rather than providing individual user accounts. Native workflow resume data cannot create a decision or authorize output.
 
 The first valid terminal decision wins atomically. An identical retry returns the same record; another decision, stale revision, stale digest, unpublished packet or changed destination receives HTTP 409. Invalid shapes receive 400, oversized bodies 413 and a wrong content type 415. Production authentication failures receive 401. Persistence/provider unavailability can return 503. Final application is asynchronous; inspect the run response after a successful decision.
 
@@ -48,8 +54,14 @@ Duplicate deliveries return the new cycle's existing run. Delayed deliveries of 
 
 ## Add an output adapter
 
-Implement `OutputProvider` in `src/mastra/providers/output.ts` and register its stable ID in the application provider map. `read` returns current fields plus the last operation marker; `apply` takes the existing destination identity, stable operation ID, exact owned patch and expected fields. Return authoritative read-back data and preserve all unowned values. A provider without atomic compare-and-set must document its read/write race and reconciliation guarantees. Never create deals, send messages or delete records in this boundary.
+Implement the contract from `src/mastra/providers/output.ts` in a concrete provider module and pass it through `createApplicationRuntime({ output: [provider], config })`, with its stable ID in `config.source.destinationProviderId`. See [CRM and lead-source adapters](crm-adapters.md) for the exact interfaces and registration. `read` returns current fields plus the last operation marker; `apply` takes the existing destination identity, stable operation ID, exact owned patch and expected fields. Return authoritative read-back data and preserve all unowned values. A provider without atomic compare-and-set must document its read/write race and reconciliation guarantees. Never create deals, send messages or delete records in this boundary.
 
 Customization prompt:
 
 > Add [destination] through OutputProvider. Inspect review schemas, persisted authorization and the outbound journal first. Map only integration-owned fields, retain the operation marker, verify destination identity and expected stage, and reconcile uncertain writes before retry. Preserve local mode and the same review contract. Add controlled functional tests for missing records, competing edits, lost responses, restart, duplicate decisions and unowned fields. Document the provider's atomicity limits and configuration; do not provision resources or add outreach implicitly.
+
+## Attio review
+
+The optional [Attio integration](attio.md) takes human decisions from authoritative Stage updates. A final Stage resolves a pending review and updates the readable Summary and protected Metadata; Justification is optional. Legacy mappings retain their separate output fields. Internal patches project onto exact CRM fields, and accepted command state is captured atomically before outbound writes. Studio and the operator decision API accept outputs configured for operator review and retain their reason requirement; external-review outputs such as Attio require verified connected commands.
+
+Connected packets use readable, versioned plain text while retaining structured assessments and exact output comparisons. A human Needs review transition reopens manual review on the same immutable assessment with a new packet/revision and append-only history. Triage requests a fresh linked assessment. Later documentation edits do not revise a closed decision. See [Attio review](attio.md#review-by-moving-stage) for native field behavior and compatibility with pending older packets.

@@ -4,15 +4,16 @@ import type { ClientRequest, IncomingMessage } from 'node:http';
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { qualificationConfig, qualificationConfigSchema } from '../../src/mastra/config/qualification';
-import { OpenAIEvidenceProvider } from '../../src/mastra/providers/evidence';
 import type { EvidenceProvider } from '../../src/mastra/providers/evidence';
+import { LocalOutputProvider } from '../../src/mastra/providers/local/output';
+import { digestValue } from '../../src/mastra/review/contracts';
 import { PageRetriever, publicHttpsTransport } from '../../src/mastra/research/page-retrieval';
 import type { PageTransport } from '../../src/mastra/research/page-retrieval';
-import type { Assessment, Fact } from '../../src/mastra/research/contracts';
-import { candidateSchema } from '../../src/mastra/research/contracts';
+import type { Assessment, Evidence, Fact } from '../../src/mastra/research/contracts';
+import { assessmentSchema, candidateSchema, researchRoundSchema } from '../../src/mastra/research/contracts';
 import { scoreCompany } from '../../src/mastra/tools/score-company';
 import { event, harness } from '../support/application';
-import { controlledResearch, pageResponse, recordProvider, proposal } from '../support/research';
+import { controlledHarness, controlledResearch, pageResponse, recordProvider, proposal } from '../support/research';
 
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -25,13 +26,8 @@ async function researchHarness(
   research: Partial<typeof qualificationConfig.research> = {},
   config = qualificationConfig,
 ) {
-  vi.stubEnv('OPENAI_API_KEY', 'controlled-functional-key');
-  const controlled = controlledResearch();
-  vi.stubGlobal('fetch', controlled.fetch);
-  const app = await harness({
+  const { app, controlled } = await controlledHarness({
     qualification: { ...config, research: { ...config.research, ...research } },
-    evidence: [new OpenAIEvidenceProvider()],
-    pages: new PageRetriever(controlled.transport),
   });
   cleanup.push(() => app.close());
   await app.mastra.startWorkers();
@@ -102,6 +98,104 @@ function accepted(value: Fact['value']): Fact {
 }
 
 describe('sourced company qualification', () => {
+  it('allows_automatic_nurture_after_inquiry_only_ambiguity_but_keeps_research_conflicts_sticky', async () => {
+    for (const sourceConflict of [false, true]) {
+      const config = structuredClone(qualificationConfig);
+      config.sources.providerIds = ['records'];
+      const provider = recordProvider('records', context =>
+        context.round.index === 0
+          ? sourceConflict
+            ? [
+                {
+                  id: 'other-company',
+                  source: 'https://example.com/identity',
+                  excerpt: 'Two unrelated companies share this brand.',
+                },
+              ]
+            : []
+          : [
+              {
+                id: 'about',
+                source: 'https://example.com/about',
+                excerpt: 'Example Company sells software. We have 40 employees. Headquarters: United States.',
+              },
+            ],
+      );
+      provider.extract.mockImplementation(async (_branch, evidence, context) => {
+        if (context.round.index === 0)
+          return { companyName: null, identityAmbiguous: true, candidates: [], intentCoverageComplete: false };
+        const source = evidence.find(item => item.source === 'https://example.com/about')!;
+        return {
+          companyName: 'Example Company',
+          identityAmbiguous: false,
+          intentCoverageComplete: false,
+          candidates: [
+            proposal('businessModel', 'b2b_saas', 'sells software', source.id),
+            proposal('employeeCount', { min: 40, max: 40 }, '40 employees', source.id),
+            proposal('headquartersCountry', 'US', 'Headquarters: United States', source.id),
+          ],
+        };
+      });
+      const app = await harness({ qualification: config, evidence: [provider], dispatch: true });
+      cleanup.push(() => app.close());
+      const response = await app.post(
+        event(`inquiry-only-identity-${sourceConflict}`, {
+          domain: 'example.com',
+          inquiry: {
+            type: 'demo_request',
+            occurredAt: '2025-01-01T00:00:00Z',
+            text: 'Please demonstrate this product to our buyers.',
+          },
+        }),
+      );
+      const { statusUrl, runId } = await response.json();
+      await vi.waitFor(
+        async () => {
+          const read = await app.http.request(statusUrl);
+          expect(read.status).toBe(200);
+          const body = await read.json();
+          const assessment = body.qualification?.assessment as Assessment;
+          expect(assessment?.facts.businessModel.disposition).toBe('accepted');
+          expect(assessment.facts.employeeCount.disposition).toBe('accepted');
+          expect(assessment.facts.headquartersCountry.disposition).toBe('accepted');
+          expect(assessment.identity.status).toBe(sourceConflict ? 'ambiguous' : 'resolved');
+          expect(assessment.result).toMatchObject({
+            classification: sourceConflict ? 'needs_review' : 'nurture',
+            requiresReview: sourceConflict,
+            score: sourceConflict ? 0 : 70,
+          });
+          expect(body.business).toMatchObject({
+            state: sourceConflict ? 'awaiting_review' : 'applied',
+            decision: null,
+          });
+          expect(body.business.authorization?.kind ?? null).toBe(sourceConflict ? null : 'policy');
+          expect(body.business.authorization?.outcome ?? null).toBe(sourceConflict ? null : 'nurture');
+        },
+        { timeout: 20_000 },
+      );
+      const initial = (await app.store.qualifications.round(runId, 0))!;
+      expect(initial.result.evidence).toHaveLength(sourceConflict ? 1 : 0);
+      expect(initial.result.identityAmbiguous).toBe(sourceConflict);
+      expect((await app.store.qualifications.round(runId, 1))!.result.identityAmbiguous).toBe(false);
+      expect(provider.extract).toHaveBeenCalledTimes(2);
+      const operation = await app.store.reviews.operation(runId, 'final');
+      const destination = (await new LocalOutputProvider(app.store.client).read({
+        providerId: 'local',
+        reference: `inquiry-only-identity-${sourceConflict}`,
+      }))!;
+      expect(destination.fields).toMatchObject({
+        classification: sourceConflict ? 'needs_review' : 'nurture',
+        decisionSource: sourceConflict ? null : 'Automatic',
+        reviewStatus: sourceConflict ? 'Awaiting review' : 'Not required',
+      });
+      expect(operation?.state ?? null).toBe(sourceConflict ? null : 'applied');
+      expect(operation ? destination.marker === operation.id : null).toBe(sourceConflict ? null : true);
+      expect((await app.reviews.read(runId))!.authorization?.patchDigest ?? null).toBe(
+        operation ? digestValue(operation.patch) : null,
+      );
+    }
+  });
+
   it('preserves_independent_supported_facts_after_rejected_restatement_with_actual_round_context', async () => {
     const config = structuredClone(qualificationConfig);
     const { app, controlled } = await researchHarness({}, config);
@@ -166,18 +260,58 @@ describe('sourced company qualification', () => {
 
   it('keeps_rejected_only_and_stale_firmographics_uncertain_with_supported_aggregation', async () => {
     const { app, controlled } = await researchHarness();
+    const workforce = 'Sellsy, c’est une équipe de plus de 150 collaborateurs,';
+    const headquarters = 'dont le siège social est situé 22 rue Alexander Fleming, 17000 La Rochelle, France';
     for (const scenario of [
       { event: 'rejected-only-supported-mode', config: { unsupported: true }, disposition: 'unsupported' },
+      {
+        event: 'retrieval-is-not-fact-date',
+        config: { asOf: (source: Evidence) => source.retrievedAt },
+        disposition: 'stale',
+      },
+      { event: 'undated-open-workforce', config: { asOf: null }, disposition: 'accepted' },
       {
         event: 'stale-supported-mode',
         config: { asOf: new Date(Date.now() - 31 * 86_400_000).toISOString() },
         disposition: 'stale',
       },
+      {
+        event: 'future-fact-date',
+        config: { asOf: new Date(Date.now() + 86_400_000).toISOString() },
+        disposition: 'stale',
+      },
     ]) {
-      controlled.setScenario(scenario.config);
+      controlled.setScenario({
+        employees: { min: 150, max: null },
+        employeeQuote: workforce,
+        country: 'FR',
+        countryQuote: headquarters,
+        ...scenario.config,
+      });
+      vi.mocked(controlled.transport.request).mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 5));
+        return pageResponse(
+          `Example sells subscription cloud software to businesses. ${workforce} ${headquarters}. ${typeof scenario.config.asOf === 'string' ? `These facts apply as of ${scenario.config.asOf}.` : ''}`,
+        );
+      });
       const assessment = await submit(app, scenario.event, true);
-      expect(assessment.facts.businessModel.disposition).toBe(scenario.disposition);
+      for (const attribute of ['businessModel', 'employeeCount', 'headquartersCountry'] as const)
+        expect(assessment.facts[attribute].disposition).toBe(scenario.disposition);
+      const undated = scenario.disposition === 'accepted';
+      expect(assessment.facts.employeeCount.value).toEqual(undated ? { min: 150, max: null } : null);
+      expect(assessment.facts.headquartersCountry.value).toBe(undated ? 'FR' : null);
+      expect(assessment.result.contributions.find(rule => rule.rule === 'employeeCount')!.state).toBe('unknown');
       expect(assessment.result.classification).toBe('needs_review');
+      const round = (await app.store.qualifications.round(assessment.runId, 0))!.result;
+      expect(round.candidates).toHaveLength(scenario.disposition === 'unsupported' ? 0 : 3);
+      for (const candidate of round.candidates) {
+        const source = round.evidence.find(item => item.id === candidate.evidenceId)!;
+        expect(source.publishedAt).toBeNull();
+        expect(Date.parse(source.retrievedAt)).toBeGreaterThan(Date.parse(assessment.snapshot.assessmentTime));
+        expect(candidate.asOf).toBe(
+          typeof scenario.config.asOf === 'function' ? source.retrievedAt : (scenario.config.asOf ?? null),
+        );
+      }
     }
   });
 
@@ -318,21 +452,45 @@ describe('sourced company qualification', () => {
     config.research.targeted.order.unshift('buyingIntent');
     const { app, controlled } = await researchHarness({}, config);
     controlled.setScenario({
+      roundCitations: {
+        headquartersCountry: [
+          'https://off-policy.example.org/location',
+          'https://example.com/company/location-details',
+        ],
+        employeeCount: ['https://support.example.com/en/team-management-settings'],
+      },
       roundSources: {
         businessModel: [
           'https://off-policy.example.org/company',
           'https://directory.example.org/product',
           'https://example.com/pricing',
         ],
-        employeeCount: ['https://example.com/blog', 'https://example.com/team'],
-        headquartersCountry: ['https://example.com/about'],
+        employeeCount: [
+          'https://support.example.com/en/team-management-settings',
+          'https://docs.example.com/about-your-team',
+          'https://example.com/podcast/company-size-of-customers',
+          'https://example.com/customers/team',
+          'https://example.com/categories/company',
+          'https://example.com/blog/company-size/201-1000-employees/',
+          'https://example.com/careers/jobs/software-engineer',
+          'https://example.com/blog',
+          'https://example.com/team',
+          'https://career.example.com/en',
+        ],
+        headquartersCountry: [
+          'https://help.example.com/about',
+          'https://example.com/customer-stories/company',
+          'https://example.com/about',
+        ],
         buyingIntent: ['https://example.com/demo'],
       },
     });
     const pages: Record<string, string> = {
       '/pricing': 'Example sells subscription cloud software to businesses.',
+      '/en': 'Our company has 40 employees.',
       '/team': 'Our company has 40 employees.',
       '/about': 'Headquarters: United States',
+      '/company/location-details': 'Headquarters: United States',
     };
     vi.mocked(controlled.transport.request).mockImplementation(async url =>
       pageResponse(pages[url.pathname] ?? 'A marketing demo offer is not buying intent.'),
@@ -341,16 +499,29 @@ describe('sourced company qualification', () => {
     expect(assessment.result).toMatchObject({ classification: 'qualified', score: 100 });
     expect(vi.mocked(controlled.transport.request).mock.calls.map(([url]) => url.href)).toEqual([
       'https://example.com/pricing',
-      'https://example.com/team',
-      'https://example.com/about',
+      'https://career.example.com/en',
+      'https://example.com/company/location-details',
     ]);
     const searches = controlled.requests.filter(request => (request.tools as unknown[])?.length);
     const data = searches.map(request => providerInput(request));
     expect(data.map(item => item.attribute)).toEqual(['businessModel', 'employeeCount', 'headquartersCountry']);
-    expect(data.every(item => item.year === new Date(assessment.snapshot.assessmentTime).getUTCFullYear())).toBe(true);
+    expect(data[1].searchQuery).toContain('employee count');
+    expect(data[1].round.gap).toBe('unresolved');
+    expect(data[1].round.missingAttributes).toContain('employeeCount');
+    expect(data[1].round.supportedFacts.businessModel.value).toBe('b2b_saas');
+    expect(data[2].searchQuery).toContain('headquarters');
+    expect(data[2].searchQuery).toContain('registered office');
+    for (const item of data) {
+      expect(item.searchQuery).toContain('example.com');
+      expect(item.searchQuery).not.toMatch(/[()]|\bOR\b|site:|-(?:inurl|filetype):/);
+      expect(item.searchQuery).not.toContain(String(item.year));
+      expect(item.year).toBe(new Date(assessment.snapshot.assessmentTime).getUTCFullYear());
+    }
     expect(
-      (searches[0]!.tools as Array<{ filters: { allowed_domains: string[] } }>)[0]!.filters.allowed_domains,
-    ).toEqual(['example.com']);
+      searches.map(
+        search => (search.tools as Array<{ filters: { allowed_domains: string[] } }>)[0]!.filters.allowed_domains,
+      ),
+    ).toEqual([['example.com'], ['example.com', 'directory.example.org'], ['example.com', 'directory.example.org']]);
     expect(assessment.rounds?.map(round => [round.target, round.reason])).toEqual([
       ['buyingIntent', 'already_supported'],
       ['businessModel', 'completed'],
@@ -361,17 +532,77 @@ describe('sourced company qualification', () => {
     expect(
       assessment.rounds?.find(round => round.target === 'employeeCount' && round.reason === 'completed'),
     ).toMatchObject({
-      discoveredUrls: 2,
+      discoveredUrls: 10,
       retrievedPages: 1,
       extractedCandidates: 2,
       selectedCandidates: 2,
       acceptedCandidates: 2,
     });
     expect(assessment.failures.some(failure => failure.code === 'unapproved_source')).toBe(true);
+    expect((await app.store.qualifications.get(assessment.runId))!.budget).toMatchObject({
+      searchCalls: 3,
+      pageRequests: 3,
+    });
+    for (const [corporatePath, extension] of [
+      ['who-are-we', 'pdf'],
+      ['qui-sommes-nous', 'docx'],
+      ['quienes-somos', 'PNG'],
+    ] as const) {
+      const incompatibleUrl = `https://example.com/about/team.${extension}?download=1`;
+      controlled.setScenario({
+        roundCitations: {
+          employeeCount: [incompatibleUrl, 'https://example.com/support/team-tutorial'],
+          headquartersCountry: ['https://help.example.com/contact'],
+        },
+        roundSources: {
+          businessModel: ['https://example.com/pricing'],
+          employeeCount: [
+            incompatibleUrl,
+            'https://example.com/legal/about-company',
+            'https://example.com/privacy/team',
+            'https://example.com/blog/company-size/201-1000-employees/',
+            'https://example.com/careers/jobs/software-engineer',
+            'https://example.com/support/team-tutorial',
+            `https://example.com/${corporatePath}`,
+          ],
+          headquartersCountry: ['https://help.example.com/contact', 'https://example.com/legal/mentions-legales'],
+        },
+      });
+      vi.mocked(controlled.transport.request).mockImplementation(async url =>
+        pageResponse(
+          url.pathname === '/pricing'
+            ? 'Example sells subscription cloud software to businesses.'
+            : url.pathname.includes('legal')
+              ? 'Headquarters: United States'
+              : 'Our company has 40 employees.',
+        ),
+      );
+      const before = vi.mocked(controlled.transport.request).mock.calls.length;
+      const corporate = await submit(app, `targeted-corporate-${corporatePath}`, true);
+      expect(corporate.result.classification).toBe('qualified');
+      expect(
+        corporate.rounds.find(round => round.target === 'employeeCount' && round.reason === 'completed')!.urls,
+      ).toContainEqual({ url: incompatibleUrl.split('?')[0], outcome: 'unsupported_format' });
+      expect(corporate.failures.some(failure => failure.code === 'unsupported_source_format')).toBe(true);
+      expect(corporate.evidence.some(source => source.source.includes(`team.${extension}`))).toBe(false);
+      expect(
+        vi
+          .mocked(controlled.transport.request)
+          .mock.calls.slice(before)
+          .map(([url]) => url.href),
+      ).toEqual([
+        'https://example.com/pricing',
+        `https://example.com/${corporatePath}`,
+        'https://example.com/legal/mentions-legales',
+      ]);
+      expect((await app.store.qualifications.get(corporate.runId))!.budget).toMatchObject({
+        searchCalls: 3,
+        pageRequests: 3,
+      });
+    }
   });
 
   it('replays_saved_rounds_after_restart_without_repeating_paid_work', async () => {
-    vi.stubEnv('OPENAI_API_KEY', 'controlled-functional-key');
     const controlled = controlledResearch({
       rejectRedundantBusiness: true,
       roundSources: {
@@ -380,7 +611,6 @@ describe('sourced company qualification', () => {
         headquartersCountry: ['https://example.com/about'],
       },
     });
-    vi.stubGlobal('fetch', controlled.fetch);
     vi.mocked(controlled.transport.request).mockImplementation(async url =>
       pageResponse(
         url.pathname === '/pricing'
@@ -390,10 +620,10 @@ describe('sourced company qualification', () => {
             : 'Headquarters: United States',
       ),
     );
-    const app = await harness({
-      evidence: [new OpenAIEvidenceProvider()],
-      pages: new PageRetriever(controlled.transport),
-    });
+    const previous = structuredClone(qualificationConfig);
+    previous.policy.version = 'inbound-saas-v4';
+    previous.policy.rules.employeeCount.estimates = 'review';
+    const { app } = await controlledHarness({ qualification: previous }, controlled);
     cleanup.push(() => app.close());
     const { runId } = await (
       await app.post(
@@ -415,24 +645,27 @@ describe('sourced company qualification', () => {
     await expect(app.qualification.qualify(runId, (await app.store.get(runId))!.event)).rejects.toThrow(
       'Controlled interruption',
     );
+    const snapshot = (await app.store.qualifications.get(runId))!.snapshot;
     const checkpoint = await app.store.qualifications.round(runId, 0);
     expect(checkpoint?.diagnostic).toMatchObject({ target: 'businessModel', searchCalls: 1, pageRequests: 1 });
     const deadline = (await app.store.qualifications.get(runId))!.budget.deadlineAt;
     await app.close(false);
     const current = structuredClone(qualificationConfig);
-    current.policy.rules.employeeCount.estimates = 'accept';
-    const next = await harness({
-      directory: app.directory,
-      qualification: current,
-      evidence: [new OpenAIEvidenceProvider()],
-      pages: new PageRetriever(controlled.transport),
-    });
+    const { app: next } = await controlledHarness(
+      {
+        directory: app.directory,
+        qualification: current,
+      },
+      controlled,
+    );
     cleanup.push(() => next.close());
     await next.mastra.startWorkers();
     await vi.waitFor(async () => expect((await next.store.qualifications.get(runId))!.assessment).toBeTruthy(), {
       timeout: 20_000,
     });
     const stored = (await next.store.qualifications.get(runId))!;
+    expect(stored.snapshot).toEqual(snapshot);
+    expect(stored.snapshot.config.policy.version).toBe('inbound-saas-v4');
     expect(stored.snapshot.config.policy.rules.employeeCount.estimates).toBe('review');
     expect(stored.assessment!.facts.businessModel.disposition).toBe('accepted');
     expect(stored.assessment!.rejections.some(rejection => rejection.attribute === 'businessModel')).toBe(true);
@@ -481,17 +714,12 @@ describe('sourced company qualification', () => {
         name: 'open',
         value: { min: 190, max: null },
         quote: '190+',
-        inferred: false,
-        state: 'unknown',
-        disposition: 'accepted',
       },
       {
         name: 'open-excluded',
         value: { min: 501, max: null },
         quote: '501+',
-        inferred: false,
         state: 'mismatched',
-        disposition: 'accepted',
       },
       {
         name: 'estimate',
@@ -499,7 +727,6 @@ describe('sourced company qualification', () => {
         quote: 'about 200 employees',
         inferred: true,
         state: 'matched',
-        disposition: 'accepted',
       },
       {
         name: 'advisory',
@@ -507,25 +734,68 @@ describe('sourced company qualification', () => {
         quote: 'about 200 employees',
         inferred: true,
         review: true,
-        state: 'unknown',
-        disposition: 'accepted',
+      },
+      {
+        name: 'advisory-lower-cue',
+        value: { min: 150, max: 240 },
+        quote: '150+ employees',
+        inferred: true,
+        review: true,
+        rationale:
+          'Assuming a rounded workforce milestone and moderate unreported growth, 150–240 is a working estimate. The upper bound is uncertain, not a source-declared ceiling.',
+      },
+      {
+        name: 'advisory-roster',
+        value: { min: 30, max: 60 },
+        quote: 'Meet our team: 30 staff profiles across the main departments',
+        inferred: true,
+        review: true,
+        rationale:
+          'Assuming these distinct staff profiles are current and cover the main departments, 30–60 allows for unlisted colleagues. Completeness and the estimated ceiling remain uncertain.',
       },
       {
         name: 'crossing',
         value: { min: 10, max: 50 },
         quote: 'about 30 employees',
         inferred: true,
-        state: 'unknown',
-        disposition: 'accepted',
       },
       {
-        name: 'invented-upper',
+        name: 'icp-chosen-upper',
         value: { min: 190, max: 500 },
         quote: '190+',
         inferred: true,
         reject: true,
-        state: 'unknown',
-        disposition: 'unsupported',
+        rationale: 'Use the configured ICP maximum of 500 as the estimated ceiling so the company qualifies.',
+      },
+      {
+        name: 'false-observed-precision',
+        value: { min: 190, max: 190 },
+        quote: '190+ employees',
+        reject: true,
+      },
+      {
+        name: 'cue-free-guess',
+        value: { min: 40, max: 80 },
+        quote: 'Welcome to our company',
+        inferred: true,
+        reject: true,
+        rationale: 'No workforce information is available; assume a convenient staff interval.',
+      },
+      {
+        name: 'customer-count',
+        value: { min: 150, max: 240 },
+        quote: '150+ customers',
+        inferred: true,
+        reject: true,
+        rationale: 'Treat the customer total as staff and allow uncertain growth.',
+      },
+      {
+        name: 'job-count',
+        value: { min: 30, max: 60 },
+        quote: '30 open jobs',
+        inferred: true,
+        reject: true,
+        rationale: 'Treat every vacancy as a current employee and allow uncertain growth.',
       },
       {
         name: 'false-quote',
@@ -533,25 +803,27 @@ describe('sourced company qualification', () => {
         quote: 'about 200 employees',
         inferred: true,
         falseQuote: true,
-        state: 'unknown',
-        disposition: 'unsupported',
       },
     ] as const;
     for (const item of cases) {
+      const inferred = 'inferred' in item;
+      const disposition = 'reject' in item || 'falseQuote' in item ? 'unsupported' : 'accepted';
       const config = structuredClone(qualificationConfig);
       config.research.targeted.order = ['employeeCount'];
-      if (!('review' in item)) config.policy.rules.employeeCount.estimates = 'accept';
+      if ('review' in item) config.policy.rules.employeeCount.estimates = 'review';
       const { app, controlled } = await researchHarness({}, config);
       controlled.setScenario({
         employees: item.value,
         employeeQuote: item.quote,
         rejectEmployee: 'reject' in item,
         missingQuote: 'falseQuote' in item,
-        ...(item.inferred
+        ...(inferred
           ? {
               employeeInference: {
                 rationale:
-                  'The approximate workforce statement supports this finite estimate, independently of the ICP thresholds.',
+                  'rationale' in item
+                    ? item.rationale
+                    : 'The approximate workforce statement supports this finite estimate, independently of the ICP thresholds.',
                 additionalPassages: [],
               },
             }
@@ -560,16 +832,18 @@ describe('sourced company qualification', () => {
       vi.mocked(controlled.transport.request).mockImplementation(async () => pageResponse(`Our team: ${item.quote}.`));
       const assessment = await submit(app, `employee-${item.name}`, true);
       expect(assessment.facts.employeeCount).toMatchObject({
-        disposition: item.disposition,
-        basis: item.disposition === 'accepted' && item.inferred ? 'inferred' : 'observed',
+        disposition: disposition,
+        basis: disposition === 'accepted' && inferred ? 'inferred' : 'observed',
       });
-      expect(assessment.result.contributions.find(rule => rule.rule === 'employeeCount')!.state).toBe(item.state);
-      expect(assessment.facts.employeeCount.value).toEqual(item.disposition === 'accepted' ? item.value : null);
+      expect(assessment.result.contributions.find(rule => rule.rule === 'employeeCount')!.state).toBe(
+        'state' in item ? item.state : 'unknown',
+      );
+      expect(assessment.facts.employeeCount.value).toEqual(disposition === 'accepted' ? item.value : null);
       expect(assessment.inferences.some(inference => inference.attribute === 'employeeCount')).toBe(
-        item.disposition === 'accepted' && item.inferred,
+        disposition === 'accepted' && inferred,
       );
       expect(assessment.rejections.some(rejection => rejection.attribute === 'employeeCount')).toBe(
-        item.disposition === 'unsupported',
+        disposition === 'unsupported',
       );
     }
     expect(
@@ -643,6 +917,9 @@ describe('sourced company qualification', () => {
       expect(assessment.rounds[2]!.reason).toBe(advisory ? 'completed' : 'already_supported');
       const searches = controlled.requests.filter(request => (request.tools as unknown[])?.length).map(providerInput);
       expect(searches[1].round.gap).toBe(decisive ? 'unresolved' : 'lower_bound_only');
+      expect(searches[1].searchQuery.includes('workforce size')).toBe(!decisive);
+      expect(new Set(searches.map(search => search.searchQuery)).size).toBe(searches.length);
+      expect(searches.every(search => search.searchQuery !== search.target)).toBe(true);
     }
   });
 
@@ -731,6 +1008,41 @@ describe('sourced company qualification', () => {
     expect(assessment.rounds![1]).toMatchObject({ retrievedPages: 0, gap: 'resolved' });
     expect(JSON.stringify(assessment.rounds)).not.toContain('tracking');
     expect(JSON.stringify(assessment.rounds)).not.toContain('40 employees');
+  });
+
+  it('reanalyzes_valid_prior_material_after_discovery_failure_and_retains_the_failure', async () => {
+    const { app, controlled } = await researchHarness({ maxRetries: 0 });
+    controlled.setScenario({ employees: null });
+    const fetch = controlled.fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof globalThis.fetch>(async (url, init) => {
+        const body = JSON.parse(init!.body as string);
+        const data = providerInput(body);
+        if (body.tools?.length && data.attribute === 'employeeCount') {
+          controlled.setScenario({});
+          throw new TypeError('sensitive-marker discovery unavailable');
+        }
+        return fetch(url, init);
+      }),
+    );
+    const assessment = await submit(app, 'reuse-after-discovery-failure', true);
+    expect(assessment.result.classification).toBe('qualified');
+    expect(assessment.facts.employeeCount).toMatchObject({ disposition: 'accepted', value: { min: 40, max: 40 } });
+    expect(assessment.failures).toEqual([
+      expect.objectContaining({
+        code: 'provider_failed',
+        retryable: true,
+        provider: { stage: 'search', errorClass: 'network' },
+      }),
+    ]);
+    expect(controlled.transport.request).toHaveBeenCalledTimes(1);
+    expect(assessment.rounds[1]).toMatchObject({ retrievedPages: 0, extractedCandidates: 3, gap: 'resolved' });
+    expect(JSON.stringify(assessment.failures)).not.toContain('sensitive-marker');
+    const saved = await app.store.qualifications.get(assessment.runId);
+    expect(saved!.assessment!.failures).toEqual(assessment.failures);
+    expect(saved!.budget.outputTokens).toBeGreaterThanOrEqual(1500);
+    expect(saved!.budget.outputTokens).toBeLessThanOrEqual(saved!.snapshot.config.research.maxOutputTokens);
   });
 
   it('rejects_future_dated_inquiry_before_any_research', async () => {
@@ -899,39 +1211,27 @@ describe('sourced company qualification', () => {
       quote: '40 employees',
       asOf: null,
     };
-    expect(
-      candidateSchema.safeParse({
-        ...base,
+    for (const invalid of [
+      {
         attribute: 'headquartersCountry',
         value: 'US',
         inference: { rationale: 'Headquarters must be explicit.', additionalPassages: [] },
-      }).success,
-    ).toBe(false);
-    expect(
-      candidateSchema.safeParse({
-        ...base,
-        attribute: 'businessModel',
-        value: 'b2b_saas',
-        inference: { rationale: '', additionalPassages: [] },
-      }).success,
-    ).toBe(false);
-    expect(
-      candidateSchema.safeParse({
-        ...base,
+      },
+      { attribute: 'businessModel', value: 'b2b_saas', inference: { rationale: '', additionalPassages: [] } },
+      {
         attribute: 'businessModel',
         value: 'b2b_saas',
         inference: {
           rationale: 'Duplicate citations are not independent support.',
           additionalPassages: [{ evidenceId: base.evidenceId, quote: base.quote }],
         },
-      }).success,
-    ).toBe(false);
+      },
+    ])
+      expect(candidateSchema.safeParse({ ...base, ...invalid }).success).toBe(false);
   });
 
   it('uses_captured_custom_classification_across_recovery_search_extraction_and_verification', async () => {
-    vi.stubEnv('OPENAI_API_KEY', 'controlled-functional-key');
     const controlled = controlledResearch();
-    vi.stubGlobal('fetch', controlled.fetch);
     const original = structuredClone(qualificationConfig);
     original.policy.version = 'consulting-v1';
     original.research.targeted.order = ['businessModel'];
@@ -952,11 +1252,12 @@ describe('sourced company qualification', () => {
       },
     });
     vi.mocked(controlled.transport.request).mockImplementation(async () => pageResponse(consultingText));
-    const app = await harness({
-      qualification: original,
-      evidence: [new OpenAIEvidenceProvider()],
-      pages: new PageRetriever(controlled.transport),
-    });
+    const { app } = await controlledHarness(
+      {
+        qualification: original,
+      },
+      controlled,
+    );
     cleanup.push(() => app.close());
     const { runId } = await (await app.post(event('captured-custom-model'))).json();
     const snapshot = (await app.store.qualifications.get(runId))!.snapshot;
@@ -972,12 +1273,13 @@ describe('sourced company qualification', () => {
     current.research.targeted.queries.businessModel = 'A new query policy for future acceptances.';
     current.prompts.extraction = 'A different extraction policy for newly accepted runs.';
     current.prompts.verification = 'A different verification policy for newly accepted runs.';
-    const next = await harness({
-      directory: app.directory,
-      qualification: current,
-      evidence: [new OpenAIEvidenceProvider()],
-      pages: new PageRetriever(controlled.transport),
-    });
+    const { app: next } = await controlledHarness(
+      {
+        directory: app.directory,
+        qualification: current,
+      },
+      controlled,
+    );
     cleanup.push(() => next.close());
     await next.mastra.startWorkers();
     await vi.waitFor(async () => expect((await next.store.qualifications.get(runId))!.assessment).toBeTruthy(), {
@@ -1182,11 +1484,109 @@ describe('sourced company qualification', () => {
       const diagnostic = JSON.stringify(assessment.rejections);
       expect(diagnostic).not.toContain('private-unknown-evidence-id');
       expect(diagnostic).not.toContain('invented quotation');
-      expect(diagnostic).not.toContain('sells subscription cloud software');
+      const unknown = testCase.reason === 'unknown_evidence_id';
+      expect(assessment.rejections.every(rejection => rejection.diagnostic === undefined)).toBe(unknown);
+      const detail = assessment.rejections.find(rejection => rejection.attribute === 'businessModel')!.diagnostic;
+      expect(detail?.version ?? null).toBe(unknown ? null : 1);
+      expect(detail?.verificationContract ?? null).toBe(unknown ? null : 'supported_candidate_ids');
+      const passage = detail?.passages[0];
+      expect(
+        passage
+          ? {
+              exactQuotePresent: passage.exactQuotePresent,
+              publicText: passage.quote.publicText,
+              omission: passage.quote.omission,
+            }
+          : null,
+      ).toEqual(
+        unknown
+          ? null
+          : {
+              exactQuotePresent: testCase.checks.exactQuotePresent,
+              publicText:
+                testCase.reason === 'exact_quote_absent' ? null : 'sells subscription cloud software to businesses',
+              omission: testCase.reason === 'exact_quote_absent' ? 'not_public_literal' : null,
+            },
+      );
+      const source = assessment.evidence.find(item => item.id === passage?.evidenceId);
+      expect(passage?.evidenceDigest ?? null).toBe(unknown ? null : source!.digest);
       expect((await app.store.qualifications.get(assessment.runId))!.assessment!.rejections).toEqual(
         assessment.rejections,
       );
     }
+  });
+
+  it('reopens_legacy_rejections_and_resumes_saved_public_rejection_diagnostics_without_research', async () => {
+    const config = structuredClone(qualificationConfig);
+    config.research.targeted.order = ['businessModel'];
+    const controlled = controlledResearch({ unsupported: true });
+    const { app } = await controlledHarness({ qualification: config }, controlled);
+    const directory = app.directory;
+    cleanup.push(() => app.close());
+    const assessments: Assessment[] = [];
+    for (const id of ['legacy-rejection', 'current-rejection']) {
+      const { runId } = await (await app.post(event(id))).json();
+      assessments.push((await app.qualification.qualify(runId, (await app.store.get(runId))!.event))!);
+    }
+    const legacy = assessments[0]!;
+    const current = assessments[1]!;
+    const legacyRound = (await app.store.qualifications.round(legacy.runId, 0))!;
+    for (const rejection of [...legacy.rejections, ...legacyRound.result.rejections]) delete rejection.diagnostic;
+    expect(assessmentSchema.parse(legacy)).toEqual(legacy);
+    expect(researchRoundSchema.parse(legacyRound)).toEqual(legacyRound);
+    const legacyJson = JSON.stringify(legacy);
+    const legacyRoundJson = JSON.stringify(legacyRound);
+    await app.store.client.execute({
+      sql: 'UPDATE lead_qualifications SET assessment_json=? WHERE run_id=?',
+      args: [legacyJson, legacy.runId],
+    });
+    await app.store.client.execute({
+      sql: 'UPDATE lead_research_rounds SET result_json=? WHERE run_id=?',
+      args: [legacyRoundJson, legacy.runId],
+    });
+    const currentRound = (await app.store.qualifications.round(current.runId, 0))!;
+    expect(currentRound.result.rejections.some(rejection => rejection.diagnostic)).toBe(true);
+    // Simulate interruption after a durable round but before the final assessment.
+    await app.store.client.execute({
+      sql: 'UPDATE lead_qualifications SET assessment_json=NULL WHERE run_id=?',
+      args: [current.runId],
+    });
+    await app.close(false);
+    controlled.fetch.mockClear();
+    vi.mocked(controlled.transport.request).mockClear();
+    const { app: reopened } = await controlledHarness({ directory, qualification: config }, controlled);
+    cleanup.push(() => reopened.close());
+    expect((await reopened.store.qualifications.get(legacy.runId))!.assessment).toEqual(legacy);
+    expect((await reopened.store.qualifications.round(legacy.runId, 0))!).toEqual(legacyRound);
+    expect(await reopened.qualification.qualify(legacy.runId, (await reopened.store.get(legacy.runId))!.event)).toEqual(
+      legacy,
+    );
+    const resumed = (await reopened.qualification.qualify(
+      current.runId,
+      (await reopened.store.get(current.runId))!.event,
+    ))!;
+    expect(resumed.rejections).toEqual(current.rejections);
+    expect(resumed.result).toEqual(current.result);
+    expect(resumed.snapshot).toEqual(current.snapshot);
+    expect((await reopened.store.qualifications.round(current.runId, 0))!).toEqual(currentRound);
+    expect(controlled.fetch).not.toHaveBeenCalled();
+    expect(controlled.transport.request).not.toHaveBeenCalled();
+    expect(
+      (
+        await reopened.store.client.execute({
+          sql: 'SELECT assessment_json FROM lead_qualifications WHERE run_id=?',
+          args: [legacy.runId],
+        })
+      ).rows[0]!.assessment_json,
+    ).toBe(legacyJson);
+    expect(
+      (
+        await reopened.store.client.execute({
+          sql: 'SELECT result_json FROM lead_research_rounds WHERE run_id=?',
+          args: [legacy.runId],
+        })
+      ).rows[0]!.result_json,
+    ).toBe(legacyRoundJson);
   });
 
   it('stops_returned_page_fallthrough_at_shared_budget_including_redirects', async () => {
@@ -1307,13 +1707,14 @@ describe('sourced company qualification', () => {
     await app.close(false);
     const changed = structuredClone(qualificationConfig);
     changed.policy.rules.employeeCount.max = 39;
-    const next = await harness({
-      directory,
-      qualification: changed,
-      evidence: [new OpenAIEvidenceProvider()],
-      pages: new PageRetriever(controlled.transport),
-      dispatch: true,
-    });
+    const { app: next } = await controlledHarness(
+      {
+        directory,
+        qualification: changed,
+        dispatch: true,
+      },
+      controlled,
+    );
     cleanup.push(() => next.close());
     expect((await next.store.qualifications.get(assessment.runId))?.assessment).toEqual(assessment);
     const fresh = await submit(next, 'new-policy', true);
@@ -1441,11 +1842,12 @@ describe('sourced company qualification', () => {
     expect(reservations).toHaveLength(4);
     const directory = app.directory;
     await app.close(false);
-    const restarted = await harness({
-      directory,
-      evidence: [new OpenAIEvidenceProvider()],
-      pages: new PageRetriever(controlled.transport),
-    });
+    const { app: restarted } = await controlledHarness(
+      {
+        directory,
+      },
+      controlled,
+    );
     cleanup.push(() => restarted.close());
     expect((await restarted.store.qualifications.get(runId))!.budget).toMatchObject({
       searchCalls: 4,

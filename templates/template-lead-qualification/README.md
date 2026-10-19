@@ -1,8 +1,8 @@
 # Lead Qualification
 
-A contact form, signup flow, or CRM can submit a company domain and a dated buying inquiry. The template researches approved sources, checks supporting text, and applies confirmed qualification outcomes to a local lead record. Uncertain assessments wait for a review decision with their score, evidence and reasons preserved.
+A contact form, signup flow, or CRM can submit a company domain and a dated buying inquiry. The template researches approved sources, checks supporting text, and applies confirmed qualification outcomes to a readable local report or a dedicated Attio list. Uncertain assessments wait for a review decision with their score, evidence and reasons preserved.
 
-The default profile is B2B SaaS with 20–500 employees, headquarters in the configured Brazil/US/European markets, and recent buying intent. Missing or conflicting facts stay visible. Local review works through Studio or the authenticated API without an Attio account; an Attio output adapter is not included.
+Qualification criteria, score weights, target markets, evidence freshness and research limits are configurable. Missing or conflicting facts stay visible. Local review works through Studio or the authenticated API without an Attio account. In connected mode, SDRs review uncertain cases inside Attio while confirmed outcomes update automatically.
 
 ## Why we built this
 
@@ -13,7 +13,8 @@ Developers can connect their lead source while keeping provenance and qualificat
 ## Prerequisites
 
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` for GPT-6 Luna through Responses, including web search and structured extraction. Default research needs no enrichment-service or Attio account.
-- Local mode uses loopback access. Set `LEAD_QUALIFICATION_MODE=production` and a random `LEAD_QUALIFICATION_TOKEN` of at least 32 characters before exposing the API through HTTPS ingress.
+- **[Attio workspace token](https://app.attio.com/settings/developers)** (optional): connected mode requires a dedicated company list, mapped attributes/options and a webhook signing secret. Follow [Attio setup](docs/attio.md) before enabling it.
+- Local mode uses loopback access. Set `LEAD_QUALIFICATION_MODE=production` and a random `LEAD_QUALIFICATION_TOKEN` of at least 32 characters before exposing the API through HTTPS ingress. Production defaults to Attio input/output; an explicit [driver configuration](docs/crm-adapters.md) can select a different pair.
 
 ## Quickstart 🚀
 
@@ -21,12 +22,12 @@ Developers can connect their lead source while keeping provenance and qualificat
    - When this template is available in the catalog, run `npx create-mastra@latest lead-qualification --template template-lead-qualification`, then `cd lead-qualification`. For an already extracted template, use its directory.
    - Run `npm install`. Setup creates `data/` and copies `.env.example` to `.env` if it is absent.
 2. **Add your API key**
-   - Set the value in `.env` using Prerequisites. If preparing environment files manually, copy `.env.example` to `.env` first.
+   - Run `cp .env.example .env` if setup has not created it, then set the value described in Prerequisites.
 3. **Start the development server**
    - Run `npm run dev` and open [Mastra Studio](http://127.0.0.1:4111).
 4. **Research a company**
    - Send the request below, then GET its returned `statusUrl`. The result contains `qualification.assessment`: sourced facts, score contributions, gaps and a next action.
-   - The **lead-intake** workflow in Studio shows **record-intake**, **qualify-company** and **apply-or-review**. Submit through the event API to create its durable association. Inspect `business.state` for applied output or a pending review.
+   - The **lead-intake** workflow in Studio shows **record-intake**, **qualify-company** and **apply-or-review**. Submit through the event API to create its durable association. Inspect `business.state` for applied output or a pending review. Open `/lead-qualification/runs/<runId>/output` for the local Markdown report, or append `?format=text` for plain text.
 
 ```sh
 curl -s http://127.0.0.1:4111/lead-qualification/events \
@@ -38,14 +39,14 @@ curl -s http://127.0.0.1:4111/lead-qualification/events \
 
 - Inspect a real company's assessment. Missing headcount or headquarters creates a `needs_review` packet with concrete actions. Open **Tools → reviewLead** in Studio and copy its run ID, review ID, revision and digest from the run response. Follow [local review](docs/review-and-output.md) to approve, reject or request changes.
 - Add an authentic `lead.inquiry` with `type`, `occurredAt` and `text` using the [input contract](docs/intake.md). A company's own “Book a demo” page does not establish its intent to buy from you.
-- Replace `domain` with an email or CRM reference and use a new event/lead reference. The result asks for a confirmed company domain and makes no research calls for the unresolved identity.
+- Connect the dedicated [Attio pipeline](docs/attio.md), generate its JSON mapping with the setup CLI, create an example profile for an explicit real domain, and review the readable findings. Move Stage to Qualified, Nurture or Disqualified to resolve a review; Justification is optional. Move a closed lead to Needs review for manual review or Triage for fresh research.
 - Resend the same event or restart with the same `data/` directory. The association, captured configuration, completed research rounds and consumed allowance are preserved.
 - Requalify a completed lead with a new event ID and `supersedesAssessmentId`. The new cycle uses current evidence and settings while keeping the prior assessment unchanged.
 
 ## Customization
 
 - Ask your coding agent: “Explore the evidence contracts and policy, then propose a plan to qualify [my target market]. Preserve sourced facts, shared budgets and deterministic scoring. Add functional examples before changing the policy.” See [configuration](docs/configuration.md).
-- Add an approved source domain or adapter using [research sources](docs/research-sources.md), or connect a different [input](docs/intake.md) or [output](docs/review-and-output.md). See [operations](docs/operations.md) and [observability](docs/observability.md) for recovery and storage.
+- Add an approved source domain or adapter using [research sources](docs/research-sources.md), configure [Attio](docs/attio.md), or connect a different [CRM or lead source](docs/crm-adapters.md). See [operations](docs/operations.md) and [observability](docs/observability.md) for recovery and storage.
 
 ## About Mastra templates
 

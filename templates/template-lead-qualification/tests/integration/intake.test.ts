@@ -1,8 +1,15 @@
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { attioFixture } from '../support/attio';
 import { z } from 'zod';
 import { createClient } from '@libsql/client';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { normalizedEventSchema, domainSchema } from '../../src/mastra/contracts';
+import { controlledHarness } from '../support/research';
+import { digestValue } from '../../src/mastra/review/contracts';
+import { ownedState } from '../../src/mastra/providers/output';
 import { intakeConfig } from '../../src/mastra/config/lead-ingestion';
 import { event, harness, productionToken } from '../support/application';
 import type { DestinationState, OutputProvider } from '../../src/mastra/providers/output';
@@ -11,9 +18,174 @@ const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => {
   vi.restoreAllMocks();
   for (const close of cleanup.splice(0).reverse()) await close();
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('durable intake', () => {
+  it('normalizes_a_registered_lead_source_and_reconciles_its_separate_output_destination_with_authenticated_review', async () => {
+    const submittedSchema = z.strictObject({ submission: z.string().min(1), company: domainSchema });
+    const destinations = new Map<string, DestinationState>();
+    const output: OutputProvider = {
+      id: 'company-directory',
+      read: async target => destinations.get(target.reference) ?? { fields: { stage: 'Triage' }, marker: null },
+      apply: async (target, operationId, patch, expected) => {
+        const before = await output.read(target);
+        if (digestValue(ownedState(before!.fields)) !== digestValue(expected)) throw new Error('destination_conflict');
+        destinations.set(target.reference, { fields: { ...patch }, marker: operationId });
+      },
+    };
+    const { app } = await controlledHarness({
+      production: true,
+      config: {
+        ...intakeConfig,
+        source: { ...intakeConfig.source, inputProviderId: 'sales-form', destinationProviderId: output.id },
+      },
+      input: new Map([
+        [
+          'sales-form',
+          {
+            id: 'sales-form',
+            source: { ...intakeConfig.source, inputProviderId: 'sales-form', destinationProviderId: output.id },
+            transport: 'json',
+            async normalize(payload, source, receivedAt) {
+              const submitted = submittedSchema.parse(payload);
+              return {
+                event: normalizedEventSchema.parse({
+                  version: 1,
+                  type: 'lead.received',
+                  eventId: submitted.submission,
+                  sourceId: source.id,
+                  receivedAt,
+                  lead: { reference: submitted.submission, domain: submitted.company },
+                  destination: {
+                    providerId: source.destinationProviderId,
+                    reference: `directory:${submitted.company}`,
+                  },
+                }),
+              };
+            },
+          },
+        ],
+      ]),
+      output: [output],
+    });
+    cleanup.push(() => app.close());
+    const headers = { Authorization: `Bearer ${productionToken}` };
+    expect((await app.post({ submission: 'lead-1', company: 'example.com' })).status).toBe(401);
+    expect(
+      (await app.post({ submission: 'lead-1', company: 'example.com', sourceId: 'untrusted' }, headers)).status,
+    ).toBe(400);
+    const payload = { submission: 'lead-1', company: 'EXAMPLE.COM' };
+    const response = await app.post(payload, headers);
+    expect(response.status).toBe(202);
+    const accepted = await response.json();
+    expect((await (await app.post(payload, headers)).json()).runId).toBe(accepted.runId);
+    await app.mastra.startWorkers();
+    await vi.waitFor(async () => expect((await app.reviews.read(accepted.runId))?.state).toBe('awaiting_review'));
+    const run = await (await app.http.request(accepted.statusUrl, { headers })).json();
+    expect(run.destination).toEqual({ providerId: output.id, reference: 'directory:example.com' });
+    expect(run.sourceId).toBe('local-inbound');
+    expect(run.qualification.assessment.identity.domain).toBe('example.com');
+    const published = destinations.get('directory:example.com')!;
+    expect(published.marker).toBe(`${accepted.runId}:review`);
+    expect(published.fields).toMatchObject({ cycleId: accepted.runId, stage: 'Needs review' });
+    const packet = run.business.packet;
+    const decision = {
+      runId: accepted.runId,
+      reviewId: packet.id,
+      revision: packet.revision,
+      digest: packet.digest,
+      decision: 'approved',
+      override: { classification: 'qualified', reason: 'Confirmed the unresolved facts directly with the company.' },
+    };
+    const review = (body: unknown, authenticated = true) =>
+      app.http.request('/lead-qualification/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(authenticated ? headers : {}) },
+        body: JSON.stringify(body),
+      });
+    expect((await review(decision, false)).status).toBe(401);
+    expect((await review({ ...decision, providerId: 'attio', reviewer: 'forged' })).status).toBe(400);
+    expect((await review(decision)).status).toBe(200);
+    await vi.waitFor(async () => expect((await app.reviews.read(accepted.runId))?.state).toBe('applied'));
+    const operation = (await app.store.reviews.operation(accepted.runId, 'final'))!;
+    const completed = (await app.reviews.read(accepted.runId))!;
+    expect(completed.authorization).toMatchObject({ kind: 'human', patchDigest: digestValue(operation.patch) });
+    expect(completed.decision!.reviewer).toBe('local-operator');
+    expect(operation.state).toBe('applied');
+    expect(destinations.get('directory:example.com')).toMatchObject({
+      marker: operation.id,
+      fields: { stage: 'Qualified' },
+    });
+  });
+
+  it('starts_local_json_without_loading_unrelated_invalid_attio_configuration', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'local-provider-selection-'));
+    cleanup.push(() => rm(directory, { recursive: true, force: true }));
+    await writeFile(join(directory, 'package.json'), '{}');
+    await writeFile(join(directory, 'attio.mapping.json'), '{invalid');
+    vi.stubEnv('MASTRA_PROJECT_ROOT', directory);
+    vi.stubEnv('ATTIO_API_TOKEN', 'unrelated-stale-token');
+    vi.stubEnv('ATTIO_WEBHOOK_SECRET', 'invalid');
+    const transport = vi.fn<typeof fetch>();
+    const app = await harness({ directory, defaultProviders: true, attioTransport: transport });
+    cleanup.push(() => app.close());
+    expect([...app.inputs.keys()]).toEqual(['generic']);
+    expect([...app.outputs.keys()]).toEqual(['local']);
+    expect((await app.post(event('local-with-stale-attio'))).status).toBe(202);
+    expect(transport).not.toHaveBeenCalled();
+    expect(
+      (await app.store.client.execute("SELECT name FROM sqlite_master WHERE name LIKE 'lead_attio_%'")).rows,
+    ).toHaveLength(0);
+  });
+
+  it('defaults_production_to_signed_attio_and_requires_only_selected_direction_credentials', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'production-provider-selection-'));
+    cleanup.push(() => rm(directory, { recursive: true, force: true }));
+    await writeFile(join(directory, 'package.json'), '{}');
+    vi.stubEnv('MASTRA_PROJECT_ROOT', directory);
+    vi.stubEnv('ATTIO_API_TOKEN', '');
+    vi.stubEnv('ATTIO_WEBHOOK_SECRET', '');
+    await expect(harness({ directory, production: true, defaultProviders: true })).rejects.toThrow(
+      'require Attio configuration',
+    );
+    const fixture = attioFixture();
+    const app = await harness({
+      directory,
+      production: true,
+      defaultProviders: true,
+      attio: fixture.config,
+      attioTransport: fixture.transport,
+    });
+    cleanup.push(() => app.close());
+    expect([...app.inputs.keys()]).toEqual(['attio']);
+    expect([...app.outputs.keys()]).toEqual(['attio']);
+    const headers = { Authorization: `Bearer ${productionToken}` };
+    expect((await app.post(event('unsigned-attio'), headers)).status).toBe(404);
+    expect(
+      (
+        await app.http.request('/lead-qualification/webhooks/attio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{"events":[]}',
+        })
+      ).status,
+    ).toBe(401);
+    expect(fixture.transport).not.toHaveBeenCalled();
+    const { webhookSecret: _secret, ...connection } = fixture.config;
+    const outputOnly = await harness({
+      config: { ...intakeConfig, source: { ...intakeConfig.source, destinationProviderId: 'attio' } },
+      attio: connection,
+      attioTransport: fixture.transport,
+    });
+    cleanup.push(() => outputOnly.close());
+    expect([...outputOnly.inputs.keys()]).toEqual(['generic']);
+    expect([...outputOnly.outputs.keys()]).toEqual(['attio']);
+    expect((await outputOnly.http.request('/lead-qualification/webhooks/attio', { method: 'POST' })).status).toBe(404);
+    expect(fixture.transport).not.toHaveBeenCalled();
+  });
+
   it('accepts_supported_lead_identifiers', async () => {
     const destinations = new Map<string, DestinationState>();
     const output: OutputProvider = {

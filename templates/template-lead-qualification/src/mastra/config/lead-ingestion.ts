@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const sourceSchema = z.strictObject({
   id: z.string().min(1).max(100),
-  inputProviderId: z.literal('generic'),
+  inputProviderId: z.string().min(1).max(100),
   destinationProviderId: z.string().min(1).max(100),
   crmProviderIds: z.array(z.string().min(1).max(100)).max(20),
 });

@@ -3,9 +3,19 @@ import { z } from 'zod';
 import { normalizedEventSchema } from '../contracts';
 
 export const dispositionSchema = z.enum(['qualified', 'nurture', 'disqualified']);
+export const qualificationStages = {
+  qualified: 'Qualified',
+  nurture: 'Nurture',
+  disqualified: 'Disqualified',
+  needs_review: 'Needs review',
+} as const;
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
+/** Bounded timestamp uncertainty, always measured against the original durable receipt. */
+export function commandWithinReceiptWindow(occurredAt: string, receivedAt: string) {
+  return Date.parse(occurredAt) <= Date.parse(receivedAt) + 5000;
+}
 export const reviewReasonSchema = z.strictObject({
-  code: z.enum(['identity_unresolved', 'fact_unresolved', 'policy_review']),
+  code: z.enum(['identity_unresolved', 'fact_unresolved', 'policy_review', 'manual_review']),
   attribute: z.enum(['identity', 'businessModel', 'employeeCount', 'headquartersCountry', 'buyingIntent', 'policy']),
   explanation: z.string().min(1),
   action: z.string().min(1),
@@ -13,6 +23,7 @@ export const reviewReasonSchema = z.strictObject({
 });
 export const ownedPatchSchema = z
   .strictObject({
+    presentationVersion: z.union([z.literal(1), z.literal(2)]).optional(),
     assessmentId: z.uuid(),
     cycleId: z.uuid(),
     classification: z.enum(['qualified', 'nurture', 'disqualified', 'needs_review']),
@@ -31,14 +42,8 @@ export const ownedPatchSchema = z
     overrideReason: z.string().max(2000).nullable(),
   })
   .superRefine((patch, ctx) => {
-    const stages = {
-      qualified: 'Qualified',
-      nurture: 'Nurture',
-      disqualified: 'Disqualified',
-      needs_review: 'Needs review',
-    };
     const reviewing = ['Awaiting review', 'Rejected', 'Changes requested', 'Expired'].includes(patch.reviewStatus);
-    if (patch.stage !== (reviewing ? 'Needs review' : stages[patch.classification]))
+    if (patch.stage !== (reviewing ? 'Needs review' : qualificationStages[patch.classification]))
       ctx.addIssue({ code: 'custom', message: 'Stage must match review status and classification' });
     if (
       (patch.reviewId === null) !== (patch.reviewRevision === null) ||
@@ -48,7 +53,7 @@ export const ownedPatchSchema = z
       (patch.reviewStatus === 'Approved' && patch.decisionSource !== 'SDR') ||
       (!reviewing && patch.classification === 'needs_review') ||
       (reviewing && (patch.decisionSource !== null || patch.reviewReasons.length === 0)) ||
-      (patch.overrideClassification === null) !== (patch.overrideReason === null) ||
+      (patch.overrideClassification === null && patch.overrideReason !== null) ||
       (patch.overrideClassification !== null &&
         (patch.reviewStatus !== 'Approved' || patch.overrideClassification !== patch.classification))
     )
@@ -58,12 +63,20 @@ export type OwnedPatch = z.infer<typeof ownedPatchSchema>;
 export const reviewPacketSchema = z
   .strictObject({
     id: z.uuid(),
-    revision: z.literal(1),
+    revision: z.number().int().positive(),
     digest,
     assessmentId: z.uuid(),
     cycleId: z.uuid(),
     destination: normalizedEventSchema.shape.destination,
     proposedPatch: ownedPatchSchema,
+    reopenedBy: z
+      .strictObject({
+        memberId: z.uuid(),
+        occurredAt: z.iso.datetime({ offset: true }),
+        receivedAt: z.iso.datetime({ offset: true }),
+      })
+      .refine(value => commandWithinReceiptWindow(value.occurredAt, value.receivedAt))
+      .optional(),
     expiresAt: z.iso.datetime({ offset: true }),
   })
   .refine(
@@ -72,7 +85,8 @@ export const reviewPacketSchema = z
       packet.proposedPatch.cycleId === packet.cycleId &&
       packet.proposedPatch.reviewId === packet.id &&
       packet.proposedPatch.reviewRevision === packet.revision &&
-      packet.proposedPatch.reviewStatus === 'Awaiting review',
+      packet.proposedPatch.reviewStatus === 'Awaiting review' &&
+      (!packet.reopenedBy || packet.revision >= 2),
     'Packet and proposed patch must share their assessment, cycle and review binding',
   );
 export const decisionInputSchema = z
@@ -83,14 +97,38 @@ export const decisionInputSchema = z
     digest,
     decision: z.enum(['approved', 'rejected', 'changes_requested']),
     override: z
-      .strictObject({ classification: dispositionSchema, reason: z.string().trim().min(1).max(2000) })
+      .strictObject({
+        classification: dispositionSchema,
+        reason: z
+          .string()
+          .min(1)
+          .max(2000)
+          .refine(value => value.trim().length > 0),
+      })
       .optional(),
   })
   .refine(value => !value.override || value.decision === 'approved', 'Only approval accepts an override');
+export const stageDisposition = { Qualified: 'qualified', Nurture: 'nurture', Disqualified: 'disqualified' } as const;
+export const stageDecisionInputSchema = z.strictObject({
+  kind: z.enum(['attio-stage', 'provider-stage']),
+  runId: z.uuid(),
+  reviewId: z.uuid(),
+  revision: z.number().int().positive(),
+  digest,
+  decision: z.literal('approved'),
+  stage: z.enum(['Qualified', 'Nurture', 'Disqualified']),
+  justification: z.string().max(2000).nullable(),
+});
+export type StageDecisionInput = z.infer<typeof stageDecisionInputSchema>;
+export const persistedDecisionInputSchema = z.union([stageDecisionInputSchema, decisionInputSchema]);
 export const decisionSchema = z.strictObject({
   id: z.uuid(),
-  input: decisionInputSchema,
-  reviewer: z.literal('local-operator'),
+  input: persistedDecisionInputSchema,
+  reviewer: z.union([
+    z.literal('local-operator'),
+    z.strictObject({ provider: z.literal('attio'), workspaceId: z.uuid(), memberId: z.uuid() }),
+    z.strictObject({ provider: z.string().min(1).max(100), actorId: z.string().min(1).max(200) }),
+  ]),
   decidedAt: z.iso.datetime({ offset: true }),
 });
 const authorizationBinding = {
@@ -110,7 +148,7 @@ export const authorizationSchema = z.discriminatedUnion('kind', [
     ...authorizationBinding,
     kind: z.literal('human'),
     reviewId: z.uuid(),
-    revision: z.literal(1),
+    revision: z.number().int().positive(),
     reviewDigest: digest,
     decisionId: z.uuid(),
   }),

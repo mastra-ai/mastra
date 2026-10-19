@@ -5,14 +5,15 @@ import { createClient } from '@libsql/client';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 import { event, harness, productionToken } from '../support/application';
-import { controlledResearch } from '../support/research';
+import { controlledHarness, controlledResearch, pageResponse } from '../support/research';
 import type { ResearchScenario } from '../support/research';
-import { OpenAIEvidenceProvider } from '../../src/mastra/providers/evidence';
-import { LocalOutputProvider } from '../../src/mastra/providers/output';
+import { LocalOutputProvider } from '../../src/mastra/providers/local/output';
+import { ownedState } from '../../src/mastra/providers/output';
 import type { OutputProvider } from '../../src/mastra/providers/output';
-import { PageRetriever } from '../../src/mastra/research/page-retrieval';
 import { qualificationConfig } from '../../src/mastra/config/qualification';
+import { digestValue } from '../../src/mastra/review/contracts';
 import type { DecisionInput } from '../../src/mastra/review/contracts';
+import type { Assessment } from '../../src/mastra/research/contracts';
 
 type App = Awaited<ReturnType<typeof harness>>;
 const cleanup: Array<() => Promise<void>> = [];
@@ -23,14 +24,7 @@ afterEach(async () => {
   for (const close of cleanup.splice(0).reverse()) await close();
 });
 async function setup(scenario: ResearchScenario = {}, options: Parameters<typeof harness>[0] = {}) {
-  vi.stubEnv('OPENAI_API_KEY', 'controlled-review-key');
-  const research = controlledResearch(scenario);
-  vi.stubGlobal('fetch', research.fetch);
-  const app = await harness({
-    evidence: [new OpenAIEvidenceProvider()],
-    pages: new PageRetriever(research.transport),
-    ...options,
-  });
+  const { app, controlled: research } = await controlledHarness(options, controlledResearch(scenario));
   cleanup.push(() => app.close());
   await app.mastra.startWorkers();
   return { app, research };
@@ -122,6 +116,131 @@ function faultOutput() {
 }
 
 describe('review and output', () => {
+  it('automatically_applies_default_supported_employee_estimates_and_reviews_unresolved_decisive_facts', async () => {
+    const { app, research } = await setup();
+    const inference = {
+      rationale:
+        'The approximate employee count supports this finite interval, allowing for uncertainty around the stated workforce.',
+      additionalPassages: [],
+    };
+    const lowerInference = {
+      rationale:
+        'The 150+ staff statement gives a known minimum. Assuming a rounded public milestone and moderate unreported growth, 150–240 is a working estimate; 240 is uncertain and is not a declared ceiling.',
+      additionalPassages: [],
+    };
+    const rosterInference = {
+      rationale:
+        'Assuming these 30 distinct current staff profiles cover the main departments, 30–60 is a working estimate allowing for unlisted colleagues. Roster completeness is uncertain; 60 is not an observed ceiling.',
+      additionalPassages: [],
+    };
+    const automatic: Array<{ assessment: Assessment; scenario: ResearchScenario }> = [];
+    for (const [id, change, inquiry, expected, score] of [
+      ['estimated-qualified', {}, true, 'qualified', 100],
+      ['estimated-nurture', {}, 'old', 'nurture', 70],
+      [
+        'lower-cue-qualified',
+        {
+          employees: { min: 150, max: 240 },
+          employeeQuote: '150+ employees',
+          employeeObservation: { value: { min: 150, max: null }, quote: '150+ employees' },
+          employeeInference: lowerInference,
+        },
+        true,
+        'qualified',
+        100,
+      ],
+      [
+        'roster-cue-nurture',
+        {
+          employees: { min: 30, max: 60 },
+          employeeQuote: 'Meet our team: 30 staff profiles across engineering, sales and operations.',
+          employeeInference: rosterInference,
+        },
+        'old',
+        'nurture',
+        70,
+      ],
+      ['missing-employees', { employees: null }, true, 'needs_review', 75],
+      ['estimated-missing-headquarters', { country: null }, true, 'needs_review', 85],
+      ['estimated-missing-business', { businessModel: null }, true, 'needs_review', 70],
+      ['estimated-missing-inquiry', {}, false, 'needs_review', 70],
+      ['unsupported-estimate', { rejectEmployee: true }, true, 'needs_review', 75],
+      ['conflicting-estimate', { conflict: true }, true, 'needs_review', 75],
+      ['stale-estimate', { asOf: new Date(Date.now() - 31 * 86_400_000).toISOString() }, true, 'needs_review', 30],
+      [
+        'boundary-estimate',
+        { employees: { min: 10, max: 50 }, employeeQuote: 'about 30 employees' },
+        true,
+        'needs_review',
+        75,
+      ],
+    ] as const) {
+      const scenario: ResearchScenario = {
+        employees: { min: 180, max: 220 },
+        employeeQuote: 'about 200 employees',
+        employeeInference: inference,
+        ...change,
+      };
+      research.setScenario(scenario);
+      vi.mocked(research.transport.request).mockImplementation(async () =>
+        pageResponse(
+          [
+            scenario.businessModel === null ? '' : 'Example sells subscription cloud software to businesses.',
+            scenario.employees === null ? '' : `Our team has ${scenario.employeeQuote}.`,
+            scenario.country === null ? '' : 'Headquarters: United States.',
+            scenario.conflict ? 'A separate report lists 400 employees.' : '',
+            typeof scenario.asOf === 'string' ? `These facts apply as of ${scenario.asOf}.` : '',
+          ].join(' '),
+        ),
+      );
+      const runId = await submit(app, id, {}, inquiry);
+      const requiresReview = expected === 'needs_review';
+      const cycle = await waitState(app, runId, requiresReview ? 'awaiting_review' : 'applied');
+      const assessment = (await app.store.qualifications.get(runId))!.assessment!;
+      expect(assessment.snapshot.config.policy.rules.employeeCount.estimates).toBe('accept');
+      expect(assessment.result).toMatchObject({ classification: expected, score, requiresReview });
+      expect(cycle.authorization?.kind ?? null).toBe(requiresReview ? null : 'policy');
+      expect(cycle.decision).toBeNull();
+      expect(Boolean(cycle.packet)).toBe(requiresReview);
+      expect((await destination(app, id)).fields).toMatchObject({
+        classification: expected,
+        score,
+        decisionSource: requiresReview ? null : 'Automatic',
+        reviewStatus: requiresReview ? 'Awaiting review' : 'Not required',
+      });
+      if (!requiresReview) automatic.push({ assessment, scenario });
+    }
+    expect(automatic).toHaveLength(4);
+    for (const { assessment, scenario } of automatic) {
+      expect(assessment.facts.employeeCount).toMatchObject({
+        disposition: 'accepted',
+        basis: 'inferred',
+        value: scenario.employees,
+      });
+      const employeeInference = assessment.inferences.find(item => item.attribute === 'employeeCount')!;
+      expect(employeeInference.rationale).toBe(scenario.employeeInference!.rationale);
+      expect(employeeInference.passages).toHaveLength(1);
+      for (const passage of employeeInference.passages) {
+        expect(passage.quote).toBe(scenario.employeeQuote);
+        expect(assessment.facts.employeeCount.evidenceIds).toContain(passage.evidenceId);
+        expect(assessment.evidence.find(source => source.id === passage.evidenceId)!.excerpt).toContain(passage.quote);
+      }
+      expect(assessment.result.contributions.find(rule => rule.rule === 'employeeCount')!.reason).toContain(
+        `Inferred employee estimate ${scenario.employees!.min}–${scenario.employees!.max ?? 'open'}`,
+      );
+    }
+    const lower = automatic[2]!.assessment;
+    const checkpoint = (await app.store.qualifications.round(lower.runId, 0))!;
+    expect(checkpoint.result.candidates).toContainEqual(
+      expect.objectContaining({ attribute: 'employeeCount', value: { min: 150, max: null } }),
+    );
+    expect(
+      checkpoint.result.candidates.find(candidate => candidate.attribute === 'employeeCount' && !candidate.inference)
+        ?.inference ?? null,
+    ).toBeNull();
+    expect(lower.facts.employeeCount.candidateIds).toHaveLength(2);
+  });
+
   it('applies_only_confirmed_automatic_outcomes_without_human_approval', async () => {
     const { app, research } = await setup();
     for (const [id, scenario, inquiry, expected] of [
@@ -162,6 +281,44 @@ describe('review and output', () => {
     expect((await app.post({ ...event('forged-auth'), authorization: { kind: 'policy' } })).status).toBe(400);
   });
 
+  it('serves_authorized_local_markdown_and_text_with_exact_readback_after_restart', async () => {
+    const first = await setup();
+    const runId = await submit(first.app, 'readable-output', {}, true);
+    const cycle = await waitState(first.app, runId, 'applied');
+    const operation = (await first.app.store.reviews.operation(runId, 'final'))!;
+    expect(cycle.authorization).toMatchObject({ kind: 'policy', patchDigest: digestValue(operation.patch) });
+    const url = `/lead-qualification/runs/${runId}/output`;
+    const report = await first.app.http.request(url);
+    expect(report.status).toBe(200);
+    expect(report.headers.get('content-type')).toContain('text/markdown');
+    const markdown = await report.text();
+    expect(markdown).toContain('# Lead qualification: Qualified');
+    expect(markdown).toContain('**Score:** 100/100');
+    expect(markdown).toContain('Sources report 40 employees.');
+    expect(markdown).toContain('## Next action');
+    expect(markdown).toContain('https://example.com/firmographics');
+    const text = await first.app.http.request(`${url}?format=text`);
+    expect(text.headers.get('content-type')).toContain('text/plain');
+    const plain = await text.text();
+    expect(plain).toContain('Lead qualification: Qualified');
+    expect(plain).toContain('Score: 100/100');
+    expect(plain).not.toContain('##');
+    const state = (await destination(first.app, 'readable-output'))!;
+    expect(state.marker).toBe(operation.id);
+    expect(state.fields.reportMarkdown).toBe(markdown);
+    expect(state.fields.reportText).toBe(plain);
+    expect((await first.app.http.request(`${url}?format=html`)).status).toBe(400);
+    await first.app.close(false);
+    const resumed = await setup({}, { directory: first.app.directory });
+    expect(await (await resumed.app.http.request(url)).text()).toBe(markdown);
+    expect(resumed.research.requests).toHaveLength(0);
+    await resumed.app.store.client.execute({
+      sql: "UPDATE lead_local_destinations SET fields_json=json_set(fields_json,'$.reportMarkdown','Changed report') WHERE reference=?",
+      args: ['readable-output'],
+    });
+    expect((await resumed.app.http.request(url)).status).toBe(409);
+  });
+
   it('resumes_persisted_review_and_applies_approved_patch', async () => {
     const first = await setup({ employees: null });
     const runId = await submit(first.app, 'restart-review', {}, true);
@@ -188,8 +345,9 @@ describe('review and output', () => {
       reviewDigest: cycle.packet!.digest,
       decisionId: accepted.id,
     });
-    expect((await destination(restarted.app, 'restart-review')).fields).toEqual({
-      ...cycle.packet!.proposedPatch,
+    expect((await destination(restarted.app, 'restart-review')).fields).toMatchObject({
+      ...ownedState(cycle.packet!.proposedPatch),
+      nextAction: 'Contact the lead to confirm the buying need and agree on the next step.',
       classification: 'qualified',
       stage: 'Qualified',
       reviewStatus: 'Approved',
@@ -469,13 +627,21 @@ describe('review and output', () => {
     // Restart captures new configuration only for the new cycle.
     await app.close(false);
     const restarted = await setup({}, { directory: app.directory, qualification: newConfig });
+    await restarted.app.dispatcher.stop();
     const accepted = await Promise.all(Array.from({ length: 4 }, async () => restarted.app.post(body)));
     expect(accepted.map(response => response.status)).toEqual([202, 202, 202, 202]);
     const ids = await Promise.all(accepted.map(async response => (await response.json()).runId as string));
     expect(new Set(ids).size).toBe(1);
     const nextId = ids[0]!;
+    expect((await restarted.app.http.request(`/lead-qualification/runs/${nextId}/output`)).status).toBe(404);
+    expect((await restarted.app.http.request(`/lead-qualification/runs/${firstId}/output`)).status).toBe(409);
+    await restarted.app.dispatcher.start();
     const next = await waitState(restarted.app, nextId, 'applied');
     expect(next.predecessorId).toBe(previous.assessment!.id);
+    expect((await restarted.app.http.request(`/lead-qualification/runs/${firstId}/output`)).status).toBe(409);
+    expect(await (await restarted.app.http.request(`/lead-qualification/runs/${nextId}/output`)).text()).toContain(
+      '# Lead qualification: Qualified',
+    );
     expect((await restarted.app.store.qualifications.get(nextId))!.assessment!.result.classification).toBe('qualified');
     expect((await restarted.app.store.qualifications.get(nextId))!.snapshot.config.policy.version).toBe(
       'updated-policy',

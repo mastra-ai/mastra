@@ -1,82 +1,108 @@
 import type { Config } from '@mastra/core/mastra';
-import { intakeConfig, intakeConfigSchema } from './config/lead-ingestion';
 import type { IntakeConfig } from './config/lead-ingestion';
-import { runtimeConfig } from './config/runtime';
+import type { QualificationConfig } from './config/qualification';
+import { qualificationConfig, qualificationConfigSchema } from './config/qualification';
+import type { ReviewConfig } from './config/review';
+import { reviewConfig, reviewConfigSchema } from './config/review';
 import type { RuntimeConfig } from './config/runtime';
+import { runtimeConfig, runtimeSettingsSchema } from './config/runtime';
 import { createServerConfig } from './config/server';
 import { LeadStorage } from './persistence/storage';
+import { initializeProviders } from './providers';
+import type { ProviderOptions } from './providers';
+import { LeadIntake } from './intake';
+import type { EvidenceProvider } from './providers/evidence';
+import type { PageRetriever } from './research/page-retrieval';
+import { QualificationService } from './research/qualification';
+import { ReviewService } from './review/service';
 import { createLeadRoutes } from './routes/lead-event-routes';
 import { createTelemetry } from './telemetry';
+import { reviewLead } from './tools/review-lead';
 import { LeadDispatcher } from './workers/lead-dispatcher';
 import { createReceiveLeadWorkflow } from './workflows/receive-lead';
-import { qualificationConfig, qualificationConfigSchema } from './config/qualification';
-import type { QualificationConfig } from './config/qualification';
-import { evidenceProviders } from './providers/evidence';
-import type { EvidenceProvider } from './providers/evidence';
-import { QualificationService } from './research/qualification';
-import type { PageRetriever } from './research/page-retrieval';
-import { LocalOutputProvider } from './providers/output';
-import type { OutputProvider } from './providers/output';
-import { ReviewService } from './review/service';
-import { createTool } from '@mastra/core/tools';
-import { decisionInputSchema, decisionSchema } from './review/contracts';
-import { reviewConfig, reviewConfigSchema } from './config/review';
-import type { ReviewConfig } from './config/review';
 
-export async function createApplicationRuntime(
-  options: {
-    runtime?: RuntimeConfig;
-    config?: IntakeConfig;
-    qualification?: QualificationConfig;
-    evidence?: EvidenceProvider[];
-    pages?: PageRetriever;
-    output?: OutputProvider[];
-    review?: ReviewConfig;
-  } = {},
-) {
-  const runtime = options.runtime ?? runtimeConfig();
-  const config = intakeConfigSchema.parse(options.config ?? intakeConfig);
+export interface ApplicationOptions extends ProviderOptions {
+  runtime?: RuntimeConfig;
+  config?: IntakeConfig;
+  qualification?: QualificationConfig;
+  evidence?: EvidenceProvider[];
+  pages?: PageRetriever;
+  review?: ReviewConfig;
+}
+
+export async function createApplicationRuntime(options: ApplicationOptions = {}) {
+  const runtime = runtimeSettingsSchema.parse(options.runtime ?? runtimeConfig());
   const qualificationSettings = qualificationConfigSchema.parse(options.qualification ?? qualificationConfig);
   const reviewSettings = reviewConfigSchema.parse(options.review ?? reviewConfig);
-  const outputIds = options.output?.map(provider => provider.id) ?? ['local'];
-  if (!outputIds.includes(config.source.destinationProviderId))
-    throw new Error('Configured output provider is unavailable');
-  const providers = evidenceProviders(options.evidence);
-  for (const id of qualificationSettings.sources.providerIds)
-    if (!providers.has(id)) throw new Error('Configured evidence provider is unavailable');
+  const providers = initializeProviders({ ...options, mode: runtime.mode, qualification: qualificationSettings });
+  const config = providers.config;
   const telemetry = createTelemetry();
-  const storage = await LeadStorage.open(runtime, () => telemetry.observability.flush());
+  let storage: LeadStorage | undefined;
+  try {
+    storage = await LeadStorage.open(runtime, () => telemetry.observability.flush());
+    const qualification = new QualificationService(
+      storage.leadEvents.qualifications,
+      providers.evidence,
+      options.pages,
+    );
+    const outputs = providers.createOutputs(storage.leadEvents.client);
+    const reviewService = new ReviewService(storage.leadEvents, outputs, reviewSettings);
+    const admission = new LeadIntake(storage.leadEvents, config, qualificationSettings);
+    const inputs = await providers.createInputs({
+      store: storage.leadEvents,
+      reviews: reviewService,
+      intake: admission,
+      config,
+    });
+    const sources = [...inputs.values()].map(provider => provider.source);
+    const intake = createReceiveLeadWorkflow(storage.leadEvents, config, qualification, reviewService, sources);
+    const dispatcher = new LeadDispatcher(storage.leadEvents, intake, config, telemetry, reviewService, [
+      ...inputs.values(),
+    ]);
 
-  const qualification = new QualificationService(storage.leadEvents.qualifications, providers, options.pages);
-  const outputs = new Map(
-    (options.output ?? [new LocalOutputProvider(storage.leadEvents.client)]).map(provider => [provider.id, provider]),
-  );
-  const reviews = new ReviewService(storage.leadEvents, outputs, reviewSettings);
-  const intake = createReceiveLeadWorkflow(storage.leadEvents, config, qualification, reviews);
-  const dispatcher = new LeadDispatcher(storage.leadEvents, intake, config, telemetry);
-  const serverConfig = createServerConfig(runtime, config.limits);
-  const mastraConfig: Config = {
-    ...serverConfig,
-    server: {
-      ...serverConfig.server,
-      apiRoutes: createLeadRoutes(storage.leadEvents, config, telemetry, qualificationSettings, reviews),
-    },
-    workflows: { leadIntake: intake.workflow },
-    tools: {
-      reviewLead: createTool({
-        id: 'review-lead',
-        description:
-          'Record a local operator decision for a published current review packet. Identity is the authenticated local operator; uncertain approvals need a reasoned override.',
-        inputSchema: decisionInputSchema,
-        outputSchema: decisionSchema,
-        execute: input => reviews.decide(input),
-      }),
-    },
-    workers: [dispatcher],
-    storage,
-    logger: telemetry.logger,
-    observability: telemetry.observability,
-  };
+    const serverConfig = createServerConfig(runtime, config.limits);
+    const mastraConfig: Config = {
+      ...serverConfig,
+      server: {
+        ...serverConfig.server,
+        apiRoutes: [
+          ...createLeadRoutes(
+            storage.leadEvents,
+            config,
+            telemetry,
+            reviewService,
+            inputs.get(config.source.inputProviderId)!,
+            admission,
+            outputs,
+          ),
+          ...[...inputs.values()].flatMap(provider => provider.routes ?? []),
+        ],
+      },
+      workflows: { leadIntake: intake.workflow },
+      tools: { reviewLead: reviewLead(reviewService) },
+      workers: [dispatcher],
+      storage,
+      logger: telemetry.logger,
+      observability: telemetry.observability,
+    };
 
-  return { mastraConfig, storage, intake, telemetry, dispatcher, qualification, reviews };
+    return {
+      mastraConfig,
+      storage,
+      intake,
+      telemetry,
+      dispatcher,
+      qualification,
+      reviews: reviewService,
+      inputs,
+      outputs,
+    };
+  } catch (error) {
+    try {
+      await storage?.close();
+    } finally {
+      await telemetry.observability.shutdown();
+    }
+    throw error;
+  }
 }

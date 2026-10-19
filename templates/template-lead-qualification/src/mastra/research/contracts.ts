@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { domainSchema } from '../contracts';
+import { selectionDiagnosticUrl } from './selection-diagnostics';
+import { diagnosticTextLimit, safeDiagnosticText } from './evidence-diagnostics';
 import {
   outcomes,
   signalTypes,
@@ -33,10 +35,16 @@ export const evidenceSchema = z.strictObject({
   retrieval: z.enum(['page', 'submitted', 'api']),
 });
 export type Evidence = z.infer<typeof evidenceSchema>;
-export const discoverySchema = z.strictObject({
-  sourceUrls: z.array(z.string().min(1).max(2048)).max(100),
-  evidence: z.array(evidenceSchema).max(20),
-});
+export const discoverySchema = z
+  .strictObject({
+    sourceUrls: z.array(z.string().min(1).max(2048)).max(100),
+    preferredSourceUrls: z.array(z.string().min(1).max(2048)).max(100).optional(),
+    evidence: z.array(evidenceSchema).max(20),
+  })
+  .refine(
+    discovery => discovery.preferredSourceUrls?.every(url => discovery.sourceUrls.includes(url)) ?? true,
+    'Preferred source URLs must be a subset of discovered source URLs',
+  );
 export const employeeIntervalSchema = z
   .strictObject({ min: z.number().int().nonnegative(), max: z.number().int().nonnegative().nullable() })
   .refine(value => value.max === null || value.min <= value.max);
@@ -53,39 +61,69 @@ export const inferenceSchema = z.strictObject({
   rationale: z.string().trim().min(1).max(2000),
   additionalPassages: z.array(supportingPassageSchema).max(3),
 });
+const candidateFields = {
+  id: z.string().min(1).max(100),
+  evidenceId: z.string().min(1).max(100),
+  quote: z.string().min(1).max(2000),
+  asOf: z.iso
+    .datetime({ offset: true })
+    .nullable()
+    .describe(
+      'Fact effective date explicitly supported by the cited content; null when undated. Never copy retrieval or assessment timestamps.',
+    ),
+};
+const headquartersCountrySchema = z.string().regex(/^[A-Z]{2}$/);
+const inferredEmployeeIntervalSchema = employeeIntervalSchema.safeExtend({ max: employeeIntervalSchema.shape.min });
+export const candidateValueSchema = z.union([
+  businessModelLabelSchema,
+  employeeIntervalSchema,
+  headquartersCountrySchema,
+  signalSchema,
+]);
 export const candidateSchema = z
-  .strictObject({
-    id: z.string().min(1).max(100),
-    attribute: z.enum(['businessModel', 'employeeCount', 'headquartersCountry', 'buyingIntent']),
-    value: z.union([businessModelLabelSchema, employeeIntervalSchema, z.string().regex(/^[A-Z]{2}$/), signalSchema]),
-    evidenceId: z.string().min(1).max(100),
-    quote: z.string().min(1).max(2000),
-    asOf: z.iso.datetime({ offset: true }).nullable(),
-    inference: inferenceSchema.nullable().optional(),
-  })
+  .union([
+    z.strictObject({
+      ...candidateFields,
+      attribute: z.literal('businessModel'),
+      value: businessModelLabelSchema,
+      inference: inferenceSchema.nullable().optional(),
+    }),
+    z.strictObject({
+      ...candidateFields,
+      attribute: z.literal('employeeCount'),
+      value: employeeIntervalSchema,
+      inference: z.null().optional(),
+    }),
+    z.strictObject({
+      ...candidateFields,
+      attribute: z.literal('employeeCount'),
+      value: inferredEmployeeIntervalSchema,
+      inference: inferenceSchema,
+    }),
+    z.strictObject({
+      ...candidateFields,
+      attribute: z.literal('headquartersCountry'),
+      value: headquartersCountrySchema,
+      inference: z.null().optional(),
+    }),
+    z.strictObject({
+      ...candidateFields,
+      attribute: z.literal('buyingIntent'),
+      value: signalSchema,
+      inference: z.null().optional(),
+    }),
+  ])
   .superRefine((value, ctx) => {
-    const schema = {
-      businessModel: businessModelLabelSchema,
-      employeeCount: employeeIntervalSchema,
-      headquartersCountry: z.string().regex(/^[A-Z]{2}$/),
-      buyingIntent: signalSchema,
-    }[value.attribute];
-    if (!schema.safeParse(value.value).success)
-      ctx.addIssue({ code: 'custom', message: 'Candidate value must match its attribute' });
-    if (value.inference && !['businessModel', 'employeeCount'].includes(value.attribute))
-      ctx.addIssue({ code: 'custom', message: 'Only business model and employee count may be inferred' });
-    if (
-      value.attribute === 'employeeCount' &&
-      value.inference &&
-      employeeIntervalSchema.safeParse(value.value).data?.max === null
-    )
-      ctx.addIssue({ code: 'custom', message: 'Inferred employee estimates require a finite upper bound' });
     const passages = [
       { evidenceId: value.evidenceId, quote: value.quote },
       ...(value.inference?.additionalPassages ?? []),
     ];
     if (new Set(passages.map(passage => JSON.stringify(passage))).size !== passages.length)
-      ctx.addIssue({ code: 'custom', message: 'Supporting passages must be distinct' });
+      ctx.addIssue({
+        code: 'custom',
+        path: ['inference', 'additionalPassages'],
+        message: 'Supporting passages must be distinct',
+      });
   });
 export type Candidate = z.infer<typeof candidateSchema>;
 export function candidatePassages(candidate: Candidate) {
@@ -110,13 +148,57 @@ export const acceptedInferenceSchema = z
           employeeIntervalSchema.parse(value.value).max !== null,
     'Inference value must match its attribute',
   );
+const rejectedTextDiagnosticSchema = z
+  .strictObject({
+    digest: z.string().regex(/^[a-f0-9]{64}$/),
+    length: z.number().int().min(1).max(2000),
+    publicText: z.string().min(1).max(diagnosticTextLimit).refine(safeDiagnosticText).nullable(),
+    omission: z.enum(['not_public_literal', 'private_overlap', 'sensitive_content']).nullable(),
+  })
+  .refine(
+    value =>
+      (value.publicText === null) === (value.omission !== null) &&
+      (value.publicText === null || value.publicText.length <= value.length),
+    'Diagnostic text must be bounded or explicitly omitted',
+  );
+export const rejectedEvidenceDiagnosticSchema = z
+  .strictObject({
+    version: z.literal(1),
+    verificationContract: z.literal('supported_candidate_ids'),
+    passages: z
+      .array(
+        z
+          .strictObject({
+            evidenceId: z.string().regex(/^evidence-[a-f0-9]{40}$/),
+            evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/),
+            sourceDigest: z.string().regex(/^[a-f0-9]{64}$/),
+            evidenceLength: z.number().int().min(1).max(24_000),
+            quote: rejectedTextDiagnosticSchema,
+            exactQuotePresent: z.boolean(),
+            whitespaceNormalizedMatch: z.boolean(),
+            unicodeNormalizedMatch: z.boolean(),
+            typographyNormalizedMatch: z.boolean(),
+          })
+          .refine(
+            value => value.exactQuotePresent || value.quote.publicText === null,
+            'Nonliteral proposals cannot retain public text',
+          ),
+      )
+      .min(1)
+      .max(4),
+    rationale: rejectedTextDiagnosticSchema.nullable(),
+  })
+  .refine(
+    value => JSON.stringify(value).length <= 4096,
+    'Rejected evidence diagnostics must fit within 4096 characters',
+  );
 export const candidateRejectionSchema = z
   .strictObject({
     branch: branchSchema,
     candidateId: z.string().regex(/^candidate-[a-f0-9]{24}$/),
     evidenceId: z.string().regex(/^evidence-[a-f0-9]{24}$/),
-    attribute: candidateSchema.shape.attribute,
-    value: candidateSchema.shape.value,
+    attribute: researchTargetSchema,
+    value: candidateValueSchema,
     reason: z.enum([
       'unknown_evidence_id',
       'exact_quote_absent',
@@ -131,6 +213,7 @@ export const candidateRejectionSchema = z
       configuredLabel: z.boolean().optional(),
       provenanceValid: z.boolean().optional(),
     }),
+    diagnostic: rejectedEvidenceDiagnosticSchema.optional(),
   })
   .refine(
     value =>
@@ -168,12 +251,84 @@ export const pageFailureSchema = z.strictObject({
   byteCap: z.number().int().positive(),
 });
 export type PageFailure = z.infer<typeof pageFailureSchema>;
+export const providerValidationIssueSchema = z.strictObject({
+  code: z.enum([
+    'invalid_type',
+    'too_big',
+    'too_small',
+    'invalid_format',
+    'not_multiple_of',
+    'unrecognized_keys',
+    'invalid_union',
+    'invalid_key',
+    'invalid_element',
+    'invalid_value',
+    'custom',
+  ]),
+  path: z
+    .array(
+      z.union([
+        z.enum([
+          'companyName',
+          'identityAmbiguous',
+          'candidates',
+          'intentCoverageComplete',
+          'supportedCandidateIds',
+          'id',
+          'attribute',
+          'value',
+          'evidenceId',
+          'quote',
+          'asOf',
+          'inference',
+          'rationale',
+          'additionalPassages',
+          'min',
+          'max',
+          'type',
+          'occurredAt',
+          'unknown_field',
+        ]),
+        z.number().int().nonnegative().max(30),
+      ]),
+    )
+    .max(8),
+});
+export const providerFailureSchema = z.strictObject({
+  stage: z.enum(['search', 'extract', 'verify']),
+  validationIssues: z.array(providerValidationIssueSchema).max(8).optional(),
+  responseStatus: z.enum(['completed', 'incomplete', 'failed', 'cancelled', 'queued', 'in_progress']).optional(),
+  incompleteReason: z.enum(['max_output_tokens', 'content_filter']).optional(),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+  errorClass: z
+    .enum([
+      'api_call',
+      'retry',
+      'json_parse',
+      'type_validation',
+      'no_object',
+      'no_output',
+      'schema_validation',
+      'syntax',
+      'network',
+      'abort',
+      'timeout',
+      'error',
+      'unknown',
+    ])
+    .optional(),
+  inputTokens: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+  outputTokens: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+  reasoningTokens: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+});
+export type ProviderFailure = z.infer<typeof providerFailureSchema>;
 export const failureSchema = z.strictObject({
   branch: branchSchema,
   providerId: z.string().max(100),
   code: z.string().regex(/^[a-z_]{1,80}$/),
   retryable: z.boolean(),
   page: pageFailureSchema.optional(),
+  provider: providerFailureSchema.optional(),
 });
 export type ResearchFailure = z.infer<typeof failureSchema>;
 export const branchResultSchema = z.strictObject({
@@ -203,14 +358,56 @@ export const gapSchema = z.enum([
   'budget',
   'unresolved',
 ]);
+export const discoverySelectionCandidateSchema = z
+  .strictObject({
+    providerIndex: z.number().int().min(0).max(9),
+    url: z
+      .string()
+      .max(512)
+      .refine(value => selectionDiagnosticUrl(value) === value)
+      .nullable(),
+    priority: z.number().int().min(-100).max(100).nullable(),
+    rank: z.number().int().min(1).max(100).nullable(),
+    selectionRank: z.number().int().min(1).max(100).nullable(),
+    citationPreferred: z.boolean(),
+    selected: z.boolean(),
+    reason: z.enum([
+      'unapproved_source',
+      'duplicate',
+      'unsupported_format',
+      'already_consulted',
+      'retrieved',
+      'unavailable',
+      'not_selected',
+      'budget_exhausted',
+    ]),
+  })
+  .refine(
+    value =>
+      (value.url === null
+        ? value.priority === null && value.rank === null
+        : value.priority !== null && value.rank !== null) &&
+      value.selected === ['retrieved', 'unavailable'].includes(value.reason) &&
+      (value.selectionRank !== null || !value.selected),
+    'Discovery selection metadata must match its URL and outcome',
+  );
+export type DiscoverySelectionCandidate = z.infer<typeof discoverySelectionCandidateSchema>;
+export const discoverySelectionSchema = z.strictObject({
+  candidates: z.array(discoverySelectionCandidateSchema).max(32),
+  omittedCount: z.number().int().min(0).max(1000),
+});
 export const roundDiagnosticSchema = z.strictObject({
   index: z.number().int().min(0).max(9),
   target: researchTargetSchema,
   reason: z.enum(['completed', 'already_supported', 'budget_exhausted']),
   gap: gapSchema,
+  discoverySelection: discoverySelectionSchema.optional(),
   urls: z
     .array(
-      z.strictObject({ url: z.url().max(2048), outcome: z.enum(['retrieved', 'unavailable', 'already_consulted']) }),
+      z.strictObject({
+        url: z.url().max(2048),
+        outcome: z.enum(['retrieved', 'unavailable', 'already_consulted', 'unsupported_format']),
+      }),
     )
     .max(100),
   missingBefore: z.array(researchTargetSchema).max(4),
@@ -233,7 +430,10 @@ export const researchRoundSchema = z
       diagnostic.rejectedCandidates === result.rejections.length &&
       diagnostic.selectedCandidates <= diagnostic.extractedCandidates &&
       diagnostic.acceptedCandidates + diagnostic.rejectedCandidates <= diagnostic.selectedCandidates &&
-      diagnostic.retrievedPages <= diagnostic.pageRequests,
+      diagnostic.retrievedPages <= diagnostic.pageRequests &&
+      (!diagnostic.discoverySelection ||
+        diagnostic.discoverySelection.candidates.length + diagnostic.discoverySelection.omittedCount ===
+          diagnostic.discoveredUrls),
     'Round diagnostics must match the persisted result and processing counts',
   );
 export type ResearchRound = z.infer<typeof researchRoundSchema>;
@@ -322,7 +522,8 @@ export class ResearchError extends Error {
     readonly retryable = false,
     readonly retryAfterMs = 0,
     readonly page?: PageFailure,
+    readonly provider?: ProviderFailure,
   ) {
-    super(code);
+    super(code, provider?.errorClass ? { cause: new Error(provider.errorClass) } : undefined);
   }
 }

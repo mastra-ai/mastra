@@ -7,7 +7,8 @@ import type { NormalizedEvent } from '../contracts';
 import type { QualificationSnapshot } from '../config/qualification';
 import { QualificationStore } from './qualification-store';
 import { ReviewStore } from './review-store';
-import { ownedState } from '../providers/output';
+import type { DestinationState } from '../providers/output';
+import { localOwnedState, projectLocalPatch } from '../providers/local/output';
 import { digestValue } from '../review/contracts';
 
 export type RunStatus = 'accepted' | 'dispatching' | 'intake_received' | 'failed';
@@ -48,7 +49,7 @@ export class LeadEventStore {
   async init() {
     await this.client.execute('PRAGMA journal_mode=WAL');
     await this.client.execute('PRAGMA synchronous=FULL');
-    await this.client.execute('PRAGMA busy_timeout=5000');
+    await this.client.execute('PRAGMA busy_timeout=1000');
     await this.client.executeMultiple(`
       CREATE TABLE IF NOT EXISTS lead_runs (
         run_id TEXT PRIMARY KEY,
@@ -73,10 +74,16 @@ export class LeadEventStore {
     `);
     await this.qualifications.init();
     await this.reviews.init();
+    await this.reviews.migrate();
   }
 
-  accept(event: NormalizedEvent, maxPendingRuns: number, snapshot?: QualificationSnapshot): Promise<RunRecord> {
-    const accepted = this.admission.then(() => this.acceptTransaction(event, maxPendingRuns, snapshot));
+  accept(
+    event: NormalizedEvent,
+    maxPendingRuns: number,
+    snapshot?: QualificationSnapshot,
+    expected?: DestinationState,
+  ): Promise<RunRecord> {
+    const accepted = this.admission.then(() => this.acceptTransaction(event, maxPendingRuns, snapshot, expected));
     this.admission = accepted.catch(() => undefined);
     return accepted;
   }
@@ -85,6 +92,7 @@ export class LeadEventStore {
     event: NormalizedEvent,
     maxPendingRuns: number,
     snapshot?: QualificationSnapshot,
+    expected?: DestinationState,
   ): Promise<RunRecord> {
     const delivery = await this.client.execute({
       sql: 'SELECT r.*, d.payload_json FROM lead_deliveries d JOIN lead_runs r USING (run_id) WHERE d.source_id=? AND d.event_id=?',
@@ -134,7 +142,8 @@ export class LeadEventStore {
         !expectedLocal ||
         !operation ||
         operation.state !== 'applied' ||
-        digestValue(ownedState(JSON.parse(expectedLocal) as Record<string, unknown>)) !== digestValue(operation.patch)
+        digestValue(localOwnedState(JSON.parse(expectedLocal) as Record<string, unknown>)) !==
+          digestValue(projectLocalPatch(operation.patch))
       )
         throw new DeliveryConflictError(
           'Destination changed since the previous cycle; resolve the conflict before requalification',
@@ -166,8 +175,15 @@ export class LeadEventStore {
       });
     if (snapshot) {
       statements.push({
-        sql: 'INSERT INTO lead_cycles(run_id,destination_provider,destination_reference,predecessor_id) VALUES(?,?,?,?)',
-        args: [runId, event.destination.providerId, event.destination.reference, event.supersedesAssessmentId ?? null],
+        sql: 'INSERT INTO lead_cycles(run_id,destination_provider,destination_reference,predecessor_id,expected_json,expected_revision) VALUES(?,?,?,?,?,?)',
+        args: [
+          runId,
+          event.destination.providerId,
+          event.destination.reference,
+          event.supersedesAssessmentId ?? null,
+          expected ? JSON.stringify(expected.fields) : null,
+          expected?.revision ?? null,
+        ],
       });
       if (event.destination.providerId === 'local')
         statements.push({

@@ -1,3 +1,5 @@
+import type { EventInputProvider } from '../providers/input';
+import type { ReviewService } from '../review/service';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraWorker } from '@mastra/core/worker';
 import type { IntakeConfig } from '../config/lead-ingestion';
@@ -19,6 +21,8 @@ export class LeadDispatcher extends MastraWorker {
     private readonly intake: ReceiveLeadWorkflow,
     private readonly config: IntakeConfig,
     private readonly telemetry: Telemetry,
+    private readonly reviews: ReviewService,
+    private readonly inputs: readonly EventInputProvider[] = [],
   ) {
     super();
   }
@@ -49,6 +53,7 @@ export class LeadDispatcher extends MastraWorker {
 
   private async tick() {
     try {
+      for (const input of this.inputs) await input.drain?.();
       const pending = new Map(
         (await this.store.pending(this.config.limits.activeRuns)).map(record => [record.runId, record]),
       );
@@ -89,6 +94,8 @@ export class LeadDispatcher extends MastraWorker {
       await this.store.markDispatching(record.runId);
       const snapshot = await this.intake.workflow.getWorkflowRunById(record.runId);
       if (snapshot?.status === 'success') {
+        // Manual review revisions continue only the durable output lifecycle. Research stays completed.
+        if ((await this.store.reviews.get(record.runId))?.active) await this.reviews.advance(record.runId);
         await this.store.complete(record.runId);
         return;
       }
@@ -96,7 +103,7 @@ export class LeadDispatcher extends MastraWorker {
         await this.store.fail(record.runId, 'workflow_failed');
         return;
       }
-      const requestContext = this.intake.authorizeDispatchContext(new RequestContext());
+      const requestContext = this.intake.authorizeDispatchContext(new RequestContext(), record.event);
       const tracingOptions = { metadata: { runId: record.runId } };
       const run = await this.intake.workflow.createRun({ runId: record.runId, resourceId: 'lead-qualification' });
       const decision = (await this.store.reviews.get(record.runId))?.decision;

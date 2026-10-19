@@ -15,8 +15,16 @@ import {
   ResearchError,
   candidatePassages,
 } from './contracts';
-import type { Assessment, BranchResult, Evidence, ResearchBranch, ResearchRound } from './contracts';
-import { approvedUrl, PageRetriever } from './page-retrieval';
+import type {
+  Assessment,
+  BranchResult,
+  Evidence,
+  ResearchBranch,
+  ResearchRound,
+  DiscoverySelectionCandidate,
+} from './contracts';
+import { approvedUrl, PageRetriever, unsupportedPageFormat } from './page-retrieval';
+import { selectionDiagnosticUrl } from './selection-diagnostics';
 import { collectFacts, gapReason, missingAttributes } from './facts';
 import { createEvidenceBatch, validateCandidates, validateSource } from './evidence-validation';
 
@@ -97,21 +105,101 @@ export class QualificationService {
       try {
         const previousMaterial = [...context.round.previousEvidence, ...result.evidence];
         const batch = createEvidenceBatch(previousMaterial);
-        const discovered = discoverySchema.safeParse(
-          await retryWithinBudget(() => provider.search(branch, context), context),
-        );
-        if (!discovered.success) throw new ResearchError('provider_discovery_invalid');
-        const discovery = discovered.data;
+        let discovery: ReturnType<typeof discoverySchema.parse> = { sourceUrls: [], evidence: [] };
+        try {
+          const discovered = discoverySchema.safeParse(
+            await retryWithinBudget(() => provider.search(branch, context), context),
+          );
+          if (!discovered.success) throw new ResearchError('provider_discovery_invalid');
+          discovery = discovered.data;
+        } catch (error) {
+          if (!previousMaterial.length) throw error;
+          const failure = normalizedResearchError(error);
+          result.failures.push({
+            branch,
+            providerId,
+            code: failure.code,
+            retryable: failure.retryable,
+            provider: failure.provider,
+          });
+        }
         context.round.counters.discoveredUrls += discovery.sourceUrls.length;
         for (const material of discovery.evidence) {
           const source = validateSource(material, providerId, context.domains, context.snapshot.config.sources);
           if (source) batch.add(source);
           else result.failures.push({ branch, providerId, code: 'unapproved_source', retryable: false });
         }
+        const target = context.round.target;
+        const priority = (value: string) => {
+          const url = new URL(value);
+          const path = url.pathname.toLowerCase();
+          const host = url.hostname.toLowerCase();
+          let score = host === context.domain ? 4 : host.endsWith(`.${context.domain}`) ? 3 : 0;
+          if (/^(?:support|help|docs|developers?|community|academy)\./.test(host)) score -= 12;
+          if (target === 'employeeCount') {
+            if (/^(?:careers?|jobs?)\./.test(host)) score += 6;
+            if (
+              /(?:^|[/_-])(?:team|about|who-are-we|qui-sommes-nous|quienes-somos|quem-somos|careers?|people|company|workforce|headcount|employees?)(?:[/_.-]|$)/.test(
+                path,
+              )
+            )
+              score += 4;
+            if (/\/(?:jobs?|positions?|vacancies)\/[^/]+/.test(path)) score -= 8;
+            if (
+              /(?:^|[/_-])(?:legal|legales|privacy|confidentialite|terms|conditions|cgu|cgv|privacidade|datenschutz)(?:[/_.-]|$)/.test(
+                path,
+              )
+            )
+              score -= 8;
+          } else if (target === 'headquartersCountry') {
+            if (
+              /about|who-are-we|qui-sommes-nous|quienes-somos|quem-somos|contact|company|headquarters|head-office|office|legal|mentions-legales|impressum/.test(
+                path,
+              )
+            )
+              score += 4;
+          } else if (/product|pricing|customer/.test(path)) score += 4;
+          if (
+            target !== 'businessModel' &&
+            /\/(?:support|help|docs|tutorials?|guides?|customers?|case-studies|customer-stories|podcasts?|archives?|categor(?:y|ies)|tags?)(?:\/|[-_]|$)/.test(
+              path,
+            )
+          )
+            score -= 8;
+          if (
+            target === 'employeeCount' &&
+            /\/(?:company-size|employee-count|headcount)\/\d+(?:-\d+)?(?:-employees)?(?:\/|$)/.test(path)
+          )
+            score -= 8;
+          return score;
+        };
+        const decisions = discovery.sourceUrls.map(source => {
+          const url = selectionDiagnosticUrl(source);
+          return {
+            providerIndex: context.snapshot.config.sources.providerIds.indexOf(providerId),
+            url,
+            priority: url === null ? null : priority(source),
+            rank: null as number | null,
+            selectionRank: null as number | null,
+            citationPreferred: discovery.preferredSourceUrls?.includes(source) ?? false,
+            selected: false,
+            reason: 'unapproved_source' as DiscoverySelectionCandidate['reason'],
+          };
+        });
         const approved: string[] = [];
-        for (const source of discovery.sourceUrls) {
+        const preferred = new Set<string>();
+        const approvedDecisions = new Map<string, DiscoverySelectionCandidate>();
+        const normalizedSources = new Map<DiscoverySelectionCandidate, string>();
+        for (const [index, source] of discovery.sourceUrls.entries()) {
+          const decision = decisions[index]!;
           try {
-            approved.push(approvedUrl(source, context.domains).href);
+            const url = approvedUrl(source, context.domains).href;
+            approved.push(url);
+            normalizedSources.set(decision, url);
+            if (decision.url !== null) decision.priority = priority(url);
+            if (discovery.preferredSourceUrls?.includes(source)) preferred.add(url);
+            decision.reason = approvedDecisions.has(url) ? 'duplicate' : 'not_selected';
+            if (!approvedDecisions.has(url)) approvedDecisions.set(url, decision);
           } catch {
             result.failures.push({ branch, providerId, code: 'unapproved_source', retryable: false });
           }
@@ -121,29 +209,34 @@ export class QualificationService {
           ...previousMaterial.filter(source => source.kind === 'website').map(source => diagnosticUrl(source.source)),
         ]);
         const urls = [...new Set(approved)].filter(url => {
+          if (unsupportedPageFormat(new URL(url))) {
+            approvedDecisions.get(url)!.reason = 'unsupported_format';
+            recordUrl(context.round.counters.urls, url, 'unsupported_format');
+            result.failures.push({ branch, providerId, code: 'unsupported_source_format', retryable: false });
+            return false;
+          }
           if (!priorUrls.has(diagnosticUrl(url))) return true;
+          approvedDecisions.get(url)!.reason = 'already_consulted';
           recordUrl(context.round.counters.urls, url, 'already_consulted');
           return false;
         });
-        {
-          const target = context.round.target;
-          const paths =
-            target === 'employeeCount'
-              ? /team|about|careers|people|company/i
-              : target === 'headquartersCountry'
-                ? /about|contact|company|office/i
-                : /product|pricing|customer/i;
-          const priority = (value: string) => {
-            const url = new URL(value);
-            return (
-              Number(url.hostname === context.domain || url.hostname.endsWith(`.${context.domain}`)) * 2 +
-              Number(paths.test(url.pathname))
-            );
-          };
-          urls.sort((a, b) => priority(b) - priority(a));
-        }
+        urls.sort((a, b) => priority(b) - priority(a) || Number(preferred.has(b)) - Number(preferred.has(a)));
+        for (const [index, url] of urls.entries()) approvedDecisions.get(url)!.selectionRank = index + 1;
+        for (const [decision, url] of normalizedSources) decision.citationPreferred = preferred.has(url);
+        const ranked = decisions
+          .filter(decision => decision.priority !== null)
+          .sort((a, b) => b.priority! - a.priority! || Number(b.citationPreferred) - Number(a.citationPreferred));
+        ranked.forEach((decision, index) => {
+          decision.rank = index + 1;
+        });
+        const selection = (context.round.counters.discoverySelection ??= { candidates: [], omittedCount: 0 });
+        const available = 32 - selection.candidates.length;
+        selection.candidates.push(...decisions.slice(0, available));
+        selection.omittedCount += Math.max(0, decisions.length - available);
         for (const sourceUrl of urls) {
           if (retrievedDigests.size >= 1) break;
+          const decision = approvedDecisions.get(sourceUrl)!;
+          decision.selected = true;
           try {
             const page = await retryWithinBudget(
               () =>
@@ -157,6 +250,7 @@ export class QualificationService {
                 }),
               context,
             );
+            decision.reason = 'retrieved';
             recordUrl(context.round.counters.urls, sourceUrl, 'retrieved');
             if (!retrievedDigests.has(page.digest)) {
               retrievedDigests.add(page.digest);
@@ -164,6 +258,7 @@ export class QualificationService {
               context.round.counters.retrievedPages++;
             }
           } catch (error) {
+            decision.reason = 'unavailable';
             recordUrl(context.round.counters.urls, sourceUrl, 'unavailable');
             const failure = normalizedResearchError(error);
             if (failure.code === 'evidence_id_conflict') throw failure;
@@ -174,8 +269,13 @@ export class QualificationService {
               retryable: failure.retryable,
               page: failure.page,
             });
-            if (['request_budget_exhausted', 'resource_budget_exhausted', 'deadline_exhausted'].includes(failure.code))
+            if (
+              ['request_budget_exhausted', 'resource_budget_exhausted', 'deadline_exhausted'].includes(failure.code)
+            ) {
+              for (const candidate of approvedDecisions.values())
+                if (candidate.reason === 'not_selected') candidate.reason = 'budget_exhausted';
               break;
+            }
           }
         }
         const prepared = batch.prepare();
@@ -191,7 +291,10 @@ export class QualificationService {
         if (!extraction.success) throw new ResearchError('provider_extraction_invalid');
         const extracted = extraction.data;
         result.companyName ??= extracted.companyName;
-        result.identityAmbiguous ||= extracted.identityAmbiguous;
+        // A submitted inquiry cannot contradict the supplied company domain on its own.
+        // Validated website or trusted API/CRM research can establish a sticky conflict.
+        result.identityAmbiguous ||=
+          extracted.identityAmbiguous && material.some(source => source.kind !== 'submitted');
         const candidates = extracted.candidates.filter(candidate =>
           branch === 'signals' ? candidate.attribute === 'buyingIntent' : candidate.attribute !== 'buyingIntent',
         );
@@ -218,7 +321,13 @@ export class QualificationService {
         result.intentCoverageComplete ||= extracted.intentCoverageComplete && verified.intentCoverageComplete;
       } catch (error) {
         const failure = normalizedResearchError(error);
-        result.failures.push({ branch, providerId, code: failure.code, retryable: failure.retryable });
+        result.failures.push({
+          branch,
+          providerId,
+          code: failure.code,
+          retryable: failure.retryable,
+          provider: failure.provider,
+        });
       }
     }
     result.evidence.sort((a, b) => a.id.localeCompare(b.id));
@@ -250,6 +359,7 @@ export class QualificationService {
         extractedCandidates: 0,
         selectedCandidates: 0,
         urls: [] as ResearchRound['diagnostic']['urls'],
+        discoverySelection: { candidates: [] as DiscoverySelectionCandidate[], omittedCount: 0 },
       };
       const result =
         reason === 'completed'
@@ -262,7 +372,9 @@ export class QualificationService {
                 query: plan.queries[target],
                 year: new Date(context.snapshot.assessmentTime).getUTCFullYear(),
                 searchDomains: before.searchCalls === 0 ? [context.domain] : context.domains,
-                consultedUrls: rounds.flatMap(round => round.urls.map(item => item.url)),
+                consultedUrls: rounds.flatMap(round =>
+                  round.urls.filter(item => item.outcome !== 'unsupported_format').map(item => item.url),
+                ),
                 previousEvidence: [
                   ...new Map(branches.flatMap(branch => branch.evidence).map(source => [source.id, source])).values(),
                 ],

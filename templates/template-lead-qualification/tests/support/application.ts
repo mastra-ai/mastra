@@ -6,12 +6,9 @@ import { Mastra } from '@mastra/core/mastra';
 import { MastraServer } from '@mastra/hono';
 import { Hono } from 'hono';
 import { createApplicationRuntime } from '../../src/mastra/application';
+import type { ApplicationOptions } from '../../src/mastra/application';
 import { intakeConfig } from '../../src/mastra/config/lead-ingestion';
-import type { IntakeConfig } from '../../src/mastra/config/lead-ingestion';
-import type { QualificationConfig } from '../../src/mastra/config/qualification';
 import type { EvidenceProvider } from '../../src/mastra/providers/evidence';
-import type { PageRetriever } from '../../src/mastra/research/page-retrieval';
-import type { OutputProvider } from '../../src/mastra/providers/output';
 
 const controlledText = 'Controlled intake-only provider material; no company attributes asserted.';
 const emptyEvidence: EvidenceProvider = {
@@ -43,15 +40,12 @@ export function event(eventId = 'delivery-1', lead: Record<string, unknown> = { 
 }
 
 export async function harness(
-  options: {
+  options: Omit<ApplicationOptions, 'runtime' | 'attio'> & {
     production?: boolean;
     dispatch?: boolean;
-    config?: IntakeConfig;
     directory?: string;
-    qualification?: QualificationConfig;
-    evidence?: EvidenceProvider[];
-    pages?: PageRetriever;
-    output?: OutputProvider[];
+    attio?: ApplicationOptions['attio'];
+    defaultProviders?: boolean;
   } = {},
 ) {
   const directory = options.directory ?? (await mkdtemp(join(tmpdir(), 'lead-intake-')));
@@ -63,11 +57,30 @@ export async function harness(
       applicationPath: join(directory, 'application.db'),
       observabilityPath: join(directory, 'observability.duckdb'),
     },
-    config: options.config ?? intakeConfig,
+    config: options.defaultProviders
+      ? options.config
+      : (options.config ??
+        (options.attio
+          ? {
+              ...intakeConfig,
+              source: {
+                ...intakeConfig.source,
+                id: `attio:${options.attio.listId}`,
+                inputProviderId: 'attio',
+                destinationProviderId: 'attio',
+              },
+            }
+          : intakeConfig)),
     qualification: options.qualification,
+    input: options.input,
+    additionalInputs: options.additionalInputs,
+    inputFactories: options.inputFactories,
+    outputFactories: options.outputFactories,
     evidence: options.evidence ?? [emptyEvidence],
     pages: options.pages,
     output: options.output,
+    attio: options.defaultProviders ? options.attio : (options.attio ?? null),
+    attioTransport: options.attioTransport,
   });
   const mastra = new Mastra(application.mastraConfig);
   const http = new Hono();

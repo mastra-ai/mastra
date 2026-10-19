@@ -12,11 +12,13 @@ const environmentSchema = z
     path: ['token'],
   });
 
-export function runtimeConfig(environment: NodeJS.ProcessEnv = process.env) {
-  const config = environmentSchema.parse({
-    mode: environment.LEAD_QUALIFICATION_MODE ?? 'local',
-    token: environment.LEAD_QUALIFICATION_TOKEN || undefined,
-  });
+export const runtimeSettingsSchema = environmentSchema.safeExtend({
+  host: z.string().min(1),
+  applicationPath: z.string().min(1),
+  observabilityPath: z.string().min(1),
+});
+
+export function resolveProjectRoot(environment: NodeJS.ProcessEnv = process.env) {
   // CLI modes use different generated working directories. Resolve their trusted hint
   // to the enclosing project, keeping both databases outside disposable build output.
   let projectRoot = resolve(environment.MASTRA_PROJECT_ROOT ?? process.cwd());
@@ -25,6 +27,15 @@ export function runtimeConfig(environment: NodeJS.ProcessEnv = process.env) {
     if (parent === projectRoot) throw new Error('Cannot locate the application project directory');
     projectRoot = parent;
   }
+  return projectRoot;
+}
+
+export function runtimeConfig(environment: NodeJS.ProcessEnv = process.env) {
+  const config = environmentSchema.parse({
+    mode: environment.LEAD_QUALIFICATION_MODE ?? 'local',
+    token: environment.LEAD_QUALIFICATION_TOKEN || undefined,
+  });
+  const projectRoot = resolveProjectRoot(environment);
   return {
     ...config,
     host: config.mode === 'local' ? '127.0.0.1' : '0.0.0.0',

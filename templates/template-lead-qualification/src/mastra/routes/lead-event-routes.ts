@@ -1,20 +1,24 @@
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRouteHandler } from '@mastra/core/server';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
+
 import type { IntakeConfig } from '../config/lead-ingestion';
 import { runReferenceSchema } from '../contracts';
+import type { LeadIntake } from '../intake';
+import type { OutputProvider } from '../providers/output';
+import { destinationFields, projectedPatch } from '../providers/output';
 import { AdmissionError, DeliveryConflictError } from '../persistence/lead-event-store';
 import type { LeadEventStore } from '../persistence/lead-event-store';
-import { inputProviders } from '../providers/input';
+import type { EventInputProvider } from '../providers/input';
 import type { Telemetry } from '../telemetry';
-import { snapshotConfiguration } from '../config/qualification';
-import type { QualificationConfig } from '../config/qualification';
 import { ReviewConflictError } from '../review/service';
 import type { ReviewService } from '../review/service';
-import { decisionInputSchema } from '../review/contracts';
+import { decisionInputSchema, digestValue } from '../review/contracts';
 
-class BodyTooLargeError extends Error {}
-async function readBody(request: Request, maxBytes: number) {
+const outputFormatSchema = z.enum(['text', 'markdown']).default('markdown');
+
+export class BodyTooLargeError extends Error {}
+export async function readRawBody(request: Request, maxBytes: number) {
   const length = request.headers.get('content-length');
   if (length && (!/^\d+$/.test(length) || Number(length) > maxBytes)) throw new BodyTooLargeError();
   const reader = request.body?.getReader();
@@ -35,18 +39,22 @@ async function readBody(request: Request, maxBytes: number) {
   } finally {
     reader.releaseLock();
   }
-  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+  return Buffer.concat(chunks);
+}
+
+async function readBody(request: Request, maxBytes: number) {
+  return JSON.parse((await readRawBody(request, maxBytes)).toString('utf8')) as unknown;
 }
 
 export function createLeadRoutes(
   store: LeadEventStore,
   config: IntakeConfig,
   telemetry: Telemetry,
-  qualification: QualificationConfig,
   reviews: ReviewService,
+  provider: EventInputProvider,
+  admission: LeadIntake,
+  outputs: ReadonlyMap<string, OutputProvider>,
 ) {
-  const provider = inputProviders.get(config.source.inputProviderId);
-  if (!provider) throw new Error('Configured input provider is unavailable');
   return [
     registerApiRoute('/lead-qualification/reviews', {
       method: 'POST',
@@ -66,41 +74,77 @@ export function createLeadRoutes(
         }
       },
     }),
-    registerApiRoute('/lead-qualification/events', {
-      method: 'POST',
+    ...(provider.transport === 'custom'
+      ? []
+      : [
+          registerApiRoute('/lead-qualification/events', {
+            method: 'POST',
+            requiresAuth: true,
+            createHandler: async () => {
+              const handler: ApiRouteHandler = async c => {
+                if (c.req.header('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json') {
+                  return c.json({ error: 'unsupported_content_type' }, 415);
+                }
+                try {
+                  const payload = await readBody(c.req.raw, config.limits.maxBodyBytes);
+                  const runId = await admission.receive(provider, payload);
+                  if (!runId) return c.json({ error: 'invalid_event' }, 400);
+                  await telemetry.diagnostic({ code: 'intake.accepted', runId });
+                  return c.json({ runId, statusUrl: `/lead-qualification/runs/${runId}` }, 202);
+                } catch (error) {
+                  await telemetry.diagnostic({ code: 'intake.rejected' });
+                  if (error instanceof BodyTooLargeError) return c.json({ error: 'body_too_large' }, 413);
+                  if (
+                    error instanceof ZodError ||
+                    error instanceof SyntaxError ||
+                    error instanceof DeliveryConflictError
+                  ) {
+                    return c.json({ error: 'invalid_event' }, 400);
+                  }
+                  if (error instanceof AdmissionError) {
+                    c.header('Retry-After', '1');
+                    return c.json({ error: 'admission_limit' }, 429);
+                  }
+                  return c.json({ error: 'persistence_unavailable' }, 503);
+                }
+              };
+              return handler;
+            },
+          }),
+        ]),
+    registerApiRoute('/lead-qualification/runs/:runId/output', {
+      method: 'GET',
       requiresAuth: true,
-      createHandler: async () => {
-        const handler: ApiRouteHandler = async c => {
-          if (c.req.header('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json') {
-            return c.json({ error: 'unsupported_content_type' }, 415);
-          }
-          try {
-            const payload = await readBody(c.req.raw, config.limits.maxBodyBytes);
-            const event = provider.normalize(payload, config.source, new Date().toISOString());
-            if (event.lead.crm && !config.source.crmProviderIds.includes(event.lead.crm.providerId)) {
-              return c.json({ error: 'unconfigured_crm_reference' }, 400);
-            }
-            const run = await store.accept(
-              event,
-              config.limits.maxPendingRuns,
-              snapshotConfiguration(qualification, event.receivedAt),
-            );
-            await telemetry.diagnostic({ code: 'intake.accepted', runId: run.runId });
-            return c.json({ runId: run.runId, statusUrl: `/lead-qualification/runs/${run.runId}` }, 202);
-          } catch (error) {
-            await telemetry.diagnostic({ code: 'intake.rejected' });
-            if (error instanceof BodyTooLargeError) return c.json({ error: 'body_too_large' }, 413);
-            if (error instanceof ZodError || error instanceof SyntaxError || error instanceof DeliveryConflictError) {
-              return c.json({ error: 'invalid_event' }, 400);
-            }
-            if (error instanceof AdmissionError) {
-              c.header('Retry-After', '1');
-              return c.json({ error: 'admission_limit' }, 429);
-            }
-            return c.json({ error: 'persistence_unavailable' }, 503);
-          }
-        };
-        return handler;
+      handler: async c => {
+        const id = runReferenceSchema.safeParse({ runId: c.req.param('runId') });
+        if (!id.success) return c.json({ error: 'invalid_run_reference' }, 400);
+        const format = outputFormatSchema.safeParse(c.req.query('format'));
+        if (!format.success) return c.json({ error: 'invalid_output_format' }, 400);
+        try {
+          const run = await store.get(id.data.runId);
+          if (!run) return c.json({ error: 'run_not_found' }, 404);
+          const provider = outputs.get(run.event.destination.providerId)!;
+          const cycle = await store.reviews.get(run.runId);
+          const kind = cycle?.state === 'awaiting_review' ? 'review' : cycle?.state === 'applied' ? 'final' : 'closure';
+          const operation = cycle && (await store.reviews.operation(run.runId, kind, cycle.revision));
+          if (!operation || operation.state !== 'applied') return c.json({ error: 'readable_output_unavailable' }, 404);
+          const state = await provider.read(run.event.destination);
+          if (
+            state &&
+            (state.marker !== operation.id ||
+              digestValue(destinationFields(provider, state.fields)) !==
+                digestValue(projectedPatch(provider, operation.patch, operation.id, operation.expected)))
+          )
+            return c.json({ error: 'output_changed' }, 409);
+          if (!state?.content) return c.json({ error: 'readable_output_unavailable' }, 404);
+          c.header(
+            'Content-Type',
+            format.data === 'text' ? 'text/plain; charset=utf-8' : 'text/markdown; charset=utf-8',
+          );
+          return c.body(state.content[format.data]);
+        } catch {
+          return c.json({ error: 'output_unavailable' }, 503);
+        }
       },
     }),
     registerApiRoute('/lead-qualification/runs/:runId', {

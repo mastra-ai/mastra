@@ -67,6 +67,18 @@ export function approvedUrl(value: string, domains: string[]) {
   if (url.href.length > 2048) throw new ResearchError('unapproved_source');
   return url;
 }
+/** Discovery can reject known incompatible files without spending a page reservation. */
+export function unsupportedPageFormat(url: URL) {
+  let path = url.pathname;
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    // Malformed escapes remain subject to normal URL and HTTP response validation.
+  }
+  return /\.(?:pdf|docx?|xlsx?|pptx?|odt|ods|odp|rtf|zip|gz|bz2|xz|tar|rar|7z|png|jpe?g|gif|webp|avif|svg|ico|bmp|tiff?|heic|mp3|wav|ogg|mp4|mov|avi|webm|woff2?|ttf|eot|exe|dmg|iso)$/i.test(
+    path,
+  );
+}
 export interface PageTransport {
   resolve(this: void, hostname: string): Promise<Array<{ address: string; family: number }>>;
   request(
@@ -158,6 +170,7 @@ export class PageRetriever {
     let url = approvedUrl(input.sourceUrl, input.domains);
     const signal = AbortSignal.timeout(Math.max(1, input.deadline - Date.now()));
     for (;;) {
+      if (unsupportedPageFormat(url)) throw new ResearchError('unsupported_source_format');
       const reservation = await input.store.reserve(input.runId, 'page');
       if (Date.now() >= input.deadline || signal.aborted) throw new ResearchError('deadline_exhausted');
       const addresses = await new Promise<Awaited<ReturnType<PageTransport['resolve']>>>((resolve, reject) => {

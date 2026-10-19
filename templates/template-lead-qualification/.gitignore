@@ -9,3 +9,6 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 data/
+/attio.mapping.json
+
+/attio.mapping.json.*

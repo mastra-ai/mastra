@@ -1,6 +1,6 @@
 # Lead event intake
 
-`POST /lead-qualification/events` accepts a strict JSON object. A successful response is HTTP 202 with `runId` and `statusUrl`, after the event, effective qualification snapshot and association commit to operational storage. `GET /lead-qualification/runs/:runId` reports intake status, source and destination references, receipt/update times, a safe failure code, and telemetry availability. It omits raw input and contact email; the assessment includes attributed inquiry text when supplied as evidence.
+For a selected JSON input driver, `POST /lead-qualification/events` accepts a strict JSON object. A successful response is HTTP 202 with `runId` and `statusUrl`, after the event, effective qualification snapshot and association commit to operational storage. `GET /lead-qualification/runs/:runId` reports intake status, source and destination references, receipt/update times, a safe failure code, and telemetry availability. It omits raw input and contact email; the assessment includes attributed inquiry text when supplied as evidence.
 
 ```json
 {
@@ -38,34 +38,34 @@ The terminal status `intake_received` means the workflow verified the associatio
 
 ## Add an input adapter
 
-Prerequisites: understand `EventInputProvider` in `src/mastra/providers/input.ts`, the schemas in `contracts.ts`, and the trusted source configuration. An input provider normalizes data; the server handles authentication and admission.
-
-1. Define a strict input schema and normalize to `NormalizedEvent`.
-2. Register the adapter by ID in `inputProviders`. Expand the configuration schema's allowed adapter IDs when adding one.
-3. Bind its source, destination provider and permitted CRM references in application configuration. Do not read URLs or credentials from event data.
-4. Preserve the same persistence/read contract. Add fixtures and HTTP functional tests for normalization, provenance, rejected input, duplicates and restart recovery.
-5. Run unit and integration checks, then verify the configured adapter through the public event endpoint.
-
-A minimal adapter follows the shipped interface:
+Implement the documented asynchronous `EventInputProvider` in `src/mastra/providers/input.ts`. Local JSON is implemented in `providers/local/input.ts`; Attio implements the same contract in `providers/attio/input.ts`. Register an instance in `input` or a factory in `inputFactories`, with its ID in `config.source.inputProviderId`. The output provider is selected separately.
 
 ```ts
+const config = { ...intakeConfig, source: { ...intakeConfig.source, inputProviderId: 'my-source' } };
 const input: EventInputProvider = {
-  normalize(payload, source, receivedAt) {
+  id: 'my-source',
+  source: config.source,
+  transport: 'json',
+  async normalize(payload, source, receivedAt) {
     const submitted = myStrictSchema.parse(payload);
-    return normalizedEventSchema.parse({
-      version: 1,
-      type: 'lead.received',
-      eventId: submitted.id,
-      sourceId: source.id,
-      receivedAt,
-      lead: { reference: submitted.companyId, domain: submitted.domain },
-      destination: { providerId: source.destinationProviderId, reference: submitted.companyId },
-    });
+    return {
+      event: normalizedEventSchema.parse({
+        version: 1,
+        type: 'lead.received',
+        eventId: submitted.id,
+        sourceId: source.id,
+        receivedAt,
+        lead: { reference: submitted.companyId, domain: submitted.domain },
+        destination: { providerId: source.destinationProviderId, reference: submitted.companyId },
+      }),
+    };
   },
 };
-inputProviders.set('my-source', input);
+const application = await createApplicationRuntime({ config, input: new Map([['my-source', input]]) });
 ```
+
+The common endpoint awaits normalization and sends its result through `LeadIntake.receive`, which checks source/destination bindings, receipt time and permitted CRM references before durable acceptance. A custom transport must use that same service. For signed delivery, declare `transport: 'custom'`, provide authenticated routes and durably persist the delivery before background hydration. The generic JSON route is absent for custom transport; Attio webhook signatures cannot be bypassed through `/events`. See [driver composition](crm-adapters.md) for factory context, retries and commands.
 
 Customization prompt:
 
-> Add [source] through EventInputProvider and the provider map. Inspect the strict event contracts and trusted bindings first. Normalize [source fields] without introducing provider branches in the workflow. Keep production authentication, streamed body limits, durable acknowledgement, changed-payload conflicts, active-destination exclusion and SIGKILL/restart recovery. Add functional fixtures/tests under tests/ and update this guide. Do not add research or CRM writes to intake.
+> Add [source] through EventInputProvider and the provider maps. Inspect strict schemas, the shared admission service and trusted binding first. Normalize [source fields] asynchronously without provider branches in the workflow. Preserve genuine inquiry provenance, production authentication, streamed limits, signed durable acknowledgement when needed, changed-payload conflicts, active-destination exclusion and restart recovery. Add HTTP functional fixtures under tests/ and update this guide.

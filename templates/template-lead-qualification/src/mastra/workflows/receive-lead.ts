@@ -1,6 +1,7 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { RequestContext } from '@mastra/core/request-context';
 import { intakeResultSchema, runReferenceSchema } from '../contracts';
+import type { NormalizedEvent } from '../contracts';
 import type { IntakeConfig } from '../config/lead-ingestion';
 import type { LeadEventStore } from '../persistence/lead-event-store';
 import type { QualificationService } from '../research/qualification';
@@ -13,7 +14,11 @@ export function createReceiveLeadWorkflow(
   config: IntakeConfig,
   qualification: QualificationService,
   reviews: ReviewService,
+  additionalSources: ReadonlyArray<{ id: string; destinationProviderId: string }> = [],
 ) {
+  const destinations = new Map(
+    [config.source, ...additionalSources].map(source => [source.id, source.destinationProviderId]),
+  );
   // Object identity cannot be supplied through native API request-context JSON.
   const dispatchBinding = Object.freeze({ sourceId: config.source.id });
   const receive = createStep({
@@ -27,8 +32,7 @@ export function createReceiveLeadWorkflow(
         runId !== inputData.runId ||
         !accepted ||
         accepted.status !== 'dispatching' ||
-        accepted.event.sourceId !== config.source.id ||
-        accepted.event.destination.providerId !== config.source.destinationProviderId
+        destinations.get(accepted.event.sourceId) !== accepted.event.destination.providerId
       ) {
         throw new Error('Workflow requires an accepted operational association and trusted dispatch');
       }
@@ -81,10 +85,10 @@ export function createReceiveLeadWorkflow(
       }),
     )
     .commit();
-  function authorizeDispatchContext(context: RequestContext) {
+  function authorizeDispatchContext(context: RequestContext, event?: NormalizedEvent) {
     context.set('intakeDispatch', dispatchBinding);
-    context.set('sourceId', config.source.id);
-    context.set('destinationProviderId', config.source.destinationProviderId);
+    context.set('sourceId', event?.sourceId ?? config.source.id);
+    context.set('destinationProviderId', event?.destination.providerId ?? config.source.destinationProviderId);
     return context;
   }
   return { workflow, authorizeDispatchContext };

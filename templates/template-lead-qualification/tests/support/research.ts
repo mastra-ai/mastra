@@ -1,23 +1,43 @@
 import { PassThrough } from 'node:stream';
 import { createHash } from 'node:crypto';
 import type { EvidenceProvider, ResearchContext } from '../../src/mastra/providers/evidence';
+import { OpenAIEvidenceProvider } from '../../src/mastra/providers/evidence';
 import type { IncomingMessage } from 'node:http';
 import { vi } from 'vitest';
 import type { Candidate, Evidence } from '../../src/mastra/research/contracts';
+import { PageRetriever } from '../../src/mastra/research/page-retrieval';
 import type { PageTransport } from '../../src/mastra/research/page-retrieval';
+import { harness } from './application';
+
+export async function controlledHarness(
+  options: Parameters<typeof harness>[0] = {},
+  controlled = controlledResearch(),
+) {
+  vi.stubEnv('OPENAI_API_KEY', 'controlled-functional-key');
+  vi.stubGlobal('fetch', controlled.fetch);
+  const app = await harness({
+    evidence: [new OpenAIEvidenceProvider()],
+    pages: new PageRetriever(controlled.transport),
+    ...options,
+  });
+  return { app, controlled };
+}
 
 export interface ResearchScenario {
   employees?: { min: number; max: number | null } | null;
   employeeInference?: { rationale: string; additionalPassages: Array<{ evidenceId: string; quote: string }> };
+  employeeObservation?: { value: { min: number; max: number | null }; quote: string };
   country?: string | null;
+  countryQuote?: string;
   businessModel?: string | null;
   inferredBusiness?: { label: string; rationale: string; quote: string; additionalQuotes?: string[] };
   deferIncompleteInference?: boolean;
   roundSources?: Record<string, string[]>;
+  roundCitations?: Record<string, string[]>;
   employeeQuote?: string;
   rejectEmployee?: boolean;
   rejectRedundantBusiness?: boolean;
-  asOf?: string | null;
+  asOf?: string | null | ((source: Evidence) => string | null);
   conflict?: boolean;
   missingQuote?: boolean;
   unknownEvidence?: boolean;
@@ -146,7 +166,7 @@ export function controlledResearch(initial: ResearchScenario = {}) {
       const evidenceId = scenario.unknownEvidence
         ? 'private-unknown-evidence-id'
         : (data.evidence!.find(source => source.excerpt.includes(pageText)) ?? data.evidence![0]!).id;
-      const candidates: Candidate[] = [];
+      const candidates: Array<Record<string, unknown>> = [];
       const add = (
         attribute: Candidate['attribute'],
         value: Candidate['value'],
@@ -162,7 +182,10 @@ export function controlledResearch(initial: ResearchScenario = {}) {
           value,
           evidenceId: supportingId,
           quote: scenario.missingQuote ? 'invented quotation' : quote,
-          asOf: scenario.asOf ?? null,
+          asOf:
+            typeof scenario.asOf === 'function'
+              ? scenario.asOf(data.evidence!.find(source => source.id === supportingId)!)
+              : (scenario.asOf ?? null),
           ...(inference ? { inference } : {}),
         });
       if (branch === 'firmographics') {
@@ -199,8 +222,10 @@ export function controlledResearch(initial: ResearchScenario = {}) {
             scenario.employeeQuote ?? '40 employees',
             scenario.employeeInference,
           );
-        if (scenario.country !== null && hasQuote('Headquarters: United States'))
-          add('headquartersCountry', scenario.country ?? 'US', 'Headquarters: United States');
+        if (scenario.employeeObservation && hasQuote(scenario.employeeObservation.quote))
+          add('employeeCount', scenario.employeeObservation.value, scenario.employeeObservation.quote);
+        if (scenario.country !== null && hasQuote(scenario.countryQuote ?? 'Headquarters: United States'))
+          add('headquartersCountry', scenario.country ?? 'US', scenario.countryQuote ?? 'Headquarters: United States');
         if (scenario.conflict) add('employeeCount', { min: 400, max: 400 }, '400 employees');
       } else if (scenario.rejectedIntent) {
         add(
@@ -235,18 +260,18 @@ export function controlledResearch(initial: ResearchScenario = {}) {
             {
               type: 'output_text',
               text,
-              annotations:
-                scenario.sourceMode === 'final_citation' && body.tools?.length
-                  ? [
-                      {
-                        type: 'url_citation',
-                        start_index: 0,
-                        end_index: 10,
-                        url: `https://example.com/${branch}`,
-                        title: 'Returned final citation',
-                      },
-                    ]
-                  : [],
+              annotations: body.tools?.length
+                ? (
+                    scenario.roundCitations?.[data.attribute ?? ''] ??
+                    (scenario.sourceMode === 'final_citation' ? [`https://example.com/${branch}`] : [])
+                  ).map(url => ({
+                    type: 'url_citation',
+                    start_index: 0,
+                    end_index: 10,
+                    url,
+                    title: 'Returned final citation',
+                  }))
+                : [],
             },
           ],
         },
@@ -311,11 +336,11 @@ export function recordProvider(
     }),
   };
 }
-export function proposal(
-  attribute: Candidate['attribute'],
-  value: Candidate['value'],
+export function proposal<A extends Candidate['attribute'], V extends Extract<Candidate, { attribute: A }>['value']>(
+  attribute: A,
+  value: V,
   quote: string,
   evidenceId = 'record-1',
-): Candidate {
+) {
   return { id: attribute, attribute, value, quote, evidenceId, asOf: null };
 }
