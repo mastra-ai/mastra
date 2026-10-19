@@ -8,13 +8,13 @@ Reworks what Slack users see when they talk to the Factory bot.
 
 **Acknowledge, then work.** For requests that need tools, the bot opens with one short line saying what it is about to do (e.g. "On it — running sleep 30, then the echo") as its own message, then the work follows. Direct answers skip the opener.
 
-**Visible progress.** Tool activity renders in Slack's native "Thinking Steps" widget (`toolDisplay: 'grouped'`) instead of being hidden. The widget header is a fixed "Working…"; each row shows the tool's description when it has one, otherwise the tool name and a short argument summary.
+**Progress in the status line.** While a tool runs, the typing status names its current step from the tool's `description` argument — "DAS Factory is listing the repo root" — and falls back to "is working…" when there is none. Tool calls themselves stay out of the thread (`toolDisplay: 'hidden'`, as before); a session runs hundreds of them and the `↗` link carries the full trace.
 
-Override the display mode through `adapterOptions` on `SlackIntegration`:
+To render tool activity in Slack's native "Thinking Steps" widget instead, opt in through `adapterOptions` on `SlackIntegration`:
 
 ```ts
 new SlackIntegration({
   // ...credentials
-  adapterOptions: { toolDisplay: 'hidden' },
+  adapterOptions: { toolDisplay: 'grouped' },
 });
 ```
