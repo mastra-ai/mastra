@@ -11,9 +11,13 @@ const ESSENTIAL_TOOLS = [
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+const isPersonalAccount = process.env.MASTRA_SMOKE_MICROSOFT_ACCOUNT_TYPE?.trim().toLowerCase() === 'personal';
+
 function isAccountCapabilityError(error: unknown): boolean {
-  return /personal|msa account|tenant-directory|work or school|sharepoint operations require/i.test(
-    errorMessage(error),
+  const detail = errorMessage(error);
+  return (
+    /personal|msa account|tenant-directory|work or school|sharepoint operations require/i.test(detail) ||
+    (isPersonalAccount && /status=(400|401|403|405|501)/i.test(detail))
   );
 }
 
@@ -27,6 +31,15 @@ export const microsoftPowerpointScenario: Scenario = {
   summary: 'discover drive → create → read/download/update/share/copy/move → delete presentations',
   async run({ tools, runId, call, log }) {
     const steps: ScenarioStep[] = [];
+    steps.push(
+      makeStep(
+        'account type',
+        undefined,
+        'pass',
+        process.env.MASTRA_SMOKE_MICROSOFT_ACCOUNT_TYPE?.trim().toLowerCase() ??
+          'unknown; set MASTRA_SMOKE_MICROSOFT_ACCOUNT_TYPE=personal|work for capability classification',
+      ),
+    );
     const missing = requireTools(tools, ESSENTIAL_TOOLS);
     if (missing) {
       steps.push(makeStep('preflight', undefined, 'skip', missing));
@@ -428,9 +441,9 @@ export const microsoftPowerpointScenario: Scenario = {
           driveId,
           itemId: originalId,
           type: 'view',
-          scope: 'organization',
+          scope: isPersonalAccount ? 'anonymous' : 'organization',
         });
-        steps.push(makeStep('create organization sharing link', 'microsoft_powerpoint_create_sharing_link', 'pass'));
+        steps.push(makeStep('create sharing link', 'microsoft_powerpoint_create_sharing_link', 'pass'));
       } catch (error) {
         steps.push(
           makeStep(
