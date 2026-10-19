@@ -25,11 +25,41 @@ export function heapFlagRelaunchArgv(proc: {
   if (proc.env[OPT_OUT_ENV] === '1') return undefined;
   // Bun and Deno expose process.execve too, but don't take V8 flags this way.
   if (proc.versions.bun || proc.versions.deno) return undefined;
-  const nodeOptions = proc.env.NODE_OPTIONS ?? '';
+  const options = [...proc.execArgv, ...splitNodeOptions(proc.env.NODE_OPTIONS ?? '')];
   const missing = HEAP_FLAGS.filter(flag => {
     const name = flag.split('=')[0]!;
-    return !proc.execArgv.some(arg => arg.startsWith(name)) && !nodeOptions.includes(name);
+    // The flag itself, not its name inside another option's value (`--title=--max-semi-space-size`).
+    return !options.some(option => option === name || option.startsWith(`${name}=`));
   });
   if (missing.length === 0) return undefined;
   return [proc.execPath, ...missing, ...proc.execArgv, ...proc.argv.slice(1)];
+}
+
+/**
+ * Split NODE_OPTIONS the way Node does: on spaces, with double quotes grouping a value and a
+ * backslash escaping the next character inside quotes.
+ */
+function splitNodeOptions(value: string): string[] {
+  const options: string[] = [];
+  let current = '';
+  let started = false;
+  let quoted = false;
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i]!;
+    if (quoted && char === '\\' && i + 1 < value.length) {
+      current += value[++i];
+    } else if (char === '"') {
+      quoted = !quoted;
+      started = true;
+    } else if (char === ' ' && !quoted) {
+      if (started) options.push(current);
+      current = '';
+      started = false;
+    } else {
+      current += char;
+      started = true;
+    }
+  }
+  if (started) options.push(current);
+  return options;
 }

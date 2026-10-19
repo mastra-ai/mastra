@@ -25,6 +25,24 @@ describe('heapFlagRelaunchArgv', () => {
     expect(heapFlagRelaunchArgv(proc({ execArgv: ['--max-semi-space-size=8'] }))).toBeUndefined();
     expect(heapFlagRelaunchArgv(proc({ execArgv: ['--max-semi-space-size=32'] }))).toBeUndefined();
     expect(heapFlagRelaunchArgv(proc({ env: { NODE_OPTIONS: '--max-semi-space-size=2' } }))).toBeUndefined();
+    expect(
+      heapFlagRelaunchArgv(proc({ env: { NODE_OPTIONS: '--title="a b" --max-semi-space-size=4' } })),
+    ).toBeUndefined();
+  });
+
+  // A flag name inside another option's value doesn't count as the flag being set.
+  it('still restarts when the flag name only appears inside another option', () => {
+    expect(heapFlagRelaunchArgv(proc({ execArgv: ['--title=--max-semi-space-size'] }))?.[1]).toBe(
+      '--max-semi-space-size=8',
+    );
+    expect(
+      heapFlagRelaunchArgv(
+        proc({ env: { NODE_OPTIONS: '--title="mc --max-semi-space-size=1" --enable-source-maps' } }),
+      )?.[1],
+    ).toBe('--max-semi-space-size=8');
+    expect(heapFlagRelaunchArgv(proc({ env: { NODE_OPTIONS: '--max-semi-space-size-x' } }))?.[1]).toBe(
+      '--max-semi-space-size=8',
+    );
   });
 
   it('skips the restart when opted out or not running on Node', () => {
