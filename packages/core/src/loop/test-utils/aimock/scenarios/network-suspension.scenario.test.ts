@@ -1,5 +1,5 @@
 import type { ChatCompletionRequest } from '@copilotkit/aimock';
-import { expect, it } from 'vitest';
+import { beforeEach, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { Mastra } from '../../../../mastra';
@@ -32,6 +32,12 @@ describeForAllEngines(
     const getMock = useLoopScenarioAimock();
     const lastIsToolResult = (req: ChatCompletionRequest | null) => req?.messages.at(-1)?.role === 'tool';
 
+    // Scopes the resumed tool call ran with; reset per test.
+    let resumedScopes: unknown[] = [];
+    beforeEach(() => {
+      resumedScopes = [];
+    });
+
     const suspendingTool = createTool({
       id: 'suspendingTool',
       description: 'Collects user information.',
@@ -42,6 +48,7 @@ describeForAllEngines(
         if (!context?.agent?.resumeData) {
           return await context?.agent?.suspend({ message: 'Please provide additional information' });
         }
+        resumedScopes.push(context.requestContext?.get(MASTRA_SCOPES_KEY));
         return { result: `Received: ${input.initialQuery} and ${context.agent.resumeData.userResponse}` };
       },
     });
@@ -171,6 +178,7 @@ describeForAllEngines(
       );
       const end = resumed.find(c => c.type === 'tool-execution-end');
       expect((end?.payload as { result: unknown }).result).toEqual({ result: 'Received: legacy and legacy info' });
+      expect(resumedScopes).toEqual([['org:a']]);
     });
 
     it('uses the run id as the thread when resuming without memory options', async () => {

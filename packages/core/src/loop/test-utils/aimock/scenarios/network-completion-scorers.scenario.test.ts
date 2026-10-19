@@ -184,7 +184,7 @@ describeForAllEngines(
       expect(text).toContain('Feedback Scorer');
       expect(text).toContain('Custom failure reason');
       expect(
-        feedback.every(m => (m.content.metadata?.completionResult as { suppressFeedback?: boolean }).suppressFeedback),
+        feedback.some(m => (m.content.metadata?.completionResult as { suppressFeedback?: boolean }).suppressFeedback),
       ).toBe(false);
     });
 
