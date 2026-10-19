@@ -5,8 +5,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp';
-import type { MastraMCPServerDefinition, OAuthClientInformation, OAuthStorage } from '@mastra/mcp';
+import type { MCPClient, MastraMCPServerDefinition, OAuthClientInformation, OAuthStorage } from '@mastra/mcp';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { getAppDataDir } from '../utils/project.js';
 import {
@@ -194,6 +193,21 @@ function getStorageKeyFingerprint(value: string): string {
   return fingerprint.toString(16).padStart(16, '0');
 }
 
+type McpModule = typeof import('@mastra/mcp');
+let mcpModule: McpModule | undefined;
+
+/** `@mastra/mcp` and the MCP SDK (~12 MB) load with the first server that connects, not with every session. */
+async function loadMcpModule(): Promise<McpModule> {
+  mcpModule ??= await import('@mastra/mcp');
+  return mcpModule;
+}
+
+/** For code that only runs once a client exists, so the module is already loaded. */
+function loadedMcpModule(): McpModule {
+  if (!mcpModule) throw new Error('@mastra/mcp is not loaded yet');
+  return mcpModule;
+}
+
 /**
  * Create an MCP manager that wraps MCPClient with config-file discovery
  * and per-server status tracking.
@@ -332,6 +346,7 @@ export function createMcpManager(
       : undefined;
     const clientMetadataUrl = clientInformation ? undefined : MASTRA_CODE_CLIENT_METADATA_URL;
 
+    const { MCPOAuthClientProvider } = loadedMcpModule();
     return new MCPOAuthClientProvider({
       redirectUrl,
       clientMetadata: {
@@ -412,6 +427,7 @@ export function createMcpManager(
       });
     }
 
+    const { MCPClient } = await loadMcpModule();
     serverDefs = buildServerDefs(servers);
     client = new MCPClient({
       id: 'mastra-code-mcp',

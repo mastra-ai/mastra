@@ -1,5 +1,5 @@
 import type { PruneResult, RetentionConfig } from '@mastra/core/storage';
-import { DuckDBStore } from '@mastra/duckdb';
+import type { DuckDBStore } from '@mastra/duckdb';
 
 /**
  * Age limits for the local trace store: 14 days for spans, metrics and logs,
@@ -44,6 +44,8 @@ async function pruneExistingTables(store: DuckDBStore): Promise<PruneResult[]> {
 export async function openLocalObservabilityStore(
   path: string,
 ): Promise<{ store: DuckDBStore; pruned: Promise<PruneResult[]> }> {
+  // Loaded on demand: DuckDB's native binding adds ~25 MB to every session that never turns this on.
+  const { DuckDBStore } = await import('@mastra/duckdb');
   const store = new DuckDBStore({ id: 'mastra-code-observability', path, retention: LOCAL_OBSERVABILITY_RETENTION });
   await store.db.getConnection();
   // No init() here: the session composite initializes the domain.
