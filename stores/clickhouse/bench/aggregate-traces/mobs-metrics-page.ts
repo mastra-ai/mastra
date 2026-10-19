@@ -282,7 +282,7 @@ function seriesLimit(r: Range, interval: Interval) {
 // Card shapes (aggregateTraces request bodies)
 
 const agentRoot = { op: 'eq', left: { path: 'entityType' }, right: { literal: 'agent' } };
-const withInterval = new Set(['O1s', 'O2', 'O4', 'P3', 'P4', 'P5']);
+const withInterval = new Set(['O1s', 'O2', 'O12s', 'O4', 'P3', 'P4', 'P5']);
 const ORG_SHAPES = ['O1', 'O1s', 'O2', 'O3s', 'O3f', 'O4', 'O5', 'O6', 'O7', 'P1', 'P2'];
 const PROJECT_SHAPES = ['P1', 'P2', 'P3', 'P4', 'P5'];
 
@@ -316,6 +316,22 @@ function shapeBody(shape: string, r: Range, interval?: Interval): Record<string,
         ...tr,
         groupBy: ['projectId'],
         measures: ['tokens.input.sum', 'tokens.output.sum', 'tokens.cached.sum', 'cost.sum'],
+        ...iv(),
+      };
+    case 'O12s': // O1s and O2 as one request (sparklines and cost/tokens by project over time)
+      return {
+        ...tr,
+        groupBy: ['projectId'],
+        measures: [
+          'count',
+          'errorRate',
+          'duration.p95',
+          'tokens.total.sum',
+          'tokens.input.sum',
+          'tokens.output.sum',
+          'tokens.cached.sum',
+          'cost.sum',
+        ],
         ...iv(),
       };
     case 'O3s': // Slowest entities
@@ -570,7 +586,6 @@ function aggCards(
   to: Date,
   window: string,
 ) {
-  const interval = pageInterval(window);
   const entries: Array<[string, string, number]> =
     page === 'org'
       ? [
@@ -596,15 +611,26 @@ function aggCards(
           ['P3', 'P3', 0],
           ['P4', 'P4', 0], // the failure-rate card derives from P4's buckets, as it does from today's runs series
         ];
-  return entries.map(([card, shape, back]): Card => {
-    const r = rangeOf(to, window, back);
-    const plan = mods.plan.planPlatformTraceAggregate(
-      shapeBody(shape, r, withInterval.has(shape) ? interval : undefined),
-      scope,
-      [],
-    );
-    return { card, source: 'agg', fn: () => mods.run.aggregateTraces(client, plan) };
-  });
+  return entries.map(([card, shape, back]) => aggCard(mods, client, scope, to, window, card, shape, back));
+}
+
+function aggCard(
+  mods: Mods,
+  client: ClickHouseClient,
+  scope: Scope,
+  to: Date,
+  window: string,
+  card: string,
+  shape: string,
+  back: number,
+): Card {
+  const r = rangeOf(to, window, back);
+  const plan = mods.plan.planPlatformTraceAggregate(
+    shapeBody(shape, r, withInterval.has(shape) ? pageInterval(window) : undefined),
+    scope,
+    [],
+  );
+  return { card, source: 'agg', fn: () => mods.run.aggregateTraces(client, plan) };
 }
 
 interface PageRecord {
@@ -645,9 +671,22 @@ async function pageLoad(options: {
             for (let rep = phase === 'cold' ? 0 : 1; rep <= (phase === 'cold' ? 0 : options.reps); rep++) {
               const to = new Date();
               const r = rangeOf(to, window);
+              // verdict: the org-only cards on aggregateTraces(), KPIs kept on metrics (X48 verdicts).
+              // merged: verdict with O1s + O2 as one request (O12s) and O6 read from O1.
+              const verdict = variant.startsWith('verdict') || variant === 'merged';
+              const merged = variant === 'merged';
               const cards = [
-                ...(variant === 'metrics' ? [] : aggCards(mods, client, options.page, scope, to, window)),
-                ...(variant === 'agg' ? [] : metricsCards(mods, client, scope, r, window)),
+                ...(variant === 'metrics'
+                  ? []
+                  : aggCards(mods, client, options.page, scope, to, window).filter(
+                      c => (!verdict || !/^P\d/.test(c.card)) && (!merged || !['O1s', 'O2', 'O6'].includes(c.card)),
+                    )),
+                ...(merged ? [aggCard(mods, client, scope, to, window, 'O12s', 'O12s', 0)] : []),
+                ...(variant === 'agg'
+                  ? []
+                  : metricsCards(mods, client, scope, r, window).filter(
+                      c => (variant !== 'verdict' && !merged) || c.card.startsWith('m:kpi-'),
+                    )),
               ];
               const started = performance.now();
               const results = await Promise.all(cards.map(c => measured(phase === 'cold', PROD, c.fn)));

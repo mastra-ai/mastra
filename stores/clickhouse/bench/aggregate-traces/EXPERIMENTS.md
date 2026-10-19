@@ -673,6 +673,16 @@ Largest org at 30 d, warm median ms / max MiB / read MiB: O1 3,630 / 423 / 3,847
 3. The project page fits at 30 d on the largest project, at the edge: 6.6–8.7 s alone, and one of three loads timed out when today's cards ran alongside.
 4. Only the tokens KPI can move off `metrics` without losing anything. Runs, runs over time and failure rate stay until `aggregateSpans()`; cost needs a decision on pricing-error rows; threads and usage over time change values.
 
+**Follow-up: the org page with the verdicts applied** (largest org, 30 d, warm ×3). KPIs served from `metrics`, so the page's aggregate requests are the org-only cards.
+
+| Variant       | Requests                                                                                   | Page ms       | Failed cards (each warm load)                           |
+| ------------- | ------------------------------------------------------------------------------------------ | ------------- | ------------------------------------------------------- |
+| `verdict`     | O1–O7 + today's 5 KPI requests                                                             | 9,186–11,399  | O1, O1s, O2, O6 every load (+ O7; load 1: all of O1–O7) |
+| `verdict-all` | O1–O7 + all 17 of today's requests                                                         | 10,292–10,778 | O1, O1s, O2, O6                                         |
+| `merged`      | O1 (also serves O6), O12s = O1s + O2 as one request, O3s, O3f, O4, O5, O7 + 5 KPI requests | 9,165–9,531   | O12s every load, O1 in 2 of 3                           |
+
+The verdicts do not make the org page fit: the token/cost cards are what time out, and they have no `metrics` equivalent. Merging them down to two requests still leaves both past 9 s alongside the other cards; each reads ~3.8 GiB of `mastra_metric_events`. At 30 d on the largest org the org page needs a cheaper usage source (`mastra_model_usage` filled, or a rollup) or token/cost cards limited to a shorter window.
+
 ### X46: `aggregateSpans()` contract affordability (prod replica, read-only, 2026-10-19)
 
 **Question.** Can ClickHouse serve the OBS-390 `aggregateSpans()` contract (mastra#27669: `querySpans()` selection, span dimensions, trace measures plus per-span tokens/cost, 365 d window) inside mobs-query's 1 GiB / 9 s budget? Store compilers are OBS-392; this is a prototype to decide whether the contract needs a narrower window before it ships.
