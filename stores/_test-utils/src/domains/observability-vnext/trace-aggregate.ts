@@ -454,6 +454,10 @@ interface AggregateRootSpec {
   cursorId: number;
   traceId: string;
   entityName: string | null;
+  /** Root span name; defaults to `traceId`. */
+  name?: string;
+  /** Root span type; defaults to `agent_run`. */
+  spanType?: string;
   startedAt: string;
   durationMs: number;
   error?: boolean;
@@ -467,6 +471,8 @@ interface AggregateRootSpec {
 function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
   const organizationId = spec.organizationId ?? 'org-a';
   const root = span(spec.cursorId, spec.traceId, spec.traceId, {
+    name: spec.name ?? spec.traceId,
+    spanType: spec.spanType ?? 'agent_run',
     entityName: spec.entityName,
     environment: spec.environment ?? 'production',
     organizationId,
@@ -523,6 +529,10 @@ function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
  *
  * Excluded records: a superseded `triage-6` root (lower `cursorId`, error + 60 s duration), a
  * pending `triage-pending` root, and a `triage-late` root starting exactly at `to`.
+ *
+ * Root spans are `agent_run` named after their `traceId`, except: triage roots share the name
+ * `triage run`, scheduler roots are `workflow_run` named `nightly-sync`, and the superseded
+ * `triage-6` copy is a `workflow_run` named `triage retry` (so it must not surface).
  */
 export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [
@@ -530,6 +540,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 100,
       traceId: 'triage-1',
       entityName: 'triage',
+      name: 'triage run',
       startedAt: '2026-08-01T10:00:00.000Z',
       durationMs: 1000,
       threadId: 't-1',
@@ -540,6 +551,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 110,
       traceId: 'triage-2',
       entityName: 'triage',
+      name: 'triage run',
       startedAt: '2026-08-01T11:00:00.000Z',
       durationMs: 2000,
       error: true,
@@ -551,6 +563,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 120,
       traceId: 'triage-3',
       entityName: 'triage',
+      name: 'triage run',
       startedAt: '2026-08-02T10:00:00.000Z',
       durationMs: 3000,
       threadId: 't-2',
@@ -561,6 +574,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 130,
       traceId: 'triage-4',
       entityName: 'triage',
+      name: 'triage run',
       startedAt: '2026-08-03T10:00:00.000Z',
       durationMs: 4000,
       threadId: 't-3',
@@ -571,6 +585,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 140,
       traceId: 'triage-5',
       entityName: 'triage',
+      name: 'triage run',
       startedAt: '2026-08-05T10:00:00.000Z',
       durationMs: 8000,
       error: true,
@@ -582,6 +597,8 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 150,
       traceId: 'triage-6',
       entityName: 'triage',
+      name: 'triage retry',
+      spanType: 'workflow_run',
       startedAt: '2026-08-05T11:00:00.000Z',
       durationMs: 60_000,
       error: true,
@@ -591,6 +608,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 151,
       traceId: 'triage-6',
       entityName: 'triage',
+      name: 'triage run',
       startedAt: '2026-08-05T11:00:00.000Z',
       durationMs: 8000,
       threadId: 't-4',
@@ -707,6 +725,8 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 500,
       traceId: 'scheduler-1',
       entityName: 'scheduler',
+      name: 'nightly-sync',
+      spanType: 'workflow_run',
       startedAt: '2026-08-01T10:00:00.000Z',
       durationMs: 1000,
       threadId: 't-11',
@@ -715,6 +735,8 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 510,
       traceId: 'scheduler-2',
       entityName: 'scheduler',
+      name: 'nightly-sync',
+      spanType: 'workflow_run',
       startedAt: '2026-08-03T10:00:00.000Z',
       durationMs: 3000,
       threadId: 't-11',
@@ -738,6 +760,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 710,
       traceId: 'triage-late',
       entityName: 'triage',
+      name: 'triage run',
       startedAt: '2026-08-08T00:00:00.000Z',
       durationMs: 1000,
       threadId: 't-1',
@@ -921,6 +944,60 @@ export const TRACE_AGGREGATE_CONFORMANCE_CASES: TraceAggregateConformanceCase[] 
         { dimensions: { 'metadata.tenant': null }, measures: { count: 2, 'countDistinct.threadId': 2 } },
         { dimensions: { 'metadata.tenant': 'globex' }, measures: { count: 1, 'countDistinct.threadId': 1 } },
       ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'groups by root span type',
+    request: { timeRange: aggregateRange, groupBy: ['spanType'], measures: ['count', 'errorCount'] },
+    expected: {
+      rows: [
+        { dimensions: { spanType: 'agent_run' }, measures: { count: 18, errorCount: 5 } },
+        { dimensions: { spanType: 'workflow_run' }, measures: { count: 2, errorCount: 0 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'groups by root span name with orderBy and limit',
+    request: {
+      timeRange: aggregateRange,
+      groupBy: ['name'],
+      measures: ['count', 'errorCount'],
+      orderBy: { field: 'count', direction: 'desc' },
+      limit: 2,
+    },
+    expected: {
+      rows: [
+        { dimensions: { name: 'triage run' }, measures: { count: 6, errorCount: 2 } },
+        { dimensions: { name: 'nightly-sync' }, measures: { count: 2, errorCount: 0 } },
+      ],
+      truncated: true,
+    },
+  },
+  {
+    name: 'drills into a root span type group by filtering on it',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'workflow_run' } },
+      groupBy: ['name'],
+      measures: ['count', 'countDistinct.spanType'],
+    },
+    expected: {
+      rows: [{ dimensions: { name: 'nightly-sync' }, measures: { count: 2, 'countDistinct.spanType': 1 } }],
+      truncated: false,
+    },
+  },
+  {
+    name: 'drills into a root span name group by filtering on it',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'eq', left: { path: 'name' }, right: { literal: 'triage run' } },
+      groupBy: ['spanType', 'entityName'],
+      measures: ['count'],
+    },
+    expected: {
+      rows: [{ dimensions: { spanType: 'agent_run', entityName: 'triage' }, measures: { count: 6 } }],
       truncated: false,
     },
   },

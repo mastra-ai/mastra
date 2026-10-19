@@ -2,7 +2,8 @@ import { queryOptions, skipToken, useQuery } from '@tanstack/react-query';
 
 import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
-import { queryKeys, type AvailableModelsFilter } from '../api/keys';
+import { queryKeys } from '../api/keys';
+import type { AvailableModelsFilter } from '../api/keys';
 import type { AvailableModelOption } from './useAvailableModels';
 
 export interface SessionModelCatalogTarget extends AvailableModelsFilter {

@@ -63,6 +63,8 @@ const TRACE_FIELDS = {
   timeToFirstChunkMs: { sql: 'r.timeToFirstChunkMs', parameterType: 'scalar' },
   entityName: { sql: 'r.entityName', parameterType: 'scalar' },
   entityType: { sql: 'r.entityType', parameterType: 'scalar' },
+  name: { sql: 'r.name', parameterType: 'scalar' },
+  spanType: { sql: 'r.spanType', parameterType: 'scalar' },
   environment: { sql: 'r.environment', parameterType: 'scalar' },
   status: { sql: TRACE_STATUS_SQL, parameterType: 'scalar' },
   tags: { sql: 'r.tags', parameterType: 'scalar' },
@@ -412,6 +414,8 @@ const ROOT_PUSHDOWN_FIELDS = new Set<string>([
   'timeToFirstChunkMs',
   'entityName',
   'entityType',
+  'name',
+  'spanType',
   'environment',
 ]);
 

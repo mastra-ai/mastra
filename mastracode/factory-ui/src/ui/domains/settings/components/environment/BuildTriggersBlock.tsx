@@ -7,7 +7,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import type { FactoryEnvironmentBuildTriggers } from '../../../workspaces/services/environment';
-import { CommittedInput, type SaveEnvironment } from './CommittedInput';
+import { CommittedInput } from './CommittedInput';
+import type { SaveEnvironment } from './CommittedInput';
 
 const DEFAULT_CRON = '0 3 * * *';
 
