@@ -2309,6 +2309,103 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       });
     });
 
+    if (capabilities.traceQuery) {
+      describe('time to first chunk on traces', () => {
+        const at = (ms: number) => new Date(VNEXT_BASE_DATE.getTime() + ms);
+        const timeRange = { from: at(-60_000).toISOString(), to: at(60_000).toISOString() };
+        const traceTtfc = async (where?: TraceQueryRequest['where']) => {
+          const response = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange, where })));
+          if (!('traces' in response)) throw new Error('Expected traces');
+          return Object.fromEntries(response.traces.map(trace => [trace.traceId, trace.timeToFirstChunkMs]));
+        };
+
+        beforeEach(async () => {
+          const span = (traceId: string, spanId: string, timeToFirstChunkMs: number | null, extra = {}) =>
+            makeSpan({ traceId, spanId, timeToFirstChunkMs, ...extra });
+          await storage.batchCreateSpans({
+            records: [
+              // The root agent answers at 300 ms; its own generation and a nested agent never replace that.
+              span('ttfc-agent', 'agent-root', 300),
+              span('ttfc-agent', 'agent-generation', 320, {
+                parentSpanId: 'agent-root',
+                spanType: SpanType.MODEL_GENERATION,
+              }),
+              span('ttfc-agent', 'nested-agent', 50, { parentSpanId: 'agent-root' }),
+              // A workflow root never streams, even when an agent inside it does.
+              span('ttfc-workflow', 'workflow-root', null, { spanType: SpanType.WORKFLOW_RUN }),
+              span('ttfc-workflow', 'workflow-agent', 200, { parentSpanId: 'workflow-root' }),
+              span('ttfc-zero', 'zero-root', 0),
+            ],
+          });
+          if (flushPendingMerges) await flushPendingMerges(storage);
+        });
+
+        it("returns the root span's value, null when the root never streamed", async () => {
+          expect(await traceTtfc()).toEqual({ 'ttfc-agent': 300, 'ttfc-workflow': null, 'ttfc-zero': 0 });
+        });
+
+        it('filters by the root value, counting zero as a value and missing as empty', async () => {
+          const field = { path: 'timeToFirstChunkMs' } as const;
+          expect(Object.keys(await traceTtfc({ op: 'gt', left: field, right: { literal: 100 } }))).toEqual([
+            'ttfc-agent',
+          ]);
+          expect(Object.keys(await traceTtfc({ op: 'eq', left: field, right: { literal: 0 } }))).toEqual(['ttfc-zero']);
+          expect(Object.keys(await traceTtfc({ op: 'exists', path: 'timeToFirstChunkMs' })).sort()).toEqual([
+            'ttfc-agent',
+            'ttfc-zero',
+          ]);
+          expect(Object.keys(await traceTtfc({ op: 'notExists', path: 'timeToFirstChunkMs' }))).toEqual([
+            'ttfc-workflow',
+          ]);
+        });
+
+        it('returns the value in numbered pages and delta polls', async () => {
+          const page = await storage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 10 } })),
+          );
+          if (!('traces' in page)) throw new Error('Expected traces');
+          expect(Object.fromEntries(page.traces.map(trace => [trace.traceId, trace.timeToFirstChunkMs]))).toEqual({
+            'ttfc-agent': 300,
+            'ttfc-workflow': null,
+            'ttfc-zero': 0,
+          });
+
+          const feature = 'observability-delta-polling';
+          const wasEnabled = coreFeatures.has(feature);
+          coreFeatures.add(feature);
+          try {
+            const request = { timeRange, mode: 'delta' as const, limit: 10 };
+            const bootstrap = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest(request)));
+            if (!('delta' in bootstrap)) throw new Error('Expected delta');
+            await storage.batchCreateSpans({
+              records: [makeSpan({ traceId: 'ttfc-late', spanId: 'late-root', timeToFirstChunkMs: 75 })],
+            });
+            if (flushPendingMerges) await flushPendingMerges(storage);
+            const polled = await waitFor(
+              async () => {
+                const batch = await storage.queryTraces(
+                  planTraceQuery(parseTraceQueryRequest({ ...request, after: bootstrap.deltaCursor })),
+                );
+                if (!('delta' in batch)) throw new Error('Expected delta');
+                return batch.traces.map(trace => [trace.traceId, trace.timeToFirstChunkMs]);
+              },
+              rows => rows.length > 0,
+            );
+            expect(polled).toEqual([['ttfc-late', 75]]);
+          } finally {
+            if (!wasEnabled) coreFeatures.delete(feature);
+          }
+        });
+
+        it("filters by any span's value", async () => {
+          const fast = await traceTtfc({
+            spans: { some: { op: 'lt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 100 } } },
+          });
+          expect(Object.keys(fast).sort()).toEqual(['ttfc-agent', 'ttfc-zero']);
+        });
+      });
+    }
+
     describe('getStructure / getTraceLight', () => {
       beforeEach(async () => {
         await storage.createSpan({

@@ -391,6 +391,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        ...traceQueryOps.timeToFirstChunkFeatures,
         'trace-query-root-span-fields',
       ] as const;
     }
@@ -413,6 +414,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       'trace-query-tenant-scope',
       'feedback',
       'trace-query-context-ids',
+      ...traceQueryOps.timeToFirstChunkFeatures,
       'trace-query-root-span-fields',
     ] as const;
   }

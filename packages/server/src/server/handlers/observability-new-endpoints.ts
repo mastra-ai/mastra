@@ -99,6 +99,7 @@ import {
   assertObservabilityTraceQueryDiscoverySupported,
   assertObservabilityTraceQueryContextIdsSupported,
   assertObservabilityTraceQueryRootDurationSupported,
+  assertObservabilityTraceQueryTimeToFirstChunkSupported,
   isTraceQueryContextIdField,
   assertObservabilityTraceQueryRootSpanFieldsSupported,
   assertObservabilityTraceQueryRootSpanValuesSupported,
@@ -113,6 +114,7 @@ import {
   OBSERVABILITY_LIST_ENDPOINTS,
   supportsObservabilityTraceQueryContextIds,
   supportsObservabilityTraceQueryRootDuration,
+  supportsObservabilityTraceQueryTimeToFirstChunk,
   supportsObservabilityTraceAggregate,
   supportsSpanQueryCore,
   supportsTraceAggregateCore,
@@ -361,6 +363,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
       assertObservabilityTraceQuerySupported(observabilityStore);
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
       if (plan.paginationMode === 'delta' && !observabilityStore.getFeatures()?.includes('delta-polling')) {
@@ -498,6 +501,7 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
       assertObservabilityTraceAggregateSupported(observabilityStore);
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
@@ -605,6 +609,7 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilitySpanQuerySupported(observabilityStore);
       assertObservabilitySpanQueryFieldsSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -709,6 +714,10 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
         .filter(
           field =>
             !isTraceQueryContextIdField(field.path) || supportsObservabilityTraceQueryContextIds(observabilityStore),
+        )
+        .filter(
+          field =>
+            field.path !== 'timeToFirstChunkMs' || supportsObservabilityTraceQueryTimeToFirstChunk(observabilityStore),
         )
         .filter(
           field =>
@@ -851,8 +860,10 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
       assertObservabilityThreadQuerySupported(observabilityStore);
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.traces.where);
       assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.traces.where);
+      assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.traces.where);
       assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan.traces);
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);

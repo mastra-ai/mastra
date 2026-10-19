@@ -25,8 +25,8 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "test": "vitest run --bail=1",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "dependencies": {
     "@google-cloud/pubsub": "^5.3.1",
@@ -48,7 +48,6 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",
-    "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:"

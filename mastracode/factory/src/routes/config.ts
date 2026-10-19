@@ -36,7 +36,7 @@ import {
   listTenantCredentialsForRequest,
   resolveCredentialContext,
   tenantOrgId,
-  WEB_OAUTH_FLOW_KINDS,
+  WEB_OAUTH_PROVIDERS,
 } from './provider-credentials.js';
 import { Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
@@ -182,7 +182,7 @@ export async function listProviders({
       source = 'env';
     }
 
-    const flowKind = WEB_OAUTH_FLOW_KINDS[model.provider];
+    const flowKind = WEB_OAUTH_PROVIDERS[model.provider]?.flow;
     seen.set(model.provider, {
       provider: model.provider,
       envVar: model.apiKeyEnvVar,

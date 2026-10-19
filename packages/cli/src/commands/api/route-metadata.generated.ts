@@ -6673,6 +6673,7 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
+      "alwaysAllowCategory",
       "approved",
       "requestContext",
       "toolCallId"
@@ -6759,6 +6760,24 @@ export const API_ROUTE_METADATA = {
     ],
     "hasQuery": true,
     "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner": {
+    "method": "POST",
+    "path": "/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner",
+    "pathParams": [
+      "controllerId",
+      "resourceId",
+      "threadId"
+    ],
+    "queryParams": [
+      "sessionScope"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
     "responseShape": {
       "kind": "single"
     }

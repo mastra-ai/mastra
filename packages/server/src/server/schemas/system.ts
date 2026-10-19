@@ -41,6 +41,11 @@ export const observabilityStorageCapabilitiesSchema = z.object({
   traceQueryContextIds: z
     .boolean()
     .describe('`runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries'),
+  traceQueryTimeToFirstChunk: z
+    .boolean()
+    .describe(
+      '`timeToFirstChunkMs` in trace and span query results, and predicates on it in trace, thread and span queries',
+    ),
   traceQueryRootSpanFields: z
     .boolean()
     .describe('Root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct`'),

@@ -1,10 +1,10 @@
 import fs from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MastraError } from '@mastra/core/error';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { copyPnpmWorkspaceSettings, DepsService, getPnpmIgnoredBuildPackages } from './deps';
+import { copyPnpmWorkspaceSettings, DepsService, getPnpmIgnoredBuildPackages, withPlaceholderVersions } from './deps';
 
 const { runChildProcess } = vi.hoisted(() => ({
   runChildProcess: vi.fn(),
@@ -544,5 +544,158 @@ describe('Deps.pack', () => {
 
   it('uses pm pack --destination for bun', async () => {
     expect(await packWith('bun.lock', '{}')).toBe(`bun pm pack --destination ${destination}`);
+  });
+});
+
+describe('withPlaceholderVersions', () => {
+  const tempDirs: string[] = [];
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
+  });
+
+  async function makePackage(manifest: string) {
+    const dir = await mkdtemp(join(tmpdir(), 'mastra-placeholder-'));
+    tempDirs.push(dir);
+    await writeFile(join(dir, 'package.json'), manifest, 'utf-8');
+    return dir;
+  }
+
+  const readManifest = async (dir: string) => JSON.parse(await readFile(join(dir, 'package.json'), 'utf-8'));
+
+  it('versions every versionless package for the whole operation and restores them afterwards', async () => {
+    const leafOriginal = '{\n    "name": "@inner/versionless",\n    "private": true\n}';
+    const dependentOriginal = '{"name":"@inner/dependent","dependencies":{"@inner/versionless":"workspace:*"}}';
+    const leaf = await makePackage(leafOriginal);
+    const dependent = await makePackage(dependentOriginal);
+
+    // While the dependent packs, pnpm/bun read the dependency's manifest to rewrite `workspace:*`.
+    const seen = await withPlaceholderVersions([leaf, dependent], async () => [
+      (await readManifest(leaf)).version,
+      (await readManifest(dependent)).version,
+    ]);
+
+    expect(seen).toEqual(['0.0.0', '0.0.0']);
+    expect(await readFile(join(leaf, 'package.json'), 'utf-8')).toBe(leafOriginal);
+    expect(await readFile(join(dependent, 'package.json'), 'utf-8')).toBe(dependentOriginal);
+  });
+
+  it('keeps the placeholder until every overlapping operation sharing a manifest finishes', async () => {
+    const original = '{"name":"@inner/versionless"}';
+    const dir = await makePackage(original);
+    let releaseSecond!: () => void;
+    const secondGate = new Promise<void>(resolve => (releaseSecond = resolve));
+
+    let firstDone!: () => void;
+    const firstFinished = new Promise<void>(resolve => (firstDone = resolve));
+    const first = withPlaceholderVersions([dir], async () => {}).then(firstDone);
+    const second = withPlaceholderVersions([dir], async () => {
+      await firstFinished;
+      const version = (await readManifest(dir)).version;
+      await secondGate;
+      return version;
+    });
+
+    await first;
+    expect((await readManifest(dir)).version).toBe('0.0.0');
+    releaseSecond();
+    expect(await second).toBe('0.0.0');
+    expect(await readFile(join(dir, 'package.json'), 'utf-8')).toBe(original);
+    expect(process.listeners('SIGINT').some(l => l.name === 'onPlaceholderSignal')).toBe(false);
+  });
+
+  it.skipIf(process.platform === 'win32')('preserves the manifest file mode', async () => {
+    const dir = await makePackage('{"name":"@inner/versionless"}');
+    const manifestPath = join(dir, 'package.json');
+    await chmod(manifestPath, 0o600);
+
+    const modeDuring = await withPlaceholderVersions([dir], async () => (await stat(manifestPath)).mode & 0o777);
+
+    expect(modeDuring).toBe(0o600);
+    expect((await stat(manifestPath)).mode & 0o777).toBe(0o600);
+  });
+
+  it('restores manifests when the operation fails', async () => {
+    const original = '{"name":"@inner/versionless"}';
+    const dir = await makePackage(original);
+
+    await expect(
+      withPlaceholderVersions([dir], async () => {
+        throw new Error('pack failed');
+      }),
+    ).rejects.toThrow('pack failed');
+    expect(await readFile(join(dir, 'package.json'), 'utf-8')).toBe(original);
+  });
+
+  it('restores manifests and re-raises the signal on SIGINT', async () => {
+    const original = '{"name":"@inner/versionless"}';
+    const dir = await makePackage(original);
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+    const listenersBefore = process.listeners('SIGINT');
+
+    await withPlaceholderVersions([dir], async () => {
+      const handler = process.listeners('SIGINT').find(listener => !listenersBefore.includes(listener))!;
+      handler('SIGINT');
+      expect(fs.readFileSync(join(dir, 'package.json'), 'utf-8')).toBe(original);
+    });
+
+    expect(kill).toHaveBeenCalledWith(process.pid, 'SIGINT');
+    expect(process.listeners('SIGINT')).toEqual(listenersBefore);
+    expect(await readFile(join(dir, 'package.json'), 'utf-8')).toBe(original);
+  });
+
+  it('restores the manifest and removes the temp file on a signal mid-write', async () => {
+    const original = '{"name":"@inner/versionless"}';
+    const dir = await makePackage(original);
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true);
+    const listenersBefore = process.listeners('SIGINT');
+    const realRename = fs.promises.rename;
+    const rename = vi.spyOn(fs.promises, 'rename').mockImplementationOnce(async (from, to) => {
+      // Temp file is written, rename has not happened yet.
+      const handler = process.listeners('SIGINT').find(listener => !listenersBefore.includes(listener))!;
+      handler('SIGINT');
+      return realRename(from, to);
+    });
+
+    await expect(withPlaceholderVersions([dir], async () => {})).rejects.toThrow(/ENOENT/);
+
+    expect(kill).toHaveBeenCalledWith(process.pid, 'SIGINT');
+    expect(await readFile(join(dir, 'package.json'), 'utf-8')).toBe(original);
+    expect(fs.readdirSync(dir)).toEqual(['package.json']);
+    rename.mockRestore();
+  });
+
+  it('removes its signal handlers after a normal run', async () => {
+    const dir = await makePackage('{"name":"@inner/versionless"}');
+    const sigint = process.listenerCount('SIGINT');
+    const sigterm = process.listenerCount('SIGTERM');
+
+    await withPlaceholderVersions([dir], async () => {});
+
+    expect(process.listenerCount('SIGINT')).toBe(sigint);
+    expect(process.listenerCount('SIGTERM')).toBe(sigterm);
+  });
+
+  it('names the manifest path when package.json is malformed', async () => {
+    const dir = await makePackage('{ not json');
+    const operation = vi.fn();
+
+    await expect(withPlaceholderVersions([dir], operation)).rejects.toThrow(
+      `Failed to parse ${join(dir, 'package.json')}`,
+    );
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  it('does not touch a manifest that already has a version', async () => {
+    const original = '{"name":"pkg","version":"1.2.3"}';
+    const dir = await makePackage(original);
+    const renameSpy = vi.spyOn(fs.promises, 'rename');
+
+    const versionDuringOperation = await withPlaceholderVersions([dir], async () => (await readManifest(dir)).version);
+
+    expect(versionDuringOperation).toBe('1.2.3');
+    expect(renameSpy).not.toHaveBeenCalled();
+    expect(await readFile(join(dir, 'package.json'), 'utf-8')).toBe(original);
   });
 });

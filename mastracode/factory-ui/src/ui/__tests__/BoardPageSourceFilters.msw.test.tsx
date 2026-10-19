@@ -5,6 +5,12 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
+import {
+  closePropertiesMenus,
+  openPropertiesMenu,
+  openPropertySubmenu,
+  togglePropertyOption,
+} from '../../../e2e/ui/properties-menu';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 import type { IntakeConfig, IntakeSourceBinding } from '../domains/factory/services/intake';
@@ -91,15 +97,20 @@ function stubHostedSources(issues = hostedIssues) {
 }
 
 async function selectMany(name: string, options: string[]) {
-  if (!screen.queryByRole('combobox', { name: 'Add filter' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
   const user = userEvent.setup();
-  const input = screen.getByRole('combobox', { name: 'Add filter' });
-  await user.click(input);
-  await user.type(input, name);
-  await user.click(await screen.findByRole('option', { name }));
-  for (const option of options) await user.click(await screen.findByRole('option', { name: new RegExp(option) }));
-  await user.click(screen.getByRole('button', { name: /^Done/ }));
+  for (const option of options) await togglePropertyOption(user, 'Board properties', name, new RegExp(option));
+}
+
+async function saveAsView() {
+  const user = userEvent.setup();
+  await openPropertiesMenu(user, 'Board properties');
+  await user.click(screen.getByRole('menuitem', { name: 'Save as view' }));
+  await user.click(await screen.findByRole('button', { name: 'Save view' }));
+}
+
+async function intakeSourceOptions() {
+  await openPropertySubmenu(userEvent.setup(), 'Board properties', 'Intake source');
+  return screen.getAllByRole('menuitemcheckbox').map(option => option.textContent);
 }
 
 async function expectPortalView() {
@@ -129,30 +140,15 @@ describe('Board source and Linear project filters', () => {
     stubSources();
     const view = renderBoard();
     await waitForMutationsIdle(view.client);
-    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
-    const user = userEvent.setup();
-    await user.click(screen.getByRole('combobox', { name: 'Add filter' }));
-    await user.type(screen.getByRole('combobox', { name: 'Add filter' }), 'Intake source');
-    await user.click(await screen.findByRole('option', { name: 'Intake source' }));
-    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['GitHub', 'Linear', 'Manual']);
+    expect(await intakeSourceOptions()).toEqual(['GitHub', 'Linear', 'Manual']);
   });
 
   it('keeps a saved filter on a disconnected source labelled and selectable', async () => {
     stubSources();
     const view = renderBoard('?source=gitlab');
     await waitForMutationsIdle(view.client);
-    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
-    expect(await screen.findByText('GitLab')).toBeInTheDocument();
-    const user = userEvent.setup();
-    await user.click(screen.getByRole('combobox', { name: 'Add filter' }));
-    await user.type(screen.getByRole('combobox', { name: 'Add filter' }), 'Intake source');
-    await user.click(await screen.findByRole('option', { name: 'Intake source' }));
-    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual([
-      'GitHub',
-      'GitLab',
-      'Linear',
-      'Manual',
-    ]);
+    expect(await intakeSourceOptions()).toEqual(['GitHub', 'GitLab', 'Linear', 'Manual']);
+    expect(screen.getByRole('menuitemcheckbox', { name: 'GitLab' })).toHaveAttribute('aria-checked', 'true');
   });
 
   it('offers only Manual when configured providers are disconnected', async () => {
@@ -167,12 +163,7 @@ describe('Board source and Linear project filters', () => {
     );
     const view = renderBoard();
     await waitForMutationsIdle(view.client);
-    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
-    const user = userEvent.setup();
-    await user.click(screen.getByRole('combobox', { name: 'Add filter' }));
-    await user.type(screen.getByRole('combobox', { name: 'Add filter' }), 'Intake source');
-    await user.click(await screen.findByRole('option', { name: 'Intake source' }));
-    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Manual']);
+    expect(await intakeSourceOptions()).toEqual(['Manual']);
   });
 
   describe('when a hosted Linear project is selected', () => {
@@ -197,9 +188,7 @@ describe('Board source and Linear project filters', () => {
         expect(screen.queryByText('Billing: payment history')).not.toBeInTheDocument();
       };
       await expectDocsWatch();
-      const user = userEvent.setup();
-      await user.click(screen.getByRole('button', { name: 'Save as view' }));
-      await user.click(screen.getByRole('button', { name: 'Save view' }));
+      await saveAsView();
       const viewId = new URLSearchParams(first.router.state.location.search).get('view');
       expect(viewId).toBeTruthy();
       first.unmount();
@@ -234,16 +223,13 @@ describe('Board source and Linear project filters', () => {
     await expectPortalView();
     expect(first.router.state.location.search).toContain('linearProject=project-a');
 
-    const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Save as view' }));
-    await user.click(screen.getByRole('button', { name: 'Save view' }));
+    await saveAsView();
     const viewId = new URLSearchParams(first.router.state.location.search).get('view');
     expect(viewId).toBeTruthy();
     first.unmount();
     const second = renderBoard(`?view=${viewId}`);
     await waitForMutationsIdle(second.client);
     await expectPortalView();
-    expect(screen.queryByRole('group', { name: 'View filters' })).not.toBeInTheDocument();
   });
 
   it('hides a repository-scoped candidate already filed with a legacy key when source filters combine feeds', async () => {
@@ -274,14 +260,16 @@ describe('Board source and Linear project filters', () => {
     expect(screen.queryByText('GitHub: improve error messages')).not.toBeInTheDocument();
   });
 
-  it('restores a project-only URL and combines it with existing label and text filters', async () => {
+  it('restores a project-only URL and combines it with an existing label filter', async () => {
     stubSources();
-    const view = renderBoard('?linearProject=project-a&label=feature&q=Portal');
+    const view = renderBoard('?linearProject=project-a&label=feature');
     await waitForMutationsIdle(view.client);
     await expectPortalView();
-    fireEvent.click(screen.getByRole('button', { name: 'Filter cards' }));
-    expect(screen.getByText('Customer Portal')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Linear project filter' }));
+    const user = userEvent.setup();
+    await openPropertiesMenu(user, 'Board properties');
+    expect(screen.getByRole('menuitem', { name: /^Linear project\s*Customer Portal$/ })).toBeInTheDocument();
+    await closePropertiesMenus(user);
+    await togglePropertyOption(user, 'Board properties', 'Linear project', 'Customer Portal');
     expect(view.router.state.location.search).not.toContain('linearProject=');
     expect(view.router.state.location.search).toContain('label=feature');
   });
@@ -296,7 +284,7 @@ describe('Board source and Linear project filters', () => {
     expect(screen.getByText('GitHub: improve error messages')).toBeInTheDocument();
     expect(screen.getByText('GitHub: update dependencies')).toBeInTheDocument();
     expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Intake source filter' }));
+    await selectMany('Intake source', ['GitHub', 'Linear']);
     await screen.findByText('Manual follow-up');
     expect(screen.getByText('Portal: add account switcher')).toBeInTheDocument();
     expect(view.router.state.location.search).not.toContain('source=');

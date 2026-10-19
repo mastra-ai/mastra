@@ -76,10 +76,38 @@
     "sonar-reasoning-pro"
   ],
   "reasoning": {
+    "gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "gemini-3-pro-preview": [
       {
         "type": "effort",
         "values": ["low", "high"]
+      }
+    ],
+    "claude-opus-4": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 31999
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "sonar-reasoning-pro": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "claude-4.5-sonnet": [
@@ -90,39 +118,6 @@
         "type": "budget_tokens",
         "min": 1024,
         "max": 63999
-      }
-    ],
-    "claude-opus-4-1-20250805": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 31999
-      }
-    ],
-    "claude-opus-4-1": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 31999
-      }
-    ],
-    "gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemini-2.5-pro": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
       }
     ],
     "sonar-deep-research": [
@@ -141,14 +136,14 @@
         "max": 24576
       }
     ],
-    "claude-sonnet-4": [
+    "claude-opus-4-1-20250805": [
       {
         "type": "toggle"
       },
       {
         "type": "budget_tokens",
         "min": 1024,
-        "max": 63999
+        "max": 31999
       }
     ],
     "claude-sonnet-4-5-20250929": [
@@ -161,7 +156,7 @@
         "max": 63999
       }
     ],
-    "claude-4.5-opus": [
+    "claude-sonnet-4": [
       {
         "type": "toggle"
       },
@@ -181,19 +176,17 @@
         "max": 24576
       }
     ],
-    "sonar-reasoning-pro": [
+    "claude-4.5-opus": [
       {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
       }
     ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "claude-opus-4": [
+    "claude-opus-4-1": [
       {
         "type": "toggle"
       },
@@ -201,6 +194,13 @@
         "type": "budget_tokens",
         "min": 1024,
         "max": 31999
+      }
+    ],
+    "gemini-2.5-pro": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
       }
     ]
   }

@@ -63,6 +63,7 @@ export interface RawTraceQuerySpan {
   userId?: string | null;
   sessionId?: string | null;
   experimentId?: string | null;
+  timeToFirstChunkMs?: number | null;
 }
 
 export interface RawTraceQueryScore {
@@ -3092,6 +3093,7 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
     startedAt: span.startedAt,
     endedAt: span.endedAt,
     durationMs: durationMsBetween(span.startedAt, span.endedAt),
+    timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
     status: span.error === null ? 'success' : 'error',
     error: span.error,
     entityType: span.entityType,
@@ -3170,6 +3172,7 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     startedAt: root.startedAt,
     endedAt: root.endedAt,
     durationMs: durationMsBetween(root.startedAt, root.endedAt),
+    timeToFirstChunkMs: root.timeToFirstChunkMs ?? null,
     entityName: traceQueryDimensionValue(root, 'entityName'),
     entityType: traceQueryDimensionValue(root, 'entityType'),
     name: traceQueryDimensionValue(root, 'name'),
@@ -3201,6 +3204,7 @@ function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
     entityType: root.entityType,
     environment: root.environment,
     status: root.error === null ? 'success' : 'error',
+    timeToFirstChunkMs: root.timeToFirstChunkMs ?? null,
   };
 }
 

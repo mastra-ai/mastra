@@ -141,6 +141,7 @@ describe('PostgresStoreVNext', () => {
           'trace-query-tenant-scope',
           'feedback',
           'trace-query-context-ids',
+          'trace-query-time-to-first-chunk',
           'trace-query-root-span-fields',
         ]);
 
@@ -164,6 +165,7 @@ describe('PostgresStoreVNext', () => {
           'trace-query-tenant-scope',
           'feedback',
           'trace-query-context-ids',
+          'trace-query-time-to-first-chunk',
           'trace-query-root-span-fields',
         ]);
       } finally {

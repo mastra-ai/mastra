@@ -137,17 +137,7 @@
     "z-ai/glm-5"
   ],
   "reasoning": {
-    "glm-4.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-2.0-mini": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-2.0-lite": [
+    "qwen3-32b": [
       {
         "type": "toggle"
       }
@@ -157,17 +147,7 @@
         "type": "toggle"
       }
     ],
-    "qwen3-32b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen-turbo": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-235b-a22b-thinking-2507": [
+    "doubao-seed-2.0-mini": [
       {
         "type": "toggle"
       }
@@ -177,12 +157,7 @@
         "type": "toggle"
       }
     ],
-    "doubao-seed-1.6-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "MiniMax-M1": [
+    "doubao-seed-2.0-lite": [
       {
         "type": "toggle"
       }
@@ -192,7 +167,7 @@
         "type": "toggle"
       }
     ],
-    "qwen3-30b-a3b": [
+    "qwen-turbo": [
       {
         "type": "toggle"
       }
@@ -207,27 +182,37 @@
         "type": "toggle"
       }
     ],
-    "qwen3-30b-a3b-thinking-2507": [
-      {
-        "type": "toggle"
-      }
-    ],
     "glm-4.5-air": [
       {
         "type": "toggle"
       }
     ],
-    "z-ai/glm-5": [
+    "qwen3-235b-a22b-thinking-2507": [
       {
         "type": "toggle"
       }
     ],
-    "z-ai/glm-4.7": [
+    "doubao-seed-1.6-flash": [
       {
         "type": "toggle"
       }
     ],
-    "minimax/minimax-m2.5": [
+    "glm-4.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "MiniMax-M1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-30b-a3b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-30b-a3b-thinking-2507": [
       {
         "type": "toggle"
       }
@@ -243,6 +228,21 @@
       }
     ],
     "minimax/minimax-m2": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "minimax/minimax-m2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "z-ai/glm-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "z-ai/glm-5": [
       {
         "type": "toggle"
       }

@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS span_events (
   spanType VARCHAR,
   isEvent BOOLEAN,
   endedAt TIMESTAMP,
+  timeToFirstChunkMs DOUBLE,
 
   -- JSON fields
   attributes JSON,
@@ -357,6 +358,7 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasInputPayload BOOLEAN`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasOutputPayload BOOLEAN`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasErrorPayload BOOLEAN`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS timeToFirstChunkMs DOUBLE`,
 
   // Metrics. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,
