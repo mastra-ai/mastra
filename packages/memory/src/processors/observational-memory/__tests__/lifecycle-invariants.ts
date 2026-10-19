@@ -136,7 +136,8 @@ export async function checkInvariants(
   storage: MemoryStorage,
   ledger: LifecycleLedger,
   ids: { threadId: string; resourceId: string },
-  state: { lastCursor: number | null },
+  /** `ties`: messages can share a millisecond, so one at the cursor millisecond may still be raw. */
+  state: { lastCursor: number | null; ties?: boolean },
   final: false | { actorRawView: ActorRawView },
 ): Promise<{ violations: Violation[]; explainedDuplicates: number; overlappingSyncDuplicates: number }> {
   const violations: Violation[] = [];
@@ -155,7 +156,8 @@ export async function checkInvariants(
   const chunks = head.bufferedObservationChunks ?? [];
   const chunkIds = new Set(chunks.flatMap(c => c.messageIds));
   const messageTime = new Map(ledger.messages.map(m => [m.id, m.createdAt.getTime()]));
-  const isRaw = (id: string) => cursor === null || (messageTime.get(id) ?? 0) > cursor;
+  const isRaw = (id: string) =>
+    cursor === null || (messageTime.get(id) ?? 0) > cursor || (!!state.ties && messageTime.get(id) === cursor);
 
   // (1) Coverage: every message is raw (after the cursor), observed in the head text, or buffered on the head.
   for (const message of ledger.messages) {
@@ -192,8 +194,9 @@ export async function checkInvariants(
     const times = append.messageIds.map(id => messageTime.get(id) ?? 0);
     return { min: Math.min(...times), max: Math.max(...times) };
   };
+  const covered = (max: number, cursorBefore: number) => (state.ties ? max < cursorBefore : max <= cursorBefore);
   for (const append of ledger.appends) {
-    if (append.persisted && append.cursorBefore !== null && rangeOf(append).max <= append.cursorBefore) {
+    if (append.persisted && append.cursorBefore !== null && covered(rangeOf(append).max, append.cursorBefore)) {
       violations.push({ invariant: 'covered-append-stored', detail: `${append.cycleId} was already observed` });
     }
   }

@@ -1,9 +1,11 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
 import { Memory } from '../../../index';
+import { filterObservedMessages } from '../message-utils';
 
 const threadId = 't-tie';
 const resourceId = 'r-tie';
@@ -150,5 +152,26 @@ describe('observation cursor millisecond ties (#27261)', () => {
     expect(prompts[0]).toContain('text of sibling-unobserved');
     expect(prompts[0]).not.toContain('text of sibling-observed');
     expect((await readRecord()).observedMessageIds).toContain('sibling-unobserved');
+  });
+
+  it('in-turn filter keeps a tied unobserved message and drops the tied observed one', () => {
+    const live = (ids: string[]) => {
+      const list = new MessageList({ threadId, resourceId });
+      for (const id of ids) list.add(msg(id, tie), 'memory');
+      return list;
+    };
+    const remaining = (list: MessageList) => list.get.all.db().map(m => m.id);
+
+    const tracked = live(['observed', 'unobserved']);
+    filterObservedMessages({
+      messageList: tracked,
+      record: { lastObservedAt: tie, observedMessageIds: ['observed'] } as any,
+    });
+    expect(remaining(tracked)).toEqual(['unobserved']);
+
+    // Without observed ids the cursor millisecond stays exclusive, as before the fix.
+    const untracked = live(['observed', 'unobserved']);
+    filterObservedMessages({ messageList: untracked, record: { lastObservedAt: tie } as any });
+    expect(remaining(untracked)).toEqual([]);
   });
 });

@@ -2207,11 +2207,14 @@ export class ObservationalMemory {
   private async loadMessagesFromStorage(
     threadId: string,
     resourceId: string | undefined,
-    lastObservedAt?: Date,
+    record?: Pick<ObservationalMemoryRecord, 'lastObservedAt' | 'observedMessageIds'>,
   ): Promise<MastraDBMessage[]> {
-    // Inclusive start: messages sharing the cursor millisecond may be unobserved.
-    // Observed ones are filtered out downstream by observedMessageIds.
-    const startDate = lastObservedAt ? new Date(lastObservedAt.getTime()) : undefined;
+    // With observed ids tracked, load the cursor millisecond too (an unobserved message can share it)
+    // and drop the observed ones by id. Without ids, keep the cursor exclusive (+1ms) as before.
+    const observedIds = new Set(record?.observedMessageIds ?? []);
+    const startDate = record?.lastObservedAt
+      ? new Date(new Date(record.lastObservedAt).getTime() + (observedIds.size > 0 ? 0 : 1))
+      : undefined;
 
     let result: { messages: MastraDBMessage[] };
 
@@ -2248,7 +2251,9 @@ export class ObservationalMemory {
     // Exclude working-memory state signals so storage-loaded paths (e.g. observe()
     // without explicit messages, buffering token counts) never re-observe stored
     // working memory (#21961).
-    return result.messages.filter(msg => msg.role !== 'system' && !isWorkingMemoryStateSignal(msg));
+    return result.messages.filter(
+      msg => msg.role !== 'system' && !isWorkingMemoryStateSignal(msg) && !observedIds.has(msg.id),
+    );
   }
 
   /**
@@ -3289,11 +3294,7 @@ ${formattedMessages}
     if (messages) {
       unobservedMessages = this.getUnobservedMessages(messages, record);
     } else {
-      const rawMessages = await this.loadMessagesFromStorage(
-        threadId,
-        resourceId,
-        record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
-      );
+      const rawMessages = await this.loadMessagesFromStorage(threadId, resourceId, record);
       unobservedMessages = this.getUnobservedMessages(rawMessages, record);
     }
 
@@ -3467,11 +3468,7 @@ ${formattedMessages}
   async loadUnobservedMessages(opts: { threadId: string; resourceId?: string }): Promise<MastraDBMessage[]> {
     const { threadId, resourceId } = opts;
     const record = await this.getOrCreateRecord(threadId, resourceId);
-    const rawMessages = await this.loadMessagesFromStorage(
-      threadId,
-      resourceId,
-      record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
-    );
+    const rawMessages = await this.loadMessagesFromStorage(threadId, resourceId, record);
     return this.getUnobservedMessages(rawMessages, record);
   }
 
@@ -3611,11 +3608,7 @@ ${formattedMessages}
       if (opts.messages) {
         candidateMessages = this.getUnobservedMessages(opts.messages, record, { excludeBuffered: true });
       } else {
-        const rawMessages = await this.loadMessagesFromStorage(
-          threadId,
-          resourceId,
-          record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
-        );
+        const rawMessages = await this.loadMessagesFromStorage(threadId, resourceId, record);
         candidateMessages = this.getUnobservedMessages(rawMessages, record, { excludeBuffered: true });
       }
 
@@ -3867,13 +3860,7 @@ ${formattedMessages}
 
     // Optional threshold guard — skip activation if pending tokens are below threshold
     if (opts.checkThreshold) {
-      const thresholdMessages =
-        opts.messages ??
-        (await this.loadMessagesFromStorage(
-          threadId,
-          resourceId,
-          record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
-        ));
+      const thresholdMessages = opts.messages ?? (await this.loadMessagesFromStorage(threadId, resourceId, record));
 
       const activateAfterIdle = resolveActivationTTL(this.observationConfig.activateAfterIdle, opts.currentModel);
       const lastActivityAt = getLastActivityFromMessages(thresholdMessages);
@@ -4235,14 +4222,7 @@ ${formattedMessages}
 
         const unobservedMessages = messages
           ? this.getUnobservedMessages(messages, freshRecord)
-          : this.getUnobservedMessages(
-              await this.loadMessagesFromStorage(
-                threadId,
-                resourceId,
-                freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
-              ),
-              freshRecord,
-            );
+          : await this.loadMessagesFromStorage(threadId, resourceId, freshRecord);
 
         if (opts.force) {
           if (unobservedMessages.length === 0) return;
