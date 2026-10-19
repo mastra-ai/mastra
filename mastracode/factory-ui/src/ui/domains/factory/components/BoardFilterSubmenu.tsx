@@ -67,7 +67,7 @@ function SearchableOptionItems({ label, options, selected, onChange }: OptionLis
 
   return (
     <div className="contents" onKeyDownCapture={keepTypingInSearch}>
-      <div className={`${menuSearchClasses.container} sticky -top-1 z-10 bg-card`}>
+      <div className={`${menuSearchClasses.container} bg-card sticky -top-1 z-10`}>
         <SearchIcon className={menuSearchClasses.icon} aria-hidden />
         <input
           ref={searchRef}
