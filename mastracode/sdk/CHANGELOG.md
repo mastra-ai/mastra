@@ -1,5 +1,29 @@
 # @mastra/code-sdk
 
+## 1.15.0-alpha.6
+
+### Patch Changes
+
+- Improved content search in sandbox workspaces without ripgrep. When the sandbox's GNU grep and git support PCRE, patterns run with `grep -P` and `git grep -P`, so `\d`, `\w`, `\s`, `\b`, and lookarounds are searched in one command instead of falling back to reading files one by one. ([#27698](https://github.com/mastra-ai/mastra/pull/27698))
+
+- Updated dependencies [[`6b8435c`](https://github.com/mastra-ai/mastra/commit/6b8435c1aaad98a3a5218ececbc45107968c9218), [`40a76a8`](https://github.com/mastra-ai/mastra/commit/40a76a854d9246aa8b8ba25ab3f58d7542e0ffea)]:
+  - @mastra/memory@1.39.0-alpha.4
+  - @mastra/libsql@1.27.0-alpha.3
+
+## 1.15.0-alpha.5
+
+### Patch Changes
+
+- Fixed sandbox workspace search staying on the slow fallback for the whole session when its first search ran before the sandbox was ready. A failed search-tool check is now retried on the next search. ([#27695](https://github.com/mastra-ai/mastra/pull/27695))
+
+- Made content search in sandbox workspaces much faster when ripgrep isn't installed. Searches now run as a single GNU grep command with context lines, using git to respect every repository's `.gitignore`, instead of reading files one by one. With ripgrep, searches also respect `.gitignore` files now. Both skip `node_modules` unless the search path points inside it. File listings in sandbox workspaces also skip `node_modules` inside the sandbox instead of returning it to be filtered out. ([#27687](https://github.com/mastra-ai/mastra/pull/27687))
+
+- Updated dependencies [[`ec84d93`](https://github.com/mastra-ai/mastra/commit/ec84d93cda24d56a0812086fcaace9e68ce8e089), [`79fd3b0`](https://github.com/mastra-ai/mastra/commit/79fd3b06a7cf59f7acb4591b9ba0f388d548fd17), [`f28b72f`](https://github.com/mastra-ai/mastra/commit/f28b72f255a460746f08c73b2a1d336bfc57757b), [`6c67158`](https://github.com/mastra-ai/mastra/commit/6c67158a10406adae195887167862d632bb54d64), [`ad8e752`](https://github.com/mastra-ai/mastra/commit/ad8e75217bcbb12986e7e77a30cb4af1be93c0fd), [`85a26af`](https://github.com/mastra-ai/mastra/commit/85a26af75fe62b7f2d8ac0b56d322798e5ae0616), [`d0f9cbd`](https://github.com/mastra-ai/mastra/commit/d0f9cbd37681e610e634ca69e3fd8210ac0fc0ef), [`0a88b7c`](https://github.com/mastra-ai/mastra/commit/0a88b7c6ec1ba548c67317ffff1169310b8d4b8d), [`e0077c3`](https://github.com/mastra-ai/mastra/commit/e0077c34070037ac77c264a9d5000a69c0dd2095)]:
+  - @mastra/core@1.79.0-alpha.5
+  - @mastra/memory@1.39.0-alpha.3
+  - @mastra/client-js@1.56.0-alpha.5
+  - @mastra/libsql@1.27.0-alpha.3
+
 ## 1.15.0-alpha.4
 
 ### Patch Changes

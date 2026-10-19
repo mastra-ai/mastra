@@ -251,6 +251,7 @@ export class ObservationStep {
             .catch((err: Error) => {
               omDebug(`[OM:buffer] fire-and-forget buffer failed: ${err?.message}`);
             }),
+          { threadId, resourceId },
         );
         buffered = true;
       }
