@@ -1,5 +1,5 @@
-import { realpathSync } from 'node:fs';
 import fs from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import path, { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -260,7 +260,7 @@ const routesManifestPlugin = (): Plugin => {
  * SPA separately (static host / CDN, cross-origin via
  * MASTRACODE_ALLOWED_ORIGINS) remains possible.
  */
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ mode }) => {
   // Absolute: Vite resolves a relative `envDir` against `root` (`src/ui`), so
   // `MASTRACODE_ENV_DIR=../web` would silently point at a directory that does
   // not exist and no `VITE_*` var would reach `import.meta.env`.
@@ -285,10 +285,6 @@ export default defineConfig(({ command, mode }) => {
     envDir,
     plugins: [react(), tailwindcss(), runtimeConfigPlugin(), routesManifestPlugin()],
     resolve: {
-      alias:
-        command === 'serve'
-          ? { '@mastra/playground-ui/sources.css': resolve(here, '../../../packages/playground-ui/src/sources.css') }
-          : undefined,
       // Monorepo packages arrive via `link:`/`workspace:` and would otherwise
       // resolve their own react copy from the monorepo store — force a single
       // copy from here.

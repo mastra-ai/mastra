@@ -1,16 +1,15 @@
-import { execFileSync } from 'node:child_process';
 import { randomInt, randomUUID } from 'node:crypto';
 import { rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Rollup, ViteDevServer } from 'vite';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const sharedSrc = resolve(repoRoot, 'packages/playground-ui/src');
 
-// Exercise each app's own Vite version, plugins, stylesheet and dev aliases.
+// Exercise each app's own Vite version, plugins, stylesheet and package conditions.
 // No library rebuild runs: saving shared source must regenerate its CSS directly.
 describe.each([
   { name: 'Studio', packagePath: 'packages/playground', configPath: 'vite.config.ts', stylesheet: '/src/index.css' },
@@ -21,22 +20,6 @@ describe.each([
     stylesheet: '/tailwind.css',
   },
 ])('$name hot reload', ({ packagePath, configPath, stylesheet }) => {
-  describe('when starting the app through Turbo', () => {
-    it('starts both shared dependency watchers', () => {
-      const output = execFileSync(
-        resolve(repoRoot, 'node_modules/.bin/turbo'),
-        ['run', 'dev', '--filter', `./${packagePath}`, '--dry=json'],
-        { cwd: repoRoot, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 },
-      );
-      const tasks: Record<string, unknown>[] = JSON.parse(output).tasks;
-      for (const name of ['@mastra/playground-ui', '@mastra/react']) {
-        // Initial full builds must finish before a watcher writes to the same dist.
-        expect(tasks.find(task => task.taskId === `${name}#dev`)).toMatchObject({
-          dependencies: expect.arrayContaining([`${name}#build`]),
-        });
-      }
-    });
-  });
   describe('when a shared component gains a utility class', () => {
     it('serves the new CSS and notifies the browser without rebuilding the library', async () => {
       const appRoot = resolve(repoRoot, packagePath);
@@ -99,14 +82,15 @@ describe.each([
       const require = createRequire(resolve(appRoot, 'package.json'));
       const { build, loadConfigFromFile } = await import(require.resolve('vite'));
       const configFile = resolve(appRoot, configPath);
-      const loaded = await loadConfigFromFile({ command: 'build', mode: 'production' }, configFile);
       const entry = resolve(appRoot, `hmr-entry-${randomUUID()}.mjs`);
       const source = resolve(sharedSrc, `hmr-fixture-${randomUUID()}.tsx`);
       const compiled = resolve(sharedSrc, '../dist', `hmr-fixture-${randomUUID()}.js`);
       const sourceZIndex = randomInt(100000, 1000000);
       const compiledZIndex = sourceZIndex + 1000000;
 
+      vi.stubEnv('NODE_ENV', 'production');
       try {
+        const loaded = await loadConfigFromFile({ command: 'build', mode: 'production' }, configFile);
         await writeFile(source, `export const className = "z-[${sourceZIndex}]";\n`);
         await writeFile(compiled, `export const className = "z-[${compiledZIndex}]";\n`);
         await writeFile(
@@ -128,9 +112,10 @@ describe.each([
           .filter((asset): asset is Rollup.OutputAsset => asset.type === 'asset' && asset.fileName.endsWith('.css'))
           .map(asset => asset.source)
           .join('\n');
-        expect(css).toContain(`z-index: ${compiledZIndex}`);
-        expect(css).not.toContain(`z-index: ${sourceZIndex}`);
+        expect(css.includes(`z-index: ${compiledZIndex}`)).toBe(true);
+        expect(css.includes(`z-index: ${sourceZIndex}`)).toBe(false);
       } finally {
+        vi.unstubAllEnvs();
         await Promise.all([source, compiled, entry].map(file => rm(file, { force: true })));
       }
     }, 15000);

@@ -38,11 +38,6 @@
       "cache": false,
       "persistent": true
     },
-    "@mastra/react#dev": {
-      "dependsOn": ["^build", "@mastra/react#build"],
-      "cache": false,
-      "persistent": true
-    },
     "validate:package": {
       "dependsOn": []
     },

@@ -347,7 +347,17 @@ async function run() {
   }
   const dev = await x(
     'pnpm',
-    ['turbo', 'run', 'dev', 'dev:api', '--filter', './mastracode/factory-ui', '--env-mode=loose'],
+    [
+      'turbo',
+      'run',
+      'dev',
+      'dev:api',
+      '--filter',
+      './mastracode/factory-ui',
+      '--filter',
+      './packages/playground-ui',
+      '--env-mode=loose',
+    ],
     { nodeOptions: { cwd: root, stdio: 'inherit', env } },
   );
   process.exit(dev.exitCode ?? 1);

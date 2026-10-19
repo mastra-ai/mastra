@@ -1,0 +1,2 @@
+@import './sources.css';
+@source './src/**/*.{ts,tsx}';

@@ -633,8 +633,12 @@ describe('theme.css export', () => {
   });
 
   it('ships a sources entry that points a consumer Tailwind build at the compiled components', async () => {
-    expect(pkg.exports['./sources.css']).toBe('./sources.css');
+    expect(pkg.exports['./sources.css']).toEqual({
+      development: './sources.dev.css',
+      default: './sources.css',
+    });
     expect(pkg.files).toContain('sources.css');
+    expect(pkg.files).toContain('sources.dev.css');
 
     const compiler = await compileStylesheet("@import 'tailwindcss'; @import './sources.css';", pkgRoot);
     const scannedPatterns = compiler.sources.map(source => resolve(source.base, source.pattern));
