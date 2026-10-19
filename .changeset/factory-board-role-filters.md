@@ -6,7 +6,7 @@ You can now filter Factory boards by **Author**, **Assignee** and, on the Review
 
 - **You** comes first in every people list and also matches the cards you opened from your GitHub account.
 - People and label lists longer than eight entries get a search box.
-- **Linear project** shows up only once Linear is picked as an intake source, and it narrows only Linear cards.
+- **Linear project** shows up only once Linear is picked as an intake source. It now narrows only Linear cards, so other picked sources such as GitHub stay visible.
 - Hovering Board properties lists the filters in use.
 
-The **Relevant because** filter is replaced by these fields. Board links and saved views that still use it now ignore it.
+**Relevant because** is removed. Board links and saved views that used it now show every card involving the picked teammate. To narrow by role again, pick the person in the matching field: Teammate "Alice" with Relevant because "Assigned" becomes Assignee "Alice".
