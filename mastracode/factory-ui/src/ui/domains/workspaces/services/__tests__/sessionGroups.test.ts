@@ -65,6 +65,24 @@ describe('groupSessionRows by board', () => {
     expect(groupSummary(groups).map(group => group.label)).toEqual(['Release Preview', 'Ops', 'User']);
   });
 
+  it('groups new Slack conversations and legacy Slack work items separately from work', () => {
+    const slackRow = factoryRow(testSession('slack-1', { branch: 'slack/1792423783-274979' }));
+    const legacyRow = factoryRow(testSession('legacy-slack'), {
+      item: testWorkItem({ source: 'slack-thread', board: 'work' }),
+    });
+
+    const groups = groupRows([slackRow, workRow, legacyRow, userRow('user-1')], 'board', builtinContext, []);
+
+    expect(groupSummary(groups)).toEqual([
+      { label: 'Work', sessionIds: ['work-1'] },
+      { label: 'Slack', sessionIds: ['slack-1', 'legacy-slack'] },
+      { label: 'User', sessionIds: ['user-1'] },
+    ]);
+    expect(groupSummary(groupRows([slackRow, workRow], 'board', builtinContext, ['slack']))).toEqual([
+      { label: 'Work', sessionIds: ['work-1'] },
+    ]);
+  });
+
   it('keeps the incoming row order inside a group and leaves out empty groups', () => {
     const secondWorkRow = factoryRow(testSession('work-2', { branch: 'factory/issue-2' }));
 
@@ -91,7 +109,7 @@ describe('groupSessionRows by board', () => {
 
     const ordered = orderGroupHeadings(defaults, ['user', 'board:gone', 'board:review']);
 
-    expect(ordered.map(heading => heading.label)).toEqual(['User', 'Review', 'Work', 'Release Preview']);
+    expect(ordered.map(heading => heading.label)).toEqual(['User', 'Review', 'Work', 'Release Preview', 'Slack']);
   });
 });
 

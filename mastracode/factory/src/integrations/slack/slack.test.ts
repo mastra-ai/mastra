@@ -1,8 +1,14 @@
 import { ChannelSessionRejectedError, AgentChannels } from '@mastra/core/channels';
+import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { LibSQLStore } from '@mastra/libsql';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { FACTORY_INTERACTIVE_KEY } from '../../auth.js';
+import { createSourceControlSessionLookup } from '../../session/factory-session.js';
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import { resolveFactoryToolScope } from '../../tools/scope.js';
 
 // Captures the tenant each prime saw: the stamp can be overwritten later in
 // the gate, so asserting on the final request context alone isn't enough.
@@ -61,7 +67,7 @@ function makeThread({ isDM = false } = {}) {
 
 function makeMessage(teamId?: string) {
   return {
-    author: { userId: 'U-sender', userName: 'caleb' },
+    author: { userId: 'U-sender', userName: 'caleb', isBot: false },
     text: 'hello bot',
     raw: teamId ? { team_id: teamId } : {},
   } as any;
@@ -115,7 +121,7 @@ describe('resolveLinkedSender', () => {
     // Ephemeral (visible only to the sender), with fallbackToDM.
     // Addressed to the sender, not the channel: the card is a private nudge.
     const [user, , options] = thread.postEphemeral.mock.calls[0];
-    expect(user).toEqual({ userId: 'U-sender', userName: 'caleb' });
+    expect(user).toEqual({ userId: 'U-sender', userName: 'caleb', isBot: false });
     expect(options).toEqual({ fallbackToDM: true });
 
     // The link carries NO identity: Slack proves the account during OIDC, so
@@ -329,6 +335,111 @@ describe('resolveFactoryForLink', () => {
     expect(result).toEqual({ status: 'blocked' });
     expect(thread.post).not.toHaveBeenCalled();
     expect(thread.postEphemeral).not.toHaveBeenCalled();
+  });
+});
+
+describe('Slack Factory management authorization', () => {
+  async function setup({ senderId = 'owner', senderOrgId = 'org-1', linked = true, worker = false } = {}) {
+    const seed = await createFactoryStorageForTests();
+    const sourceControl = seed.sourceControl.forIntegration('github');
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'owner', input: { name: 'Mastra' } });
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1', connectedByUserId: 'owner', externalId: '1',
+    });
+    const repository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '2', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+    });
+    const connection = await sourceControl.connections.create({
+      orgId: 'org-1', factoryProjectId: project.id, installationId: installation.id, createdByUserId: 'owner',
+    });
+    const projectRepository = await sourceControl.projectRepositories.link({
+      orgId: 'org-1', connectionId: connection.id, repositoryId: repository.id,
+      createdByUserId: 'owner', sandboxProvider: 'local', sandboxWorkdir: '/sandbox/mastra',
+    });
+    await sourceControl.sessions.create({
+      sessionId: 'session-1', projectRepositoryId: projectRepository.id, factoryProjectId: project.id,
+      orgId: 'org-1', userId: 'owner', branch: 'slack/thread-1', baseBranch: 'main', visibility: 'private',
+      ...(worker ? { origin: { sessionId: 'parent', threadId: 'parent-thread' } } : {}),
+    });
+    if (linked) {
+      await seed.channelIdentity.saveAccountLink({
+        platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-sender',
+        orgId: senderOrgId, userId: senderId,
+      });
+      await seed.channelIdentity.setDefaultFactory({
+        platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-sender',
+        factoryProjectId: project.id,
+      });
+    }
+    const storage = new LibSQLStore({ id: 'slack-auth-test', url: ':memory:' });
+    await storage.init();
+    onTestFinished(() => storage.close());
+    const memory = await storage.getStore('memory');
+    await memory!.saveThread({ thread: {
+      id: 'thread-1', resourceId: 'session-1', title: 'Slack thread', createdAt: new Date(), updatedAt: new Date(),
+      metadata: { channel_platform: 'slack', channel_externalThreadId: 'slack-thread', channel_externalChannelId: 'C-1' },
+    } });
+    const thread = makeThread();
+    thread.id = 'slack-thread';
+    thread.isSubscribed = vi.fn().mockResolvedValue(true);
+    const ctx = handlerCtx(new Mastra({ storage }));
+    ctx.requestContext.set('controller', { resourceId: 'session-1', threadId: 'thread-1' });
+    const handlers = createHandlers({ accountLinks: seed.channelIdentity, projects: seed.projects, sourceControl });
+    const resolveScope = () => resolveFactoryToolScope({
+      requestContext: ctx.requestContext, authEnabled: true,
+      sessions: createSourceControlSessionLookup([sourceControl]), projects: seed.projects, workItems: seed.workItems,
+    });
+    return { thread, ctx, handlers, resolveScope };
+  }
+
+  it.each(['onMention', 'onDirectMessage', 'onSubscribedMessage'] as const)(
+    'allows a linked human owner to manage their Factory through %s', async handler => {
+      const env = await setup();
+      let scope;
+      await env.handlers[handler]!(env.thread, makeMessage('T-1'), async () => {
+        scope = await env.resolveScope();
+      }, env.ctx);
+      expect(scope).toMatchObject({ kind: 'user', userId: 'owner', interactive: true });
+    },
+  );
+
+  it('does not give a different linked responder management powers as the session owner', async () => {
+    const env = await setup({ senderId: 'responder' });
+    let scope;
+    await env.handlers.onSubscribedMessage!(env.thread, makeMessage('T-1'), async () => {
+      scope = await env.resolveScope();
+    }, env.ctx);
+    expect(scope).toMatchObject({ interactive: false });
+  });
+
+  it.each([true, undefined])('does not elevate a sender unless explicitly human (isBot: %s)', async isBot => {
+    const env = await setup();
+    env.ctx.requestContext.set(FACTORY_INTERACTIVE_KEY, true);
+    const message = makeMessage('T-1');
+    message.author.isBot = isBot;
+    let scope;
+    await env.handlers.onSubscribedMessage!(env.thread, message, async () => {
+      scope = await env.resolveScope();
+    }, env.ctx);
+    expect(scope).toMatchObject({ interactive: false });
+  });
+
+  it.each([{ linked: false }, { senderOrgId: 'org-2' }])('refuses unauthorized Slack dispatches: %j', async options => {
+    const env = await setup(options);
+    const dispatch = vi.fn();
+    await env.handlers.onSubscribedMessage!(env.thread, makeMessage('T-1'), dispatch, env.ctx);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(env.ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).not.toBe(true);
+  });
+
+  it('keeps a side session worker-scoped even when its owner sends a Slack message', async () => {
+    const env = await setup({ worker: true });
+    let scope;
+    await env.handlers.onSubscribedMessage!(env.thread, makeMessage('T-1'), async () => {
+      scope = await env.resolveScope();
+    }, env.ctx);
+    expect(scope).toMatchObject({ kind: 'worker' });
   });
 });
 

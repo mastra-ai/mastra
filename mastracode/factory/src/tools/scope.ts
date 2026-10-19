@@ -27,7 +27,7 @@ export interface FactoryToolScope {
   threadId: string;
   /** `worker` sessions are bound to a work item run; only `user` sessions manage the Factory. */
   kind: 'user' | 'worker';
-  /** True only for turns a signed-in person started over HTTP (see {@link FACTORY_INTERACTIVE_KEY}). */
+  /** True only for verified human HTTP or Slack turns (see {@link FACTORY_INTERACTIVE_KEY}). */
   interactive: boolean;
   /** The caller's name and avatar, stamped on audit events so the board can show who acted. */
   actorProfile?: AuditActorProfileInput;

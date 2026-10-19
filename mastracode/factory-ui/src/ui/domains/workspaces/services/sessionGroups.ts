@@ -44,6 +44,7 @@ export interface SessionGroupContext {
   viewerUserId: string | undefined;
 }
 
+const SLACK_GROUP: SessionGroupHeading = { key: 'slack', label: 'Slack', icon: 'user' };
 const USER_GROUP: SessionGroupHeading = { key: 'user', label: 'User', icon: 'user' };
 const ALL_GROUP: SessionGroupHeading = { key: 'all', label: 'All', icon: 'all' };
 
@@ -66,7 +67,12 @@ const STATUS_GROUPS: readonly SessionGroupHeading[] = SESSION_ACTIVITY_STATUSES.
 }));
 
 const GROUP_KEY_OF_ROW: Record<SessionGroupBy, (row: SessionListRow) => string> = {
-  board: row => (row.board === undefined ? USER_GROUP.key : boardGroupKey(row.board)),
+  board: row =>
+    row.source === 'slack-thread'
+      ? SLACK_GROUP.key
+      : row.board === undefined
+        ? USER_GROUP.key
+        : boardGroupKey(row.board),
   status: row => statusGroupKey(row.status),
   owner: row => ownerGroupKey(row.session.userId),
   none: () => ALL_GROUP.key,
@@ -93,6 +99,7 @@ function boardGroupHeadings(
   return [
     ...catalog.map(board => boardHeading(board.id, board.title)),
     ...uncatalogedBoards.map(({ id }) => boardHeading(id, id.charAt(0).toUpperCase() + id.slice(1))),
+    SLACK_GROUP,
     USER_GROUP,
   ];
 }
