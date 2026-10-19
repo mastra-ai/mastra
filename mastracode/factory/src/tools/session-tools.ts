@@ -87,6 +87,37 @@ export function createFactorySessionTools(
   scope: FactoryToolScope,
   deps: FactorySessionToolDependencies,
 ): IntegrationTools {
+  const switchModel = createTool({
+    id: 'factory_switch_session_model',
+    description:
+      'Switch the model of a running session you own in this Factory, without recreating it. The model takes effect on its next run. Use a session ID from the Factory session or work item tools.',
+    inputSchema: z
+      .object({
+        sessionId: z.string().trim().min(1).max(200),
+        modelId: z.string().trim().min(1).max(200),
+      })
+      .strict(),
+    execute: async ({ sessionId, modelId }) => {
+      const row = await deps.sessions.getBySessionId(sessionId);
+      if (
+        !row ||
+        row.orgId !== scope.orgId ||
+        row.factoryProjectId !== scope.factoryProjectId ||
+        row.userId !== scope.userId
+      ) {
+        throw new Error('Session not found or not owned by you in this Factory.');
+      }
+      const messaging = await deps.messaging();
+      if (!messaging) throw new Error('Session model switching is not available on this server.');
+      const session = await messaging.controller.getSessionByResource(sessionId);
+      if (!session) throw new Error('Session is not running.');
+      const threadId = session.thread.getId();
+      if (!threadId) throw new Error('Session has no active thread.');
+      await session.thread.setSettingOn({ threadId, key: 'currentModelId', value: modelId });
+      return { sessionId, threadId, modelId };
+    },
+  });
+
   const start = createTool({
     id: 'factory_start_session',
     description: [
@@ -364,5 +395,5 @@ export function createFactorySessionTools(
     return repository.projectRepositoryId;
   }
 
-  return { factory_start_session: start };
+  return { factory_start_session: start, factory_switch_session_model: switchModel };
 }

@@ -119,6 +119,10 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
         rename: vi.fn(async () => undefined),
         getSetting: async ({ key }: { key: string }) => settings.get(key),
         setSetting: vi.fn(async ({ key, value }: { key: string; value: unknown }) => void settings.set(key, value)),
+        setSettingOn: vi.fn(async ({ threadId, key, value }: { threadId: string; key: string; value: unknown }) => {
+          if (threadId !== id) throw new Error('Wrong thread');
+          settings.set(key, value);
+        }),
       },
       sendSignal: vi.fn((_input: unknown, _options: { requestContext: RequestContext }) => {
         calls.push('kickoff');
@@ -229,14 +233,64 @@ async function setup(
     auditRecorder: audit,
     startCoordinator: () => (coordinatorOption === 'none' ? undefined : { prepare }),
   };
-  const tool = createFactorySessionTools(seeded.scope, deps).factory_start_session!;
+  const tools = createFactorySessionTools(seeded.scope, deps);
+  const tool = tools.factory_start_session!;
   const start = (input: Record<string, unknown>) =>
     (tool as unknown as { execute: (input: unknown, context: unknown) => Promise<unknown> }).execute(input, {});
-  return { ...seeded, calls, controller, created, start, tool, prepare, transition, notifications, reports };
+  const switchModel = (input: Record<string, unknown>) =>
+    (
+      tools.factory_switch_session_model! as unknown as {
+        execute: (input: unknown, context: unknown) => Promise<unknown>;
+      }
+    ).execute(input, {});
+  return {
+    ...seeded,
+    calls,
+    controller,
+    created,
+    start,
+    switchModel,
+    tool,
+    prepare,
+    transition,
+    notifications,
+    reports,
+  };
 }
 
 beforeEach(() => {
   prime.mockReset();
+});
+
+describe('factory_switch_session_model', () => {
+  it('switches an owned running session without recreating it and rejects sessions owned by others', async () => {
+    const env = await setup();
+    const started = (await env.start({ prompt: 'Investigate the build.' })) as { sessionId: string };
+    const live = env.created[0]!.session;
+
+    await expect(env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' })).resolves.toEqual({
+      sessionId: started.sessionId,
+      threadId: started.sessionId,
+      modelId: 'openai/gpt-5.6',
+    });
+    expect(await live.thread.getSetting({ key: 'currentModelId' })).toBe('openai/gpt-5.6');
+    expect(env.created).toHaveLength(1);
+
+    await env.sourceControl.sessions.create({
+      sessionId: 'other-user-session',
+      projectRepositoryId: env.projectRepository.id,
+      factoryProjectId: env.scope.factoryProjectId,
+      orgId: env.scope.orgId,
+      userId: 'someone-else',
+      branch: 'user/session-other-user-session',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    await expect(env.switchModel({ sessionId: 'other-user-session', modelId: 'openai/gpt-5.6' })).rejects.toThrow(
+      'not owned by you',
+    );
+    await expect(env.switchModel({ sessionId: 'not-running', modelId: 'openai/gpt-5.6' })).rejects.toThrow('not found');
+  });
 });
 
 describe('factory_start_session in side mode', () => {
