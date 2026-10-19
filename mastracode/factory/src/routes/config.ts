@@ -104,6 +104,10 @@ export interface ProviderInfo {
 export interface OMSession {
   /** `get()` returns '' when no model is selected, so callers fall back on falsy. */
   model: { get: () => string };
+  thread?: {
+    getId: () => string | null;
+    setSettingOn: (args: { threadId: string; key: 'currentModelId'; value: string }) => Promise<unknown>;
+  };
 }
 
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
@@ -580,6 +584,7 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   modelDefaults?: ModelDefaultsStorage;
   /** Source-control sessions available to config route integrations. */
   sourceControlSessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
+  sourceControls?: Array<Pick<SourceControlStorageHandle, 'sessions'>>;
   /** Thread membership used to resolve the same model policy as an invocation. */
   workItems?: WorkItemsStorage;
   /** Tenant memory-settings domain handle; absent in local (no-DB) mode. */
@@ -1029,6 +1034,74 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
+        },
+      }),
+
+      registerApiRoute('/web/config/default-model/apply', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          const context = await resolveModelDefaultsContext({
+            c: loose(c),
+            auth,
+            modelDefaults: options.modelDefaults,
+          });
+          if ('response' in context) return context.response;
+          if (
+            !options.factoryProjects ||
+            !options.sourceControls ||
+            !options.workItems ||
+            !options.controller.getSessionByResource
+          ) {
+            return c.json({ error: 'model_apply_unavailable' }, 503);
+          }
+          const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
+          if (!record?.modelId) return c.json({ error: 'default_model_not_set' }, 400);
+
+          const applied: string[] = [];
+          const skipped: Array<{ sessionId: string; reason: 'not-running' | 'thread-missing' | 'apply-failed' }> = [];
+          const seen = new Set<string>();
+          const projects = await options.factoryProjects.list({ orgId: context.orgId });
+          for (const project of projects) {
+            const workerSessions = new Set(
+              (await options.workItems.listRunBindings(context.orgId, project.id)).map(binding => binding.sessionId),
+            );
+            for (const sourceControl of options.sourceControls) {
+              const sessions = await sourceControl.sessions.listByProject({
+                orgId: context.orgId,
+                factoryProjectId: project.id,
+                viewerUserId: context.userId,
+              });
+              for (const row of sessions) {
+                if (
+                  row.userId !== context.userId ||
+                  row.originSessionId ||
+                  workerSessions.has(row.sessionId) ||
+                  seen.has(row.sessionId)
+                )
+                  continue;
+                seen.add(row.sessionId);
+                const session = await options.controller.getSessionByResource(row.sessionId);
+                if (!session?.thread) {
+                  skipped.push({ sessionId: row.sessionId, reason: 'not-running' });
+                  continue;
+                }
+                const threadId = session.thread.getId();
+                if (!threadId) {
+                  skipped.push({ sessionId: row.sessionId, reason: 'thread-missing' });
+                  continue;
+                }
+                try {
+                  await session.thread.setSettingOn({ threadId, key: 'currentModelId', value: record.modelId });
+                  applied.push(row.sessionId);
+                } catch (error) {
+                  console.warn('[factory] apply user default model failed for session', row.sessionId, error);
+                  skipped.push({ sessionId: row.sessionId, reason: 'apply-failed' });
+                }
+              }
+            }
+          }
+          return c.json({ modelId: record.modelId, applied, skipped });
         },
       }),
 

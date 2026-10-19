@@ -8,8 +8,8 @@ import {
   InputNumberInput,
 } from '@mastra/playground-ui/components/InputNumber';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { useState } from 'react';
 
 import {
@@ -170,6 +170,10 @@ export function OMSection({
           </Txt>
         </div>
       )}
+
+      <Txt as="p" variant="caption" tone="muted" className="px-4">
+        Observer and Reflector model changes take effect on the next run, including existing sessions.
+      </Txt>
 
       <SettingsRow label="Observer model" description="Summarizes the conversation into observations">
         <ModelCombobox
