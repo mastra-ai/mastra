@@ -6,6 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 import { MockRegistry } from '../mock-registry';
+import { seedWorkflowRun } from '../seed-run';
 
 /**
  * Create all workflows needed for time travel tests.
@@ -1638,8 +1639,9 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
         expect(workflowsStore).toBeDefined();
 
         // Persist a snapshot that indicates the workflow is still running
-        await workflowsStore?.persistWorkflowSnapshot({
+        await seedWorkflowRun(workflowsStore!, {
           workflowName: 'tt-error-running-workflow',
+          storageVersion: workflow.options.storageVersion,
           runId,
           snapshot: {
             runId,

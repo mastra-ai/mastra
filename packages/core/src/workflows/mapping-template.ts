@@ -134,16 +134,25 @@ function stringifyTemplateValue(v: unknown, template: string, idx: number, rawEx
  * available in a step's execute context. See the `.map()` overload signature
  * for the full list of accepted scopes (`inputData`, `initData`, `state`,
  * `requestContext`, `stepResults.<stepId>`).
+ *
+ * `stepResults.<stepId>` placeholders read `stepOutputs`, which the caller
+ * resolves up front for every id from {@link collectTemplateStepIds}.
  */
-export function resolveTemplate(template: string, ctx: any): string {
+export function resolveTemplate(template: string, ctx: any, stepOutputs: ReadonlyMap<string, unknown>): string {
   let idx = 0;
   return template.replace(TEMPLATE_PLACEHOLDER, (_match, rawExpr: string) => {
     idx++;
-    return resolveTemplatePlaceholder(rawExpr, template, idx, ctx);
+    return resolveTemplatePlaceholder(rawExpr, template, idx, ctx, stepOutputs);
   });
 }
 
-function resolveTemplatePlaceholder(rawExpr: string, template: string, idx: number, ctx: any): string {
+function resolveTemplatePlaceholder(
+  rawExpr: string,
+  template: string,
+  idx: number,
+  ctx: any,
+  stepOutputs: ReadonlyMap<string, unknown>,
+): string {
   // validateTemplate(template) is called at definition time so we know the
   // raw expr is well-formed (non-empty, no surrounding whitespace, known
   // scope). Runtime only cares about path-resolution + value coercion.
@@ -162,7 +171,7 @@ function resolveTemplatePlaceholder(rawExpr: string, template: string, idx: numb
       const innerDot = rest.indexOf('.');
       const stepId = innerDot === -1 ? rest : rest.slice(0, innerDot);
       const subPath = innerDot === -1 ? '' : rest.slice(innerDot + 1);
-      const stepResult = ctx.getStepResult(stepId);
+      const stepResult = stepOutputs.get(stepId);
       // Nullish (not just null) so a step that "succeeded" with `undefined`
       // output is reported as missing too — consistent with how predicates
       // treat nullish step results. Nullish *path values inside* a present

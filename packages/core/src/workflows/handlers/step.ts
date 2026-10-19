@@ -17,8 +17,8 @@ import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
+import { buildStepResultAccessors } from '../run-journal';
 import type { Step, SuspendOptions } from '../step';
-import { getStepResult, getStepResultAsync } from '../step';
 import type {
   ExecutionContext,
   OutputWriter,
@@ -103,6 +103,9 @@ export async function executeStep(
   } = params;
   const skipEmits = skipEmitsParam || engine.options.emitStepEvents === false;
   const observabilityContext = resolveObservabilityContext(rest);
+
+  // Read before the first await, while the run executes: the step can outlive its run.
+  const journal = engine.getRunJournal(runId);
 
   const stepCallId = globalThis.crypto.randomUUID();
   const persistedNestedRunId =
@@ -240,6 +243,10 @@ export async function executeStep(
     requestContext,
     phase: 'start',
     recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
+    // A foreach's iterations all run this step, so their writes would name the same step at the
+    // same time. Its result is written when the foreach ends.
+    stepIds: executionContext.foreachIndex === undefined ? [step.id] : [],
+    journal,
   });
 
   // Check if this is a nested workflow that requires special handling
@@ -372,12 +379,19 @@ export async function executeStep(
       let completedNestedOutput: { found: boolean; value?: unknown } = { found: false };
       if (isNestedWorkflow && persistedNestedRunId && engine.mastra) {
         const workflowsStore = await engine.mastra.getStorage()?.getStore('workflows');
-        const nestedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: step.id,
-          runId: persistedNestedRunId,
-        });
-        if (nestedSnapshot?.status === 'success') {
-          completedNestedOutput = { found: true, value: nestedSnapshot.result };
+        // The nested workflow's own option: it can differ from this run's.
+        const nestedStorageVersion = (step as { options?: { storageVersion?: 1 | 2 } }).options?.storageVersion ?? 1;
+        const nestedRun =
+          nestedStorageVersion === 2
+            ? (await workflowsStore?.loadWorkflowRunHeader({ workflowName: step.id, runId: persistedNestedRunId }))
+                ?.header
+            : await workflowsStore?.loadWorkflowSnapshot({
+                workflowName: step.id,
+                runId: persistedNestedRunId,
+                storageVersion: 1,
+              });
+        if (nestedRun?.status === 'success') {
+          completedNestedOutput = { found: true, value: nestedRun.result };
         }
       }
 
@@ -423,8 +437,7 @@ export async function executeStep(
         suspendData: suspendDataToUse,
         ...createObservabilityContext({ currentSpan: stepSpan }),
         getInitData: () => stepResults?.input as any,
-        getStepResult: getStepResult.bind(null, stepResults),
-        getStepResultAsync: getStepResultAsync.bind(null, stepResults),
+        ...buildStepResultAccessors(engine, runId, stepResults),
         suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<void> => {
           const { suspendData, validationError: suspendValidationError } = await validateStepSuspendData({
             suspendData: suspendPayload,
@@ -619,15 +632,15 @@ export async function executeStep(
     ...execResults,
   } as StepResult<any, any, any, any>;
 
+  const stateUpdate = stepRetryResult.ok ? stepRetryResult.result.contextMutations.stateUpdate : null;
+
   return {
     result: stepResult,
     stepResults: { [step.id]: stepResult },
-    mutableContext: engine.buildMutableContext({
-      ...executionContext,
-      state: stepRetryResult.ok
-        ? (stepRetryResult.result.contextMutations.stateUpdate ?? executionContext.state)
-        : executionContext.state,
-    }),
+    mutableContext: {
+      ...engine.buildMutableContext({ ...executionContext, state: stateUpdate ?? executionContext.state }),
+      ...(stateUpdate != null ? { stateUpdated: true } : {}),
+    },
     // Serialize requestContext only for engines that restore it from
     // serialized results (Inngest memoization); the default engine keeps
     // the original reference and never reads this field, so serializing
