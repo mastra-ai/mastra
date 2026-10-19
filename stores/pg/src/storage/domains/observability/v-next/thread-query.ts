@@ -178,6 +178,8 @@ export async function queryThreadRows(
   schema: string,
   plan: TrustedThreadRowsQueryPlan,
   timeoutMs: number,
+  // Internal override for real-database conformance tests and benchmarks.
+  strategy: 'auto' | 'candidates' | 'full' = 'auto',
 ) {
   const deadline = performance.now() + coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
   const run = async <T>(text: string, values: unknown[]): Promise<T[]> => {
@@ -185,11 +187,14 @@ export async function queryThreadRows(
     if (remaining <= 0) throw new coreStorage.TraceQueryExecutionError();
     return await runWithPostgresTraceQueryTimeout(client, remaining, tx => tx.any<T>(text, values));
   };
-  const probeQuery = compilePostgresThreadRowsQuery(schema, plan, 'probe');
-  const [probe] = await run<CandidateSize>(probeQuery.text, probeQuery.values);
-  if (Number(probe!.threadCount) === 0) return { threads: [], page: { next: null } };
+  if (strategy === 'auto') {
+    const probeQuery = compilePostgresThreadRowsQuery(schema, plan, 'probe');
+    const [probe] = await run<CandidateSize>(probeQuery.text, probeQuery.values);
+    if (Number(probe!.threadCount) === 0) return { threads: [], page: { next: null } };
+    strategy = canUseThreadCandidates(probe!) ? 'candidates' : 'full';
+  }
   // Actual candidates have no LIMIT; concurrent arrivals must not truncate history.
-  const compiled = compilePostgresThreadRowsQuery(schema, plan, canUseThreadCandidates(probe!) ? 'candidates' : 'full');
+  const compiled = compilePostgresThreadRowsQuery(schema, plan, strategy);
   const selected = await run<Selected>(compiled.text, compiled.values);
   const page = selected.slice(0, plan.limit);
   if (!page.length) return { threads: [], page: { next: null } };

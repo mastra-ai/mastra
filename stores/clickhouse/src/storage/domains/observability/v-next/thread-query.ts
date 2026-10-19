@@ -223,7 +223,13 @@ function* batches<T extends Root>(rows: T[], maxRows = 256): Generator<T[]> {
   if (batch.length) yield batch;
 }
 
-export async function queryThreadRows(client: ClickHouseClient, plan: TrustedThreadRowsQueryPlan, timeoutMs: number) {
+export async function queryThreadRows(
+  client: ClickHouseClient,
+  plan: TrustedThreadRowsQueryPlan,
+  timeoutMs: number,
+  // Internal override for real-database conformance tests and benchmarks.
+  strategy: 'auto' | 'candidates' | 'full' = 'auto',
+) {
   const deadline = performance.now() + coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
   const run = async <T>(compiled: { query: string; query_params: Record<string, unknown> }): Promise<T[]> => {
     const remaining = Math.floor(deadline - performance.now());
@@ -234,13 +240,14 @@ export async function queryThreadRows(client: ClickHouseClient, plan: TrustedThr
       compiled,
     )) as T[];
   };
-  const [probe] = await run<CandidateSize>(compileClickHouseThreadRowsQuery(plan, 'probe'));
-  if (Number(probe!.threadCount) === 0) return { threads: [], page: { next: null } };
+  if (strategy === 'auto') {
+    const [probe] = await run<CandidateSize>(compileClickHouseThreadRowsQuery(plan, 'probe'));
+    if (Number(probe!.threadCount) === 0) return { threads: [], page: { next: null } };
+    strategy = canUseThreadCandidates(probe!) ? 'candidates' : 'full';
+  }
   // Candidate sets are recomputed without LIMIT in the selection statement. A
   // concurrent insert must never turn a planning budget into truncated history.
-  const selected = await run<Selected>(
-    compileClickHouseThreadRowsQuery(plan, canUseThreadCandidates(probe!) ? 'candidates' : 'full'),
-  );
+  const selected = await run<Selected>(compileClickHouseThreadRowsQuery(plan, strategy));
   const page = selected.slice(0, plan.limit);
   if (!page.length) return { threads: [], page: { next: null } };
   const roots = new Map<string, Root>();

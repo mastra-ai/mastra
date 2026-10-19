@@ -10,9 +10,10 @@ import {
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
 import { CH_INSERT_SETTINGS, spanRecordToRow } from './helpers';
+import * as threadQueryOps from './thread-query';
 import { ObservabilityStorageClickhouseVNext } from './index';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -76,15 +77,29 @@ it('keeps completed threads visible before pending and completed root copies mer
     await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
   }
 });
-createThreadQueryTests(() => storage, {
-  writeSpanWithoutPreviews: async span => {
-    await client.insert({
-      table: TABLE_SPAN_EVENTS,
-      values: [{ ...spanRecordToRow(span), inputPreview: null, outputPreview: null, errorPreview: null }],
-      format: 'JSONEachRow',
-      clickhouse_settings: CH_INSERT_SETTINGS,
-    });
-  },
+const runThreadRows = threadQueryOps.queryThreadRows;
+describe.each(['auto', 'candidates', 'full'] as const)('thread strategy: %s', strategy => {
+  beforeEach(async () => {
+    // Keep the public storage API and real SQL execution; override only plan selection.
+    vi.spyOn(threadQueryOps, 'queryThreadRows').mockImplementation((client, plan, timeoutMs) =>
+      runThreadRows(client, plan, timeoutMs, strategy),
+    );
+    await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+  });
+  afterEach(async () => {
+    vi.mocked(threadQueryOps.queryThreadRows).mockRestore();
+    await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+  });
+  createThreadQueryTests(() => storage, {
+    writeSpanWithoutPreviews: async span => {
+      await client.insert({
+        table: TABLE_SPAN_EVENTS,
+        values: [{ ...spanRecordToRow(span), inputPreview: null, outputPreview: null, errorPreview: null }],
+        format: 'JSONEachRow',
+        clickhouse_settings: CH_INSERT_SETTINGS,
+      });
+    },
+  });
 });
 createPreviewTests(() => storage, {
   // The row as the writer stored it before the preview columns existed.

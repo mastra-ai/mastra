@@ -186,7 +186,12 @@ type Selected = Omit<ThreadQueryRow, 'startedAt' | 'endedAt'> & {
   lastResourceId: string | null;
 };
 
-export async function queryThreadRows(db: DuckDBConnection, plan: TrustedThreadRowsQueryPlan) {
+export async function queryThreadRows(
+  db: DuckDBConnection,
+  plan: TrustedThreadRowsQueryPlan,
+  // Internal override for real-database conformance tests and benchmarks.
+  strategy: 'auto' | 'candidates' | 'full' = 'auto',
+) {
   const deadline = performance.now() + coreStorage.TRACE_QUERY_DEFAULT_TIMEOUT_MS;
   const run = async <T>(sql: string, values: unknown[]): Promise<T[]> => {
     const remaining = Math.floor(deadline - performance.now());
@@ -200,11 +205,14 @@ export async function queryThreadRows(db: DuckDBConnection, plan: TrustedThreadR
       throw error;
     }
   };
-  const probeQuery = compileDuckDBThreadRowsQuery(plan, 'probe');
-  const [probe] = await run<CandidateSize>(probeQuery.sql, probeQuery.values);
-  if (Number(probe!.threadCount) === 0) return { threads: [], page: { next: null } };
+  if (strategy === 'auto') {
+    const probeQuery = compileDuckDBThreadRowsQuery(plan, 'probe');
+    const [probe] = await run<CandidateSize>(probeQuery.sql, probeQuery.values);
+    if (Number(probe!.threadCount) === 0) return { threads: [], page: { next: null } };
+    strategy = canUseThreadCandidates(probe!) ? 'candidates' : 'full';
+  }
   // Actual candidates have no LIMIT; concurrent arrivals must not truncate history.
-  const compiled = compileDuckDBThreadRowsQuery(plan, canUseThreadCandidates(probe!) ? 'candidates' : 'full');
+  const compiled = compileDuckDBThreadRowsQuery(plan, strategy);
   const selected = await run<Selected>(compiled.sql, compiled.values);
   const page = selected.slice(0, plan.limit);
   if (!page.length) return { threads: [], page: { next: null } };
