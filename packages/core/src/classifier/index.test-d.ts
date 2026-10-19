@@ -1,13 +1,13 @@
 import { expectTypeOf } from 'vitest';
 
-import {
-  Classifier,
-  type MastraEvaluationModelInterface,
-  type BooleanAnswer,
-  type ChoiceAnswer,
-  type ClassifierInterface,
-  type RefusalAnswer,
-  type ScoreAnswer,
+import { Classifier } from './index';
+import type {
+  MastraEvaluationModelInterface,
+  BooleanAnswer,
+  ChoiceAnswer,
+  ClassifierInterface,
+  RefusalAnswer,
+  ScoreAnswer,
 } from './index';
 
 declare const model: ConstructorParameters<typeof Classifier>[0]['model'];

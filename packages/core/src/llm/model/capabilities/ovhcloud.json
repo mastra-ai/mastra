@@ -38,18 +38,6 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "qwen3.6-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "qwen3.5-9b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
     "gpt-oss-20b": [
       {
         "type": "effort",
@@ -63,6 +51,18 @@
       }
     ],
     "qwen3.5-397b-a17b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "qwen3.6-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "qwen3.5-9b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]

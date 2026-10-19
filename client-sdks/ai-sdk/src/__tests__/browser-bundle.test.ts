@@ -5,7 +5,8 @@ import { TransformStream } from 'node:stream/web';
 import { URL } from 'node:url';
 import { TextDecoder, TextEncoder } from 'node:util';
 import { runInNewContext } from 'node:vm';
-import { rspack, type Stats } from '@rspack/core';
+import { rspack } from '@rspack/core';
+import type { Stats } from '@rspack/core';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import aiV4BuildConfig from '../../../../packages/_vendored/ai_v4/tsdown.config.ts';
 

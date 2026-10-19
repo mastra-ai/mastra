@@ -469,7 +469,7 @@ describe('ThreadViewByTrace', () => {
       if (!toolBadge) throw new Error('expected a tool badge for the tool part');
       await screen.findByLabelText('View details for span Recipe lookup');
 
-      fireEvent.click(within(toolBadge).getAllByRole('button')[0] as HTMLElement);
+      fireEvent.click(within(toolBadge).getAllByRole('button')[0]);
 
       expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
       expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull();

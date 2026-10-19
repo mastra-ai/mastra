@@ -336,6 +336,52 @@ describe('source-control session routes', () => {
     });
   });
 
+  it('starts the conversation on the session thread so the first prompt can be sent right away', async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const controller = new AgentController<MastraCodeState>({
+      id: 'code',
+      stateSchema,
+      storage: new InMemoryStore({ id: 'factory-user-session-start' }),
+      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          default: true,
+          agent: new Agent({
+            id: 'test-agent',
+            name: 'Test agent',
+            instructions: 'Test.',
+            model: { id: 'openai/gpt-5.5' },
+          }),
+        },
+      ],
+    });
+    await controller.init();
+    const app = buildApp([sourceControl], seed, controller);
+    const sessionId = '22222222-2222-4222-8222-222222222222';
+    const create = () =>
+      app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId, title: 'First prompt' }),
+      });
+
+    expect((await create()).status).toBe(200);
+    // A retried create (the draft resubmitting the same id) must not start a second conversation.
+    expect((await create()).status).toBe(200);
+
+    const live = await controller.getSessionByResource(sessionId);
+    expect(live?.thread.getId()).toBe(sessionId);
+    expect(live?.state.get()).toMatchObject({
+      factoryOrgId: 'org-1',
+      factoryProjectId: project.id,
+      projectRepositoryId: projectRepository.id,
+    });
+    const threads = await controller.queryThreads({ resourceId: sessionId });
+    expect(threads.map(thread => thread.id)).toEqual([sessionId]);
+  });
+
   it('stamps the factory of the link on the session it creates', async () => {
     const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
     const app = buildApp([sourceControl], seed);

@@ -275,7 +275,7 @@ const RESERVED_THREAD_METADATA_KEYS = [
 /** Packages that cannot import the list as a value pin their copy to it with `satisfies Record<ReservedThreadMetadataKey, true>`. */
 export type ReservedThreadMetadataKey = (typeof RESERVED_THREAD_METADATA_KEYS)[number];
 
-function isReservedThreadMetadataKey(key: string): boolean {
+export function isReservedThreadMetadataKey(key: string): boolean {
   // Legacy per-mode model keys remain reserved and read-only so existing threads can restore their model.
   return RESERVED_THREAD_METADATA_KEYS.some(reserved => reserved === key) || key.startsWith('modeModelId_');
 }
@@ -3416,6 +3416,8 @@ export class SessionDisplayState {
       getThreadId: () => string | null;
       /** Clear the session's follow-up queue when thread-scoped display state resets. */
       clearFollowUps: () => void;
+      /** The run the session is tracking, still set while its `agent_end` is applied. */
+      getRunId: () => string | null;
     },
   ) {}
 
@@ -3551,10 +3553,17 @@ export class SessionDisplayState {
         ds.isRunning = false;
         // A suspended run keeps its pending tool suspensions alive so the UI can
         // still render the prompts (e.g. `ask_user`, which pauses via the native
-        // tool-suspension primitive). When the run ends for any other reason the
-        // parked suspensions are abandoned, so clear them all.
+        // tool-suspension primitive). When the run ends for any other reason its
+        // parked suspensions are abandoned, so clear them. Another run on the
+        // thread can end while a prompt is still waiting, and answering that
+        // prompt still resumes its run, so keep the prompts of other runs.
         if (event.reason !== 'suspended') {
-          ds.pendingSuspensions.clear();
+          const runId = this.deps.getRunId();
+          for (const [key, suspension] of ds.pendingSuspensions) {
+            if (!runId || suspension.runId === undefined || suspension.runId === runId) {
+              ds.pendingSuspensions.delete(key);
+            }
+          }
         }
         // Mark any still-running tools as errored (handles abort mid-run)
         for (const [, tool] of ds.activeTools) {
@@ -4123,6 +4132,7 @@ export class Session<TState = unknown> {
   readonly #bus = new SessionBus();
   /** Process-local hooks that must finish before the session exposes a terminal agent event. */
   readonly #beforeAgentEndListeners = new Set<SessionBeforeAgentEndListener>();
+  #endingRunId: string | null | undefined;
   /** Tool categories granted "allow", bucketed by thread id (or the session-wide bucket). */
   readonly #grantedCategories = new Map<string, Set<string>>();
   /** Individual tool names granted "allow", bucketed by thread id (or the session-wide bucket). */
@@ -4217,6 +4227,7 @@ export class Session<TState = unknown> {
       getSubagentDisplayName: agentType => this.#resolveSubagentName?.(agentType),
       getThreadId: () => this.thread.getId(),
       clearFollowUps: () => this.cleanupFollowUpBinding(),
+      getRunId: () => (this.#endingRunId === undefined ? this.run.getRunId() : this.#endingRunId),
     });
     this.#bus.setDisplayState(this.displayState);
     const sessionState = new SessionState(
@@ -4346,7 +4357,14 @@ export class Session<TState = unknown> {
       }
     }
     if (reason !== 'suspended' && runId) this.#threadOwnerIdsByRunId.delete(runId);
-    this.emit(event);
+    // The display state clears the ending run's prompts; a listener above may
+    // already have moved the tracked run on, so hand it the run that ended.
+    this.#endingRunId = runId;
+    try {
+      this.emit(event);
+    } finally {
+      this.#endingRunId = undefined;
+    }
   }
 
   /** Await the terminal event for a specific accepted agent run. */
@@ -5356,23 +5374,92 @@ export class Session<TState = unknown> {
     untilIdle?: boolean | { maxIdleMs?: number };
     author?: MessageAuthor;
   }): Promise<void> {
-    const wasActive = this.stream.isActive();
-    const signal = this.sendSignal(
-      {
-        content: this.createMessageInput({ content, files }),
-        tracingContext,
-        tracingOptions,
-        requestContext: requestContextInput,
-        untilIdle,
-        author,
-      },
-      { requireDelivery: true },
-    );
+    let lastBlockingRunId: string | undefined;
+    while (true) {
+      const wasActive = this.stream.isActive();
+      const signal = this.sendSignal(
+        {
+          content: this.createMessageInput({ content, files }),
+          tracingContext,
+          tracingOptions,
+          requestContext: requestContextInput,
+          untilIdle,
+          author,
+        },
+        { requireDelivery: true },
+      );
+      // Another agent's run on the thread can't take this message, so the
+      // thread reports itself blocked. Wait for that run to end and send again,
+      // as a message sent just before that run started would have waited.
+      let blockingRunId: string | undefined;
+      const accepted = signal.accepted.then(settled => {
+        if (settled.action !== 'blocked') return settled;
+        blockingRunId = settled.runId;
+        return { action: settled.action };
+      });
 
-    if (wasActive) {
-      await signal.accepted;
-    } else {
-      await this.waitForAcceptedRunCompletion(signal.accepted);
+      if (wasActive) {
+        await accepted;
+      } else {
+        await this.waitForAcceptedRunCompletion(accepted);
+      }
+      if (blockingRunId === undefined) return;
+      // Blocked again by the run already waited out: the wait saw nothing it
+      // could wait for, so don't spin on resending.
+      if (blockingRunId === lastBlockingRunId) {
+        this.emit({
+          type: 'error',
+          error: new Error("Your message wasn't sent: another run still holds this thread. Try again shortly."),
+        });
+        return;
+      }
+      lastBlockingRunId = blockingRunId;
+      const waited = await this.#waitForOtherAgentRun();
+      if (waited === 'stopped') return;
+      // A parked run waits on its own prompt, so waiting can't free the thread.
+      if (waited === 'suspended') {
+        this.emit({
+          type: 'error',
+          error: new Error(
+            "Your message wasn't sent: another agent's run on this thread is waiting for an answer to its own prompt.",
+          ),
+        });
+        return;
+      }
+    }
+  }
+
+  /**
+   * Wait until no other run holds this session's thread and this session has
+   * seen it end, or until that run parks on a prompt (`'suspended'`).
+   * `'stopped'` when Stop is pressed while waiting.
+   */
+  async #waitForOtherAgentRun(): Promise<'free' | 'suspended' | 'stopped'> {
+    const threadId = this.thread.getId();
+    if (!threadId) return 'free';
+    const agent = this.machinery.getAgent();
+    const waiters = new AbortController();
+    let aborted = false;
+    const abortRequest = this.run
+      .waitForAbortRequest(waiters.signal, { after: this.run.getAbortGeneration() })
+      .then(() => {
+        aborted = true;
+      });
+    try {
+      const outcome = await Promise.race([
+        agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+          agent,
+          { memory: { thread: threadId, resource: this.identity.getResourceId() }, untilSuspended: true },
+          agent.getPubSub(),
+        ),
+        abortRequest,
+      ]);
+      if (aborted) return 'stopped';
+      if (outcome === 'suspended') return 'suspended';
+      await this.waitForStreamIdle();
+      return aborted ? 'stopped' : 'free';
+    } finally {
+      waiters.abort();
     }
   }
 

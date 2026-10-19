@@ -1033,7 +1033,7 @@ describe('Board card pending states', () => {
     // Exactly one card: the filed work item; the live candidate is deduped, not the card.
     const actions = await screen.findAllByRole('button', { name: 'Actions for Fix Jira intake sync' });
     expect(actions).toHaveLength(1);
-    await user.click(actions[0]!);
+    await user.click(actions[0]);
 
     // The filed Jira card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
@@ -1185,7 +1185,7 @@ describe('Board card pending states', () => {
     // Exactly one card: the filed work item; the live candidate is deduped, not the card.
     const actions = await screen.findAllByRole('button', { name: 'Actions for Add retry to incident pager' });
     expect(actions).toHaveLength(1);
-    await user.click(actions[0]!);
+    await user.click(actions[0]);
 
     // The filed incident.io card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();

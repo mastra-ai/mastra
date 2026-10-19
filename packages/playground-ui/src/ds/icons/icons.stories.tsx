@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Bell, Check, ChevronDown, Copy, Folder, Play, Plus, Search, Settings, Trash2, X } from 'lucide-react';
-import { Icon, type IconSize } from './Icon';
+import { Icon } from './Icon';
+import type { IconSize } from './Icon';
 import {
   AgentIcon,
   AgentCoinIcon,

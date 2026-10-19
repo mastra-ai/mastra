@@ -47,11 +47,13 @@ import {
   FAILED_STEP_WARNINGS_DIFFERENCE,
   expectEngineParity,
   textOnlyTape,
-  type EngineObservation,
-  type EngineParityResults,
-  type ModelScript,
-  type ParityEngine,
-  type ParitySnapshot,
+} from '../../../loop/test-utils/aimock/parity';
+import type {
+  EngineObservation,
+  EngineParityResults,
+  ModelScript,
+  ParityEngine,
+  ParitySnapshot,
 } from '../../../loop/test-utils/aimock/parity';
 import { MockMemory } from '../../../memory/mock';
 import { Agent } from '../../agent';

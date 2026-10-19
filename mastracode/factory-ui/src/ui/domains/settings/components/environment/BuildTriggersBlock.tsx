@@ -168,7 +168,7 @@ function ScheduleRows({
             : 'Needs a storage adapter with schedules. Build now and push builds still work.'
         }
       >
-        <Select value={frequency} onValueChange={next => pick(next as Frequency)} disabled={locked}>
+        <Select value={frequency} onValueChange={next => pick(next)} disabled={locked}>
           <SelectTrigger size="sm" aria-label="Build frequency" className="w-auto">
             {FREQUENCY_LABEL[frequency]}
           </SelectTrigger>

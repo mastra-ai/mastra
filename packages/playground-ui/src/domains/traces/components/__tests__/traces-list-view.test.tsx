@@ -25,13 +25,13 @@ beforeAll(() => {
             devicePixelContentBoxSize: [{ inlineSize: 800, blockSize: 600 }],
           },
         ],
-        this as unknown as ResizeObserver,
+        this,
       );
     }
     unobserve() {}
     disconnect() {}
   }
-  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+  globalThis.ResizeObserver = ResizeObserverStub;
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600));
   // Base UI waits for the menu's exit animations; jsdom has no Web Animations API.
   Element.prototype.getAnimations ??= () => [];

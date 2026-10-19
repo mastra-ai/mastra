@@ -22,13 +22,19 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-flash-latest": [
+    "moonshotai/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "effort",
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-pro": [
+    "deepseek/deepseek-v4-flash-latest": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -38,12 +44,6 @@
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "moonshotai/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }
