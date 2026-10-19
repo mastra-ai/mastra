@@ -14,6 +14,7 @@ import { createSlackAdapter } from '@mastra/slack';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
+import { FACTORY_INTERACTIVE_KEY, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../../auth.js';
 import {
   primeTenantCredentialsForRequestContext,
   primeTenantCredentialsForTenant,
@@ -742,6 +743,12 @@ async function gateDispatch(
     const route = await resolveFactoryForLink({ thread, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;
     if (route.status === 'resolved') {
+      // Only the linked session owner can receive management tools. A reply from
+      // another linked member runs under the owner's credentials, not their own.
+      const user = getFactoryAuthUserFromContext(ctx.requestContext);
+      if (getFactoryAuthUserId(user) === sender.link.userId) {
+        ctx.requestContext.set(FACTORY_INTERACTIVE_KEY, true);
+      }
       return { routed: { link: sender.link, factoryProjectId: route.factoryProjectId } };
     }
   }
