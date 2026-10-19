@@ -291,7 +291,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       verb === 'approve' ? FACTORY_ROUTE_CONTRACTS.decisionApprove : FACTORY_ROUTE_CONTRACTS.decisionDismiss;
     return registerApiRoute(contract.path, {
       method: contract.method,
-      requiresAuth: false,
       handler: async c => {
         const context = loose(c);
         const resolved = await this.#resolveProject(context);
@@ -324,7 +323,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     return [
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.boardCatalog.path, {
         method: FACTORY_ROUTE_CONTRACTS.boardCatalog.method,
-        requiresAuth: false,
         handler: async c => {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
@@ -347,7 +345,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       // ── List the org's work items for a project, and which are being worked ─
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemList.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemList.method,
-        requiresAuth: false,
         handler: async c => {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
@@ -367,7 +364,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       // ── Flow metrics aggregated over the project's work items ───────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.metricsGet.path, {
         method: FACTORY_ROUTE_CONTRACTS.metricsGet.method,
-        requiresAuth: false,
         handler: async c => {
           const context = loose(c);
           const resolved = await this.#resolveProject(context);
@@ -390,7 +386,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       // ── Per-project queue-health age-threshold config (seconds) ─────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.healthThresholdsGet.path, {
         method: FACTORY_ROUTE_CONTRACTS.healthThresholdsGet.method,
-        requiresAuth: false,
         handler: async c => {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
@@ -407,7 +402,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       // ── Bounded durable rule-decision status ────────────────────────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.decisionList.path, {
         method: FACTORY_ROUTE_CONTRACTS.decisionList.method,
-        requiresAuth: false,
         handler: async c => {
           const context = loose(c);
           const resolved = await this.#resolveProject(context);
@@ -459,7 +453,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.decisionRetry.path, {
         method: FACTORY_ROUTE_CONTRACTS.decisionRetry.method,
-        requiresAuth: false,
         handler: async c => {
           const context = loose(c);
           const resolved = await this.#resolveProject(context);
@@ -486,7 +479,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       // ── Create (upsert on sourceKey) a work item ─────────────────────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemCreate.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemCreate.method,
-        requiresAuth: false,
         handler: async c => {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
@@ -541,7 +533,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       // ── Authoritative stage transition ──────────────────────────────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemTransition.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemTransition.method,
-        requiresAuth: false,
         handler: async c => {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
@@ -578,7 +569,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       // ── Bind a Factory run before dispatching its kickoff ────────────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemStart.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemStart.method,
-        requiresAuth: false,
         handler: async c => {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
@@ -614,7 +604,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       // ── Patch non-stage metadata / sessions / title ──────────────────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemUpdate.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemUpdate.method,
-        requiresAuth: false,
         handler: async c => {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
@@ -683,7 +672,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       // ── Remove a work item ───────────────────────────────────────────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemDelete.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemDelete.method,
-        requiresAuth: false,
         handler: async c => {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;

@@ -980,7 +980,12 @@ export const mastra = new Mastra({
 
 Custom middleware functions to intercept requests before or after route handlers. Middleware can be used for authentication, logging, injecting request-specific context, or adding headers. Each middleware receives the Hono `Context` and a `next` function. Return a `Response` to short-circuit the request, or call `next()` to continue processing.
 
-Visit the [Middleware documentation](/docs/server/middleware) to learn more.
+An object entry accepts `path`, `handler`, and an optional `phase`:
+
+- `'beforeAuth'` (default): runs before route authentication.
+- `'afterAuth'`: runs after route authentication succeeds, with the authenticated user on `requestContext` under `user`. Skipped when authentication fails and on routes declared `requiresAuth: false`.
+
+Visit the [Middleware documentation](/docs/server/middleware#run-before-or-after-authentication) to learn more.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -997,6 +1002,15 @@ export const mastra = new Mastra({
           await next()
         },
         path: '/api/*',
+      },
+      {
+        path: '/api/*',
+        phase: 'afterAuth',
+        handler: async (c, next) => {
+          const user = c.get('requestContext').get('user')
+          console.log(`Request from ${user.id}`)
+          await next()
+        },
       },
     ],
   },
