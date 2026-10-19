@@ -29,7 +29,7 @@ export function ExperimentStatusIcon({
   status: DatasetExperiment['status'];
   className?: string;
 }) {
-  const config = statusIconMap[status as RunStatus] ?? statusIconMap.pending;
+  const config = statusIconMap[status] ?? statusIconMap.pending;
 
   return (
     <Tooltip>
@@ -46,7 +46,7 @@ export function ExperimentStatusIcon({
 }
 
 export function ExperimentStats({ experiment, className }: ExperimentStatsProps) {
-  const status = experiment.status as RunStatus;
+  const status = experiment.status;
   const pendingCount = experiment.totalItems - experiment.succeededCount - experiment.failedCount;
 
   return (

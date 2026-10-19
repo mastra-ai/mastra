@@ -92,7 +92,7 @@ export default function LogsPage() {
   const logsFilters = useMemo(
     () =>
       buildLogsListFilters({
-        rootEntityType: url.selectedEntityOption?.entityType as EntityType | undefined,
+        rootEntityType: url.selectedEntityOption?.entityType,
         dateFrom: url.selectedDateFrom,
         dateTo: url.selectedDateTo,
         tokens: url.filterTokens,

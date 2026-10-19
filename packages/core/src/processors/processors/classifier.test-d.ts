@@ -1,6 +1,7 @@
 import { expectTypeOf } from 'vitest';
 
-import { Classifier, type BooleanAnswer, type ChoiceAnswer, type ScoreAnswer } from '../../classifier';
+import { Classifier } from '../../classifier';
+import type { BooleanAnswer, ChoiceAnswer, RefusalAnswer, ScoreAnswer } from '../../classifier';
 import { ClassifierProcessor } from './classifier';
 
 declare const model: ConstructorParameters<typeof Classifier>[0]['model'];
@@ -19,14 +20,16 @@ const configured = new Classifier({
 new ClassifierProcessor({
   classifier: configured,
   onResult: (answers, { abort, filter, phase, result }) => {
-    expectTypeOf(answers.route).toEqualTypeOf<ChoiceAnswer<'support' | 'sales'>>();
-    expectTypeOf(answers.quality).toEqualTypeOf<ScoreAnswer>();
-    expectTypeOf(answers.unsafe).toEqualTypeOf<BooleanAnswer>();
-    expectTypeOf(result.answers.route.choice).toEqualTypeOf<'support' | 'sales'>();
+    expectTypeOf(answers.route).toEqualTypeOf<ChoiceAnswer<'support' | 'sales'> | RefusalAnswer>();
+    expectTypeOf(answers.quality).toEqualTypeOf<ScoreAnswer | RefusalAnswer>();
+    expectTypeOf(answers.unsafe).toEqualTypeOf<BooleanAnswer | RefusalAnswer>();
+    if (result.answers.route.type === 'choice') {
+      expectTypeOf(result.answers.route.choice).toEqualTypeOf<'support' | 'sales'>();
+    }
     expectTypeOf(phase).toEqualTypeOf<'input' | 'output' | 'stream'>();
     expectTypeOf(abort).toEqualTypeOf<(reason?: string) => never>();
     expectTypeOf(filter).toEqualTypeOf<() => void>();
-    if (answers.unsafe.probability > 0.8) abort('blocked');
+    if (answers.unsafe.type === 'refusal' || answers.unsafe.probability > 0.8) abort('blocked');
   },
 });
 
@@ -34,7 +37,7 @@ new ClassifierProcessor({
 new ClassifierProcessor({
   classifier: configured,
   onResult: async (answers, { filter }) => {
-    if (answers.quality.score < 0.3) filter();
+    if (answers.quality.type === 'score' && answers.quality.score < 0.3) filter();
   },
 });
 
@@ -52,7 +55,7 @@ new ClassifierProcessor({ classifier: 'safety', onResult: () => {} });
 new ClassifierProcessor<{ unsafe: { type: 'boolean' } }>({
   classifier: 'safety',
   onResult: (answers, { abort }) => {
-    expectTypeOf(answers.unsafe).toEqualTypeOf<BooleanAnswer>();
-    if (answers.unsafe.probability > 0.5) abort('blocked');
+    expectTypeOf(answers.unsafe).toEqualTypeOf<BooleanAnswer | RefusalAnswer>();
+    if (answers.unsafe.type === 'boolean' && answers.unsafe.probability > 0.5) abort('blocked');
   },
 });

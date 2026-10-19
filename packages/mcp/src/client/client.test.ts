@@ -349,7 +349,12 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
       },
     });
 
-    await expect(tool.execute?.({})).resolves.toBe(42);
+    // In-band errors resolve with the full envelope so isError is not lost (#23330).
+    await expect(tool.execute?.({})).resolves.toEqual({
+      structuredContent: 42,
+      content: [{ type: "text", text: "failed" }],
+      isError: true,
+    });
     expect(customValidator.getValidator).not.toHaveBeenCalled();
   });
   it('should leave the SDK Client default validator in place when omitted', () => {
@@ -843,7 +848,8 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
       vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
 
       const result = await calculateTool.execute?.({ expression: '1 + 1' });
-      expect(result).toEqual(callToolResult.structuredContent);
+      // The envelope keeps isError next to structuredContent (#23330).
+      expect(result).toEqual(callToolResult);
       expect((result as any).error).toBeUndefined();
     } finally {
       await returnClient.disconnect().catch(() => {});

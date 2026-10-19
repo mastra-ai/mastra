@@ -862,6 +862,55 @@ describe('default model routes with a tenant', () => {
     expect(await seed.modelDefaults.get({ orgId: 'org1', userId: 'user-a' })).toBeNull();
   });
 
+  it('switches only the caller’s live user sessions without starting dormant sessions', async () => {
+    await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Team' } });
+    await putDefault(buildApp(userA), { modelId: 'openai/gpt-5.6' });
+    const settings = new Map<string, string>();
+    const rows = [
+      { sessionId: 'live', userId: 'user-a', originSessionId: null },
+      { sessionId: 'dormant', userId: 'user-a', originSessionId: null },
+      { sessionId: 'other-user', userId: 'user-b', originSessionId: null },
+      { sessionId: 'side-session', userId: 'user-a', originSessionId: 'live' },
+    ];
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, userA as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        modelDefaults: seed.modelDefaults,
+        factoryProjects: seed.projects,
+        workItems: seed.workItems,
+        sourceControls: [{ sessions: { listByProject: async () => rows } }] as never,
+        controller: {
+          ...controller,
+          getSessionByResource: async (id: string) =>
+            id === 'live'
+              ? {
+                  model: {
+                    get: () => settings.get('currentModelId') ?? '',
+                    switch: async (modelId: string) => void settings.set('currentModelId', modelId),
+                  },
+                  thread: { getId: () => 'thread-live' },
+                }
+              : undefined,
+        },
+      }).routes(),
+    );
+
+    const response = await app.request('/web/config/default-model/apply', { method: 'POST' });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      modelId: 'openai/gpt-5.6',
+      applied: ['live'],
+      skipped: [{ sessionId: 'dormant', reason: 'not-running' }],
+    });
+    expect(settings.get('currentModelId')).toBe('openai/gpt-5.6');
+  });
+
   it('uses the local sentinel org and user when auth is disabled', async () => {
     const app = new Hono();
     mountApiRoutes(

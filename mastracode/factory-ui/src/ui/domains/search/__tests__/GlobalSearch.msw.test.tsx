@@ -348,7 +348,7 @@ describe('Global search', () => {
           slug: 'other-provider/repo',
         };
         const item: WorkItem = {
-          ...workItems[3]!,
+          ...workItems[3],
           source: provider === 'github' ? 'github-issue' : 'gitlab-issue',
           board: 'release',
           stages: ['shipped'],
@@ -431,7 +431,7 @@ describe('Global search', () => {
     expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
     await waitFor(() => expect(trigger).toHaveFocus());
 
-    await user.keyboard('{Meta>}k{/Meta}');
+    await user.keyboard('{Control>}k{/Control}');
     expect(await screen.findByRole('dialog', { name: 'Global search' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Search MastraCode' })).toHaveFocus();
   });
@@ -560,7 +560,7 @@ describe('Global search', () => {
 
   it('keeps search open while choosing a repository for an unattributed work item', async () => {
     const item = {
-      ...workItems[3]!,
+      ...workItems[3],
       board: 'custom',
       metadata: { number: 777 },
     };
@@ -825,7 +825,7 @@ describe('Global search', () => {
   });
 
   it('refuses to open a session on a custom-board card while automation is already starting a run on it', async () => {
-    const item = { ...workItems[3]!, board: 'custom', metadata: { number: 777 } };
+    const item = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
     const requests = stubSearchApi({ workItems: [item] });
     stubAutomationStartingRunOn(item.id);
     const user = userEvent.setup();
@@ -877,7 +877,7 @@ describe('Global search', () => {
   });
 
   it('refuses to open a second session while the session chosen through the repository picker is still starting', async () => {
-    const item = { ...workItems[3]!, board: 'custom', metadata: { number: 777 } };
+    const item = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
     stubSearchApi({ workItems: [item] });
     const starts: unknown[] = [];
     let releaseStart = () => {};
@@ -1090,5 +1090,30 @@ describe('Global search', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument());
     await waitFor(() => expect(trigger).toHaveFocus());
     expect(requests.abortRequests).toBe(0);
+  });
+
+  it('aborts a busy run when Escape is pressed while typing in the composer', async () => {
+    const requests = stubSearchApi({ running: true });
+    const user = userEvent.setup();
+    renderSearchRoute(`/factories/${ACTIVE_FACTORY_ID}/workspaces/session-work/threads/thread-work-linked`);
+    await screen.findByRole('button', { name: 'Abort' }, { timeout: 5_000 });
+
+    await user.click(screen.getByRole('textbox', { name: 'Message' }));
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(requests.abortRequests).toBe(1));
+  });
+
+  it('types "?" in the composer instead of opening the shortcuts help', async () => {
+    stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute(`/factories/${ACTIVE_FACTORY_ID}/workspaces/session-work/threads/thread-work-linked`);
+    const composer = await screen.findByRole('textbox', { name: 'Message' }, { timeout: 5_000 });
+
+    await user.click(composer);
+    await user.keyboard('?');
+
+    expect(composer).toHaveValue('?');
+    expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).not.toBeInTheDocument();
   });
 });

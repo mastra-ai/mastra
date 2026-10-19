@@ -37,7 +37,7 @@ const renderBadge = (
   return { ...utils, approveToolcall };
 };
 
-const badge = () => screen.getByTestId<HTMLElement>('ask-user-badge');
+const badge = () => screen.getByTestId('ask-user-badge');
 
 afterEach(() => cleanup());
 

@@ -7,7 +7,7 @@ description: "Browse OpenCode Go model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/opencode-go.svg" alt="OpenCode Go logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Go
 
-Access 31 OpenCode Go models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 33 OpenCode Go models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode Go documentation](https://opencode.ai/v2/docs/console/go/).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "opencode-go/cat-jam-free"
+  model: "opencode-go/beam-free"
 });
 
 // Generate a response
@@ -46,7 +46,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "opencode-go/cat-jam-free",
+    "model": "opencode-go/beam-free",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -310,6 +310,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
+    "model": "opencode-go/minimax-m3.1-flash-free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 512000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "opencode-go/muse-spark-1.2-contributor",
     "imageInput": true,
     "audioInput": true,
@@ -370,18 +382,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 6
   },
   {
-    "model": "opencode-go/space-bunny",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 524288,
-    "inputCost": 0.15,
-    "outputCost": 0.6
-  },
-  {
     "model": "opencode-go/step-5-preview",
     "imageInput": true,
     "audioInput": false,
@@ -408,7 +408,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://opencode.ai/inference/go/openai/v1",
-    id: "opencode-go/cat-jam-free",
+    id: "opencode-go/beam-free",
     apiKey: process.env.OPENCODE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -427,7 +427,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "opencode-go/step-5-preview-free"
-      : "opencode-go/cat-jam-free";
+      : "opencode-go/beam-free";
   }
 });
 ```

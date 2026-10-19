@@ -24,7 +24,7 @@ export type { BaseIterationState, AccumulatedUsage } from './schemas';
 export { calculateAccumulatedUsage, buildStepRecord, createBaseIterationStateUpdate } from './iteration-state';
 export type { IterationStateUpdateInput, StepRecord } from './iteration-state';
 
-export { buildDeferredStepFinishChunk, buildDurableStepContent } from '@internal/core/durable';
+export { buildDeferredStepFinishChunk, buildDurableStepContent, expandDurableSteps } from '@internal/core/durable';
 
 export {
   dehydrateSnapshotTranscripts,

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { ProcessInputArgs } from '../processors';
-import { MemoryInputFilter } from '../processors/memory/memory-input-filter';
+import type { MemoryInputFilter } from '../processors/memory/memory-input-filter';
 import { MessageHistory } from '../processors/memory/message-history';
 import { TokenLimiterProcessor } from '../processors/processors/token-limiter';
 import { RequestContext } from '../request-context';

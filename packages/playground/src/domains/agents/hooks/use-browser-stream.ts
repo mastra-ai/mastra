@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { requestBrowserStreamTicket } from '../utils/browser-stream-ticket';
+import { buildBrowserStreamUrl } from '../utils/browser-stream-url';
+import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
+
 /**
  * Connection status for the browser screencast stream
  */
@@ -42,6 +46,7 @@ interface UseBrowserStreamReturn {
  */
 export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserStreamReturn {
   const { agentId, threadId, enabled = true, onFrame, maxReconnectAttempts = 5 } = options;
+  const { baseUrl, apiPrefix, headers } = useStudioConfig();
 
   const [status, setStatus] = useState<StreamStatus>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +56,8 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
   // Store WebSocket in ref to avoid creating new connections on render
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptRef = useRef(0);
+  /** Invalidates an in-flight ticket request when a newer connect or a disconnect happens. */
+  const connectAttemptRef = useRef(0);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onFrameRef = useRef(onFrame);
 
@@ -68,6 +75,8 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
 
   const disconnect = useCallback(() => {
     clearReconnectTimeout();
+    // Invalidate any connect() that is still waiting for a ticket.
+    connectAttemptRef.current += 1;
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -94,110 +103,119 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
     setStatus('connecting');
     setError(null);
 
-    // Construct WebSocket URL based on current protocol
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/browser/${agentId}/stream?threadId=${encodeURIComponent(threadId)}`;
+    // A ticket is consumed by the upgrade it authorizes, so every attempt mints a
+    // fresh one. The WebSocket API can't set request headers, which is why a
+    // header-authenticated deployment sends its credential on this request rather
+    // than in the handshake URL.
+    const attempt = ++connectAttemptRef.current;
 
-    try {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+    void requestBrowserStreamTicket({ agentId, threadId, baseUrl, apiPrefix, headers }).then(ticket => {
+      // A newer connect() or a disconnect() superseded this attempt.
+      if (attempt !== connectAttemptRef.current) return;
 
-      ws.onopen = () => {
-        setStatus('connected');
-        setError(null);
-        // Reset reconnect attempts on successful connection
-        reconnectAttemptRef.current = 0;
-      };
+      const wsUrl = buildBrowserStreamUrl({ agentId, threadId, ticket });
 
-      ws.onmessage = event => {
-        const data = event.data as string;
+      try {
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
 
-        // Check if message is JSON (status/error messages start with '{')
-        if (data.startsWith('{')) {
-          try {
-            const parsed = JSON.parse(data) as {
-              status?: string;
-              error?: string;
-              url?: string;
-              viewport?: { width: number; height: number };
-            };
+        ws.onopen = () => {
+          setStatus('connected');
+          setError(null);
+          // Reset reconnect attempts on successful connection
+          reconnectAttemptRef.current = 0;
+        };
 
-            if (parsed.status) {
-              // Map server status to StreamStatus
-              switch (parsed.status) {
-                case 'browser_starting':
-                  setStatus('browser_starting');
-                  break;
-                case 'streaming':
-                  setStatus('streaming');
-                  break;
-                case 'browser_closed':
-                  setStatus('browser_closed');
-                  break;
-                case 'stopped':
-                  setStatus('disconnected');
-                  break;
-                default:
-                  // Keep current status for unknown statuses
-                  break;
+        ws.onmessage = event => {
+          const data = event.data as string;
+
+          // Check if message is JSON (status/error messages start with '{')
+          if (data.startsWith('{')) {
+            try {
+              const parsed = JSON.parse(data) as {
+                status?: string;
+                error?: string;
+                url?: string;
+                viewport?: { width: number; height: number };
+              };
+
+              if (parsed.status) {
+                // Map server status to StreamStatus
+                switch (parsed.status) {
+                  case 'browser_starting':
+                    setStatus('browser_starting');
+                    break;
+                  case 'streaming':
+                    setStatus('streaming');
+                    break;
+                  case 'browser_closed':
+                    setStatus('browser_closed');
+                    break;
+                  case 'stopped':
+                    setStatus('disconnected');
+                    break;
+                  default:
+                    // Keep current status for unknown statuses
+                    break;
+                }
               }
-            }
 
-            if (parsed.error) {
-              setError(parsed.error);
-              setStatus('error');
-            }
+              if (parsed.error) {
+                setError(parsed.error);
+                setStatus('error');
+              }
 
-            if (parsed.url) {
-              setCurrentUrl(parsed.url);
-            }
+              if (parsed.url) {
+                setCurrentUrl(parsed.url);
+              }
 
-            if (parsed.viewport) {
-              setViewport(parsed.viewport);
+              if (parsed.viewport) {
+                setViewport(parsed.viewport);
+              }
+            } catch {
+              // If JSON parsing fails, treat as frame data
+              onFrameRef.current?.(data);
             }
-          } catch {
-            // If JSON parsing fails, treat as frame data
+          } else {
+            // Plain text is base64 frame data
             onFrameRef.current?.(data);
+            // Ensure we're in streaming status when receiving frames
+            setStatus(prev => (prev !== 'streaming' ? 'streaming' : prev));
           }
-        } else {
-          // Plain text is base64 frame data
-          onFrameRef.current?.(data);
-          // Ensure we're in streaming status when receiving frames
-          setStatus(prev => (prev !== 'streaming' ? 'streaming' : prev));
-        }
-      };
+        };
 
-      ws.onerror = () => {
-        // Error event doesn't provide useful info, wait for close
-        setError('WebSocket error occurred');
-      };
+        ws.onerror = () => {
+          // Error event doesn't provide useful info, wait for close
+          setError('WebSocket error occurred');
+        };
 
-      ws.onclose = event => {
-        wsRef.current = null;
+        ws.onclose = event => {
+          wsRef.current = null;
 
-        // Don't reconnect if intentionally closed or max attempts reached
-        if (!event.wasClean && enabled && reconnectAttemptRef.current < maxReconnectAttempts) {
-          setStatus('disconnected');
+          // Don't reconnect if intentionally closed or max attempts reached
+          if (!event.wasClean && enabled && reconnectAttemptRef.current < maxReconnectAttempts) {
+            setStatus('disconnected');
 
-          // Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
-          reconnectAttemptRef.current += 1;
+            // Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
+            reconnectAttemptRef.current += 1;
 
-          reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
-          }, delay);
-        } else if (reconnectAttemptRef.current >= maxReconnectAttempts) {
-          setStatus('error');
-          setError('Maximum reconnection attempts reached');
-        } else {
-          setStatus('idle');
-        }
-      };
-    } catch (err) {
-      setStatus('error');
-      setError(err instanceof Error ? err.message : 'Failed to create WebSocket');
-    }
-  }, [agentId, threadId, enabled, maxReconnectAttempts, clearReconnectTimeout]);
+            reconnectTimeoutRef.current = setTimeout(() => {
+              connect();
+            }, delay);
+          } else if (reconnectAttemptRef.current >= maxReconnectAttempts) {
+            setStatus('error');
+            setError('Maximum reconnection attempts reached');
+          } else {
+            setStatus('idle');
+          }
+        };
+      } catch (err) {
+        setStatus('error');
+        setError(err instanceof Error ? err.message : 'Failed to create WebSocket');
+      }
+    });
+  }, [agentId, threadId, enabled, maxReconnectAttempts, clearReconnectTimeout, baseUrl, apiPrefix, headers]);
 
   // Handle tab visibility changes - reconnect when tab becomes visible
   useEffect(() => {

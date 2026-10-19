@@ -1,7 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
@@ -20,8 +20,10 @@ import { ComparisonItemPayload } from './comparison-item-payload';
 import { totalTokens } from './comparison-metric-format';
 import { sectionStackClass } from './comparison-section';
 import { ComparisonSideCell } from './comparison-side-cell';
-import { ComparisonSideHeader } from './comparison-side-header';
+import { ComparisonSideSummary, ComparisonSideTitle } from './comparison-side-header';
 import type { ComparisonSideMetrics, ScorerSummary } from './comparison-side-header';
+import { ComparisonTracePanel } from './comparison-trace-panel';
+import { columnLabel } from './constants';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 
 interface ExperimentsComparisonProps {
@@ -35,11 +37,12 @@ interface ExperimentsComparisonProps {
 
 const cell = 'min-w-0 px-4 py-3';
 
-/** Items column plus one column per experiment. N is dynamic, so it goes through a CSS variable. */
+/**
+ * Items column plus one column per experiment. N is dynamic, so it goes through a CSS variable.
+ * The columns keep their width at every viewport size: the page scrolls sideways instead.
+ */
 const gridRow =
-  'grid border-border xl:grid-cols-[minmax(22rem,26rem)_repeat(var(--compare-cols),minmax(32rem,1fr))] xl:divide-x xl:divide-border';
-
-const columnLabel = (index: number) => (index === 0 ? 'Baseline' : `Contender ${index}`);
+  'grid grid-cols-[minmax(22rem,26rem)_repeat(var(--compare-cols),minmax(32rem,1fr))] divide-x divide-border border-border';
 
 /**
  * Rows open on click, but their buttons, links and fields keep their own behaviour. Portaled
@@ -48,7 +51,9 @@ const columnLabel = (index: number) => (index === 0 ? 'Baseline' : `Contender ${
 const isFromControl = (event: MouseEvent<HTMLElement>) =>
   !(event.target instanceof Element) ||
   !event.currentTarget.contains(event.target) ||
-  event.target.closest('a, button, input, select, textarea, [role="button"], [role="link"]') !== null;
+  event.target.closest(
+    'a, button, input, select, textarea, [role="button"], [role="link"], [data-slot="collapsible-box-fade"]',
+  ) !== null;
 
 /** Selecting text to copy it shouldn't open the item. */
 const hasTextSelection = () => Boolean(window.getSelection()?.toString());
@@ -86,6 +91,17 @@ export function ExperimentsComparison({
 }: ExperimentsComparisonProps) {
   const experimentIds = useMemo(() => [baselineId, ...contenderIds], [baselineId, contenderIds]);
   const [selectedItemId, setSelectedItemId] = useState<string>();
+  const [featuredTraceId, setFeaturedTraceId] = useState<string>();
+  const traceQuery = useTraceQueryAvailable();
+  // One drawer at a time: the item and the trace replace each other.
+  const openItem = (itemId: string) => {
+    setFeaturedTraceId(undefined);
+    setSelectedItemId(itemId);
+  };
+  const showTrace = (traceId: string) => {
+    setSelectedItemId(undefined);
+    setFeaturedTraceId(traceId);
+  };
 
   const {
     data: comparison,
@@ -184,26 +200,42 @@ export function ExperimentsComparison({
   const baselineExperiment = experimentsById[baselineId];
 
   return (
-    <ScrollArea orientation="horizontal" mask={{ x: '6rem' }}>
+    <>
       <div
         role="table"
         aria-label="Experiments comparison"
-        className="grid"
+        // The column minimums set the width: max-content would stretch columns to the unwrapped text.
+        className="grid min-w-[calc(22rem_+_var(--compare-cols)_*_32rem)]"
         style={{ '--compare-cols': experimentIds.length } as CSSProperties}
       >
-        <div role="row" className={cn(gridRow, 'border-b')}>
-          <div role="columnheader" aria-label="Items" className={cn('text-muted-foreground', `${cell} uppercase`)}>
-            <Txt as="span" variant="caption" className="block">
-              Items
-            </Txt>
-          </div>
+        {/* Titles stay pinned while scrolling down, so every column still says which experiment it is. */}
+        <div role="row" className={cn(gridRow, 'sticky top-0 z-20 bg-background')}>
+          <div role="columnheader" aria-label="Items" className={cell} />
+          {experimentIds.map((experimentId, index) => (
+            <div
+              key={experimentId}
+              role="columnheader"
+              aria-label={columnLabel(index)}
+              className={cn(cell, 'border-b')}
+            >
+              <ComparisonSideTitle
+                role={index === 0 ? 'baseline' : 'contender'}
+                label={columnLabel(index)}
+                experiment={experimentsById[experimentId] ?? undefined}
+                onSetBaseline={index > 0 && onSetBaseline ? () => onSetBaseline(experimentId) : undefined}
+              />
+            </div>
+          ))}
+        </div>
+
+        <div role="row" aria-label="Summary" className={cn(gridRow, 'border-b')}>
+          <div role="cell" aria-label="Items" className={cell} />
           {experimentIds.map((experimentId, index) => {
             const experiment = experimentsById[experimentId] ?? undefined;
             return (
-              <div key={experimentId} role="columnheader" aria-label={columnLabel(index)} className={cell}>
-                <ComparisonSideHeader
+              <div key={experimentId} role="cell" aria-label={columnLabel(index)} className={cell}>
+                <ComparisonSideSummary
                   role={index === 0 ? 'baseline' : 'contender'}
-                  label={columnLabel(index)}
                   experiment={experiment}
                   summary={summaries[index]}
                   metrics={isResultsLoading ? undefined : metrics[index]}
@@ -213,7 +245,6 @@ export function ExperimentsComparison({
                       ? experiment?.datasetVersion !== baselineExperiment?.datasetVersion
                       : undefined
                   }
-                  onSetBaseline={index > 0 && onSetBaseline ? () => onSetBaseline(experimentId) : undefined}
                   showUsage={supportsMetrics}
                 />
               </div>
@@ -222,40 +253,88 @@ export function ExperimentsComparison({
         </div>
 
         {rows.map(row => (
-          <div
+          <ComparisonRowView
             key={row.itemId}
-            role="row"
-            aria-label={row.itemId}
-            tabIndex={0}
-            onClick={event => {
-              if (isFromControl(event) || hasTextSelection()) return;
-              setSelectedItemId(row.itemId);
-            }}
-            onKeyDown={event => {
-              if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
-              event.preventDefault();
-              setSelectedItemId(row.itemId);
-            }}
-            className={cn(
-              gridRow,
-              'cursor-pointer border-b transition-colors duration-normal ease-out-custom hover:bg-fill-subtle',
-              focusRingInset,
-            )}
-          >
-            <div role="cell" className={cn(cell, sectionStackClass)}>
-              <ComparisonItemPayload label="Input" value={row.input} />
-              <ComparisonItemPayload label="Ground truth" value={row.groundTruth} />
-            </div>
-
-            {row.sides.map((side, index) => (
-              <div key={side.experimentId} role="cell" aria-label={columnLabel(index)} className={cell}>
-                <ComparisonSideCell column={side} isLoading={isResultsLoading} showUsage={supportsMetrics} />
-              </div>
-            ))}
-          </div>
+            row={row}
+            isLoading={isResultsLoading}
+            showUsage={supportsMetrics}
+            onOpen={() => openItem(row.itemId)}
+            onShowTrace={showTrace}
+          />
         ))}
       </div>
       <ComparisonItemPanel datasetId={datasetId} itemId={selectedItemId} onClose={() => setSelectedItemId(undefined)} />
-    </ScrollArea>
+      {/* Stays mounted so the drawer animates in and out, like on the traces page. */}
+      <ComparisonTracePanel
+        traceId={featuredTraceId}
+        onClose={() => setFeaturedTraceId(undefined)}
+        withQueryTrace={traceQuery.enabled}
+        withFeedback={traceQuery.enabled}
+      />
+    </>
+  );
+}
+
+type ExpandableSection = 'input' | 'groundTruth' | 'output';
+
+interface ComparisonRowViewProps {
+  row: ComparisonRow;
+  isLoading: boolean;
+  showUsage: boolean;
+  onOpen: () => void;
+  onShowTrace: (traceId: string) => void;
+}
+
+/** One item of the comparison. Expanding a section expands the same section in every column of the row. */
+function ComparisonRowView({ row, isLoading, showUsage, onOpen, onShowTrace }: ComparisonRowViewProps) {
+  const [expanded, setExpanded] = useState<Record<ExpandableSection, boolean>>({
+    input: false,
+    groundTruth: false,
+    output: false,
+  });
+  const expandedProps = (section: ExpandableSection) => ({
+    expanded: expanded[section],
+    onExpandedChange: (value: boolean) => setExpanded(current => ({ ...current, [section]: value })),
+  });
+  const output = expandedProps('output');
+
+  return (
+    <div
+      role="row"
+      aria-label={row.itemId}
+      tabIndex={0}
+      onClick={event => {
+        if (isFromControl(event) || hasTextSelection()) return;
+        onOpen();
+      }}
+      onKeyDown={event => {
+        if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
+        event.preventDefault();
+        onOpen();
+      }}
+      className={cn(
+        gridRow,
+        'cursor-pointer border-b transition-colors duration-normal ease-out-custom hover:bg-fill-subtle',
+        focusRingInset,
+      )}
+    >
+      <div role="cell" className={cn(cell, sectionStackClass)}>
+        <ComparisonItemPayload label="Input" value={row.input} {...expandedProps('input')} />
+        <ComparisonItemPayload label="Ground truth" value={row.groundTruth} {...expandedProps('groundTruth')} />
+      </div>
+
+      {row.sides.map((side, index) => (
+        <div key={side.experimentId} role="cell" aria-label={columnLabel(index)} className={cell}>
+          <ComparisonSideCell
+            column={side}
+            isLoading={isLoading}
+            showUsage={showUsage}
+            outputExpanded={output.expanded}
+            onOutputExpandedChange={output.onExpandedChange}
+            onShowTrace={onShowTrace}
+          />
+        </div>
+      ))}
+    </div>
   );
 }
