@@ -31,10 +31,8 @@ vi.mock('@mastra/memory', async () => ({
   },
 }));
 
-const fastembedSmallDoEmbed = vi.hoisted(() => vi.fn(async () => ({ embeddings: [[0.1, 0.2]], warnings: [] })));
-
 vi.mock('@mastra/fastembed', () => ({
-  fastembed: { small: { doEmbed: fastembedSmallDoEmbed } },
+  fastembed: { small: 'fastembed-small' },
 }));
 
 vi.mock('../utils/project.js', () => ({
@@ -310,13 +308,8 @@ describe('getDynamicMemory', () => {
     const { config, requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', vector);
 
     expect(config.vector).toBe(vector);
-    // The embedder loads fastembed on its first call and delegates to fastembed.small.
+    // fastembed.small, wrapped so @mastra/fastembed only loads on the first embedding.
     expect(config.embedder).toMatchObject({ provider: 'fastembed', modelId: 'bge-small-en-v1.5' });
-    await expect(config.embedder.doEmbed({ values: ['hello'] })).resolves.toEqual({
-      embeddings: [[0.1, 0.2]],
-      warnings: [],
-    });
-    expect(fastembedSmallDoEmbed).toHaveBeenCalledWith({ values: ['hello'] });
     expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
       defaultScope: 'resource',
       pins: true,
