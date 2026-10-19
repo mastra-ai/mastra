@@ -24,7 +24,7 @@ import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
 import type { DynamicArgument } from '../types';
-import { Workspace } from '../workspace/workspace';
+import type { Workspace } from '../workspace/workspace';
 
 import { SessionNotStartedError } from './errors';
 import {

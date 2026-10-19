@@ -5,13 +5,8 @@ import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  ACTIVE_ATTR,
-  useFluidHover,
-  useRegisterFluidHoverItem,
-  type UseFluidHoverOptions,
-  type UseFluidHoverReturn,
-} from './use-fluid-hover';
+import { ACTIVE_ATTR, useFluidHover, useRegisterFluidHoverItem } from './use-fluid-hover';
+import type { UseFluidHoverOptions, UseFluidHoverReturn } from './use-fluid-hover';
 import { FluidHoverHighlight } from '@/components/fluid-hover-highlight';
 
 const ROW_HEIGHT = 40;

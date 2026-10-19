@@ -40,7 +40,8 @@ import {
 } from './execute-command';
 import { fileStatTool } from './file-stat';
 import { getProcessOutputTool } from './get-process-output';
-import { createGrepTool, type GrepToolOptions } from './grep';
+import { createGrepTool } from './grep';
+import type { GrepToolOptions } from './grep';
 import { indexContentTool } from './index-content';
 import { killProcessTool } from './kill-process';
 import { listFilesTool } from './list-files';
