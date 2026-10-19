@@ -607,6 +607,25 @@ describe('SandboxFilesystem.grep', () => {
   describe('GNU grep without ripgrep', () => {
     const gnuProbe = { exitCode: 0, stdout: 'gnu-grep\ngit\n', stderr: '' };
 
+    it('retries a failed tool probe on the next search instead of caching it', async () => {
+      let probes = 0;
+      const { fs } = makeFs(script => {
+        if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+        if (script.startsWith('command -v rg')) {
+          probes++;
+          return probes === 1 ? { exitCode: 1, stdout: '', stderr: 'sandbox not ready' } : gnuProbe;
+        }
+        return { exitCode: 0, stdout: '', stderr: '' };
+      });
+      const search = () => fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false });
+
+      await search();
+      await search();
+      await search();
+
+      expect(probes).toBe(2);
+    });
+
     it('returns matches with context from one command, resolving paths per repository', async () => {
       const { fs, sandbox } = makeFs(script => {
         if (isContainmentCheck(script)) return realpathResult(WORKDIR);

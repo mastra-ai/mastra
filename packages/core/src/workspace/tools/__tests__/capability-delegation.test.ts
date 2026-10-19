@@ -250,8 +250,10 @@ describe('filesystem capability delegation', () => {
 
       expect(capFs.grepCalls).toHaveLength(1);
       expect(capFs.readdirCalls).toHaveLength(0);
-      // Only the .gitignore load reads a file host-side
-      expect(capFs.readFileCalls).toEqual(['.gitignore']);
+      // Only .gitignore files are read host-side (the root's and those of
+      // directories holding results), never the files being searched.
+      expect(capFs.readFileCalls).toContain('.gitignore');
+      expect(capFs.readFileCalls.every(file => file.endsWith('.gitignore'))).toBe(true);
       expect(result).toContain('index.ts');
     });
 
