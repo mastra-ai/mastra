@@ -635,7 +635,12 @@ export const connectSessionSchema = z.object({
    * appears in a creation response that could reach a browser.
    */
   connectUrl: z.string().nullish(),
-  sessionToken: z.string(),
+  /**
+   * Nango connect session token. Nulled by the platform for resource-scoped
+   * sessions for the same reason as `connectUrl`: the token alone can open
+   * the vendor Connect UI, so it is an equivalent launch capability.
+   */
+  sessionToken: z.string().nullish(),
   expiresAt: z.string(),
 });
 

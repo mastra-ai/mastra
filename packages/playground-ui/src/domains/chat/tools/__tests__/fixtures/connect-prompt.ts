@@ -33,7 +33,6 @@ export const connectPromptSession: UserConnectSessionResponse = {
   connectionId: 'conn-chat-1',
   integrationId: 'linear',
   launchUrl: '/connect/connections/conn-chat-1/launch',
-  sessionToken: 'tok_chat',
   expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
 };
 
