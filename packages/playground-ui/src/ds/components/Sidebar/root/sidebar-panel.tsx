@@ -248,7 +248,7 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
   return (
     <div
       className={cn(
-        'sidebar-layout group/sidebar t-resize relative min-h-0 shrink-0 self-stretch bg-sidebar text-foreground',
+        'sidebar-layout group/sidebar relative min-h-0 shrink-0 self-stretch bg-sidebar text-foreground t-resize',
         'w-(--sidebar-width)',
         'in-data-[sidebar-gesture=active]:transition-none',
         className,
