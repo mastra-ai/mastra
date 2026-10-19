@@ -351,6 +351,86 @@ describe('dispatchGithubWebhook', () => {
     );
   });
 
+  describe('Factory App comments on managed authoring subscriptions', () => {
+    const github = { ...githubWithSessionRow(null), slug: 'mastra-platform' };
+    const appComment = (body: string, login = 'mastra-platform[bot]') =>
+      parsed('issue_comment', 'created', {
+        sender: { login, type: 'Bot' },
+        issue: { number: 34, pull_request: { url: 'https://api.github.test/pr/34' } },
+        pull_request: undefined,
+        comment: { body, html_url: 'https://github.com/octo/hello/pull/34#issuecomment-1' },
+      });
+    function sessions() {
+      const send = vi.fn(async () => ({ record: { id: 'n' }, decision: { action: 'deliver' } }));
+      const getSessionByResource = vi.fn(async (_resourceId: string, scope?: string) => ({
+        thread: { getId: () => `thread-${scope?.split('/').at(-1)}`, switch: vi.fn() },
+        sendNotificationSignal: send,
+      }));
+      return { send, controller: controllerStub({ getSessionByResource, createSession: vi.fn() }) };
+    }
+    const managed = async () => [
+      subscription('auto', '/worktrees/auto', 'thread-auto', 'auto-gh-pr-create'),
+      subscription('factory', '/worktrees/factory', 'thread-factory', 'factory-pr-create'),
+    ];
+
+    it.each([
+      ['an approval verdict', '**Verdict: approve**\n\nLooks good.'],
+      ['a demo link', 'Demo: https://example.test/demo'],
+      ['a negated verdict', 'Verdict: do not request changes'],
+      ['a verdict quoted below the first line', 'Progress update\n\nVerdict: request changes'],
+    ])('does not wake the builder for %s, which the default rule ignores', async (_label, body) => {
+      const { send, controller } = sessions();
+
+      await expect(
+        dispatchGithubWebhook(appComment(body), { controller, github, listSubscriptions: managed }),
+      ).resolves.toEqual({ delivered: 0, failed: 0, skipped: 2, ignored: false });
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it('still delivers a first-line request-changes verdict', async () => {
+      const { send, controller } = sessions();
+
+      await expect(
+        dispatchGithubWebhook(appComment('**Verdict: request changes**\n\n- fix the thing'), {
+          controller,
+          github,
+          listSubscriptions: managed,
+        }),
+      ).resolves.toEqual({ delivered: 2, failed: 0, skipped: 0, ignored: false });
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'issue-comment-created', priority: 'high' }),
+        expect.anything(),
+      );
+    });
+
+    it('leaves explicitly subscribed sessions informed of every App comment', async () => {
+      const { send, controller } = sessions();
+
+      await expect(
+        dispatchGithubWebhook(appComment('**Verdict: approve**'), {
+          controller,
+          github,
+          listSubscriptions: async () => [subscription('explicit', '/worktrees/explicit')],
+        }),
+      ).resolves.toEqual({ delivered: 1, failed: 0, skipped: 0, ignored: false });
+      expect(send).toHaveBeenCalledOnce();
+    });
+
+    it('leaves comments from other senders on managed subscriptions unchanged', async () => {
+      const { send, controller } = sessions();
+
+      await expect(
+        dispatchGithubWebhook(appComment('Can you also update the docs?', 'ada'), {
+          controller,
+          github,
+          listSubscriptions: managed,
+          isAuthorizedSender: async () => true,
+        }),
+      ).resolves.toEqual({ delivered: 2, failed: 0, skipped: 0, ignored: false });
+      expect(send).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('delivers with per-target dedupe, exact scope/thread resume, and no delivery overrides', async () => {
     const sendA = vi.fn(async () => ({ record: { id: 'n-a' }, decision: { action: 'deliver' } }));
     const sendB = vi.fn(async () => ({ record: { id: 'n-b' }, decision: { action: 'deliver' } }));

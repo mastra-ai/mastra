@@ -149,6 +149,7 @@ export const queryKeys = {
     ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
   workspaceFiles: (workspacePath: string | undefined, threadId: string | undefined) =>
     ['workspace-files', workspacePath ?? null, threadId ?? null] as const,
+  workspaceFilesScope: (workspacePath: string | undefined) => ['workspace-files', workspacePath ?? null] as const,
   workspaceFileScope: (workspacePath: string | undefined) => ['workspace-file', workspacePath ?? null] as const,
   workspaceFile: (workspacePath: string | undefined, filePath: string | undefined, threadId?: string) =>
     ['workspace-file', workspacePath ?? null, filePath ?? null, threadId ?? null] as const,

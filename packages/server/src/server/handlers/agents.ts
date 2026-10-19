@@ -442,6 +442,8 @@ export interface SerializedAgent {
   modelId?: string;
   modelVersion?: string;
   supportsMemory?: boolean;
+  /** False when the model list comes from a function and cannot be reordered or edited */
+  modelListEditable?: boolean;
   modelList?: Array<
     Omit<AgentModelManagerConfig, 'model'> & {
       model: {
@@ -916,6 +918,7 @@ async function formatAgentList({
     supportsMemory,
     defaultOptions,
     modelList,
+    modelListEditable: modelList ? typeof agent.model !== 'function' : undefined,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
@@ -1235,6 +1238,7 @@ async function formatAgent({
     modelVersion: model?.specificationVersion,
     supportsMemory,
     modelList,
+    modelListEditable: modelList ? typeof agent.model !== 'function' : undefined,
     defaultOptions,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
@@ -3639,12 +3643,21 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
+      if (typeof agent.model === 'function') {
+        throw new HTTPException(409, {
+          message: 'Agent model list is dynamic (model is a function) and cannot be edited',
+        });
+      }
+
       const modelList = await agent.getModelList();
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
 
-      agent.reorderModels(reorderedModelIds);
+      const applied = agent.reorderModels(reorderedModelIds);
+      if (applied === false) {
+        throw new HTTPException(400, { message: 'Agent model list could not be reordered' });
+      }
 
       return { message: 'Model list reordered' };
     } catch (error) {
@@ -3668,6 +3681,12 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
+      if (typeof agent.model === 'function') {
+        throw new HTTPException(409, {
+          message: 'Agent model list is dynamic (model is a function) and cannot be edited',
+        });
+      }
+
       const modelList = await agent.getModelList();
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
@@ -3688,7 +3707,10 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
         ...(enabled !== undefined ? { enabled } : {}),
       };
 
-      agent.updateModelInModelList(updated);
+      const applied = agent.updateModelInModelList(updated);
+      if (applied === false) {
+        throw new HTTPException(404, { message: `Model config with id ${modelConfigId} not found` });
+      }
 
       return { message: 'Model updated in model list' };
     } catch (error) {

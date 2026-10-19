@@ -150,7 +150,7 @@ import type { StorageResult } from './utils/storage-factory.js';
 import { createStorageMaintenance, DEFAULT_RETENTION, resolveLocalDbFiles } from './utils/storage-maintenance.js';
 import type { StorageMaintenance } from './utils/storage-maintenance.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
-import { FOREIGN_THREAD, findWakeSession, threadScopeKey } from './utils/wake-session.js';
+import { FOREIGN_THREAD, findWakeSession, sessionLeaseScopes } from './utils/wake-session.js';
 import type { WakeSession } from './utils/wake-session.js';
 import { registerWorkflowBuilderPrimitives } from './workflows/register-primitives.js';
 
@@ -916,14 +916,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     ownsNotificationDispatch && !ownSignalsPubSub && process.platform !== 'win32'
       ? createSignalsPubSub(project.resourceId)
       : undefined;
+  const notificationDispatchLeases = ownsNotificationDispatch
+    ? (ownSignalsPubSub ?? dispatchLeasePubSub)?.getLeaseProvider()
+    : undefined;
   const notificationDispatcher = createResourceNotificationDispatcher({
     getMastra: () => controller.getMastra(),
-    getSessionScopes: () =>
-      [...liveSessions].map(session => ({
-        resourceId: session.identity.getResourceId(),
-        scope: threadScopeKey(session.getThreadScope()),
-      })),
-    leases: ownsNotificationDispatch ? (ownSignalsPubSub ?? dispatchLeasePubSub)?.getLeaseProvider() : undefined,
+    getSessionScopes: async () =>
+      (
+        await Promise.all(
+          [...liveSessions].map(async session => {
+            const resourceId = session.identity.getResourceId();
+            return (await sessionLeaseScopes(session)).map(scope => ({ resourceId, scope }));
+          }),
+        )
+      ).flat(),
+    leases: notificationDispatchLeases,
     owner: `${ownerId}:${process.pid}:${randomUUID()}`,
     onError: error => console.warn('Notification dispatch failed:', error),
   });
@@ -1299,10 +1306,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           // another process sharing the resource runs it. Leave it pending for
           // that process, whose own dispatch pass for the thread's scope
           // delivers it, rather than running it with this one's workspace.
-          const owner = await findWakeSession(controller, liveSessions, {
-            resourceId: input.record.resourceId,
-            threadId: input.record.threadId,
-          });
+          const owner = await findWakeSession(
+            controller,
+            liveSessions,
+            { resourceId: input.record.resourceId, threadId: input.record.threadId },
+            notificationDispatchLeases,
+          );
           if (owner === FOREIGN_THREAD) return { ...decision, hold: true };
           const streamOptions = owner
             ? await getWakeStreamOptions({

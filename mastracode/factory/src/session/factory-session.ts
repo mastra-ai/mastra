@@ -5,11 +5,11 @@ import { resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import {
-  SourceControlConnectionNotFoundError,
-  type SourceControlSession,
-  type SourceControlSessionVisibility,
-  type SourceControlStorageHandle,
+import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
+import type {
+  SourceControlSession,
+  SourceControlSessionVisibility,
+  SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import { resolveEnvironmentRepositories } from './environment-repositories.js';
 import { seedSessionOrg } from './org-seed.js';

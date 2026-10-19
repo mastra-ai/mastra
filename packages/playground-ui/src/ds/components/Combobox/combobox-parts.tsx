@@ -13,6 +13,7 @@ import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { menuLabelClass, menuSeparatorClass } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
+import { usePopupAnchor } from '@/ds/primitives/popup-anchor';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import type { PortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
@@ -260,6 +261,7 @@ function ComboboxContent({
   container,
   ...props
 }: ComboboxContentProps) {
+  const popupAnchor = usePopupAnchor();
   const resolvedContainer = usePortalContainer(container);
   return (
     <BaseCombobox.Portal container={resolvedContainer}>
@@ -269,8 +271,8 @@ function ComboboxContent({
         align={align}
         alignOffset={alignOffset}
         // Base UI anchors to the field (the InputGroup of ComboboxInput or ComboboxChips), or to the
-        // trigger when the input is in the popup.
-        anchor={anchor}
+        // trigger when the input is in the popup; a crumb switcher anchors to the whole crumb.
+        anchor={anchor ?? popupAnchor}
         positionMethod={FLOATING_POSITION_METHOD}
         className={comboboxStyles.positioner}
       >
@@ -287,7 +289,7 @@ function ComboboxContent({
 
 /** The scrolling list. Children: a render function per item (or per group), like Base UI's List. */
 function ComboboxList({ className, ...props }: BaseCombobox.List.Props) {
-  const menu = useFluidMenu<HTMLDivElement>();
+  const menu = useFluidMenu();
   return (
     <ScrollArea maxHeight="var(--spacing-dropdown)">
       <ScrollAreaViewport className="scroll-py-8">

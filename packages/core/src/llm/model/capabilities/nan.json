@@ -17,12 +17,6 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "qwen3.6": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
     "glm5.3-flash": [
       {
         "type": "effort",
@@ -30,6 +24,12 @@
       }
     ],
     "gemma4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "qwen3.6": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]

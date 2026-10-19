@@ -161,18 +161,20 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 
 | Predicate context | Fields | Operators |
 | - | - | - |
-| Trace | `traceId`, `threadId`, `resourceId`, `runId`, `sessionId`, `userId`, `organizationId`, `entityName`, `entityType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace | `traceId`, `threadId`, `resourceId`, `runId`, `sessionId`, `userId`, `organizationId`, `entityName`, `entityType`, `name`, `spanType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace metadata | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
-| Trace | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Trace | `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Trace | `tags` | `includes`, `notIncludes`, `exists`, `notExists` |
 | Span | `name` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists`, `matches`, `notMatches` |
 | Span | `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId`, `runId`, `sessionId`, `userId`, `organizationId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
-| Span | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Span | `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Span | `error` | `exists`, `notExists` |
+
+Trace-scope `name` and `spanType` read the current root span, so `{ op: 'eq', left: { path: 'spanType' }, right: { literal: 'workflow_run' } }` selects traces started by a workflow run. Inside `spans.some` or `spans.none`, the same fields match any span in the trace.
 
 Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`. Tag predicates name the stored tag collection in `path`. `includes` and `notIncludes` also take one tag in `value`, while `exists` and `notExists` take only `op` and `path`. See [Filter by tags](#filter-by-tags). Text predicates use the comparison shape with a string literal. See [Filter by text](#filter-by-text).
 
-String comparisons are case-sensitive, and literals are never coerced. `matches` and `notMatches` are the exception: they compare words case-insensitively. Canonical string fields compare exact stored values. Metadata string values are trimmed before comparison, as described below. Duration predicates require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
+String comparisons are case-sensitive, and literals are never coerced. `matches` and `notMatches` are the exception: they compare words case-insensitively. Canonical string fields compare exact stored values. Metadata string values are trimmed before comparison, as described below. Duration and time-to-first-chunk predicates require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
 
 ### Filter by root duration
 
@@ -189,6 +191,30 @@ const slowRootTraces = {
 This top-level predicate doesn't inspect child spans. In contrast, `spans.some` with a `durationMs` predicate examines the current root span and current child spans, so a long child can satisfy that clause even when its root is shorter.
 
 Trace queries exclude incomplete roots before evaluating predicates. As a result, `{ op: 'notExists', path: 'durationMs' }` doesn't find running traces or malformed roots without a usable `endedAt`.
+
+### Filter by time to first chunk
+
+`timeToFirstChunkMs` is the time in milliseconds from a span's start to the first chunk of its model response. Agent run and model spans record it when the model streams a response. At trace scope, the field reads the current root span's value. Inside `spans.some` or `spans.none`, it reads each related span.
+
+This predicate finds traces with a model call that took more than 2 seconds to stream its first chunk:
+
+```typescript
+const slowFirstChunk = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+        { op: 'gt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 2000 } },
+      ],
+    },
+  },
+}
+```
+
+The value is `null` when the span didn't stream a chunk, for example a tool call or a workflow run. A `null` value counts as missing, so it matches `notExists` and never matches ordered predicates. A value of `0` isn't missing. It means the first chunk arrived in the same millisecond the span started.
+
+Trace query results include the root span's `timeToFirstChunkMs`, and `querySpans()` results include each span's value. Sorting by this field isn't supported. Stores advertise support through the `trace-query-time-to-first-chunk` feature, and the server reports it as the `traceQueryTimeToFirstChunk` capability. Against an older store, results omit the field, a predicate on it returns `501` before storage runs, and field discovery omits it.
 
 ### Filter by context identifiers
 
@@ -386,12 +412,15 @@ A query using keyset pagination returns lightweight completed traces and a curso
       "entityName": "support-agent",
       "entityType": "agent",
       "environment": "production",
-      "status": "success"
+      "status": "success",
+      "timeToFirstChunkMs": 412
     }
   ],
   "page": { "next": null }
 }
 ```
+
+`timeToFirstChunkMs` is present only when the configured store supports it. See [Filter by time to first chunk](#filter-by-time-to-first-chunk).
 
 The response doesn't include the related spans that matched the predicate. Use [`getTrace()`](/reference/client-js/observability#getting-a-specific-trace) to load the full trace after selecting a result.
 
@@ -597,10 +626,10 @@ Value suggestions are available for these canonical fields:
 
 | Scope | Fields |
 | - | - |
-| Trace | `entityName`, `entityType`, `environment`, `status`, `tags` |
+| Trace | `entityName`, `entityType`, `name`, `spanType`, `environment`, `status`, `tags` |
 | Spans | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityName` |
 
-Each executable top-level string `metadata.<key>` field also supports value suggestions in the `trace` scope. Identifiers, timestamps, durations, errors, and version IDs don't. The fields response still includes canonical fields with `valueSuggestions: false`. The values endpoint rejects those paths with `422 TRACE_QUERY_INVALID`.
+Each executable top-level string `metadata.<key>` field also supports value suggestions in the `trace` scope. Identifiers, timestamps, durations, time to first chunk, errors, and version IDs don't. The fields response still includes canonical fields with `valueSuggestions: false`. The values endpoint rejects those paths with `422 TRACE_QUERY_INVALID`.
 
 Both discovery requests require a half-open time range. They use the same current-record semantics as `queryTraces()`: qualifying completed roots satisfy `from <= startedAt < to`, and related values come only from current records joined to those roots by `traceId`. Discovery doesn't accept or apply a draft `where` predicate.
 

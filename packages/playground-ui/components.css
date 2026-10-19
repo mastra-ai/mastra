@@ -173,6 +173,13 @@
     font-size-adjust: none;
   }
 
+  /* Every lucide icon draws its line from one token instead of lucide's default
+     `stroke-width="2"`. The value is in the icon's 24-unit grid, so the line still
+     thickens a little as the icon grows. Components size icons; none sets a stroke. */
+  :where(svg.lucide) {
+    stroke-width: var(--icon-stroke-width);
+  }
+
   :focus-visible {
     outline: 1px solid var(--border-focus);
     outline-offset: 0;

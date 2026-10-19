@@ -158,6 +158,76 @@ describe('tracing when a tool call suspends', () => {
     });
   });
 
+  it('counts each step once when a resumed run suspends again', async () => {
+    const exporter = new TestExporter();
+    const toolCallStep = (toolCallId: string, usage: typeof SUSPENDED_STEP_USAGE) => [
+      { type: 'stream-start' as const, warnings: [] },
+      { type: 'tool-call' as const, toolCallId, toolName: 'ask', input: '{}', providerExecuted: false },
+      { type: 'finish' as const, finishReason: 'tool-calls' as const, usage },
+    ];
+    const steps = [
+      toolCallStep('call-1', SUSPENDED_STEP_USAGE),
+      toolCallStep('call-2', RESUMED_STEP_USAGE),
+      [
+        { type: 'stream-start' as const, warnings: [] },
+        { type: 'text-start' as const, id: 't' },
+        { type: 'text-delta' as const, id: 't', delta: 'done' },
+        { type: 'text-end' as const, id: 't' },
+        {
+          type: 'finish' as const,
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6 },
+        },
+      ],
+    ];
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream<any>(steps[calls++]!),
+      }),
+    });
+    const agent = new Agent({
+      id: 'usage-agent',
+      name: 'usage-agent',
+      instructions: 'use the tool',
+      model,
+      tools: { ask: askTool },
+    });
+    observability = new Observability({
+      configs: { default: { serviceName: 'suspended-usage', exporters: [exporter] } },
+    });
+    new Mastra({ logger: false, agents: { agent }, storage: new InMemoryStore(), observability });
+
+    const output = await agent.stream('Hello');
+    await output.consumeStream();
+    expect(output.status).toBe('suspended');
+
+    const resumed = await agent.resumeStream({ answer: 'blue' }, { runId: output.runId });
+    await resumed.consumeStream();
+    expect(resumed.status).toBe('suspended');
+
+    const finished = await agent.resumeStream({ answer: 'red' }, { runId: output.runId });
+    await finished.consumeStream();
+    expect(finished.status).toBe('success');
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const generationUsage = exporter
+      .getByEventType(TracingEventType.SPAN_ENDED)
+      .filter(event => event.exportedSpan.type === SpanType.MODEL_GENERATION)
+      .map(event => event.exportedSpan.attributes?.usage);
+    expect(generationUsage).toHaveLength(3);
+    expect(generationUsage[0]).toMatchObject({ inputTokens: 100, outputTokens: 20 });
+    expect(generationUsage[1]).toMatchObject({ inputTokens: 7, outputTokens: 3 });
+    expect(generationUsage[2]).toMatchObject({ inputTokens: 5, outputTokens: 1 });
+
+    const metricValue = (name: string) =>
+      exporter.getMetricsByName(name).reduce((sum, metric) => sum + metric.value, 0);
+    expect(metricValue('mastra_model_total_input_tokens')).toBe(112);
+    expect(metricValue('mastra_model_total_output_tokens')).toBe(24);
+  });
+
   it('does not open extra model spans for a later approval request from the same step', async () => {
     const exporter = new TestExporter();
     let calls = 0;
