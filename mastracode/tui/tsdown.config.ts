@@ -17,7 +17,7 @@ const NATIVE_VOICE_ASSETS = ['macos-stt.swift', 'macos-stt.plist'];
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
-    cli: 'src/main.ts',
+    cli: 'src/cli.ts',
     tui: 'src/tui/index.ts',
     acp: 'src/acp.ts',
     headless: 'src/headless.ts',
