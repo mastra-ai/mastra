@@ -147,11 +147,15 @@ describe('RerunExperimentButton', () => {
     fireEvent.click(screen.getByRole('button', { name: /rerun/i }));
     await screen.findByRole('dialog', { name: /new experiment/i });
 
-    // Then Advanced is open with the name/description prefilled, and both are sent with the new run
+    // Then Advanced stays closed, still holds the prefilled name/description, and both are sent with the new run
+    await waitFor(() => expect(targetField().value).toBe('Agent One'));
+    const advanced = screen.getByRole('button', { name: 'Advanced' });
+    expect(advanced.getAttribute('aria-expanded')).toBe('false');
+
+    fireEvent.click(advanced);
     expect((await screen.findByLabelText<HTMLInputElement>('Experiment name')).value).toBe('Original run');
     expect(screen.getByLabelText<HTMLTextAreaElement>('Description').value).toBe('Original description');
 
-    await waitFor(() => expect(targetField().value).toBe('Agent One'));
     fireEvent.click(runButton());
 
     await waitFor(() => expect(triggerCalls).toHaveLength(1));
