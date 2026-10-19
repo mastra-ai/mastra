@@ -56,7 +56,8 @@ function afterCursor(plan: TrustedThreadRowsQueryPlan, parameters: ParameterBuil
 }
 
 // Keep the root sort and thread aggregation within a bounded memory budget.
-// Measured against 3M synthetic roots, including a 30K-trace thread and UUID-sized IDs.
+// Broad-history execution also has an admission limit below: spill alone does not
+// bound the per-trace selection state or the final aggregation merge.
 export const THREAD_QUERY_EXECUTION_LIMITS = {
   memoryLimitBytes: 512 * 1024 * 1024,
   maxThreads: 2,
@@ -69,6 +70,10 @@ export const THREAD_QUERY_EXECUTION_LIMITS = {
 const MAX_CANDIDATE_THREADS = 16_384;
 const MAX_CANDIDATE_TRACES = 100_000;
 const MAX_CANDIDATE_ID_BYTES = 4 * 1024 * 1024;
+// Fragmented 90-day fixtures can exceed 512 MiB at 500K retained roots when
+// merging spilled aggregates. Count physical copies conservatively, with headroom.
+// Narrow candidate queries remain available above this full-history budget.
+const MAX_FULL_HISTORY_ROOTS = 250_000;
 type CandidateSize = {
   threadCount: string | number;
   traceCount: string | number;
@@ -103,7 +108,7 @@ function candidateCtes(scope: string[], from: string, to: string, plan: TrustedT
 
 export function compileClickHouseThreadRowsQuery(
   plan: TrustedThreadRowsQueryPlan,
-  strategy: 'full' | 'candidates' | 'probe' = 'full',
+  strategy: 'full' | 'candidates' | 'probe' | 'historyBudget' = 'full',
 ) {
   const parameters = new ParameterBuilder();
   const from = parameters.add(plan.timeRange.from, "DateTime64(3, 'UTC')");
@@ -113,6 +118,15 @@ export function compileClickHouseThreadRowsQuery(
     scope.push(`organizationId = ${parameters.add(plan.scope.organizationId, 'String')}`);
     if (plan.scope.resourceId !== undefined)
       scope.push(`resourceId = ${parameters.add(plan.scope.resourceId, 'String')}`);
+  }
+  if (strategy === 'historyBudget') {
+    return {
+      query: `SELECT count() AS rootCount FROM (
+        SELECT 1 FROM ${TABLE_TRACE_ROOTS} ${scope.length ? `WHERE ${scope.join(' AND ')}` : ''}
+        LIMIT ${MAX_FULL_HISTORY_ROOTS + 1}
+      )`,
+      query_params: parameters.params,
+    };
   }
   if (strategy === 'probe') {
     return {
@@ -245,8 +259,14 @@ export async function queryThreadRows(
     if (Number(probe!.threadCount) === 0) return { threads: [], page: { next: null } };
     strategy = canUseThreadCandidates(probe!) ? 'candidates' : 'full';
   }
+  if (strategy === 'full') {
+    const [budget] = await run<{ rootCount: number | string }>(compileClickHouseThreadRowsQuery(plan, 'historyBudget'));
+    if (Number(budget!.rootCount) > MAX_FULL_HISTORY_ROOTS) throw new coreStorage.TraceQueryResourceLimitError();
+  }
   // Candidate sets are recomputed without LIMIT in the selection statement. A
   // concurrent insert must never turn a planning budget into truncated history.
+  // Likewise, the history admission check never truncates the selection. The
+  // execution memory/deadline limits still apply if data grows after the check.
   const selected = await run<Selected>(compileClickHouseThreadRowsQuery(plan, strategy));
   const page = selected.slice(0, plan.limit);
   if (!page.length) return { threads: [], page: { next: null } };

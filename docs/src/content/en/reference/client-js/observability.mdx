@@ -225,6 +225,8 @@ To load the traces within a thread, use [`queryTraces()`](#querying-traces) with
 
 Check `capabilities.threadQueryRows` from `getObservabilityCapabilities()` before using this contract. A missing or false value means full thread rows aren't available. Older core or storage packages return a structured `501` for these requests. Legacy identity requests remain supported for mixed package versions.
 
+ClickHouse rejects broad thread queries when the authorized history exceeds 250,000 stored trace-root rows, including duplicate copies. A narrower time range can still succeed by selecting fewer candidate threads. Rejected queries return `503 TRACE_QUERY_RESOURCE_LIMIT` without partial results.
+
 ## Querying traces
 
 `queryTraces()` finds completed logical traces using trace fields and conditions over related spans. Every query requires an ISO timestamp range.

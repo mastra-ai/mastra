@@ -78,6 +78,56 @@ it('keeps completed threads visible before pending and completed root copies mer
   }
 });
 const runThreadRows = threadQueryOps.queryThreadRows;
+it('rejects broad queries over large histories while allowing narrow queries and smaller scopes', async () => {
+  await storage.dangerouslyClearAll();
+  await client.command({
+    query: `INSERT INTO ${TABLE_TRACE_ROOTS}
+      (organizationId, traceId, spanId, dedupeKey, threadId, startedAt, endedAt, inputPreview, outputPreview, errorPreview)
+      SELECT 'large', concat('trace-', toString(number)), 'root', concat('key-', toString(number)),
+        concat('thread-', toString(intDiv(number, 5))),
+        toDateTime64('2026-01-01 00:00:00', 3, 'UTC') + toIntervalSecond(number),
+        toDateTime64('2026-01-01 00:00:01', 3, 'UTC') + toIntervalSecond(number), '', '', ''
+      FROM numbers(250001) SETTINGS max_threads=2, max_insert_threads=1`,
+  });
+  const broad = { timeRange: { traces: { from: '2026-01-01T00:00:00Z', to: '2026-01-08T00:00:00Z' } } };
+  await expect(
+    storage.queryThreads(planThreadRowsQuery(broad, { scope: { organizationId: 'large' } })),
+  ).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
+  const narrow = await storage.queryThreads(
+    planThreadRowsQuery(
+      { timeRange: { traces: { from: '2026-01-01T00:00:01Z', to: '2026-01-01T01:00:00Z' } } },
+      { scope: { organizationId: 'large' } },
+    ),
+  );
+  expect(narrow.threads).toHaveLength(100);
+  expect(narrow.threads.every(row => row.traceCount === 5)).toBe(true);
+  await storage.batchCreateSpans({
+    records: [
+      {
+        traceId: 'small-trace',
+        spanId: 'root',
+        parentSpanId: null,
+        name: 'agent',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        organizationId: 'small',
+        threadId: 'small-thread',
+        startedAt: new Date('2026-01-01T00:00:00Z'),
+        endedAt: new Date('2026-01-01T00:00:01Z'),
+      },
+    ],
+  });
+  const forceFull = vi
+    .spyOn(threadQueryOps, 'queryThreadRows')
+    .mockImplementation((client, plan, timeoutMs) => runThreadRows(client, plan, timeoutMs, 'full'));
+  try {
+    const small = await storage.queryThreads(planThreadRowsQuery(broad, { scope: { organizationId: 'small' } }));
+    expect(small.threads).toHaveLength(1);
+    expect(small.threads[0]).toMatchObject({ threadId: 'small-thread', traceCount: 1 });
+  } finally {
+    forceFull.mockRestore();
+  }
+});
 describe.each(['auto', 'candidates', 'full'] as const)('thread strategy: %s', strategy => {
   beforeEach(async () => {
     // Keep the public storage API and real SQL execution; override only plan selection.
