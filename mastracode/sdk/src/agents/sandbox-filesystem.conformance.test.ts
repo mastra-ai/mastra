@@ -8,13 +8,13 @@
  * host OS, so running it on macOS covers the BSD variants and CI covers GNU.
  */
 
-import { execFile } from 'node:child_process';
-import { mkdtempSync, rmSync, realpathSync } from 'node:fs';
+import { execFile, execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { createFilesystemTestSuite } from '@internal/workspace-test-utils';
-import { afterAll } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
 import type { SandboxCommandResult, SandboxExec } from './sandbox-filesystem';
 import { SandboxFilesystem } from './sandbox-filesystem';
@@ -89,4 +89,80 @@ createFilesystemTestSuite({
   // Every operation shells out (often several commands), so give slow CI
   // hosts more headroom than the 5s default.
   testTimeout: 20000,
+});
+
+/**
+ * The GNU grep path (no ripgrep) against a real multi-repo tree. Runs only
+ * where the host has GNU grep and git (Linux CI); ripgrep is hidden from the
+ * filesystem's tool probe so this path is used even when rg is installed.
+ */
+const hostHasGnuGrepAndGit = (() => {
+  try {
+    return (
+      execFileSync('grep', ['--version'], { encoding: 'utf8' }).includes('GNU grep') &&
+      execFileSync('git', ['--version'], { encoding: 'utf8' }).startsWith('git version')
+    );
+  } catch {
+    return false;
+  }
+})();
+
+describe.skipIf(!hostHasGnuGrepAndGit)('SandboxFilesystem.grep with GNU grep and git (local shell)', () => {
+  function write(root: string, file: string, content: string) {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), content);
+  }
+
+  function createWorkspace(): string {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'mastra-sandbox-grep-')));
+    tmpDirs.push(root);
+    const repo = join(root, 'app');
+    write(root, 'app/.gitignore', 'node_modules\n/dist\n');
+    write(root, 'app/pkg/.gitignore', 'gen/\n');
+    write(root, 'app/src/a.ts', 'before\nconst isBot: true\nafter\n');
+    write(root, 'app/src/new.ts', 'isBot: untracked\n');
+    write(root, 'app/node_modules/dep/i.js', 'isBot: dependency\n');
+    write(root, 'app/pkg/gen/g.ts', 'isBot: generated\n');
+    write(root, 'app/dist/d.js', 'isBot: build output\n');
+    write(root, 'loose/l.txt', 'isBot: outside a repository\n');
+    write(root, 'loose/node_modules/p/a.js', 'isBot: loose dependency\n');
+    const git = (...args: string[]) => execFileSync('git', ['-C', repo, ...args], { stdio: 'ignore' });
+    git('init', '-q');
+    git('add', '.gitignore', 'pkg/.gitignore', 'src/a.ts');
+    return root;
+  }
+
+  function createGnuFilesystem(root: string): SandboxFilesystem {
+    const shell = createLocalShellExec();
+    const sandbox: SandboxExec = {
+      id: shell.id,
+      async executeCommand(command, args, options) {
+        const result = await shell.executeCommand(command, args, options);
+        if (!args?.[1]?.startsWith('command -v rg')) return result;
+        return { ...result, stdout: result.stdout.replace(/^rg\n/m, '') };
+      },
+    };
+    return new SandboxFilesystem({ sandbox, workdir: root });
+  }
+
+  const grep = (fs: SandboxFilesystem, path: string, contextLines = 0) =>
+    fs.grep({ pattern: 'isBot:', path, caseSensitive: true, includeHidden: false, contextLines });
+
+  it('applies every repository .gitignore, skips node_modules, and returns context', async () => {
+    const root = createWorkspace();
+    const results = await grep(createGnuFilesystem(root), '.', 1);
+
+    expect(results.map(result => result.path).sort()).toEqual(['app/src/a.ts', 'app/src/new.ts', 'loose/l.txt']);
+    expect(results.find(result => result.path === 'app/src/a.ts')!.matches).toEqual([
+      { line: 2, column: 6, text: 'const isBot: true', before: ['before'], after: ['after'] },
+    ]);
+  });
+
+  it('still searches an ignored directory when the path points at it', async () => {
+    const root = createWorkspace();
+    const fs = createGnuFilesystem(root);
+
+    expect((await grep(fs, 'app/node_modules')).map(result => result.path)).toEqual(['dep/i.js']);
+    expect((await grep(fs, 'app/dist')).map(result => result.path)).toEqual(['d.js']);
+  });
 });

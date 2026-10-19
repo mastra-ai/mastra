@@ -45,3 +45,46 @@ export async function loadGitignore(filesystem: WorkspaceFilesystem): Promise<Ig
     return ig.ignores(normalized);
   };
 }
+
+/**
+ * Ignore rules from `.gitignore` files found below or above the workspace
+ * root, each applied relative to the directory that holds it, the way git
+ * does. Paths are given in whatever form the caller walks with (`./src/a`,
+ * `src/a`, or `/workspace/repo/src/a`), as long as directories added with
+ * {@link add} use the same form.
+ */
+export class NestedGitignore {
+  readonly #rules = new Map<string, ReturnType<typeof ignore>>();
+
+  /** Add the rules of the `.gitignore` in `directory`. */
+  add(directory: string, content: string): void {
+    if (!content.trim()) return;
+    this.#rules.set(normalizeDirectory(directory), ignore().add(content));
+  }
+
+  has(directory: string): boolean {
+    return this.#rules.has(normalizeDirectory(directory));
+  }
+
+  ignores(path: string, isDirectory: boolean): boolean {
+    const normalized = path.replace(/^\.\//, '').replace(/\/+$/, '');
+    for (const [directory, ig] of this.#rules) {
+      let relative: string;
+      if (directory === '') {
+        if (normalized.startsWith('/')) continue;
+        relative = normalized;
+      } else if (normalized.startsWith(`${directory}/`)) {
+        relative = normalized.slice(directory.length + 1);
+      } else {
+        continue;
+      }
+      if (relative && ig.ignores(isDirectory ? `${relative}/` : relative)) return true;
+    }
+    return false;
+  }
+}
+
+function normalizeDirectory(directory: string): string {
+  const normalized = directory.replace(/^\.\//, '').replace(/\/+$/, '');
+  return normalized === '.' ? '' : normalized;
+}
