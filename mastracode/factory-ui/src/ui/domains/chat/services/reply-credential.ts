@@ -5,7 +5,7 @@ export interface ThreadOwner {
   avatarUrl?: string;
 }
 
-export function credentialHolder(
+function credentialHolder(
   credentialOwnerId: string | undefined,
   threadOwner: ThreadOwner | undefined,
   viewerId: string | undefined,
@@ -14,6 +14,15 @@ export function credentialHolder(
   if (credentialOwnerId === viewerId) return 'Your';
   if (credentialOwnerId === threadOwner?.id && threadOwner.name) return `${threadOwner.name}’s`;
   return 'Personal';
+}
+
+export function credentialName(
+  credentialLabel: string,
+  credentialOwnerId: string | undefined,
+  threadOwner: ThreadOwner | undefined,
+  viewerId: string | undefined,
+): string {
+  return `${credentialHolder(credentialOwnerId, threadOwner, viewerId)} ${credentialLabel}`;
 }
 
 /**
@@ -30,5 +39,5 @@ export function replyCredentialLabel(
   const { credentialLabel, credentialOwnerId } = metadata;
   if (typeof credentialLabel !== 'string') return undefined;
   const ownerId = typeof credentialOwnerId === 'string' ? credentialOwnerId : undefined;
-  return `${credentialHolder(ownerId, threadOwner, viewerId)} ${credentialLabel}`;
+  return credentialName(credentialLabel, ownerId, threadOwner, viewerId);
 }

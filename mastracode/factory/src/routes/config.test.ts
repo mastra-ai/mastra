@@ -10,6 +10,7 @@ import type * as CoreLlm from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -652,6 +653,45 @@ describe('GET /web/config/models', () => {
     expect(await ids(`?factoryId=${orgProject.id}`)).toEqual(['openai/gpt-5.6']);
     expect(await ids(`?factoryId=${userProject.id}`)).toEqual(['anthropic/claude-fable-5']);
     expect((await app.request('/web/config/models?factoryId=missing')).status).toBe(404);
+  });
+
+  it('labels the credential from the scope a reply will use, not a personal login that shadows it', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
+      type: 'oauth',
+      refresh: 'refresh',
+      access: 'access',
+      expires: Date.now() + 60_000,
+    });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'anthropic', { type: 'api_key', key: 'sk-org' });
+    const orgProject = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Org' } });
+    const controller = {
+      listAvailableModels: async () => [
+        { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: false },
+      ],
+    };
+    const app = new Hono<{ Variables: { factoryAuthUser: { workosId: string; organizationId: string } } }>();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser', { workosId: 'user-a', organizationId: 'org1' });
+      await next();
+    });
+    mountApiRoutes(
+      app,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller,
+        modelCredentials: seed.credentials,
+        factoryProjects: seed.projects,
+      }).routes(),
+    );
+    const catalog = z.object({ models: z.array(z.object({ credentialLabel: z.string().optional() })) });
+    const label = async (query: string) => {
+      const res = await app.request(`/web/config/models${query}`);
+      return catalog.parse(await res.json()).models[0]?.credentialLabel;
+    };
+
+    expect(await label(`?factoryId=${orgProject.id}`)).toBe('Anthropic API key');
+    expect(await label('?scope=user')).toBe('Claude Pro/Max');
   });
 
   it('includes Bedrock models for a tenant only when the deployment opted in', async () => {

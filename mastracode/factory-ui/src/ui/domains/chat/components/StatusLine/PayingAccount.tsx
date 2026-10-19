@@ -7,7 +7,7 @@ import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatModelScope } from '../../context/useChatModelScope';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
-import { credentialHolder } from '../../services/reply-credential';
+import { credentialName } from '../../services/reply-credential';
 import type { ThreadOwner } from '../../services/reply-credential';
 
 function PayerMark({ payer }: { payer: Partial<ThreadOwner> | undefined }) {
@@ -37,7 +37,7 @@ export function PayingAccount() {
       type="button"
       variant="ghost"
       size="icon-sm"
-      tooltip={`${credentialHolder(payer?.id, owner, viewer?.userId)} ${credentialLabel ?? 'account'}`}
+      tooltip={credentialName(credentialLabel ?? 'account', payer?.id, owner, viewer?.userId)}
       className="cursor-help"
     >
       <PayerMark payer={payer} />
