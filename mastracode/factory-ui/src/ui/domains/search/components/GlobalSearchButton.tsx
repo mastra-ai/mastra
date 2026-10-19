@@ -1,19 +1,22 @@
-import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
-import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Search } from 'lucide-react';
 
 import { useGlobalSearchControls } from '../hooks/useGlobalSearchControls';
 
-export function GlobalSearchButton({ id, className }: { id: string; className?: string }) {
+export function GlobalSearchButton({ id }: { id: string }) {
   const { openSearch } = useGlobalSearchControls();
-  const shortcutLabel = useKeyboardShortcutLabel('K');
 
   return (
-    <Sidebar.SearchTrigger
+    <Button
       id={id}
+      type="button"
+      variant="ghost"
+      size="icon-sm"
       aria-label="Search and navigate"
-      shortcut={shortcutLabel}
-      className={className}
+      tooltip="Search and navigate"
       onClick={event => openSearch(event.currentTarget)}
-    />
+    >
+      <Search />
+    </Button>
   );
 }

@@ -1,6 +1,23 @@
-import { GlobalSearchButton } from './GlobalSearchButton';
+import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
+import { Search } from 'lucide-react';
+
+import { useGlobalSearchControls } from '../hooks/useGlobalSearchControls';
 
 // Hidden in the mobile drawer — the chat header owns the trigger at that width
 export function SidebarGlobalSearchButton() {
-  return <GlobalSearchButton id="global-search-sidebar-trigger" className="hidden md:inline-flex" />;
+  const { openSearch } = useGlobalSearchControls();
+  const shortcutLabel = useKeyboardShortcutLabel('K');
+
+  return (
+    <Sidebar.SearchTrigger
+      id="global-search-sidebar-trigger"
+      aria-label="Search and navigate"
+      shortcut={shortcutLabel}
+      className="ml-auto hidden md:inline-flex"
+      onClick={event => openSearch(event.currentTarget)}
+    >
+      <Search />
+    </Sidebar.SearchTrigger>
+  );
 }

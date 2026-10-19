@@ -52,14 +52,14 @@ export function AppSidebar() {
 
   return (
     <Sidebar aria-label="Main sidebar" className="h-full">
-      <Sidebar.Header>
+      <Sidebar.CommandHeader>
         <Sidebar.Brand
           logo={<LogoWithoutText aria-label="Mastra" role="img" className="text-foreground h-4 w-auto" />}
           title={<BetaBadge />}
         />
         <SidebarGlobalSearchButton />
         <Sidebar.Trigger />
-      </Sidebar.Header>
+      </Sidebar.CommandHeader>
       <Sidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
         {settingsOpen ? (
           <SettingsNavigation />

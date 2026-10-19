@@ -10,6 +10,7 @@ import {
   LayoutGrid,
   ListTodo,
   Plug,
+  Search,
   Settings,
   Users,
   Waypoints,
@@ -89,7 +90,13 @@ type SidebarStoryProps = {
 function SidebarSearchDialog() {
   return (
     <Dialog>
-      <DialogTrigger render={<Sidebar.SearchTrigger shortcut="⌘ K" />} />
+      <DialogTrigger
+        render={
+          <Sidebar.SearchTrigger aria-label="Search" shortcut="⌘ K">
+            <Search />
+          </Sidebar.SearchTrigger>
+        }
+      />
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Search</DialogTitle>
