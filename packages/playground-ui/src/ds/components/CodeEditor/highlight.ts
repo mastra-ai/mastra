@@ -54,7 +54,10 @@ function getHighlighter(): Promise<HighlighterCore> {
       ]);
 
       return createHighlighterCore({
-        themes: [import('shiki/themes/github-light.mjs'), import('shiki/themes/github-dark.mjs')],
+        themes: [
+          import('shiki/themes/github-light.mjs'),
+          import('./mastra-dark.json').then(m => ({ ...m.default, type: 'dark' as const })),
+        ],
         langs: [
           import('shiki/langs/javascript.mjs'),
           import('shiki/langs/typescript.mjs'),
@@ -90,7 +93,7 @@ export async function highlight(code: string, language: string): Promise<ThemedT
     defaultColor: false,
     themes: {
       light: 'github-light',
-      dark: 'github-dark',
+      dark: 'mastra-dark',
     },
   });
 
