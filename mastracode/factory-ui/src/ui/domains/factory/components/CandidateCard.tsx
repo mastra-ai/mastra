@@ -5,14 +5,14 @@ import { ArrowUpRight, EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useId } from 'react';
 
-import { useCardMorph } from '../hooks/useCardMorph';
-import { boardCardState } from '../boardCardState';
 import type { BoardCandidate } from '../boardCandidates';
+import { boardCardState } from '../boardCardState';
 import { candidatePayload, setDragPayload } from '../boardDrag';
 import { externalLinkLabel } from '../boardItems';
 import type { BoardLayout } from '../boardLayout';
 import { cardMoves } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
+import { useCardMorph } from '../hooks/useCardMorph';
 import { CardActions, CardDetailsHint, REVEAL_ON_CARD_HOVER } from './BoardCardParts';
 import { actionIcon } from './BoardIcons';
 import { CandidateCardRows } from './CandidateCardRows';
@@ -78,6 +78,7 @@ export function CandidateCard({
       menu={menuItems}
       defaultMove={defaultMove}
       onRun={onRun}
+      layout={layout}
     />
   );
 

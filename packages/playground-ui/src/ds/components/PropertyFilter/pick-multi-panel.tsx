@@ -61,7 +61,7 @@ export type PickMultiPanelProps = {
  */
 export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps) {
   const [query, setQuery] = useState('');
-  const menu = useFluidMenu<HTMLDivElement>();
+  const menu = useFluidMenu();
   const listProps = {
     className: cn('max-h-[80dvh] overflow-auto p-1', menu.containerClassName),
     ...menu.getContainerProps({}),

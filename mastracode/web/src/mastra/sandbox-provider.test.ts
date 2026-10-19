@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isFactorySandbox } from '@mastra/core/workspace';
+import type { FactorySandboxContext } from '@mastra/core/workspace';
 import type * as factoryModule from '@mastra/factory';
 
 const factoryConfigs = vi.hoisted(() => [] as Array<ConstructorParameters<typeof factoryModule.MastraFactory>[0]>);
@@ -14,16 +16,17 @@ vi.mock('@mastra/factory', async importOriginal => {
 });
 
 /**
- * Sandbox selection lives inline in the entry's `sandbox` callback because
- * `src/mastra/index.ts` is copied verbatim into the create-factory template
- * (scripts/sync-template.mjs) — the entry must stay a single self-contained
- * file. These tests boot the real entry and exercise that callback directly.
+ * Sandbox selection lives inline in the entry, which hands the factory one
+ * host `FactorySandbox` chosen at boot, because `src/mastra/index.ts` is
+ * copied verbatim into the create-factory template (scripts/sync-template.mjs)
+ * — the entry must stay a single self-contained file. These tests boot the
+ * real entry and create session sandboxes from that host object directly.
  *
  * Provider precedence: Platform > E2B > Local. Template *definitions* are
  * covered by `@mastra/platform-workspace` repo-template tests; here we pin
  * which provider is selected and what session context is forwarded.
  */
-describe('entry sandbox callback (src/mastra/index.ts)', () => {
+describe('entry host sandbox (src/mastra/index.ts)', () => {
   beforeEach(() => {
     for (const name of [
       'MASTRACODE_AUTH_DISABLED',
@@ -64,12 +67,18 @@ describe('entry sandbox callback (src/mastra/index.ts)', () => {
     vi.resetModules();
   });
 
+  /**
+   * Boots the entry and returns a session-sandbox constructor backed by the
+   * host `FactorySandbox` it configured, called the way factory calls it:
+   * with the session context and the provider's default (empty) settings.
+   */
   async function importSandboxCallback() {
     await import('./index.js');
     expect(factoryConfigs).toHaveLength(1);
-    const sandbox = factoryConfigs[0]?.sandbox;
-    if (typeof sandbox !== 'function') throw new Error('entry factory config has no sandbox callback');
-    return sandbox;
+    const host = factoryConfigs[0]?.sandbox;
+    if (!isFactorySandbox(host)) throw new Error('entry factory config has no FactorySandbox');
+    return (ctx: Partial<FactorySandboxContext> & { sessionId: string }) =>
+      host.create({ getRepositoryAccess: undefined, ...ctx }, {});
   }
 
   it('prefers PlatformSandbox over direct E2B and forwards session context', { timeout: 60_000 }, async () => {

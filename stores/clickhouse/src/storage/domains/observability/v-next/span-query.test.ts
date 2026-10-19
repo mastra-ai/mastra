@@ -1,13 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@clickhouse/client';
 import type { ClickHouseClient } from '@clickhouse/client';
-import { createPreviewTests, createSpanQueryTests } from '@internal/storage-test-utils';
+import { createPreviewTests, createSpanQueryTests, createThreadQueryTests } from '@internal/storage-test-utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { SpanType } from '@mastra/core/observability';
-import { planSpanQuery, TraceQueryExecutionError, TraceQueryResourceLimitError } from '@mastra/core/storage';
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
-import { TABLE_SPAN_EVENTS } from './ddl';
+import {
+  planSpanQuery,
+  planThreadRowsQuery,
+  TraceQueryExecutionError,
+  TraceQueryResourceLimitError,
+} from '@mastra/core/storage';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
 import { CH_INSERT_SETTINGS, spanRecordToRow } from './helpers';
+import * as threadQueryOps from './thread-query';
 import { ObservabilityStorageClickhouseVNext } from './index';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -30,6 +36,121 @@ afterAll(async () => {
   await admin.close();
 });
 createSpanQueryTests(() => storage, { completionOnly: true, immutableStartedAt: true });
+it('keeps completed threads visible before pending and completed root copies merge', async () => {
+  await storage.dangerouslyClearAll();
+  await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+  try {
+    const startedAt = new Date();
+    const endedAt = new Date(startedAt.getTime() + 1000);
+    const plan = planThreadRowsQuery({
+      timeRange: { traces: { from: startedAt.toISOString(), to: new Date(endedAt.getTime() + 1000).toISOString() } },
+    });
+    // Repeated public writes reproduce the nondeterministic tie reported in PR #27652.
+    for (let index = 0; index < 40; index++) {
+      const span = {
+        traceId: `late-context-${index}`,
+        spanId: 'root',
+        parentSpanId: null,
+        name: 'agent',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        startedAt,
+      };
+      await storage.batchCreateSpans({ records: [{ ...span, endedAt: null, threadId: null }] });
+      await storage.batchCreateSpans({
+        records: [
+          { ...span, endedAt: index % 2 ? endedAt : startedAt, threadId: `thread-${index}`, output: 'completed' },
+        ],
+      });
+    }
+    const copies = await client.query({
+      query: `SELECT count() AS count FROM ${TABLE_TRACE_ROOTS}`,
+      format: 'JSONEachRow',
+    });
+    expect(Number((await copies.json<{ count: string | number }>())[0]!.count)).toBe(80);
+    for (let round = 0; round < 40; round++) {
+      const result = await storage.queryThreads(plan);
+      expect(result.threads).toHaveLength(40);
+      expect(result.threads.every(row => row.traceCount === 1 && row.outputPreview === 'completed')).toBe(true);
+    }
+  } finally {
+    await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+  }
+});
+const runThreadRows = threadQueryOps.queryThreadRows;
+it('rejects broad queries over large histories while allowing narrow queries and smaller scopes', async () => {
+  await storage.dangerouslyClearAll();
+  await client.command({
+    query: `INSERT INTO ${TABLE_TRACE_ROOTS}
+      (organizationId, traceId, spanId, dedupeKey, threadId, startedAt, endedAt, inputPreview, outputPreview, errorPreview)
+      SELECT 'large', concat('trace-', toString(number)), 'root', concat('key-', toString(number)),
+        concat('thread-', toString(intDiv(number, 5))),
+        toDateTime64('2026-01-01 00:00:00', 3, 'UTC') + toIntervalSecond(number),
+        toDateTime64('2026-01-01 00:00:01', 3, 'UTC') + toIntervalSecond(number), '', '', ''
+      FROM numbers(250001) SETTINGS max_threads=2, max_insert_threads=1`,
+  });
+  const broad = { timeRange: { traces: { from: '2026-01-01T00:00:00Z', to: '2026-01-08T00:00:00Z' } } };
+  await expect(
+    storage.queryThreads(planThreadRowsQuery(broad, { scope: { organizationId: 'large' } })),
+  ).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
+  const narrow = await storage.queryThreads(
+    planThreadRowsQuery(
+      { timeRange: { traces: { from: '2026-01-01T00:00:01Z', to: '2026-01-01T01:00:00Z' } } },
+      { scope: { organizationId: 'large' } },
+    ),
+  );
+  expect(narrow.threads).toHaveLength(100);
+  expect(narrow.threads.every(row => row.traceCount === 5)).toBe(true);
+  await storage.batchCreateSpans({
+    records: [
+      {
+        traceId: 'small-trace',
+        spanId: 'root',
+        parentSpanId: null,
+        name: 'agent',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        organizationId: 'small',
+        threadId: 'small-thread',
+        startedAt: new Date('2026-01-01T00:00:00Z'),
+        endedAt: new Date('2026-01-01T00:00:01Z'),
+      },
+    ],
+  });
+  const forceFull = vi
+    .spyOn(threadQueryOps, 'queryThreadRows')
+    .mockImplementation((client, plan, timeoutMs) => runThreadRows(client, plan, timeoutMs, 'full'));
+  try {
+    const small = await storage.queryThreads(planThreadRowsQuery(broad, { scope: { organizationId: 'small' } }));
+    expect(small.threads).toHaveLength(1);
+    expect(small.threads[0]).toMatchObject({ threadId: 'small-thread', traceCount: 1 });
+  } finally {
+    forceFull.mockRestore();
+  }
+});
+describe.each(['auto', 'candidates', 'full'] as const)('thread strategy: %s', strategy => {
+  beforeEach(async () => {
+    // Keep the public storage API and real SQL execution; override only plan selection.
+    vi.spyOn(threadQueryOps, 'queryThreadRows').mockImplementation((client, plan, timeoutMs) =>
+      runThreadRows(client, plan, timeoutMs, strategy),
+    );
+    await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+  });
+  afterEach(async () => {
+    vi.mocked(threadQueryOps.queryThreadRows).mockRestore();
+    await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+  });
+  createThreadQueryTests(() => storage, {
+    writeSpanWithoutPreviews: async span => {
+      await client.insert({
+        table: TABLE_SPAN_EVENTS,
+        values: [{ ...spanRecordToRow(span), inputPreview: null, outputPreview: null, errorPreview: null }],
+        format: 'JSONEachRow',
+        clickhouse_settings: CH_INSERT_SETTINGS,
+      });
+    },
+  });
+});
 createPreviewTests(() => storage, {
   // The row as the writer stored it before the preview columns existed.
   writeSpanWithoutPreviews: async span => {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { useWorkspaceChanges, useWorkspaceFile, useWorkspaceFiles } from '../../../../hooks/use-fs';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
+import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { WorkspacePanelSize } from '../layout';
 import { WorkItemFeedPanel } from '../../factory/components/feed/WorkItemFeedPanel';
 import type { WorkItem } from '../../factory/services/workItems';
@@ -19,6 +20,8 @@ interface WorkspaceViewerPanelProps {
   visible?: boolean;
   workItem?: WorkItem;
   factoryProjectId?: string;
+  /** The Factory session this workspace belongs to; enables session actions such as recreating the sandbox. */
+  sessionId?: string;
 }
 
 type WorkspacePanelView =
@@ -35,7 +38,10 @@ export function WorkspaceViewerPanel({
   visible = true,
   workItem,
   factoryProjectId,
+  sessionId,
 }: WorkspaceViewerPanelProps) {
+  const session = useUserSessionQuery(sessionId);
+  const canRecreateSandbox = session.data?.capabilities?.recreateSandbox === true;
   const [view, setView] = useState<WorkspacePanelView>({ type: 'overview' });
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const selectedFilePath = view.type === 'file' ? view.path : undefined;
@@ -130,6 +136,9 @@ export function WorkspaceViewerPanel({
       onShowChanges={() => showView('changes')}
       commentCount={workItem?.commentCount}
       onShowComments={workItem ? showFeed : undefined}
+      recreateSandbox={
+        canRecreateSandbox && sessionId ? { sessionId, factoryId: factoryProjectId, workspacePath } : undefined
+      }
     />
   );
 }

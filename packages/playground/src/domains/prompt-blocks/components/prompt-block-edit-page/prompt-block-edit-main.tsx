@@ -1,5 +1,4 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import type { UseFormReturn } from 'react-hook-form';
 import { Controller, useWatch } from 'react-hook-form';
@@ -16,8 +15,8 @@ interface PromptBlockEditMainProps {
 export function PromptBlockEditMain({ form, formResetKey = 0 }: PromptBlockEditMainProps) {
   const { control, setValue } = form;
 
-  const schema = useWatch({ control, name: 'variables' }) as JsonSchema | undefined;
-  const rules = useWatch({ control, name: 'rules' }) as RuleGroup | undefined;
+  const schema = useWatch({ control, name: 'variables' });
+  const rules = useWatch({ control, name: 'rules' });
 
   const handleRulesChange = (ruleGroup: RuleGroup | undefined) => {
     setValue('rules', ruleGroup, { shouldDirty: true });

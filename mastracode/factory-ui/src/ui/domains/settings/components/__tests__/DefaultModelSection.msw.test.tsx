@@ -47,6 +47,26 @@ describe('DefaultModelSection', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
   });
 
+  it('applies the saved default to running sessions and reports dormant sessions skipped', async () => {
+    server.use(
+      http.get(URL, () => HttpResponse.json({ modelId: 'openai/gpt-5' })),
+      http.post(`${URL}/apply`, () =>
+        HttpResponse.json({
+          modelId: 'openai/gpt-5',
+          applied: ['running-session'],
+          skipped: [{ sessionId: 'dormant-session', reason: 'not-running' }],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(<DefaultModelSection models={models} modelsLoaded />);
+
+    await user.click(await screen.findByRole('button', { name: 'Apply to running sessions' }));
+    await waitForMutationsIdle(client);
+
+    expect(screen.getByText('Updated 1 running session(s); skipped 1.')).toBeInTheDocument();
+  });
+
   it('clears the personal default model', async () => {
     let modelId: string | null = 'openai/gpt-5';
     server.use(

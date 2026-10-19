@@ -2,6 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { FileDiff, MessageSquare, NotepadText } from 'lucide-react';
 
 import type { WorkspaceChanges, WorkspaceFilesListing } from '../../../../api/types';
+import { RecreateSandboxAction } from './RecreateSandboxAction';
+import type { RecreateSandboxTarget } from './RecreateSandboxAction';
 import { WorkspaceOverviewStatus } from './WorkspaceOverviewStatus';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
@@ -17,6 +19,8 @@ interface WorkspaceOverviewProps {
   /** From the board snapshot the thread already polls; absent when the thread has no work item. */
   commentCount?: number;
   onShowComments?: () => void;
+  /** Present only when the server says the viewer may recreate this session's sandbox. */
+  recreateSandbox?: RecreateSandboxTarget;
 }
 
 function fileSummary(count: number) {
@@ -41,6 +45,7 @@ export function WorkspaceOverview({
   onShowChanges,
   commentCount,
   onShowComments,
+  recreateSandbox,
 }: WorkspaceOverviewProps) {
   const fileCount = listing?.files.length ?? 0;
   const changeCount = changes?.changes.length ?? 0;
@@ -88,6 +93,14 @@ export function WorkspaceOverview({
             {commentCount === 0 ? 'None yet' : commentCount}
           </Txt>
         </Button>
+      ) : null}
+      {recreateSandbox ? (
+        <RecreateSandboxAction
+          target={recreateSandbox}
+          changes={changes}
+          changesLoading={changesLoading}
+          changesError={changesError}
+        />
       ) : null}
     </aside>
   );

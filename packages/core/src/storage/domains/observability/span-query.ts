@@ -123,6 +123,11 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
     inputPreview: previewSchema,
     outputPreview: previewSchema,
     errorPreview: previewSchema,
+    /**
+     * Time from the span's start to its first model response chunk; `null` when it never
+     * streamed one. Absent when the store lacks the `trace-query-time-to-first-chunk` feature.
+     */
+    timeToFirstChunkMs: z.number().nullable().optional(),
   })
   .superRefine((row, context) => {
     const duration = Date.parse(row.endedAt) - Date.parse(row.startedAt);

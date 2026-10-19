@@ -1,5 +1,5 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -25,7 +25,14 @@ const datasetTwo = buildDataset({ id: 'dataset-2', name: 'Dataset Two' });
 
 const sameDatasetA: DatasetExperiment = { ...experiments[0], id: 'exp-a', datasetId: 'dataset-1', name: 'run a' };
 const sameDatasetB: DatasetExperiment = { ...experiments[1], id: 'exp-b', datasetId: 'dataset-1', name: 'run b' };
-const otherDataset: DatasetExperiment = { ...experiments[2], id: 'exp-c', datasetId: 'dataset-2', name: 'run c' };
+/** Oldest run, so it is listed after the `dataset-1` runs. */
+const otherDataset: DatasetExperiment = {
+  ...experiments[2],
+  id: 'exp-c',
+  datasetId: 'dataset-2',
+  name: 'run c',
+  createdAt: '2026-06-30T10:00:00.000Z',
+};
 /** More runs of `dataset-1`, enough to fill and overflow the five compare slots. */
 const moreSameDataset: DatasetExperiment[] = ['d', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'].map(suffix => ({
   ...experiments[3],
@@ -104,11 +111,20 @@ function isChecked(id: string) {
   return screen.getByRole('checkbox', { name: `Select experiment ${id}` }).getAttribute('aria-checked') === 'true';
 }
 
-/** Names of the experiments whose row carries the comparable (info) tone. */
-function highlightedExperiments() {
-  return ['run a', 'run b', 'run c'].filter(
-    name => screen.getByText(name).closest('a')?.getAttribute('data-variant') === 'info',
-  );
+function isSelectable(id: string) {
+  const checkbox = screen.getByRole('checkbox', { name: `Select experiment ${id}` });
+  return checkbox.getAttribute('aria-disabled') !== 'true' && !checkbox.hasAttribute('data-disabled');
+}
+
+/** Ids of the experiments whose checkbox can be clicked. */
+function selectableExperiments() {
+  return ['exp-a', 'exp-b', 'exp-c'].filter(isSelectable);
+}
+
+/** The Baseline/Contender badge in the row of the named experiment, if any. */
+function selectionRoleOf(name: string) {
+  const row = screen.getByText(name).closest('a')!;
+  return within(row).queryByText(/^(Baseline|Contender \d+)$/)?.textContent ?? null;
 }
 
 function getLegend() {
@@ -157,16 +173,22 @@ describe('Experiments page — selection and compare', () => {
       expect(screen.queryByRole('button', { name: /cancel/i })).toBeNull();
     });
 
-    it('highlights no experiment', async () => {
+    it('lets every experiment be selected', async () => {
       await renderLoadedPage();
 
-      expect(highlightedExperiments()).toEqual([]);
+      expect(selectableExperiments()).toEqual(['exp-a', 'exp-b', 'exp-c']);
     });
 
-    it('explains above the list that a selection highlights the comparable experiments', async () => {
+    it('shows no Baseline or Contender badge', async () => {
       await renderLoadedPage();
 
-      expect(getLegend().textContent).toBe('Select an experiment to highlight comparable ones');
+      expect(['run a', 'run b', 'run c'].map(selectionRoleOf)).toEqual([null, null, null]);
+    });
+
+    it('explains that the first pick sets the dataset to compare', async () => {
+      await renderLoadedPage();
+
+      expect(getLegend().textContent).toBe('Select an experiment to pick the dataset to compare');
     });
   });
 
@@ -179,28 +201,63 @@ describe('Experiments page — selection and compare', () => {
       expect(await getCompareTooltip()).toBe('Select at least two experiments to compare');
     });
 
-    it('highlights every experiment of its dataset, itself included', async () => {
+    it('disables the checkboxes of experiments from other datasets', async () => {
       await renderLoadedPage();
       select('exp-a');
 
-      expect(highlightedExperiments()).toEqual(['run a', 'run b']);
+      expect(selectableExperiments()).toEqual(['exp-a', 'exp-b']);
     });
 
-    it('explains the highlight above the list, giving the dataset id', async () => {
+    it('marks it as the Baseline', async () => {
       await renderLoadedPage();
       select('exp-a');
 
-      expect(getLegend().textContent).toBe('Comparable experiments share dataset dataset-1');
+      expect(selectionRoleOf('run a')).toBe('Baseline');
+      expect(selectionRoleOf('run b')).toBeNull();
+    });
+
+    it('names the dataset its comparable experiments share', async () => {
+      await renderLoadedPage();
+      select('exp-a');
+
+      expect(getLegend().textContent).toBe('Comparable experiments share dataset Dataset One');
+    });
+
+    it('ignores a click on an experiment of another dataset', async () => {
+      await renderLoadedPage();
+      select('exp-a', 'exp-c');
+
+      expect(isChecked('exp-c')).toBe(false);
+      expect(getSelectionCount(1)).toBeDefined();
+    });
+  });
+
+  describe('when a second experiment is selected', () => {
+    it('marks it as Contender 1', async () => {
+      await renderLoadedPage();
+      select('exp-a', 'exp-b');
+
+      expect(selectionRoleOf('run a')).toBe('Baseline');
+      expect(selectionRoleOf('run b')).toBe('Contender 1');
     });
   });
 
   describe('when the first selected experiment is deselected', () => {
-    it('highlights the dataset of the next selected experiment instead', async () => {
+    it('promotes the next selected experiment to Baseline', async () => {
       await renderLoadedPage();
-      select('exp-a', 'exp-c', 'exp-a');
+      select('exp-a', 'exp-b', 'exp-a');
 
-      expect(highlightedExperiments()).toEqual(['run c']);
-      expect(getLegend().textContent).toBe('Comparable experiments share dataset dataset-2');
+      expect(selectionRoleOf('run a')).toBeNull();
+      expect(selectionRoleOf('run b')).toBe('Baseline');
+    });
+  });
+
+  describe('when every selected experiment is deselected', () => {
+    it('lets experiments of any dataset be selected again', async () => {
+      await renderLoadedPage();
+      select('exp-a', 'exp-a');
+
+      expect(selectableExperiments()).toEqual(['exp-a', 'exp-b', 'exp-c']);
     });
   });
 
@@ -224,23 +281,6 @@ describe('Experiments page — selection and compare', () => {
     });
   });
 
-  describe('when the selected experiments belong to different datasets', () => {
-    it('keeps Compare disabled and says why', async () => {
-      await renderLoadedPage();
-      select('exp-a', 'exp-c');
-
-      expect(getCompareButton().hasAttribute('disabled')).toBe(true);
-      expect(await getCompareTooltip()).toMatch(/same dataset/i);
-    });
-
-    it('leaves the selected experiment of the other dataset without highlight', async () => {
-      await renderLoadedPage();
-      select('exp-a', 'exp-c');
-
-      expect(highlightedExperiments()).toEqual(['run a', 'run b']);
-    });
-  });
-
   describe('when two experiments from the same dataset are selected', () => {
     it('navigates to /experiments/compare with baseline and contender', async () => {
       await renderLoadedPage();
@@ -259,12 +299,13 @@ describe('Experiments page — selection and compare', () => {
   });
 
   describe('when select-all is toggled with nothing selected', () => {
-    it('selects every listed experiment', async () => {
+    it('selects only the experiments sharing the dataset of the first listed one', async () => {
       await renderLoadedPage();
       fireEvent.click(screen.getByRole('checkbox', { name: 'Select all experiments' }));
 
-      expect(['exp-a', 'exp-b', 'exp-c'].every(isChecked)).toBe(true);
-      expect(getSelectionCount(3)).toBeDefined();
+      expect(['exp-a', 'exp-b'].every(isChecked)).toBe(true);
+      expect(isChecked('exp-c')).toBe(false);
+      expect(getSelectionCount(2)).toBeDefined();
     });
   });
 
@@ -316,13 +357,13 @@ describe('Experiments page — selection and compare', () => {
 
       server.use(
         http.get(`${TEST_BASE_URL}/api/experiments`, () =>
-          HttpResponse.json(buildListExperimentsResponse([sameDatasetB, otherDataset])),
+          HttpResponse.json(buildListExperimentsResponse([sameDatasetB, otherDataset, moreSameDataset[0]])),
         ),
       );
       await queryClient.invalidateQueries();
       await waitFor(() => expect(screen.queryByText('run a')).toBeNull());
 
-      select('exp-c');
+      select('exp-d');
 
       expect(getSelectionCount(2)).toBeDefined();
     });

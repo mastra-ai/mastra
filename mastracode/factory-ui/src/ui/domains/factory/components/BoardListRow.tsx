@@ -1,6 +1,6 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { ActivityWick } from '@mastra/playground-ui/components/Activity';
 import type { ActivityStatus } from '@mastra/playground-ui/components/Activity';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
@@ -43,7 +43,7 @@ export function BoardListRow({
   cardRef,
   detailsRef,
   expanded,
-  onOpen,
+  onToggleDetails,
   dragPayload,
   busy = false,
   locked = false,
@@ -58,7 +58,7 @@ export function BoardListRow({
   cardRef: RefCallback<HTMLElement>;
   detailsRef?: (element: HTMLElement | null) => void;
   expanded: boolean;
-  onOpen: () => void;
+  onToggleDetails: () => void;
   dragPayload?: DragPayload;
   busy?: boolean;
   locked?: boolean;
@@ -97,7 +97,8 @@ export function BoardListRow({
           >
             {cells.labels}
           </span>
-          <span className="flex shrink-0 items-center empty:hidden">{cells.status}</span>
+          {/* Shrinks (an error truncates) so a long status never spills over the title. */}
+          <span className="flex max-w-80 min-w-0 items-center empty:hidden">{cells.status}</span>
         </span>
         <span
           onClick={stopRowClick}
@@ -137,7 +138,7 @@ export function BoardListRow({
             aria-expanded={expanded}
             onClick={event => {
               stopRowClick(event);
-              onOpen();
+              onToggleDetails();
             }}
             className={REVEAL_ON_KEYBOARD_FOCUS}
           >
@@ -183,7 +184,7 @@ export function BoardListRow({
       onDragStart={event => {
         if (dragPayload) setDragPayload(event, dragPayload);
       }}
-      onSelectRow={onOpen}
+      onSelectRow={onToggleDetails}
       className={cn(
         'group min-h-10 grid-cols-[auto_5rem_minmax(0,1fr)_var(--spacing-avatar-sm)_3.5rem] items-center gap-x-3 px-3 py-1 max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-y-1 max-sm:py-2',
         locked && 'cursor-wait opacity-70',

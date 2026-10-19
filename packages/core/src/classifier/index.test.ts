@@ -1,7 +1,7 @@
-import {
-  APICallError,
-  type Experimental_DecisionModelV4 as DecisionModelV4,
-  type Experimental_EvaluationModelV4 as EvaluationModelV4,
+import { APICallError } from '@ai-sdk/provider-v7';
+import type {
+  Experimental_DecisionModelV4 as DecisionModelV4,
+  Experimental_EvaluationModelV4 as EvaluationModelV4,
 } from '@ai-sdk/provider-v7';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -328,8 +328,63 @@ describe('Classifier', () => {
     expect(doEvaluate).not.toHaveBeenCalled();
   });
 
+  it('accepts refusal answers for any question type', async () => {
+    const questions = {
+      route: { type: 'choice', instructions: 'Route', criteria: { support: 'Support', sales: 'Sales' } },
+      score: { type: 'score', instructions: 'Score', criteria: ['Low', 'High'] },
+      unsafe: { type: 'boolean', criteria: { true: 'Unsafe', false: 'Safe' } },
+    } as const;
+    const classifier = new Classifier({
+      id: 'refusals',
+      model: createModel({
+        doEvaluate: async () => ({
+          answers: {
+            route: { type: 'refusal' },
+            score: { type: 'refusal' },
+            unsafe: { type: 'refusal' },
+          },
+          warnings: [],
+        }),
+      }),
+      questions,
+    });
+
+    const result = await classifier.decide({ state: 'content' });
+    expect(result.answers).toEqual({
+      route: { type: 'refusal' },
+      score: { type: 'refusal' },
+      unsafe: { type: 'refusal' },
+    });
+  });
+
+  it('keeps answered questions when another question is refused', async () => {
+    const questions = {
+      route: { type: 'choice', instructions: 'Route', criteria: { support: 'Support', sales: 'Sales' } },
+      risk: { type: 'boolean', criteria: { true: 'Risky', false: 'Safe' } },
+    } as const;
+    const classifier = new Classifier({
+      id: 'mixed',
+      model: createModel({
+        doEvaluate: async () => ({
+          answers: {
+            route: { type: 'choice', choice: 'support' },
+            risk: { type: 'refusal' },
+          },
+          warnings: [],
+        }),
+      }),
+      questions,
+    });
+
+    const result = await classifier.decide({ state: 'content' });
+    expect(result.answers.route).toMatchObject({ type: 'choice', choice: 'support' });
+    expect(result.answers.risk).toEqual({ type: 'refusal' });
+  });
+
   it.each([
     [{ unsafe: { type: 'choice', choice: 'yes' } }, 'does not match'],
+    [{ unsafe: { type: 'bogus' } }, 'does not match'],
+    [{ unsafe: { type: 'refusal', probability: 0 } }, 'must not include answer fields'],
     [{}, 'exactly one answer'],
     [{ unsafe: { type: 'boolean', probability: 2 } }, 'between 0 and 1'],
   ])('rejects malformed boolean output %#', async (answers, message) => {

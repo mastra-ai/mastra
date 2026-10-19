@@ -8,7 +8,15 @@ import type { ButtonVariant } from './Button';
 import { Button } from './Button';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
-const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'ghost', 'link'];
+const ALL_VARIANTS: ButtonVariant[] = [
+  'default',
+  'primary',
+  'destructive',
+  'destructive-ghost',
+  'ghost',
+  'subtle',
+  'link',
+];
 
 const meta: Meta<typeof Button> = {
   title: 'Elements/Button',
@@ -91,12 +99,21 @@ export const WithIcon: Story = {
 
 export const WithIconSizes: Story = {
   render: () => (
-    <div className="flex items-center gap-4">
-      {(['sm', 'md', 'lg'] as const).map(size => (
-        <Button key={size} size={size} icon={<Plus />}>
-          Add Item
-        </Button>
-      ))}
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-4">
+        {(['sm', 'md', 'lg'] as const).map(size => (
+          <Button key={size} size={size} icon={<Plus />}>
+            Add Item
+          </Button>
+        ))}
+      </div>
+      <div className="flex items-center gap-4">
+        {(['sm', 'md', 'lg'] as const).map(size => (
+          <Button key={size} size={size} iconEnd={<ArrowUpRight />}>
+            Open portal
+          </Button>
+        ))}
+      </div>
     </div>
   ),
 };
