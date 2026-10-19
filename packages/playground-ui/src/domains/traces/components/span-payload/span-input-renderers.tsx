@@ -7,7 +7,6 @@ import { SpanPayloadField, SpanPayloadMarkdown } from './span-payload-primitives
 import { SpanPayloadProcessor } from './span-payload-processor';
 import { asCoreSpan, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
-import { Card, CardContent } from '@/ds/components/Card';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 
 function SpanTextRenderer({ value }: { value: string }) {
@@ -71,11 +70,5 @@ export function SpanInputRenderer({ span }: SpanInputRendererProps) {
   if (!description) return null;
   if (description.type === 'json') return <SpanPayloadJson value={description.value} />;
   const Renderer = pickRenderer(SPAN_INPUT_RENDERERS, description);
-  return (
-    <Card data-slot="span-input-card" className="min-w-0">
-      <CardContent>
-        <Renderer value={description.value} />
-      </CardContent>
-    </Card>
-  );
+  return <Renderer value={description.value} />;
 }

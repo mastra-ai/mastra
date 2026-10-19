@@ -148,7 +148,7 @@ function SpanDataPanelContent({
         </div>
       )}
 
-      <SpanPayloadSection title="Error" raw={span.error} className="mb-3">
+      <SpanPayloadSection title="Error" raw={span.error} framed={false} className="mb-3">
         <SpanErrorRenderer span={span} />
       </SpanPayloadSection>
 

@@ -366,16 +366,20 @@ export function TraceDataPanelView({
           </DataPanel.Header>
         ) : (
           <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
-            <DataPanel.Header className="border-b border-border">
-              <TabList variant="pill-ghost" size="sm">
-                {sideViews.map(view => (
-                  <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
-                    {view.label}
-                  </Tab>
-                ))}
-              </TabList>
+            {/* `flex-nowrap` + a shrinkable tab column: the tab list's scroll wrapper is full-width,
+                so in a wrapping row it would push the actions onto a second line. */}
+            <DataPanel.Header className="flex-nowrap border-b border-border">
+              <div className="min-w-0 flex-1">
+                <TabList variant="pill-ghost" size="sm">
+                  {sideViews.map(view => (
+                    <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
+                      {view.label}
+                    </Tab>
+                  ))}
+                </TabList>
+              </div>
               {sideHeaderActions && (
-                <div className="ml-auto flex shrink-0 items-center whitespace-nowrap">
+                <div className="flex shrink-0 items-center whitespace-nowrap">
                   {sideHeaderActions({ compact: compactSide })}
                 </div>
               )}
