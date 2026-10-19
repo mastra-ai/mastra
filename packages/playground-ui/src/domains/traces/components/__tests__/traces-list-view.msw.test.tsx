@@ -16,7 +16,7 @@ const query = () => ({ timeRange: { from: '2026-09-01T00:00:00Z', to: '2026-09-0
 // jsdom has no layout; without a sized scroll container the virtualizer renders no rows.
 beforeAll(() => {
   class ResizeObserverStub {
-    constructor(private readonly callback: ResizeObserverCallback) {}
+    constructor(private callback: ResizeObserverCallback) {}
     observe(target: Element) {
       const size = [{ inlineSize: 1200, blockSize: 800 }];
       this.callback(

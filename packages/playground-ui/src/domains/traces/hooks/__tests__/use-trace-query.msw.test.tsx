@@ -95,7 +95,7 @@ describe('useTraceQuery', () => {
       vi.stubGlobal(
         'IntersectionObserver',
         class {
-          constructor(private readonly callback: IntersectionObserverCallback) {}
+          constructor(private callback: IntersectionObserverCallback) {}
           observe(target: Element) {
             const rect = target.getBoundingClientRect();
             this.callback(

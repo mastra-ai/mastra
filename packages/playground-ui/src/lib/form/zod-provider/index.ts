@@ -205,7 +205,7 @@ function normalizeFormValues(value: unknown, schema: AnySchema): unknown {
 }
 
 export class CustomZodProvider<T extends AnySchema> implements SchemaProvider {
-  private readonly _schema: T;
+  private _schema: T;
   constructor(schema: T) {
     if (!schema) {
       throw new Error('CustomZodProvider: schema is required');

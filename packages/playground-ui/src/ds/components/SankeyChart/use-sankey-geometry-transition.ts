@@ -81,7 +81,7 @@ function prefersReducedMotion() {
 class SankeyGeometryMotionStore {
   private animationFrame = 0;
   private key?: string;
-  private readonly listeners = new Set<() => void>();
+  private listeners = new Set<() => void>();
   private snapshot?: FixedSankeyGeometry;
   private target?: FixedSankeyGeometry;
   private transition?: GeometryTransition;
@@ -129,7 +129,7 @@ class SankeyGeometryMotionStore {
     this.listeners.clear();
   }
 
-  private readonly animate = (now: number) => {
+  private animate = (now: number) => {
     const transition = this.transition;
     if (!transition) return;
 

@@ -1,6 +1,5 @@
 import { defineConfig } from 'oxlint';
 import rootConfig from '../../oxlint.config.ts';
-import { uiSafetyOverrides } from '../../packages/_config/src/oxlint-ui.ts';
 
 export default defineConfig({
   extends: [rootConfig],
@@ -13,7 +12,6 @@ export default defineConfig({
     'typescript/no-unnecessary-type-parameters': 'error',
   },
   overrides: [
-    ...uiSafetyOverrides,
     {
       files: ['**/*.{ts,tsx}'],
       rules: { 'typescript/no-floating-promises': 'off', 'typescript/no-misused-promises': 'off' },
