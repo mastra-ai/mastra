@@ -4,18 +4,18 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 
 import { createTarball, hashInstallInputs, uploadFile } from './engine.js';
 import { getInfoSafe, resolveRemoteDir, runInSandbox, shellQuote } from './shared.js';
-import {
-  SandboxWorkerCapabilityError,
-  type AttachWorkerDeploymentOptions,
-  type DeployWorkerToSandboxOptions,
-  type SandboxDestroyResult,
-  type SandboxWorkerDeployment,
-  type SandboxWorkerExecution,
-  type SandboxWorkerInput,
-  type SandboxWorkerOutput,
-  type SandboxWorkerResourceLimitCapability,
-  type SandboxWorkerResourceLimits,
-  type SandboxWorkerStatus,
+import { SandboxWorkerCapabilityError } from './types.js';
+import type {
+  AttachWorkerDeploymentOptions,
+  DeployWorkerToSandboxOptions,
+  SandboxDestroyResult,
+  SandboxWorkerDeployment,
+  SandboxWorkerExecution,
+  SandboxWorkerInput,
+  SandboxWorkerOutput,
+  SandboxWorkerResourceLimitCapability,
+  SandboxWorkerResourceLimits,
+  SandboxWorkerStatus,
 } from './types.js';
 
 const ARCHIVE = '.mastra-worker.tar.gz';

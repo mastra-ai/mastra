@@ -8,7 +8,6 @@ import { Avatar } from '@/ds/components/Avatar';
 import { Button } from '@/ds/components/Button';
 import {
   Comment,
-  type CommentVariant,
   CommentItem,
   CommentItemActions,
   CommentItemAuthor,
@@ -19,6 +18,7 @@ import {
   CommentItemTimestamp,
   CommentList,
 } from '@/ds/components/Comment';
+import type { CommentVariant } from '@/ds/components/Comment';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import { Txt } from '@/ds/components/Txt';

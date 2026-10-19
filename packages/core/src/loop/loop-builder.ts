@@ -5,7 +5,8 @@ import { InternalSpans, resolveExportedSpanId, SpanType } from '../observability
 import { safeEnqueue } from '../stream/base';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
-import { createEventedWorkflow, createWorkflow } from '../workflows/create';
+import type { createEventedWorkflow } from '../workflows/create';
+import { createWorkflow } from '../workflows/create';
 import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowStateTracingContext } from '../workflows/types';
 import type { Workflow } from '../workflows/workflow';

@@ -104,11 +104,11 @@ export default defineConfig({
       },
     },
     {
-      // TODO: meant to be on; off since #20173 broke this override's glob (`?(x)` matched no file).
-      // ~1,155 violations to clean up in follow-up PRs, one rule family each.
+      // TODO: the rules still 'off' here are meant to be on; off since #20173 broke this override's glob
+      // (`?(x)` matched no file). ~500 violations left to clean up in follow-up PRs, one rule family each.
       files: ['**/*.{ts,tsx}'],
       rules: {
-        'import/consistent-type-specifier-style': ['off', 'prefer-top-level'],
+        'import/consistent-type-specifier-style': ['error', 'prefer-top-level'],
         'eslint/no-unused-vars': [
           'off',
           {
@@ -121,10 +121,11 @@ export default defineConfig({
           },
         ],
         'typescript/consistent-type-imports': [
-          'off',
+          'error',
           {
             prefer: 'type-imports',
-            disallowTypeAnnotations: true,
+            // `typeof import('x')` is already type-only; tests use it with vi.importActual.
+            disallowTypeAnnotations: false,
             fixStyle: 'separate-type-imports',
           },
         ],

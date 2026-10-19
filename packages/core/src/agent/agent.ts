@@ -67,11 +67,8 @@ import { normalizeMessageHistoryConfig } from '../memory/message-history-config'
 import { getMemoryRunState } from '../memory/run-state';
 import { checkThreadFGA } from '../memory/thread-fga';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
-import {
-  resolveDeliveryFailureUpdate,
-  resolveNotificationDeliveryDecision,
-  type NotificationDeliveryPolicyInput,
-} from '../notifications/delivery-policy';
+import { resolveDeliveryFailureUpdate, resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
+import type { NotificationDeliveryPolicyInput } from '../notifications/delivery-policy';
 import { applyNotificationRoutingRequirement } from '../notifications/routing';
 import {
   createNotificationSignal,
