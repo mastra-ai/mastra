@@ -8,7 +8,13 @@ import { heapFlagRelaunchArgv } from './heap-flags.js';
 const relaunchArgv = heapFlagRelaunchArgv(process);
 // Same in-place exec as main.ts's relaunch(); without it (Windows, older Node) we run without the flags.
 const execve = (process as { execve?: (file: string, args: string[], env: NodeJS.ProcessEnv) => never }).execve;
-if (relaunchArgv && execve) execve(process.execPath, relaunchArgv, process.env);
+if (relaunchArgv && execve) {
+  try {
+    execve(process.execPath, relaunchArgv, process.env);
+  } catch {
+    // The exec itself failed (e.g. a sandbox forbids it): carry on in this process without the flags.
+  }
+}
 
 // No top-level await: this entry is also built as CommonJS.
 import('./main.js').catch((error: unknown) => {
