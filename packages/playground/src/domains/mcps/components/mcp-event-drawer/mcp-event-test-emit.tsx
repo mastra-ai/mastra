@@ -26,7 +26,7 @@ export function McpEventTestEmit({ serverId, event, onEmitted }: McpEventTestEmi
   };
 
   return (
-    <section aria-label="Send test event" className="grid gap-3">
+    <section aria-label="Send test event" className="grid grid-cols-1 gap-3">
       <Txt as="h3" variant="subheading">
         Send test event
       </Txt>

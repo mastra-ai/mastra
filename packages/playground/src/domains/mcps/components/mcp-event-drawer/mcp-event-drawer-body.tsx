@@ -24,7 +24,7 @@ export function McpEventDrawerBody({ serverId, eventName }: McpEventDrawerBodyPr
     <ToolDrawerContent
       description={event.description}
       overview={
-        <div className="grid gap-6">
+        <div className="grid grid-cols-1 gap-6">
           <McpEventDeliveryBadges delivery={event.delivery} />
           <ToolSchemaSection
             title="Arguments"

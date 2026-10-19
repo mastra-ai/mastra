@@ -23,7 +23,7 @@ export function McpEventLivePanel({ serverId, event, testEmit }: McpEventLivePan
   const isStreaming = feed.status === 'connecting' || feed.status === 'live';
 
   return (
-    <div className="grid content-start gap-6">
+    <div className="grid grid-cols-1 content-start gap-6">
       <McpEventArgumentsForm inputSchema={event.inputSchema} onChange={setArgs} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">

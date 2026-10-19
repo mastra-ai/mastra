@@ -19,7 +19,7 @@ export function McpEventFeedList({ items }: { items: EventFeedItem[] }) {
   }
 
   return (
-    <ol aria-label="Occurrences" className="grid gap-2">
+    <ol aria-label="Occurrences" className="grid grid-cols-1 gap-2">
       {items.map(item => (
         <li key={item.key}>
           {item.kind === 'gap' ? (
