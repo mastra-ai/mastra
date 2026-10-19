@@ -95,18 +95,6 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
 }
 
 /**
- * Resolve the SlackAdapter fields the provider forwards to every
- * `createSlackAdapter()` call. Top-level fields win; the deprecated
- * `adapterConfig` is the back-compat fallback, matching
- * {@link resolveSlackAdapterConfig}.
- */
-export function resolveForwardedAdapterOptions(channelConfig: SlackProviderConfig) {
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- intentional read of deprecated alias for back-compat
-  const { logger, suggestedPrompts = channelConfig.adapterConfig?.suggestedPrompts } = channelConfig;
-  return { logger, suggestedPrompts };
-}
-
-/**
  * Create a hash of the agent config for change detection.
  * Uses the resolved app name (config.name ?? agentName) to detect renames.
  */
@@ -852,7 +840,8 @@ export class SlackProvider implements ChannelProvider {
    * applied separately.
    */
   #forwardedAdapterOptions() {
-    return resolveForwardedAdapterOptions(this.#channelConfig);
+    const { logger } = this.#channelConfig;
+    return { logger };
   }
 
   /**

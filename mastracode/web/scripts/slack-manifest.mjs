@@ -92,15 +92,7 @@ const manifest = {
   settings: {
     event_subscriptions: {
       request_url: webhookUrl,
-      bot_events: [
-        'app_mention',
-        'message.channels',
-        'message.groups',
-        'message.im',
-        'message.mpim',
-        // Fired when a user opens a new AI Assistant thread; pins suggested prompts.
-        'assistant_thread_started',
-      ],
+      bot_events: ['app_mention', 'message.channels', 'message.groups', 'message.im', 'message.mpim'],
     },
     interactivity: {
       is_enabled: true,

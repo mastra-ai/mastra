@@ -60,11 +60,6 @@ describe('buildManifest', () => {
     }
   });
 
-  it('subscribes to assistant_thread_started so suggested prompts can be pinned', () => {
-    const manifest = buildManifest(baseOptions);
-    expect(manifest.settings?.event_subscriptions?.bot_events).toContain('assistant_thread_started');
-  });
-
   it('enables app_home messages tab', () => {
     const manifest = buildManifest(baseOptions);
     expect(manifest.features?.app_home?.messages_tab_enabled).toBe(true);

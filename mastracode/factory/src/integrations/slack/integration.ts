@@ -85,39 +85,6 @@ const factoryTypingStatus: TypingStatusFn = chunk => {
 };
 
 /**
- * What a sender sees pinned when they open a fresh AI Assistant thread with
- * the bot. Slack sends the `message` verbatim on click — there is no edit
- * step — so each one must stand on its own: it either asks a complete
- * question or tells the agent to collect the specifics in the thread before
- * doing anything. Slack shows at most four.
- */
-const factorySuggestedPrompts: NonNullable<SlackAdapterChannelConfig['suggestedPrompts']> = {
-  title: 'Ask your Factory',
-  prompts: [
-    {
-      title: 'What can you do?',
-      message:
-        'Explain what you can do from Slack: how you start sessions, what investigate / plan / build mean, and how I open a PR.',
-    },
-    {
-      title: 'Investigate an issue',
-      message:
-        'I want you to investigate an issue. Ask me for the link or a description, then report what you find before changing anything.',
-    },
-    {
-      title: 'Plan a change',
-      message:
-        'I want an implementation plan. Ask me what the change is, then write the plan — no code changes until I approve it.',
-    },
-    {
-      title: 'Build and open a PR',
-      message:
-        'I want you to build a change and open a pull request. Ask me what to build and which repo it belongs in, then get started.',
-    },
-  ],
-};
-
-/**
  * Drops keys the caller set to `undefined` so spreading the overrides cannot
  * erase the Factory defaults they sit on top of.
  */
@@ -135,7 +102,7 @@ function adapterOverrides(options: SlackAdapterChannelConfig | undefined): Slack
  * per-tool cards instead.
  */
 function factoryAdapterOptions(overrides: SlackAdapterChannelConfig): SlackAdapterChannelConfig {
-  const shared = { typingStatus: factoryTypingStatus, suggestedPrompts: factorySuggestedPrompts };
+  const shared = { typingStatus: factoryTypingStatus };
   return overrides.streaming === false
     ? { ...shared, toolDisplay: 'cards', ...overrides }
     : { ...shared, toolDisplay: 'grouped', ...overrides };
