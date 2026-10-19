@@ -2854,15 +2854,6 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * dispatcher builds the workspace for a kickoff). Ambiguous matches never
    * authorize.
    */
-  /** Whether a Factory run was ever bound to the session, in any status: run sessions stay org-visible. */
-  async hasRunBindingForSession(input: { orgId: string; sessionId: string }): Promise<boolean> {
-    const rows = await this.#db.findMany<GovernanceDbRow>('factory_run_bindings', {
-      org_id: input.orgId,
-      session_id: input.sessionId,
-    });
-    return rows.length > 0;
-  }
-
   async findActiveRunBindingForSession(input: {
     orgId: string;
     factoryProjectId: string;

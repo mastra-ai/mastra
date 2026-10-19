@@ -624,7 +624,12 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         // channel threads stay with the team, Slack DMs stay private.
         if (
           row.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) ||
-          (await options.workItems?.hasRunBindingForSession({ orgId: row.orgId, sessionId }))
+          (row.factoryProjectId !== null &&
+            (await options.workItems?.hasRunBindingForSession({
+              orgId: row.orgId,
+              factoryProjectId: row.factoryProjectId,
+              sessionId,
+            })))
         ) {
           return c.json({ error: 'Only user sessions can change visibility' }, 409);
         }
