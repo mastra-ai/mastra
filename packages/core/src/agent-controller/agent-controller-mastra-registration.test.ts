@@ -133,6 +133,33 @@ describe('AgentController ↔ Mastra registration', () => {
     expect(agent.getPubSub()).toBe(parent.pubsub);
   });
 
+  it("moves its agent to the parent's pubsub when registered on a parent after starting on an application's bus", async () => {
+    const storage = new InMemoryStore();
+    const appAgent = createTestAgent({ id: 'app-agent', name: 'app-agent' });
+    const freshAgent = createTestAgent({ id: 'fresh-agent', name: 'fresh-agent' });
+    const app = new Mastra({ logger: false, agents: { appAgent }, pubsub: new EventEmitterPubSub() });
+    const controller = createTestController({
+      storage,
+      modes: [
+        { id: 'fresh', name: 'Fresh', default: true, agent: freshAgent },
+        { id: 'app', name: 'App', agent: appAgent },
+      ],
+    });
+    await controller.init();
+    expect(freshAgent.getPubSub()).toBe(app.pubsub);
+
+    const parent = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      agentControllers: { code: controller },
+    });
+    await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    expect(freshAgent.getMastraInstance()).toBe(parent);
+    expect(freshAgent.getPubSub()).toBe(parent.pubsub);
+  });
+
   it('returns undefined from getAgentController/getAgentControllerById when no controller is registered', () => {
     const mastra = new Mastra({});
     expect(mastra.getAgentController('code')).toBeUndefined();

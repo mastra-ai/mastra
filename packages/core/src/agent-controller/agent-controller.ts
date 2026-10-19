@@ -1569,8 +1569,10 @@ export class AgentController<TState = {}> {
     // factory before the per-session request context is available.
     const mastra = this.getMastra();
     if (mastra && agent.getMastraInstance() !== mastra) {
-      if (this.#applicationPubSub && mastra === this.#internalMastra && !agent.hasOwnPubSub()) {
-        agent.__setPubSub(this.#applicationPubSub);
+      // An agent pinned to the application's bus while on the internal Mastra
+      // takes the parent's bus once the controller is registered on a parent.
+      if (this.#applicationPubSub && !agent.hasOwnPubSub()) {
+        agent.__setPubSub(mastra === this.#internalMastra ? this.#applicationPubSub : mastra.pubsub);
       }
       mastra.addAgent(agent);
     }
