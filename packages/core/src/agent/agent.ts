@@ -3415,16 +3415,6 @@ export class Agent<
   }
 
   /**
-   * Gets the default options for this agent, resolving function-based options if necessary.
-   * These options are used as defaults when calling `stream()` or `generate()` without explicit options.
-   *
-   * @example
-   * ```typescript
-   * const options = await agent.getDefaultStreamOptions();
-   * console.log(options.maxSteps); // 5
-   * ```
-   */
-  /**
    * Resolve the stream options for a run started by a signal that wakes an
    * idle thread, from the `wakeOptions` config.
    *
@@ -3446,6 +3436,16 @@ export class Agent<
     this.#wakeOptions ??= wakeOptions;
   }
 
+  /**
+   * Gets the default options for this agent, resolving function-based options if necessary.
+   * These options are used as defaults when calling `stream()` or `generate()` without explicit options.
+   *
+   * @example
+   * ```typescript
+   * const options = await agent.getDefaultStreamOptions();
+   * console.log(options.maxSteps); // 5
+   * ```
+   */
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
     | AgentExecutionOptions<TOutput>
     | Promise<AgentExecutionOptions<TOutput>> {

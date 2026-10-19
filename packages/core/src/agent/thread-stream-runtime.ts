@@ -6058,7 +6058,11 @@ export class AgentThreadStreamRuntime {
           signal,
           Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
           () => state.claimedThreadOwners.get(reservedKey)?.unsubscribe === localClaimedOwner.unsubscribe,
-          target.ifIdle?.streamOptions,
+          // The server routes pass an authenticated caller as the top-level
+          // `requestContext`; it is the fallback when `ifIdle.streamOptions` has none.
+          target.requestContext && target.ifIdle?.streamOptions?.requestContext === undefined
+            ? { ...target.ifIdle?.streamOptions, requestContext: target.requestContext }
+            : target.ifIdle?.streamOptions,
         );
         if (!localAcceptance) {
           throw new Error(
