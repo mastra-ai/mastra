@@ -191,6 +191,14 @@ class WebhookShare {
         const requestedAt = Date.now();
         const result = await this.subscribe();
         if (this.closed) return;
+        const expiresAt = result.refreshBefore === null ? null : Date.parse(result.refreshBefore);
+        if (expiresAt !== null && !Number.isFinite(expiresAt)) {
+          throw eventsError(
+            'MCP_EVENTS_SUBSCRIPTION_FAILED',
+            `Server returned an invalid refreshBefore for the '${this.name}' webhook subscription`,
+            { eventName: this.name },
+          );
+        }
         if (this.route?.id !== result.id) {
           this.route?.unregister();
           this.route = {
@@ -204,8 +212,8 @@ class WebhookShare {
         this.resolveStarted();
 
         let delay = DAY_MS;
-        if (result.refreshBefore !== null) {
-          const grant = Date.parse(result.refreshBefore) - requestedAt;
+        if (expiresAt !== null) {
+          const grant = expiresAt - requestedAt;
           const margin = this.setup.options.refreshMarginMs ?? Math.min(MAX_MARGIN_MS, grant * 0.2);
           delay = Math.max(grant - margin - (Date.now() - requestedAt), MIN_REFRESH_DELAY_MS);
         }

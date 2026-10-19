@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { generateWebhookSecret, signWebhook } from '../../shared/events';
-import { WebhookReceiver } from './webhook-receiver';
+import { MAX_WEBHOOK_BODY_BYTES, WebhookReceiver } from './webhook-receiver';
 import type { WebhookBody } from './webhook-receiver';
 
 const SECRET = generateWebhookSecret();
@@ -92,6 +92,33 @@ describe('WebhookReceiver', () => {
     receiver.register('sub_1', route());
     expect((await receiver.handle(delivery('{not json'))).status).toBe(400);
     expect((await receiver.handle(delivery({ type: 'gap' }))).status).toBe(400);
+  });
+
+  it('rejects a body over the size cap with 413 without reading past it', async () => {
+    const receiver = new WebhookReceiver();
+    const r = route();
+    receiver.register('sub_1', r);
+    const huge = JSON.stringify({ ...event, data: 'x'.repeat(MAX_WEBHOOK_BODY_BYTES) });
+
+    expect((await receiver.handle(delivery(huge))).status).toBe(413);
+
+    let pulled = 0;
+    const chunk = new Uint8Array(64 * 1024);
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+    });
+    const streamed = new Request('https://client.example.com/webhooks', {
+      method: 'POST',
+      body: endless,
+      headers: { 'x-mcp-subscription-id': 'sub_1' },
+      duplex: 'half',
+    } as RequestInit);
+    expect((await receiver.handle(streamed)).status).toBe(413);
+    expect(pulled).toBeLessThanOrEqual(MAX_WEBHOOK_BODY_BYTES + 2 * chunk.byteLength);
+    expect(r.bodies).toEqual([]);
   });
 
   it('rejects non-POST requests with 405', async () => {

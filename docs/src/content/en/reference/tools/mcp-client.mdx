@@ -1083,6 +1083,7 @@ It verifies the Standard Webhooks signature on the raw body before parsing it, a
 - `401` when the signature is invalid or the timestamp is more than 5 minutes old.
 - `503` when the subscription id isn't known yet, so the server retries. This covers deliveries that arrive before the subscribe response.
 - `400` for a signed but malformed body, and `405` for methods other than `POST`.
+- `413` for a body over 1 MiB. The body is read only up to that limit, before any other check.
 - `404` when the client has no `webhook` settings.
 
 #### Webhook delivery

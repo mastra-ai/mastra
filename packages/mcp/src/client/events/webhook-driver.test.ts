@@ -105,6 +105,14 @@ describe('webhookDriver', () => {
     await sub.cancel();
   });
 
+  it('fails instead of refreshing in a loop when refreshBefore is not a timestamp', async () => {
+    const { port, start } = setup();
+    port.queueSubscribe(granted({ refreshBefore: 'not-a-date' }));
+    await expect(start()).rejects.toMatchObject({ id: 'MCP_EVENTS_SUBSCRIPTION_FAILED' });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(port.subscribeCalls).toHaveLength(1);
+  });
+
   it('refreshes a no-expiry grant once a day', async () => {
     const { port, start } = setup({ ttlMs: null });
     port.queueSubscribe(granted({ refreshBefore: null }));

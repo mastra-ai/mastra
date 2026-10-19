@@ -58,13 +58,14 @@ export class WebhookReceiver {
   }
 
   /**
-   * Handles one webhook request: `405` for non-POST, `503` for an id not routed yet (the server
+   * Handles one webhook request: `405` for non-POST, `413` for a body over 1 MiB, `503` for an id not routed yet (the server
    * retries), `401` for a bad or stale signature, `400` for a malformed body, otherwise `200`.
    * Verification handshakes are answered with the echoed challenge.
    */
   async handle(request: Request): Promise<Response> {
     if (request.method !== 'POST') return respond(405);
-    const body = new Uint8Array(await request.arrayBuffer());
+    const body = await readBody(request, MAX_WEBHOOK_BODY_BYTES);
+    if (!body) return respond(413);
     const id = request.headers.get(WEBHOOK_HEADERS.subscriptionId) ?? '';
     const routes = this.routes.get(id) ?? [];
     const candidates = [...new Set([...routes.map(route => route.secret), ...this.pendingSecrets.keys()])];
@@ -94,4 +95,34 @@ export class WebhookReceiver {
     route.onBody(routed);
     return respond(200);
   }
+}
+
+/** Largest webhook body read. The route is public, so the body is capped before any check. */
+export const MAX_WEBHOOK_BODY_BYTES = 1024 * 1024;
+
+/** Reads at most `limit` bytes of the body; `undefined` when it is larger. */
+async function readBody(request: Request, limit: number): Promise<Uint8Array | undefined> {
+  const declared = Number(request.headers.get('content-length'));
+  if (declared > limit) return undefined;
+  if (!request.body) return new Uint8Array();
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel().catch(() => {});
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
 }
