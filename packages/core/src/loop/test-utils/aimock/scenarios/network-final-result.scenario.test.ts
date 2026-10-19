@@ -262,8 +262,12 @@ describe('AIMock network scenario: final result', () => {
       llm.on({ endpoint: 'chat', predicate: isAgentRequest('RESEARCH_MARK') }, { content: 'notes' });
       llm.on({ endpoint: 'chat', predicate: isCompletionRequest }, complete('SHOULD_BE_IGNORED', false));
 
-      await drain(await network.network('Research', { maxSteps: 1, memory: { thread: 'di-t', resource: 'di-r' } }));
+      const chunks = await drain(
+        await network.network('Research', { maxSteps: 1, memory: { thread: 'di-t', resource: 'di-r' } }),
+      );
 
+      expect(String(finishResult(chunks))).not.toContain('SHOULD_BE_IGNORED');
+      expect(streamedText(chunks)).not.toContain('SHOULD_BE_IGNORED');
       expect(await standaloneTexts(memory, 'di-t', 'di-r')).toEqual([]);
     });
 

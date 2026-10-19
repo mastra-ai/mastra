@@ -85,7 +85,8 @@ describe('AIMock network scenario: metadata and callbacks', () => {
     const userMessage = messages.find(
       m => m.role === 'user' && JSON.stringify(m.content).includes('Tell me about quantum computing'),
     );
-    expect(userMessage?.content.metadata?.mode).not.toBe('network');
+    expect(userMessage).toMatchObject({ role: 'user' });
+    expect(userMessage!.content.metadata?.mode).not.toBe('network');
   });
 
   it('calls onStepFinish for the sub-agent step', async () => {

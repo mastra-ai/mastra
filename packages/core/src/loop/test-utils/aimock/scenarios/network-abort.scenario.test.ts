@@ -139,6 +139,9 @@ describe('AIMock network scenario: abort', () => {
     const chunks: any[] = [];
     for await (const chunk of stream) {
       chunks.push(chunk);
+      // No public hook runs between routing and tool dispatch. There is no I/O between them, so the
+      // consumer reads routing-agent-end before the workflow moves to the tool step. That ordering
+      // depends on the engine's microtask scheduling and will break if a step transition becomes synchronous.
       if (chunk.type === 'routing-agent-end') controller.abort();
     }
 

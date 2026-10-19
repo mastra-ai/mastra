@@ -103,8 +103,12 @@ describe('AIMock network scenario: structured output', () => {
     }
     const chunks = await chunksPromise;
 
+    expect(partials.length).toBeGreaterThan(1);
+    expect(partials[0]).not.toEqual(structuredResult);
     expect(partials.at(-1)).toEqual(structuredResult);
     const objectChunks = chunks.filter(c => c.type === 'network-object');
+    expect(objectChunks.length).toBeGreaterThan(1);
+    expect((objectChunks[0]!.payload as { object: unknown }).object).not.toEqual(structuredResult);
     expect((objectChunks.at(-1)?.payload as { object: unknown }).object).toEqual(structuredResult);
   });
 
@@ -137,9 +141,10 @@ describe('AIMock network scenario: structured output', () => {
     });
     const chunks = await drain(stream);
 
-    expect(chunks.findIndex(c => c.type === 'agent-execution-end')).toBeLessThan(
-      chunks.findIndex(c => c.type === 'network-object-result'),
-    );
+    const agentEnd = chunks.findIndex(c => c.type === 'agent-execution-end');
+    const objectResult = chunks.findIndex(c => c.type === 'network-object-result');
+    expect(agentEnd).toBeGreaterThanOrEqual(0);
+    expect(objectResult).toBeGreaterThan(agentEnd);
     const structuredRequest = llm.getRequests().find(r => isStructuredResultRequest(r.body));
     expect(requestText(structuredRequest!.body)).toContain('SUBAGENT_FINDINGS: slow queries');
     await expect(stream.object).resolves.toEqual(structuredResult);
@@ -157,6 +162,10 @@ describe('AIMock network scenario: structured output', () => {
     });
     await drain(stream);
 
+    const bodies = llm.getRequests().map(r => r.body);
+    const structuredAt = bodies.findIndex(isStructuredResultRequest);
+    expect(structuredAt).toBeGreaterThan(0);
+    expect(bodies.slice(0, structuredAt).filter(isCompletionRequest)).toHaveLength(1);
     await expect(stream.object).resolves.toEqual(structuredResult);
   });
 
