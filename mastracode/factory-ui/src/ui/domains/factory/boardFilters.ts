@@ -129,9 +129,10 @@ export function boardFilterItems(state: BoardFilterState, kind: BoardKind): Filt
   return items;
 }
 
-/** Values picked for one filter field; empty when the field narrows nothing. */
-export function boardFilterValues(items: readonly FilterBarItem[], fieldId: string): string[] {
-  return asStrings(items.find(item => item.fieldId === fieldId)?.value);
+/** Values checked for one filter field. Relevance is never empty: every kind counts until some are unchecked. */
+export function boardFilterValues(state: BoardFilterState, kind: BoardKind, fieldId: string): string[] {
+  if (fieldId === BOARD_FILTER_FIELD.relevance) return [...state.relevanceTypes];
+  return asStrings(boardFilterItems(state, kind).find(item => item.fieldId === fieldId)?.value);
 }
 
 /** `state` with one field's picked values replaced; no values drops the field. */

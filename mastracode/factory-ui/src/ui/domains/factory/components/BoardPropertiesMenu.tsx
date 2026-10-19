@@ -44,7 +44,8 @@ export function BoardPropertiesMenu({
           <BoardFilterSubmenu
             key={field.id}
             field={field}
-            selected={boardFilterValues(items, field.id)}
+            selected={boardFilterValues(view.filters, kind, field.id)}
+            narrowing={items.some(item => item.fieldId === field.id)}
             onChange={values => view.setFilters(withBoardFilterValues(view.filters, kind, field.id, values))}
           />
         ))}

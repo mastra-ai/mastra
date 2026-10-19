@@ -368,8 +368,7 @@ describe('Board work-item activity', () => {
     await openPropertySubmenu(user, 'Board properties', 'Relevant because');
     expect(screen.queryByRole('menuitemcheckbox', { name: 'Review requested' })).not.toBeInTheDocument();
     await closePropertiesMenus(user);
-    await togglePropertyOption(user, 'Board properties', 'Relevant because', 'Worked on');
-    await togglePropertyOption(user, 'Board properties', 'Relevant because', 'Assigned');
+    await togglePropertyOption(user, 'Board properties', 'Relevant because', 'Authored');
     await waitFor(() => {
       expect(new URLSearchParams(router.state.location.search).get('relevance')).toBe('worked,assigned');
     });
@@ -527,9 +526,7 @@ describe('Board work-item activity', () => {
     expect(screen.getByText('Requested PR')).toBeInTheDocument();
     expect(screen.queryByText('Worked PR')).not.toBeInTheDocument();
 
-    await togglePropertyOption(user, 'Board properties', 'Relevant because', 'Worked on');
-    await togglePropertyOption(user, 'Board properties', 'Relevant because', 'Assigned');
-    await togglePropertyOption(user, 'Board properties', 'Relevant because', 'Review requested');
+    await togglePropertyOption(user, 'Board properties', 'Relevant because', 'Authored');
 
     expect(screen.queryByText('Authored PR')).not.toBeInTheDocument();
     expect(screen.getByText('Assigned PR')).toBeInTheDocument();
