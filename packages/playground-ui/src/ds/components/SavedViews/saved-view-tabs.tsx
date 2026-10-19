@@ -16,11 +16,8 @@ import { controlHeight } from '@/ds/primitives/control-size';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
-const restingTabClass = buttonVariants({ variant: 'default', size: 'sm' });
-const selectedTabClass = cn(
-  buttonVariants({ variant: 'ghost', size: 'sm' }),
-  'border-0 bg-fill-hover text-foreground not-disabled:hover:bg-fill-hover',
-);
+const restingTabClass = buttonVariants({ variant: 'ghost', size: 'sm' });
+const selectedTabClass = buttonVariants({ variant: 'primary', size: 'sm' });
 const editingTabClass = cn(
   controlHeight.sm,
   'inline-flex items-center gap-1.5 rounded-full border border-dashed border-border-strong bg-fill-hover px-[.9em] text-label text-foreground',
