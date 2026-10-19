@@ -872,9 +872,9 @@ const SESSION_FAVICON_PATHS = new Set([
 ]);
 
 /**
- * Request-context key marking a turn a signed-in person started over HTTP.
- * Wakes, webhooks, channels and the dispatcher build their own request context
- * and never carry it, so Factory management tools stay off those turns.
+ * Request-context key marking an authenticated interactive turn. HTTP requests
+ * and linked Slack senders verified against their session owner can carry it;
+ * wakes, webhooks, and dispatcher turns cannot.
  */
 export const FACTORY_INTERACTIVE_KEY = 'factoryInteractive';
 
