@@ -91,6 +91,34 @@ createFilesystemTestSuite({
   testTimeout: 20000,
 });
 
+describe('SandboxFilesystem.walk ignore options (local shell)', () => {
+  it('keeps .gitignore files and prunes skipped directories', async () => {
+    const filesystem = createSandboxFilesystem();
+    await filesystem.writeFile('app/.gitignore', 'dist\n');
+    await filesystem.writeFile('app/.env', 'SECRET=1\n');
+    await filesystem.writeFile('app/src/a.ts', 'a\n');
+    await filesystem.writeFile('app/node_modules/dep/i.js', 'i\n');
+
+    const paths = (entries: Array<{ path: string }>) => entries.map(entry => entry.path).sort();
+
+    expect(paths(await filesystem.walk('.'))).toEqual([
+      'app',
+      'app/node_modules',
+      'app/node_modules/dep',
+      'app/node_modules/dep/i.js',
+      'app/src',
+      'app/src/a.ts',
+    ]);
+    expect(
+      paths(await filesystem.walk('.', { includeGitignoreFiles: true, skipDirectoryNames: ['node_modules'] })),
+    ).toEqual(['app', 'app/.gitignore', 'app/src', 'app/src/a.ts']);
+    expect(paths(await filesystem.walk('app/node_modules', { skipDirectoryNames: ['node_modules'] }))).toEqual([
+      'dep',
+      'dep/i.js',
+    ]);
+  });
+});
+
 /**
  * The GNU grep path (no ripgrep) against a real multi-repo tree. Runs only
  * where the host has GNU grep and git (Linux CI); ripgrep is hidden from the

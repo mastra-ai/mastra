@@ -126,6 +126,16 @@ export interface WalkOptions {
   maxDepth?: number;
   /** Include entries whose names start with "." (default: false) */
   includeHidden?: boolean;
+  /**
+   * Still return `.gitignore` files when hidden entries are excluded, so the
+   * caller can apply them. Providers may ignore this.
+   */
+  includeGitignoreFiles?: boolean;
+  /**
+   * Directory names (e.g. `node_modules`) not to descend into or return. The
+   * caller filters the results too, so providers may ignore this.
+   */
+  skipDirectoryNames?: string[];
 }
 
 export interface FilesystemGrepOptions {

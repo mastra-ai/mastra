@@ -377,7 +377,7 @@ describe('SandboxFilesystem.walk', () => {
     await fs.walk('.', { maxDepth: 3 });
     const findCall = sandbox.calls.find(c => c.includes('find '))!;
     expect(findCall).toContain('-maxdepth 3');
-    expect(findCall).toContain(`-name '.*' -prune -o`);
+    expect(findCall).toContain(`\\( -name '.*' \\) -prune -o`);
 
     await fs.walk('.', { includeHidden: true });
     const hiddenCall = sandbox.calls.filter(c => c.includes('find ')).at(-1)!;

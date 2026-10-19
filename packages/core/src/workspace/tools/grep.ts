@@ -2,9 +2,9 @@ import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { UnsupportedGrepPatternError } from '../errors';
-import type { FilesystemGrepResult, WorkspaceFilesystem } from '../filesystem';
+import type { FilesystemGrepResult } from '../filesystem';
 import { isEnoentError, isEnotdirError, isTextFile } from '../filesystem/fs-utils';
-import { loadGitignore, NestedGitignore } from '../gitignore';
+import { loadWorkspaceIgnore } from '../gitignore';
 import type { GlobMatcher } from '../glob';
 import { createGlobMatcher, extractGlobBase, isGlobPattern } from '../glob';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
@@ -20,28 +20,6 @@ const GREP_FILESYSTEM_CONCURRENCY = 8;
  * returns what it found so far and says the search is incomplete.
  */
 const HOST_WALK_BUDGET_MS = 60_000;
-
-/** Directories from `path` up to (not including) the workspace root, deepest first. */
-function ancestorDirectories(path: string): string[] {
-  const directories: string[] = [];
-  let current = path.replace(/\/+$/, '');
-  while (current && current !== '.' && current !== '/') {
-    directories.push(current);
-    const slash = current.lastIndexOf('/');
-    current = slash > 0 ? current.slice(0, slash) : slash === 0 ? '/' : '';
-  }
-  return directories;
-}
-
-/** Read `<directory>/.gitignore`, or undefined when it is missing or unreadable. */
-async function readGitignore(filesystem: WorkspaceFilesystem, directory: string): Promise<string | undefined> {
-  try {
-    const content = await filesystem.readFile(`${directory.replace(/\/+$/, '')}/.gitignore`, { encoding: 'utf-8' });
-    return typeof content === 'string' ? content : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 /**
  * Options for {@link createGrepTool}.
@@ -185,34 +163,9 @@ Usage:
           searchPath = inputPath;
         }
 
-        // Load gitignore rules: the workspace root's, plus any `.gitignore` in
-        // the search path's ancestors (e.g. the repository a multi-repo search
-        // targets). The walk below adds nested ones as it finds them.
-        // If the user explicitly targets an ignored path (e.g. "./dist" or
-        // "node_modules/x"), skip filtering so they can still search there.
-        const rawIgnoreFilter = await loadGitignore(filesystem);
-        const searchPathNormalized = searchPath.replace(/^\.\//, '').replace(/\/$/, '');
-        const nestedGitignore = new NestedGitignore();
-        await Promise.all(
-          ancestorDirectories(searchPathNormalized).map(async dir => {
-            const content = await readGitignore(filesystem, dir);
-            if (content !== undefined) nestedGitignore.add(dir, content);
-          }),
-        );
-        const targetIsIgnored =
-          !!searchPathNormalized &&
-          searchPathNormalized !== '.' &&
-          (!!rawIgnoreFilter?.(searchPathNormalized + '/') || nestedGitignore.ignores(searchPathNormalized, true));
-        // node_modules is skipped even without a .gitignore rule for it, unless
-        // the search path or glob points inside one.
-        const skipNodeModules = !/(^|\/)node_modules(\/|$)/.test(inputPath);
-        const isIgnored = (path: string, isDirectory: boolean): boolean => {
-          const relativePath = path.replace(/^\.\//, '');
-          if (skipNodeModules && relativePath.split('/').includes('node_modules')) return true;
-          if (targetIsIgnored) return false;
-          if (rawIgnoreFilter?.(isDirectory ? `${relativePath}/` : relativePath)) return true;
-          return nestedGitignore.ignores(relativePath, isDirectory);
-        };
+        // The walk below adds nested .gitignore files as it finds them.
+        const workspaceIgnore = await loadWorkspaceIgnore(filesystem, searchPath, { requestedPath: inputPath });
+        const isIgnored = (path: string, isDirectory: boolean) => workspaceIgnore.ignores(path, isDirectory);
 
         const MAX_LINE_LENGTH = 500;
         const GLOBAL_CAP = 1000;
@@ -301,19 +254,8 @@ Usage:
 
                 // Read each listed directory's .gitignore before filtering its
                 // children, so its rules apply to everything below it.
-                await pMap(
-                  directoryFrontier.filter(
-                    (dir, directoryIndex) =>
-                      !nestedGitignore.has(dir) &&
-                      directoryEntries[directoryIndex]?.some(
-                        entry => entry.type === 'file' && entry.name === '.gitignore',
-                      ),
-                  ),
-                  async dir => {
-                    const content = await readGitignore(filesystem, dir);
-                    if (content !== undefined) nestedGitignore.add(dir, content);
-                  },
-                  { concurrency: GREP_FILESYSTEM_CONCURRENCY },
+                await workspaceIgnore.addListings(
+                  directoryFrontier.map((dir, directoryIndex) => [dir, directoryEntries[directoryIndex]]),
                 );
 
                 for (let directoryIndex = 0; directoryIndex < directoryFrontier.length; directoryIndex++) {

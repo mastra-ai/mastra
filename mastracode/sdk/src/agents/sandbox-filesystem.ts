@@ -590,15 +590,23 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
         ? `-maxdepth ${Math.max(0, Math.floor(options.maxDepth))} `
         : '';
     // Prune hidden entries in-sandbox when not requested, so a huge hidden
-    // tree (e.g. `.git`) doesn't inflate the response.
-    const hiddenPrune = options?.includeHidden ? '' : `-name '.*' -prune -o `;
+    // tree (e.g. `.git`) doesn't inflate the response. `.gitignore` files
+    // still come back when the caller applies them.
+    const keepGitignore = options?.includeGitignoreFiles ? `! \\( -type f -name .gitignore \\) ` : '';
+    const hiddenPrune = options?.includeHidden ? '' : `\\( -name '.*' ${keepGitignore}\\) -prune -o `;
+    // Skip directories like node_modules entirely instead of listing them
+    // only for the caller to filter them out.
+    const skipNames = options?.skipDirectoryNames?.filter(Boolean) ?? [];
+    const skipPrune = skipNames.length
+      ? `\\( -type d \\( ${skipNames.map(name => `-name ${shellQuote(name)}`).join(' -o ')} \\) \\) -prune -o `
+      : '';
     // Emit "flag\tpath[\ttarget]" — flag is d/f for regular entries, D/F for
     // symlinks (with the link target as a third field).
     const script =
       `root=${shellQuote(abs)}\n` +
       `[ -e "$root" ] || [ -L "$root" ] || exit ${EXIT_NOT_FOUND}\n` +
       `[ -d "$root" ] || exit ${EXIT_NOT_DIRECTORY}\n` +
-      `find "$root" -mindepth 1 ${maxDepth}${hiddenPrune}-print 2>/dev/null | while IFS= read -r f; do ` +
+      `find "$root" -mindepth 1 ${maxDepth}${hiddenPrune}${skipPrune}-print 2>/dev/null | while IFS= read -r f; do ` +
       `if [ -L "$f" ]; then if [ -d "$f" ]; then t=D; else t=F; fi; printf '%s\\t%s\\t%s\\n' "$t" "$f" "$(readlink "$f")"; ` +
       `elif [ -d "$f" ]; then printf 'd\\t%s\\n' "$f"; else printf 'f\\t%s\\n' "$f"; fi; done`;
     const result = await this.exec(script);
