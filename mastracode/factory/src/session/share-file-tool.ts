@@ -37,22 +37,23 @@ export function createShareFileTool(requestContext: RequestContext): Integration
         if (!fs) throw new Error('No workspace filesystem is attached to this session.');
         const stat = await fs.stat(path);
         if (stat.type === 'directory') throw new Error(`${path} is a directory; share a single file.`);
+        // The stat check keeps us from reading something enormous; the check on
+        // the bytes we actually hold is the one that bounds the upload, since the
+        // file can change between the two calls.
         if (stat.size > SHARE_FILE_MAX_BYTES) {
           throw new Error(`${path} is ${stat.size} bytes; the limit is ${SHARE_FILE_MAX_BYTES} bytes.`);
         }
-        const data = await fs.readFile(path);
+        const raw = await fs.readFile(path);
+        const data = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+        if (data.length > SHARE_FILE_MAX_BYTES) {
+          throw new Error(`${path} is ${data.length} bytes; the limit is ${SHARE_FILE_MAX_BYTES} bytes.`);
+        }
         const filename = path.split('/').pop() || 'file';
         await render.chatThread.post({
           markdown: comment?.trim() || ' ',
-          files: [
-            {
-              data: Buffer.isBuffer(data) ? data : Buffer.from(data),
-              filename,
-              ...(stat.mimeType ? { mimeType: stat.mimeType } : {}),
-            },
-          ],
+          files: [{ data, filename, ...(stat.mimeType ? { mimeType: stat.mimeType } : {}) }],
         });
-        return { shared: true, filename, bytes: stat.size };
+        return { shared: true, filename, bytes: data.length };
       },
     }),
   };
