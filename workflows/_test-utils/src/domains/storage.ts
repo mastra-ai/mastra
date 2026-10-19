@@ -460,7 +460,7 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
     );
 
     it.skipIf(skipTests.storageResourceIdLoop)(
-      'should pass resourceId in every persistWorkflowSnapshot call during loop execution',
+      'should pass resourceId in every run write during loop execution',
       async () => {
         const { workflow } = registry!['storage-resourceid-loop-workflow']!;
 
@@ -469,17 +469,20 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
 
         const storage = ctx.getStorage?.();
         const workflowsStore = storage ? await (storage as any).getStore('workflows') : undefined;
-        const persistSpy = workflowsStore ? vi.spyOn(workflowsStore, 'persistWorkflowSnapshot') : undefined;
+        expect(workflowsStore).toBeDefined();
+        // Storage v2 runs write through the checkpoint/append methods; every other run writes whole snapshots.
+        const spies = (
+          ['persistWorkflowSnapshot', 'writeWorkflowRunCheckpoint', 'appendWorkflowRunEntries'] as const
+        ).map(method => vi.spyOn(workflowsStore, method));
 
         await execute(workflow, { value: 0 }, { runId, resourceId });
 
-        expect(persistSpy).toBeDefined();
-        const calls = persistSpy!.mock.calls;
+        const calls = spies.flatMap(spy => spy.mock.calls);
         expect(calls.length).toBeGreaterThan(0);
         for (const [args] of calls) {
           expect(args.resourceId).toBe(resourceId);
         }
-        persistSpy!.mockRestore();
+        spies.forEach(spy => spy.mockRestore());
       },
     );
 

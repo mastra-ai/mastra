@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { StepResult, WorkflowRunState } from '../../../workflows';
 import type {
   ClaimRunOwnershipInput,
@@ -10,7 +11,16 @@ import type {
 import { runFencingNotSupportedError } from '../../run-fencing';
 import type { UpdateWorkflowStateOptions, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
 import { StorageDomain } from '../base';
-import type { WorkflowRunChanges } from './journal';
+import type { StoredWorkflowRun, StoredWorkflowRunHeader, WorkflowRunHeader } from './journal';
+
+function runJournalNotSupportedError(adapter: string): MastraError {
+  return new MastraError({
+    id: 'STORAGE_RUN_JOURNAL_NOT_SUPPORTED',
+    domain: ErrorDomain.STORAGE,
+    category: ErrorCategory.USER,
+    text: `${adapter} does not support storage v2 runs. Check supportsRunJournal() before calling storage v2 methods.`,
+  });
+}
 
 export abstract class WorkflowsStorage extends StorageDomain {
   constructor() {
@@ -49,7 +59,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
 
   /**
    * Whether this adapter stores storage v2 runs (`storageVersion: 2`): a header plus
-   * append-only entries, written by `persistWorkflowSnapshot` with `storageVersion: 2`.
+   * append-only entries, written and read by the storage v2 methods below.
    * Reads without a `storageVersion` hint must find runs of either version.
    * @experimental
    */
@@ -101,6 +111,91 @@ export abstract class WorkflowsStorage extends StorageDomain {
     throw runFencingNotSupportedError('workflows', this.constructor.name);
   }
 
+  // Storage v2 runs. Adapters that return true from supportsRunJournal() implement these.
+
+  /**
+   * A storage v2 run's header, without reading its entries. Null when the run isn't stored as v2.
+   * @experimental
+   */
+  async loadWorkflowRunHeader(_args: { workflowName: string; runId: string }): Promise<StoredWorkflowRunHeader | null> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * A storage v2 run's header, latest state and latest result per step. With
+   * `successfulSteps: 'summary'`, successful steps come back as summaries
+   * (`summarizeStepResult`) and are listed in `summarizedStepIds`.
+   * @experimental
+   */
+  async loadWorkflowRun(_args: {
+    workflowName: string;
+    runId: string;
+    successfulSteps: 'full' | 'summary';
+  }): Promise<StoredWorkflowRun | null> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * The latest result of each given step of a storage v2 run. Steps without an entry are left out.
+   * @experimental
+   */
+  async loadWorkflowRunSteps(_args: {
+    workflowName: string;
+    runId: string;
+    stepIds: string[];
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Patch a storage v2 run's header. With `opts.expectedStatus`, only when the stored status
+   * matches. Returns the updated header, or undefined when the run isn't stored or the status
+   * didn't match.
+   * @experimental
+   */
+  async updateWorkflowRunHeader(_args: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+    fence?: RunFence;
+  }): Promise<StoredWorkflowRunHeader | undefined> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Replace all of a storage v2 run's entries with one per step, in the given order, then
+   * the state. Writes the header, creating the run if it isn't stored.
+   * @experimental
+   */
+  async writeWorkflowRunCheckpoint(_args: {
+    workflowName: string;
+    runId: string;
+    resourceId?: string;
+    header: WorkflowRunHeader;
+    steps: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
+    fence?: RunFence;
+  }): Promise<void> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Append one entry per given step to a storage v2 run, then the state when given. Writes
+   * the header, creating the run if it isn't stored.
+   * @experimental
+   */
+  async appendWorkflowRunEntries(_args: {
+    workflowName: string;
+    runId: string;
+    resourceId?: string;
+    header: WorkflowRunHeader;
+    steps: Record<string, StepResult<any, any, any, any>>;
+    state?: Record<string, any>;
+    fence?: RunFence;
+  }): Promise<void> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
   /**
    * In-memory, LibSQL, and PostgreSQL storage return an empty object without writing when the workflow run does not
    * exist. Remaining adapters are being aligned under COR-1448; callers must not rely on this method to create the
@@ -147,12 +242,6 @@ export abstract class WorkflowsStorage extends StorageDomain {
     storageVersion?: 1 | 2;
   }): Promise<WorkflowRunState | undefined>;
 
-  /**
-   * With `storageVersion: 2`, the run is stored as a header plus entries. A call without
-   * `changes` is a checkpoint that replaces the run's entries with one per `snapshot.context`
-   * key plus the state. A call with `changes` appends only the listed step results, and the
-   * state when `changes.state` is set. Either way, the header is rewritten from `snapshot`.
-   */
   abstract persistWorkflowSnapshot(_: {
     workflowName: string;
     runId: string;
@@ -161,10 +250,6 @@ export abstract class WorkflowsStorage extends StorageDomain {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-    /** @experimental */
-    storageVersion?: 1 | 2;
-    /** @experimental */
-    changes?: WorkflowRunChanges;
   }): Promise<void>;
 
   /**

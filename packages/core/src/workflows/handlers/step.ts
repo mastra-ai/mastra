@@ -372,12 +372,19 @@ export async function executeStep(
       let completedNestedOutput: { found: boolean; value?: unknown } = { found: false };
       if (isNestedWorkflow && persistedNestedRunId && engine.mastra) {
         const workflowsStore = await engine.mastra.getStorage()?.getStore('workflows');
-        const nestedSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: step.id,
-          runId: persistedNestedRunId,
-        });
-        if (nestedSnapshot?.status === 'success') {
-          completedNestedOutput = { found: true, value: nestedSnapshot.result };
+        // The nested workflow's own option: it can differ from this run's.
+        const nestedStorageVersion = (step as { options?: { storageVersion?: 1 | 2 } }).options?.storageVersion ?? 1;
+        const nestedRun =
+          nestedStorageVersion === 2
+            ? (await workflowsStore?.loadWorkflowRunHeader({ workflowName: step.id, runId: persistedNestedRunId }))
+                ?.header
+            : await workflowsStore?.loadWorkflowSnapshot({
+                workflowName: step.id,
+                runId: persistedNestedRunId,
+                storageVersion: 1,
+              });
+        if (nestedRun?.status === 'success') {
+          completedNestedOutput = { found: true, value: nestedRun.result };
         }
       }
 
