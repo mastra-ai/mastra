@@ -368,61 +368,144 @@ describe('T65 wf-restart-shapes in a fresh module graph', () => {
   }
 });
 
-it('evented foreach restarts the recorded child run without replaying its completed steps', async () => {
-  const id = 'foreach-child-restart';
-  const runId = 'foreach-child-restart-run';
-  const log: Entry[] = [];
-  const gate = createGate();
-  gates.push(gate);
-  const scenario = createRestartScenario({
-    kind: 'workflow',
-    runId,
-    build: ({ core, generation }) => {
-      const { createStep, createWorkflow } = factories(core, 'evented');
-      const first = createStep({
-        id: 'child-first',
-        inputSchema: N,
-        outputSchema: N,
-        execute: async ({ inputData }: any) => {
-          log.push({ generation, step: 'child-first', event: 'start', input: inputData });
-          return { n: inputData.n + 1 };
-        },
-      });
-      const last = createStep({
-        id: 'child-last',
-        inputSchema: N,
-        outputSchema: N,
-        execute: async ({ inputData }: any) => {
-          log.push({ generation, step: 'child-last', event: 'start', input: inputData });
-          if (generation === 1 && inputData.n === 3) await gate.wait();
-          return { n: inputData.n + 1 };
-        },
-      });
-      const child = createWorkflow({ id: `${id}-child`, inputSchema: N, outputSchema: N })
-        .then(first)
-        .then(last)
-        .commit();
-      return createWorkflow({ id, inputSchema: z.array(N), outputSchema: z.array(N) })
-        .foreach(child, { concurrency: 1 })
-        .commit();
-    },
-  });
-  scenarios.push(scenario);
-  const original = await scenario.start(async ({ workflow }) => {
-    const run = await workflow.createRun({ runId });
-    return run.start({ inputData: [{ n: 1 }, { n: 2 }] });
-  });
-  expect(await Promise.race([gate.reached.then(() => true), original.settled.then(() => false)])).toBe(true);
-  const checkpoint = await original.checkpoint();
-  const parent = findRow(checkpoint, id, runId)!.snapshot;
-  expect(parent.activeStepsPath[`${id}-child`]).toEqual([0, 1]);
-  expect(ctxOf(parent, `${id}-child`).output).toEqual([{ n: 3 }, null]);
-  const childRunId = ctxOf(parent, `${id}-child`).metadata.nestedRunId;
-  expect(childRunId).toBeTruthy();
-  expect(ctxOf(findRow(checkpoint, `${id}-child`, childRunId)!.snapshot, 'child-first').status).toBe('success');
-  const { result } = await scenario.restart(checkpoint);
-  expect(result.status).toBe('success');
-  expect(result.result).toEqual([{ n: 3 }, { n: 4 }]);
-  expect(log.filter(e => e.generation === 2 && e.step === 'child-first')).toEqual([]);
-  expect(log.filter(e => e.generation === 2 && e.step === 'child-last').map(e => e.input)).toEqual([{ n: 3 }]);
-}, 60_000);
+it.each([false, true])(
+  'evented foreach restarts the recorded child run without replaying its completed steps (legacy: %s)',
+  async legacy => {
+    const id = 'foreach-child-restart';
+    const runId = 'foreach-child-restart-run';
+    const log: Entry[] = [];
+    const gate = createGate();
+    gates.push(gate);
+    const scenario = createRestartScenario({
+      kind: 'workflow',
+      runId,
+      build: ({ core, generation }) => {
+        const { createStep, createWorkflow } = factories(core, 'evented');
+        const first = createStep({
+          id: 'child-first',
+          inputSchema: N,
+          outputSchema: N,
+          execute: async ({ inputData }: any) => {
+            log.push({ generation, step: 'child-first', event: 'start', input: inputData });
+            return { n: inputData.n + 1 };
+          },
+        });
+        const last = createStep({
+          id: 'child-last',
+          inputSchema: N,
+          outputSchema: N,
+          execute: async ({ inputData }: any) => {
+            log.push({ generation, step: 'child-last', event: 'start', input: inputData });
+            if (generation === 1 && inputData.n === 3) await gate.wait();
+            return { n: inputData.n + 1 };
+          },
+        });
+        const child = createWorkflow({ id: `${id}-child`, inputSchema: N, outputSchema: N })
+          .then(first)
+          .then(last)
+          .commit();
+        return createWorkflow({ id, inputSchema: z.array(N), outputSchema: z.array(N) })
+          .foreach(child, { concurrency: 1 })
+          .commit();
+      },
+    });
+    scenarios.push(scenario);
+    const original = await scenario.start(async ({ workflow }) => {
+      const run = await workflow.createRun({ runId });
+      return run.start({ inputData: [{ n: 1 }, { n: 2 }] });
+    });
+    expect(await Promise.race([gate.reached.then(() => true), original.settled.then(() => false)])).toBe(true);
+    const checkpoint = await original.checkpoint();
+    const parent = findRow(checkpoint, id, runId)!.snapshot;
+    expect(parent.activeStepsPath[`${id}-child`]).toEqual([0, 1]);
+    expect(ctxOf(parent, `${id}-child`).output).toEqual([{ n: 3 }, null]);
+    const childRunId = ctxOf(parent, `${id}-child`).metadata.nestedRunId;
+    expect(childRunId).toBeTruthy();
+    expect(ctxOf(findRow(checkpoint, `${id}-child`, childRunId)!.snapshot, 'child-first').status).toBe('success');
+    if (legacy) delete ctxOf(parent, `${id}-child`).metadata.foreachNestedRunIds;
+    const { result } = await scenario.restart(checkpoint);
+    expect(result.status).toBe('success');
+    expect(result.result).toEqual([{ n: 3 }, { n: 4 }]);
+    expect(log.filter(e => e.generation === 2 && e.step === 'child-first')).toEqual([]);
+    expect(log.filter(e => e.generation === 2 && e.step === 'child-last').map(e => e.input)).toEqual([{ n: 3 }]);
+  },
+  60_000,
+);
+
+it.each([1, 2])(
+  'evented foreach recovers every concurrent child in its original iteration with recovery concurrency %i',
+  async recoveryConcurrency => {
+    const id = 'foreach-concurrent-child-restart';
+    const runId = `${id}-run`;
+    const log: Entry[] = [];
+    const pending = [createGate(), createGate()];
+    gates.push(...pending);
+    const scenario = createRestartScenario({
+      kind: 'workflow',
+      runId,
+      build: ({ core, generation }) => {
+        const { createStep, createWorkflow } = factories(core, 'evented');
+        const first = createStep({
+          id: 'child-first',
+          inputSchema: N,
+          outputSchema: N,
+          execute: async ({ inputData }: any) => {
+            log.push({ generation, step: 'child-first', event: 'start', input: inputData });
+            return { n: inputData.n + 1 };
+          },
+        });
+        const last = createStep({
+          id: 'child-last',
+          inputSchema: N,
+          outputSchema: N,
+          execute: async ({ inputData }: any) => {
+            log.push({ generation, step: 'child-last', event: 'start', input: inputData });
+            if (generation === 1 && inputData.n <= 3) await pending[inputData.n - 2]!.wait();
+            return { n: inputData.n + 1 };
+          },
+        });
+        const child = createWorkflow({ id: `${id}-child`, inputSchema: N, outputSchema: N })
+          .then(first)
+          .then(last)
+          .commit();
+        return createWorkflow({ id, inputSchema: z.array(N), outputSchema: z.array(N) })
+          .foreach(child, { concurrency: generation === 1 ? 2 : recoveryConcurrency })
+          .commit();
+      },
+    });
+    scenarios.push(scenario);
+    const original = await scenario.start(async ({ workflow }) => {
+      const run = await workflow.createRun({ runId });
+      return run.start({ inputData: [{ n: 1 }, { n: 2 }, { n: 3 }] });
+    });
+    expect(
+      await Promise.race([
+        Promise.all(pending.map(gate => gate.reached)).then(() => true),
+        original.settled.then(() => false),
+      ]),
+    ).toBe(true);
+    const checkpoint = await original.checkpoint();
+    const parent = findRow(checkpoint, id, runId)!.snapshot;
+    const aggregate = ctxOf(parent, `${id}-child`);
+    expect(aggregate.output).toEqual([null, null]);
+    const childRunIds = aggregate.metadata.foreachNestedRunIds;
+    expect(Object.keys(childRunIds).sort()).toEqual(['0', '1']);
+    expect(childRunIds[0]).not.toBe(childRunIds[1]);
+    for (const index of [0, 1]) {
+      const child = findRow(checkpoint, `${id}-child`, childRunIds[index])!.snapshot;
+      expect(ctxOf(child, 'child-first').status).toBe('success');
+      expect(ctxOf(child, 'child-first').output).toEqual({ n: index + 2 });
+    }
+    const { result } = await scenario.restart(checkpoint);
+    expect(result.status).toBe('success');
+    expect(result.result).toEqual([{ n: 3 }, { n: 4 }, { n: 5 }]);
+    expect(log.filter(e => e.generation === 2 && e.step === 'child-first').map(e => e.input)).toEqual([{ n: 3 }]);
+    expect(
+      log
+        .filter(e => e.generation === 2 && e.step === 'child-last')
+        .map(e => e.input?.n)
+        .sort(),
+    ).toEqual([2, 3, 4]);
+  },
+  60_000,
+);

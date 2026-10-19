@@ -11,7 +11,7 @@ import type { ProcessorArgs } from '.';
 
 const FOREACH_QUEUED = '__mastra_foreach_queued__';
 
-function isQueuedForeachIteration(value: unknown): value is { [FOREACH_QUEUED]: true } {
+export function isQueuedForeachIteration(value: unknown): value is { [FOREACH_QUEUED]: true; nestedRunId?: string } {
   return Boolean(value && typeof value === 'object' && FOREACH_QUEUED in value);
 }
 
@@ -447,10 +447,24 @@ export async function processWorkflowForEach(
     stepResults[stepId] = currentResult;
   }
 
-  if (restart && Array.isArray(currentResult?.output) && currentResult.output.some((result: any) => result === null)) {
-    currentResult.output = currentResult.output.map((result: any) =>
-      result === null ? ({ [FOREACH_QUEUED]: true } as { [FOREACH_QUEUED]: true }) : result,
-    );
+  if (
+    restart &&
+    !restart.isForeachRestarted &&
+    Array.isArray(currentResult?.output) &&
+    currentResult.output.some((result: any) => result === null)
+  ) {
+    const unfinishedCount = currentResult.output.filter((result: any) => result === null).length;
+    currentResult.output = currentResult.output.map((result: any, index: number) => {
+      if (result !== null) return result;
+      const nestedRunId =
+        currentResult.metadata?.foreachNestedRunIds?.[index] ??
+        (!currentResult.metadata?.foreachNestedRunIds &&
+        unfinishedCount === 1 &&
+        restart.activeStepsPath?.[stepId]?.[1] === index
+          ? currentResult.metadata?.nestedRunId
+          : undefined);
+      return { [FOREACH_QUEUED]: true, ...(nestedRunId ? { nestedRunId } : {}) };
+    });
 
     await workflowsStore?.updateWorkflowResults({
       workflowName: workflowId,
@@ -510,6 +524,18 @@ export async function processWorkflowForEach(
             executionPath: [executionPath[0]!, index],
             resumeSteps,
             timeTravel,
+            // Only recorded children receive recovery events. Plain steps and slots
+            // that never started still execute normally through the leaf runner.
+            restart:
+              isNestedWorkflow && !timeTravel && currentResult.output[index]?.nestedRunId
+                ? {
+                    ...restart,
+                    activePaths: restart?.activePaths ?? [executionPath[0]!, index],
+                    activeStepsPath: { ...restart?.activeStepsPath, [stepId]: [executionPath[0]!, index] },
+                    stepResults,
+                    isForeachRestarted: true,
+                  }
+                : undefined,
             stepResults,
             prevResult: iterationPrevResult,
             resumeData,
