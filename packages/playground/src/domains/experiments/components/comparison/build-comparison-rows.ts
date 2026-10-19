@@ -20,6 +20,8 @@ export interface ComparisonSide {
   startedAt: string | null;
   completedAt: string | null;
   scores: ComparisonScore[];
+  /** Trace of this side's run, when it was recorded. */
+  traceId?: string;
   /** Tokens and estimated cost of this side's run. Undefined when unknown (no metrics, or a target without model calls). */
   usage?: ExperimentItemUsage;
 }
@@ -116,6 +118,7 @@ const buildSide = (
     scores: Object.entries(comparisonResult.scores)
       .map(([scorerId, value]) => ({ scorerId, value, reason: reasonByScorerId.get(scorerId) ?? null }))
       .sort((a, b) => a.scorerId.localeCompare(b.scorerId)),
+    traceId: detail?.traceId ?? undefined,
     usage: detail?.traceId ? usageByTraceId?.[detail.traceId] : undefined,
   };
 };

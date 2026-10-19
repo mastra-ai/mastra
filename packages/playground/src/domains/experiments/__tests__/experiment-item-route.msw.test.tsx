@@ -173,7 +173,7 @@ describe('experiment item sub-route', () => {
 
       expect(await screen.findByText('Total tokens')).toBeDefined();
       expect(await screen.findByText('12,400')).toBeDefined();
-      expect(await screen.findByText('$0.0123')).toBeDefined();
+      expect(await screen.findByText('$0.012')).toBeDefined();
       expect(await screen.findByText('1.85s avg per item')).toBeDefined();
 
       expect(metricRequests.length).toBeGreaterThanOrEqual(3);
