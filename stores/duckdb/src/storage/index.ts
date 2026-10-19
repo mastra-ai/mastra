@@ -31,6 +31,7 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'trace-query-tenant-scope',
   'feedback',
   'trace-query-context-ids',
+  'trace-query-root-span-fields',
 ] as const;
 const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'metrics',
@@ -51,6 +52,7 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'trace-query-tenant-scope',
   'feedback',
   'trace-query-context-ids',
+  'trace-query-root-span-fields',
 ] as const;
 
 function isObservabilityCompatibilityError(error: unknown): boolean {

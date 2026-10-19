@@ -127,6 +127,38 @@ describe('QUERY_THREADS', () => {
     }
   });
 
+  it('returns 422 before calling an older store for root span name and type predicates', async () => {
+    const requests = [
+      {
+        traces: { timeRange: TIME_RANGE, where: { op: 'eq', left: { path: 'name' }, right: { literal: 'root-a' } } },
+      },
+      {
+        traces: { timeRange: TIME_RANGE },
+        where: { traces: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'workflow_run' } } } },
+      },
+    ];
+    for (const request of requests) {
+      const { mastra, observabilityStore } = createHarness(['thread-query']);
+      const error = await captureHttpException(QUERY_THREADS.handler(params(mastra, request)));
+
+      expect(error.status).toBe(422);
+      expect(await error.getResponse().json()).toMatchObject({
+        code: 'TRACE_QUERY_INVALID',
+        issues: [{ code: 'field_not_allowed', path: ['where'] }],
+      });
+      expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
+    }
+
+    const { mastra, observabilityStore } = createHarness(['thread-query']);
+    await QUERY_THREADS.handler(
+      params(mastra, {
+        traces: { timeRange: TIME_RANGE },
+        where: { traces: { some: { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'x' } } } } } },
+      }),
+    );
+    expect(observabilityStore.queryThreads).toHaveBeenCalledOnce();
+  });
+
   it('returns 501 before calling an older store for root duration predicates in thread relations', async () => {
     const { mastra, observabilityStore } = createHarness(['thread-query']);
     const error = await captureHttpException(

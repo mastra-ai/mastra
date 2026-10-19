@@ -3715,6 +3715,8 @@ type Shared_Type_67 = {
   traceQueryRootDuration: boolean;
   /** `runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries */
   traceQueryContextIds: boolean;
+  /** Root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct` */
+  traceQueryRootSpanFields: boolean;
   /** Trace query field discovery (POST /observability/traces/query/fields and /values) */
   traceQueryDiscovery: boolean;
   /** Trusted tenant scoping of trace and thread queries */

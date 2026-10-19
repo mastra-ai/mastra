@@ -21,4 +21,4 @@ const plan = planTraceAggregate(
 );
 ```
 
-Stores need a matching update to run these requests: upgrade `@mastra/clickhouse`, `@mastra/pg`, or `@mastra/duckdb` alongside `@mastra/core`.
+Stores that support these fields declare the new `trace-query-root-span-fields` storage feature.
