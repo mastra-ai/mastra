@@ -230,6 +230,7 @@ import { taskProgressEventsScenario } from './task-progress-events.js';
 import { taskPromptContextNextTurnScenario } from './task-prompt-context-next-turn.js';
 import { terminalResizeReflowScenario } from './terminal-resize-reflow.js';
 import { thinkPickerPerModelScenario } from './think-picker-per-model.js';
+import { thinkReasoningWarningScenario } from './think-reasoning-warning.js';
 import { threadHistoryScenario } from './thread-history.js';
 import { toolHistoryParityScenario } from './tool-history-parity.js';
 import { toolHistoryReloadScenario } from './tool-history-reload.js';
@@ -477,6 +478,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'task-prompt-context-next-turn': taskPromptContextNextTurnScenario,
   'terminal-resize-reflow': terminalResizeReflowScenario,
   'think-picker-per-model': thinkPickerPerModelScenario,
+  'think-reasoning-warning': thinkReasoningWarningScenario,
   'thread-history': threadHistoryScenario,
   'resume-locked-thread': resumeLockedThreadScenario,
   'resume-missing-thread': resumeMissingThreadScenario,

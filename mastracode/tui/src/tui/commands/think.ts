@@ -2,7 +2,7 @@ import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
 import { loadSettings, resolveDefaultThinkingLevel } from '@mastra/code-sdk/onboarding/settings';
-import { isThinkingLevelSetting, parseThinkCommand } from '@mastra/code-sdk/thinking';
+import { canRequestThinking, isThinkingLevelSetting, parseThinkCommand } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting, ThinkingLevelSource } from '@mastra/code-sdk/thinking';
 import { runCatalogThinkingLevel } from '@mastra/code-sdk/thinking-catalog';
 import {
@@ -14,13 +14,7 @@ import { showModalOverlay } from '../overlay.js';
 import { theme, getSelectListTheme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
-/** Sentinel value used by the selector for "clear the session override". */
 const DEFAULT_ITEM_VALUE = '__default__';
-
-/** Models that support reasoning effort. */
-function supportsThinking(modelId: string): boolean {
-  return modelId.startsWith('openai/') || modelId.startsWith('anthropic/');
-}
 
 function levelLabel(levelId: string): string {
   return THINKING_LEVELS.find(l => l.id === levelId)?.label ?? levelId;
@@ -30,13 +24,11 @@ function sourceLabel(source: ThinkingLevelSource, modeId: string | null): string
   return source === 'mode-default' && modeId ? `${modeId} mode default` : 'global default';
 }
 
-/** The session override, or undefined when the session inherits the defaults. */
 function getSessionOverride(ctx: SlashCommandContext): ThinkingLevelSetting | undefined {
   const level = ctx.state.session.state.get()?.thinkingLevel;
   return isThinkingLevelSetting(level) ? level : undefined;
 }
 
-/** Resolve the configured default (mode default → global default) for display. */
 function getConfiguredDefault(ctx: SlashCommandContext): {
   level: ThinkingLevelSetting;
   source: ThinkingLevelSource;
@@ -59,8 +51,8 @@ function getThinkingStatusLine(ctx: SlashCommandContext): string {
 function getModelNote(ctx: SlashCommandContext): string | null {
   const modelId = ctx.state.session.model.get() ?? '';
   if (!modelId) return 'No model selected.';
-  if (!supportsThinking(modelId)) {
-    return `Warning: current model (${modelId}) may not support reasoning effort. Setting will be saved but may not take effect.`;
+  if (!canRequestThinking(modelId)) {
+    return `Warning: thinking levels aren't sent to the current model (${modelId}). Setting will be saved but won't take effect.`;
   }
   return null;
 }
@@ -102,7 +94,6 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
     return;
   }
 
-  // No argument: show inline selector
   const defaultDescription = `${levelLabel(configuredDefault.level)} · ${sourceLabel(configuredDefault.source, configuredDefault.modeId)}`;
   const items: SelectItem[] = [
     {

@@ -61,6 +61,11 @@ function splitProvider(modelId: string): { provider: string; bareModelId: string
   return { provider: routedModelId.slice(0, slash), bareModelId: routedModelId.slice(slash + 1) };
 }
 
+export function canRequestThinking(modelId: string): boolean {
+  if (isRoutedWithoutThinking(modelId)) return false;
+  return isThinkingAdapterProvider(splitProvider(modelId).provider) || thinkingRequestFormatFor(modelId) !== undefined;
+}
+
 function offeredEffortLevels(reasoningOptions: readonly ModelReasoningOption[] | undefined): ActiveThinkingLevel[] {
   const effortValues = reasoningOptions?.flatMap(option => (option.type === 'effort' ? option.values : [])) ?? [];
   return ACTIVE_THINKING_LEVELS.filter(level => effortValues.includes(level));

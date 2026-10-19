@@ -215,6 +215,7 @@ export type ScenarioName =
   | 'task-progress-events'
   | 'terminal-resize-reflow'
   | 'think-picker-per-model'
+  | 'think-reasoning-warning'
   | 'task-prompt-context-next-turn'
   | 'resume-locked-thread'
   | 'resume-missing-thread'

@@ -130,6 +130,25 @@ describe('handleThinkCommand', () => {
     expect(showInfo).toHaveBeenCalledWith(expect.stringContaining('Invalid thinking level'));
   });
 
+  it.each([
+    ['DeepSeek V4 Pro', 'deepseek/deepseek-v4-pro'],
+    ['an OpenAI model newer than the catalog', 'openai/gpt-9-preview'],
+  ])('sets a level on %s without a warning, since the level is sent', async (_model, modelId) => {
+    const { ctx, showInfo } = makeCtx({ modelId });
+
+    await handleThinkCommand(ctx, ['high']);
+
+    expect(showInfo).toHaveBeenCalledWith(expect.stringMatching(/^Thinking: high \(session override\)$/i));
+  });
+
+  it('warns that the level is not sent on a provider Mastra Code has no thinking format for', async () => {
+    const { ctx, showInfo } = makeCtx({ modelId: 'my-local-provider/my-model' });
+
+    await handleThinkCommand(ctx, ['high']);
+
+    expect(showInfo).toHaveBeenCalledWith(expect.stringContaining("thinking levels aren't sent"));
+  });
+
   it('marks and preselects the level a saved override runs at', async () => {
     const { ctx } = makeCtx({ sessionThinkingLevel: 'max', modelId: 'anthropic/claude-haiku-4-5' });
 
