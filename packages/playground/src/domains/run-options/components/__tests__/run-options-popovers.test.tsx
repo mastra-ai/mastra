@@ -29,7 +29,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   window.localStorage.clear();
-  delete (window as typeof window & { MASTRA_REQUEST_CONTEXT_PRESETS?: string }).MASTRA_REQUEST_CONTEXT_PRESETS;
+  delete window.MASTRA_REQUEST_CONTEXT_PRESETS;
 });
 
 const renderWithProviders = (ui: React.ReactNode, entityType: 'agent' | 'workflow', entityId: string) => {
@@ -54,8 +54,7 @@ const open = async (name: string) => {
 describe('RequestContextPopover', () => {
   describe('when the user saves a preset from the JSON editor', () => {
     it('persists it for the entity, toasts and closes', async () => {
-      (window as typeof window & { MASTRA_REQUEST_CONTEXT_PRESETS?: string }).MASTRA_REQUEST_CONTEXT_PRESETS =
-        JSON.stringify({ French: { locale: 'fr' } });
+      window.MASTRA_REQUEST_CONTEXT_PRESETS = JSON.stringify({ French: { locale: 'fr' } });
       renderWithProviders(<RequestContextPopover entityType="agent" entityId={AGENT_ID} />, 'agent', AGENT_ID);
 
       await open('Request context');

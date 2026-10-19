@@ -2,6 +2,7 @@ import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
 import { SimpleProgressComponent } from './components/simple-progress.js';
 import { askModalQuestion } from './modal-question.js';
 import { showModalOverlay } from './overlay.js';
+import type { LocalRuntime } from './runtime.js';
 import type { TUIState } from './state.js';
 
 export type StartupResumeIssue =
@@ -17,30 +18,34 @@ export async function resumeThreadOnStartup(
   state: TUIState,
   requestedThreadId?: string,
 ): Promise<StartupResumeIssue | undefined> {
+  const local = state.local;
+  if (!local) return resumeFactoryThread(state);
+  const { session, controller } = local;
+
   const currentPath = state.projectInfo.rootPath;
-  const allThreads = await state.session.thread.list(requestedThreadId ? { allResources: true } : undefined);
-  const activeThreadId = state.session.thread.getId();
+  const allThreads = await session.thread.list(requestedThreadId ? { allResources: true } : undefined);
+  const activeThreadId = session.thread.getId();
 
   if (requestedThreadId) {
     const thread = allThreads.find(candidate => candidate.id === requestedThreadId);
     if (!thread) {
-      await startPendingNewThread(state);
+      await startPendingNewThread(state, local);
       return { kind: 'missing', threadId: requestedThreadId };
     }
-    const originalResourceId = state.session.identity.getResourceId();
+    const originalResourceId = session.identity.getResourceId();
     if (thread.resourceId !== originalResourceId) {
-      await state.controller.setResourceId(state.session, { resourceId: thread.resourceId });
+      await controller.setResourceId(session, { resourceId: thread.resourceId });
     }
     if (requestedThreadId !== activeThreadId) {
       try {
-        await state.session.thread.switch({ threadId: requestedThreadId });
+        await session.thread.switch({ threadId: requestedThreadId });
       } catch (error) {
         if (!(error instanceof ThreadLockError)) throw error;
         // The new thread belongs to this project, not the locked thread's resource.
-        if (state.session.identity.getResourceId() !== originalResourceId) {
-          await state.controller.setResourceId(state.session, { resourceId: originalResourceId });
+        if (session.identity.getResourceId() !== originalResourceId) {
+          await controller.setResourceId(session, { resourceId: originalResourceId });
         }
-        await startPendingNewThread(state);
+        await startPendingNewThread(state, local);
         return { kind: 'locked', threadId: thread.id, title: thread.title || thread.id, ownerPid: error.ownerPid };
       }
     }
@@ -51,15 +56,15 @@ export async function resumeThreadOnStartup(
   const threads = allThreads.filter(thread => thread.metadata?.projectPath === currentPath);
 
   if (threads.length === 0) {
-    if (await cloneDriftedThread(state)) return;
+    if (await cloneDriftedThread(state, local)) return;
     state.pendingNewThread = true;
     return;
   }
 
   for (const thread of [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())) {
-    if (thread.id === state.session.thread.getId()) return;
+    if (thread.id === session.thread.getId()) return;
     try {
-      await state.session.thread.switch({ threadId: thread.id });
+      await session.thread.switch({ threadId: thread.id });
       return;
     } catch (error) {
       if (error instanceof ThreadLockError) continue;
@@ -70,22 +75,30 @@ export async function resumeThreadOnStartup(
   state.pendingNewThread = true;
 }
 
+/** Factory sessions own their threads, so local project-path tagging and resource IDs don't apply. */
+async function resumeFactoryThread(state: TUIState): Promise<undefined> {
+  if (state.session.thread.getId()) return;
+  const [latest] = (await state.session.thread.list()).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  if (latest) await state.session.thread.switch({ threadId: latest.id });
+  else state.pendingNewThread = true;
+}
+
 /**
  * Leave the session waiting for a new thread. Session creation may already have
  * bound the latest project thread; unbind it (and release its lock) so the UI
  * and exit hint don't show a thread the user didn't ask for.
  */
-async function startPendingNewThread(state: TUIState): Promise<void> {
-  state.session.thread.cleanupSubscription();
-  await state.session.thread.clearAndReleaseLock();
+async function startPendingNewThread(state: TUIState, { session }: LocalRuntime): Promise<void> {
+  session.thread.cleanupSubscription();
+  await session.thread.clearAndReleaseLock();
   state.pendingNewThread = true;
 }
 
-async function cloneDriftedThread(state: TUIState): Promise<boolean> {
+async function cloneDriftedThread(state: TUIState, { session }: LocalRuntime): Promise<boolean> {
   const currentPath = state.projectInfo.rootPath;
-  const currentResourceId = state.session.identity.getResourceId();
+  const currentResourceId = session.identity.getResourceId();
   const driftCandidates = (
-    await state.session.thread.list({
+    await session.thread.list({
       allResources: true,
       metadata: { projectPath: currentPath },
     })
@@ -120,7 +133,7 @@ async function cloneDriftedThread(state: TUIState): Promise<boolean> {
     await new Promise(resolve => setTimeout(resolve, 50));
     progress.updateStatus('Loading cloned thread...');
     state.ui.requestRender();
-    await state.session.thread.cloneToCurrentResource({
+    await session.thread.cloneToCurrentResource({
       threadId: thread.id,
       expectedResourceId: thread.resourceId,
       expectedProjectPath: currentPath,

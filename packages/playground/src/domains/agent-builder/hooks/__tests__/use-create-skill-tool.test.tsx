@@ -48,8 +48,7 @@ const seedWorkspaceWrite = () => {
   return workspaceIds;
 };
 
-const asInMemoryFiles = (files: StoredSkillFileNode[] | undefined): InMemoryFileNode[] =>
-  (files ?? []) as InMemoryFileNode[];
+const asInMemoryFiles = (files: StoredSkillFileNode[] | undefined): InMemoryFileNode[] => files ?? [];
 
 type SkillTool = ReturnType<typeof useCreateSkillTool>;
 type SkillToolInput = Parameters<NonNullable<SkillTool['execute']>>[0];

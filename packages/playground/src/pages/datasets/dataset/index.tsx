@@ -36,7 +36,7 @@ function DatasetPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?:
 }
 
 function DatasetPage() {
-  const { datasetId } = useParams()! as { datasetId: string };
+  const { datasetId } = useParams() as { datasetId: string };
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeVersion } = useDatasetItemsUrlState(searchParams, setSearchParams);

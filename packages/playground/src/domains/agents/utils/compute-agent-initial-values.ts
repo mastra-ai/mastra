@@ -101,9 +101,7 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
       }
     | undefined;
 
-  const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(
-    dataSource.instructions as Parameters<typeof mapInstructionBlocksFromApi>[0],
-  );
+  const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(dataSource.instructions);
 
   return {
     name: dataSource.name || '',

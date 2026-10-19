@@ -4336,6 +4336,43 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(execute).not.toHaveBeenCalled();
     });
 
+    it('returns invalid input to the model instead of requesting approval on the network path (#26771)', async () => {
+      const execute = vi.fn().mockResolvedValue({ result: 'should not run' });
+      const guardedTool = createTool({
+        id: 'guardedTool',
+        description: 'A tool that requires approval.',
+        inputSchema: z.object({ query: z.string(), limit: z.number() }),
+        requireApproval: true,
+        execute,
+      });
+
+      const mockModel = createRoutingMockModel('guardedTool', 'tool', JSON.stringify({ query: 42 }));
+      const networkAgent = new Agent({
+        id: 'invalid-input-network-agent',
+        name: 'Invalid Input Network Agent',
+        instructions: 'Use guardedTool.',
+        model: mockModel,
+        tools: { guardedTool },
+        memory,
+      });
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Process the query "guarded"', {
+        memory: { thread: 'test-thread-invalid-input', resource: 'test-resource-invalid-input' },
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of anStream) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks.map(chunk => chunk.type)).not.toContain('tool-execution-approval');
+      const executionEnd = chunks.find(chunk => chunk.type === 'tool-execution-end');
+      expect(JSON.stringify(executionEnd?.payload?.result)).toMatch(/validation failed/i);
+      expect(execute).not.toHaveBeenCalled();
+    });
+
     it('stringifies circular or undefined beforeApproval output on the network path (#26772)', async () => {
       const circular: Record<string, unknown> = { error: 'loop' };
       circular.self = circular;

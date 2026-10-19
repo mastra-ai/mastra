@@ -1,4 +1,3 @@
-import { knownExternalAuthor } from '@mastra/factory/rules/types';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
@@ -15,7 +14,6 @@ import {
   CardActions,
   CardStatus,
   CommentCount,
-  ExternalAuthorBadge,
   MetadataLabels,
   SourceTitle,
   WorkItemSourceIcon,
@@ -53,7 +51,6 @@ export function WorkItemCardRows({
   open: boolean;
 }) {
   const otherStages = item.stages.filter(stage => stage !== columnStage);
-  const external = knownExternalAuthor(item);
   const verdict = columnReviewVerdict(item, columnStage);
 
   return (
@@ -90,11 +87,10 @@ export function WorkItemCardRows({
           ))}
         </div>
       )}
-      {(status.kind !== 'idle' || external || verdict) && (
+      {(status.kind !== 'idle' || verdict) && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <CardStatus status={status} />
           {verdict && <ReviewVerdictBadge verdict={verdict} />}
-          {external && <ExternalAuthorBadge className="ml-auto" />}
         </div>
       )}
       <CardActions

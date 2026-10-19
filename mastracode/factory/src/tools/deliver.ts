@@ -25,7 +25,7 @@ export type FactoryDeliveryResult =
   | {
       delivered: 'skipped';
       notificationId?: string;
-      reason: 'thread-not-found' | 'thread-not-owned' | 'session-not-found' | 'discarded';
+      reason: 'thread-not-found' | 'thread-not-owned' | 'session-not-found' | 'offline' | 'discarded';
     };
 
 /**
@@ -46,11 +46,14 @@ export async function deliverFactorySessionNotification({
   sessions,
   target,
   notification,
+  onlyIfLive = false,
 }: {
   controller: FactoryDeliveryController;
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
   target: FactoryDeliveryTarget;
   notification: Omit<SendNotificationSignalInput, 'source'>;
+  /** Skip, without creating anything, when no live session owns the target (stage notices). */
+  onlyIfLive?: boolean;
 }): Promise<FactoryDeliveryResult> {
   const thread = await controller.queryThreadById({ threadId: target.threadId });
   if (!thread) return { delivered: 'skipped', reason: 'thread-not-found' };
@@ -65,6 +68,7 @@ export async function deliverFactorySessionNotification({
   // and this is a server-side lookup on the target's behalf, not the sender's.
   let session = await controller.getSessionByResource(ownerResourceId);
   if (!session) {
+    if (onlyIfLive) return { delivered: 'skipped', reason: 'offline' };
     const row = await sessions.getBySessionId(target.sessionId);
     if (!row?.factoryProjectId) return { delivered: 'skipped', reason: 'session-not-found' };
     session = await createSessionAsRowOwner(controller, {

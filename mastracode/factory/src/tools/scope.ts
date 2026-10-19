@@ -31,6 +31,8 @@ export interface FactoryToolScope {
   interactive: boolean;
   /** The caller's name and avatar, stamped on audit events so the board can show who acted. */
   actorProfile?: AuditActorProfileInput;
+  /** Set for a side session: the user session and thread that started it. */
+  origin?: { sessionId: string; threadId: string };
 }
 
 export interface ResolveFactoryToolScopeOptions {
@@ -77,12 +79,19 @@ export async function resolveFactoryToolScope({
   // A caller from another org never acts here, worker or not.
   if (caller && row.orgId !== caller.orgId) return null;
 
-  // Any binding, active or revoked, on any thread: a session that ever ran a role stays a worker.
-  const worker = await workItems.hasRunBindingForSession({
-    orgId: row.orgId,
-    factoryProjectId: row.factoryProjectId,
-    sessionId: row.sessionId,
-  });
+  // A side session works for the session that started it. Otherwise any
+  // binding, active or revoked, on any thread: a session that ever ran a role stays a worker.
+  const origin =
+    row.originSessionId && row.originThreadId
+      ? { sessionId: row.originSessionId, threadId: row.originThreadId }
+      : undefined;
+  const worker =
+    origin !== undefined ||
+    (await workItems.hasRunBindingForSession({
+      orgId: row.orgId,
+      factoryProjectId: row.factoryProjectId,
+      sessionId: row.sessionId,
+    }));
 
   // A worker acts as its session row: dispatcher-driven runs carry no signed-in user.
   // A user session acts as the signed-in caller, who must be able to see it.
@@ -108,5 +117,6 @@ export async function resolveFactoryToolScope({
     kind: worker ? 'worker' : 'user',
     interactive: requestContext.get(FACTORY_INTERACTIVE_KEY) === true,
     ...(identity.actorProfile ? { actorProfile: identity.actorProfile } : {}),
+    ...(origin ? { origin } : {}),
   };
 }

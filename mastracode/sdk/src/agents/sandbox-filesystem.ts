@@ -85,6 +85,20 @@ export interface SandboxFilesystemOptions {
 /** Default per-command deadline so a hung sandbox can't block file tools forever. */
 const COMMAND_TIMEOUT_MS = 30_000;
 
+/**
+ * Explain why a native grep command failed so callers can tell a timeout or
+ * broken toolchain apart from a pattern the engine cannot express.
+ */
+function describeGrepFailure(result: SandboxCommandResult): string {
+  if (result.exitCode === 124) return `timed out after ${COMMAND_TIMEOUT_MS / 1000}s`;
+  const stderrLine = result.stderr
+    .split('\n')
+    .map(line => line.trim())
+    .find(Boolean);
+  const detail = stderrLine ? `: ${stderrLine.length > 200 ? `${stderrLine.slice(0, 200)}…` : stderrLine}` : '';
+  return `exit code ${result.exitCode}${detail}`;
+}
+
 /** Single-quote a string for safe POSIX shell interpolation. */
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -616,7 +630,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     if (result.exitCode === 1) return [];
     const results = this.parseRipgrepJson(result.stdout, abs, options);
     if (result.exitCode !== 0 && results.length === 0) {
-      throw new UnsupportedGrepPatternError(options.pattern);
+      throw new UnsupportedGrepPatternError(options.pattern, describeGrepFailure(result));
     }
     return results;
   }
@@ -690,21 +704,23 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   private async grepWithPosixGrep(abs: string, options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
     if (SandboxFilesystem.ERE_UNSUPPORTED.test(options.pattern)) {
-      throw new UnsupportedGrepPatternError(options.pattern);
+      throw new UnsupportedGrepPatternError(options.pattern, 'POSIX ERE cannot express this syntax');
     }
     let jsRegex: RegExp;
     try {
       jsRegex = new RegExp(options.pattern, options.caseSensitive ? '' : 'i');
     } catch {
-      throw new UnsupportedGrepPatternError(options.pattern);
+      throw new UnsupportedGrepPatternError(options.pattern, 'invalid regular expression');
     }
     // Reconstructing per-match context from `grep -C` text output is not
     // reliable (separator lines are ambiguous); let the host walk handle it.
     if (options.contextLines) {
-      throw new UnsupportedGrepPatternError(options.pattern);
+      throw new UnsupportedGrepPatternError(options.pattern, 'context lines are not supported by POSIX grep');
     }
     const args = [
       'grep -rnIE',
+      // .git is filtered host-side too; skip it so object files are not scanned.
+      '--exclude-dir=.git',
       options.caseSensitive ? '' : '-i',
       options.maxCountPerFile !== undefined ? `-m ${Math.max(1, Math.floor(options.maxCountPerFile))}` : '',
       '--',
@@ -715,8 +731,10 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       .join(' ');
     const result = await this.exec(args);
     if (result.exitCode === 1) return [];
-    if (result.exitCode !== 0) {
-      throw new UnsupportedGrepPatternError(options.pattern);
+    // Like rg, grep exits 2 on per-file errors (e.g. an unreadable file) while
+    // still printing matches for the rest; keep those partial results.
+    if (result.exitCode !== 0 && !(result.exitCode === 2 && result.stdout.trim())) {
+      throw new UnsupportedGrepPatternError(options.pattern, describeGrepFailure(result));
     }
     // grep -n has no column output; recompute with the JS regex host-side so
     // columns are UTF-16 indices, consistent with the fallback implementation.
@@ -730,7 +748,9 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       const column = jsRegex.exec(text)?.index;
       // grep matched this line but the JS regex did not: the two dialects
       // disagree on this pattern, so the columns would be wrong. Fall back.
-      if (column === undefined) throw new UnsupportedGrepPatternError(options.pattern);
+      if (column === undefined) {
+        throw new UnsupportedGrepPatternError(options.pattern, 'POSIX ERE and JS RegExp disagree on this pattern');
+      }
       let matches = byFile.get(rel);
       if (!matches) {
         matches = [];

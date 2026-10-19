@@ -1,5 +1,89 @@
 # @mastra/core
 
+## 1.79.0-alpha.3
+
+### Minor Changes
+
+- Added iteration-aware final output processing so processors receive the current feedback-continuation iteration as its own assistant message and can transform each iteration independently. ([#26346](https://github.com/mastra-ai/mastra/pull/26346))
+
+  Fixed feedback continuations with output processors so rewrites and redactions are preserved in `getFullOutput().text` and `steps[].text` instead of returning raw earlier-iteration text.
+
+  Custom output processors that persist transcripts should use `messageList.cloneForPersistence()` to retain one assistant response with its original identity and order.
+
+  ```ts
+  // Before: may persist processor-visible response messages separately.
+  const processor = {
+    id: 'transcript-persister',
+    processOutputResult: async ({ messages, messageList }) => {
+      await saveMessages(messageList.get.response.db());
+      return messages;
+    },
+  };
+
+  // After: preserves one assistant response with its original identity and order.
+  const processor = {
+    id: 'transcript-persister',
+    processOutputResult: async ({ messages, messageList }) => {
+      await saveMessages(messageList.cloneForPersistence().get.response.db());
+      return messages;
+    },
+  };
+  ```
+
+### Patch Changes
+
+- Fixed MCP tool results containing images or audio being dropped by AI SDK v5 models and rejected by AI SDK v7 models such as Amazon Bedrock (`unsupported tool content part type: image-data`). MCP media content is now passed to every model in the format it supports. ([#26662](https://github.com/mastra-ai/mastra/pull/26662))
+
+- Fixed notifications that failed on their first delivery attempt. Delivery now retries automatically, up to five attempts, instead of staying pending forever. Retries preserve the claimed-owner requirement. ([#25837](https://github.com/mastra-ai/mastra/pull/25837))
+
+- `respondToPersistedToolApproval` now accepts `alwaysAllowCategory`. Approving a tool call restored after a restart with "always allow" grants the tool's category to the run's thread, matching a live approval. ([#27222](https://github.com/mastra-ai/mastra/pull/27222))
+
+  ```ts
+  await session.respondToPersistedToolApproval({ toolCallId, approved: true, alwaysAllowCategory: true });
+  ```
+
+- Fixed agents crashing with `Class constructor ... cannot be invoked without 'new'` when a tool's schema is a class-based Standard Schema, such as an Effect `Schema.Class` adapted with `Schema.toStandardSchemaV1`. Tools can now use class-based schemas the same way as `Schema.Struct`. ([#27317](https://github.com/mastra-ai/mastra/pull/27317))
+
+- Fixed goal judges and subagents hanging inside an Agent Controller session. Previously they inherited the session's memory thread and waited on it forever. Goal judges now use their own goal-specific thread. Forked subagents use the cloned thread. Non-forked subagents no longer inherit the session's thread and resource IDs. ([#27323](https://github.com/mastra-ai/mastra/pull/27323))
+
+## 1.79.0-alpha.2
+
+### Minor Changes
+
+- `session.thread.transferOwnership` now accepts an optional `threadId`, so you can transfer a thread without switching the session to it first. Without `threadId` it still transfers the active thread. ([#27043](https://github.com/mastra-ai/mastra/pull/27043))
+
+  ```ts
+  await session.thread.transferOwnership({ toOwnerId: 'user-456', threadId: 'thread-123' });
+  ```
+
+- Span records now carry `timeToFirstChunkMs`, the milliseconds from span start to the first streamed chunk. The storage exporters fill it in, so storage adapters save the value without computing it. ([#27140](https://github.com/mastra-ai/mastra/pull/27140))
+
+### Patch Changes
+
+- Fixed `Classifier.decide()` crashing with `state.map is not a function` on decision providers built for `@ai-sdk/provider` 4.0.25 and newer, such as `@ai-sdk/typesafe-ai` 3.0.16+. String and JSON state are now converted to `text` and `json` parts before the provider is called, matching the AI SDK. Arrays are passed through only when every element is already a state part; other JSON arrays are wrapped in a `json` part. ([#27298](https://github.com/mastra-ai/mastra/pull/27298))
+
+- You can now resume durable agents (`createDurableAgent`, `createInngestAgent`) with the same `resumeGenerate(resumeData, { runId })` call you use with `Agent`. ([#27299](https://github.com/mastra-ai/mastra/pull/27299))
+
+  ```ts
+  // Before (durable-only order, still supported but deprecated)
+  await durableAgent.resumeGenerate(runId, { approved: true });
+
+  // After (same as Agent)
+  await durableAgent.resumeGenerate({ approved: true }, { runId });
+  ```
+
+  One deprecated call shape now throws instead of guessing: a string run ID followed by resume data that itself contains a string `runId`, with no third argument, for example `resumeGenerate('run-A', { runId: 'x', approved: true })`. To keep using the deprecated order, pass an explicit options argument: `resumeGenerate('run-A', { runId: 'x', approved: true }, {})`.
+
+- Fixed `LocalSandbox` commands that could hang past their timeout. When a command times out, it is asked to stop and then force-killed two seconds later if it is still running, including child processes that keep its output open. Previously a command that ignored the stop request kept the tool call waiting forever. ([#26879](https://github.com/mastra-ai/mastra/pull/26879))
+
+- Fixed trajectory scorers in `runEvals` and dataset experiments getting a flat list of tool calls instead of the full trace when storage is configured. `runEvals` also no longer waits up to 6 seconds per item before scoring. ([#27271](https://github.com/mastra-ai/mastra/pull/27271))
+
+- Fixed the 30-second default timeout for `LocalSandbox` foreground commands. A command run without a timeout could previously wait forever. Configured defaults and per-command timeouts are honored, including `0` to disable the timeout, and cloned sandboxes keep the configured default. Background processes keep their existing lifetime. ([#26878](https://github.com/mastra-ai/mastra/pull/26878))
+
+- Fixed authenticated agent controller sessions failing with `AGENT_MEMORY_THREAD_RESOURCE_MISMATCH` when auth uses `mapUserToResourceId`. The controller now sets the reserved memory resource and thread keys to the session's own resource and thread. Other auth values in the request context are kept. ([#27304](https://github.com/mastra-ai/mastra/pull/27304))
+
+- Removed the `gray-matter` dependency. SKILL.md frontmatter is now parsed with the `yaml` package directly, which drops the vulnerable `sprintf-js` package (GHSA-hp3w-g68c-fv3c, no patched release available) from the production dependency tree. YAML frontmatter that worked before keeps working; JavaScript frontmatter (`---js`) is still rejected. ([#27198](https://github.com/mastra-ai/mastra/pull/27198))
+
 ## 1.79.0-alpha.1
 
 ### Minor Changes

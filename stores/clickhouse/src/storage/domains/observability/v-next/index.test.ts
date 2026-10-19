@@ -46,6 +46,8 @@ import {
   MV_DISCOVERY_PAIRS,
   MV_DISCOVERY_VALUES,
   MV_SCORE_EVENTS_CURRENT,
+  MV_TRACE_BRANCHES,
+  MV_TRACE_ROOTS,
   MV_TRACE_ROOTS_DELTA,
   MV_SCORE_EVENTS_DELTA,
   buildScoreEventsDeltaMvDDL,
@@ -62,8 +64,11 @@ import {
   TABLE_SCORE_EVENTS_CURRENT_BACKFILL,
   TABLE_SCORE_EVENTS_DELTA,
   TABLE_SPAN_EVENTS,
+  TABLE_TRACE_BRANCHES,
   TABLE_TRACE_ROOTS,
   TABLE_TRACE_ROOTS_DELTA,
+  TRACE_BRANCHES_MV_DDL,
+  TRACE_ROOTS_MV_DDL,
 } from './ddl';
 import { feedbackRecordToRow, scoreRecordToRow, spanRecordToRow } from './helpers';
 import { isReplacingMergeTreeEngine } from './migration';
@@ -1051,6 +1056,7 @@ LIMIT 1`,
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        'trace-query-time-to-first-chunk',
         'trace-aggregate',
         'span-query',
         'span-query-context-fields',
@@ -1077,6 +1083,7 @@ LIMIT 1`,
           'trace-query-tenant-scope',
           'feedback',
           'trace-query-context-ids',
+          'trace-query-time-to-first-chunk',
           'trace-aggregate',
           'span-query',
           'span-query-context-fields',
@@ -6414,6 +6421,63 @@ LIMIT 1`,
           format: 'JSONEachRow',
         });
         expect(await markerResult.json<{ marker: string }>()).toEqual([{ marker: 'v1' }]);
+      } finally {
+        await new ObservabilityStorageClickhouseVNext({ client }).init();
+        await client.close();
+      }
+    });
+
+    it('adds timeToFirstChunkMs to existing span tables and copies it into trace roots and branches', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const spanTables = [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES];
+      const startedAt = new Date('2026-01-01T00:00:00Z');
+      const span = (traceId: string, timeToFirstChunkMs: number) => ({
+        traceId,
+        spanId: 'root',
+        parentSpanId: null,
+        name: 'agent run',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        startedAt,
+        endedAt: new Date(startedAt.getTime() + 1000),
+        timeToFirstChunkMs,
+      });
+
+      try {
+        // Rebuild the pre-upgrade state: tables without the column, and the
+        // root / branch views created on top of them.
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_TRACE_ROOTS}` });
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_TRACE_BRANCHES}` });
+        for (const table of spanTables) {
+          await client.command({ query: `ALTER TABLE ${table} DROP COLUMN IF EXISTS timeToFirstChunkMs` });
+        }
+        await client.command({ query: TRACE_ROOTS_MV_DDL });
+        await client.command({ query: TRACE_BRANCHES_MV_DDL });
+        // A row written before the upgrade, through the old column set.
+        const { timeToFirstChunkMs: _dropped, ...legacyRow } = spanRecordToRow(span('ttfc-upgrade-old', 100));
+        await client.insert({ table: TABLE_SPAN_EVENTS, values: [legacyRow], format: 'JSONEachRow' });
+
+        const upgraded = new ObservabilityStorageClickhouseVNext({ client });
+        await upgraded.init();
+        await upgraded.batchCreateSpans({
+          records: [span('ttfc-upgrade-new', 250)],
+        });
+
+        for (const table of spanTables) {
+          const result = await client.query({
+            query: `SELECT traceId, timeToFirstChunkMs FROM ${table} FINAL
+              WHERE traceId IN ('ttfc-upgrade-old', 'ttfc-upgrade-new') ORDER BY traceId`,
+            format: 'JSONEachRow',
+          });
+          expect(await result.json(), table).toEqual([
+            { traceId: 'ttfc-upgrade-new', timeToFirstChunkMs: 250 },
+            { traceId: 'ttfc-upgrade-old', timeToFirstChunkMs: null },
+          ]);
+        }
       } finally {
         await new ObservabilityStorageClickhouseVNext({ client }).init();
         await client.close();

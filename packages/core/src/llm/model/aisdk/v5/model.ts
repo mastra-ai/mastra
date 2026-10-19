@@ -1,6 +1,7 @@
 import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
 import type { MastraLanguageModelV2 } from '../../shared.types';
 import { createStreamFromGenerateResult } from '../generate-to-stream';
+import { toSingleSystemMessage } from '../single-system-message';
 
 type StreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;
 
@@ -108,7 +109,7 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
   }
 
   async doGenerate(options: LanguageModelV2CallOptions) {
-    const result = await this.#model.doGenerate(applyStrictForV2(options));
+    const result = await this.#model.doGenerate(applyStrictForV2(this.#withSingleSystemMessage(options)));
 
     return {
       ...result,
@@ -119,7 +120,12 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
   }
 
   async doStream(options: LanguageModelV2CallOptions) {
-    return await this.#model.doStream(applyStrictForV2(options));
+    return await this.#model.doStream(applyStrictForV2(this.#withSingleSystemMessage(options)));
+  }
+
+  #withSingleSystemMessage(options: LanguageModelV2CallOptions): LanguageModelV2CallOptions {
+    const prompt = toSingleSystemMessage(this.provider, options.prompt);
+    return prompt === options.prompt ? options : { ...options, prompt };
   }
 
   /**

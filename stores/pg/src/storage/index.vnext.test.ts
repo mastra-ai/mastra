@@ -141,6 +141,7 @@ describe('PostgresStoreVNext', () => {
           'trace-query-tenant-scope',
           'feedback',
           'trace-query-context-ids',
+          'trace-query-time-to-first-chunk',
         ]);
 
         coreFeatures.delete('observability-delta-polling');
@@ -163,6 +164,7 @@ describe('PostgresStoreVNext', () => {
           'trace-query-tenant-scope',
           'feedback',
           'trace-query-context-ids',
+          'trace-query-time-to-first-chunk',
         ]);
       } finally {
         coreFeatures.clear();

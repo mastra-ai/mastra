@@ -59,7 +59,7 @@ export function FilterBarOptionList<T>({
 }: FilterBarOptionListProps<T>) {
   const { describeSuggestionsError } = useFilterBarContext();
   const idle = !isLoading && error === undefined;
-  const menu = useFluidMenu<HTMLDivElement>();
+  const menu = useFluidMenu();
   const renderItem = (option: T) => {
     const selected = isSelected?.(option) ?? false;
     return (

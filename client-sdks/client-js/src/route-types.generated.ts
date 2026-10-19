@@ -3484,6 +3484,8 @@ type Shared_Type_61 = {
   outputPreview?: (string | null) | undefined;
   /** Short text preview of the span error */
   errorPreview?: (string | null) | undefined;
+  /** Milliseconds from span start to the first streamed chunk; null when the span never streamed one */
+  timeToFirstChunkMs?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3599,6 +3601,8 @@ type Shared_Type_63 = {
   outputPreview?: (string | null) | undefined;
   /** Short text preview of the span error */
   errorPreview?: (string | null) | undefined;
+  /** Milliseconds from span start to the first streamed chunk; null when the span never streamed one */
+  timeToFirstChunkMs?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3626,6 +3630,7 @@ type Shared_Type_64 = {
   entityType: string | null;
   environment: string | null;
   status: 'success' | 'error';
+  timeToFirstChunkMs?: (number | null) | undefined;
 };
 
 type Shared_Type_65 = {
@@ -3715,6 +3720,8 @@ type Shared_Type_67 = {
   traceQueryRootDuration: boolean;
   /** `runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries */
   traceQueryContextIds: boolean;
+  /** `timeToFirstChunkMs` in trace and span query results, and predicates on it in trace, thread and span queries */
+  traceQueryTimeToFirstChunk: boolean;
   /** Trace query field discovery (POST /observability/traces/query/fields and /values) */
   traceQueryDiscovery: boolean;
   /** Trusted tenant scoping of trace and thread queries */
@@ -10772,6 +10779,7 @@ export type PostObservabilitySpansQuery_Response = {
     inputPreview: string | null;
     outputPreview: string | null;
     errorPreview: string | null;
+    timeToFirstChunkMs?: (number | null) | undefined;
   }[];
   page: {
     next: string | null;
@@ -23426,6 +23434,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_QueryP
 export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body = {
   toolCallId: string;
   approved: boolean;
+  alwaysAllowCategory?: boolean | undefined;
   requestContext?:
     | {
         [key: string]: unknown;

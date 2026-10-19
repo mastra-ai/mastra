@@ -179,6 +179,21 @@ describe('handleError', () => {
     });
   });
 
+  describe('time travel conflicts', () => {
+    it.each(['WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED', 'WORKFLOW_TIME_TRAVEL_RUN_RUNNING'])('maps %s to 409', id => {
+      const err = Object.assign(new Error('already claimed'), { id });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(409);
+      expect(caught!.message).toBe('already claimed');
+    });
+  });
+
   describe('durable agent run conflicts', () => {
     it.each([
       'DURABLE_AGENT_RUN_ACTIVE',

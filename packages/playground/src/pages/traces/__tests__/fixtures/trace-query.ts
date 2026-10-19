@@ -91,7 +91,7 @@ export const traceQueryPage: TraceQueryKeysetTraceResponse = {
 export const traceQueryPageWithThreadAndEnvironment: Awaited<ReturnType<MastraClient['queryTraces']>> = {
   traces: [
     {
-      ...traceQueryPage.traces[0]!,
+      ...traceQueryPage.traces[0],
       traceId: 'trace-env',
       rootSpanId: 'span-env',
       environment: 'production',
@@ -217,7 +217,7 @@ export const traceQueryFieldsWithAggregate: GetTraceQueryFieldsResponse = {
 };
 
 const groupedTrace = (traceId: string, entityName: string, status: 'success' | 'error') => ({
-  ...traceQueryPage.traces[0]!,
+  ...traceQueryPage.traces[0],
   traceId,
   rootSpanId: `span-${traceId}`,
   name: entityName,

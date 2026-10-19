@@ -1,4 +1,5 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import type { DropdownMenuTriggerProps } from '@mastra/playground-ui/components/DropdownMenu';
 import { RotateCcw, Settings2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -7,23 +8,26 @@ export function PropertiesMenu({
   changedCount,
   onReset,
   align = 'start',
+  variant = 'ghost',
   children,
 }: {
   label: string;
   changedCount: number;
   onReset: () => void;
   align?: 'start' | 'end';
+  variant?: DropdownMenuTriggerProps['variant'];
   children: ReactNode;
 }) {
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger
-        variant="ghost"
-        size="icon-sm"
+        variant={variant}
+        size={changedCount === 0 ? 'icon-sm' : 'sm'}
         aria-label={changedCount === 0 ? label : `${label}, ${changedCount} changed`}
         tooltip={label}
       >
         <Settings2 size={15} aria-hidden />
+        {changedCount > 0 && <span className="tabular-nums">{changedCount}</span>}
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align={align}>
         {children}
