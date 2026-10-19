@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { StreamErrorRetryProcessor } from '../../../../processors';
 import { createTool } from '../../../../tools';
 import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
@@ -135,4 +136,85 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
       );
     });
   }
+});
+
+/**
+ * A `stopWhen` predicate reads the last step's tool results to decide whether to stop. Each step it
+ * sees must carry that step's own results, never another step's: a stale result can stop the run
+ * early, and `onIterationComplete` would report the same tool result twice.
+ *
+ * The retry is a real mid-stream failure: aimock streams a few deltas, then resets the socket.
+ */
+
+const midStreamDrop = { chunkSize: 5, latency: 20, disconnectAfterMs: 150 };
+// Same processor id as the shipped default, so it replaces it; the default waits 3s before retrying.
+const retryWithoutBackoff = () => [new StreamErrorRetryProcessor({ maxRetries: 2 })];
+
+const lookupOrderTool = createTool({
+  id: 'lookupOrder',
+  description: 'Look up an order by id.',
+  inputSchema: z.object({ orderId: z.string() }),
+  execute: async ({ orderId }) => ({ orderId, status: 'shipped' }),
+});
+
+type SeenStep = { finishReason: string; toolResultIds: string[] };
+
+describeForAllEngines('stopWhen sees each step with its own tool results', engine => {
+  const getMock = useLoopScenarioAimock();
+
+  // Technical: the processAPIError retry returns `output.steps` unchanged, so the predicate's synthetic
+  // `retry` step must not pick up the previous accepted step's transcript entry (#24224 review).
+  it('a step retried after a dropped connection reports no tool results of its own', async () => {
+    const seenByStopWhen: SeenStep[] = [];
+    const seenByIterationHook: SeenStep[] = [];
+
+    const { output } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Where is my order #4821?',
+      tools: { lookupOrder: lookupOrderTool },
+      maxSteps: 5,
+      stopWhen: ({ steps }) => {
+        const last = steps.at(-1)!;
+        seenByStopWhen.push({
+          finishReason: last.finishReason,
+          toolResultIds: last.toolResults.map(r => r.toolCallId),
+        });
+        return false;
+      },
+      onIterationComplete: ctx => {
+        seenByIterationHook.push({ finishReason: ctx.finishReason, toolResultIds: ctx.toolResults.map(r => r.id) });
+      },
+      errorProcessors: retryWithoutBackoff(),
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_lookup', name: 'lookupOrder', arguments: JSON.stringify({ orderId: '4821' }) }] },
+        );
+        llm.on(
+          { endpoint: 'chat', hasToolResult: true, sequenceIndex: 0 },
+          { content: 'Your order shipped yesterday and should arrive by Friday, tracking number' },
+          midStreamDrop,
+        );
+        llm.on(
+          { endpoint: 'chat', hasToolResult: true, sequenceIndex: 1 },
+          { content: 'Your order #4821 shipped yesterday.' },
+        );
+      },
+    });
+
+    expect(await output.text).toBe('Your order #4821 shipped yesterday.');
+    const lookupStep = { finishReason: 'tool-calls', toolResultIds: ['call_lookup'] };
+    const retryStep = { finishReason: 'retry', toolResultIds: [] };
+    const replyStep = { finishReason: 'stop', toolResultIds: [] };
+    if (isDurableEngineVariant(engine)) {
+      // The durable loop retries inside the step and never surfaces a `retry` step (same as main).
+      expect(seenByStopWhen).toEqual([lookupStep]);
+      expect(seenByIterationHook).toEqual([lookupStep, replyStep]);
+    } else {
+      // stopWhen is not consulted after the final step; onIterationComplete is.
+      expect(seenByStopWhen).toEqual([lookupStep, retryStep]);
+      expect(seenByIterationHook).toEqual([lookupStep, retryStep, replyStep]);
+    }
+  });
 });

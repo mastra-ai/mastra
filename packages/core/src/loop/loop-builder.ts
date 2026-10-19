@@ -27,9 +27,12 @@ import {
 } from './run-scope-keys';
 import { decideContinuation } from './shared/continuation-core';
 import { drainSignalsToTranscript } from './shared/steps/signal-drain-core';
+import { getTranscriptStepContent } from './shared/transcript-step';
+import type { TranscriptStep } from './shared/transcript-step';
 import type { LoopRun } from './types';
 import { createBackgroundTaskCheckStep } from './workflows/agentic-execution/background-task-check-step';
 import { EagerToolExecutionCoordinator } from './workflows/agentic-execution/eager-tool-execution';
+import { EarlyToolResultStream } from './workflows/agentic-execution/early-tool-result-stream';
 import { createGoalStep } from './workflows/agentic-execution/goal-step';
 import { createIsTaskCompleteStep } from './workflows/agentic-execution/is-task-complete-step';
 import { createLLMExecutionStep } from './workflows/agentic-execution/llm-execution-step';
@@ -96,6 +99,8 @@ export type LoopWorkflow = Workflow<any, any, any, any, any, any, any, any>;
  */
 export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefined> {
   readonly #params?: AgenticLoopBuilderParams<Tools, OUTPUT>;
+  /** Where each step's parts sit in the response, recorded by the execution step. */
+  readonly #transcriptSteps: (TranscriptStep | undefined)[] = [];
 
   /**
    * The main loop resolves everything from per-run params captured at
@@ -181,6 +186,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     return createLLMExecutionStep<Tools, OUTPUT>({
       ...this.params,
       toolCallForeachOptions,
+      transcriptSteps: this.#transcriptSteps,
       eagerCoordinator: eager?.coordinator,
       eagerToolCallStep: eager?.toolCallStep,
     });
@@ -190,8 +196,8 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     return createToolCallStep<Tools, OUTPUT>({ ...this.params });
   }
 
-  protected llmMappingStep(llmExecutionStep: LoopStep): LoopStep {
-    return createLLMMappingStep<Tools, OUTPUT>({ ...this.params }, llmExecutionStep as any);
+  protected llmMappingStep(llmExecutionStep: LoopStep, earlyToolResults?: EarlyToolResultStream): LoopStep {
+    return createLLMMappingStep<Tools, OUTPUT>({ ...this.params }, llmExecutionStep as any, earlyToolResults);
   }
 
   protected backgroundTaskCheckStep(): LoopStep {
@@ -308,7 +314,18 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       toolCallForeachOptions,
       eagerCoordinator ? { coordinator: eagerCoordinator, toolCallStep } : undefined,
     );
-    const llmMappingStep = this.llmMappingStep(llmExecutionStep);
+    // Parallel tool results stream as each call finishes rather than after the slowest one
+    // (#21902). The eager path keeps the plain step: an eager attempt can still be discarded.
+    const earlyToolResults = new EarlyToolResultStream();
+    const foreachToolCallStep: LoopStep = {
+      ...toolCallStep,
+      execute: async params => {
+        const output = await toolCallStep.execute(params);
+        earlyToolResults.settle(output as any, params.getStepResult(llmExecutionStep as any));
+        return output;
+      },
+    };
+    const llmMappingStep = this.llmMappingStep(llmExecutionStep, earlyToolResults);
     const backgroundTaskCheckStep = this.backgroundTaskCheckStep();
     const signalDrainStep = this.signalDrainStep();
     const isTaskCompleteStep = this.isTaskCompleteStep();
@@ -382,13 +399,14 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             logger: rest.logger,
           });
           emittedConcurrencyResolved = true;
+          earlyToolResults.begin(toolCallForeachOptions.concurrency > 1 && toolCalls.length > 1);
           writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
           writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', typedInputData.output.usage);
           return toolCalls;
         },
         { id: 'map-tool-calls' },
       )
-      .foreach(toolCallStep, {
+      .foreach(foreachToolCallStep, {
         // On a resume that re-enters the suspended foreach, map-tool-calls already
         // completed in the snapshot and is skipped, so the limit above was never
         // recomputed for this instance. Derive it from the persisted tool-call batch
@@ -447,6 +465,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       // that persisted row — see the guard in the predicate below (issue #19445).
       resumeContinuationPending: !!rest.resumeContext,
     };
+    let stepsSeen = 0;
 
     return async (predicateParams: any) => {
       const rt = this.resolveRuntime(predicateParams);
@@ -516,7 +535,18 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       );
 
       // Only include new content in this step (content added since the previous iteration)
-      const currentContent = allContent.slice(state.previousContentLength);
+      // Observational Memory drains the response bucket between steps, which shifts
+      // offsets into the flattened response (#24224). Read this step's parts from where
+      // the execution step recorded them instead. Only an iteration that pushed a step
+      // owns the last entry; a retried attempt pushes nothing, so the entry is the
+      // previous step's and the offset slice below applies.
+      const stepCount = typedInputData.output.steps.length;
+      const pushedStep = stepCount > stepsSeen;
+      stepsSeen = stepCount;
+      const transcriptStep = pushedStep ? this.#transcriptSteps[stepCount - 1] : undefined;
+      const currentContent = transcriptStep
+        ? (getTranscriptStepContent(messageList, transcriptStep) as StepResult<Tools>['content'])
+        : allContent.slice(state.previousContentLength);
       state.previousContentLength = allContent.length;
 
       const toolResultParts = currentContent.filter(part => part.type === 'tool-result');

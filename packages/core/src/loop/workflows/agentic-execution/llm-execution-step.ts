@@ -1260,8 +1260,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   eagerCoordinator,
   eagerToolCallStep,
   runAbortSignal,
+  transcriptSteps = [],
 }: OuterLLMRun<TOOLS, OUTPUT> & {
   toolCallForeachOptions?: ToolCallForeachOptions;
+  /**
+   * Where each accepted step's content sits in the response, by step index. A queued
+   * signal can rotate the response message mid-run, so counting step-start markers
+   * would read the wrong parts. Shared with the loop's continuation predicate.
+   */
+  transcriptSteps?: (TranscriptStep | undefined)[];
   eagerCoordinator?: EagerToolExecutionCoordinator;
   eagerToolCallStep?: { execute: (context: any) => Promise<unknown> };
 }) {
@@ -1273,10 +1280,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
   let currentIteration = 0;
   let eagerAbortListenerRegistered = false;
-  // Where each accepted step's content sits in the response, by step index. A queued
-  // signal can rotate the response message mid-run, so counting step-start markers
-  // would read the wrong parts.
-  const transcriptSteps: (TranscriptStep | undefined)[] = [];
   const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
 
   const cleanupProviderToolSpans = (terminal: boolean) => {
