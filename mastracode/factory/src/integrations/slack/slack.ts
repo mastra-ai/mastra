@@ -14,6 +14,7 @@ import { createSlackAdapter } from '@mastra/slack';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
+import { FACTORY_INTERACTIVE_KEY, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../../auth.js';
 import {
   primeTenantCredentialsForRequestContext,
   primeTenantCredentialsForTenant,
@@ -714,6 +715,7 @@ async function gateDispatch(
   routed?: { link: ChannelAccountLink; factoryProjectId: string };
 } | null> {
   const { accountLinks, projects } = deps;
+  ctx.requestContext.set(FACTORY_INTERACTIVE_KEY, false);
   const sender = await resolveLinkedSender({ thread, message, accountLinks });
   if (sender.status === 'blocked') return null;
   // Linked senders must also route to a Factory project before a run starts.
@@ -741,6 +743,13 @@ async function gateDispatch(
 
     const route = await resolveFactoryForLink({ thread, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;
+    // Owner preparation may replace the sender with the stored session owner.
+    // A different Slack participant must not acquire that owner's management tools.
+    const runUser = getFactoryAuthUserFromContext(ctx.requestContext);
+    ctx.requestContext.set(
+      FACTORY_INTERACTIVE_KEY,
+      message.author.isBot === false && !!runUser && getFactoryAuthUserId(runUser) === sender.link.userId,
+    );
     if (route.status === 'resolved') {
       return { routed: { link: sender.link, factoryProjectId: route.factoryProjectId } };
     }

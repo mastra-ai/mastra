@@ -117,6 +117,33 @@ const rowNamesIn = (groupLabel: string) =>
     .map(row => row.getAttribute('aria-label'));
 
 describe('Sessions sidebar groups', () => {
+  it('lists Slack conversations separately from work and user sessions', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/sessions`, () =>
+        HttpResponse.json({
+          sessions: [...sessions, session('slack-conversation', 'Discuss deploy', 'slack/1792423783-274979', 'new')],
+        }),
+      ),
+    );
+    renderSection();
+
+    const slackRow = await screen.findByRole('button', { name: 'Discuss deploy' });
+    expect(groupRegions()).toEqual([
+      'Work sessions',
+      'Review sessions',
+      'Release Preview sessions',
+      'Slack sessions',
+      'User sessions',
+    ]);
+    expect(
+      within(screen.getByRole('region', { name: 'Slack sessions' })).getByRole('button', { name: 'Discuss deploy' }),
+    ).toBe(slackRow);
+    expect(
+      within(screen.getByRole('region', { name: 'Work sessions' })).queryByRole('button', { name: 'Discuss deploy' }),
+    ).not.toBeInTheDocument();
+    expect(slackRow).toHaveAttribute('aria-label', 'Discuss deploy');
+  });
+
   it('groups sessions by board: Work, Review, custom boards, then User', async () => {
     renderSection();
 
