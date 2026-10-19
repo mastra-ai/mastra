@@ -252,6 +252,10 @@ export interface FactoryProjectPayload {
   autoRunEnabled?: boolean;
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
   autoApprovePlans?: boolean;
+  /** Whether Review agents publish test results as a commit check. Defaults to off. */
+  reviewTestChecksEnabled?: boolean;
+  /** Whether Work items get an independent self-review before the change request opens. Defaults to off. */
+  selfReviewEnabled?: boolean;
 }
 
 /** `{...projectRepository, repository}` payload from the Factory project routes. */
@@ -473,7 +477,10 @@ export async function applyFactoryDefaultModelToSessions(
 export async function updateFactoryAutomation(
   baseUrl: string,
   factoryProjectId: string,
-  patch: { autoRunEnabled?: boolean; autoApprovePlans?: boolean },
+  patch: Pick<
+    FactoryProjectPayload,
+    'autoRunEnabled' | 'autoApprovePlans' | 'reviewTestChecksEnabled' | 'selfReviewEnabled'
+  >,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',

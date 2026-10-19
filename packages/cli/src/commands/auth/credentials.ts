@@ -25,10 +25,14 @@ export interface Credentials {
   currentOrgId?: string;
 }
 
+/** Which CLI entry point started the browser login. Sent to the platform for signup attribution. */
+export type LoginSource = 'create-mastra' | 'mastra-cli-create' | 'create-factory' | 'mastra-cli';
+
 export interface LoginOptions {
   skipOnInput?: boolean;
   allowLogin?: boolean;
   timeoutMs?: number;
+  source?: LoginSource;
 }
 
 export class LoginCancelledError extends Error {
@@ -248,7 +252,7 @@ async function loginAttempt(signal?: AbortSignal, options: LoginOptions = {}): P
     });
   });
 
-  const loginUrl = `${MASTRA_PLATFORM_API_URL}/v1/auth/login?product=cli&cli_port=${port}&state=${state}`;
+  const loginUrl = `${MASTRA_PLATFORM_API_URL}/v1/auth/login?product=cli&cli_port=${port}&state=${state}&source=${options.source ?? 'mastra-cli'}`;
   console.info(`   Opening browser...\n`);
   console.info(
     options.skipOnInput

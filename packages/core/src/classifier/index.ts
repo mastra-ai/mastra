@@ -8,6 +8,7 @@ import {
   type Experimental_DecisionModelV4Input as DecisionModelV4Input,
   type Experimental_DecisionModelV4Question as DecisionModelV4Question,
   type Experimental_DecisionModelV4Result as DecisionModelV4Result,
+  type Experimental_DecisionModelV4State as DecisionModelV4State,
   type Experimental_EvaluationModelV4 as EvaluationModelV4,
   type SharedV4ProviderMetadata,
   type SharedV4ProviderOptions,
@@ -124,15 +125,29 @@ export type BooleanAnswer = {
   probability: number;
 };
 
+/**
+ * The decision model declined to answer the question. Valid for any question type.
+ *
+ * The answer fields are typed as absent so equality checks such as
+ * `answers.route.choice === 'billing'` keep compiling and evaluate to `false` on a refusal.
+ */
+export type RefusalAnswer = {
+  type: 'refusal';
+  choice?: never;
+  score?: never;
+  probability?: never;
+  probabilities?: never;
+};
+
 export type ClassifierAnswer<QUESTION extends ClassifierQuestion> = QUESTION extends {
   type: 'choice';
   criteria: infer CRITERIA extends Readonly<Record<string, DecisionModelV4Input | null>>;
 }
-  ? ChoiceAnswer<Extract<keyof CRITERIA, string>>
+  ? ChoiceAnswer<Extract<keyof CRITERIA, string>> | RefusalAnswer
   : QUESTION extends { type: 'score' }
-    ? ScoreAnswer
+    ? ScoreAnswer | RefusalAnswer
     : QUESTION extends { type: 'boolean' }
-      ? BooleanAnswer
+      ? BooleanAnswer | RefusalAnswer
       : never;
 
 export type ClassifierAnswers<QUESTIONS extends ClassifierQuestions> = {
@@ -322,7 +337,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
           attemptCount += 1;
           try {
             const callOptions = {
-              state: options.state,
+              state: toProviderState(options.state),
               questions: providerQuestions,
               abortSignal: options.abortSignal,
               providerOptions: options.providerOptions,
@@ -400,6 +415,17 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
       throw error;
     }
   }
+}
+
+// Mirrors the AI SDK's decide(): providers receive state as an array of parts.
+function toProviderState(state: ClassifierState): DecisionModelV4State {
+  if (typeof state === 'string') return [{ type: 'text', text: state }];
+  if (Array.isArray(state) && state.every(isStatePart)) return state;
+  return [{ type: 'json', value: state }];
+}
+
+function isStatePart(value: unknown): value is DecisionModelV4State[number] {
+  return isPlainObject(value) && (value.type === 'text' || value.type === 'file' || value.type === 'json');
 }
 
 function toProviderQuestions(questions: ClassifierQuestions): Readonly<Record<string, DecisionModelV4Question>> {
@@ -522,7 +548,7 @@ function validateProviderResult(
   questions: ClassifierQuestions,
   answers: Record<string, DecisionModelV4Answer>,
   rounding?: { probabilityDecimals?: number; scoreDecimals?: number },
-): void {
+): asserts answers is ClassifierAnswers<ClassifierQuestions> {
   if (!isPlainObject(answers)) throw new TypeError('The evaluation model returned invalid answers.');
   const questionIds = Object.keys(questions);
   const answerIds = Object.keys(answers);
@@ -538,7 +564,16 @@ function validateProviderResult(
   for (const questionId of questionIds) {
     const question = questions[questionId]!;
     const answer = answers[questionId]!;
-    if (!isPlainObject(answer) || answer.type !== question.type) {
+    if (!isPlainObject(answer)) {
+      throw new TypeError(`Answer '${questionId}' does not match its question type.`);
+    }
+    if (answer.type === 'refusal') {
+      if (['choice', 'score', 'probability', 'probabilities'].some(field => field in answer)) {
+        throw new TypeError(`Refusal answer '${questionId}' must not include answer fields.`);
+      }
+      continue;
+    }
+    if (answer.type !== question.type) {
       throw new TypeError(`Answer '${questionId}' does not match its question type.`);
     }
 
