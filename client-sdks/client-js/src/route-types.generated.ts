@@ -2351,6 +2351,8 @@ type Shared_Type_6 = {
   modelVersion?: string | undefined;
   supportsMemory?: boolean | undefined;
   modelList?: Shared_Type_2[] | undefined;
+  /** False when the model list comes from a function and cannot be reordered or edited */
+  modelListEditable?: boolean | undefined;
   /** Default options for agent execution */
   defaultOptions?: Shared_Type_5 | undefined;
   defaultGenerateOptionsLegacy?:
