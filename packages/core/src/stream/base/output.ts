@@ -2610,10 +2610,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   /** `#usageCount` plus the suspended step's usage, following the same missing-key rules. */
-  #getUsageCountWithSuspendedStep(): LLMStepResult<OUTPUT>['usage'] {
-    if (!this.#suspendedStepUsage) return this.#usageCount;
+  #getUsageCountWithSuspendedStep(
+    suspendedStepUsage: LanguageModelUsage | undefined = this.#suspendedStepUsage,
+  ): LLMStepResult<OUTPUT>['usage'] {
+    if (!suspendedStepUsage) return this.#usageCount;
     const usageCount = { ...this.#usageCount };
-    accumulateUsage(usageCount, new Set(this.#usageCountMissing), this.#suspendedStepUsage);
+    accumulateUsage(usageCount, new Set(this.#usageCountMissing), suspendedStepUsage);
     return usageCount;
   }
 
@@ -2820,10 +2822,26 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     return this.#status;
   }
 
-  serializeState() {
+  /**
+   * @param pendingSuspension A suspension chunk the step has emitted but this output may not have
+   * processed yet. Tool suspension snapshots the stream state right after emitting the chunk, so
+   * the state is serialized as if the chunk was processed; otherwise a resumed run would not know
+   * which usage its suspended leg already reported.
+   */
+  serializeState(pendingSuspension?: { usage?: LanguageModelUsage }) {
     const { steps, requests } = dedupeStepRequests(packStepMessageMirrors(this.#bufferedSteps));
+    // A restored run keeps status 'suspended' until it finishes, and its resumed step-finish clears
+    // the suspended step usage, so either one missing means the pending suspension is new.
+    const recordSuspension =
+      pendingSuspension !== undefined && (this.#status !== 'suspended' || this.#suspendedStepUsage === undefined);
+    const suspendedStepUsage = recordSuspension
+      ? (this.#suspendedStepUsage ?? pendingSuspension.usage)
+      : this.#suspendedStepUsage;
+    const generationReportedUsage = recordSuspension
+      ? this.#getTotalUsage(this.#getUsageCountWithSuspendedStep(suspendedStepUsage))
+      : this.#generationReportedUsage;
     return {
-      status: this.#status,
+      status: recordSuspension ? 'suspended' : this.#status,
       bufferedSteps: steps,
       bufferedStepRequests: requests,
       bufferedReasoningDetails: this.#bufferedReasoningDetails,
@@ -2847,10 +2865,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       usageCount: this.#usageCount,
       usageCountMissing: [...this.#usageCountMissing],
       lastStepUsage: this.#lastStepUsage,
-      suspendedStepUsage: this.#suspendedStepUsage,
-      generationReportedUsage: this.#generationReportedUsage,
+      suspendedStepUsage,
+      generationReportedUsage,
       tripwire: this.#tripwire,
-      wasSuspended: this.#wasSuspended,
+      wasSuspended: this.#wasSuspended || recordSuspension,
       messageList: this.messageList.serialize(),
     };
   }

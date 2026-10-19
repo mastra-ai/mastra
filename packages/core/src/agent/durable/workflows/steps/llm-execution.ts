@@ -1,6 +1,7 @@
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import { expandDurableSteps } from '@internal/core/durable';
 import { z } from 'zod';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../../error';
 import { serializeError } from '../../../../events/codec/error';
@@ -819,7 +820,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   llmRequestProcessorIds: ProcessorRunner.getLLMRequestProcessorIds(llmRequestInputProcessors),
                   messageList,
                   stepNumber: stepIndex,
-                  steps: inputData.accumulatedSteps ?? [],
+                  steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   requestContext,
                   memory: registryEntry?.memory,
@@ -1080,7 +1081,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   messageList,
                   workspace: registryEntry?.workspace,
                   stepNumber: inputData.stepIndex ?? 0,
-                  steps: inputData.accumulatedSteps ?? [],
+                  steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                   retryCount: processorRetryCount,
                   requestContext,
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
@@ -1712,7 +1713,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   if (effectiveOutputProcessors.length > 0) {
                     try {
                       await getToolResultRunner().runProcessToolResult({
-                        steps: (inputData as any).accumulatedSteps ?? [],
+                        steps: expandDurableSteps((inputData as any).accumulatedSteps ?? []),
                         messages: messageList.get.all.db(),
                         messageList,
                         stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,
@@ -2335,7 +2336,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     messageId: currentMessageId,
                     rotateResponseMessageId,
                     stepNumber: inputData.stepIndex ?? 0,
-                    steps: inputData.accumulatedSteps ?? [],
+                    steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                     retryCount: processorRetryCount,
                     requestContext,
                   });
@@ -2456,7 +2457,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   chunks: collectedChunks,
                   model: currentModel,
                   stepNumber: inputData.stepIndex ?? 0,
-                  steps: inputData.accumulatedSteps ?? [],
+                  steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                   warnings,
                   request,
                   rawResponse,
@@ -2577,7 +2578,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
               try {
                 await outputStepRunner.runProcessOutputStep({
-                  steps: inputData.accumulatedSteps ?? [],
+                  steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                   messages: messageList.get.all.db(),
                   messageList,
                   stepNumber: inputData.stepIndex ?? 0,
@@ -2799,7 +2800,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   messageId: currentMessageId,
                   rotateResponseMessageId,
                   stepNumber: inputData.stepIndex ?? 0,
-                  steps: inputData.accumulatedSteps ?? [],
+                  steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                   retryCount: processorRetryCount,
                   requestContext,
                   tracingContext,
