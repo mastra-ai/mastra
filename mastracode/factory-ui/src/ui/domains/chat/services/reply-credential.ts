@@ -16,15 +16,6 @@ function credentialHolder(
   return 'Personal';
 }
 
-export function credentialName(
-  credentialLabel: string,
-  credentialOwnerId: string | undefined,
-  threadOwner: ThreadOwner | undefined,
-  viewerId: string | undefined,
-): string {
-  return `${credentialHolder(credentialOwnerId, threadOwner, viewerId)} ${credentialLabel}`;
-}
-
 /**
  * Names the credential the server stamped on a reply when it answered:
  * `credentialLabel` ("Claude Pro/Max") and, for a personal credential,
@@ -39,5 +30,5 @@ export function replyCredentialLabel(
   const { credentialLabel, credentialOwnerId } = metadata;
   if (typeof credentialLabel !== 'string') return undefined;
   const ownerId = typeof credentialOwnerId === 'string' ? credentialOwnerId : undefined;
-  return credentialName(credentialLabel, ownerId, threadOwner, viewerId);
+  return `${credentialHolder(ownerId, threadOwner, viewerId)} ${credentialLabel}`;
 }

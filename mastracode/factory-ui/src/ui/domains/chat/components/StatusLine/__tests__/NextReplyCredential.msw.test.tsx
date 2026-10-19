@@ -11,13 +11,14 @@ import { ChatModelsContext } from '../../../context/ChatModelsContext';
 import type { ChatModelsApi } from '../../../context/ChatModelsContext';
 import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
 import { ChatSessionContext } from '../../../context/ChatSessionContext';
-import { PayingAccount } from '../PayingAccount';
+import { NextReplyCredential } from '../NextReplyCredential';
 
 const SHANE = { id: 'user-shane', name: 'Shane Thomas' };
+const DAMIEN = { id: 'user-damien', name: 'Damien Schneider' };
 const MODEL_ID = 'anthropic/claude-opus-4-6';
 
-function renderPayingAccount({
-  viewerId = 'user-damien',
+function renderNextReplyCredential({
+  viewer = DAMIEN,
   owner,
   draft = false,
   projectScope = 'hybrid',
@@ -25,7 +26,7 @@ function renderPayingAccount({
   authEnabled = true,
   credentialLabel = 'Claude Pro/Max',
 }: {
-  viewerId?: string;
+  viewer?: { id: string; name: string };
   owner?: ChatSessionContextApi['owner'];
   draft?: boolean;
   projectScope?: 'factory' | 'user' | 'hybrid';
@@ -49,7 +50,10 @@ function renderPayingAccount({
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       authEnabled
-        ? HttpResponse.json({ authenticated: true, user: { userId: viewerId, organizationId: 'org-1' } })
+        ? HttpResponse.json({
+            authenticated: true,
+            user: { userId: viewer.id, name: viewer.name, organizationId: 'org-1' },
+          })
         : HttpResponse.json({ error: 'not_found' }, { status: 404 }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
@@ -87,7 +91,7 @@ function renderPayingAccount({
             <ChatSessionContext.Provider value={session}>
               <ChatModelsContext.Provider value={models}>
                 <form onSubmit={submitComposer}>
-                  <PayingAccount />
+                  <NextReplyCredential />
                 </form>
               </ChatModelsContext.Provider>
             </ChatSessionContext.Provider>
@@ -101,53 +105,57 @@ function renderPayingAccount({
 
 const findCredential = (name: string) => screen.findByRole('button', { name });
 
-describe('PayingAccount', () => {
-  it('names the owner’s subscription when a teammate opens a session that runs on it', async () => {
-    renderPayingAccount({ owner: SHANE, threadScope: 'user' });
+describe('NextReplyCredential', () => {
+  it('warns a teammate that their messages run on the session owner’s subscription', async () => {
+    renderNextReplyCredential({ owner: SHANE, threadScope: 'user' });
 
-    expect(await findCredential('Shane Thomas’s Claude Pro/Max')).toBeInTheDocument();
+    expect(
+      await findCredential(
+        'Claude Pro/Max. Shane Thomas · session owner. Your messages use Shane Thomas’s Claude Pro/Max',
+      ),
+    ).toBeInTheDocument();
   });
 
-  it('tells the owner the session runs on their own subscription', async () => {
-    renderPayingAccount({ viewerId: SHANE.id, owner: SHANE, threadScope: 'user' });
+  it('tells the session owner the credential is their own, without the teammate warning', async () => {
+    renderNextReplyCredential({ viewer: SHANE, owner: SHANE, threadScope: 'user' });
 
-    expect(await findCredential('Your Claude Pro/Max')).toBeInTheDocument();
+    expect(await findCredential('Claude Pro/Max. Shane Thomas · session owner (you)')).toBeInTheDocument();
   });
 
   it('names the organization API key for a work-item thread even in a hybrid Factory', async () => {
-    renderPayingAccount({ owner: SHANE, threadScope: 'factory', credentialLabel: 'Anthropic API key' });
+    renderNextReplyCredential({ owner: SHANE, threadScope: 'factory', credentialLabel: 'Anthropic API key' });
 
-    expect(await findCredential('Organization Anthropic API key')).toBeInTheDocument();
+    expect(await findCredential('Anthropic API key. Shared by the organization')).toBeInTheDocument();
   });
 
-  it('names your credential on a new chat in a hybrid Factory before the first message', async () => {
-    renderPayingAccount({ draft: true, projectScope: 'hybrid' });
+  it('names your credential on a new chat in a hybrid Factory, where you become the owner', async () => {
+    renderNextReplyCredential({ draft: true, projectScope: 'hybrid' });
 
-    expect(await findCredential('Your Claude Pro/Max')).toBeInTheDocument();
+    expect(await findCredential('Claude Pro/Max. Damien Schneider · session owner (you)')).toBeInTheDocument();
   });
 
   it('names the organization credential on a new chat in an organization-scoped Factory', async () => {
-    renderPayingAccount({ draft: true, projectScope: 'factory', credentialLabel: 'Anthropic API key' });
+    renderNextReplyCredential({ draft: true, projectScope: 'factory', credentialLabel: 'Anthropic API key' });
 
-    expect(await findCredential('Organization Anthropic API key')).toBeInTheDocument();
+    expect(await findCredential('Anthropic API key. Shared by the organization')).toBeInTheDocument();
   });
 
-  it('falls back to whose account when the catalog cannot name the credential, as for a custom provider', async () => {
-    renderPayingAccount({ draft: true, projectScope: 'factory', credentialLabel: null });
+  it('falls back to the provider name when the catalog cannot name the credential', async () => {
+    renderNextReplyCredential({ draft: true, projectScope: 'factory', credentialLabel: null });
 
-    expect(await findCredential('Organization account')).toBeInTheDocument();
+    expect(await findCredential('Anthropic credential. Shared by the organization')).toBeInTheDocument();
   });
 
   it('does not send the draft when someone clicks the credential icon inside the composer form', async () => {
-    const { submitComposer } = renderPayingAccount({ owner: SHANE, threadScope: 'user' });
+    const { submitComposer } = renderNextReplyCredential({ viewer: SHANE, owner: SHANE, threadScope: 'user' });
 
-    await userEvent.click(await findCredential('Shane Thomas’s Claude Pro/Max'));
+    await userEvent.click(await findCredential('Claude Pro/Max. Shane Thomas · session owner (you)'));
 
     expect(submitComposer).not.toHaveBeenCalled();
   });
 
   it('stays hidden on a local Factory without sign-in, where only your own credentials exist', async () => {
-    const { client } = renderPayingAccount({ draft: true, projectScope: 'factory', authEnabled: false });
+    const { client } = renderNextReplyCredential({ draft: true, projectScope: 'factory', authEnabled: false });
 
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
