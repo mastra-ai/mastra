@@ -1,10 +1,10 @@
-import { Cpu, Factory, Infinity as InfinityIcon } from 'lucide-react';
+import { Cpu, Factory, Infinity } from 'lucide-react';
 import type { Product } from './product-identity';
 
 export function ProductIcon({ product }: { product: Product }) {
   if (product === 'factory') return <Factory aria-hidden="true" />;
   if (product === 'workers') return <Cpu aria-hidden="true" />;
-  if (product === 'persistent-server') return <InfinityIcon aria-hidden="true" />;
+  if (product === 'persistent-server') return <Infinity aria-hidden="true" />;
   if (product === 'server') {
     return (
       <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
