@@ -102,6 +102,7 @@ import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
 import { FactoryChannelReplyProcessor } from './session/channel-reply-processor.js';
+import { FactoryChannelSessionLinkProcessor } from './session/channel-session-link-processor.js';
 import { resolveFactoryCredentialTenant } from './session/credential-policy.js';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
 import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.js';
@@ -1277,7 +1278,7 @@ export class MastraFactory {
           }
           return [channelReplyProcessor, environmentProcessor, ...sessionsProcessor];
         },
-        outputProcessors: [new FactoryReplyCredentialProcessor()],
+        outputProcessors: [new FactoryChannelSessionLinkProcessor(), new FactoryReplyCredentialProcessor()],
         ...(vector ? { vector } : {}),
         ...(toolIntegrations.length > 0 ||
         sourceControlToolProviders.length > 0 ||

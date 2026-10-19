@@ -18,7 +18,7 @@ import {
   primeTenantCredentialsForRequestContext,
   primeTenantCredentialsForTenant,
 } from '../../routes/tenant-credentials.js';
-import { SESSION_LINK_LABEL, sessionLink } from '../../session/channel-reply-processor.js';
+import { markNewChannelSession } from '../../session/channel-session-link-processor.js';
 import {
   createSourceControlSessionLookup,
   FactorySourceControlConflictError,
@@ -851,51 +851,21 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
     // created (which would otherwise be tenant-less and fail credential
     // resolution). This handler is the only gate — core dispatches whatever
     // reaches it — so every slot that can start a run must call it.
-    let gate: Awaited<ReturnType<typeof gateDispatch>>;
-    let isNewSession: boolean;
     try {
-      gate = await gateDispatch(thread, message, deps, ctx);
-      if (!gate) return;
+      if (!(await gateDispatch(thread, message, deps, ctx))) return;
       // A mention on a not-yet-subscribed thread is a NEW session. The default
       // handler auto-subscribes, so once subscribed this is a follow-up — the
-      // thread already carries its link.
-      isNewSession = !(await thread.isSubscribed());
+      // thread already carries its link. Factory posts nothing of its own:
+      // FactoryChannelSessionLinkProcessor folds the `↗` into the agent's
+      // first message so link and reply land as one.
+      if (!(await thread.isSubscribed())) markNewChannelSession(ctx.requestContext);
       acknowledgeReceipt(thread, deps);
     } catch (error) {
       await reportPreDispatchError(thread, message, ctx, error);
       return;
     }
-
-    // The framework handler resolves once the run is accepted, before the
-    // model's first token, and creates the internal thread the link names.
     await defaultHandler(thread, message);
-
-    if (!isNewSession) return;
-    await postSessionLink(thread, ctx, gate.routed?.factoryProjectId);
   };
-}
-
-/**
- * The only thing Factory posts on its own in a new thread: a bare `↗` to the
- * session, landing right after the run is accepted and before the model's
- * opener. Factory-posted rather than left to the model because the opener is
- * the model's call — it skips one for trivial requests — and the link must
- * not go with it. Skipped without a public origin; best-effort otherwise, as
- * the run is already underway.
- */
-async function postSessionLink(thread: HandlerThread, ctx: ChannelHandlerContext, factoryProjectId?: string) {
-  try {
-    const internalThread = await findInternalThread(ctx.mastra, thread);
-    if (!internalThread) {
-      console.warn('[slack] no internal thread found for', thread.id);
-      return;
-    }
-    const link = sessionLink({ threadId: internalThread.id, resourceId: internalThread.resourceId, factoryProjectId });
-    if (!link) return;
-    await thread.post({ markdown: `[${SESSION_LINK_LABEL}](${link})` });
-  } catch (error) {
-    console.warn('[slack] session link failed', { thread: thread.id, error });
-  }
 }
 
 /**

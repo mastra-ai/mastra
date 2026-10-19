@@ -29,7 +29,7 @@ describe('FactoryChannelReplyProcessor', () => {
     expect(result).toBeUndefined();
   });
 
-  it('tells a channel run to open with a line naming the task, and leaves the session link to the handler', () => {
+  it('tells a channel run to open with a line naming the task, and leaves the session link to the link processor', () => {
     const text = instruction(channelContext());
     expect(text).toMatch(/reply first with one short line that says what you are about to do/);
     expect(text).not.toContain('↗');
