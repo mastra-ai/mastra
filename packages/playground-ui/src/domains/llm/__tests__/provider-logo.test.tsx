@@ -91,4 +91,11 @@ describe('ProviderLogo', () => {
     expect(logo.style.height).toBe('32px');
     expect(logo.getAttribute('class')).not.toContain('size-icon');
   });
+
+  it('applies a pixel size to the gateway fallback icon', () => {
+    render(<ProviderLogo providerId="mastra" size={32} />);
+    const icon = document.querySelector<HTMLElement>('[data-slot="icon"]');
+    expect(icon?.style.width).toBe('32px');
+    expect(icon?.style.height).toBe('32px');
+  });
 });

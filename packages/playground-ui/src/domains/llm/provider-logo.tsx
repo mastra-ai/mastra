@@ -98,7 +98,11 @@ export const ProviderLogo = ({ providerId, className = '', size = 'lg', style }:
   if (isGateway || imageError || !providerId) {
     const fallback = fallbackIcon ? providerMapToIcon[fallbackIcon] : undefined;
     if (fallback) {
-      return <Icon size={iconSize}>{fallback}</Icon>;
+      return (
+        <Icon size={iconSize} className={cn('shrink-0', className)} style={{ ...sizeStyle, ...style }}>
+          {fallback}
+        </Icon>
+      );
     }
     return (
       <div className={cn('shrink-0 rounded bg-muted', sizeClassName, className)} style={{ ...sizeStyle, ...style }} />
