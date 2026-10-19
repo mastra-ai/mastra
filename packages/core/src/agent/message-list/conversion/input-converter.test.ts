@@ -32,6 +32,25 @@ describe('hydrateMastraDBMessageFields', () => {
     expect(context.newMessageId).not.toHaveBeenCalled();
     expect(context.generateCreatedAt).not.toHaveBeenCalled();
   });
+
+  it('assigns a generated id to a message that has none', () => {
+    const message = {
+      id: '',
+      role: 'assistant',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
+    } satisfies MastraDBMessage;
+    const context = {
+      newMessageId: () => 'generated-id',
+      generateCreatedAt: () => new Date('2026-01-02T00:00:00.000Z'),
+      dbMessages: [],
+    } satisfies InputConversionContext;
+
+    const result = hydrateMastraDBMessageFields(message, context, 'response');
+
+    expect(result.id).toBe('generated-id');
+    expect(result.content.parts).toEqual([{ type: 'text', text: 'hi' }]);
+  });
 });
 
 describe('inputToMastraDBMessage', () => {

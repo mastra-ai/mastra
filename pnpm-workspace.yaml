@@ -111,9 +111,6 @@ packageExtensions:
   'eslint-plugin-storybook@10.6.0':
     dependencies:
       typescript: ^6.0.3
-  'eslint-plugin-tailwindcss@4.1.0':
-    dependencies:
-      typescript: ^6.0.3
   '@ai-sdk/provider-utils@3.0.25':
     dependencies:
       msw: ^2.12.11
@@ -189,8 +186,8 @@ minimumReleaseAgeExclude:
   - '@ai-sdk/openai@4.0.0'
   - '@ai-sdk/anthropic@4.0.0'
   - '@ai-sdk/google@4.0.0'
-  # Renovate security update: shell-quote@1.10.0
-  - shell-quote@1.10.0
+  # Renovate security update: shell-quote@1.10.0 || 1.12.0
+  - shell-quote@1.10.0 || 1.12.0
   # Renovate security update: tmp@0.2.7
   - tmp@0.2.7
   # Renovate security update: axios@1.20.0
@@ -283,6 +280,10 @@ minimumReleaseAgeExclude:
   - brace-expansion@2.1.7 || 5.0.12 || 1.1.21
   - better-auth@1.7.5
   - better-auth@1.6.26
+  # Renovate security update: katex@0.18.2
+  - katex@0.18.2
+  # Renovate security update: multer@2.4.0
+  - multer@2.4.0
 trustPolicyExclude:
   # Vanta 2026-10-02: 7.4.6 fixes GHSA-g84c-rxfj-3j2c; earlier 7.4.x had trusted publisher
   # but 7.4.6 lacks that evidence (pnpm trustPolicy no-downgrade).
@@ -354,7 +355,7 @@ overrides:
   joi@>=17.0.0 <17.13.8: 17.13.8
   svgo@>=3.0.0 <3.3.5: 3.3.5
   e2b>undici8: npm:undici@8.11.2
-  multer@<2.3.0: 2.3.0
+  multer@<2.3.0: 2.4.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.10.0
   '@opentelemetry/sdk-node@<0.217.0': 0.221.0
@@ -389,7 +390,7 @@ overrides:
   jose@>=4.14.0 <6.2.12: 6.2.12
   '@noble/hashes@>=1.0.0 <1.8.0': 1.8.0
   '@noble/hashes@>=2.0.0 <2.4.0': 2.4.0
-  katex@<0.16.47: 0.16.47
+  katex@<0.16.47: 0.18.2
   colord@<2.9.4: 2.9.4
   fflate@>=0.4.5 <0.4.9: 0.4.9
   browserslist@<=4.28.6: 4.28.7
@@ -407,6 +408,9 @@ overrides:
   '@opentelemetry/propagator-jaeger@<2.11.0': 2.11.0
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.40
   '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
+  # provider-utils 4.0.56 pins @ai-sdk/provider 3.0.18; keep ai v6/gateway on the
+  # same provider so @internal/ai-v6's bundled types don't get `_2`-suffixed.
+  '@ai-sdk/provider@>=3.0.0 <3.0.18': 3.0.18
   '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.52
   # Keep 3.x/4.x js-yaml consumers on patched lines when not forced to 5.x
   js-yaml@>=3.0.0 <3.15.2: 3.15.2
@@ -505,7 +509,7 @@ overrides:
   'safe-regex-test': 'npm:@socketregistry/safe-regex-test@^1'
   'safer-buffer': 'npm:@socketregistry/safer-buffer@^1'
   'set-function-length': 'npm:@socketregistry/set-function-length@^1'
-  'shell-quote': 'npm:shell-quote@^1.10.0'
+  'shell-quote': 'npm:shell-quote@^1.12.0'
   'side-channel': 'npm:@socketregistry/side-channel@^1'
   'string.prototype.matchall': 'npm:@socketregistry/string.prototype.matchall@^1'
   'string.prototype.repeat': 'npm:@socketregistry/string.prototype.repeat@^1'

@@ -175,7 +175,7 @@ export function PropertyFilterCreator({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        align="end"
+        align="start"
         sideOffset={MENU_SIDE_OFFSET}
         className={cn('w-64', selectedField ? 'p-3' : 'p-1')}
         initialFocus={false}
