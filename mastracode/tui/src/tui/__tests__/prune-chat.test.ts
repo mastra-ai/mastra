@@ -8,6 +8,7 @@ import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
 import { SystemReminderComponent } from '../components/system-reminder.js';
+import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import { pruneChatContainer } from '../prune-chat.js';
 import type { TUIState } from '../state.js';
 
@@ -180,5 +181,44 @@ describe('pruneChatContainer', () => {
     pruneChatContainer(state);
 
     expect(state.chatContainer.children).toEqual(retained);
+  });
+
+  it('stops the ticker of a running shell row it drops, but not of one it keeps', () => {
+    vi.useFakeTimers();
+    try {
+      // A running compact shell row redraws its elapsed time every 100ms until stopped.
+      const runningShell = (description: string) => {
+        const ui = { requestRender: vi.fn() };
+        const component = new ToolExecutionComponentEnhanced(
+          'execute_command',
+          { command: 'sleep 600', description },
+          { collapsedByDefault: true, previewLineLimit: 0 },
+          ui as any,
+        );
+        component.render(80);
+        return { component, requestRender: ui.requestRender };
+      };
+      const state = createState(0);
+      const dropped = runningShell('Old command');
+      state.chatContainer.addChild(dropped.component);
+      state.pendingTools.set('call-old', dropped.component);
+      for (let i = 0; i < 600; i++) state.chatContainer.addChild(new Text(`child-${i}`, 0, 0));
+      const kept = runningShell('New command');
+      state.chatContainer.addChild(kept.component);
+      state.pendingTools.set('call-new', kept.component);
+
+      pruneChatContainer(state);
+      expect(state.chatContainer.children).not.toContain(dropped.component);
+      expect(state.chatContainer.children).toContain(kept.component);
+      dropped.requestRender.mockClear();
+      kept.requestRender.mockClear();
+      vi.advanceTimersByTime(1_000);
+
+      expect(dropped.requestRender).not.toHaveBeenCalled();
+      expect(kept.requestRender).toHaveBeenCalled();
+      kept.component.stopLiveUpdates();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
