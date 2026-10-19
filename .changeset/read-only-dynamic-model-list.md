@@ -4,4 +4,13 @@
 '@internal/playground': patch
 ---
 
-The agent response now includes `modelListEditable`, which is `false` when the agent's `model` is a function and `true` for a static model list. Studio's Models panel uses it to show a function-valued list read-only, without drag handles, model pickers or enable switches, plus a note that the list is set in code.
+Added `modelListEditable` to agent details so clients can disable model-list editing when an agent resolves its models dynamically. Studio now shows function-valued model lists as read-only while keeping static model lists editable.
+
+```ts
+const agent = client.getAgent('weather-agent');
+const details = await agent.details();
+
+if (details.modelListEditable === false) {
+  // Hide or disable model-list editing controls.
+}
+```
