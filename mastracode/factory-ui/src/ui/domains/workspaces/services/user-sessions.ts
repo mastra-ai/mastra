@@ -19,15 +19,12 @@ export interface FactoryUserSession {
   id: string;
   sessionId: string;
   projectRepositoryId: string;
-  orgId: string;
   userId: string;
   owner?: FactoryUserSessionOwner;
   visibility: 'org' | 'private';
   title?: string;
   branch: string;
   baseBranch: string;
-  sandboxId: string | null;
-  sandboxWorkdir: string | null;
   materializedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -39,19 +36,47 @@ function normalizeUserSession({ title, ...session }: FactoryUserSessionPayload):
   return { ...session, title: title ?? undefined };
 }
 
-/** Every session of the Factory the viewer can see, across all of its repositories and providers. */
+/** The compact list; a server that predates it answers with `{ sessions }` carrying inline owners. */
+interface SessionListPayload {
+  sessions: FactoryUserSessionPayload[];
+  owners?: Record<string, Omit<FactoryUserSessionOwner, 'id'>>;
+  total?: number;
+  syncedAt?: string;
+}
+
+export interface UserSessionList {
+  sessions: FactoryUserSession[];
+  /** How many sessions the viewer can see in total; with `updatedSince`, `sessions` holds only the changed ones. */
+  total: number;
+  /** Server time of this read; pass it back as `updatedSince` to fetch only what changed since. */
+  syncedAt?: string;
+}
+
+/**
+ * The Factory's sessions the viewer can see, across all of its repositories and
+ * providers. With `updatedSince`, only sessions updated since then are returned.
+ */
 export async function listUserSessions(
   baseUrl: string,
   factoryId: string,
-  signal?: AbortSignal,
-): Promise<FactoryUserSession[]> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryId)}/sessions`, {
+  options: { signal?: AbortSignal; updatedSince?: string } = {},
+): Promise<UserSessionList> {
+  const params = new URLSearchParams({ compact: '1' });
+  if (options.updatedSince) params.set('updatedSince', options.updatedSince);
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryId)}/sessions?${params}`, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
-    signal,
+    signal: options.signal,
   });
-  const body = await readJsonOrThrow<{ sessions: FactoryUserSessionPayload[] }>(res, 'Failed to list sessions');
-  return body.sessions.map(normalizeUserSession);
+  const body = await readJsonOrThrow<SessionListPayload>(res, 'Failed to list sessions');
+  return {
+    sessions: body.sessions.map(session => {
+      const owner = body.owners?.[session.userId];
+      return normalizeUserSession(owner ? { ...session, owner: { id: session.userId, ...owner } } : session);
+    }),
+    total: body.total ?? body.sessions.length,
+    syncedAt: body.syncedAt,
+  };
 }
 
 export type CreateUserSessionOptions =

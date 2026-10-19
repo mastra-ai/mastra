@@ -29,9 +29,11 @@ interface AgentControllerThreadsScope {
 export interface WorkspacesData {
   workspaces: FactoryUserSession[];
   userSessions: FactoryUserSession[];
+  /** Server time of the last list read; the next refetch asks only for sessions changed since. */
+  syncedAt?: string;
 }
 
-function splitSessions(sessions: FactoryUserSession[]): WorkspacesData {
+function splitSessions(sessions: FactoryUserSession[]): Pick<WorkspacesData, 'workspaces' | 'userSessions'> {
   return {
     workspaces: sessions.filter(session => !session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)),
     userSessions: sessions.filter(session => session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)),
@@ -43,8 +45,30 @@ export function allSessionRows(data: WorkspacesData | undefined): FactoryUserSes
   return [...(data?.workspaces ?? []), ...(data?.userSessions ?? [])];
 }
 
-async function loadWorkspaces(baseUrl: string, factoryId: string, signal?: AbortSignal) {
-  return splitSessions(await listUserSessions(baseUrl, factoryId, signal));
+/**
+ * With a previous read, fetch only the sessions changed since it and merge them in
+ * place. The full list is re-read when there is no previous read, or when the merged
+ * count disagrees with the server's (a session was deleted or hidden elsewhere).
+ */
+async function loadWorkspaces(
+  baseUrl: string,
+  factoryId: string,
+  signal?: AbortSignal,
+  previous?: WorkspacesData,
+): Promise<WorkspacesData> {
+  if (previous?.syncedAt) {
+    const delta = await listUserSessions(baseUrl, factoryId, { signal, updatedSince: previous.syncedAt });
+    const changed = new Map(delta.sessions.map(session => [session.id, session]));
+    const rows = allSessionRows(previous).map(session => {
+      const update = changed.get(session.id);
+      changed.delete(session.id);
+      return update ?? session;
+    });
+    const merged = [...rows, ...changed.values()];
+    if (merged.length === delta.total) return { ...splitSessions(merged), syncedAt: delta.syncedAt };
+  }
+  const full = await listUserSessions(baseUrl, factoryId, { signal });
+  return { ...splitSessions(full.sessions), syncedAt: full.syncedAt };
 }
 
 export function workspacesQueryOptions(baseUrl: string, factoryId: string) {
@@ -60,6 +84,7 @@ export function removeCachedSession(queryClient: QueryClient, factoryId: string 
   queryClient.setQueryData<WorkspacesData>(queryKeys.sessions(factoryId), current => {
     if (!current) return current;
     return {
+      ...current,
       workspaces: current.workspaces.filter(session => session.sessionId !== sessionId),
       userSessions: current.userSessions.filter(session => session.sessionId !== sessionId),
     };
@@ -76,7 +101,9 @@ export function addCachedSession(queryClient: QueryClient, factoryId: string, se
   queryClient.setQueryData<WorkspacesData>(queryKey, current => {
     if (!current) return current;
     const all = [...current.workspaces, ...current.userSessions];
-    return all.some(cached => cached.sessionId === session.sessionId) ? current : splitSessions([...all, session]);
+    return all.some(cached => cached.sessionId === session.sessionId)
+      ? current
+      : { ...current, ...splitSessions([...all, session]) };
   });
 }
 
@@ -152,10 +179,17 @@ export function sessionsRefetchInterval(data: WorkspacesData | undefined, now = 
 
 export function useWorkspacesQuery(factoryId: string | undefined) {
   const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: queryKeys.sessions(factoryId),
     queryFn: factoryId
-      ? ({ signal }): Promise<WorkspacesData> => loadWorkspaces(baseUrl, factoryId, signal)
+      ? ({ signal }): Promise<WorkspacesData> =>
+          loadWorkspaces(
+            baseUrl,
+            factoryId,
+            signal,
+            queryClient.getQueryData<WorkspacesData>(queryKeys.sessions(factoryId)),
+          )
       : skipToken,
     refetchInterval: query => sessionsRefetchInterval(query.state.data),
   });

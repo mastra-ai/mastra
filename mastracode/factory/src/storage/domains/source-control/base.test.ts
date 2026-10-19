@@ -1,6 +1,6 @@
 import { UniqueViolationError } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { FactoryProjectsStorage } from '../projects/base.js';
 import { SessionOwnershipMismatchError, SourceControlStorage } from './base.js';
@@ -813,6 +813,56 @@ describe('SourceControlStorage', () => {
       expect(
         await github.sessions.listByProject({ orgId: 'org-2', factoryProjectId: project.id, viewerUserId: 'user-2' }),
       ).toEqual([]);
+    });
+
+    it('listByProject with updatedSince returns only sessions changed since, oldest first, and countByProject counts every visible one', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      onTestFinished(() => vi.useRealTimers());
+      const project = await createProject();
+      const { first, second } = await twoLinks(project.id);
+      const scope = { orgId: 'org-1', factoryProjectId: project.id, viewerUserId: 'user-2' };
+
+      vi.setSystemTime(new Date('2026-10-01T10:00:00.000Z'));
+      const untouched = await github.sessions.create(
+        sessionInput('00000000-0000-4000-8000-000000000141', first.id, 'user-1', 'a'),
+      );
+      const renamed = await github.sessions.create(
+        sessionInput('00000000-0000-4000-8000-000000000142', second.id, 'user-2', 'b'),
+      );
+      await github.sessions.create({
+        ...sessionInput('00000000-0000-4000-8000-000000000143', first.id, 'user-1', 'c'),
+        visibility: 'private',
+      });
+      await github.sessions.create({
+        ...sessionInput('00000000-0000-4000-8000-000000000144', second.id, 'user-2', 'd'),
+        visibility: 'private',
+      });
+
+      const since = new Date('2026-10-01T10:05:00.000Z');
+      vi.setSystemTime(since);
+      const created = await github.sessions.create(
+        sessionInput('00000000-0000-4000-8000-000000000145', first.id, 'user-1', 'e'),
+      );
+      vi.setSystemTime(new Date('2026-10-01T10:06:00.000Z'));
+      await github.sessions.rename({ sessionId: renamed.sessionId, title: 'Renamed' });
+      await github.sessions.create({
+        ...sessionInput('00000000-0000-4000-8000-000000000146', first.id, 'user-1', 'f'),
+        visibility: 'private',
+      });
+
+      const changed = await github.sessions.listByProject({ ...scope, updatedSince: since });
+      expect(changed.map(session => [session.sessionId, session.title])).toEqual([
+        [created.sessionId, null],
+        [renamed.sessionId, 'Renamed'],
+      ]);
+      expect(changed.map(session => session.id)).not.toContain(untouched.id);
+      expect(
+        await github.sessions.listByProject({ ...scope, updatedSince: new Date('2026-10-01T10:06:00.001Z') }),
+      ).toEqual([]);
+      // a, b, e, plus user-2's own private d; user-1's private c and f stay hidden.
+      expect(await github.sessions.countByProject(scope)).toBe(4);
+      expect((await github.sessions.listByProject(scope)).length).toBe(4);
+      expect(await gitlab.sessions.countByProject(scope)).toBe(0);
     });
 
     it('session repository rows round-trip, are unique per (session, link) and go away with the session', async () => {

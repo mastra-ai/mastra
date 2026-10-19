@@ -5,6 +5,7 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { Context } from 'hono';
+import { compress } from 'hono/compress';
 
 import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-release.js';
 import { isValidGitRef } from '../sandbox/git-ref.js';
@@ -19,6 +20,7 @@ import type {
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { timedAboveThreshold } from '../timing.js';
 import type { RouteAuth } from './route.js';
 
 type RouteContext = Context;
@@ -32,6 +34,10 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3
 const MAX_SESSION_OWNER_PROFILES = 100;
 const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
 const SESSION_OWNER_PROFILE_TTL_MS = 5 * 60_000;
+/** Phases of the sessions list slower than this are logged as `[factory:timing] slow …`. */
+const SLOW_PHASE_MS = 100;
+/** Incremental session syncs re-send rows updated this long before the client's last sync. */
+const SESSION_SYNC_LOOKBACK_MS = 10_000;
 
 interface SessionOwnerProfile {
   id: string;
@@ -216,6 +222,23 @@ function withOwnerProfile(session: SourceControlSession, owners: Map<string, Ses
   return owner ? { ...session, owner } : session;
 }
 
+/** The fields the sidebar, board, and search read from a listed session; owners travel in a shared map. */
+function toSessionSummary(session: SourceControlSession) {
+  return {
+    id: session.id,
+    sessionId: session.sessionId,
+    projectRepositoryId: session.projectRepositoryId,
+    userId: session.userId,
+    visibility: session.visibility,
+    title: session.title,
+    branch: session.branch,
+    baseBranch: session.baseBranch,
+    materializedAt: session.materializedAt,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  };
+}
+
 function projectSessionRoutes(
   path: '/web/source-control/projects/:id/sessions' | '/web/github/projects/:id/sessions',
   options: SourceControlSessionRoutesOptions,
@@ -339,23 +362,59 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
     registerApiRoute('/web/factory/projects/:id/sessions', {
       method: 'GET',
       requiresAuth: false,
+      middleware: compress(),
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
         const { orgId, userId } = resolved.tenant;
         const factoryProjectId = c.req.param('id');
-        const project = factoryProjectId ? await options.projects.get({ orgId, id: factoryProjectId }) : null;
+        const compact = c.req.query('compact') === '1';
+        const updatedSinceParam = compact ? c.req.query('updatedSince') : undefined;
+        const updatedSince = updatedSinceParam ? new Date(updatedSinceParam) : undefined;
+        if (updatedSince && Number.isNaN(updatedSince.getTime())) {
+          return c.json({ error: 'updatedSince must be an ISO timestamp' }, 400);
+        }
+        const syncedAt = new Date();
+        const project = factoryProjectId
+          ? await timedAboveThreshold('sessions.list project', SLOW_PHASE_MS, () =>
+              options.projects.get({ orgId, id: factoryProjectId }),
+            )
+          : null;
         if (!project) return c.json({ error: 'Factory not found' }, 404);
+        const scope = { orgId, factoryProjectId: project.id, viewerUserId: userId };
         // Storage is partitioned per provider; a Factory's sessions can live in any of them.
-        const sessions = (
-          await Promise.all(
-            options.sourceControls.map(sourceControl =>
-              sourceControl.sessions.listByProject({ orgId, factoryProjectId: project.id, viewerUserId: userId }),
-            ),
-          )
-        ).flat();
-        const owners = await resolveOwnerProfiles(sessions.map(session => session.userId));
-        return c.json({ sessions: sessions.map(session => withOwnerProfile(session, owners)) });
+        const [sessions, total] = await timedAboveThreshold('sessions.list listByProject', SLOW_PHASE_MS, () =>
+          Promise.all([
+            Promise.all(
+              options.sourceControls.map(sourceControl =>
+                sourceControl.sessions.listByProject({
+                  ...scope,
+                  // Rows written just before the client's last sync can commit after it; re-send them.
+                  ...(updatedSince
+                    ? { updatedSince: new Date(updatedSince.getTime() - SESSION_SYNC_LOOKBACK_MS) }
+                    : {}),
+                }),
+              ),
+            ).then(lists => lists.flat()),
+            updatedSince
+              ? Promise.all(
+                  options.sourceControls.map(sourceControl => sourceControl.sessions.countByProject(scope)),
+                ).then(counts => counts.reduce((sum, count) => sum + count, 0))
+              : undefined,
+          ]),
+        );
+        const owners = await timedAboveThreshold('sessions.list owners', SLOW_PHASE_MS, () =>
+          resolveOwnerProfiles(sessions.map(session => session.userId)),
+        );
+        if (!compact) return c.json({ sessions: sessions.map(session => withOwnerProfile(session, owners)) });
+        return c.json({
+          sessions: sessions.map(toSessionSummary),
+          owners: Object.fromEntries(
+            [...owners].map(([id, { name, avatarUrl }]) => [id, avatarUrl ? { name, avatarUrl } : { name }]),
+          ),
+          total: total ?? sessions.length,
+          syncedAt: syncedAt.toISOString(),
+        });
       },
     }),
     ...projectSessionRoutes('/web/source-control/projects/:id/sessions', options, resolveOwnerProfiles),
