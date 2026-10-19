@@ -9,6 +9,8 @@
     "dev:api": "pnpm --dir ../web api",
     "build": "vite --config src/vite.config.ts build",
     "typecheck": "tsc --noEmit -p src/ui/tsconfig.json",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
     "test": "vitest run",
     "test:unit": "vitest run --project unit:factory-ui",
     "test:msw": "vitest run --project msw:factory-ui"

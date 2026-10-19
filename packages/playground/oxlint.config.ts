@@ -141,6 +141,7 @@ export default defineConfig({
     'e2e/tests/__utils__/**',
   ],
   rules: {
+    'typescript/no-unnecessary-type-assertion': 'error',
     'react/only-export-components': [
       'warn',
       {

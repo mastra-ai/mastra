@@ -152,18 +152,18 @@ describe('extractStaticModel', () => {
 
   it('returns undefined when provider is missing or empty', () => {
     expect(extractStaticModel({ name: 'gpt-4o' } as never)).toBeUndefined();
-    expect(extractStaticModel({ provider: '', name: 'gpt-4o' } as never)).toBeUndefined();
+    expect(extractStaticModel({ provider: '', name: 'gpt-4o' })).toBeUndefined();
     expect(extractStaticModel({ provider: 42, name: 'gpt-4o' } as never)).toBeUndefined();
   });
 
   it('returns undefined when name is missing or empty', () => {
     expect(extractStaticModel({ provider: 'openai' } as never)).toBeUndefined();
-    expect(extractStaticModel({ provider: 'openai', name: '' } as never)).toBeUndefined();
+    expect(extractStaticModel({ provider: 'openai', name: '' })).toBeUndefined();
     expect(extractStaticModel({ provider: 'openai', name: 42 } as never)).toBeUndefined();
   });
 
   it('returns the static model when both provider and name are valid strings', () => {
-    expect(extractStaticModel({ provider: 'openai', name: 'gpt-4o' } as never)).toEqual({
+    expect(extractStaticModel({ provider: 'openai', name: 'gpt-4o' })).toEqual({
       provider: 'openai',
       name: 'gpt-4o',
     });
@@ -176,7 +176,7 @@ describe('isConditionalStoredModel', () => {
   });
 
   it('returns false for object input', () => {
-    expect(isConditionalStoredModel({ provider: 'openai', name: 'gpt-4o' } as never)).toBe(false);
+    expect(isConditionalStoredModel({ provider: 'openai', name: 'gpt-4o' })).toBe(false);
   });
 
   it('returns false for undefined', () => {

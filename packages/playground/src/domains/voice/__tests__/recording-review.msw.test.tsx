@@ -122,7 +122,7 @@ describe('LiveKitRecordingReview', () => {
   describe('when the trace is not a voice call', () => {
     it('does not offer playback', async () => {
       server.use(http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(recordingEnabledPackages)));
-      const { queryClient } = renderReview('text-trace', [{ ...recordedTrace.spans[0]!, name: 'agent run' }]);
+      const { queryClient } = renderReview('text-trace', [{ ...recordedTrace.spans[0], name: 'agent run' }]);
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(screen.queryByRole('button', { name: 'Review Audio' })).toBeNull();
     });

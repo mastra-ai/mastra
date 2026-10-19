@@ -187,7 +187,6 @@ export default defineConfig({
         'typescript/no-unnecessary-qualifier': 'off',
         'typescript/no-unnecessary-template-expression': 'off',
         'typescript/no-unnecessary-type-arguments': 'off',
-        'typescript/no-unnecessary-type-assertion': 'off',
         'typescript/no-unnecessary-type-conversion': 'off',
         'typescript/no-unnecessary-type-parameters': 'off',
         'typescript/no-unsafe-argument': 'off',

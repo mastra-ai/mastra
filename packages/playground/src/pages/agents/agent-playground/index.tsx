@@ -82,7 +82,7 @@ function AgentPlayground() {
     if (isViewingVersion && versionData) return versionData;
     if (storedAgent) return storedAgent;
     if (codeAgent) return mapAgentResponseToDataSource(codeAgent);
-    return {} as AgentDataSource;
+    return {};
   }, [isViewingVersion, versionData, storedAgent, codeAgent]);
 
   const {
