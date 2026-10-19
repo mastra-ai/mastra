@@ -11,18 +11,35 @@ import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandI
 import { useChatModels } from '../../context/useChatModels';
 import { useChatModelScope } from '../../context/useChatModelScope';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
+import type { ThreadOwner } from '../../services/reply-credential';
+import type { FactoryAuthState } from '../../../auth/services/auth';
 
 type CredentialHolder =
-  { kind: 'organization' } | { kind: 'session-owner'; name?: string; avatarUrl?: string; isViewer: boolean };
+  | { kind: 'organization' }
+  | { kind: 'teammate-owner'; name?: string; avatarUrl?: string }
+  | { kind: 'you'; name?: string; avatarUrl?: string; ownsSession: boolean };
+
+function personalHolder(
+  owner: ThreadOwner | undefined,
+  viewer: FactoryAuthState['user'],
+  isDraft: boolean,
+): CredentialHolder {
+  if (owner && owner.id !== viewer?.userId) {
+    return { kind: 'teammate-owner', name: owner.name, avatarUrl: owner.avatarUrl };
+  }
+  const you = owner ?? { name: viewer?.name, avatarUrl: viewer?.avatarUrl };
+  return { kind: 'you', name: you.name, avatarUrl: you.avatarUrl, ownsSession: Boolean(owner) || isDraft };
+}
 
 function describeHolder(holder: CredentialHolder): string {
   if (holder.kind === 'organization') return 'Shared by the organization';
-  if (holder.isViewer) return holder.name ? `${holder.name} · session owner (you)` : 'You · session owner';
-  return holder.name ? `${holder.name} · session owner` : 'Session owner';
+  if (holder.kind === 'teammate-owner') return holder.name ? `${holder.name} · session owner` : 'Session owner';
+  if (!holder.ownsSession) return holder.name ? `${holder.name} (you)` : 'You';
+  return holder.name ? `${holder.name} · session owner (you)` : 'You · session owner';
 }
 
 function teammateWarning(holder: CredentialHolder, credential: string): string | undefined {
-  if (holder.kind === 'organization' || holder.isViewer) return undefined;
+  if (holder.kind !== 'teammate-owner') return undefined;
   return `Your messages use ${holder.name ? `${holder.name}’s` : 'the session owner’s'} ${credential}`;
 }
 
@@ -52,24 +69,17 @@ function HolderBadge({ holder }: { holder: CredentialHolder }) {
 
 export function ModelCredential() {
   const authQuery = useFactoryAuth();
-  const { owner } = useChatSessionContext();
+  const { owner, draftSessionId } = useChatSessionContext();
   const { activeModelId } = useChatModels();
   const { modelScope, catalogTarget } = useChatModelScope();
   const modelsQuery = useAvailableModelsQuery(catalogTarget);
 
   if (!authQuery.data?.authEnabled || !modelScope) return null;
 
-  const viewer = authQuery.data.user;
-  const sessionOwner = owner ?? { id: viewer?.userId, name: viewer?.name, avatarUrl: viewer?.avatarUrl };
   const holder: CredentialHolder =
     modelScope === 'factory'
       ? { kind: 'organization' }
-      : {
-          kind: 'session-owner',
-          name: sessionOwner.name,
-          avatarUrl: sessionOwner.avatarUrl,
-          isViewer: sessionOwner.id === viewer?.userId,
-        };
+      : personalHolder(owner, authQuery.data.user, Boolean(draftSessionId));
   const model = modelsQuery.data?.find(candidate => candidate.id === activeModelId);
   const credential =
     model?.credentialLabel ?? (model ? `${providerDisplayName(model.provider)} connection` : 'Model connection');

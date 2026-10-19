@@ -134,6 +134,12 @@ describe('ModelCredential', () => {
     expect(await findCredential('Claude Pro/Max. Damien Schneider · session owner (you)')).toBeInTheDocument();
   });
 
+  it('names you without claiming ownership on a thread no session row backs, such as a Slack channel thread', async () => {
+    renderModelCredential({ threadScope: 'user' });
+
+    expect(await findCredential('Claude Pro/Max. Damien Schneider (you)')).toBeInTheDocument();
+  });
+
   it('names the organization credential on a new chat in an organization-scoped Factory', async () => {
     renderModelCredential({ draft: true, projectScope: 'factory', credentialLabel: 'Anthropic API key' });
 
