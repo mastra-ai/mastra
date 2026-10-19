@@ -50,6 +50,7 @@ it('neither returns nor advertises time to first chunk when core predates the fi
     dedupeKey: 'trace-a',
     sortValue: '2026-01-01T10:00:00.000Z',
     rootStartedAt: '2026-01-01T10:00:00.000Z',
+    rootEndedAt: '2026-01-01T10:00:01.000Z',
   };
   const query = vi.fn().mockResolvedValue({ json: async () => [row] });
   const result = await queryTraces({ query } as unknown as ClickHouseClient, keyset, 15_000, 'serial');
