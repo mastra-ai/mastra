@@ -3,7 +3,13 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 
 import { SlackManifestClient } from './client';
-import { SlackProvider, stripTrailingSlash, resolveSlackAdapterConfig, hashConfig } from './provider';
+import {
+  SlackProvider,
+  stripTrailingSlash,
+  resolveSlackAdapterConfig,
+  resolveForwardedAdapterOptions,
+  hashConfig,
+} from './provider';
 import type { SlackConnectOptions } from './types';
 
 describe('connect object form', () => {
@@ -48,6 +54,29 @@ describe('resolveSlackAdapterConfig', () => {
   it('omits textFormat when unset so the core default governs', () => {
     const resolved = resolveSlackAdapterConfig({});
     expect('textFormat' in resolved).toBe(false);
+  });
+});
+
+describe('resolveForwardedAdapterOptions', () => {
+  const topLevel = { prompts: [{ title: 'Top', message: 'top-level' }] };
+  const legacy = { prompts: [{ title: 'Legacy', message: 'adapterConfig' }] };
+
+  it('forwards top-level suggestedPrompts', () => {
+    expect(resolveForwardedAdapterOptions({ suggestedPrompts: topLevel }).suggestedPrompts).toBe(topLevel);
+  });
+
+  it('falls back to the deprecated adapterConfig.suggestedPrompts', () => {
+    expect(resolveForwardedAdapterOptions({ adapterConfig: { suggestedPrompts: legacy } }).suggestedPrompts).toBe(
+      legacy,
+    );
+  });
+
+  it('prefers top-level suggestedPrompts over adapterConfig when both are set', () => {
+    const resolved = resolveForwardedAdapterOptions({
+      suggestedPrompts: topLevel,
+      adapterConfig: { suggestedPrompts: legacy },
+    });
+    expect(resolved.suggestedPrompts).toBe(topLevel);
   });
 });
 

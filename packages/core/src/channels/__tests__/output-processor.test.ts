@@ -673,6 +673,135 @@ describe('ChatChannelOutputProcessor', () => {
       expect(new Set(taskUpdates.map(update => update.id))).toEqual(new Set(['t1', 't2']));
     });
 
+    it("'grouped': a memory event before the first tool neither pins the opener nor steals the header", async () => {
+      // OM recall fires before the model says anything. It sets its own
+      // "Updating memory" header, which must not count as "tools have
+      // started": the opener still flushes on its own (with the memory row)
+      // and the first tool row still brings the `Working…` header.
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      await drive(
+        channels,
+        [
+          {
+            type: 'data-om-activation',
+            data: { cycleId: 'a1', operationType: 'observation', tokensActivated: 100, observationTokens: 10 },
+          },
+          { type: 'text-delta', payload: { text: 'On it — checking the weather first.' } },
+          { type: 'text-end', payload: {} },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'rainy' },
+          },
+          { type: 'text-delta', payload: { text: 'Rainy.' } },
+          { type: 'finish', payload: {} },
+        ] as any,
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(2);
+
+      const opener = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
+      expect(opener.filter((piece): piece is string => typeof piece === 'string').join('')).toBe(
+        'On it — checking the weather first.',
+      );
+      const planTitles = (pieces: (string | object)[]) =>
+        pieces
+          .filter((p): p is { type: 'plan_update'; title: string } => (p as any).type === 'plan_update')
+          .map(p => p.title);
+      expect(planTitles(opener)).toEqual(['Updating memory']);
+      expect(opener.some(piece => (piece as any).type === 'task_update' && (piece as any).id === 't1')).toBe(false);
+
+      const rest = await drainStreamingPlan((posts[1] as Extract<Call, { kind: 'post' }>).arg);
+      expect(planTitles(rest)).toEqual(['Working…']);
+      expect(rest.filter((piece): piece is string => typeof piece === 'string').join('')).toBe('Rainy.');
+    });
+
+    it("'grouped': a resumed run whose tool-result arrives without its tool-call still gets the header", async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      (channels as any).pendingApprovalCards.set('t1', {
+        displayName: 'weather',
+        argsSummary: 'NYC',
+        startedAt: Date.now() - 1000,
+        messageId: 'pending-card-1',
+      });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      const drained = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
+      const planUpdates = drained.filter(
+        (p): p is { type: 'plan_update'; title: string } => typeof p === 'object' && (p as any).type === 'plan_update',
+      );
+      expect(planUpdates.map(p => p.title)).toEqual(['Working…']);
+      const taskUpdates = drained.filter(
+        (p): p is { type: 'task_update'; id: string; status: string; title: string } =>
+          typeof p === 'object' && (p as any).type === 'task_update',
+      );
+      expect(taskUpdates).toEqual([expect.objectContaining({ id: 't1', status: 'complete', title: 'weather NYC' })]);
+    });
+
+    it("'timeline': one fixed plan header per message, never a per-row echo", async () => {
+      // Timeline shares the header rule with grouped: rows carry the tool
+      // detail, so the header is a fixed label rather than the current row's
+      // title (which used to be re-pushed on every result). Timeline still
+      // flushes before each sequential tool, so each tool is its own post.
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'timeline' });
+      await drive(
+        channels,
+        [
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'rainy' },
+          },
+          {
+            type: 'tool-call',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' } },
+          },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't2', toolName: 'weather', args: { city: 'LA' }, result: 'sunny' },
+          },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(2);
+      for (const [i, expectedTitle] of [['weather NYC'], ['weather LA']].entries()) {
+        const drained = await drainStreamingPlan((posts[i] as Extract<Call, { kind: 'post' }>).arg);
+        const planUpdates = drained.filter(
+          (p): p is { type: 'plan_update'; title: string } =>
+            typeof p === 'object' && (p as any).type === 'plan_update',
+        );
+        expect(planUpdates.map(p => p.title)).toEqual(['Working…']);
+        const starts = drained.filter(
+          (p): p is { type: 'task_update'; title: string; status: string } =>
+            typeof p === 'object' && (p as any).type === 'task_update' && (p as any).status === 'in_progress',
+        );
+        expect(starts.map(t => t.title)).toEqual(expectedTitle);
+      }
+    });
+
     it("flushes pending OM tasks as 'complete' before closing the session", async () => {
       // OM buffering runs async in the background — if the session closes
       // before `buffering-end` arrives, the chat-SDK plan widget flips any

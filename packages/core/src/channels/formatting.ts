@@ -51,12 +51,19 @@ export function formatArgsSummary(args: unknown): string {
  * describes itself (e.g. `execute_command`'s `description`) gets that line
  * verbatim — "Listing files in /workspace" reads better than
  * "execute_command ls -la". Otherwise fall back to `name args`.
+ *
+ * Not every `description` is a one-liner — issue/PR creators and MCP tools
+ * take multi-paragraph bodies under that name — so only the first non-blank
+ * line is used, with runs of whitespace collapsed.
  */
 export function formatTaskTitle(displayName: string, argsSummary: string, args: unknown): string {
   const description = args && typeof args === 'object' ? (args as Record<string, unknown>).description : undefined;
-  if (typeof description === 'string' && description.trim()) {
-    const line = description.trim();
-    return line.length > MAX_TASK_TITLE_LENGTH ? line.slice(0, MAX_TASK_TITLE_LENGTH) + '…' : line;
+  if (typeof description === 'string') {
+    const line = description
+      .split('\n')
+      .map(l => l.replace(/\s+/g, ' ').trim())
+      .find(Boolean);
+    if (line) return line.length > MAX_TASK_TITLE_LENGTH ? line.slice(0, MAX_TASK_TITLE_LENGTH) + '…' : line;
   }
   return argsSummary ? `${displayName} ${argsSummary}` : displayName;
 }

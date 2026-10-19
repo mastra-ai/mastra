@@ -2,6 +2,6 @@
 '@mastra/core': patch
 ---
 
-Channel streaming in `toolDisplay: 'grouped'` mode now posts any text the agent writes before its first tool call as its own message, so an opening acknowledgement lands in the thread before the Thinking Steps widget instead of being folded under it.
+Channel streaming: text the agent writes before its first tool call now posts as its own message in `toolDisplay: 'grouped'` mode. An opening acknowledgement lands above the Thinking Steps widget instead of under it.
 
-The widget itself is quieter: its header is a fixed "Working…" label instead of echoing the current tool, and each task row shows the tool's `description` argument alone when one is present (falling back to `toolName firstArg` otherwise), so a single-tool run no longer reads the same line twice.
+The plan widget in `'grouped'` and `'timeline'` modes is quieter. The header is a fixed "Working…" label and no longer echoes the current tool. Each task row shows the tool's `description` argument (first line only) when it has one, and falls back to `toolName firstArg` otherwise.

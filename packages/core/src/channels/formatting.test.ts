@@ -160,7 +160,16 @@ describe('formatTaskTitle', () => {
 
   it('ignores a blank or non-string description', () => {
     expect(formatTaskTitle('view', 'a.ts', { description: '  ', path: 'a.ts' })).toBe('view a.ts');
+    expect(formatTaskTitle('view', 'a.ts', { description: '\n\n  \n', path: 'a.ts' })).toBe('view a.ts');
     expect(formatTaskTitle('view', 'a.ts', { description: 42, path: 'a.ts' })).toBe('view a.ts');
+  });
+
+  it('keeps only the first line of a multi-line description and collapses whitespace', () => {
+    // Issue/PR creators and MCP tools take whole bodies under `description`.
+    const body = '\n  Fix the   flaky\tlogin test\n\nIt fails when the clock crosses midnight.\n- step one\n- step two';
+    expect(formatTaskTitle('github_create_issue', 'Fix login', { title: 'Fix login', description: body })).toBe(
+      'Fix the flaky login test',
+    );
   });
 });
 
