@@ -13,7 +13,6 @@
     "lint:fix": "oxlint --type-aware --fix .",
     "test": "vitest run",
     "test:unit": "vitest run --project unit:factory-ui",
-    "test:hmr": "playwright test -c e2e/hmr/playwright.config.ts",
     "test:msw": "vitest run --project msw:factory-ui"
   },
   "dependencies": {
