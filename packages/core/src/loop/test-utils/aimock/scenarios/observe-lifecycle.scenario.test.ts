@@ -6,6 +6,8 @@
  * or errored runs) and must stay open while a live run is merely quiet (slow
  * first token, slow tool between steps) or suspended for approval, so an
  * existing observer follows the approved run to its finish without reconnecting.
+ * An abort request against a suspended run does not end the suspension, so the
+ * observation stays open until the run unwinds with its abort `finish`.
  *
  * observe() exists only on the durable engines, so `normal` and `fs` are skipped.
  */
@@ -203,6 +205,56 @@ describeForAllEngines(
         }
         expect(acrossSuspend.types).toContain('tool-call-approval');
         await resumed.consumeStream();
+      } finally {
+        resumed?.cleanup?.();
+        run.cleanup?.();
+      }
+    }, 30_000);
+
+    it('keeps observing a suspended run after an abort request and closes on the abort finish', async () => {
+      const llm = getMock();
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        { toolCalls: [{ id: 'call_abort', name: 'lookup_status', arguments: { query: 'alpha' } }] },
+      );
+      llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Should never be generated.' });
+      const lookup = createTool({
+        id: 'lookup_status',
+        description: 'Look up a status.',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async ({ query }) => ({ status: `OK:${query}` }),
+      });
+      const { agent } = await createSharedAgent(llm, { engine, tools: { lookup_status: lookup } });
+      const run = await agent.stream('Look up alpha', { requireToolApproval: true, maxSteps: 5 });
+      for await (const chunk of run.fullStream) if (chunk.type === 'tool-call-approval') break;
+
+      let resumed: any;
+      try {
+        let closed = false;
+        const observing = drain(await agent.observe(run.runId), 20_000).finally(() => (closed = true));
+
+        // Aborting a run parked on approval records the intent; the run stays suspended,
+        // so nothing terminal is published and the observer must not close yet.
+        expect(agent.abortRunStream(run.runId)).toBe(true);
+        await new Promise(resolve => setTimeout(resolve, SILENCE_MS));
+        expect(closed).toBe(false);
+
+        resumed = await agent.approveToolCall({ runId: run.runId, toolCallId: 'call_abort' });
+        await resumed.consumeStream();
+        const acrossAbort = await observing;
+
+        expect(acrossAbort.timedOut).toBe(false);
+        expect(acrossAbort.types).toContain('tool-call-approval');
+        expect(acrossAbort.types).toContain('abort');
+        expect(acrossAbort.types.at(-1)).toBe('finish');
+        expect(textOf(acrossAbort.chunks)).toBe('');
+        expect(llm.getRequests()).toHaveLength(1);
+
+        // Observing the aborted run afterwards replays it and closes.
+        const replay = await drain(await agent.observe(run.runId), CLOSE_WITHIN_MS);
+        expect(replay.timedOut).toBe(false);
+        expect(replay.types).toContain('abort');
+        expect(replay.types.at(-1)).toBe('finish');
       } finally {
         resumed?.cleanup?.();
         run.cleanup?.();
