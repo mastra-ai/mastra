@@ -1,5 +1,14 @@
 # mastracode
 
+## 0.48.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`6b8435c`](https://github.com/mastra-ai/mastra/commit/6b8435c1aaad98a3a5218ececbc45107968c9218), [`40a76a8`](https://github.com/mastra-ai/mastra/commit/40a76a854d9246aa8b8ba25ab3f58d7542e0ffea), [`2ceedd7`](https://github.com/mastra-ai/mastra/commit/2ceedd7a69502474bbf43910351772747493ef88)]:
+  - @mastra/memory@1.39.0-alpha.4
+  - @mastra/code-sdk@1.15.0-alpha.6
+  - @mastra/libsql@1.27.0-alpha.3
+
 ## 0.48.0-alpha.5
 
 ### Patch Changes
