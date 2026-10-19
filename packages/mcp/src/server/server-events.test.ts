@@ -485,6 +485,31 @@ describe('MCPServer events over Streamable HTTP', () => {
       expect(methods(received)).toEqual(['active']);
     });
 
+    it('rejects streams past maxStreams with -32025 until one closes', async () => {
+      const server = makeServer({ 'ticket.created': ticketCreated() }, { eventsOptions: { maxStreams: 2 } });
+      const c = await connect(server);
+      const { received, methods } = recordNotifications(c);
+      const registry = registryOf(server);
+
+      const first = openStream(c, { name: 'ticket.created' });
+      const second = openStream(c, { name: 'ticket.created' });
+      await vi.waitFor(() => expect(methods(received)).toEqual(['active', 'active']));
+
+      const error = await rejection(
+        c.request({ method: 'events/stream', params: { name: 'ticket.created' } }, StreamEventsResultSchema),
+      );
+      expect(error.code).toBe(-32025);
+      expect(registry.openStreams.size).toBe(2);
+      expect(registry.listenerCount()).toBe(2);
+
+      first.abort();
+      await vi.waitFor(() => expect(registry.openStreams.size).toBe(1));
+      const third = openStream(c, { name: 'ticket.created' });
+      await vi.waitFor(() => expect(methods(received)).toEqual(['active', 'active', 'active']));
+      second.abort();
+      third.abort();
+    });
+
     it('keeps serving other requests while streams are open', async () => {
       const server = makeServer({ 'ticket.created': ticketCreated() });
       const c = await connect(server);

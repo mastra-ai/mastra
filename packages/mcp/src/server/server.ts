@@ -567,6 +567,7 @@ export class MCPServer extends MCPServerBase {
         registry: this.eventRegistry,
         heartbeatIntervalMs: this.eventsOptions.heartbeatIntervalMs ?? DEFAULT_EVENTS_HEARTBEAT_INTERVAL_MS,
         listPageSize: this.eventsOptions.listPageSize,
+        maxStreams: this.eventsOptions.maxStreams,
         getLogger: () => this.logger,
         jsonSchema: (schema, options) => this.jsonSchema(schema, options),
         trace: (instance, method, params, ctx, fn) => this.traceCustomRequest(instance, method, params, ctx, fn),

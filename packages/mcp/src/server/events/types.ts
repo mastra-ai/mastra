@@ -100,6 +100,11 @@ export interface MCPServerEventsOptions {
   heartbeatIntervalMs?: number;
   /** Descriptors per `events/list` page. Defaults to 100. */
   listPageSize?: number;
+  /**
+   * Most `events/stream` requests this server keeps open at once, across all clients. Further
+   * requests are rejected with -32025 until a stream closes. Defaults to 1024.
+   */
+  maxStreams?: number;
 }
 
 /** @experimental SEP-3415 is a draft; this API may change. */
