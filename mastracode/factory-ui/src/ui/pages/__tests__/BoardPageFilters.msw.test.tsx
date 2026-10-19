@@ -292,12 +292,14 @@ describe('BoardPage filters', () => {
     await togglePropertyOption(user, MENU, 'Relevant because', 'Worked on');
     await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('relevance=authored'));
     await openPropertySubmenu(user, MENU, 'Relevant because');
+    expect(screen.getByRole('menuitem', { name: /^Relevant because\s*Authored$/ })).toBeInTheDocument();
     expect(screen.getByRole('menuitemcheckbox', { name: 'Authored' })).toHaveAttribute('aria-disabled', 'true');
     await closePropertiesMenus(user);
     await togglePropertyOption(user, MENU, 'Relevant because', 'Worked on');
     await togglePropertyOption(user, MENU, 'Relevant because', 'Assigned');
     await waitFor(() => expect(screen.getByTestId('board-url')).not.toHaveTextContent('relevance='));
     await openPropertySubmenu(user, MENU, 'Relevant because');
+    expect(screen.getByRole('menuitem', { name: /^Relevant because$/ })).toBeInTheDocument();
     for (const reason of ['Worked on', 'Authored', 'Assigned']) {
       expect(screen.getByRole('menuitemcheckbox', { name: reason })).toHaveAttribute('aria-checked', 'true');
     }
