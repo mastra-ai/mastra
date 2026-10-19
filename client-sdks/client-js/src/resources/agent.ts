@@ -1,12 +1,3 @@
-import { parsePartialJson, processDataStream } from '@ai-sdk/ui-utils';
-import type {
-  JSONValue,
-  ReasoningUIPart,
-  TextUIPart,
-  ToolInvocation,
-  UIMessage,
-  UseChatOptions,
-} from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
 import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
 import type { AIV5Type, MessageListInput } from '@mastra/core/agent/message-list';
@@ -69,6 +60,15 @@ import {
   requestContextQueryString,
   toQueryParams,
 } from '../utils';
+import type {
+  JSONValue,
+  ReasoningUIPart,
+  TextUIPart,
+  ToolInvocation,
+  UIMessage,
+  UseChatOptions,
+} from '../utils/ai-sdk-v4';
+import { parsePartialJson, processDataStream } from '../utils/ai-sdk-v4';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';

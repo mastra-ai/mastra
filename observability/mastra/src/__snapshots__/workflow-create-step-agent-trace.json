@@ -106,7 +106,8 @@
                 "entityType": "agent",
                 "entityId": "workflow-agent",
                 "attributes": {
-                  "instructions": "You are an agent in a workflow"
+                  "instructions": "You are an agent in a workflow",
+                  "completionStartTime": "<date>"
                 },
                 "metadata": {
                   "runId": "<runId-2>",
@@ -136,10 +137,10 @@
                       "provider": "mock-provider",
                       "streaming": true,
                       "parameters": {},
+                      "completionStartTime": "<date>",
                       "finishReason": "stop",
                       "responseId": "1",
                       "responseModel": "",
-                      "completionStartTime": "<date>",
                       "usage": {
                         "inputTokens": 10,
                         "outputTokens": 20,
@@ -196,6 +197,7 @@
                         "attributes": {
                           "stepIndex": 0,
                           "messageId": "<messageId-1>",
+                          "completionStartTime": "<date>",
                           "usage": {
                             "inputTokens": 10,
                             "outputTokens": 20,

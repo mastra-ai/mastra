@@ -17,9 +17,13 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "GLM-5.1": [
+    "glm5.2-fast": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
       }
     ],
     "GLM-5.2": [
@@ -31,13 +35,9 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "glm5.2-fast": [
+    "GLM-5.1": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
       }
     ]
   }

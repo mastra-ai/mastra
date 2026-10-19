@@ -92,6 +92,7 @@ import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
   assertObservabilitySpanQuerySupported,
+  assertObservabilitySpanQueryFieldsSupported,
   assertObservabilityThreadQuerySupported,
   assertObservabilityTraceAggregateSupported,
   assertObservabilityTraceQueryTenantScopeSupported,
@@ -631,8 +632,12 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilitySpanQuerySupported(observabilityStore);
+      assertObservabilitySpanQueryFieldsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
+      if (error instanceof coreStorage.TraceQueryValidationError) {
+        throwTraceQueryError(422, { code: error.code, message: 'The span query is invalid', issues: error.issues });
+      }
       if (error instanceof HTTPException && error.status === 501) {
         throwTraceQueryError(501, { code: SERVER_ERROR_CODES.SPAN_QUERY_UNSUPPORTED, message: error.message });
       }

@@ -1,4 +1,3 @@
-import type { JSONValue, ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import type {
   AgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
@@ -44,6 +43,7 @@ import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
 
 import type { Body, PathParams, QueryParams, RouteKey, RouteResponse, Simplify } from './route-types.generated.js';
+import type { JSONValue, ToolInvocationUIPart } from './utils/ai-sdk-v4';
 
 export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
 
@@ -57,7 +57,7 @@ export type PartProviderMetadata = Record<string, Record<string, JSONValue>>;
 export type MaybeProviderMetadata = { providerMetadata?: PartProviderMetadata };
 
 /**
- * `ToolInvocationUIPart` from `@ai-sdk/ui-utils` has no `providerMetadata` field, but the
+ * `ToolInvocationUIPart` from the AI SDK v4 UI types has no `providerMetadata` field, but the
  * server reads provider metadata from the part itself (not from the nested `toolInvocation`),
  * so the SDK has to be able to set it there.
  */

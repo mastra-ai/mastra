@@ -330,7 +330,9 @@ export const ticketTriage = createWorkflow({
   .commit()
 ```
 
-The `choice` field retains the configured criteria-key union, so `inputData.answers.route.choice` is typed as `'billing' | 'support' | 'other'`. Score answers expose `score`. Boolean answers expose the `P(true)` value as `probability`. Apply an explicit threshold when routing.
+The `choice` field retains the configured criteria-key union, so `inputData.answers.route.choice` is typed as `'billing' | 'support' | 'other' | undefined`. Score answers expose `score`. Boolean answers expose the `P(true)` value as `probability`. Apply an explicit threshold when routing.
+
+When the decision model refuses a question, its answer is `{ type: 'refusal' }` and `choice`, `score`, and `probability` are `undefined`. In the example above, a refused `route` question matches no condition. Add a condition on `inputData.answers.route.type === 'refusal'` to handle it explicitly.
 
 ### Output structure
 

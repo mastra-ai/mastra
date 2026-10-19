@@ -52,12 +52,14 @@ const durableLLMMappingOutputSchema = z.object({
     toolCalls: z.array(z.any()).optional(),
     usage: z.any(),
     steps: z.array(z.any()),
+    content: z.array(z.any()).optional(),
   }),
   state: z.any(),
   delegationBailed: z.boolean().optional(),
   processorRetryCount: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
   deferredStepFinishChunk: z.any().optional(),
+  completionStartTime: z.coerce.date().optional(),
 });
 
 /**
@@ -390,6 +392,9 @@ export function createDurableLLMMappingStep() {
             totalTokens: undefined,
           },
           steps: [], // Steps are accumulated at the loop level
+          // Recorded on the step record; stopWhen reads it, and the deferred
+          // step-finish chunk returns it as stream.steps content.
+          content: messageList.get.response.aiV5.modelContent(-1),
         },
         state: {
           ...state,
@@ -399,6 +404,7 @@ export function createDurableLLMMappingStep() {
         processorRetryFeedback: llmOutput.processorRetryFeedback,
         delegationBailed,
         deferredStepFinishChunk,
+        completionStartTime: llmOutput.completionStartTime,
       };
 
       // Close the MODEL_STEP span for tool-calling iterations: the LLM step defers it so

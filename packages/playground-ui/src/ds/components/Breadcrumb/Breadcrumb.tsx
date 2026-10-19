@@ -96,7 +96,7 @@ export const Crumb = ({
           {icon && (
             <Icon
               className={cn(
-                '-ml-[.3em] shrink-0 opacity-50 group-hover:opacity-100',
+                'ml-[-.3em] shrink-0 opacity-50 group-hover:opacity-100',
                 'transition-opacity duration-normal ease-out-custom',
               )}
             >

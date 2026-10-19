@@ -44,7 +44,7 @@ import { relatedWorkItemIndex } from '../../domains/factory/services/relationshi
 import { workItemHumanActorIds } from '../../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../../domains/workspaces/services/github';
 
-import { ColumnReveal } from '../../domains/factory/components/ColumnReveal';
+import { VirtualBoardItems } from '../../domains/factory/components/VirtualBoardItems';
 import { WorkItemCard } from '../../domains/factory/components/WorkItemCard';
 import { InlineWorkItemComposer } from '../../domains/factory/components/InlineWorkItemComposer';
 import { BoardStageCandidates } from '../../domains/factory/components/BoardStageCandidates';
@@ -305,12 +305,13 @@ export function BoardContent({
             )
           }
         >
-          <ColumnReveal
+          <VirtualBoardItems
             items={stageWorkItems}
-            pinned={item => item.id === targetItemId}
+            itemKey={item => item.id}
+            layout={layout}
+            pinnedKey={targetItemId}
             renderItem={item => (
               <WorkItemCard
-                key={`${item.id}:${stage.id}`}
                 layout={layout}
                 item={item}
                 deepLinkRef={registerDeepLinkedCard(item.id)}
@@ -407,6 +408,8 @@ export function BoardContent({
                   factoryProjectId={factoryProjectId}
                   autoRunEnabled={factory.autoRunEnabled ?? false}
                   autoApprovePlans={factory.autoApprovePlans ?? false}
+                  reviewTestChecksEnabled={factory.reviewTestChecksEnabled ?? false}
+                  selfReviewEnabled={factory.selfReviewEnabled ?? false}
                 />
               )
             }

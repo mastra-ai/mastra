@@ -19,7 +19,7 @@ import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
-import { RequestContext } from '../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
@@ -2603,6 +2603,8 @@ export class AgentController<TState = {}> {
     this.#executionViews.set(controllerContext, executionView);
     requestContext.set('controller', controllerContext);
     if (threadOwnerId !== undefined) requestContext.setRaw(THREAD_OWNER_ID_CONTEXT_KEY, threadOwnerId);
+    if (resourceId) requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+    if (threadId) requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
 
     return requestContext;
   }
