@@ -208,7 +208,9 @@ export async function queryThreadRows(
       return `(${Object.entries(entries)
         .map(([field, value]) => {
           values.push(value);
-          return `"${field}" IS NOT DISTINCT FROM $${values.length}`;
+          // Selected root keys are non-null; equality permits index scans and partition pruning.
+          const operator = field === 'organizationId' || field === 'resourceId' ? 'IS NOT DISTINCT FROM' : '=';
+          return `"${field}" ${operator} $${values.length}`;
         })
         .join(' AND ')})`;
     }),
@@ -239,7 +241,8 @@ export async function queryThreadRows(
         })
           .map(([field, value]) => {
             modelValues.push(value);
-            return `"${field}" IS NOT DISTINCT FROM $${modelValues.length}`;
+            const operator = field === 'organizationId' || field === 'resourceId' ? 'IS NOT DISTINCT FROM' : '=';
+            return `"${field}" ${operator} $${modelValues.length}`;
           })
           .join(' AND ')})`,
     );
