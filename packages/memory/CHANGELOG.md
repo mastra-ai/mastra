@@ -1,5 +1,17 @@
 # @mastra/memory
 
+## 1.39.0-alpha.4
+
+### Patch Changes
+
+- Observational memory now aborts and retries an Observer, Reflector, or extraction model call that produces no output for 5 minutes. Before, a provider that accepted the request but never answered could stall the call indefinitely, holding up the thread's observation work. The limit measures silence, not total duration, so long replies that keep streaming are never cut off. ([#27489](https://github.com/mastra-ai/mastra/pull/27489))
+
+- Added an optional `{ threadId, resourceId }` scope to `settled()`. With a scope it waits only for that thread's observational memory background work, so a busy thread no longer holds up callers waiting on a different thread that shares the same engine. Calling `settled()` with no scope still waits for all work. ([#27444](https://github.com/mastra-ai/mastra/pull/27444))
+
+  ```ts
+  await memory.settled({ threadId, resourceId });
+  ```
+
 ## 1.39.0-alpha.3
 
 ### Patch Changes
