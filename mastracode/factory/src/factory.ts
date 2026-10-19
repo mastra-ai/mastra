@@ -899,7 +899,19 @@ export class MastraFactory {
       transitionService,
       auditRecorder: auditDomain,
       sessions: sourceControlSessions,
-      sessionModel: { projects: factoryProjectsStorage, modelDefaults: modelDefaultsStorage },
+      sessionModel: {
+        projects: factoryProjectsStorage,
+        modelDefaults: modelDefaultsStorage,
+        ...(auth
+          ? {
+              tenantCatalog: {
+                credentials: modelCredentialsStorage,
+                customProviders: customProvidersStorage,
+                deploymentProviders: deploymentModelProviders,
+              },
+            }
+          : {}),
+      },
       intake: intakeStorage,
       startCoordinator: () => this.#startCoordinator,
       messaging: factoryMessaging,
