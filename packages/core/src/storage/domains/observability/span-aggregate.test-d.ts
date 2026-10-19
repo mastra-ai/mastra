@@ -20,7 +20,8 @@ describe('TrustedSpanAggregatePlan type', () => {
     expectTypeOf<'countDistinct.metadata.tenant'>().not.toMatchTypeOf<Name>();
     expectTypeOf<TrustedSpanAggregatePlan['dimensions'][number]>().toEqualTypeOf<SpanAggregateDimension>();
     expectTypeOf<'metadata.tenant'>().not.toMatchTypeOf<SpanAggregateDimension>();
-    expectTypeOf<'model' | 'parentEntityName' | 'rootEntityType'>().toMatchTypeOf<SpanAggregateDimension>();
+    expectTypeOf<'model' | 'provider'>().not.toMatchTypeOf<SpanAggregateDimension>();
+    expectTypeOf<'parentEntityName' | 'rootEntityType'>().toMatchTypeOf<SpanAggregateDimension>();
   });
 
   it('narrows having and orderBy references the same way', () => {

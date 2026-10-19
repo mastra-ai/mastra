@@ -55,8 +55,8 @@ describe('planSpanAggregate', () => {
   });
 
   it.each([
-    ['model', 'filterable only through grouping'],
-    ['provider', 'filterable only through grouping'],
+    ['model', 'not a span query field'],
+    ['provider', 'not a span query field'],
     ['metadata.tenant', 'trace-only'],
   ])('rejects %s in where (%s)', field => {
     expectIssue({ ...base, where: eq(field, 'x') }, 'field_not_allowed', ['where', 'left', 'path']);
@@ -66,12 +66,20 @@ describe('planSpanAggregate', () => {
     expect(planSpanAggregate({ ...base, groupBy: [dimension] }).dimensions).toEqual([dimension]);
   });
 
-  it.each(['traceId', 'spanId', 'parentSpanId', 'runId', 'requestId', 'metadata.tenant', 'durationMs', 'attributes.x'])(
-    'rejects %s as a dimension',
-    dimension => {
-      expectIssue({ ...base, groupBy: [dimension] }, 'field_not_allowed', ['groupBy', 0]);
-    },
-  );
+  it.each([
+    'traceId',
+    'spanId',
+    'parentSpanId',
+    'runId',
+    'requestId',
+    'metadata.tenant',
+    'durationMs',
+    'attributes.x',
+    'model',
+    'provider',
+  ])('rejects %s as a dimension', dimension => {
+    expectIssue({ ...base, groupBy: [dimension] }, 'field_not_allowed', ['groupBy', 0]);
+  });
 
   it('accepts countDistinct over traceId and span dimensions, normalizing templates', () => {
     const plan = planSpanAggregate({
@@ -106,7 +114,7 @@ describe('planSpanAggregate', () => {
   it('plans having and orderBy over measures and span dimensions', () => {
     const plan = planSpanAggregate({
       ...base,
-      groupBy: ['model', 'parentEntityName'],
+      groupBy: ['rootEntityName', 'parentEntityName'],
       measures: ['count', 'cost.sum'],
       having: { op: 'gt', left: { path: 'cost.sum' }, right: { literal: 1 } },
       orderBy: { field: 'parentEntityName', direction: 'asc' },

@@ -57,7 +57,7 @@ export function evaluateSpanAggregateRequest(
 // Expected responses are derived by hand from the table below — never by running the evaluator —
 // so stores can be proven against an independent oracle. Window: 2026-08-01 – 2026-08-03.
 //
-// | trace | span        | type             | name             | dur   | entity       | parent  | root    | model       | notes                    |
+// | trace | span        | type             | name             | dur   | entity       | parent  | root    | model attr  | notes                    |
 // |-------|-------------|------------------|------------------|-------|--------------|---------|---------|-------------|--------------------------|
 // | t1    | t1-root     | agent_run        | agent:support    | 10 s  | agent/support| –       | support |             | 08-01 00:00              |
 // | t1    | t1-model    | model_generation | llm              | 2 s   | –            | support | support | gpt-4o      | older copy ran 9 s       |
@@ -335,30 +335,30 @@ export const SPAN_AGGREGATE_CONFORMANCE_CASES: SpanAggregateConformanceCase[] = 
     },
   },
   {
-    name: 'attributes tokens and cost to the span that emitted them, grouped by model',
+    name: 'attributes tokens and cost to the span that emitted them, grouped by calling agent',
     request: {
       timeRange: spanRange,
       where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
-      groupBy: ['model'],
+      groupBy: ['parentEntityName'],
       measures: ['count', 'tokens.total.sum', 'tokens.input.avg', 'cost.sum'],
-      orderBy: { field: 'model', direction: 'asc' },
+      orderBy: { field: 'parentEntityName', direction: 'asc' },
     },
     expected: {
       rows: [
         {
-          dimensions: { model: 'gpt-4o' },
-          measures: { count: 1, 'tokens.total.sum': 150, 'tokens.input.avg': 100, 'cost.sum': 0.75 },
-          cost: usd(1),
-        },
-        {
-          dimensions: { model: 'gpt-4o-mini' },
+          dimensions: { parentEntityName: 'billing' },
           measures: { count: 1, 'tokens.total.sum': 280, 'tokens.input.avg': 200, 'cost.sum': 0.125 },
           cost: eur(1),
         },
         {
-          dimensions: { model: null },
+          dimensions: { parentEntityName: 'nightly' },
           measures: { count: 1, 'tokens.total.sum': 50, 'tokens.input.avg': 40, 'cost.sum': null },
           cost: unpriced,
+        },
+        {
+          dimensions: { parentEntityName: 'support' },
+          measures: { count: 1, 'tokens.total.sum': 150, 'tokens.input.avg': 100, 'cost.sum': 0.75 },
+          cost: usd(1),
         },
       ],
       truncated: false,

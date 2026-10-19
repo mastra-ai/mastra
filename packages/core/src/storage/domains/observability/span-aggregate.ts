@@ -55,10 +55,11 @@ const stringDimension = (): TraceAggregateDimensionRule => ({ valueKind: 'string
 /**
  * Span-scope groupable dimensions for `aggregateSpans()`, in discovery order.
  *
- * The trace dimensions plus the span's own `name`/`spanType`, its `model`/`provider` (groupable
- * though `querySpans()` cannot filter on them), its `entityId`, and the parent and root entity
- * context. `metadata.<key>` is not groupable: the span field policy has no metadata. Identity
- * fields (`traceId`, `spanId`, `parentSpanId`, `runId`, `requestId`) are not groupable.
+ * The trace dimensions plus the span's own `name`/`spanType`, its `entityId`, and the parent and
+ * root entity context. Not groupable: `metadata.<key>` (the span field policy has no metadata),
+ * identity fields (`traceId`, `spanId`, `parentSpanId`, `runId`, `requestId`), and
+ * `model`/`provider`, which live in span attributes and cost a full attribute read to group on
+ * (OBS-693 tracks dedicated columns).
  */
 export const SPAN_AGGREGATE_DIMENSION_REGISTRY = {
   name: stringDimension(),
@@ -70,8 +71,6 @@ export const SPAN_AGGREGATE_DIMENSION_REGISTRY = {
   parentEntityName: stringDimension(),
   rootEntityType: stringDimension(),
   rootEntityName: stringDimension(),
-  model: stringDimension(),
-  provider: stringDimension(),
   environment: stringDimension(),
   status: stringDimension(),
   serviceName: stringDimension(),
@@ -185,6 +184,9 @@ export type TrustedSpanAggregateOrderBy = TrustedTraceAggregateOrderBy<
  * populations, `limit`/`truncated`, buckets, caps enforced only by the planner, null measures) are
  * exactly those of `TrustedTraceAggregatePlan`. What differs:
  *
+ * - **Window.** Up to `TRACE_AGGREGATE_MAX_TIME_RANGE_DAYS`, as for traces. Hosts accept the
+ *   span retention window they advertise, the same for every tenant scope (project or org), and
+ *   stores must serve that whole window: there is no narrower org-wide span window.
  * - **Population.** One row per current completed span: exactly the spans `querySpans()` pages
  *   through for the same `timeRange`, `where`, and `scope`, so `count` with no `groupBy` equals
  *   that row count. Retry copies of a span collapse to its current copy before `where`,
