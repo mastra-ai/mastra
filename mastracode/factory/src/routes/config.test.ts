@@ -890,11 +890,11 @@ describe('default model routes with a tenant', () => {
           getSessionByResource: async (id: string) =>
             id === 'live'
               ? {
-                  thread: {
-                    getId: () => 'thread-live',
-                    setSettingOn: async ({ key, value }: { key: string; value: string }) =>
-                      void settings.set(key, value),
+                  model: {
+                    get: () => settings.get('currentModelId') ?? '',
+                    switch: async (modelId: string) => void settings.set('currentModelId', modelId),
                   },
+                  thread: { getId: () => 'thread-live' },
                 }
               : undefined,
         },

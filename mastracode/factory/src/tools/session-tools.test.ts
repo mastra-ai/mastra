@@ -151,23 +151,22 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
         .filter(([, thread]) => thread.resourceId === resourceId)
         .map(([id, thread]) => ({ id, ...thread })),
     ),
-    setThreadSettingOn: vi.fn(
-      async ({
-        resourceId,
-        threadId,
-        key,
-        value,
-      }: {
-        resourceId: string;
-        threadId: string;
-        key: string;
-        value: unknown;
-      }) => {
+    listAvailableModels: vi.fn(async () => [
+      { id: 'openai/gpt-5.6', provider: 'openai', modelName: 'gpt-5.6', hasApiKey: true },
+      { id: 'openai/gpt-6.1-sol', provider: 'openai', modelName: 'gpt-6.1-sol', hasApiKey: true },
+      { id: 'anthropic/claude-opus-4-1', provider: 'anthropic', modelName: 'claude-opus-4-1', hasApiKey: false },
+    ]),
+    setThreadModel: vi.fn(
+      async ({ resourceId, threadId, modelId }: { resourceId: string; threadId: string; modelId: string }) => {
         const thread = storedThreads.get(threadId);
         if (!thread || thread.resourceId !== resourceId) throw new Error('Thread not found for session.');
-        thread.metadata[key] = value;
-        const live = created.find(entry => entry.options.threadId === threadId)?.session;
-        if (live) await live.thread.setSettingOn({ threadId, key, value });
+        const live = (await controller.getSessionByResource(resourceId)) as FakeSession | null;
+        if (live?.thread.getId() === threadId) {
+          await live.model.switch(modelId);
+          return { live: true };
+        }
+        thread.metadata.currentModelId = modelId;
+        return { live: false };
       },
     ),
   };
@@ -292,17 +291,19 @@ beforeEach(() => {
 });
 
 describe('factory_switch_session_model', () => {
-  it('switches an owned live or stopped session without recreating it and rejects sessions owned by others', async () => {
+  it('switches a running session immediately, a stopped one for its next run, and rejects unavailable models or other users', async () => {
     const env = await setup();
     const started = (await env.start({ prompt: 'Investigate the build.' })) as { sessionId: string };
     const live = env.created[0]!.session;
+    vi.mocked(live.model.switch).mockClear();
 
     await expect(env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' })).resolves.toEqual({
       sessionId: started.sessionId,
       threadId: started.sessionId,
       modelId: 'openai/gpt-5.6',
+      live: true,
     });
-    expect(await live.thread.getSetting({ key: 'currentModelId' })).toBe('openai/gpt-5.6');
+    expect(live.model.switch).toHaveBeenCalledWith('openai/gpt-5.6');
     expect(env.created).toHaveLength(1);
 
     env.controller.getSessionByResource.mockResolvedValue(null);
@@ -310,9 +311,18 @@ describe('factory_switch_session_model', () => {
       sessionId: started.sessionId,
       threadId: started.sessionId,
       modelId: 'openai/gpt-6.1-sol',
+      live: false,
     });
-    expect(await live.thread.getSetting({ key: 'currentModelId' })).toBe('openai/gpt-6.1-sol');
+    expect(live.model.switch).toHaveBeenCalledTimes(1);
     expect(env.created).toHaveLength(1);
+
+    await expect(
+      env.switchModel({ sessionId: started.sessionId, modelId: 'anthropic/claude-opus-4-1' }),
+    ).rejects.toThrow('not available');
+    await expect(env.switchModel({ sessionId: started.sessionId, modelId: 'made-up/model' })).rejects.toThrow(
+      'not available',
+    );
+    expect(env.controller.setThreadModel).toHaveBeenCalledTimes(2);
 
     await env.sourceControl.sessions.create({
       sessionId: 'other-user-session',
@@ -327,7 +337,7 @@ describe('factory_switch_session_model', () => {
     await expect(env.switchModel({ sessionId: 'other-user-session', modelId: 'openai/gpt-5.6' })).rejects.toThrow(
       'not owned by you',
     );
-    await expect(env.switchModel({ sessionId: 'not-running', modelId: 'openai/gpt-5.6' })).rejects.toThrow('not found');
+    await expect(env.switchModel({ sessionId: 'missing', modelId: 'openai/gpt-5.6' })).rejects.toThrow('not found');
   });
 });
 

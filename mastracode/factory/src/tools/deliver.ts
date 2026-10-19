@@ -12,7 +12,8 @@ export type FactoryDeliveryController = Pick<
   MountedMastraCode['controller'],
   | 'queryThreadById'
   | 'queryThreads'
-  | 'setThreadSettingOn'
+  | 'setThreadModel'
+  | 'listAvailableModels'
   | 'getSessionByResource'
   | 'createSession'
   | 'getCurrentAgent'

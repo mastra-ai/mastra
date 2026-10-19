@@ -28,6 +28,7 @@ import type {
   MemorySettingsStorage,
 } from '../storage/domains/memory-settings/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
+import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -103,11 +104,8 @@ export interface ProviderInfo {
 /** Minimal session surface the config routes touch. */
 export interface OMSession {
   /** `get()` returns '' when no model is selected, so callers fall back on falsy. */
-  model: { get: () => string };
-  thread?: {
-    getId: () => string | null;
-    setSettingOn: (args: { threadId: string; key: 'currentModelId'; value: string }) => Promise<unknown>;
-  };
+  model: { get: () => string; switch?: (modelId: string) => Promise<void> };
+  thread?: { getId: () => string | null };
 }
 
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
@@ -1059,47 +1057,60 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if (!record?.modelId) return c.json({ error: 'default_model_not_set' }, 400);
 
           const applied: string[] = [];
-          const skipped: Array<{ sessionId: string; reason: 'not-running' | 'thread-missing' | 'apply-failed' }> = [];
+          const skipped: Array<{
+            sessionId: string;
+            reason: 'not-running' | 'thread-missing' | 'factory-scope' | 'apply-failed';
+          }> = [];
           const seen = new Set<string>();
-          const projects = await options.factoryProjects.list({ orgId: context.orgId });
-          for (const project of projects) {
-            const workerSessions = new Set(
-              (await options.workItems.listRunBindings(context.orgId, project.id)).map(binding => binding.sessionId),
-            );
-            for (const sourceControl of options.sourceControls) {
-              const sessions = await sourceControl.sessions.listByProject({
-                orgId: context.orgId,
-                factoryProjectId: project.id,
-                viewerUserId: context.userId,
-              });
-              for (const row of sessions) {
-                if (
-                  row.userId !== context.userId ||
-                  row.originSessionId ||
-                  workerSessions.has(row.sessionId) ||
-                  seen.has(row.sessionId)
-                )
-                  continue;
-                seen.add(row.sessionId);
-                const session = await options.controller.getSessionByResource(row.sessionId);
-                if (!session?.thread) {
-                  skipped.push({ sessionId: row.sessionId, reason: 'not-running' });
-                  continue;
-                }
-                const threadId = session.thread.getId();
-                if (!threadId) {
-                  skipped.push({ sessionId: row.sessionId, reason: 'thread-missing' });
-                  continue;
-                }
-                try {
-                  await session.thread.setSettingOn({ threadId, key: 'currentModelId', value: record.modelId });
-                  applied.push(row.sessionId);
-                } catch (error) {
-                  console.warn('[factory] apply user default model failed for session', row.sessionId, error);
-                  skipped.push({ sessionId: row.sessionId, reason: 'apply-failed' });
+          try {
+            await options.factoryProjects.ensureReady();
+            const projects = await options.factoryProjects.list({ orgId: context.orgId });
+            for (const project of projects) {
+              // Factory-scoped sessions bill the org and use the Factory's model, never a personal default.
+              const personal = effectiveModelScope(project.modelScope, 'session') === 'user';
+              const workerSessions = new Set(
+                (await options.workItems.listRunBindings(context.orgId, project.id)).map(binding => binding.sessionId),
+              );
+              for (const sourceControl of options.sourceControls) {
+                const sessions = await sourceControl.sessions.listByProject({
+                  orgId: context.orgId,
+                  factoryProjectId: project.id,
+                  viewerUserId: context.userId,
+                });
+                for (const row of sessions) {
+                  if (
+                    row.userId !== context.userId ||
+                    row.originSessionId ||
+                    workerSessions.has(row.sessionId) ||
+                    seen.has(row.sessionId)
+                  )
+                    continue;
+                  seen.add(row.sessionId);
+                  if (!personal) {
+                    skipped.push({ sessionId: row.sessionId, reason: 'factory-scope' });
+                    continue;
+                  }
+                  const session = await options.controller.getSessionByResource(row.sessionId);
+                  if (!session?.thread || !session.model.switch) {
+                    skipped.push({ sessionId: row.sessionId, reason: 'not-running' });
+                    continue;
+                  }
+                  if (!session.thread.getId()) {
+                    skipped.push({ sessionId: row.sessionId, reason: 'thread-missing' });
+                    continue;
+                  }
+                  try {
+                    await session.model.switch(record.modelId);
+                    applied.push(row.sessionId);
+                  } catch (error) {
+                    console.warn('[factory] apply user default model failed for session', row.sessionId, error);
+                    skipped.push({ sessionId: row.sessionId, reason: 'apply-failed' });
+                  }
                 }
               }
             }
+          } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
           return c.json({ modelId: record.modelId, applied, skipped });
         },

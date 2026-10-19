@@ -2,4 +2,10 @@
 '@mastra/factory': minor
 ---
 
-Added an action to apply your saved default model to running user sessions without recreating them. Interactive user sessions can also use `factory_switch_session_model` to change the model of another session they own in the same Factory, even if it is stopped; the change takes effect on its next run. User sessions also use their personal Observer and Reflector model settings rather than the Factory project's settings.
+Added **Apply to running sessions** for your saved default model. It switches your running user sessions right away and reports which sessions were updated and which were skipped (stopped, Factory-billed, or failed).
+
+Interactive sessions can also call `factory_switch_session_model` to change the model of a side, work item, or review session you own in the same Factory. It asks for approval and only accepts models this server can run:
+
+```json
+{ "sessionId": "session-1", "modelId": "openai/gpt-5.6" }
+```

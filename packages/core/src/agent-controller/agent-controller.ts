@@ -26,7 +26,14 @@ import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMe
 import type { DynamicArgument } from '../types';
 import { Workspace } from '../workspace/workspace';
 
-import { Session, THREAD_OWNER_ID_CONTEXT_KEY, migratePersistedModelSelection } from './session';
+import {
+  MODEL_PERSISTENCE_VERSION,
+  MODEL_PERSISTENCE_VERSION_KEY,
+  Session,
+  THREAD_OWNER_ID_CONTEXT_KEY,
+  migratePersistedModelSelection,
+  runModelPersistenceOperation,
+} from './session';
 import type { SessionState, SharedRunOptions, ThreadDataStore } from './session';
 import { addTokenUsage, toStepTokenUsage } from './stream-content';
 import {
@@ -1339,21 +1346,35 @@ export class AgentController<TState = {}> {
     };
   }
 
-  /** Persist a setting on a resource's stored thread without creating a session. */
-  async setThreadSettingOn({
+  /**
+   * Switch the model of a resource's stored thread without creating a session.
+   * A live session bound to that thread switches immediately; otherwise the
+   * selection is persisted and applies when a session next loads the thread.
+   * Returns whether the switch reached a live session.
+   */
+  async setThreadModel({
     resourceId,
     threadId,
-    key,
-    value,
+    modelId,
   }: {
     resourceId: string;
     threadId: string;
-    key: string;
-    value: unknown;
-  }): Promise<void> {
+    modelId: string;
+  }): Promise<{ live: boolean }> {
     const thread = await this.queryThreadById({ threadId });
     if (!thread || thread.resourceId !== resourceId) throw new Error('Thread not found for session.');
-    await this.writeThreadMetadataValues(threadId, { [key]: value });
+    const live = await this.#sessionsByResource.get(sessionRegistryKey(resourceId));
+    if (live && live.thread.getId() === threadId) {
+      await live.model.switch(modelId);
+      return { live: true };
+    }
+    await runModelPersistenceOperation(threadId, () =>
+      this.writeThreadMetadataValues(threadId, {
+        currentModelId: modelId,
+        [MODEL_PERSISTENCE_VERSION_KEY]: MODEL_PERSISTENCE_VERSION,
+      }),
+    );
+    return { live: false };
   }
 
   /**

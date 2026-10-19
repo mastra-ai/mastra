@@ -91,7 +91,7 @@ export function createFactorySessionTools(
   const switchModel = createTool({
     id: 'factory_switch_session_model',
     description:
-      'Switch the model of a session you own in this Factory, including a stopped session, without recreating it. The model takes effect on its next run. Use a session ID from the Factory session or work item tools.',
+      'Switch the model of a session you own in this Factory (side, work item, or review session) without recreating it. A running session switches immediately; a stopped one uses the model on its next run. The model must be one this server can run. Use a session ID from the Factory session or work item tools.',
     inputSchema: z
       .object({
         sessionId: z.string().trim().min(1).max(200),
@@ -117,13 +117,12 @@ export function createFactorySessionTools(
         sessionId,
       });
       if (!threadId) throw new Error('Session has no conversation thread yet.');
-      await messaging.controller.setThreadSettingOn({
-        resourceId: sessionId,
-        threadId,
-        key: 'currentModelId',
-        value: modelId,
-      });
-      return { sessionId, threadId, modelId };
+      const available = await messaging.controller.listAvailableModels();
+      if (!available.some(model => model.id === modelId && model.hasApiKey)) {
+        throw new Error(`Model ${modelId} is not available on this server.`);
+      }
+      const { live } = await messaging.controller.setThreadModel({ resourceId: sessionId, threadId, modelId });
+      return { sessionId, threadId, modelId, live };
     },
   });
 

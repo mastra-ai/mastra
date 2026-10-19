@@ -22,7 +22,6 @@ export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
   'factory_signal_session',
   'factory_message_origin',
   'factory_start_session',
-  'factory_switch_session_model',
   'factory_answer_approval',
 ];
 

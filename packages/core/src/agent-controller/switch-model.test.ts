@@ -41,25 +41,39 @@ describe('session.model.switch', () => {
     const thread = await session.thread.create();
     const { controller: restarted } = await createSession(undefined, storage);
     const resourceId = (await controller.queryThreadById({ threadId: thread.id }))!.resourceId;
+    await restarted.deleteSession({ resourceId });
 
     await expect(
-      restarted.setThreadSettingOn({
-        resourceId: 'other-session',
-        threadId: thread.id,
-        key: 'currentModelId',
-        value: 'openai/gpt-5.5',
-      }),
+      restarted.setThreadModel({ resourceId: 'other-session', threadId: thread.id, modelId: 'openai/gpt-5.5' }),
     ).rejects.toThrow('Thread not found for session.');
-    await restarted.setThreadSettingOn({
-      resourceId,
-      threadId: thread.id,
-      key: 'currentModelId',
-      value: 'openai/gpt-5.5',
+    expect(await restarted.setThreadModel({ resourceId, threadId: thread.id, modelId: 'openai/gpt-5.5' })).toEqual({
+      live: false,
     });
-    expect((await controller.queryThreadById({ threadId: thread.id }))?.metadata?.currentModelId).toBe(
-      'openai/gpt-5.5',
-    );
-    expect((await restarted.queryThreadById({ threadId: thread.id }))?.metadata?.currentModelId).toBe('openai/gpt-5.5');
+    expect((await restarted.queryThreadById({ threadId: thread.id }))?.metadata).toMatchObject({
+      currentModelId: 'openai/gpt-5.5',
+      modelPersistenceVersion: 2,
+    });
+
+    const { session: reloaded } = await createSession(undefined, storage);
+    await reloaded.thread.switch({ threadId: thread.id });
+    expect(reloaded.model.get()).toBe('openai/gpt-5.5');
+  });
+
+  it('switches the live session bound to the thread immediately', async () => {
+    const { controller, session } = await createSession();
+    const thread = await session.thread.create();
+    const resourceId = (await controller.queryThreadById({ threadId: thread.id }))!.resourceId;
+    const changed = vi.fn();
+    session.subscribe(event => {
+      if (event.type === 'model_changed') changed(event.modelId);
+    });
+
+    expect(await controller.setThreadModel({ resourceId, threadId: thread.id, modelId: 'openai/gpt-5.5' })).toEqual({
+      live: true,
+    });
+    expect(session.model.get()).toBe('openai/gpt-5.5');
+    expect(changed).toHaveBeenCalledWith('openai/gpt-5.5');
+    expect(await session.thread.getSetting({ key: 'currentModelId' })).toBe('openai/gpt-5.5');
   });
 
   it('persists and restores the model and thinking level together', async () => {

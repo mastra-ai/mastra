@@ -1134,37 +1134,6 @@ describe('MastraFactory.prepare', () => {
       return requestContext;
     }
 
-    it('uses personal memory models in a project user session instead of the project models', async () => {
-      const storage = fakeStorage();
-      const config = await prepareFactory({ storage, auth: fakeProvider() });
-      const project = await seedUserSession(storage);
-      const memorySettings = storage.getDomain<MemorySettingsStorage>('memory-settings');
-      await memorySettings.patch({
-        orgId: 'org-1',
-        userId: `factory-project:${project.id}`,
-        patch: { observerModelId: 'anthropic/claude-haiku-5-5', reflectorModelId: 'anthropic/claude-haiku-5-5' },
-      });
-      await memorySettings.patch({
-        orgId: 'org-1',
-        userId: 'user-1',
-        patch: { observerModelId: 'openai/gpt-6-luna', reflectorModelId: 'openai/gpt-6-luna' },
-      });
-      const inputProcessors = config.inputProcessors as (args: {
-        requestContext: RequestContext;
-      }) => Promise<unknown[]>;
-      const requestContext = sessionContext(true);
-      requestContext.set('controller', {
-        resourceId: 'session-1',
-        threadId: 'thread-1',
-        getState: () => ({ factoryProjectId: project.id, factoryOrgId: 'org-1' }),
-      });
-      await inputProcessors({ requestContext });
-      expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
-        observerModelId: 'openai/gpt-6-luna',
-        reflectorModelId: 'openai/gpt-6-luna',
-      });
-    });
-
     const READ_TOOLS = ['factory_list_work_items', 'factory_inspect_work_item', 'factory_list_attention'];
     const MANAGEMENT_TOOLS = [
       'factory_create_work_item',
@@ -1177,6 +1146,7 @@ describe('MastraFactory.prepare', () => {
       'factory_unsubscribe_work_item',
       'factory_start_session',
       'factory_answer_approval',
+      'factory_switch_session_model',
     ];
     const ALLOWED_TOOLS = [
       ...READ_TOOLS,
@@ -1192,7 +1162,6 @@ describe('MastraFactory.prepare', () => {
       'factory_message_origin',
       'factory_start_session',
       'factory_answer_approval',
-      'factory_switch_session_model',
     ];
 
     it('gives a user session read tools on every turn, management tools only on person-started turns, and other sessions none', async () => {
