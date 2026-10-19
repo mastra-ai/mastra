@@ -140,10 +140,10 @@ describe('NextReplyCredential', () => {
     expect(await findCredential('Anthropic API key. Shared by the organization')).toBeInTheDocument();
   });
 
-  it('falls back to the provider name when the catalog cannot name the credential', async () => {
+  it('falls back to the provider connection when the catalog cannot tell a subscription from an API key', async () => {
     renderNextReplyCredential({ draft: true, projectScope: 'factory', credentialLabel: null });
 
-    expect(await findCredential('Anthropic credential. Shared by the organization')).toBeInTheDocument();
+    expect(await findCredential('Anthropic connection. Shared by the organization')).toBeInTheDocument();
   });
 
   it('does not send the draft when someone clicks the credential icon inside the composer form', async () => {

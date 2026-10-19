@@ -26,24 +26,28 @@ function teammateWarning(holder: CredentialHolder, credential: string): string |
   return `Your messages use ${holder.name ? `${holder.name}’s` : 'the session owner’s'} ${credential}`;
 }
 
-const badgeShell = 'flex size-icon-xs items-center justify-center rounded-full border border-border bg-card';
+const badgeShell = 'flex size-icon-sm items-center justify-center rounded-full border border-border bg-card';
 
 function HolderBadge({ holder }: { holder: CredentialHolder }) {
   if (holder.kind === 'organization') {
     return (
       <span className={badgeShell}>
-        <Building2 className="size-2" />
+        <Building2 className="size-2.5" />
       </span>
     );
   }
   if (!holder.name) {
     return (
       <span className={badgeShell}>
-        <User className="size-2" />
+        <User className="size-2.5" />
       </span>
     );
   }
-  return <Avatar name={holder.name} src={holder.avatarUrl} size="xs" />;
+  return (
+    <span className="flex [&>[data-slot=avatar]]:size-icon-sm">
+      <Avatar name={holder.name} src={holder.avatarUrl} size="xs" />
+    </span>
+  );
 }
 
 export function NextReplyCredential() {
@@ -68,7 +72,7 @@ export function NextReplyCredential() {
         };
   const model = modelsQuery.data?.find(candidate => candidate.id === activeModelId);
   const credential =
-    model?.credentialLabel ?? (model ? `${providerDisplayName(model.provider)} credential` : 'Model credential');
+    model?.credentialLabel ?? (model ? `${providerDisplayName(model.provider)} connection` : 'Model connection');
   const lines = [credential, holderLine(holder), teammateWarning(holder, credential)];
 
   return (
@@ -86,7 +90,7 @@ export function NextReplyCredential() {
         }
       >
         <ProviderBrandIcon provider={model?.provider ?? ''} fallback={<KeyRound className="size-3.5" />} />
-        <span className="absolute -right-0.5 -bottom-0.5">
+        <span className="absolute -right-1 -bottom-1">
           <HolderBadge holder={holder} />
         </span>
       </TooltipTrigger>
