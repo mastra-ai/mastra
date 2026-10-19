@@ -6,7 +6,12 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { closePropertiesMenus, openPropertiesMenu, togglePropertyOption } from '../../../../e2e/ui/properties-menu';
+import {
+  closePropertiesMenus,
+  openPropertiesMenu,
+  openPropertySubmenu,
+  togglePropertyOption,
+} from '../../../../e2e/ui/properties-menu';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import type { WorkItem } from '../../domains/factory/services/workItems';
 import type { GithubIssue, GithubPullRequest } from '../../domains/factory/services/factory';
@@ -208,7 +213,8 @@ describe('BoardPage filters', () => {
     expect(candidateTitles()).toContain('Issue 10');
     expect(candidateTitles()).toContain('Issue 11');
     await togglePropertyOption(user, MENU, 'Teammate', /alice/i);
-    await togglePropertyOption(user, MENU, 'Relevant because', /Authored/i);
+    await togglePropertyOption(user, MENU, 'Relevant because', 'Worked on');
+    await togglePropertyOption(user, MENU, 'Relevant because', 'Assigned');
     await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('relevance=authored'));
     expect(screen.getByTestId('board-url')).toHaveTextContent('teammate=github%3Aalice');
     expect(screen.getByText('Card bug')).toBeInTheDocument();
@@ -227,7 +233,8 @@ describe('BoardPage filters', () => {
     expect(await screen.findByText('Card bug')).toBeInTheDocument();
     expect(candidateTitles()).toContain('Issue 10');
     expect(candidateTitles()).not.toContain('Issue 11');
-    await togglePropertyOption(user, MENU, 'Relevant because', /Authored/i);
+    await togglePropertyOption(user, MENU, 'Relevant because', 'Worked on');
+    await togglePropertyOption(user, MENU, 'Relevant because', 'Assigned');
     expect(screen.getByTestId('board-url')).not.toHaveTextContent('relevance=');
     expect(screen.queryByText('Card docs')).not.toBeInTheDocument();
     await togglePropertyOption(user, MENU, 'Teammate', /alice/i);
@@ -244,8 +251,8 @@ describe('BoardPage filters', () => {
     expect(await screen.findByText('Card authored')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     await togglePropertyOption(user, MENU, 'Teammate', /alice/i);
-    await togglePropertyOption(user, MENU, 'Relevant because', /Authored/i);
-    await togglePropertyOption(user, MENU, 'Relevant because', /Review requested/i);
+    await togglePropertyOption(user, MENU, 'Relevant because', 'Worked on');
+    await togglePropertyOption(user, MENU, 'Relevant because', 'Assigned');
     await waitFor(() =>
       expect(screen.getByTestId('board-url')).toHaveTextContent('relevance=authored%2Creview-requested'),
     );
@@ -271,6 +278,29 @@ describe('BoardPage filters', () => {
     await togglePropertyOption(user, MENU, 'Teammate', /alice/i);
     await openPropertiesMenu(user, MENU);
     expect(screen.getByRole('menuitem', { name: /^Relevant because/ })).toBeInTheDocument();
+    await closePropertiesMenus(user);
+  });
+
+  it('starts Relevant because with every reason checked, narrows by unchecking and keeps the last one', async () => {
+    const user = userEvent.setup();
+    const { client } = renderBoard('work');
+    expect(await screen.findByText('Card bug')).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    await togglePropertyOption(user, MENU, 'Teammate', /alice/i);
+    await togglePropertyOption(user, MENU, 'Relevant because', 'Assigned');
+    await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('relevance=worked%2Cauthored'));
+    await togglePropertyOption(user, MENU, 'Relevant because', 'Worked on');
+    await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('relevance=authored'));
+    await openPropertySubmenu(user, MENU, 'Relevant because');
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Authored' })).toHaveAttribute('aria-disabled', 'true');
+    await closePropertiesMenus(user);
+    await togglePropertyOption(user, MENU, 'Relevant because', 'Worked on');
+    await togglePropertyOption(user, MENU, 'Relevant because', 'Assigned');
+    await waitFor(() => expect(screen.getByTestId('board-url')).not.toHaveTextContent('relevance='));
+    await openPropertySubmenu(user, MENU, 'Relevant because');
+    for (const reason of ['Worked on', 'Authored', 'Assigned']) {
+      expect(screen.getByRole('menuitemcheckbox', { name: reason })).toHaveAttribute('aria-checked', 'true');
+    }
     await closePropertiesMenus(user);
   });
 

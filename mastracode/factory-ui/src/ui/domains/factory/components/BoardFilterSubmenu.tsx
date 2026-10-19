@@ -33,6 +33,7 @@ export function BoardFilterSubmenu({
   const options = optionsKeepingPicked(field, selected);
   if (options.length === 0) return null;
   const picked = new Set(selected);
+  const lockedPick = field.keepsOnePicked && selected.length === 1 ? selected[0] : undefined;
   const Icon = field.icon;
 
   return (
@@ -46,6 +47,7 @@ export function BoardFilterSubmenu({
           <DropdownMenu.CheckboxItem
             key={option.value}
             checked={picked.has(option.value)}
+            disabled={option.value === lockedPick}
             onCheckedChange={checked => onChange(withValuePicked(selected, option.value, checked))}
           >
             {option.start}

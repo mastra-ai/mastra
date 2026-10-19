@@ -11,7 +11,7 @@ import type { LinearProject } from '../services/linear';
 
 export const BOARD_FILTER_OPERATORS: FilterBarOperator[] = [{ id: 'in', label: 'is any of', arity: 'many' }];
 
-export type BoardFilterField = FilterBarField & { suggestions: FilterBarOption[] };
+export type BoardFilterField = FilterBarField & { suggestions: FilterBarOption[]; keepsOnePicked?: boolean };
 
 interface BoardFilterFieldsOptions {
   kind: BoardKind;
@@ -75,6 +75,7 @@ export function boardFilterFields({
       strict: true,
       // Relevance narrows the picked teammates' cards: with nobody picked there is nothing to be relevant to.
       hidden: !teammateSelected,
+      keepsOnePicked: true,
       suggestions: boardRelevanceOptions(kind).map(option => ({ value: option.id, label: option.label })),
     },
     {
