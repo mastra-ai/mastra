@@ -11,10 +11,9 @@ import {
   planTraceQuery,
   planTraceQueryObservedFields,
   planTraceQueryValues,
-  TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
-import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
+import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan, TraceQueryExecutionError } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SCORE_EVENTS_DDL, SPAN_EVENTS_DDL, TRACE_BRANCHES_DDL, TRACE_ROOTS_DDL } from './ddl';

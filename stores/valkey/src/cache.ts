@@ -1,5 +1,6 @@
 import { MastraServerCache } from '@mastra/core/cache';
-import { Decoder, type GlideClient } from '@valkey/valkey-glide';
+import { Decoder } from '@valkey/valkey-glide';
+import type { GlideClient } from '@valkey/valkey-glide';
 
 export interface ValkeyServerCacheOptions {
   keyPrefix?: string;

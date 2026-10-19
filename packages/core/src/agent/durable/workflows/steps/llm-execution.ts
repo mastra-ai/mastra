@@ -31,8 +31,15 @@ import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-e
 import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { Mastra } from '../../../../mastra';
 import { createRunScope } from '../../../../mastra/run-scope';
-import type { AIModelGenerationSpan, ExportedSpan, IModelSpanTracker, AnySpan, Span } from '../../../../observability';
-import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
+import type {
+  AIModelGenerationSpan,
+  ExportedSpan,
+  IModelSpanTracker,
+  AnySpan,
+  Span,
+  SpanType,
+} from '../../../../observability';
+import { EntityType, createObservabilityContext } from '../../../../observability';
 import { executeWithContextSync, getRootExportSpan } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';

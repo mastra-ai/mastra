@@ -4,7 +4,8 @@ import { SandboxUnsupportedFeatureError, Workspace } from '@mastra/core/workspac
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { CloudflareSandbox } from './sandbox';
-import { createFakeBridge, type FakeBridge } from './testing/fake-bridge';
+import { createFakeBridge } from './testing/fake-bridge';
+import type { FakeBridge } from './testing/fake-bridge';
 
 const BASE_URL = 'https://bridge.example.com';
 

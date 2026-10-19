@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { MessageList } from '../message-list';
 import type { MastraDBMessage, MastraErrorPart, MastraMessagePart } from '../state/types';
-import { AIV4Adapter, type AIV4AdapterContext } from './AIV4Adapter';
+import { AIV4Adapter } from './AIV4Adapter';
+import type { AIV4AdapterContext } from './AIV4Adapter';
 import { AIV5Adapter } from './AIV5Adapter';
 import { AIV6Adapter } from './AIV6Adapter';
 

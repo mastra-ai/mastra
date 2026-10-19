@@ -10,6 +10,7 @@ import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-rel
 import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
+import { seedSessionOrg } from '../session/org-seed.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -126,6 +127,37 @@ async function resolveSession(
   );
   if (matches.length > 1) throw new Error('Factory session exists in multiple source-control providers.');
   return matches[0] ?? null;
+}
+
+/**
+ * Start the live conversation for a user session on its own thread (thread id === session id). Agent-controller
+ * routes only act on started sessions, so the first prompt the page sends right after creation always lands on the
+ * thread the page reads, with the org and Factory address already in state. Get-or-create, so retried or repeated
+ * creates are safe.
+ */
+async function startUserSessionConversation(
+  controller: SourceControlSessionRoutesOptions['controller'],
+  session: SourceControlSession,
+): Promise<void> {
+  if (!controller) return;
+  const requestContext = new RequestContext();
+  requestContext.set('user', { workosId: session.userId, organizationId: session.orgId });
+  const live = await controller.createSession({
+    id: session.sessionId,
+    resourceId: session.sessionId,
+    threadId: session.sessionId,
+    ownerId: session.userId,
+    requestContext,
+  });
+  await seedSessionOrg(live, session.orgId);
+  // Server-side gates (the transition tool, factory-phase processor) resolve the session address from state, so
+  // seed it here rather than waiting for the page to connect.
+  if (session.factoryProjectId) {
+    await live.state.set({
+      factoryProjectId: session.factoryProjectId,
+      ...(session.projectRepositoryId ? { projectRepositoryId: session.projectRepositoryId } : {}),
+    });
+  }
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
@@ -294,6 +326,7 @@ function projectSessionRoutes(
             ) {
               return c.json({ error: 'Session ID conflict' }, 409);
             }
+            await startUserSessionConversation(options.controller, existing);
             return c.json({ session: existing });
           }
         }
@@ -326,6 +359,7 @@ function projectSessionRoutes(
         ) {
           return c.json({ error: 'Session ID conflict' }, 409);
         }
+        await startUserSessionConversation(options.controller, session);
         return c.json({ session });
       },
     }),

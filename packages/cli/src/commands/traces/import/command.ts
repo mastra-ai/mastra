@@ -1,4 +1,5 @@
-import { Argument, Option, type CommandUnknownOpts } from 'commander';
+import { Argument, Option } from 'commander';
+import type { CommandUnknownOpts } from 'commander';
 
 export interface TraceImportCommandOptions {
   targetProject?: string;

@@ -67,11 +67,8 @@ import { normalizeMessageHistoryConfig } from '../memory/message-history-config'
 import { getMemoryRunState } from '../memory/run-state';
 import { checkThreadFGA } from '../memory/thread-fga';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
-import {
-  resolveDeliveryFailureUpdate,
-  resolveNotificationDeliveryDecision,
-  type NotificationDeliveryPolicyInput,
-} from '../notifications/delivery-policy';
+import { resolveDeliveryFailureUpdate, resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
+import type { NotificationDeliveryPolicyInput } from '../notifications/delivery-policy';
 import { applyNotificationRoutingRequirement } from '../notifications/routing';
 import {
   createNotificationSignal,
@@ -3972,10 +3969,19 @@ export class Agent<
     };
   }
 
-  reorderModels(modelIds: string[]) {
+  /**
+   * Reorders a static model list. Returns false when `model` is not an array (including
+   * function-valued models, whose selection is resolved per request and cannot be edited in place).
+   */
+  reorderModels(modelIds: string[]): boolean {
     if (!Array.isArray(this.model)) {
       this.logger.warn('Model is not an array', { agent: this.name });
-      return;
+      return false;
+    }
+
+    if (!(this.model as ModelFallbacks).some(m => modelIds.includes(m.id))) {
+      this.logger.warn('No matching model ids to reorder', { agent: this.name });
+      return false;
     }
 
     // TypeScript sees this.model as ModelWithRetries[] | ModelFallbacks after Array.isArray check.
@@ -3988,6 +3994,7 @@ export class Agent<
       const bPos = bIndex === -1 ? Infinity : bIndex;
       return aPos - bPos;
     });
+    return true;
   }
 
   updateModelInModelList({
@@ -4000,10 +4007,10 @@ export class Agent<
     model?: DynamicArgument<MastraModelConfig>;
     enabled?: boolean;
     maxRetries?: number;
-  }) {
+  }): boolean {
     if (!Array.isArray(this.model)) {
       this.logger.warn('Model is not an array', { agent: this.name });
-      return;
+      return false;
     }
 
     // TypeScript sees this.model as ModelWithRetries[] | ModelFallbacks after Array.isArray check.
@@ -4013,7 +4020,7 @@ export class Agent<
     const modelToUpdate = modelArray.find(m => m.id === id);
     if (!modelToUpdate) {
       this.logger.warn('Model not found', { agent: this.name, modelId: id });
-      return;
+      return false;
     }
 
     this.model = modelArray.map(mdl => {
@@ -4028,6 +4035,7 @@ export class Agent<
       }
       return mdl;
     });
+    return true;
   }
 
   #primitives?: MastraPrimitives;
