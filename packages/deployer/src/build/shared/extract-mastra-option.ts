@@ -25,6 +25,9 @@ const NODE_MODULES = `${sep}node_modules${sep}`;
  * imports made from inlined sources stay external but are pinned to the file they resolve to from that source: the
  * extracted config lives in `.mastra/output` and can't see the package's own `node_modules` (e.g. pnpm isolated
  * installs). The app's own imports keep resolving by name.
+ *
+ * Raw TypeScript inside node_modules (e.g. a package listed in `bundler.transpilePackages`) is inlined too: Node
+ * refuses to strip types under node_modules, so leaving it external or loading it untranspiled breaks the config.
  */
 function typescriptSourcesResolver(entryFile: string): Plugin {
   const appPackageJson = pkg.up({ cwd: dirname(entryFile) });
@@ -32,7 +35,8 @@ function typescriptSourcesResolver(entryFile: string): Plugin {
   // App files keep the entry's path, files resolved by node-resolve are real paths
   const appRoots = [appDir + sep, realpathSync(appDir) + sep];
   const isInlinedSource = (file: string) =>
-    isAbsolute(file) && !file.includes(NODE_MODULES) && !appRoots.some(root => file.startsWith(root));
+    isAbsolute(file) &&
+    (file.includes(NODE_MODULES) ? TS_SOURCE.test(file) : !appRoots.some(root => file.startsWith(root)));
 
   const resolver = nodeResolve({
     ...getNodeResolveOptions('node'),
@@ -54,7 +58,7 @@ function typescriptSourcesResolver(entryFile: string): Plugin {
         return null;
       }
 
-      if (TS_SOURCE.test(resolved.id) && !resolved.id.includes(NODE_MODULES)) {
+      if (TS_SOURCE.test(resolved.id)) {
         return resolved.id;
       }
 
@@ -80,8 +84,8 @@ export function extractMastraOptionBundler(
     plugins: [
       tsConfigPaths(),
       typescriptSourcesResolver(entryFile),
-      // transpile typescript to something we understand
-      esbuild(),
+      // transpile typescript to something we understand, including raw TypeScript inlined from node_modules
+      esbuild({ exclude: [] }),
       optimizeLodashImports({
         include: '**/*.{js,ts,mjs,cjs}',
       }),
