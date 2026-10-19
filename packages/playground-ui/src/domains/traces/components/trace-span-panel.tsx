@@ -197,7 +197,8 @@ export function TraceSpanPanel({
                   variant="ghost"
                   size="sm"
                   // At a side column of 500px or less, collapse to a round icon button; the label stays for screen readers.
-                  className="@max-[501px]:w-control-sm @max-[501px]:rounded-full @max-[501px]:px-0 @max-[501px]:[&>[data-slot=button-icon]]:ml-0"
+                  // The icon's own left padding is reset too, or the icon sits off-centre.
+                  className="@max-[501px]:w-control-sm @max-[501px]:rounded-full @max-[501px]:px-0 @max-[501px]:has-[>[data-slot=button-icon]]:pl-0 @max-[501px]:[&>[data-slot=button-icon]]:ml-0"
                   onClick={() => onFullThreadOpenChange(true)}
                 >
                   <span className="@max-[501px]:sr-only">Open full thread</span>

@@ -9,9 +9,23 @@ export interface DataPanelMetadataProps {
   children: React.ReactNode;
 }
 
-/** Row of `Meta` pills next to a `DataPanel.Heading`. Never wraps; overflowing pills are clipped. */
+/**
+ * Row of `Meta` pills next to a `DataPanel.Heading`. When they don't fit beside the heading and actions,
+ * the header moves them to their own full-width row below, where they wrap instead of being clipped.
+ */
 export function DataPanelMetadata({ children }: DataPanelMetadataProps) {
-  return <ul className="flex min-w-0 flex-nowrap items-center gap-0.5 overflow-hidden">{children}</ul>;
+  return (
+    <ul
+      data-slot="data-panel-metadata"
+      className={cn(
+        'flex min-w-0 flex-nowrap items-center gap-0.5 overflow-hidden',
+        // `-ml-1` lines the first pill's text up with the heading text above it.
+        'group-data-wrapped/data-panel-header:order-last group-data-wrapped/data-panel-header:-ml-1 group-data-wrapped/data-panel-header:basis-full group-data-wrapped/data-panel-header:flex-wrap group-data-wrapped/data-panel-header:overflow-visible',
+      )}
+    >
+      {children}
+    </ul>
+  );
 }
 
 export interface DataPanelMetaProps extends Omit<React.HTMLAttributes<HTMLElement>, 'children' | 'title'> {

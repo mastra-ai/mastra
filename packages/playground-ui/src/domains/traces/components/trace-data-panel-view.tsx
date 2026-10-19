@@ -192,7 +192,7 @@ export function TraceDataPanelView({
             <Icon size="xs">
               <MessageSquareTextIcon />
             </Icon>
-            <span className="@max-[501px]:sr-only">Messages</span>
+            <span className="@max-[401px]:sr-only">Messages</span>
           </>
         ),
       });
@@ -206,7 +206,7 @@ export function TraceDataPanelView({
             <Icon size="xs">
               <MessageSquareReplyIcon />
             </Icon>
-            <span className="@max-[501px]:sr-only">
+            <span className="@max-[401px]:sr-only">
               Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}
             </span>
           </>
@@ -222,7 +222,7 @@ export function TraceDataPanelView({
             <Icon size="xs">
               <ScorersIcon />
             </Icon>
-            <span className="@max-[501px]:sr-only">Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</span>
+            <span className="@max-[401px]:sr-only">Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</span>
           </>
         ),
       });
@@ -230,13 +230,18 @@ export function TraceDataPanelView({
     return views;
   }, [messagesPanelSlot, feedbackTabSlot, feedbackTabBadge, scoresTabSlot, scoresTabBadge]);
   const [uncontrolledSideView, setUncontrolledSideView] = useState<TraceSideView>();
-  // Mirrors the side column's `@max-[501px]` container query: the layout collapses in CSS, but
-  // tooltips render in a portal outside the container, so they need the width in JS.
+  // Mirror the side column's container queries: the header actions collapse to icons at `@max-[501px]`,
+  // the tab labels only at `@max-[401px]`. The layout collapses in CSS, but tooltips render in a portal
+  // outside the container, so they need the width in JS.
   const [sideColumnElement, setSideColumnElement] = useState<HTMLDivElement | null>(null);
-  const [compactSide, setCompactSide] = useState(false);
+  const [compactSideActions, setCompactSideActions] = useState(false);
+  const [compactSideTabs, setCompactSideTabs] = useState(false);
   useEffect(() => {
     if (!sideColumnElement || !('ResizeObserver' in globalThis)) return;
-    const observer = new ResizeObserver(() => setCompactSide(sideColumnElement.clientWidth <= 500));
+    const observer = new ResizeObserver(() => {
+      setCompactSideActions(sideColumnElement.clientWidth <= 500);
+      setCompactSideTabs(sideColumnElement.clientWidth <= 400);
+    });
     observer.observe(sideColumnElement);
     return () => observer.disconnect();
   }, [sideColumnElement]);
@@ -369,17 +374,18 @@ export function TraceDataPanelView({
           </DataPanel.Header>
         ) : (
           <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
-            <DataPanel.Header className="border-b border-border">
+            {/* One row: the tabs take the space the actions leave and scroll if they still don't fit. */}
+            <DataPanel.Header className="flex-nowrap border-b border-border [&>[data-slot=tabs-list-scroll]]:w-auto [&>[data-slot=tabs-list-scroll]]:min-w-0 [&>[data-slot=tabs-list-scroll]]:flex-1">
               <TabList variant="pill-ghost" size="sm">
                 {sideViews.map(view => (
-                  <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
+                  <Tab key={view.value} value={view.value} tooltip={compactSideTabs ? view.name : undefined}>
                     {view.label}
                   </Tab>
                 ))}
               </TabList>
               {sideHeaderActions && (
                 <div className="ml-auto flex shrink-0 items-center whitespace-nowrap">
-                  {sideHeaderActions({ compact: compactSide })}
+                  {sideHeaderActions({ compact: compactSideActions })}
                 </div>
               )}
             </DataPanel.Header>
