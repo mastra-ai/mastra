@@ -755,6 +755,48 @@ describe('ChatChannelOutputProcessor', () => {
       expect(taskUpdates).toEqual([expect.objectContaining({ id: 't1', status: 'complete', title: 'weather NYC' })]);
     });
 
+    it("'grouped': an opener before a result-only first tool row still posts on its own", async () => {
+      // Same resumed-approval shape, but the model speaks first. The split
+      // lives with the header logic, so a `tool-result` (or `tool-error`)
+      // that opens the widget flushes the opener exactly like a `tool-call`.
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'grouped' });
+      (channels as any).pendingApprovalCards.set('t1', {
+        displayName: 'weather',
+        argsSummary: 'NYC',
+        startedAt: Date.now() - 1000,
+        messageId: 'pending-card-1',
+      });
+      await drive(
+        channels,
+        [
+          { type: 'text-delta', payload: { text: 'Resuming the weather check.' } },
+          { type: 'text-end', payload: {} },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'NYC' }, result: 'sunny' },
+          },
+          { type: 'text-delta', payload: { text: 'Sunny.' } },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(2);
+
+      const opener = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
+      expect(opener).toEqual(['Resuming the weather check.']);
+
+      const rest = await drainStreamingPlan((posts[1] as Extract<Call, { kind: 'post' }>).arg);
+      expect(rest.filter(p => typeof p === 'object' && (p as any).type === 'plan_update')).toEqual([
+        expect.objectContaining({ title: 'Working…' }),
+      ]);
+      expect(rest.some(p => typeof p === 'object' && (p as any).type === 'task_update' && (p as any).id === 't1')).toBe(
+        true,
+      );
+      expect(rest.filter((p): p is string => typeof p === 'string').join('')).toBe('Sunny.');
+    });
+
     it("'timeline': one fixed plan header per message, never a per-row echo", async () => {
       // Timeline shares the header rule with grouped: rows carry the tool
       // detail, so the header is a fixed label rather than the current row's

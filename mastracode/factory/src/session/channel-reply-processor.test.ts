@@ -9,14 +9,9 @@ function args(requestContext: RequestContext, messageList = new MessageList({}))
   return { messageList, requestContext } as unknown as ProcessInputStepArgs;
 }
 
-function channelContext({
-  threadId = 'uuid-thread-1',
-  resourceId = 'us-42',
-  factoryProjectId = 'fp-1',
-}: { threadId?: string | null; resourceId?: string; factoryProjectId?: string } = {}) {
+function channelContext() {
   const requestContext = new RequestContext();
   requestContext.set('channel', { platform: 'slack', isDM: true });
-  requestContext.set('controller', { threadId, resourceId, getState: () => ({ factoryProjectId }) });
   return requestContext;
 }
 
@@ -29,31 +24,16 @@ function instruction(requestContext: RequestContext): string {
 }
 
 describe('FactoryChannelReplyProcessor', () => {
-  const originalPublicUrl = process.env.MASTRACODE_PUBLIC_URL;
-  beforeEach(() => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-  });
-  afterEach(() => {
-    if (originalPublicUrl === undefined) delete process.env.MASTRACODE_PUBLIC_URL;
-    else process.env.MASTRACODE_PUBLIC_URL = originalPublicUrl;
-  });
-
   it('stays out of runs that did not come in over a channel', () => {
     const result = new FactoryChannelReplyProcessor().processInputStep(args(new RequestContext()));
     expect(result).toBeUndefined();
   });
 
-  it('tells a channel run to open with a line naming the task, signed with the session link', () => {
+  it('tells a channel run to open with a line naming the task, and leaves the session link to the handler', () => {
     const text = instruction(channelContext());
     expect(text).toMatch(/reply first with one short line that says what you are about to do/);
-    expect(text).toContain('[↗](https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1)');
-  });
-
-  it('leaves the link out when there is no public origin', () => {
-    delete process.env.MASTRACODE_PUBLIC_URL;
-    const text = instruction(channelContext());
-    expect(text).toMatch(/reply first with one short line/);
-    expect(text).not.toContain('[↗]');
+    expect(text).not.toContain('↗');
+    expect(text).not.toMatch(/link/i);
   });
 
   it('adds the instruction once across steps', () => {
@@ -78,28 +58,27 @@ describe('sessionLink', () => {
     else process.env.MASTRACODE_PUBLIC_URL = originalPublicUrl;
   });
 
+  const target = { threadId: 'uuid-thread-1', resourceId: 'us-42', factoryProjectId: 'fp-1' };
+
   it('a repo-backed thread deep-links to the user-session workspace route with no resourceId param', () => {
-    expect(sessionLink(channelContext())).toBe(
-      'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1',
-    );
+    expect(sessionLink(target)).toBe('https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1');
   });
 
   it('a chat-only thread keeps the channel workspace segment and names its resource in the query', () => {
-    expect(sessionLink(channelContext({ resourceId: 'channel:slack:C-1:1700.42' }))).toBe(
+    expect(sessionLink({ ...target, resourceId: 'channel:slack:C-1:1700.42' })).toBe(
       'https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1' +
         `?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
     );
   });
 
   it('a session with no factory falls back to the factory-agnostic redirect', () => {
-    expect(sessionLink(channelContext({ factoryProjectId: '' }))).toBe(
+    expect(sessionLink({ ...target, factoryProjectId: undefined })).toBe(
       'https://mc.example.com/threads/uuid-thread-1?resourceId=us-42',
     );
   });
 
-  it('is undefined without a public origin or a thread', () => {
-    expect(sessionLink(channelContext({ threadId: null }))).toBeUndefined();
+  it('is undefined without a public origin', () => {
     delete process.env.MASTRACODE_PUBLIC_URL;
-    expect(sessionLink(channelContext())).toBeUndefined();
+    expect(sessionLink(target)).toBeUndefined();
   });
 });

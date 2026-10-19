@@ -2,9 +2,17 @@
 '@mastra/factory': patch
 ---
 
-Slack onboarding: a new AI Assistant thread with the Factory bot now pins suggested prompts ("What can you do?", "Investigate an issue", "Plan a change", "Build and open a PR"). Tool activity renders in Slack's native "Thinking Steps" widget (`toolDisplay: 'grouped'`) instead of being hidden. Regenerate your Slack app manifest to subscribe to `assistant_thread_started`.
+Reworks what Slack users see when they talk to the Factory bot.
 
-Override any of these through `adapterOptions` on `SlackIntegration`:
+**Suggested prompts.** A new AI Assistant thread with the bot pins four starters: "What can you do?", "Investigate an issue", "Plan a change", "Build and open a PR". Regenerate your Slack app manifest to subscribe to `assistant_thread_started`; without it the prompts don't appear.
+
+**Immediate feedback.** The bot shows an "is thinking…" status as soon as a message is accepted, before session setup and model latency. A new session also gets a bare `↗` link to the web session right after the run starts (requires `MASTRACODE_PUBLIC_URL`). The old "Started a session" paragraph is gone.
+
+**Acknowledge, then work.** For requests that need tools, the bot opens with one short line saying what it is about to do (e.g. "On it — running sleep 30, then the echo") as its own message, then the work follows. Direct answers skip the opener.
+
+**Visible progress.** Tool activity renders in Slack's native "Thinking Steps" widget (`toolDisplay: 'grouped'`) instead of being hidden. The widget header is a fixed "Working…" and each row shows the tool's description.
+
+Override the display mode or prompts through `adapterOptions` on `SlackIntegration`:
 
 ```ts
 new SlackIntegration({
@@ -18,5 +26,3 @@ new SlackIntegration({
   },
 });
 ```
-
-The bot no longer posts a static "Started a session" message. Channel-triggered runs get a system instruction to open with one short line saying what it is about to do (e.g. "On it — running sleep 30, then the echo"), ending with a `↗` link to the session when `MASTRACODE_PUBLIC_URL` is set. The bot also sets an "is thinking..." status as soon as a message is accepted, before session setup and model latency, so Slack users see a response immediately.

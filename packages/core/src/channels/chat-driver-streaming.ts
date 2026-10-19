@@ -307,8 +307,17 @@ export async function runStreamingDriver({
   // into it made a single-tool run read the same line twice. Result-only
   // sessions (a resumed approval whose `tool-call` we never saw) go through
   // here too, so they get a header instead of the SDK's fallback.
-  const pushToolTask = (task: Extract<StreamChunk, { type: 'task_update' }>) => {
+  //
+  // In grouped mode the first row also closes any text-only session first,
+  // so an "On it — checking X" opener posts as its own message instead of
+  // landing under the widget (Slack renders tasks above text in one post).
+  // Only until the first tool row: every later step keeps accumulating under
+  // the one widget. Memory rows alone don't count — an OM event before the
+  // first tool must not pin the opener either. Timeline splits per step at
+  // the `tool-call` site instead.
+  const pushToolTask = async (task: Extract<StreamChunk, { type: 'task_update' }>) => {
     if (!toolTasksRef.current) {
+      if (toolDisplay === 'grouped' && sessionRef.current) await closeSession();
       pushToSession({ type: 'plan_update', title: PLAN_TITLE });
       planTitleRef.current = true;
       toolTasksRef.current = true;
@@ -541,19 +550,10 @@ export async function runStreamingDriver({
         continue;
       }
 
-      // For Plan-widget modes, close any active text-only session before
-      // the first tool so the preceding text posts as its own platform
-      // message (Slack renders tasks above text inside one post, so an
-      // "On it — checking X first" opener would otherwise land under the
-      // widget). Timeline does this per step; grouped only until the first
-      // tool row lands, so every later step keeps accumulating under the
-      // one widget. Memory rows alone don't count: an OM event before the
-      // first tool must not pin the opener under the widget either.
-      if (
-        sessionRef.current &&
-        ((toolDisplay === 'timeline' && tracker.inFlightCount === 1) ||
-          (toolDisplay === 'grouped' && !toolTasksRef.current))
-      ) {
+      // Timeline: close any active text-only session before each step's
+      // first tool so the preceding text posts as its own platform message.
+      // (Grouped does the equivalent once, inside `pushToolTask`.)
+      if (sessionRef.current && toolDisplay === 'timeline' && tracker.inFlightCount === 1) {
         await closeSession();
       }
 
@@ -588,7 +588,7 @@ export async function runStreamingDriver({
       }
 
       // 'timeline' | 'grouped' — push task_update into Plan widget.
-      pushToolTask({
+      await pushToolTask({
         type: 'task_update',
         id: enr.toolCallId,
         title: formatTaskTitle(enr.displayName, enr.argsSummary, enr.args),
@@ -659,7 +659,7 @@ export async function runStreamingDriver({
       // 'timeline' | 'grouped' — push task_update into Plan widget.
       const fallbackTitle = formatTaskTitle(enr.displayName, enr.argsSummary, enr.args);
       const taskTitle = lookupTaskTitle(enr.toolCallId, fallbackTitle);
-      pushToolTask({
+      await pushToolTask({
         type: 'task_update',
         id: enr.toolCallId,
         title: taskTitle,
@@ -733,7 +733,7 @@ export async function runStreamingDriver({
       // Mark as `complete` rather than `error` so a single failing tool
       // doesn't flip the overall plan header to ⚠. The error text in
       // `details` is enough to convey the failure inline.
-      pushToolTask({
+      await pushToolTask({
         type: 'task_update',
         id: enr.toolCallId,
         title: taskTitle,

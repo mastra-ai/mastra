@@ -135,6 +135,19 @@ describe('formatArgsSummary', () => {
 // ---------------------------------------------------------------------------
 
 describe('formatTaskTitle', () => {
+  it('reads the description from JSON-string args too', () => {
+    // ToolTracker hands over whatever the model emitted, which can still be
+    // the raw JSON string; the description must not be lost on that path.
+    expect(
+      formatTaskTitle(
+        'execute_command',
+        'ls -la /workspace',
+        JSON.stringify({ command: 'ls -la /workspace', description: 'Listing files in /workspace' }),
+      ),
+    ).toBe('Listing files in /workspace');
+    expect(formatTaskTitle('execute_command', 'ls', '{not json')).toBe('execute_command ls');
+  });
+
   it('uses the description alone when the tool provides one', () => {
     expect(
       formatTaskTitle('execute_command', 'ls -la /workspace', {

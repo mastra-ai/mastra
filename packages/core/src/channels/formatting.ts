@@ -25,12 +25,22 @@ export function stripToolPrefix(name: string): string {
   return name;
 }
 
-export function formatArgsSummary(args: unknown): string {
+/** Tool args arrive either as an object or as the raw JSON string the model emitted. */
+function parseArgs(args: unknown): Record<string, unknown> | undefined {
   try {
     const obj = typeof args === 'string' ? JSON.parse(args) : args;
-    if (!obj || typeof obj !== 'object') return '';
+    return obj && typeof obj === 'object' ? (obj as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
-    const entries = Object.entries(obj as Record<string, unknown>).filter(
+export function formatArgsSummary(args: unknown): string {
+  try {
+    const obj = parseArgs(args);
+    if (!obj) return '';
+
+    const entries = Object.entries(obj).filter(
       ([key, val]) => key !== '__mastraMetadata' && val != null && val !== false && val !== '',
     );
     if (entries.length === 0) return '';
@@ -57,7 +67,7 @@ export function formatArgsSummary(args: unknown): string {
  * line is used, with runs of whitespace collapsed.
  */
 export function formatTaskTitle(displayName: string, argsSummary: string, args: unknown): string {
-  const description = args && typeof args === 'object' ? (args as Record<string, unknown>).description : undefined;
+  const description = parseArgs(args)?.description;
   if (typeof description === 'string') {
     const line = description
       .split('\n')
