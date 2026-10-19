@@ -135,6 +135,25 @@ const hostHasGnuGrepAndGit = (() => {
   }
 })();
 
+/** Whether host grep and git both run PCRE (`-P`); git can be built without it. */
+const hostHasPcre = (() => {
+  try {
+    execFileSync('sh', ['-c', "printf 'a1\\n' | grep -qP '\\d(?=)'"]);
+    const repo = mkdtempSync(join(tmpdir(), 'mastra-pcre-probe-'));
+    try {
+      execFileSync('sh', ['-c', "git init -q && printf 'a1\\n' >f && git grep -q --untracked -P -e '\\d(?=)'"], {
+        cwd: repo,
+        stdio: 'ignore',
+      });
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
 describe.skipIf(!hostHasGnuGrepAndGit)('SandboxFilesystem.grep with GNU grep and git (local shell)', () => {
   function write(root: string, file: string, content: string) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
@@ -192,5 +211,18 @@ describe.skipIf(!hostHasGnuGrepAndGit)('SandboxFilesystem.grep with GNU grep and
 
     expect((await grep(fs, 'app/node_modules')).map(result => result.path)).toEqual(['dep/i.js']);
     expect((await grep(fs, 'app/dist')).map(result => result.path)).toEqual(['d.js']);
+  });
+
+  it.skipIf(!hostHasPcre)('runs \\b, \\s, \\w, and lookarounds natively when grep and git support -P', async () => {
+    const root = createWorkspace();
+    const results = await createGnuFilesystem(root).grep({
+      pattern: '\\bisBot:\\s(?=[a-z])\\w+',
+      path: '.',
+      caseSensitive: true,
+      includeHidden: false,
+    });
+
+    expect(results.map(result => result.path).sort()).toEqual(['app/src/a.ts', 'app/src/new.ts', 'loose/l.txt']);
+    expect(results.find(result => result.path === 'app/src/a.ts')!.matches[0]).toMatchObject({ line: 2, column: 6 });
   });
 });
