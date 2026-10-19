@@ -25,6 +25,8 @@ const MENU_ITEM_OVERRIDES = cn(
   'data-selected:text-foreground',
   'data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50',
   '[&>span]:truncate',
+  // A row is not a pill: a leading icon keeps the menu's own inset.
+  'has-[>svg]:pl-2',
 );
 
 export const menuItemClass = cn(buttonVariants({ variant: 'ghost', size: 'md' }), MENU_ITEM_OVERRIDES);
