@@ -12,6 +12,7 @@ import {
 } from '@internal/storage-test-utils';
 import type { TraceAggregateConformanceCase, TraceAggregateFixtureData } from '@internal/storage-test-utils';
 import { Mastra } from '@mastra/core';
+import { toStandardSchema } from '@mastra/core/schema';
 import { traceAggregateResponseSchema } from '@mastra/core/storage';
 import type { TrustedTraceAggregatePlan } from '@mastra/core/storage';
 import { AGGREGATE_TRACES } from '@mastra/server/handlers/observability-new-endpoints';
@@ -105,7 +106,8 @@ describe('POST /api/observability/traces/aggregate conformance', () => {
       const schema = AGGREGATE_TRACES.openapi?.responses[422]?.content?.['application/json']?.schema;
       if (!schema) throw new Error('Missing trace-aggregate 422 schema');
       const json = await response.json();
-      expect(schema.safeParse(json).success).toBe(true);
+      const validation = await toStandardSchema(schema)['~standard'].validate(json);
+      expect(validation.issues, JSON.stringify(json)).toBeUndefined();
       expect(aggregateTraces).not.toHaveBeenCalled();
       return json;
     }
