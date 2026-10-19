@@ -628,6 +628,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'tools/ceramic',
+          label: 'Ceramic',
+          customProps: { icon: '/img/integrations/ceramic.svg' },
+        },
+        {
+          type: 'doc',
           id: 'tools/firecrawl',
           label: 'Firecrawl',
           customProps: { icon: '/img/integrations/firecrawl.svg' },
