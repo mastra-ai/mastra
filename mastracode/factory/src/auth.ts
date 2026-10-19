@@ -904,13 +904,8 @@ export function createFactoryAfterAuth(provider: IMastraAuthProvider) {
     }
 
     const token = getBearerToken(c.req.header('Authorization'));
-    const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
-    if (requestedOrganizationId) {
-      if (!selectRequestedOrganization(user, requestedOrganizationId)) {
-        return c.json({ error: 'organization_forbidden' }, 403);
-      }
-    } else {
-      await ensureUserOrg(provider, user);
+    if (!(await applyRequestedOrganization(provider, c, token, user))) {
+      return c.json({ error: 'organization_forbidden' }, 403);
     }
     c.set(FACTORY_AUTH_USER_KEY, user);
     resolvedUsers.set(requestContext, user);

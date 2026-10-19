@@ -16,6 +16,7 @@ const ALLOWED_PUBLIC_DECLARATIONS: Record<string, number> = {
   'integrations/platform/github/integration.ts': 2, // `/auth/github/connect`, `/auth/github/connect-user`
   'integrations/platform/linear/integration.ts': 1, // `/auth/linear/connect`
   'integrations/slack/connect-route.ts': 3, // `/connect/slack`, OIDC start + callback
+  'mcp/routes.ts': 1, // protected-resource metadata; the MCP endpoint itself authenticates to return an OAuth challenge
 };
 
 function sourceFiles(dir: string): string[] {
