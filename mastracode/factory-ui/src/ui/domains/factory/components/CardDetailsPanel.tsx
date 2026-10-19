@@ -5,7 +5,7 @@ import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
-import { useContext, useEffect, useLayoutEffect, useRef } from 'react';
+import { useContext, useEffect, useEffectEvent } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { BoardLayout } from '../boardLayout';
@@ -134,11 +134,8 @@ function DockedCardDetails({
   header,
   children,
 }: CardDetailsProps & { dock: BoardDetailsDock }) {
-  const closeDetailsRef = useRef(morph.closeDetails);
-  useLayoutEffect(() => {
-    closeDetailsRef.current = morph.closeDetails;
-  });
-  useEffect(() => claim(() => closeDetailsRef.current()), [claim]);
+  const closeDetails = useEffectEvent(() => morph.closeDetails());
+  useEffect(() => claim(() => closeDetails()), [claim]);
 
   const { cardRef } = morph;
   useEffect(
