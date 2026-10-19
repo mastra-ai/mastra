@@ -222,7 +222,8 @@ export async function queryThreadRows(db: DuckDBConnection, plan: TrustedThreadR
       return `(${Object.entries(entries)
         .map(([field, value]) => {
           values.push(value);
-          return `${field} IS NOT DISTINCT FROM ?`;
+          const operator = field === 'organizationId' || field === 'resourceId' ? 'IS NOT DISTINCT FROM' : '=';
+          return `${field} ${operator} ?`;
         })
         .join(' AND ')})`;
     }),
@@ -254,7 +255,8 @@ export async function queryThreadRows(db: DuckDBConnection, plan: TrustedThreadR
         })
           .map(([field, value]) => {
             modelValues.push(value);
-            return `${field} IS NOT DISTINCT FROM ?`;
+            const operator = field === 'organizationId' || field === 'resourceId' ? 'IS NOT DISTINCT FROM' : '=';
+            return `${field} ${operator} ?`;
           })
           .join(' AND ')})`,
     );
