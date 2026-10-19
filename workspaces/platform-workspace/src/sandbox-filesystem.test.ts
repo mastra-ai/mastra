@@ -29,6 +29,7 @@ import {
   FileNotFoundError as E2BFileNotFoundError,
   InvalidArgumentError,
   SandboxError,
+  TimeoutError,
 } from 'e2b';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -414,6 +415,11 @@ describe('PlatformSandboxFilesystem', () => {
       expect(await fs.stat('/w/src')).toMatchObject({ name: 'src', type: 'directory' });
     });
 
+    it('reports a directory size of 0', async () => {
+      expect((await fs.stat('/w/src')).size).toBe(0);
+      expect((await fs.stat('/w/dirlink')).size).toBe(0);
+    });
+
     it("follows symlinks to the target's type and size", async () => {
       expect(await fs.stat('/w/filelink')).toMatchObject({
         name: 'filelink',
@@ -434,6 +440,19 @@ describe('PlatformSandboxFilesystem', () => {
       files.getInfo = async path => ({ ...(await original(path)), modifiedTime: undefined });
       expect((await fs.stat('/w/a.txt')).modifiedAt).toEqual(new Date(0));
     });
+  });
+
+  it('does not read a dead-sandbox 404 as a missing file', async () => {
+    const dead = new E2BFileNotFoundError('paused sandbox sbx_1 not found');
+    files.getInfo = async () => {
+      throw dead;
+    };
+    files.read = async () => {
+      throw dead;
+    };
+    await expect(fs.exists('/w/a.txt')).rejects.toBe(dead);
+    await expect(fs.readFile('/w/a.txt')).rejects.toBe(dead);
+    await expect(fs.deleteFile('/w/a.txt', { force: true })).rejects.toBe(dead);
   });
 
   it('passes errors it does not recognise through unchanged', async () => {
@@ -589,6 +608,62 @@ describe('PlatformSandbox.filesystem', () => {
     const { sandbox } = makeSandbox(fetchMock, () => Object.assign(new FakeFiles(root), { [method]: failing }));
     await expect(op(sandbox.filesystem)).rejects.toBe(lost);
     expect(failing).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.filter(isLeaseCall)).toHaveLength(1);
+  });
+
+  it('retries only the call envd rejected, never the calls that already succeeded', async () => {
+    await mkdir(join(root, 'src'));
+    await writeFile(join(root, 'src/1.txt'), '1');
+    await writeFile(join(root, 'src/2.txt'), '2');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(created())
+      .mockResolvedValueOnce(e2bLease('stale'))
+      .mockResolvedValueOnce(e2bLease('fresh'));
+    const writes: string[] = [];
+    const { sandbox, leases } = makeSandbox(fetchMock, jwt => {
+      const files = new FakeFiles(root);
+      const write = files.write.bind(files);
+      files.write = async (path, data) => {
+        writes.push(`${jwt} ${path}`);
+        // The lease expires between the first and the second file of the copy.
+        if (jwt === 'stale' && path.endsWith('2.txt')) throw new AuthenticationError('unauthorized');
+        return write(path, data);
+      };
+      return files;
+    });
+    await sandbox.filesystem.copyFile('/src', '/out', { recursive: true, overwrite: false });
+    expect(writes).toEqual(['stale /out/1.txt', 'stale /out/2.txt', 'fresh /out/2.txt']);
+    expect(leases).toEqual(['stale', 'fresh']);
+    expect(await readFile(join(root, 'out/2.txt'), 'utf-8')).toBe('2');
+  });
+
+  it.each([
+    ['a timeout', () => new TimeoutError('502: The sandbox was not found')],
+    ['a dead-sandbox 404', () => new E2BFileNotFoundError('paused sandbox sbx_1 not found')],
+    ['a dropped connection', () => new TypeError('fetch failed')],
+  ])('after %s on a cached lease, the next op learns the sandbox was destroyed', async (_name, failure) => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(created())
+      .mockResolvedValueOnce(e2bLease())
+      .mockResolvedValueOnce(json({ error: { message: 'Gone', type: 'gone' } }, { status: 410 }));
+    const error = failure();
+    const read = vi.fn(async () => {
+      throw error;
+    });
+    const { sandbox } = makeSandbox(fetchMock, () => Object.assign(new FakeFiles(root), { read }));
+    await expect(sandbox.filesystem.readFile('/a.txt')).rejects.toBe(error);
+    expect(read).toHaveBeenCalledTimes(1);
+    await expect(sandbox.filesystem.readFile('/a.txt')).rejects.toBeInstanceOf(SandboxDestroyedError);
+    expect(sandbox.status).toBe('stopped');
+  });
+
+  it('keeps the cached lease after an ordinary file error', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(created()).mockResolvedValueOnce(e2bLease());
+    const { sandbox } = makeSandbox(fetchMock);
+    await expect(sandbox.filesystem.readFile('/missing')).rejects.toBeInstanceOf(FileNotFoundError);
+    await sandbox.filesystem.readFile('/a.txt');
     expect(fetchMock.mock.calls.filter(isLeaseCall)).toHaveLength(1);
   });
 

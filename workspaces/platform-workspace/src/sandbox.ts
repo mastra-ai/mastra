@@ -30,7 +30,7 @@ import type { E2BExecRunner, E2BFiles, E2BFilesFactory } from './e2b-exec.js';
 import { e2bFilesForLease, execViaE2BLease } from './e2b-exec.js';
 import type { PrivateNetExecOptions, PrivateNetExecResult, PrivateNetFetch } from './private-net-exec.js';
 import { execViaPrivateNetwork, PrivateNetExecHttpError } from './private-net-exec.js';
-import { PlatformSandboxFilesystem } from './sandbox-filesystem.js';
+import { isBrokenSandboxError, PlatformSandboxFilesystem } from './sandbox-filesystem.js';
 import type { SandboxTemplateBuilder, SerializedSandboxTemplate } from './template.js';
 import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './template.js';
 
@@ -1571,29 +1571,55 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   /**
-   * Run one files-API call against the VM. Retries once, with a fresh lease,
-   * only when envd rejects the token: that proves the request did nothing, so
-   * a write, rename or remove is never replayed.
+   * Run a filesystem operation against the VM through the files API. Each
+   * files call that envd rejects for its token is retried once with a fresh
+   * lease: the rejection proves that call did nothing, and the calls before it
+   * already succeeded, so nothing is replayed. Any other failure is thrown
+   * unchanged. A dead sandbox or a broken transport also drops the cached
+   * lease, so the next operation re-mints it and learns about a destroyed
+   * sandbox (410) the same way `executeCommand` does.
    */
   private async _withE2BFiles<T>(operation: string, fn: (files: E2BFiles) => Promise<T>): Promise<T> {
     await this.ensureRunning();
     if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
-    for (let attempt = 0; ; attempt++) {
-      const lease = await this._fileLease(operation, attempt + 1);
-      if (lease.provider !== 'e2b') {
-        throw new Error(
-          `PlatformSandbox.filesystem requires an E2B-backed sandbox; this sandbox's provider is "${lease.provider}"`,
-        );
-      }
-      if (this._e2bFiles?.lease !== lease) this._e2bFiles = { lease, files: this._e2bFilesFactory(lease) };
-      const { files } = this._e2bFiles;
+    let current = await this._filesHandle(operation, 1);
+    const call = async <R>(invoke: (files: E2BFiles) => Promise<R>): Promise<R> => {
       try {
-        return await fn(files);
+        return await invoke(current.files);
       } catch (error) {
-        if (attempt > 0 || !(error instanceof AuthenticationError)) throw error;
-        if (this._lease === lease) this._lease = null;
+        if (error instanceof AuthenticationError) {
+          if (this._lease === current.lease) this._lease = null;
+          current = await this._filesHandle(operation, 2);
+          return invoke(current.files);
+        }
+        if (isBrokenSandboxError(error) && this._lease === current.lease) this._lease = null;
+        throw error;
       }
+    };
+    return fn({
+      read: (path, opts) => call(files => files.read(path, opts)),
+      write: (path, data) => call(files => files.write(path, data)),
+      list: (path, opts) => call(files => files.list(path, opts)),
+      makeDir: path => call(files => files.makeDir(path)),
+      rename: (oldPath, newPath) => call(files => files.rename(oldPath, newPath)),
+      remove: path => call(files => files.remove(path)),
+      getInfo: path => call(files => files.getInfo(path)),
+    });
+  }
+
+  /** The files handle for the current lease, rebuilt only when the lease changes. */
+  private async _filesHandle(
+    operation: string,
+    attempts: number,
+  ): Promise<{ lease: CachedExecLease; files: E2BFiles }> {
+    const lease = await this._fileLease(operation, attempts);
+    if (lease.provider !== 'e2b') {
+      throw new Error(
+        `PlatformSandbox.filesystem requires an E2B-backed sandbox; this sandbox's provider is "${lease.provider}"`,
+      );
     }
+    if (this._e2bFiles?.lease !== lease) this._e2bFiles = { lease, files: this._e2bFilesFactory(lease) };
+    return this._e2bFiles;
   }
 
   /** `_ensureLease`, with a 410 handled the same way `_runDirectExec` handles it. */

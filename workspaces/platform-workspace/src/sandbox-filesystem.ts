@@ -21,7 +21,7 @@ import {
   MastraFilesystem,
   NotDirectoryError,
 } from '@mastra/core/workspace';
-import { InvalidArgumentError, NotFoundError, SandboxNotFoundError } from 'e2b';
+import { InvalidArgumentError, NotFoundError, SandboxError, SandboxNotFoundError, TimeoutError } from 'e2b';
 import type { EntryInfo } from 'e2b';
 
 import type { E2BFiles } from './e2b-exec.js';
@@ -35,7 +35,21 @@ export interface E2BFilesRunner {
 /** Default recursion depth for `readdir({ recursive: true })`, matching `LocalFilesystem`. */
 const DEFAULT_MAX_DEPTH = 100;
 
-const isFileNotFound = (error: unknown) => error instanceof NotFoundError && !(error instanceof SandboxNotFoundError);
+/**
+ * envd's edge answers a paused or missing sandbox with a 404 or 502 that the
+ * SDK reports as `FileNotFoundError` or `TimeoutError`. Same message pattern as
+ * `E2BSandbox`'s dead-sandbox check.
+ */
+const DEAD_SANDBOX = /\b(?:paused\s+)?sandbox(?:\s+\S+)?\s+(?:was\s+)?not found\b/i;
+
+const isDeadSandbox = (error: unknown) =>
+  error instanceof SandboxNotFoundError || (error instanceof Error && DEAD_SANDBOX.test(error.message));
+
+const isFileNotFound = (error: unknown) => error instanceof NotFoundError && !isDeadSandbox(error);
+
+/** A failure that says nothing about the file: the sandbox is gone or the request never got an answer. */
+export const isBrokenSandboxError = (error: unknown) =>
+  isDeadSandbox(error) || error instanceof TimeoutError || !(error instanceof SandboxError);
 
 const toAbsolute = (path: string) => posix.resolve('/', path);
 
@@ -63,6 +77,10 @@ function matchesExtension(name: string, extension: ListOptions['extension']): bo
  * Not atomic: `appendFile` (read then write), `writeFile({ overwrite: false })`
  * and `copyFile({ overwrite: false })` (exists check then write), and recursive
  * `copyFile` (one write per file). Use `executeCommand` when you need atomicity.
+ * A recursive `copyFile` copies what symlinks point at rather than the links.
+ *
+ * Kept in step with `E2BSandboxFilesystem` in `@mastra/e2b`, which maps the same files API;
+ * the two can't share code without one package depending on the other.
  */
 export class PlatformSandboxFilesystem extends MastraFilesystem {
   readonly id: string;
@@ -242,7 +260,7 @@ export class PlatformSandboxFilesystem extends MastraFilesystem {
         name: posix.basename(abs),
         path: abs,
         type: info.type === 'dir' ? 'directory' : 'file',
-        size: info.size,
+        size: info.type === 'dir' ? 0 : info.size,
         createdAt: modifiedAt,
         modifiedAt,
       };

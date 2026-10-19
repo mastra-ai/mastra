@@ -422,6 +422,11 @@ describe('E2BSandboxFilesystem', () => {
       expect(await fs.stat('/w/src')).toMatchObject({ name: 'src', type: 'directory' });
     });
 
+    it('reports a directory size of 0', async () => {
+      expect((await fs.stat('/w/src')).size).toBe(0);
+      expect((await fs.stat('/w/dirlink')).size).toBe(0);
+    });
+
     it("follows symlinks to the target's type and size", async () => {
       expect(await fs.stat('/w/filelink')).toMatchObject({
         name: 'filelink',
@@ -507,6 +512,23 @@ describe('E2BSandbox.filesystem', () => {
     expect(await sandbox.filesystem.readFile('/w/a.txt', { encoding: 'utf-8' })).toBe('hello');
     expect(ensureRunning).toHaveBeenCalledTimes(2);
     expect(fresh.calls).toEqual(['read /w/a.txt']);
+  });
+
+  it('treats the 404 envd returns for a paused sandbox as a dead sandbox, not a missing file', async () => {
+    const dead = new FakeFiles(root);
+    dead.getInfo = async () => {
+      throw new E2BFileNotFoundError('paused sandbox sbx_old not found');
+    };
+    const fresh = new FakeFiles(root);
+    const sandbox = runningSandbox(dead);
+    vi.spyOn(sandbox, 'ensureRunning').mockImplementation(async () => {
+      const handle = sandbox as unknown as { _sandbox: Sandbox | null };
+      if (!handle._sandbox) handle._sandbox = { files: fresh } as unknown as Sandbox;
+      sandbox.status = 'running';
+    });
+
+    expect(await sandbox.filesystem.exists('/w/a.txt')).toBe(true);
+    expect(fresh.calls).toEqual(['getInfo /w/a.txt']);
   });
 
   it('surfaces the error when the sandbox is dead again after the restart', async () => {

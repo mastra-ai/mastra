@@ -31,7 +31,17 @@ type E2BFiles = Sandbox['files'];
 /** Default recursion depth for `readdir({ recursive: true })`, matching `LocalFilesystem`. */
 const DEFAULT_MAX_DEPTH = 100;
 
-const isFileNotFound = (error: unknown) => error instanceof NotFoundError && !(error instanceof SandboxNotFoundError);
+/**
+ * envd's edge answers a paused or missing sandbox with a 404 that the SDK
+ * reports as `FileNotFoundError`. Same pattern as `E2BSandbox`'s dead-sandbox
+ * check, so those errors reach `retryOnDead` instead of reading as a missing file.
+ */
+const DEAD_SANDBOX = /\b(?:paused\s+)?sandbox(?:\s+\S+)?\s+(?:was\s+)?not found\b/i;
+
+const isFileNotFound = (error: unknown) =>
+  error instanceof NotFoundError &&
+  !(error instanceof SandboxNotFoundError) &&
+  !(error instanceof Error && DEAD_SANDBOX.test(error.message));
 
 const toAbsolute = (path: string) => posix.resolve('/', path);
 
@@ -60,6 +70,10 @@ function matchesExtension(name: string, extension: ListOptions['extension']): bo
  * Not atomic: `appendFile` (read then write), `writeFile({ overwrite: false })`
  * and `copyFile({ overwrite: false })` (exists check then write), and recursive
  * `copyFile` (one write per file). Use `executeCommand` when you need atomicity.
+ * A recursive `copyFile` copies what symlinks point at rather than the links.
+ *
+ * Kept in step with `PlatformSandboxFilesystem` in `@mastra/platform-workspace`, which maps the same files API;
+ * the two can't share code without one package depending on the other.
  */
 export class E2BSandboxFilesystem extends MastraFilesystem {
   readonly id: string;
@@ -239,7 +253,7 @@ export class E2BSandboxFilesystem extends MastraFilesystem {
         name: posix.basename(abs),
         path: abs,
         type: info.type === 'dir' ? 'directory' : 'file',
-        size: info.size,
+        size: info.type === 'dir' ? 0 : info.size,
         createdAt: modifiedAt,
         modifiedAt,
       };
