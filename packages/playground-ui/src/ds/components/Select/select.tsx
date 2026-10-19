@@ -56,7 +56,7 @@ function collectItems(children: React.ReactNode, acc: Array<{ value: unknown; la
   });
 }
 
-type SelectRootProps<Value> = SelectPrimitive.Root.Props<Value, false>;
+type SelectRootProps<Value> = SelectPrimitive.Root.Props<Value>;
 type SelectChangeDetails = Parameters<NonNullable<SelectRootProps<unknown>['onValueChange']>>[1];
 
 /**
@@ -218,7 +218,7 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
     // Default to the nearest SideDialog/Drawer popup so the dropdown stays
     // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
-    const menu = useFluidMenu<HTMLDivElement>();
+    const menu = useFluidMenu();
     const positionerProps: SelectContentPositionerProps = {
       side,
       align,
