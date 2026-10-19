@@ -12,5 +12,14 @@ export interface ErrorMessage {
   wayOut?: { kind: keyof typeof wayOutLabels; href: string };
 }
 
-export const errorToast = ({ title, why, fix }: ErrorMessage, options: ExternalToast = {}) =>
-  toast.error(title, { ...options, description: `${why} ${fix}` });
+const wayOutAction = ({ kind, href }: NonNullable<ErrorMessage['wayOut']>) => ({
+  label: `${wayOutLabels[kind]} ↗`,
+  onClick: () => window.open(href, '_blank', 'noopener,noreferrer'),
+});
+
+export const errorToast = ({ title, why, fix, wayOut }: ErrorMessage, options: ExternalToast = {}) =>
+  toast.error(title, {
+    ...options,
+    action: options.action ?? (wayOut && wayOutAction(wayOut)),
+    description: `${why} ${fix}`,
+  });

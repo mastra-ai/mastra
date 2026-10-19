@@ -68,6 +68,11 @@ export const Toasts: Story = {
     <div className="flex flex-wrap gap-2">
       <Button onClick={() => errorToast(unlinkSlack)}>Unlink Slack</Button>
       <Button onClick={() => errorToast(deleteDatabase)}>Delete orders-db</Button>
+      <Button
+        onClick={() => errorToast(loadDeploys, { action: { label: 'Retry', onClick: () => errorToast(loadDeploys) } })}
+      >
+        Load deploys
+      </Button>
     </div>
   ),
 };

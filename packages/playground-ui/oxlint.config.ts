@@ -56,6 +56,11 @@ const restrictedErrorCopySelectors = [
     selector: `JSXExpressionContainer ${RAW_ERROR_MESSAGE}`,
     message: `${ERROR_COPY_MESSAGE} Map the cause to written copy in ErrorNotice or errorToast instead of showing error.message.`,
   },
+  {
+    selector:
+      "ObjectExpression:has(> Property[key.name='title']):has(> Property[key.name='why']):has(> Property[key.name='fix']):not(:has(> Property[key.name='wayOut']))",
+    message: 'No way out. Is there a docs page or support link we can offer the user? Add it as wayOut.',
+  },
 ];
 
 export default defineConfig({

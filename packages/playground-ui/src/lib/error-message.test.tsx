@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { errorToast } from './error-message';
 import type { ErrorMessage } from './error-message';
@@ -15,7 +15,10 @@ const deleteDatabase: ErrorMessage = {
   wayOut: { kind: 'docs', href: 'https://mastra.ai/docs' },
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe('errorToast', () => {
   it('shows what happened as the title and the cause plus next step as the description', async () => {
@@ -29,6 +32,27 @@ describe('errorToast', () => {
       screen.getByText('Two environments still use it. Detach it from both environments, then delete it.'),
     ).toBeTruthy();
     expect(screen.queryByText(/Nothing was deleted/)).toBeNull();
+  });
+
+  it('offers the way out as the toast action, opening it in a new tab', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(<Toaster />);
+    act(() => {
+      errorToast(deleteDatabase);
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Docs ↗' }));
+    expect(open).toHaveBeenCalledWith('https://mastra.ai/docs', '_blank', 'noopener,noreferrer');
+  });
+
+  it('keeps the caller’s own action instead of the way out', async () => {
+    render(<Toaster />);
+    act(() => {
+      errorToast(deleteDatabase, { action: { label: 'Retry', onClick: () => {} } });
+    });
+
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Docs ↗' })).toBeNull();
   });
 });
 
