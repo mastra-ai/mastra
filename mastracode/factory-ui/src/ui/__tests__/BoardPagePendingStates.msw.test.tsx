@@ -306,7 +306,7 @@ function stubIncidentioCandidate() {
 }
 
 describe('Board card pending states', () => {
-  it('shows only Linear candidates after switching Work intake from Issues to Linear', async () => {
+  it('shows GitHub and Linear candidates alongside persisted and manual issues in Work intake', async () => {
     const githubIssue: GithubIssue = {
       number: 42,
       title: 'Investigate GitHub intake failure',
@@ -390,23 +390,15 @@ describe('Board card pending states', () => {
       ),
     );
 
-    const user = userEvent.setup();
     const { client } = renderWorkBoard();
 
     await waitForMutationsIdle(client);
+    expect(await screen.findByText('Fix Linear intake sync')).toBeVisible();
     expect(screen.getByText('Investigate GitHub intake failure')).toBeVisible();
     expect(screen.getByText('Persisted GitHub intake item')).toBeVisible();
-    expect(screen.queryByText('Persisted Linear intake item')).not.toBeInTheDocument();
-    expect(screen.getByText('Plan onboarding')).toBeVisible();
-
-    await user.click(screen.getByRole('button', { name: 'Linear' }));
-
-    await waitForMutationsIdle(client);
-    expect(screen.getByText('Fix Linear intake sync')).toBeVisible();
     expect(screen.getByText('Persisted Linear intake item')).toBeVisible();
-    expect(screen.queryByText('Persisted GitHub intake item')).not.toBeInTheDocument();
     expect(screen.getByText('Plan onboarding')).toBeVisible();
-    await waitFor(() => expect(screen.queryByText('Investigate GitHub intake failure')).not.toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Linear' })).not.toBeInTheDocument();
   });
 
   it('shows "Moving to …" on the card while a menu move is in flight, then clears it', async () => {
@@ -892,7 +884,6 @@ describe('Board card pending states', () => {
     expect(githubLink).toHaveAttribute('target', '_blank');
     await user.keyboard('{Escape}');
 
-    await user.click(screen.getByRole('button', { name: 'Linear' }));
     await user.click(await screen.findByRole('button', { name: 'Actions for Linear intake issue' }));
     const linearLink = await screen.findByRole('menuitem', { name: 'Open in Linear' });
     expect(linearLink).toHaveAttribute('href', 'https://linear.app/acme/issue/ENG-42/linear-intake-issue');
@@ -1042,13 +1033,12 @@ describe('Board card pending states', () => {
     // Exactly one card: the filed work item; the live candidate is deduped, not the card.
     const actions = await screen.findAllByRole('button', { name: 'Actions for Fix Jira intake sync' });
     expect(actions).toHaveLength(1);
-    await user.click(actions[0]!);
+    await user.click(actions[0]);
 
     // The filed Jira card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in Jira' })).toHaveAttribute('href', jiraIssue.url);
-    expect(screen.getByRole('menuitem', { name: 'Ask supervisor' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
   });
@@ -1195,13 +1185,12 @@ describe('Board card pending states', () => {
     // Exactly one card: the filed work item; the live candidate is deduped, not the card.
     const actions = await screen.findAllByRole('button', { name: 'Actions for Add retry to incident pager' });
     expect(actions).toHaveLength(1);
-    await user.click(actions[0]!);
+    await user.click(actions[0]);
 
     // The filed incident.io card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in incident.io' })).toHaveAttribute('href', incidentioIssue.url);
-    expect(screen.getByRole('menuitem', { name: 'Ask supervisor' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
   });

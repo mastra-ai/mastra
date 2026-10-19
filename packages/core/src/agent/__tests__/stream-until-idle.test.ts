@@ -1,10 +1,14 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { buildContinuationOpts, resolveScope } from '../../loop/shared/stream-until-idle-helpers';
+import {
+  buildContinuationOpts,
+  releaseContinuationToolCallIds,
+  resolveScope,
+} from '../../loop/shared/stream-until-idle-helpers';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
-import { RequestContext } from '../../request-context';
+import { MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY, RequestContext } from '../../request-context';
 import { MockStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
@@ -132,6 +136,31 @@ describe('Agent.streamUntilIdle', () => {
           'IMPORTANT: These tool calls ran as background tasks. Their authoritative results may now look like ordinary tool results after reconciliation; do not reinterpret them as foreground calls. IMPORTANT: The following tool-call IDs completed successfully: call-1 (view), background task task-1. Their results are now in the conversation. Do not call the same tool again — the result is already available.',
       },
     ]);
+    expect(options.requestContext.get(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY)).toEqual(['call-1']);
+  });
+
+  it('shares the caller request context with continuations', () => {
+    const requestContext = new RequestContext();
+    const options = buildContinuationOpts({ requestContext }, undefined, [
+      { type: 'background-task-completed', payload: { taskId: 'task-1', toolCallId: 'call-1', toolName: 'view' } },
+    ]);
+    expect(options.requestContext).toBe(requestContext);
+    expect(requestContext.get(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY)).toEqual(['call-1']);
+  });
+
+  it('keeps overlapping continuation IDs isolated on a shared request context', () => {
+    const requestContext = new RequestContext();
+    const first = buildContinuationOpts({ requestContext }, undefined, [
+      { type: 'background-task-completed', payload: { taskId: 'task-1', toolCallId: 'call-1', toolName: 'view' } },
+    ]);
+    buildContinuationOpts({ requestContext }, undefined, [
+      { type: 'background-task-completed', payload: { taskId: 'task-2', toolCallId: 'call-2', toolName: 'view' } },
+    ]);
+    expect(requestContext.get(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY)).toEqual(['call-1', 'call-2']);
+    releaseContinuationToolCallIds(requestContext, first.continuationToolCallIds);
+    expect(requestContext.get(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY)).toEqual(['call-2']);
+    releaseContinuationToolCallIds(requestContext, ['call-2']);
+    expect(requestContext.has(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY)).toBe(false);
   });
 
   let mastra: Mastra;

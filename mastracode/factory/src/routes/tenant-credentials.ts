@@ -25,14 +25,14 @@ import {
   resolveTenantFromRequestContext,
   setCredentialStoreProvider,
 } from '@mastra/code-sdk/agents/credential-resolver';
-import { getOAuthProvider } from '@mastra/code-sdk/auth/storage';
+import { getOAuthProvider, PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
 import type { AuthCredential, CredentialStore } from '@mastra/code-sdk/auth/types';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MiddlewareHandler } from 'hono';
 
 import { isOAuthCredentialExpired } from '../storage/domains/credentials/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
-import { getTenantCredentialsStorage, tenantOrgId } from './provider-credentials.js';
+import { getAuthProviderId, getTenantCredentialsStorage, tenantOrgId } from './provider-credentials.js';
 import type { RouteAuth } from './route.js';
 
 /** How long a hydrated snapshot is considered fresh. */
@@ -249,6 +249,27 @@ export async function primeTenantCredentialsForTenant(tenant: SdkCredentialTenan
       error,
     });
   }
+}
+
+/**
+ * The model a session should fall back to when its scope has no chosen default:
+ * the provider default (`PROVIDER_DEFAULT_MODELS`) of the first provider the
+ * tenant is connected to. Returns `undefined` when `currentModelId` is already
+ * usable, when no connected provider has a default, or before registration.
+ */
+export async function resolveTenantProviderDefaultModel(
+  tenant: SdkCredentialTenant,
+  currentModelId: string | undefined,
+): Promise<string | undefined> {
+  if (!registeredCredentials) return undefined;
+  const store = storeFor(tenant, registeredCredentials);
+  await store.ensureFresh();
+  const usable = (modelId: string) => {
+    const provider = modelId.split('/')[0] ?? '';
+    return store.get(getAuthProviderId(provider)) !== undefined || store.allowsDeploymentCredentials(provider);
+  };
+  if (currentModelId && usable(currentModelId)) return undefined;
+  return Object.entries(PROVIDER_DEFAULT_MODELS).find(([provider]) => store.get(provider) !== undefined)?.[1];
 }
 
 /** Test hook: clear registration and cached tenant snapshots. */

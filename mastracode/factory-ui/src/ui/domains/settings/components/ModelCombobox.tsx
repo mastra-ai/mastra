@@ -1,12 +1,12 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
+import type { ComboboxOption, ComboboxSingleProps } from '@mastra/playground-ui/components/Combobox';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { Box, Sparkles } from 'lucide-react';
 import { useMemo } from 'react';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { ProviderBrandIcon } from '../../workspaces/components/ProviderBrandIcon';
-import { providerDisplayName } from './provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 
 /** Value the picker reports when the caller's `auto` choice is picked. */
 const AUTO_VALUE = 'auto';
@@ -64,6 +64,9 @@ export function ModelCombobox({
   placeholder,
   disabled,
   className,
+  variant,
+  size,
+  'aria-label': ariaLabel,
 }: {
   models: AvailableModelOption[];
   value: string;
@@ -72,6 +75,9 @@ export function ModelCombobox({
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  variant?: ComboboxSingleProps['variant'];
+  size?: ComboboxSingleProps['size'];
+  'aria-label'?: string;
 }) {
   const autoEffectiveModelId = auto ? (auto.effectiveModelId ?? null) : undefined;
   const options = useMemo(() => {
@@ -94,6 +100,9 @@ export function ModelCombobox({
       allowCustomValue
       disabled={disabled}
       className={className}
+      variant={variant}
+      size={size}
+      aria-label={ariaLabel}
     />
   );
 }

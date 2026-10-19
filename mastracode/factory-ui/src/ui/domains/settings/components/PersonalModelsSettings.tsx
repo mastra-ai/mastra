@@ -32,7 +32,6 @@ export function PersonalModelsSettings() {
       )}
       <ProviderAccessSection
         fixedScope="user"
-        showOrgCoverage
         description="Connect your own provider account for interactive chats. Organization credentials are managed in Factory settings."
       />
     </div>

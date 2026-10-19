@@ -24,7 +24,7 @@ export function FactoryModelScopeSection() {
 
   if (!factoryId) return null;
 
-  const modelScope = projectQuery.data?.modelScope ?? 'factory';
+  const modelScope = projectQuery.data?.modelScope ?? 'hybrid';
   const error = setModelScope.error ?? projectQuery.error;
 
   const saveModelScope = (value: string) => {

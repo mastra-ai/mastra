@@ -60,6 +60,7 @@ const COLUMNS = [
   'spanType',
   'isEvent',
   'endedAt',
+  'timeToFirstChunkMs',
   'experimentId',
   'entityType',
   'entityId',
@@ -614,6 +615,7 @@ interface SpanEventRow {
   spanType: string | null;
   isEvent: boolean | null;
   endedAt: Date | null;
+  timeToFirstChunkMs: number | null;
   experimentId: string | null;
   entityType: string | null;
   entityId: string | null;
@@ -689,6 +691,7 @@ function toValuesTuple(row: SpanEventRow): string {
     v(row.spanType),
     v(row.isEvent),
     v(row.endedAt),
+    v(row.timeToFirstChunkMs),
     v(row.experimentId),
     v(row.entityType),
     v(row.entityId),
@@ -751,6 +754,7 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     isEvent: s.isEvent,
     // Event spans are point-in-time: they end at the instant they start.
     endedAt: s.isEvent ? s.startedAt : null,
+    timeToFirstChunkMs: s.timeToFirstChunkMs ?? null,
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
@@ -800,6 +804,7 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     spanType: s.spanType,
     isEvent: s.isEvent,
     endedAt: s.endedAt ?? null,
+    timeToFirstChunkMs: s.timeToFirstChunkMs ?? null,
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,

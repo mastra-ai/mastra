@@ -4,6 +4,7 @@ import type {
   MastraCompositeStore,
   ObservabilityStorage,
   ScoresStorage,
+  TrustedTraceQueryScalarPredicate,
   TrustedThreadPredicate,
   TrustedTraceQueryPredicate,
 } from '@mastra/core/storage';
@@ -25,9 +26,29 @@ export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
 const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
 const OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE = 'trace-aggregate';
 const OBSERVABILITY_SPAN_QUERY_STORAGE_FEATURE = 'span-query';
+const SPAN_QUERY_CONTEXT_FIELDS = new Set([
+  'traceId',
+  'spanId',
+  'parentSpanId',
+  'threadId',
+  'resourceId',
+  'requestId',
+  'serviceName',
+  'experimentId',
+  'environment',
+  'executionSource',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
+]);
 const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
 const OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE = 'trace-query-context-ids';
 const TRACE_QUERY_CONTEXT_ID_FIELDS = new Set(['runId', 'sessionId', 'userId', 'organizationId']);
+const OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_STORAGE_FEATURE = 'trace-query-time-to-first-chunk';
+const TRACE_QUERY_TIME_TO_FIRST_CHUNK_FIELDS = new Set(['timeToFirstChunkMs']);
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
 const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE = 'trace-query-tenant-scope';
@@ -125,8 +146,12 @@ export function assertObservabilityTraceQuerySupported(observabilityStore: Obser
   });
 }
 
+export function supportsObservabilityTraceAggregate(observabilityStore: ObservabilityStorage) {
+  return getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE) === true;
+}
+
 export function assertObservabilityTraceAggregateSupported(observabilityStore: ObservabilityStorage) {
-  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE)) return;
+  if (supportsObservabilityTraceAggregate(observabilityStore)) return;
 
   throw new HTTPException(501, {
     message: 'Trace aggregation is not supported by the configured observability store',
@@ -139,6 +164,26 @@ export function assertObservabilitySpanQuerySupported(observabilityStore: Observ
   throw new HTTPException(501, {
     message: 'Span queries are not supported by the configured observability store',
   });
+}
+
+export function assertObservabilitySpanQueryFieldsSupported(
+  observabilityStore: ObservabilityStorage,
+  predicate: TrustedTraceQueryScalarPredicate | undefined,
+) {
+  if (!predicate || getFeatures(observabilityStore)?.includes('span-query-context-fields')) return;
+  if (predicate.type === 'boolean') {
+    for (const arg of predicate.args) assertObservabilitySpanQueryFieldsSupported(observabilityStore, arg);
+  } else if (predicate.type === 'not') {
+    assertObservabilitySpanQueryFieldsSupported(observabilityStore, predicate.arg);
+  } else if (SPAN_QUERY_CONTEXT_FIELDS.has(predicate.field)) {
+    throw new coreStorage.TraceQueryValidationError([
+      {
+        code: 'field_not_allowed',
+        path: ['where'],
+        message: `Filtering by ${predicate.field} requires an updated storage adapter with span query context-field support.`,
+      },
+    ]);
+  }
 }
 
 function usesRootDuration(predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined): boolean {
@@ -166,12 +211,16 @@ export function assertObservabilityTraceQueryRootDurationSupported(
   });
 }
 
-function usesContextId(predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined): boolean {
+/** Whether any scalar predicate, at any depth and inside any relation, names one of `fields`. */
+function usesField(
+  predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
+  fields: ReadonlySet<string>,
+): boolean {
   if (!predicate) return false;
-  if (predicate.type === 'boolean') return predicate.args.some(usesContextId);
-  if (predicate.type === 'not') return usesContextId(predicate.arg);
-  if (predicate.type === 'relation') return usesContextId(predicate.predicate);
-  return TRACE_QUERY_CONTEXT_ID_FIELDS.has(predicate.field);
+  if (predicate.type === 'boolean') return predicate.args.some(arg => usesField(arg, fields));
+  if (predicate.type === 'not') return usesField(predicate.arg, fields);
+  if (predicate.type === 'relation') return usesField(predicate.predicate, fields);
+  return fields.has(predicate.field);
 }
 
 export function supportsObservabilityTraceQueryContextIds(observabilityStore: ObservabilityStorage) {
@@ -186,10 +235,38 @@ export function assertObservabilityTraceQueryContextIdsSupported(
   observabilityStore: ObservabilityStorage,
   predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
 ) {
-  if (!usesContextId(predicate) || supportsObservabilityTraceQueryContextIds(observabilityStore)) return;
+  if (
+    !usesField(predicate, TRACE_QUERY_CONTEXT_ID_FIELDS) ||
+    supportsObservabilityTraceQueryContextIds(observabilityStore)
+  ) {
+    return;
+  }
 
   throw new HTTPException(501, {
     message: 'Context identifier predicates are not supported by the configured observability store',
+  });
+}
+
+export function supportsObservabilityTraceQueryTimeToFirstChunk(observabilityStore: ObservabilityStorage) {
+  return (
+    getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_STORAGE_FEATURE) === true
+  );
+}
+
+/** Covers trace, thread and span query predicates, including `spans` and `traces` relations. */
+export function assertObservabilityTraceQueryTimeToFirstChunkSupported(
+  observabilityStore: ObservabilityStorage,
+  predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
+) {
+  if (
+    !usesField(predicate, TRACE_QUERY_TIME_TO_FIRST_CHUNK_FIELDS) ||
+    supportsObservabilityTraceQueryTimeToFirstChunk(observabilityStore)
+  ) {
+    return;
+  }
+
+  throw new HTTPException(501, {
+    message: 'Time to first chunk predicates are not supported by the configured observability store',
   });
 }
 
@@ -269,10 +346,14 @@ export type ObservabilityStorageCapabilities = {
   traceQuery: boolean;
   traceQueryRootDuration: boolean;
   traceQueryContextIds: boolean;
+  traceQueryTimeToFirstChunk: boolean;
   traceQueryDiscovery: boolean;
   traceQueryTenantScope: boolean;
+  traceAggregate: boolean;
   threadQuery: boolean;
   spanQuery: boolean;
+  /** Days of traces the store keeps. Omitted when the store does not report a limit. */
+  traceRetentionDays?: number;
   feedback: boolean;
 };
 
@@ -291,8 +372,10 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   traceQuery: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
+  traceQueryTimeToFirstChunk: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
+  traceAggregate: false,
   threadQuery: false,
   spanQuery: false,
   feedback: false,
@@ -338,6 +421,7 @@ export function getObservabilityStorageCapabilities(
     newApiCore &&
     typeof coreStorage.planThreadQuery === 'function' &&
     declares(OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE);
+  const spanQuery = newApiCore && supportsSpanQueryCore() && declares(OBSERVABILITY_SPAN_QUERY_STORAGE_FEATURE);
 
   return {
     // `listMetrics` is left out: it backs a newer route that metric dashboards don't use,
@@ -364,14 +448,19 @@ export function getObservabilityStorageCapabilities(
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE),
     traceQueryContextIds:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE),
+    traceQueryTimeToFirstChunk:
+      (traceQuery || threadQuery || spanQuery) &&
+      declares(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_STORAGE_FEATURE),
     traceQueryDiscovery:
       newApiCore && supportsTraceQueryDiscoveryCore() && declares(OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE),
     traceQueryTenantScope:
       (traceQuery || threadQuery) &&
       coreFeatures.has(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE) &&
       declares(OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE),
+    traceAggregate:
+      newApiCore && supportsTraceAggregateCore() && declares(OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE),
     threadQuery,
-    spanQuery: newApiCore && supportsSpanQueryCore() && declares(OBSERVABILITY_SPAN_QUERY_STORAGE_FEATURE),
+    spanQuery,
     feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
   };
 }

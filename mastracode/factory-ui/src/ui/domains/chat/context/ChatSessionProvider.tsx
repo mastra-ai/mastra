@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
-import { useContext } from 'react';
+import { useContext, useMemo } from 'react';
 import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
@@ -29,53 +29,24 @@ export function ChatSessionConfigProvider({
   threadId,
   userScoped = false,
   draftSessionId,
-  supervisor,
 }: {
   children: ReactNode;
   threadId?: string;
   userScoped?: boolean;
   draftSessionId?: string;
-  /**
-   * Bind the chat to the factory's supervisor session instead of a stored
-   * workspace session. The supervisor has no repository or sandbox and no
-   * session row: its resource is addressable straight away, and the server's
-   * session-start hook stamps factory state from the resource id.
-   */
-  supervisor?: { resourceId: string; threadId: string };
 }) {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
   const isUserDraft = userScoped && Boolean(draftSessionId);
-  const sessionQuery = useUserSessionQuery(supervisor ? undefined : userScoped ? threadId : sessionId);
+  const sessionQuery = useUserSessionQuery(userScoped ? threadId : sessionId);
   const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
+  const owner = useMemo(
+    () => storedSession && { id: storedSession.userId, name: storedSession.owner?.name },
+    [storedSession],
+  );
 
-  if (supervisor) {
-    return (
-      <ChatSessionContext.Provider
-        value={{
-          resourceId: supervisor.resourceId,
-          sessionEnabled: true,
-          sandboxReady: true,
-          resourceReady: true,
-          sandboxPreparing: false,
-          resourceEnabled: true,
-          sessionError: undefined,
-          retrySession: undefined,
-          projectPath: undefined,
-          sessionThreadId: supervisor.threadId,
-          workspacePending: false,
-          draftSessionId: undefined,
-          factorySessionState: factory ? { factoryProjectId: factory.id } : undefined,
-          baseUrl,
-          kind: 'factory' as const,
-        }}
-      >
-        {children}
-      </ChatSessionContext.Provider>
-    );
-  }
   const repository = storedSession
     ? factory?.repositories.find(
         (repo: LinkedRepositoryPayload) => repo.projectRepositoryId === storedSession.projectRepositoryId,
@@ -159,6 +130,7 @@ export function ChatSessionConfigProvider({
         : undefined,
     baseUrl,
     kind: userScoped ? ('user' as const) : ('factory' as const),
+    owner,
   };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;

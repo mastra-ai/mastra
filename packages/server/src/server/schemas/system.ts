@@ -41,12 +41,30 @@ export const observabilityStorageCapabilitiesSchema = z.object({
   traceQueryContextIds: z
     .boolean()
     .describe('`runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries'),
+  traceQueryTimeToFirstChunk: z
+    .boolean()
+    .describe(
+      '`timeToFirstChunkMs` in trace and span query results, and predicates on it in trace, thread and span queries',
+    ),
   traceQueryDiscovery: z
     .boolean()
     .describe('Trace query field discovery (POST /observability/traces/query/fields and /values)'),
   traceQueryTenantScope: z.boolean().describe('Trusted tenant scoping of trace and thread queries'),
+  traceAggregate: z
+    .boolean()
+    .describe(
+      'Trace aggregation (POST /observability/traces/aggregate). Unlike `traceQuery`, clients should treat a missing value as unavailable.',
+    ),
   threadQuery: z.boolean().describe('Advanced thread queries (POST /observability/threads/query)'),
   spanQuery: z.boolean().describe('Span queries (POST /observability/spans/query)'),
+  traceRetentionDays: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit.',
+    ),
   feedback: z
     .boolean()
     .describe(

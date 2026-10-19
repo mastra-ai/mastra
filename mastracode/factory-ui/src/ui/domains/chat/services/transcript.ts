@@ -38,7 +38,12 @@ export interface NoticeEntry {
   id: string;
   level: 'info' | 'error';
   text: string;
+  /** A provider credential is missing; the notice offers a way to sign in. */
+  action?: 'provider-login';
 }
+
+/** Wire-stable `Error.name` the SDK uses for missing provider credentials. */
+export const PROVIDER_AUTH_REQUIRED_ERROR = 'ProviderAuthRequiredError';
 
 export interface ApprovalPrompt {
   kind: 'approval';
@@ -392,7 +397,12 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     case 'info':
       return pushNotice(state, 'info', event.message);
     case 'error':
-      return pushNotice(state, 'error', describeErrorEvent(event));
+      return pushNotice(
+        state,
+        'error',
+        describeErrorEvent(event),
+        isProviderAuthError(event.error) ? 'provider-login' : undefined,
+      );
 
     default:
       return state;
@@ -404,6 +414,10 @@ function describeErrorEvent(event: { error: { message?: string } | string; error
   if (message) return message;
   if (event.errorType) return `Run failed (${event.errorType}). Check the server logs for details.`;
   return 'Run failed with an unknown error. Check the server logs for details.';
+}
+
+function isProviderAuthError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'name' in error && error.name === PROVIDER_AUTH_REQUIRED_ERROR;
 }
 
 export function createInitialTranscript({
@@ -802,6 +816,7 @@ function upsertMessage(
   if (message.role === 'assistant' && idx === -1) idx = indexOfSameTurn(entries, message);
   if (message.role === 'signal' && idx === -1 && !sentByOther(message, viewerId)) {
     idx = claimOnScreenEntries(entries, [message], isUnconfirmedSteer).get(message) ?? -1;
+    if (idx === -1) idx = indexOfUnclaimedOptimisticCopy(entries, message);
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
@@ -809,7 +824,15 @@ function upsertMessage(
     message.role === 'assistant'
       ? withoutToolPartsDrawnElsewhere(preserveRuntimeToolParts(message, prevEntry?.message), entries, idx)
       : undefined;
-  const nextMessage = filtered?.message ?? preserveOptimisticUserContent(message, prevEntry?.message, viewerId);
+  // The viewer's own message sent from another client (e.g. the TUI) has no optimistic copy to hide behind.
+  const ownSignalWithoutEcho = message.role === 'signal' && idx === -1;
+  const nextMessage =
+    filtered?.message ??
+    preserveOptimisticUserContent(
+      ownSignalWithoutEcho ? withRenderableSignalText(message) : message,
+      prevEntry?.message,
+      viewerId,
+    );
   const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools, viewerId });
   // Changing the entry id remounts open cards.
   const entry = prevEntry
@@ -820,6 +843,19 @@ function upsertMessage(
   else entries[idx] = entry;
   const next = { ...state, entries };
   return message.role === 'assistant' ? reconcileToolResults(next, [message]) : next;
+}
+
+// A composer bubble keeps its local message id until its echo signal claims it, so each send is consumed once.
+function indexOfUnclaimedOptimisticCopy(entries: TimelineEntry[], message: MastraDBMessage): number {
+  const texts = new Set(drawableTexts(message));
+  return entries.findIndex(
+    entry =>
+      entry.kind === 'message' &&
+      entry.message.role === 'user' &&
+      entry.id.startsWith('local-') &&
+      entry.message.id === entry.id &&
+      drawableTexts(entry.message).some(text => texts.has(text)),
+  );
 }
 
 function withoutToolPartsDrawnElsewhere(
@@ -841,7 +877,7 @@ function withoutToolPartsDrawnElsewhere(
   });
   if (sourcePartIndexes.length === message.content.parts.length) return { message };
 
-  const parts = sourcePartIndexes.map(index => message.content.parts[index]!);
+  const parts = sourcePartIndexes.map(index => message.content.parts[index]);
   return { message: { ...message, content: { ...message.content, parts } }, sourcePartIndexes };
 }
 
@@ -1022,9 +1058,13 @@ function pushPrompt(state: TranscriptState, prompt: PromptEntry): TranscriptStat
   return { ...state, entries: [...state.entries, prompt] };
 }
 
-function pushNotice(state: TranscriptState, level: 'info' | 'error', text: string): TranscriptState {
-  return {
-    ...state,
-    entries: [...state.entries, { kind: 'notice', id: `notice-${Date.now()}-${noticeSeq++}`, level, text }],
-  };
+function pushNotice(
+  state: TranscriptState,
+  level: 'info' | 'error',
+  text: string,
+  action?: NoticeEntry['action'],
+): TranscriptState {
+  const notice: NoticeEntry = { kind: 'notice', id: `notice-${Date.now()}-${noticeSeq++}`, level, text };
+  if (action) notice.action = action;
+  return { ...state, entries: [...state.entries, notice] };
 }

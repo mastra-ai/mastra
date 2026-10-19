@@ -27,7 +27,7 @@ function loose(c: unknown): RouteContext {
   return c as RouteContext;
 }
 
-const USER_SESSION_BRANCH_PREFIX = 'user/session-';
+export const USER_SESSION_BRANCH_PREFIX = 'user/session-';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const MAX_SESSION_OWNER_PROFILES = 100;
 const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
@@ -272,12 +272,12 @@ function projectSessionRoutes(
         ) {
           return c.json({ error: 'Invalid sessionId' }, 400);
         }
-        const requestedSessionId = body.sessionId as string | undefined;
+        const requestedSessionId = body.sessionId;
         const sessionId = requestedSessionId ?? globalThis.crypto.randomUUID();
         if (body.title !== undefined && typeof body.title !== 'string') {
           return c.json({ error: 'Invalid title' }, 400);
         }
-        const normalizedTitle = body.title === undefined ? null : normalizeSessionTitle(body.title as string);
+        const normalizedTitle = body.title === undefined ? null : normalizeSessionTitle(body.title);
         let branch: string;
         if (body.branch === undefined) branch = `${USER_SESSION_BRANCH_PREFIX}${sessionId}`;
         else if (isValidGitRef(body.branch)) branch = body.branch;

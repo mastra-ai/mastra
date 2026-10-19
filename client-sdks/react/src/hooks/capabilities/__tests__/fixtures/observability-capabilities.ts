@@ -19,6 +19,8 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryDiscovery: true,
     traceQueryTenantScope: true,
     traceQueryContextIds: true,
+    traceQueryTimeToFirstChunk: true,
+    traceAggregate: true,
     threadQuery: true,
     spanQuery: true,
     feedback: true,
@@ -42,9 +44,28 @@ export const legacyTraceCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryDiscovery: false,
     traceQueryTenantScope: false,
     traceQueryContextIds: false,
+    traceQueryTimeToFirstChunk: false,
+    traceAggregate: false,
     threadQuery: false,
     spanQuery: false,
   },
+};
+
+/** Store runs trace queries but does not declare `trace-aggregate`. */
+export const noTraceAggregateCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    traceAggregate: false,
+  },
+};
+
+/** Response from a server released before the `traceAggregate` key existed. */
+export const preAggregateCapabilities = {
+  observabilityStorageType: 'ObservabilityStorageClickhouseVNext',
+  capabilities: Object.fromEntries(
+    Object.entries(traceQueryCapabilities.capabilities).filter(([key]) => key !== 'traceAggregate'),
+  ),
 };
 
 /** Store declares `trace-query` but not `trace-query-root-duration`. */

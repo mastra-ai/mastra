@@ -254,6 +254,29 @@ describe('trusted Factory credential policy', () => {
     await expect(prepareCredentialTenant(context('sender'))).resolves.toBeUndefined();
   });
 
+  it('resolves session-less Factory pages, addressed by project id, to the Factory policy', async () => {
+    const { seed, project, context } = await setup();
+    const factoryPage = context(project.id);
+    await prepareCredentialTenant(factoryPage);
+    expect(resolveCredentialStore(factoryPage)?.getStoredApiKey('openai-codex')).toBe('org-key');
+
+    const hybrid = await seed.projects.create({
+      orgId: ORG,
+      userId: OWNER,
+      input: { name: 'Hybrid', modelScope: 'hybrid' },
+    });
+    const hybridPage = context(hybrid.id);
+    await prepareCredentialTenant(hybridPage);
+    expect(resolveCredentialStore(hybridPage)?.getStoredApiKey('openai-codex')).toBe('sender-key');
+  });
+
+  it("refuses another org's Factory id as a session-less resource", async () => {
+    const { project, context } = await setup();
+    await expect(prepareCredentialTenant(context(project.id, 'sender', 'org-2'))).rejects.toThrow(
+      'ownership is unavailable',
+    );
+  });
+
   it('rejects ambiguous bindings instead of selecting the repository project policy', async () => {
     const { seed, project, sourceSession, context } = await setup();
     const other = await seed.projects.create({
@@ -410,16 +433,6 @@ describe('trusted Factory credential policy', () => {
 
       expect(session.model.switch).not.toHaveBeenCalled();
       expect(state).toMatchObject({ factoryModelScope: 'user', factoryOwnerUserId: undefined });
-    });
-
-    it('bills supervisor turns as Factory runs', async () => {
-      const { seed, project, context } = await setup();
-      await seed.projects.update({ orgId: ORG, id: project.id, input: { modelScope: 'hybrid' } });
-      const ctx = context(`factory-supervisor:${project.id}`);
-
-      await prepareCredentialTenant(ctx);
-
-      expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: ORG, userId: OWNER, credentialScope: 'factory' });
     });
 
     it('leaves factory and user Factories on their scope whether or not a run binding exists', async () => {
@@ -700,21 +713,15 @@ describe('trusted Factory credential policy', () => {
     const unavailable = new RequestContext();
     await expect(
       prepareSessionRunContext(unavailable, 'missing-session', { sessions: deps.sourceControl }),
-    ).resolves.toBe('unavailable');
+    ).resolves.toBe('session-not-found');
     await expect(prepareCredentialTenant(unavailable)).rejects.toThrow('could not be resolved');
   });
 
-  it('refreshes supervisor policy from the actual project and rejects foreign supervisors', async () => {
-    const { seed, project, context } = await setup();
-    const ctx = context(`factory-supervisor:${project.id}`);
-    await prepareCredentialTenant(ctx);
-    expect(resolveCredentialStore(ctx)?.getStoredApiKey('openai-codex')).toBe('org-key');
-    await seed.projects.update({ orgId: ORG, id: project.id, input: { modelScope: 'user' } });
-    await prepareCredentialTenant(ctx);
-    expect(resolveCredentialStore(ctx)?.getStoredApiKey('openai-codex')).toBe('owner-key');
-    await expect(
-      prepareCredentialTenant(context(`factory-supervisor:${project.id}`, 'sender', 'org-2')),
-    ).rejects.toThrow('policy is unavailable');
+  it('refuses a project-keyed resourceId from a retired session kind instead of reading the project policy', async () => {
+    const { project, context } = await setup();
+    const ctx = context(`factory-retired-kind:${project.id}`);
+    await expect(prepareCredentialTenant(ctx)).rejects.toThrow('ownership is unavailable');
+    expect(resolveTenantFromRequestContext(ctx)).toBeUndefined();
   });
 
   it('ignores HTTP state forgery during real Agent model resolution and fails closed on subsequent policy errors', async () => {

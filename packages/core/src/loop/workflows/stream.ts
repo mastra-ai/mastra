@@ -13,6 +13,7 @@ import { safeClose, safeEnqueue } from '../../stream/base';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom, isDataChunk } from '../../stream/types';
+import { rebindProcessorTools } from '../../utils';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
 import { REQUEST_TOOLS_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '../timeout';
@@ -333,12 +334,13 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // which close over that request's requestContext. Let the tools built for this call
         // replace the ones the previous request configured, but keep the ones a processor added
         // or swapped in, since the suspended call may be one of them and the processors do not
-        // run again before it resumes.
+        // run again before it resumes. Processor-added tools are rebuilt for this call's
+        // requestContext instead, so an approved one runs with the approver's context (#27544).
         const runScope = rest.mastra.__getRunScope(runId);
         const previousStepTools = resumeContext ? runScope?.get(STEP_TOOLS_KEY) : undefined;
         if (previousStepTools) {
           const previousRequestTools = runScope!.get(REQUEST_TOOLS_KEY);
-          const stepTools = { ...previousStepTools };
+          const stepTools = rebindProcessorTools({ ...previousStepTools }, requestContext);
           for (const [name, tool] of Object.entries(rest.tools ?? {})) {
             // A name the previous request configured but the step tools lack was withheld by a processor.
             const refresh =
@@ -545,6 +547,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         safeClose(controller);
       } finally {
+        // The run is over, so close any output stream processor span still open, e.g. one
+        // opened by a tool result resumed after approval when no step follows it.
+        dataChunkProcessorRunner?.endStreamProcessorSpans(dataChunkProcessorStates!);
         upstreamAbortSignal?.removeEventListener('abort', onUpstreamAbort);
         cleanupTotalTimeout();
         await stopGoalActivity({ agentId, runId, now: _internal?.now });

@@ -11,7 +11,7 @@ import {
   clearOpenCard,
 } from '../boardFilters';
 import type { BoardFilterState } from '../boardFilters';
-import { DEFAULT_BOARD_LAYOUT } from '../boardLayout';
+import { boardLayoutFromParams, boardLayoutParams } from '../boardLayout';
 import type { BoardLayout } from '../boardLayout';
 import type { BoardSort } from '../boardOrder';
 import { BOARD_VIEW_QUERY, boardViewSettingsSchema, savedBoardViewsStorageKey } from '../boardSavedViews';
@@ -32,9 +32,11 @@ export interface BoardView {
   layout: BoardLayout;
   newViewSettings: BoardViewSettings;
   setFilters: (next: BoardFilterState) => void;
+  clearFilters: () => void;
   setSearch: (next: string) => void;
   setSort: (next: BoardSort) => void;
   setLayout: (next: BoardLayout) => void;
+  resetProperties: () => void;
 }
 
 export function useBoardView({
@@ -70,7 +72,7 @@ export function useBoardView({
   const { applied } = savedViews;
   const pageSettings: BoardViewSettings = {
     sort: boardSortFromParams(searchParams, currentUserId),
-    layout: DEFAULT_BOARD_LAYOUT,
+    layout: boardLayoutFromParams(searchParams),
   };
   const pageFilters = boardFiltersFromParams(searchParams, kind);
   const settings = applied?.settings ?? pageSettings;
@@ -98,12 +100,34 @@ export function useBoardView({
       if (applied) savedViews.change({ filters: boardFilterItems(next, kind) });
       if (params.toString() !== searchParams.toString()) replaceParams(params);
     },
+    clearFilters: () => {
+      const params = applied
+        ? new URLSearchParams(searchParams)
+        : boardFilterParams(searchParams, boardFilterStateFromItems([], kind), kind);
+      params.delete(BOARD_SEARCH_QUERY);
+      clearOpenCard(params);
+      if (applied) savedViews.change({ filters: [] });
+      replaceParams(params);
+    },
     setSort: (next: BoardSort) => {
       if (applied) savedViews.change({ settings: { ...applied.settings, sort: next } });
       else replaceParams(boardSortParams(searchParams, next));
     },
     setLayout: (next: BoardLayout) => {
       if (applied) savedViews.change({ settings: { ...applied.settings, layout: next } });
+      else replaceParams(boardLayoutParams(searchParams, next));
+    },
+    resetProperties: () => {
+      if (applied) {
+        savedViews.change({ filters: [], settings: { ...applied.settings, sort: DEFAULT_BOARD_SORT } });
+        return;
+      }
+      const params = boardSortParams(
+        boardFilterParams(searchParams, boardFilterStateFromItems([], kind), kind),
+        DEFAULT_BOARD_SORT,
+      );
+      clearOpenCard(params);
+      replaceParams(params);
     },
   };
 }

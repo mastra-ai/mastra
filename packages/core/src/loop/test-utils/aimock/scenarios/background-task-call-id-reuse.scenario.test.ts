@@ -22,71 +22,76 @@ import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForA
  * each dispatching the background tool as `call_0`, every turn's result
  * recorded in the transcript.
  */
-describeForAllEngines('AIMock loop scenario: background tool with reused provider call ids', engine => {
-  const getMock = useLoopScenarioAimock();
+describeForAllEngines(
+  'AIMock loop scenario: background tool with reused provider call ids',
+  engine => {
+    const getMock = useLoopScenarioAimock();
 
-  it('lands every turn result when the provider reuses the same tool-call id', async () => {
-    let executions = 0;
+    it('lands every turn result when the provider reuses the same tool-call id', async () => {
+      let executions = 0;
 
-    const backgroundTool = createTool({
-      id: 'background-work',
-      description: 'Performs long-running work in the background',
-      inputSchema: z.object({ turn: z.number() }),
-      outputSchema: z.object({ result: z.string() }),
-      background: { enabled: true, timeoutMs: 5000 },
-      execute: async ({ turn }) => {
-        executions++;
-        await new Promise(resolve => setTimeout(resolve, 10));
-        return { result: `turn-${turn} done` };
-      },
-    });
-
-    const memory = new MockMemory();
-    const shared = await createSharedAgent(getMock(), {
-      memory,
-      tools: { 'background-work': backgroundTool },
-      agentBackgroundTasks: { tools: { 'background-work': true } },
-      backgroundTasks: { enabled: true },
-    });
-
-    const threadId = 'bg-call-id-reuse-thread';
-    const resourceId = 'user-1';
-
-    for (let turn = 1; turn <= 3; turn++) {
-      // Fresh fixtures per turn; sequence indices restart from 0.
-      getMock().clearFixtures();
-      getMock().clearRequests();
-      getMock().resetMatchCounts();
-
-      await runLoopScenario({
-        engine,
-        llm: getMock(),
-        sharedAgent: shared,
-        prompt: `Run background work, turn ${turn}`,
-        memory,
-        threadId,
-        resourceId,
-        stopWhen: stepCountIs(3),
-        fixtures: llm => {
-          // The provider reuses `call_0` on EVERY turn — the trigger for
-          // the identity-conflict regression.
-          llm.on(
-            { endpoint: 'chat', sequenceIndex: 0 },
-            { toolCalls: [{ id: 'call_0', name: 'background-work', arguments: { turn } }] },
-          );
-          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: `Turn ${turn} dispatched.` });
+      const backgroundTool = createTool({
+        id: 'background-work',
+        description: 'Performs long-running work in the background',
+        inputSchema: z.object({ turn: z.number() }),
+        outputSchema: z.object({ result: z.string() }),
+        background: { enabled: true, timeoutMs: 5000 },
+        execute: async ({ turn }) => {
+          executions++;
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return { result: `turn-${turn} done` };
         },
       });
-    }
 
-    // The tool ran once per turn — turn 2+ did not hang or get dropped.
-    expect(executions).toBe(3);
+      const memory = new MockMemory();
+      const shared = await createSharedAgent(getMock(), {
+        memory,
+        tools: { 'background-work': backgroundTool },
+        agentBackgroundTasks: { tools: { 'background-work': true } },
+        backgroundTasks: { enabled: true },
+      });
 
-    // Every turn's real result (not the placeholder) is in the transcript.
-    const { messages } = await memory.recall({ threadId, resourceId });
-    const serialized = JSON.stringify(messages);
-    expect(serialized).toContain('turn-1 done');
-    expect(serialized).toContain('turn-2 done');
-    expect(serialized).toContain('turn-3 done');
-  }, 30_000);
-});
+      const threadId = 'bg-call-id-reuse-thread';
+      const resourceId = 'user-1';
+
+      for (let turn = 1; turn <= 3; turn++) {
+        // Fresh fixtures per turn; sequence indices restart from 0.
+        getMock().clearFixtures();
+        getMock().clearRequests();
+        getMock().resetMatchCounts();
+
+        await runLoopScenario({
+          engine,
+          llm: getMock(),
+          sharedAgent: shared,
+          prompt: `Run background work, turn ${turn}`,
+          memory,
+          threadId,
+          resourceId,
+          stopWhen: stepCountIs(3),
+          fixtures: llm => {
+            // The provider reuses `call_0` on EVERY turn — the trigger for
+            // the identity-conflict regression.
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              { toolCalls: [{ id: 'call_0', name: 'background-work', arguments: { turn } }] },
+            );
+            llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: `Turn ${turn} dispatched.` });
+          },
+        });
+      }
+
+      // The tool ran once per turn — turn 2+ did not hang or get dropped.
+      expect(executions).toBe(3);
+
+      // Every turn's real result (not the placeholder) is in the transcript.
+      const { messages } = await memory.recall({ threadId, resourceId });
+      const serialized = JSON.stringify(messages);
+      expect(serialized).toContain('turn-1 done');
+      expect(serialized).toContain('turn-2 done');
+      expect(serialized).toContain('turn-3 done');
+    }, 30_000);
+  },
+  // The shared Inngest Mastra is built without per-scenario `backgroundTasks` config.
+  { skip: ['inngest'] },
+);

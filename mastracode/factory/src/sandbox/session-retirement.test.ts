@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import type { FactorySandbox } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -130,6 +131,127 @@ function seedMemoSandbox(
   entry.workdir = '/workspace/mastra';
   return fake;
 }
+
+/** A FactorySandbox whose created instances record what is called on them. */
+function fakeFactorySandbox(calls: string[], { failDestroy = false } = {}) {
+  const create = vi.fn((ctx: { sessionId: string; sandboxId?: string }) => ({
+    status: 'pending',
+    start: vi.fn(async () => {
+      calls.push('start');
+    }),
+    _destroy: vi.fn(async () => {
+      calls.push('_destroy');
+    }),
+    destroy: vi.fn(async () => {
+      if (failDestroy) throw new Error('kill failed');
+      calls.push(`destroy:${ctx.sessionId}:${ctx.sandboxId}`);
+    }),
+  }));
+  return { provider: 'stub', create } as never as FactorySandbox & { create: typeof create };
+}
+
+describe('SessionRetirementCoordinator detached sandboxes', () => {
+  async function materializedSession(storage: SourceControlStorageInMemory) {
+    const session = await seedSession(storage);
+    await storage.sessions.setSandbox({ id: session.id, sandboxId: 'vm-1', sandboxWorkdir: '/workspace/repo' });
+    return (await storage.sessions.getBySessionId(session.sessionId))!;
+  }
+
+  it('destroys a deleted session VM this process never attached to', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const session = await materializedSession(storage);
+    const calls: string[] = [];
+    const sandbox = fakeFactorySandbox(calls);
+
+    await new SessionRetirementCoordinator({ sandbox }).retireSession({
+      sourceControl: storage,
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      deleteSession: true,
+    });
+
+    expect(calls).toEqual([`destroy:${session.id}:vm-1`]);
+    expect(await storage.sessions.getBySessionId(session.sessionId)).toBeNull();
+    expect(peekSessionSandbox(session.id)).toBeUndefined();
+  });
+
+  it('does not construct a sandbox for a session that never materialized', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const session = await seedSession(storage);
+    const sandbox = fakeFactorySandbox([]);
+
+    await new SessionRetirementCoordinator({ sandbox }).retireSession({
+      sourceControl: storage,
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      deleteSession: true,
+    });
+
+    expect(sandbox.create).not.toHaveBeenCalled();
+    expect(await storage.sessions.getBySessionId(session.sessionId)).toBeNull();
+  });
+
+  it('does not construct a sandbox when the session is only retired', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const session = await materializedSession(storage);
+    const sandbox = fakeFactorySandbox([]);
+
+    await new SessionRetirementCoordinator({ sandbox }).retireSession({
+      sourceControl: storage,
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      deleteSession: false,
+    });
+
+    expect(sandbox.create).not.toHaveBeenCalled();
+    expect(await storage.sessions.getBySessionId(session.sessionId)).not.toBeNull();
+  });
+
+  it('still deletes the row when the detached destroy fails', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const session = await materializedSession(storage);
+    const warn = vi.fn();
+
+    await new SessionRetirementCoordinator({
+      sandbox: fakeFactorySandbox([], { failDestroy: true }),
+      warn,
+    }).retireSession({
+      sourceControl: storage,
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      deleteSession: true,
+    });
+
+    expect(warn).toHaveBeenCalledWith(
+      'Factory detached session sandbox destroy failed',
+      expect.objectContaining({ error: 'kill failed' }),
+    );
+    expect(await storage.sessions.getBySessionId(session.sessionId)).toBeNull();
+  });
+
+  it('destroys a memoized sandbox that was constructed but never started here', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage, '');
+    const session = await materializedSession(storage);
+    const calls: string[] = [];
+    const instance = fakeFactorySandbox(calls).create({ sessionId: session.id, sandboxId: 'vm-1' });
+    getSessionSandbox(session.id, 'acme/repo', () => instance as never);
+
+    await new SessionRetirementCoordinator().retireSession({
+      sourceControl: storage,
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      deleteSession: true,
+    });
+
+    expect(calls).toEqual([`destroy:${session.id}:vm-1`]);
+    expect(peekSessionSandbox(session.id)).toBeUndefined();
+  });
+});
 
 describe('SessionRetirementCoordinator', () => {
   it('runs remote teardown before stopping the sandbox, then invalidates', async () => {

@@ -61,17 +61,12 @@
     "upstage/solar-pro4"
   ],
   "reasoning": {
-    "gemma-4": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen3-6-35b": [
       {
         "type": "toggle"
       }
     ],
-    "poolside/laguna-xs-2.1": [
+    "gemma-4": [
       {
         "type": "toggle"
       }
@@ -88,10 +83,9 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "meta/muse-spark-1.2-contributor": [
+    "poolside/laguna-xs-2.1": [
       {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
+        "type": "toggle"
       }
     ],
     "upstage/solar-pro4": [
@@ -100,22 +94,64 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "upstage/solar-pro3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "upstage/solar-pro2": [
       {
         "type": "effort",
         "values": ["minimal", "high"]
       }
     ],
-    "sakana/fugu-ultra": [
+    "upstage/solar-pro3": [
       {
         "type": "effort",
-        "values": ["high", "xhigh"]
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "qwen/qwen3.7-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.6-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.5-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.5-397b-a17b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.6-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
     "qwen/qwen-flash": [
@@ -134,22 +170,6 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.5-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
     "qwen/qwen3-max": [
       {
         "type": "toggle"
@@ -158,36 +178,16 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.6-flash": [
+    "meta/muse-spark-1.2-contributor": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "qwen/qwen3.5-397b-a17b": [
+    "sakana/fugu-ultra": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen3.6-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen3.7-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["high", "xhigh"]
       }
     ]
   }
