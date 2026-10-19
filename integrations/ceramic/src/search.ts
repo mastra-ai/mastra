@@ -19,15 +19,6 @@ const inputSchema = z.object({
     .refine(value => countWords(value) <= MAX_QUERY_WORDS, {
       message: `query must contain at most ${MAX_QUERY_WORDS} words.`,
     })
-    .refine(value => !value.includes('/'), {
-      message: 'query cannot contain slashes. Search for the words in a URL or path instead.',
-    })
-    .refine(value => !/\d,\d/.test(value), {
-      message: 'query cannot contain numbers with commas. Write 101342 instead of 101,342.',
-    })
-    .refine(value => !/[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u.test(value), {
-      message: 'query cannot contain non-Latin characters.',
-    })
     .describe(
       'Keyword search query (1-50 words). Ceramic matches the exact words in your query, so use specific terms likely to appear in the target pages, such as names, identifiers, and technical terms, instead of a conversational question. Supports site:domain, OR with parentheses, and "exact phrase" operators.',
     ),

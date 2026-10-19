@@ -101,17 +101,6 @@ describe('createCeramicSearchTool', () => {
     expect(() => tool.inputSchema!.parse({ query: Array(51).fill('word').join(' ') })).toThrow('at most 50 words');
   });
 
-  it.each([
-    ['slashes', 'docs.ceramic.ai/api search', 'cannot contain slashes'],
-    ['numbers with commas', 'population 101,342 city', 'numbers with commas'],
-    ['non-Latin characters', 'Tokyo 東京 weather', 'non-Latin characters'],
-  ])('rejects queries with %s before execution', (_, query, message) => {
-    const tool = createCeramicSearchTool({ apiKey: 'ceramic-test' });
-
-    expect(() => tool.inputSchema!.parse({ query })).toThrow(message);
-    expect(mockSearch).not.toHaveBeenCalled();
-  });
-
   it('enforces the documented numeric ranges', () => {
     const tool = createCeramicSearchTool({ apiKey: 'ceramic-test' });
 
