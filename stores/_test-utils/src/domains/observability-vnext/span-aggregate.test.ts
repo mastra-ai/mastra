@@ -34,14 +34,27 @@ describe('span-aggregate reference evaluator', () => {
     }
   });
 
+  // Expected spans are read off the fixture table by hand, independently of the evaluator's
+  // selection helper, so this catches the shared selection drifting from querySpans() semantics
+  // (current copies, completed spans, `startedAt` window, `where`).
   it.each([
-    undefined,
-    { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
-    { op: 'eq', left: { path: 'rootEntityName' }, right: { literal: 'support' } },
-    { op: 'exists', path: 'error' },
-  ] as const)('counts exactly the spans querySpans selects for %j', where => {
+    [
+      'no filter',
+      undefined,
+      ['t1-root', 't1-model', 't1-tool', 't2-root', 't2-model', 't2-tool', 't3-root', 't3-model'],
+    ],
+    ['tool calls', { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } }, ['t1-tool', 't2-tool']],
+    [
+      'a root entity',
+      { op: 'eq', left: { path: 'rootEntityName' }, right: { literal: 'support' } },
+      ['t1-root', 't1-model', 't1-tool'],
+    ],
+    ['errored spans', { op: 'exists', path: 'error' }, ['t1-tool']],
+  ] as const)('selects and counts the spans querySpans returns for %s', (_label, where, expected) => {
     const plan = planSpanAggregate({ timeRange: range, where, measures: ['count'] });
+    const selected = selectSpanQuerySpans(SPAN_AGGREGATE_FIXTURE_DATA, plan).map(span => span.spanId);
+    expect([...selected].sort()).toEqual([...expected].sort());
     const [row] = evaluateSpanAggregate(SPAN_AGGREGATE_FIXTURE_DATA, plan).rows;
-    expect(row!.measures.count).toBe(selectSpanQuerySpans(SPAN_AGGREGATE_FIXTURE_DATA, plan).length);
+    expect(row!.measures.count).toBe(expected.length);
   });
 });
