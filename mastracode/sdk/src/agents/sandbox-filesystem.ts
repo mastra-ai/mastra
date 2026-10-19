@@ -108,13 +108,20 @@ interface SearchTools {
   rg: boolean;
   gnuGrep: boolean;
   git: boolean;
+  /** `grep -P` works, and so does `git grep -P` when git is present. */
+  pcre: boolean;
 }
 
 /** One command that reports which search tools the sandbox has, one name per line. */
 const SEARCH_TOOLS_PROBE =
   'command -v rg >/dev/null 2>&1 && echo rg; ' +
   "grep --version 2>/dev/null | head -n 1 | grep -q 'GNU grep' && echo gnu-grep; " +
-  'command -v git >/dev/null 2>&1 && echo git; true';
+  "printf 'a1\\n' | grep -qP '\\d(?=)' 2>/dev/null && echo grep-pcre; " +
+  'if command -v git >/dev/null 2>&1; then echo git; ' +
+  // git can be built without PCRE; check it on a throwaway repository.
+  'd=$(mktemp -d 2>/dev/null) && { ' +
+  "(cd \"$d\" && git init -q && printf 'a1\\n' >f && git grep -q --untracked -P -e '\\d(?=)') >/dev/null 2>&1 && echo git-pcre; " +
+  'rm -rf "$d"; }; fi; true';
 
 function isInsideNodeModules(path: string): boolean {
   return path.split('/').includes('node_modules');
@@ -660,7 +667,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     await this.assertContainedRealpath(abs, options.path);
     const tools = await this.searchTools();
     if (tools.rg) return this.grepWithRipgrep(abs, options);
-    if (tools.gnuGrep) return this.grepWithGnuGrep(abs, options, tools.git);
+    if (tools.gnuGrep) return this.grepWithGnuGrep(abs, options, tools);
     return this.grepWithPosixGrep(abs, options);
   }
 
@@ -670,13 +677,19 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     const check = (this.toolsCheck ??= this.exec(SEARCH_TOOLS_PROBE).then(result => {
       if (result.exitCode !== 0) throw new Error(`search tool probe exited with ${result.exitCode}`);
       const found = new Set(result.stdout.split('\n').map(line => line.trim()));
-      return { rg: found.has('rg'), gnuGrep: found.has('gnu-grep'), git: found.has('git') };
+      const git = found.has('git');
+      return {
+        rg: found.has('rg'),
+        gnuGrep: found.has('gnu-grep'),
+        git,
+        pcre: found.has('grep-pcre') && (!git || found.has('git-pcre')),
+      };
     }));
     // Only a successful probe is cached; a failed one (e.g. the sandbox wasn't
     // ready) is retried on the next search instead of pinning the slow path.
     return check.catch(() => {
       if (this.toolsCheck === check) this.toolsCheck = undefined;
-      return { rg: false, gnuGrep: false, git: false };
+      return { rg: false, gnuGrep: false, git: false, pcre: false };
     });
   }
 
@@ -748,10 +761,26 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
    */
   private static readonly ERE_UNSUPPORTED = /\\[dDwWsSbB<>]|\(\?|[*+?}]\?|\[:[a-z]+:\]/;
 
-  /** Reject patterns grep's ERE can't run with the same meaning; return the JS regex used for columns. */
-  private static ereRegex(options: FilesystemGrepOptions): RegExp {
-    if (SandboxFilesystem.ERE_UNSUPPORTED.test(options.pattern)) {
-      throw new UnsupportedGrepPatternError(options.pattern, 'POSIX ERE cannot express this syntax');
+  /**
+   * Escapes that `grep -P` (PCRE) and JS RegExp (without the `u` flag) both
+   * accept but read differently, e.g. `\A` is "start of subject" in PCRE and
+   * a literal `A` in JS, plus POSIX bracket classes. PCRE-only syntax that JS
+   * rejects (inline flags, possessive quantifiers, atomic groups) already
+   * fails the JS compile below.
+   */
+  private static readonly PCRE_UNSUPPORTED = /\\[AzZGKQEhHvVRXNCpPe]|\[:[a-z]+:\]/;
+
+  /** Reject patterns grep can't run with the same meaning as JS; return the JS regex used for columns. */
+  private static grepRegex(options: FilesystemGrepOptions, pcre = false): RegExp {
+    if (
+      pcre
+        ? SandboxFilesystem.PCRE_UNSUPPORTED.test(options.pattern)
+        : SandboxFilesystem.ERE_UNSUPPORTED.test(options.pattern)
+    ) {
+      throw new UnsupportedGrepPatternError(
+        options.pattern,
+        pcre ? 'grep -P reads this syntax differently from JavaScript' : 'POSIX ERE cannot express this syntax',
+      );
     }
     try {
       return new RegExp(options.pattern, options.caseSensitive ? '' : 'i');
@@ -767,16 +796,20 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
    * each child repository is searched the same way and plain grep covers the
    * remaining files, skipping `node_modules`. `--null` ends each file name
    * with NUL, so match (`N:`) and context (`N-`) lines parse unambiguously.
+   * When grep and git support it, patterns run as PCRE (`-P`), so `\d`,
+   * `\w`, `\s`, `\b`, and lookarounds don't need the host walk.
    */
   private async grepWithGnuGrep(
     abs: string,
     options: FilesystemGrepOptions,
-    hasGit: boolean,
+    tools: SearchTools,
   ): Promise<FilesystemGrepResult[]> {
-    const jsRegex = SandboxFilesystem.ereRegex(options);
+    const hasGit = tools.git;
+    const mode = tools.pcre ? '-P' : '-E';
+    const jsRegex = SandboxFilesystem.grepRegex(options, tools.pcre);
     const contextLines = Math.max(0, Math.floor(options.contextLines ?? 0));
     const grepFlags = [
-      '-HnIE --null',
+      `-HnI${mode.slice(1)} --null`,
       options.caseSensitive ? '' : '-i',
       options.maxCountPerFile !== undefined ? `-m ${Math.max(1, Math.floor(options.maxCountPerFile))}` : '',
       contextLines > 0 ? `-C ${contextLines}` : '',
@@ -790,14 +823,14 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       `pat=${shellQuote(options.pattern)}`,
       `root=${shellQuote(abs)}`,
       // xargs exit codes can't tell "no match" from "bad pattern"; check first.
-      'grep -E -e "$pat" </dev/null >/dev/null 2>&1',
+      `grep ${mode} -e "$pat" </dev/null >/dev/null 2>&1`,
       'if [ $? -eq 2 ]; then echo "grep: invalid regular expression" >&2; exit 2; fi',
       'tmp=$(mktemp -d) || exit 1',
       `trap 'rm -rf "$tmp"' EXIT`,
       `search_files() { xargs -0 -r grep ${grepFlags} -e "$pat" -- 2>/dev/null; }`,
       // A line starting with NUL names the directory later paths are relative to.
       'search_repo() {',
-      `  git -C "$1" grep -l -z -I --untracked ${options.caseSensitive ? '' : '-i '}-E -e "$pat" -- .${nodeModulesPathspec} >"$tmp/files" 2>/dev/null`,
+      `  git -C "$1" grep -l -z -I --untracked ${options.caseSensitive ? '' : '-i '}${mode} -e "$pat" -- .${nodeModulesPathspec} >"$tmp/files" 2>/dev/null`,
       '  [ $? -gt 1 ] && return 1',
       `  printf '\\0%s\\n' "$1"`,
       '  (cd "$1" && search_files) <"$tmp/files"',
@@ -852,7 +885,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   }
 
   private async grepWithPosixGrep(abs: string, options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {
-    const jsRegex = SandboxFilesystem.ereRegex(options);
+    const jsRegex = SandboxFilesystem.grepRegex(options);
     // Reconstructing per-match context from `grep -C` text output is not
     // reliable (separator lines are ambiguous); let the host walk handle it.
     if (options.contextLines) {

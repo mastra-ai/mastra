@@ -704,6 +704,65 @@ describe('SandboxFilesystem.grep', () => {
       ).rejects.toMatchObject({ code: 'EUNSUPPORTED_PATTERN' });
     });
 
+    describe('with PCRE support', () => {
+      const pcreProbe = { exitCode: 0, stdout: 'gnu-grep\ngrep-pcre\ngit\ngit-pcre\n', stderr: '' };
+
+      it('runs \\d, \\s, \\b, and lookarounds natively with grep -P', async () => {
+        const { fs, sandbox } = makeFs(script => {
+          if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+          if (script.startsWith('command -v rg')) return pcreProbe;
+          if (script.startsWith('pat=')) {
+            return { exitCode: 0, stdout: `\0${WORKDIR}\na.ts\x003:  isBot: 42\n`, stderr: '' };
+          }
+          return { exitCode: 0, stdout: '', stderr: '' };
+        });
+
+        const results = await fs.grep({
+          pattern: '\\bisBot:\\s(?=\\d)\\d+',
+          path: '.',
+          caseSensitive: true,
+          includeHidden: false,
+        });
+
+        expect(results).toEqual([{ path: 'a.ts', matches: [{ line: 3, column: 2, text: '  isBot: 42' }] }]);
+        const search = sandbox.calls.find(c => c.startsWith('pat='))!;
+        expect(search).toContain('grep -HnIP --null');
+        expect(search).toContain('--untracked -P -e "$pat"');
+        expect(search).toContain('grep -P -e "$pat" </dev/null');
+        expect(search).not.toContain('-E');
+      });
+
+      it('signals fallback for escapes PCRE and JS read differently', async () => {
+        const { fs, sandbox } = makeFs(script => {
+          if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+          if (script.startsWith('command -v rg')) return pcreProbe;
+          return { exitCode: 0, stdout: '', stderr: '' };
+        });
+
+        for (const pattern of ['\\Afoo', 'foo\\z', '\\p{L}+', '[[:alpha:]]']) {
+          await expect(
+            fs.grep({ pattern, path: '.', caseSensitive: true, includeHidden: false }),
+          ).rejects.toMatchObject({ code: 'EUNSUPPORTED_PATTERN' });
+        }
+        expect(sandbox.calls.some(c => c.startsWith('pat='))).toBe(false);
+      });
+
+      it('keeps ERE when git lacks PCRE', async () => {
+        const { fs, sandbox } = makeFs(script => {
+          if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+          if (script.startsWith('command -v rg'))
+            return { exitCode: 0, stdout: 'gnu-grep\ngrep-pcre\ngit\n', stderr: '' };
+          return { exitCode: 0, stdout: '', stderr: '' };
+        });
+
+        await expect(
+          fs.grep({ pattern: '\\d+', path: '.', caseSensitive: true, includeHidden: false }),
+        ).rejects.toMatchObject({ code: 'EUNSUPPORTED_PATTERN' });
+        await fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false });
+        expect(sandbox.calls.find(c => c.startsWith('pat='))).toContain('grep -HnIE --null');
+      });
+    });
+
     it('searches node_modules when the path points inside it', async () => {
       const { fs, sandbox } = makeFs(script => {
         if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/node_modules/x`);
