@@ -43,16 +43,15 @@ export async function findWakeSession<TState>(
   const thread = await first.thread.getById({ threadId });
   if (!thread || thread.resourceId !== resourceId) return { session: first };
   const metadata = (thread.metadata as Record<string, unknown> | undefined) ?? {};
-  const owns = (session: Session<TState>) =>
-    session.thread.getId() === threadId ||
+  const candidates = [
+    first,
+    ...[...liveSessions].filter(session => session !== first && session.identity.getResourceId() === resourceId),
+  ];
+  const matchesScope = (session: Session<TState>) =>
     Object.entries(session.getThreadScope()).every(
       ([key, value]) => metadata[key] === undefined || metadata[key] === value,
     );
-  const owner = owns(first)
-    ? first
-    : [...liveSessions].find(
-        session => session !== first && session.identity.getResourceId() === resourceId && owns(session),
-      );
+  const owner = candidates.find(session => session.thread.getId() === threadId) ?? candidates.find(matchesScope);
   if (!owner) return FOREIGN_THREAD;
   const scope = owner.getThreadScope();
   const scoped = Object.keys(scope).every(key => metadata[key] !== undefined);

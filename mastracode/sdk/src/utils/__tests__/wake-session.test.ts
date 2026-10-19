@@ -52,6 +52,15 @@ describe('findWakeSession', () => {
     });
   });
 
+  it('prefers the session that has the thread open over one whose project tag matches', async () => {
+    const b = session('team', { projectPath: '/homes/b' }, threads);
+    const openOnA = session('team', { projectPath: '/homes/a' }, threads, 'th-b');
+    expect(await findWakeSession(controller(b), [b, openOnA], { resourceId: 'team', threadId: 'th-b' })).toEqual({
+      session: openOnA,
+      scope: scopeA,
+    });
+  });
+
   it('picks the matching session when this process has several for the resource', async () => {
     const b = session('team', { projectPath: '/homes/b' }, threads);
     expect(await findWakeSession(controller(a), [a, b], { resourceId: 'team', threadId: 'th-b' })).toEqual({
