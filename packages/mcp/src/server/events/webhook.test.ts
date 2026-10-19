@@ -154,6 +154,21 @@ describe('MCPServer webhook delivery', () => {
     expect(posts).toEqual([]);
   });
 
+  it('keeps the signing secret out of the request span', async () => {
+    const { server, connect } = await start({});
+    const spanParams: unknown[] = [];
+    const original = server['startRequestSpan'].bind(server);
+    vi.spyOn(server as any, 'startRequestSpan').mockImplementation((...args: any[]) => {
+      spanParams.push(args[1]);
+      return original(...args);
+    });
+    const client = await connect('alice');
+    await subscribe(client, subscribeParams());
+    expect(spanParams).toHaveLength(1);
+    expect(spanParams[0]).toMatchObject({ delivery: { url: CALLBACK, secret: '[redacted]' } });
+    expect(JSON.stringify(spanParams)).not.toContain(SECRET);
+  });
+
   it('verifies, delivers signed emits, and stops after unsubscribe', async () => {
     const { server, connect, posts } = await start({});
     const client = await connect('alice');
