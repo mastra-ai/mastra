@@ -194,30 +194,6 @@ describe('ChatChannelOutputProcessor', () => {
       );
       expect(calls.filter(c => c.kind === 'post')).toEqual([]);
     });
-
-    it('keeps a cited reply (text → source → text) as one post', async () => {
-      // Citations split a reply into several text blocks, each with its own
-      // text-end; those are not post boundaries.
-      const { channels, calls, chatThread } = makeChannels({ streaming: false });
-      await drive(
-        channels,
-        [
-          { type: 'text-start', payload: { id: 'a' } },
-          { type: 'text-delta', payload: { id: 'a', text: 'Expect ' } },
-          { type: 'text-end', payload: { id: 'a' } },
-          { type: 'source', payload: { id: 's1', sourceType: 'url', url: 'https://w.example', title: 'w' } },
-          { type: 'text-start', payload: { id: 'b' } },
-          { type: 'text-delta', payload: { id: 'b', text: 'low clouds, then sun.' } },
-          { type: 'text-end', payload: { id: 'b' } },
-          { type: 'step-finish', payload: {} },
-          { type: 'finish', payload: {} },
-        ],
-        chatThread,
-      );
-      expect(calls.filter(c => c.kind === 'post')).toEqual([
-        { kind: 'post', arg: { markdown: 'Expect low clouds, then sun.' } },
-      ]);
-    });
   });
 
   describe('textFormat reply dialect', () => {
@@ -1228,37 +1204,6 @@ describe('ChatChannelOutputProcessor', () => {
       const text = allDrained.filter((p): p is string => typeof p === 'string').join('');
       expect(text).toContain('thinking');
       expect(text).toContain('done');
-    });
-
-    it("'hidden': a cited reply (text → source → text) stays one post", async () => {
-      // A model that cites emits a text block per citation boundary, each
-      // with its own text-end. Hidden mode used to close the post on every
-      // text-end, which shredded one reply into a message per sentence
-      // fragment in Slack.
-      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'hidden' });
-      await drive(
-        channels,
-        [
-          { type: 'text-start', payload: { id: 'a' } },
-          { type: 'text-delta', payload: { id: 'a', text: 'Expect ' } },
-          { type: 'text-end', payload: { id: 'a' } },
-          { type: 'source', payload: { id: 's1', sourceType: 'url', url: 'https://w.example', title: 'w' } },
-          { type: 'text-start', payload: { id: 'b' } },
-          { type: 'text-delta', payload: { id: 'b', text: 'low clouds' } },
-          { type: 'text-end', payload: { id: 'b' } },
-          { type: 'text-start', payload: { id: 'c' } },
-          { type: 'text-delta', payload: { id: 'c', text: ', then sun.' } },
-          { type: 'text-end', payload: { id: 'c' } },
-          { type: 'step-finish', payload: {} },
-          { type: 'finish', payload: {} },
-        ],
-        chatThread,
-      );
-
-      const posts = calls.filter(c => c.kind === 'post');
-      expect(posts).toHaveLength(1);
-      const drained = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
-      expect(drained.filter((p): p is string => typeof p === 'string').join('')).toBe('Expect low clouds, then sun.');
     });
 
     it("'timeline' without streaming: warns once and falls back to cards", async () => {

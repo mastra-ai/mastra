@@ -24,31 +24,24 @@ export function markNewChannelSession(requestContext: RequestContext): void {
  */
 const REPROCESS_PART_KEY = '__mastraReprocessPart';
 
-/** Text-part id of the link delta; never collides with a model block id. */
-const LINK_PART_ID = 'factory-session-link';
-
 /**
- * Appends a bare `↗` link to the end of the first reply of a new channel
- * session, so the link and the reply are one message and the link trails
- * the text rather than leading it.
+ * Appends a bare `↗` link to the first text block of a new channel session,
+ * so the link and the reply are one message instead of two and the link
+ * trails the text rather than leading it.
  *
- * "End of the reply" is not `text-end`: a reply with citations is several
- * text blocks (`text … source … text`), each with its own `text-end`. The
- * reply ends at the first `tool-call` (the opener before tools run) or at
- * `step-finish` (a reply with no tools), whichever comes first after some
- * text. A processor can only return one part, so on that chunk this returns
- * a `text-delta` carrying the link and stashes the chunk itself under
- * `REPROCESS_PART_KEY`, which the runner re-drives through the chain right
- * after — the link lands before it and downstream processors see both.
- * Factory-emitted rather than left to the model so a skipped opener can't
- * drop it. No-op without the new-session marker or a public origin.
+ * The model's `text-end` marks the end of that block. A processor can only
+ * return one part, so on that `text-end` this returns a final `text-delta`
+ * carrying the link and stashes the `text-end` under `REPROCESS_PART_KEY`,
+ * which the runner re-drives through the chain right after — the delta lands
+ * before the end marker and downstream processors see both. Factory-emitted
+ * rather than left to the model so a skipped opener can't drop it. No-op
+ * without the new-session marker or a public origin.
  *
  * The streamed text is also what gets persisted, and the link is a Slack
  * display detail: in memory it would show the model its own `[↗](…)` on
  * later turns (inviting it to fabricate links) and render a self-link in
- * the web transcript. The link delta opens its own text part, so
- * `processOutputStep` drops that part from the assistant message before
- * `MessageHistory` saves it.
+ * the web transcript. So `processOutputStep` trims the same suffix back off
+ * the assistant message before `MessageHistory` saves it.
  */
 export class FactoryChannelSessionLinkProcessor implements Processor {
   readonly id = 'factory-channel-session-link';
@@ -59,7 +52,7 @@ export class FactoryChannelSessionLinkProcessor implements Processor {
       state.textStarted = true;
       return part;
     }
-    if ((part.type !== 'tool-call' && part.type !== 'step-finish') || !state.textStarted) return part;
+    if (part.type !== 'text-end' || !state.textStarted) return part;
     state.linked = true;
     const link = sessionLinkFromRequest(requestContext);
     if (!link) return part;
@@ -68,7 +61,7 @@ export class FactoryChannelSessionLinkProcessor implements Processor {
       type: 'text-delta',
       runId: part.runId,
       from: part.from,
-      payload: { id: LINK_PART_ID, text: linkSuffix(link) },
+      payload: { id: part.payload.id, text: linkSuffix(link) },
     };
   }
 
@@ -79,13 +72,14 @@ export class FactoryChannelSessionLinkProcessor implements Processor {
     const suffix = linkSuffix(link);
     for (const message of messageList.get.response.db()) {
       if (message.role !== 'assistant') continue;
-      const index = message.content.parts.findIndex(part => part.type === 'text' && part.text === suffix);
-      if (index === -1) continue;
-      message.content.parts.splice(index, 1);
-      if (typeof message.content.content === 'string' && message.content.content.endsWith(suffix)) {
-        message.content.content = message.content.content.slice(0, -suffix.length);
+      for (const part of message.content.parts) {
+        if (part.type !== 'text' || !part.text.endsWith(suffix)) continue;
+        part.text = part.text.slice(0, -suffix.length);
+        if (typeof message.content.content === 'string' && message.content.content.endsWith(suffix)) {
+          message.content.content = message.content.content.slice(0, -suffix.length);
+        }
+        return messageList;
       }
-      return messageList;
     }
     return messageList;
   }
