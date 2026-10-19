@@ -14,7 +14,6 @@ export function PropertiesMenu({
 }: {
   label: string;
   changedCount: number;
-  /** One line per changed property, shown under the label in the trigger's tooltip. */
   changes?: readonly string[];
   onReset: () => void;
   align?: 'start' | 'end';

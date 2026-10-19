@@ -39,6 +39,7 @@ export interface BoardView {
   setSort: (next: BoardSort) => void;
   setLayout: (next: BoardLayout) => void;
   resetProperties: () => void;
+  saveAsView: () => void;
 }
 
 export function useBoardView({
@@ -108,6 +109,7 @@ export function useBoardView({
       if (applied) savedViews.change({ filters: boardFilterItems(stored) });
       if (params.toString() !== searchParams.toString()) replaceParams(params);
     },
+    saveAsView: () => savedViews.create({ ...settings, sort }, boardFilterItems(withPeopleUnfolded(filters, personId))),
     clearFilters: () => {
       const params = applied
         ? new URLSearchParams(searchParams)

@@ -55,7 +55,6 @@ export function clearOpenCard(params: URLSearchParams) {
   params.delete('comment');
 }
 
-/** One item per active filter, in menu order. */
 export function boardFilterItems(state: BoardFilterState): FilterBarItem[] {
   return BOARD_FILTER_FIELDS.filter(fieldId => state[fieldId].size > 0).map(fieldId => ({
     id: fieldId,

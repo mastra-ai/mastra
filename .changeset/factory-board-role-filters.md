@@ -2,7 +2,7 @@
 'mastra': patch
 ---
 
-You can now filter Factory boards by **Author**, **Assignee** and, on the Review board, **Reviewer**. **Involves** (formerly Teammate) and **Worked on by** remain available. Picks within one field match any of them, and different fields must all match, so "Author: Alice" plus "Assignee: Bob" shows only Alice's cards that Bob is assigned to.
+You can now filter Factory boards by **Author**, **Assignee** and, on the Review board, **Reviewer**. **Involves** (formerly Teammate) and **Worked on by** remain available. Picks within one people field match any of them, and different fields must all match, so "Author: Alice" plus "Assignee: Bob" shows only Alice's cards that Bob is assigned to. **Label** still needs every picked label.
 
 - **You** comes first in every people list and also matches the cards you opened from your GitHub account.
 - People and label lists longer than eight entries get a search box.

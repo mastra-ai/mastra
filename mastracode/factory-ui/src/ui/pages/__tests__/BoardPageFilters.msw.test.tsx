@@ -341,6 +341,11 @@ describe('BoardPage filters', () => {
     await waitForMutationsIdle(client);
     const trigger = screen.getByRole('button', { name: 'Board properties, 2 changed' });
     expect(trigger).toHaveTextContent('2');
+    await user.hover(trigger);
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Sort:');
+    expect(tooltip).toHaveTextContent('Label: bug');
+    await user.unhover(trigger);
     await openPropertiesMenu(user, MENU);
     await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
     await waitFor(() => expect(screen.getByTestId('board-url')).not.toHaveTextContent('label='));

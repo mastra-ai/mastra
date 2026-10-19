@@ -22,7 +22,6 @@ import type { LinearProject } from '../services/linear';
 
 export const BOARD_FILTER_OPERATORS: FilterBarOperator[] = [{ id: 'in', label: 'is any of', arity: 'many' }];
 
-/** `alsoMatches` lets the submenu search find an option by more than its label, e.g. You by your name. */
 export type BoardFilterOption = FilterBarOption & { alsoMatches?: string };
 
 export type BoardFilterField = FilterBarField & { id: BoardFilterFieldId; suggestions: BoardFilterOption[] };
@@ -38,7 +37,6 @@ const FIELD_PRESENTATION: Record<BoardFilterFieldId, { label: string; icon: Luci
   label: { label: 'Label', icon: Tag },
 };
 
-/** You first, then everyone else by name. */
 function peopleOptions(
   participants: readonly BoardParticipant[],
   currentUserId: string | undefined,
@@ -108,7 +106,6 @@ export function boardFilterOptions(field: BoardFilterField, selected: readonly s
   return [...field.suggestions, ...orphaned];
 }
 
-/** What a field is narrowed to, short enough to sit next to its name: the one pick, or a count. */
 export function boardFilterSummary(field: BoardFilterField, selected: readonly string[]): string {
   if (selected.length > 1) return `${selected.length} selected`;
   const only = boardFilterOptions(field, selected).find(option => option.value === selected[0]);

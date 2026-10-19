@@ -59,7 +59,6 @@ function withPeopleMapped(filters: BoardFilterState, ids: (picked: string) => st
   return mapped;
 }
 
-/** What the menu shows: each picked person once, under the id `personId` folds them onto. */
 export function withPeopleFolded(filters: BoardFilterState, personId: PersonIdentity): BoardFilterState {
   return withPeopleMapped(filters, picked => [personId.fold(picked)]);
 }

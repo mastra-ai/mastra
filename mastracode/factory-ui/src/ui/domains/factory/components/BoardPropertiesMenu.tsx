@@ -2,7 +2,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ArrowUpDown, LayersPlus } from 'lucide-react';
 
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
-import { boardFilterItems, boardFiltersActive, withBoardFilterValues } from '../boardFilters';
+import { boardFiltersActive, withBoardFilterValues } from '../boardFilters';
 import { BOARD_SORT_LABELS, boardSortOptions, DEFAULT_BOARD_SORT } from '../boardSort';
 import type { BoardView } from '../hooks/useBoardView';
 import { BoardFilterSubmenu } from './BoardFilterSubmenu';
@@ -54,9 +54,7 @@ export function BoardPropertiesMenu({
       {canSaveAsView && (
         <>
           <DropdownMenu.Separator />
-          <DropdownMenu.Item
-            onClick={() => view.savedViews.create(view.newViewSettings, boardFilterItems(view.filters))}
-          >
+          <DropdownMenu.Item onClick={view.saveAsView}>
             <LayersPlus aria-hidden />
             <span>Save as view</span>
           </DropdownMenu.Item>

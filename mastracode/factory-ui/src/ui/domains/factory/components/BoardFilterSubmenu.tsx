@@ -8,9 +8,7 @@ import type { KeyboardEvent } from 'react';
 import { boardFilterOptions, boardFilterSummary } from './boardFilterFields';
 import type { BoardFilterField, BoardFilterOption } from './boardFilterFields';
 
-/** Past this many options the list scrolls, so it gets a search box and keeps its picks on top. */
 const SEARCHABLE_OPTION_COUNT = 8;
-const MENU_NAVIGATION_KEYS = ['ArrowUp', 'ArrowDown', 'Escape', 'Tab'];
 
 interface OptionListProps {
   options: readonly BoardFilterOption[];
@@ -34,7 +32,6 @@ function OptionItems({ options, selected, onChange }: OptionListProps) {
   ));
 }
 
-/** Mounts with each open, so the query clears and the picks pinned on top stay put while you tick. */
 function SearchableOptionItems({ label, options, selected, onChange }: OptionListProps & { label: string }) {
   const [query, setQuery] = useState('');
   const [pickedOnOpen] = useState(() => new Set(selected));
@@ -48,8 +45,7 @@ function SearchableOptionItems({ label, options, selected, onChange }: OptionLis
     ...matching.filter(option => !pickedOnOpen.has(option.value)),
   ];
 
-  // The menu's typeahead swallows printable keys, and opening from the keyboard focuses the first
-  // option rather than the box: typing anywhere in the list goes to the search, Space still ticks.
+  // Base UI menu typeahead eats printable keys and keyboard-open focuses the first option, not the box.
   const keepTypingInSearch = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target === searchRef.current) {
       if (event.key === 'Escape' || event.key === 'Tab') return;
