@@ -15,7 +15,7 @@ import { useChatSessionContext } from '../../context/useChatSessionContext';
 type CredentialHolder =
   { kind: 'organization' } | { kind: 'session-owner'; name?: string; avatarUrl?: string; isViewer: boolean };
 
-function holderLine(holder: CredentialHolder): string {
+function describeHolder(holder: CredentialHolder): string {
   if (holder.kind === 'organization') return 'Shared by the organization';
   if (holder.isViewer) return holder.name ? `${holder.name} · session owner (you)` : 'You · session owner';
   return holder.name ? `${holder.name} · session owner` : 'Session owner';
@@ -50,7 +50,7 @@ function HolderBadge({ holder }: { holder: CredentialHolder }) {
   );
 }
 
-export function NextReplyCredential() {
+export function ModelCredential() {
   const authQuery = useFactoryAuth();
   const { owner } = useChatSessionContext();
   const { activeModelId } = useChatModels();
@@ -60,20 +60,21 @@ export function NextReplyCredential() {
   if (!authQuery.data?.authEnabled || !modelScope) return null;
 
   const viewer = authQuery.data.user;
-  const person = owner ?? { id: viewer?.userId, name: viewer?.name, avatarUrl: viewer?.avatarUrl };
+  const sessionOwner = owner ?? { id: viewer?.userId, name: viewer?.name, avatarUrl: viewer?.avatarUrl };
   const holder: CredentialHolder =
     modelScope === 'factory'
       ? { kind: 'organization' }
       : {
           kind: 'session-owner',
-          name: person.name,
-          avatarUrl: person.avatarUrl,
-          isViewer: person.id === viewer?.userId,
+          name: sessionOwner.name,
+          avatarUrl: sessionOwner.avatarUrl,
+          isViewer: sessionOwner.id === viewer?.userId,
         };
   const model = modelsQuery.data?.find(candidate => candidate.id === activeModelId);
   const credential =
     model?.credentialLabel ?? (model ? `${providerDisplayName(model.provider)} connection` : 'Model connection');
-  const lines = [credential, holderLine(holder), teammateWarning(holder, credential)];
+  const holderDescription = describeHolder(holder);
+  const warning = teammateWarning(holder, credential);
 
   return (
     <Tooltip>
@@ -81,7 +82,7 @@ export function NextReplyCredential() {
         render={
           <button
             type="button"
-            aria-label={lines.filter(Boolean).join('. ')}
+            aria-label={[credential, holderDescription, warning].filter(Boolean).join('. ')}
             className={cn(
               'relative flex size-avatar-sm shrink-0 cursor-help items-center justify-center rounded-full text-muted-foreground',
               focusRing,
@@ -95,12 +96,12 @@ export function NextReplyCredential() {
         </span>
       </TooltipTrigger>
       <TooltipContent className="grid gap-1">
-        <span className="font-medium">{lines[0]}</span>
+        <span className="font-medium">{credential}</span>
         <span className="flex items-center gap-1.5 text-muted-foreground">
           <HolderBadge holder={holder} />
-          {lines[1]}
+          {holderDescription}
         </span>
-        {lines[2] ? <span className="text-warning-foreground">{lines[2]}</span> : null}
+        {warning ? <span className="text-warning-foreground">{warning}</span> : null}
       </TooltipContent>
     </Tooltip>
   );

@@ -11,13 +11,13 @@ import { ChatModelsContext } from '../../../context/ChatModelsContext';
 import type { ChatModelsApi } from '../../../context/ChatModelsContext';
 import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
 import { ChatSessionContext } from '../../../context/ChatSessionContext';
-import { NextReplyCredential } from '../NextReplyCredential';
+import { ModelCredential } from '../ModelCredential';
 
 const SHANE = { id: 'user-shane', name: 'Shane Thomas' };
 const DAMIEN = { id: 'user-damien', name: 'Damien Schneider' };
 const MODEL_ID = 'anthropic/claude-opus-4-6';
 
-function renderNextReplyCredential({
+function renderModelCredential({
   viewer = DAMIEN,
   owner,
   draft = false,
@@ -91,7 +91,7 @@ function renderNextReplyCredential({
             <ChatSessionContext.Provider value={session}>
               <ChatModelsContext.Provider value={models}>
                 <form onSubmit={submitComposer}>
-                  <NextReplyCredential />
+                  <ModelCredential />
                 </form>
               </ChatModelsContext.Provider>
             </ChatSessionContext.Provider>
@@ -105,9 +105,9 @@ function renderNextReplyCredential({
 
 const findCredential = (name: string) => screen.findByRole('button', { name });
 
-describe('NextReplyCredential', () => {
+describe('ModelCredential', () => {
   it('warns a teammate that their messages run on the session owner’s subscription', async () => {
-    renderNextReplyCredential({ owner: SHANE, threadScope: 'user' });
+    renderModelCredential({ owner: SHANE, threadScope: 'user' });
 
     expect(
       await findCredential(
@@ -117,37 +117,37 @@ describe('NextReplyCredential', () => {
   });
 
   it('tells the session owner the credential is their own, without the teammate warning', async () => {
-    renderNextReplyCredential({ viewer: SHANE, owner: SHANE, threadScope: 'user' });
+    renderModelCredential({ viewer: SHANE, owner: SHANE, threadScope: 'user' });
 
     expect(await findCredential('Claude Pro/Max. Shane Thomas · session owner (you)')).toBeInTheDocument();
   });
 
   it('names the organization API key for a work-item thread even in a hybrid Factory', async () => {
-    renderNextReplyCredential({ owner: SHANE, threadScope: 'factory', credentialLabel: 'Anthropic API key' });
+    renderModelCredential({ owner: SHANE, threadScope: 'factory', credentialLabel: 'Anthropic API key' });
 
     expect(await findCredential('Anthropic API key. Shared by the organization')).toBeInTheDocument();
   });
 
   it('names your credential on a new chat in a hybrid Factory, where you become the owner', async () => {
-    renderNextReplyCredential({ draft: true, projectScope: 'hybrid' });
+    renderModelCredential({ draft: true, projectScope: 'hybrid' });
 
     expect(await findCredential('Claude Pro/Max. Damien Schneider · session owner (you)')).toBeInTheDocument();
   });
 
   it('names the organization credential on a new chat in an organization-scoped Factory', async () => {
-    renderNextReplyCredential({ draft: true, projectScope: 'factory', credentialLabel: 'Anthropic API key' });
+    renderModelCredential({ draft: true, projectScope: 'factory', credentialLabel: 'Anthropic API key' });
 
     expect(await findCredential('Anthropic API key. Shared by the organization')).toBeInTheDocument();
   });
 
   it('falls back to the provider connection when the catalog cannot tell a subscription from an API key', async () => {
-    renderNextReplyCredential({ draft: true, projectScope: 'factory', credentialLabel: null });
+    renderModelCredential({ draft: true, projectScope: 'factory', credentialLabel: null });
 
     expect(await findCredential('Anthropic connection. Shared by the organization')).toBeInTheDocument();
   });
 
   it('does not send the draft when someone clicks the credential icon inside the composer form', async () => {
-    const { submitComposer } = renderNextReplyCredential({ viewer: SHANE, owner: SHANE, threadScope: 'user' });
+    const { submitComposer } = renderModelCredential({ viewer: SHANE, owner: SHANE, threadScope: 'user' });
 
     await userEvent.click(await findCredential('Claude Pro/Max. Shane Thomas · session owner (you)'));
 
@@ -155,7 +155,7 @@ describe('NextReplyCredential', () => {
   });
 
   it('stays hidden on a local Factory without sign-in, where only your own credentials exist', async () => {
-    const { client } = renderNextReplyCredential({ draft: true, projectScope: 'factory', authEnabled: false });
+    const { client } = renderModelCredential({ draft: true, projectScope: 'factory', authEnabled: false });
 
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
