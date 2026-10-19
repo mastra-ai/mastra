@@ -11,11 +11,11 @@ type TimelineNameColProps = {
   span: UISpan;
   spanUI?: UISpanStyle | null;
   isFaded?: boolean;
-  depth?: number;
   onSpanClick?: (id: string) => void;
   selectedSpanId?: string;
   revealSpanId?: string;
   isLastChild?: boolean;
+  guides?: boolean[];
   hasChildren?: boolean;
   numOfChildren?: number;
   isRootSpan?: boolean;
@@ -29,11 +29,11 @@ export function TimelineNameCol({
   span,
   spanUI,
   isFaded,
-  depth = 0,
   onSpanClick,
   selectedSpanId,
   revealSpanId,
   isLastChild,
+  guides,
   hasChildren,
   numOfChildren = 0,
   isRootSpan,
@@ -54,6 +54,7 @@ export function TimelineNameCol({
   }, [shouldScrollIntoView, isRevealed]);
 
   const toggleLabel = isExpanded ? `Collapse children (${numOfChildren})` : `Expand children (${numOfChildren})`;
+  const rail = { guides, isRootSpan, isLastChild, hasStem: hasChildren && isExpanded };
 
   return (
     <div
@@ -62,52 +63,58 @@ export function TimelineNameCol({
       aria-selected={isSelected}
       // The whole row selects the span; the name button is the keyboard target and its click bubbles here.
       onClick={() => onSpanClick?.(span.id)}
-      className={cn('flex min-h-8 cursor-pointer items-stretch rounded-md opacity-80 hover:bg-fill-subtle', {
+      className={cn('flex min-h-8 cursor-pointer items-stretch rounded-md pl-1 opacity-80 hover:bg-fill-subtle', {
         'opacity-40 dark:opacity-30 [&:hover]:opacity-70 dark:[&:hover]:opacity-60': isFaded,
         'bg-fill-hover': isSelected,
       })}
-      style={{ paddingLeft: `${depth * 1}rem` }}
     >
-      {!isRootSpan && <TimelineStructureSign isLastChild={isLastChild} />}
-
-      <button
-        type="button"
-        className={cn(
-          'text-foreground',
-          'flex min-w-0 flex-1 cursor-pointer items-start gap-1.5 self-stretch rounded-md px-2 py-1 text-left',
-          focusRingInset,
-        )}
-      >
-        {spanUI?.color && (
-          <span
-            aria-hidden
-            title={spanUI.label}
-            style={{ backgroundColor: spanUI.color }}
-            className="mt-[5px] inline-block size-2 shrink-0 rounded-full"
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div data-slot="timeline-name-line" className="flex min-w-0 items-stretch">
+          <TimelineStructureSign
+            {...rail}
+            dot={
+              <span
+                aria-hidden
+                title={spanUI?.label}
+                style={{ backgroundColor: spanUI?.color }}
+                className="size-2 shrink-0 rounded-full"
+              />
+            }
           />
-        )}
-        {/* Searchable: the span name is what the timeline search matches on. When the match
-            is in the span's payload instead, the whole name is painted in the indirect color
-            so the row explains its own presence. */}
-        {/* Duration always stacks under the name. */}
-        <span className="flex min-w-0 flex-1 flex-col">
-          <Txt
-            as="span"
-            variant="caption"
-            data-highlight={span.matchedInPayloadOnly ? undefined : ''}
-            data-highlight-indirect={span.matchedInPayloadOnly ? '' : undefined}
-            title={span.matchedInPayloadOnly ? 'Matches your search in this span’s details' : undefined}
-            className="min-w-0 truncate"
+          <button
+            type="button"
+            className={cn(
+              'text-foreground',
+              'flex min-w-0 flex-1 cursor-pointer rounded-md py-1 pr-2 pl-1.5 text-left',
+              focusRingInset,
+            )}
           >
-            {span.name}
-          </Txt>
-          {meta && (
-            <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
+            {/* Searchable: the span name is what the timeline search matches on. When the match
+                is in the span's payload instead, the whole name is painted in the indirect color
+                so the row explains its own presence. */}
+            <Txt
+              as="span"
+              variant="caption"
+              data-highlight={span.matchedInPayloadOnly ? undefined : ''}
+              data-highlight-indirect={span.matchedInPayloadOnly ? '' : undefined}
+              title={span.matchedInPayloadOnly ? 'Matches your search in this span’s details' : undefined}
+              className="min-w-0 truncate"
+            >
+              {span.name}
+            </Txt>
+          </button>
+        </div>
+
+        {/* Duration always stacks under the name; the rail continues alongside it. */}
+        {meta && (
+          <div className="flex min-w-0 items-stretch">
+            <TimelineStructureSign {...rail} />
+            <Txt as="span" variant="meta" tone="muted" className="shrink-0 pb-1 pl-1.5 tabular-nums">
               {meta}
             </Txt>
-          )}
-        </span>
-      </button>
+          </div>
+        )}
+      </div>
 
       {/* Expand toggle sits at the end of the row; the slot is always present so names stay aligned. */}
       <div className="flex w-8 shrink-0 items-center justify-center self-stretch pr-1">
