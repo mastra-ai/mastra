@@ -417,6 +417,11 @@ export const traceQueryTraceSchema = z
     entityType: z.string().nullable(),
     environment: z.string().nullable(),
     status: z.enum(['success', 'error']),
+    /**
+     * The root span's time to first chunk; `null` when the root never streamed one.
+     * Absent when the store lacks the `trace-query-time-to-first-chunk` feature.
+     */
+    timeToFirstChunkMs: z.number().nullable().optional(),
   })
   .strict();
 
@@ -570,8 +575,11 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     startedAt: orderedField('timestamp'),
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
+    timeToFirstChunkMs: orderedField('number'),
     entityName: stringField(true),
     entityType: stringField(true),
+    name: stringField(true),
+    spanType: stringField(true),
     environment: stringField(true),
     status: stringField(true),
     tags: arrayField(),
@@ -584,6 +592,7 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     startedAt: orderedField('timestamp'),
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
+    timeToFirstChunkMs: orderedField('number'),
     status: stringField(true),
     error: presenceField(),
     entityType: stringField(true),
@@ -631,6 +640,7 @@ export const SPAN_QUERY_FIELD_REGISTRY = {
   startedAt: orderedField('timestamp'),
   endedAt: orderedField('timestamp'),
   durationMs: orderedField('number'),
+  timeToFirstChunkMs: orderedField('number'),
   traceId: stringField(false),
   spanId: stringField(false),
   parentSpanId: stringField(false),

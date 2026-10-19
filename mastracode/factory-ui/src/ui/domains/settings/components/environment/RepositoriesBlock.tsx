@@ -13,7 +13,8 @@ import type {
   FactoryEnvironmentRepositoryPatch,
 } from '../../../workspaces/services/environment';
 import { GitLabIcon } from '../../../../ui/icons';
-import { CommittedInput, type SaveEnvironment } from './CommittedInput';
+import { CommittedInput } from './CommittedInput';
+import type { SaveEnvironment } from './CommittedInput';
 
 /**
  * A reorder must number every link of the project 1..n, so it lists them all

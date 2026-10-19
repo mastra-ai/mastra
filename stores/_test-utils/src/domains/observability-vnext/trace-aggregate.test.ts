@@ -39,6 +39,8 @@ describe('trace-aggregate reference evaluator', () => {
       undefined,
       { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
       { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } } } },
+      { op: 'eq', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
+      { op: 'ne', left: { path: 'name' }, right: { literal: 'root-a' } },
     ];
     for (const where of predicates) {
       const plan = planTraceQuery(parseTraceQueryRequest({ timeRange: fullRange, where }));

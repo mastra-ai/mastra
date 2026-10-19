@@ -123,7 +123,7 @@ export function SchemaImport({ schemaType, onImport }: SchemaImportProps) {
   return (
     <div className="flex items-center gap-2">
       {/* Source type selector */}
-      <Select value={sourceType} onValueChange={v => setSourceType(v as SourceType | '')}>
+      <Select value={sourceType} onValueChange={v => setSourceType(v)}>
         <SelectTrigger size="sm" className="w-28">
           <SelectValue placeholder="Import..." />
         </SelectTrigger>

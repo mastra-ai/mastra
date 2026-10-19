@@ -1,5 +1,33 @@
 # @mastra/code-sdk
 
+## 1.15.0-alpha.3
+
+### Minor Changes
+
+- Added a Factory client for driving a remote Factory session. `RemoteSession` and `RemoteController` mirror a Factory session's state over its event stream and forward messages, approvals, and mode/model switches over HTTP. Platform helpers sign in to Mastra Platform and discover the organizations, projects, and environments to connect to. ([#27222](https://github.com/mastra-ai/mastra/pull/27222))
+
+  ```ts
+  import { createFactoryClient } from '@mastra/code-sdk/factory/client';
+  import { RemoteSession } from '@mastra/code-sdk/factory/remote-session';
+  import { getPlatformSession } from '@mastra/code-sdk/platform/index';
+
+  const session = await getPlatformSession();
+  const client = createFactoryClient({ url: 'https://my-factory.factory.mastra.cloud', session });
+  ```
+
+  Requests that fail with an expired Platform token refresh it once and retry.
+
+### Patch Changes
+
+- Fixed "build a workflow" requests never finishing in Mastra Code. The workflow builder no longer inherits the chat session's memory thread, so it stops waiting on the session run that is waiting on it. ([#27323](https://github.com/mastra-ai/mastra/pull/27323))
+
+- Fixed the cross-agent signal sender telling the model to resend a signal that failed direct delivery. The signal waits in the recipient's inbox and is retried automatically, so the sender now tells the model not to resend it. A resend while that signal is still pending merges into it; a resend after it is delivered sends the recipient a second copy. ([#27347](https://github.com/mastra-ai/mastra/pull/27347))
+
+- Updated dependencies [[`90dca88`](https://github.com/mastra-ai/mastra/commit/90dca88f44f31428a0e585584114b56f0bec477b), [`90dca88`](https://github.com/mastra-ai/mastra/commit/90dca88f44f31428a0e585584114b56f0bec477b), [`9cb6843`](https://github.com/mastra-ai/mastra/commit/9cb6843a8a39ab2e12498b0c08c9f4cdcefd9cea), [`9277d8e`](https://github.com/mastra-ai/mastra/commit/9277d8ef26ad2f08bfbae89d78d409fb91c95c8d), [`e41478c`](https://github.com/mastra-ai/mastra/commit/e41478cbb7ab108cf7f704a6f0f4092ec4374e21), [`e41478c`](https://github.com/mastra-ai/mastra/commit/e41478cbb7ab108cf7f704a6f0f4092ec4374e21), [`680d914`](https://github.com/mastra-ai/mastra/commit/680d9141c851e8eb6fcd2d3c3fbadf05a0f1011d), [`beb81d3`](https://github.com/mastra-ai/mastra/commit/beb81d355b4a8e472ac411f33aa0d4854cb8662b)]:
+  - @mastra/core@1.79.0-alpha.3
+  - @mastra/memory@1.39.0-alpha.1
+  - @mastra/client-js@1.56.0-alpha.3
+
 ## 1.15.0-alpha.2
 
 ### Minor Changes

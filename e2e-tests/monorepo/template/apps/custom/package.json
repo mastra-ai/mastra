@@ -33,7 +33,7 @@
     "@hono/node-ws": "^1.3.0",
     "hono": "^4.13.7",
     "ws": "^8.21.3",
-    "nodemailer": "^10.0.6",
+    "nodemailer": "^10.1.1",
     "unicorn-magic": "0.4.0",
     "zod": "^4.0.0"
   },

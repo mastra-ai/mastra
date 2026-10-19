@@ -11,7 +11,8 @@ import {
   setupMarkerContent,
 } from '@internal/workspace';
 
-import { Template, type SandboxTemplateBuilder } from './template.js';
+import { Template } from './template.js';
+import type { SandboxTemplateBuilder } from './template.js';
 
 const execFileAsync = promisify(execFile);
 type GitExec = (

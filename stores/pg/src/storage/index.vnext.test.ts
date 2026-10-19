@@ -27,8 +27,6 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { PoolAdapter } from './client';
 import { ObservabilityPG } from './domains/observability';
 import { ObservabilityStoragePostgresVNext } from './domains/observability/v-next';
-import { qualifiedTable, TABLE_SPAN_EVENTS } from './domains/observability/v-next/ddl';
-import { SPAN_COLLAPSE_ORDER } from './domains/observability/v-next/sql';
 import { TEST_CONFIG } from './test-utils';
 import { PostgresStore, PostgresStoreVNext } from '.';
 
@@ -143,6 +141,8 @@ describe('PostgresStoreVNext', () => {
           'trace-query-tenant-scope',
           'feedback',
           'trace-query-context-ids',
+          'trace-query-time-to-first-chunk',
+          'trace-query-root-span-fields',
         ]);
 
         coreFeatures.delete('observability-delta-polling');
@@ -165,6 +165,8 @@ describe('PostgresStoreVNext', () => {
           'trace-query-tenant-scope',
           'feedback',
           'trace-query-context-ids',
+          'trace-query-time-to-first-chunk',
+          'trace-query-root-span-fields',
         ]);
       } finally {
         coreFeatures.clear();
@@ -284,18 +286,6 @@ describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability 
     },
     cleanup: async storage => {
       await storage.dangerouslyClearAll();
-    },
-    readTimeToFirstChunkMs: async (_storage, { traceId, spanId }) => {
-      if (!sharedClient || !sharedSchema) throw new Error('shared observability storage was not initialized');
-      const row = await sharedClient.oneOrNone<{ timeToFirstChunkMs: number | null }>(
-        `SELECT "timeToFirstChunkMs" FROM ${qualifiedTable(sharedSchema, TABLE_SPAN_EVENTS)}
-         WHERE "traceId" = $1 AND "spanId" = $2
-         ORDER BY ${SPAN_COLLAPSE_ORDER}
-         LIMIT 1`,
-        [traceId, spanId],
-      );
-      if (!row) throw new Error(`span ${spanId} was not stored`);
-      return row.timeToFirstChunkMs;
     },
   });
 

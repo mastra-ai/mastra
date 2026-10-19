@@ -66,6 +66,7 @@ const BackgroundTaskMetadata = ({
     } = typeof args === 'object' ? args : JSON.parse(args ?? '');
     argSlot = <CodeEditor data={formattedArgs} />;
   } catch {
+    // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- The built task type is an object; TypeScript requires unknown as the intermediate type in this string assertion.
     argSlot = <pre className="overflow-x-auto rounded-md bg-muted p-4 whitespace-pre">{args as unknown as string}</pre>;
   }
 

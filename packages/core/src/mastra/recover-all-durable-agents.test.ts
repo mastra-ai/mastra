@@ -3,7 +3,7 @@
  * walks every registered `DurableAgent` and re-drives its orphaned RUNNING
  * runs after a process restart (issue #19056).
  *
- * These are focused unit tests: we stub `DurableAgent.recoverActiveRuns()`
+ * Most are focused unit tests: we stub `DurableAgent.recoverActiveRuns()`
  * on each agent so we can pin down the fan-out contract of the
  * Mastra-level API without spinning up real durable workflows. The
  * per-agent recovery behavior itself is covered by
@@ -12,9 +12,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
+import { DurableStepIds } from '../agent/durable/constants';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
 import type { DurableAgent } from '../agent/durable/durable-agent';
+import { globalRunRegistry } from '../agent/durable/run-registry';
 import { InMemoryStore } from '../storage';
+import type { WorkflowRunState } from '../workflows/types';
 import { Mastra } from './index';
 
 function makeBaseAgent(id: string) {
@@ -50,6 +53,37 @@ function stubRecover(
   return vi.spyOn(agent, 'recoverActiveRuns').mockResolvedValue(result);
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+const emptyRecovery = { recovered: [], succeeded: 0, failed: 0 };
+
+async function seedRunning(store: InMemoryStore, agentId: string, runId: string) {
+  const workflows = (await store.getStore('workflows'))!;
+  await workflows.persistWorkflowSnapshot({
+    workflowName: DurableStepIds.AGENTIC_LOOP,
+    runId,
+    snapshot: {
+      runId,
+      status: 'running',
+      value: {},
+      context: { input: { __workflowKind: 'durable-agent', runId, agentId, messageListState: { memoryInfo: null } } },
+      activePaths: [],
+      activeStepsPath: {},
+      suspendedPaths: {},
+      resumeLabels: {},
+      serializedStepGraph: [],
+      waitingPaths: {},
+      timestamp: Date.now(),
+    } as WorkflowRunState,
+  });
+}
+
 describe('Mastra.recoverAllDurableAgents', () => {
   let store: InMemoryStore;
 
@@ -60,6 +94,244 @@ describe('Mastra.recoverAllDurableAgents', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  it('does not dispatch after shutdown before entry, but still counts registered agents', async () => {
+    const a = makeDurable('shutdown-a');
+    const b = makeDurable('shutdown-b');
+    const mastra = new Mastra({ agents: { a: a as any, b: b as any }, storage: store });
+    const aSpy = stubRecover(a, emptyRecovery);
+    const bSpy = stubRecover(b, emptyRecovery);
+    await mastra.shutdown();
+
+    expect(await mastra.recoverAllDurableAgents()).toEqual({
+      agents: 2,
+      recovered: 0,
+      succeeded: 0,
+      failed: 0,
+      skipped: 0,
+    });
+    expect(aSpy).not.toHaveBeenCalled();
+    expect(bSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch the next agent when shutdown begins during a gated batch', async () => {
+    vi.useFakeTimers();
+    const a = makeDurable('gated-a');
+    const b = makeDurable('gated-b');
+    const mastra = new Mastra({ agents: { a: a as any, b: b as any }, storage: store });
+    const gate = deferred<typeof emptyRecovery>();
+    vi.spyOn(a, 'recoverActiveRuns').mockReturnValue(gate.promise);
+    const bSpy = stubRecover(b, emptyRecovery);
+    const traversal = mastra.recoverAllDurableAgents();
+    await vi.advanceTimersByTimeAsync(0);
+    const shutdown = mastra.shutdown({ drainTimeout: 500 });
+    try {
+      gate.resolve(emptyRecovery);
+      await traversal;
+      await vi.advanceTimersByTimeAsync(500);
+      await shutdown;
+      expect(bSpy).not.toHaveBeenCalled();
+    } finally {
+      gate.resolve(emptyRecovery);
+      await traversal;
+      await vi.advanceTimersByTimeAsync(500);
+      await shutdown;
+    }
+  });
+
+  it('drains a boot traversal that settles within the shutdown budget', async () => {
+    vi.useFakeTimers();
+    const agent = makeDurable('drained-boot');
+    const mastra = new Mastra({ agents: { agent: agent as any }, storage: store });
+    const gate = deferred<typeof emptyRecovery>();
+    vi.spyOn(agent, 'recoverActiveRuns').mockReturnValue(gate.promise);
+    const traversal = mastra.recoverAllDurableAgents();
+    await vi.advanceTimersByTimeAsync(0);
+    let settled = false;
+    const shutdown = mastra.shutdown({ drainTimeout: 500 }).then(() => {
+      settled = true;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(100);
+      expect(settled).toBe(false);
+      gate.resolve(emptyRecovery);
+      await traversal;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settled).toBe(true);
+      await shutdown;
+    } finally {
+      gate.resolve(emptyRecovery);
+      await traversal;
+      await vi.advanceTimersByTimeAsync(500);
+      await shutdown;
+    }
+  });
+
+  it('bounds an unsettled boot traversal by one shared shutdown deadline', async () => {
+    vi.useFakeTimers();
+    const agent = makeDurable('bounded-boot');
+    const mastra = new Mastra({ agents: { agent: agent as any }, storage: store });
+    const gate = deferred<typeof emptyRecovery>();
+    vi.spyOn(agent, 'recoverActiveRuns').mockReturnValue(gate.promise);
+    const traversal = mastra.recoverAllDurableAgents();
+    await vi.advanceTimersByTimeAsync(0);
+    let settled = false;
+    const shutdown = mastra.shutdown({ drainTimeout: 500 }).then(() => {
+      settled = true;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(499);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settled).toBe(true);
+      await shutdown;
+    } finally {
+      gate.resolve(emptyRecovery);
+      await traversal;
+      await vi.advanceTimersByTimeAsync(500);
+      await shutdown;
+    }
+  });
+
+  it('removes a settled boot traversal so shutdown does not consume its drain budget', async () => {
+    vi.useFakeTimers();
+    const agent = makeDurable('settled-boot');
+    const mastra = new Mastra({ agents: { agent: agent as any }, storage: store });
+    stubRecover(agent, emptyRecovery);
+    await mastra.recoverAllDurableAgents();
+    let settled = false;
+    const shutdown = mastra.shutdown({ drainTimeout: 500 }).then(() => {
+      settled = true;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settled).toBe(true);
+      await shutdown;
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      await vi.advanceTimersByTimeAsync(500);
+      await shutdown;
+    }
+  });
+
+  // Keep discovery and recoverActiveRuns real. Only the setup boundary in
+  // recover() is gated; the foreign-owner path still exercises real fencing.
+  async function startStalledBoot(withForeignOwner = false) {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const a = makeDurable('real-recovery-a');
+    const b = makeDurable('real-recovery-b');
+    const mastra = new Mastra({ agents: { a: a as any, b: b as any }, storage: store });
+    if (withForeignOwner) {
+      await seedRunning(store, a.id, 'foreign');
+      const workflows = (await store.getStore('workflows'))!;
+      await workflows.claimRunOwnership({ runId: 'foreign', ownerId: 'other-instance', leaseMs: 30_000 });
+    }
+    await seedRunning(store, a.id, 'stalled');
+    await seedRunning(store, b.id, 'later-agent');
+    // If the foreign lease expires during its recheck, restart only the
+    // workflow boundary: no provider or background model execution is needed.
+    vi.spyOn(a, 'getWorkflow').mockReturnValue({
+      createRun: vi.fn(async () => ({ restart: vi.fn(async () => ({ status: 'success' })) })),
+    } as any);
+    const gate = deferred<void>();
+    const originalRecover = a.recover.bind(a);
+    const aRecover = vi.spyOn(a, 'recover').mockImplementation(async (runId, options) => {
+      if (runId === 'foreign') return originalRecover(runId, options);
+      await gate.promise;
+      return { cleanup: vi.fn() } as Awaited<ReturnType<DurableAgent['recover']>>;
+    });
+    vi.spyOn(b, 'recover').mockResolvedValue({ cleanup: vi.fn() } as Awaited<ReturnType<DurableAgent['recover']>>);
+    const aBatch = vi.spyOn(a, 'recoverActiveRuns');
+    const bBatch = vi.spyOn(b, 'recoverActiveRuns');
+    let settled = false;
+    const traversal = mastra.recoverAllDurableAgents().then(result => {
+      settled = true;
+      return result;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    return {
+      mastra,
+      aRecover,
+      aBatch,
+      bBatch,
+      traversal,
+      isSettled: () => settled,
+      async cleanup() {
+        gate.resolve();
+        await traversal;
+        const shutdown = mastra.shutdown({ drainTimeout: 500 });
+        await vi.advanceTimersByTimeAsync(500);
+        await shutdown;
+      },
+    };
+  }
+
+  it('reaches another agent after the real first batch exhausts its 30-second setup wait', async () => {
+    const boot = await startStalledBoot();
+    try {
+      expect(boot.aRecover).toHaveBeenCalledWith('stalled', expect.anything());
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(boot.bBatch).not.toHaveBeenCalled();
+      expect(boot.isSettled()).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(boot.bBatch).toHaveBeenCalledTimes(1);
+      // Check settlement before awaiting: on the regression the original
+      // promise is still gated and must not hang the test runner.
+      expect(boot.isSettled()).toBe(true);
+      expect(await boot.traversal).toEqual({ agents: 2, recovered: 1, succeeded: 1, failed: 0, skipped: 1 });
+      expect(boot.aBatch.mock.results[0]?.type).toBe('return');
+      const firstBatch = await boot.aBatch.mock.results[0]!.value;
+      expect(firstBatch).toMatchObject({
+        succeeded: 0,
+        failed: 0,
+        recovered: [{ runId: 'stalled', status: 'skipped', reason: 'recovery-timeout' }],
+      });
+      expect(firstBatch.recovered[0]).not.toHaveProperty('retryAt');
+    } finally {
+      await boot.cleanup();
+    }
+  });
+
+  it('keeps timed-out setup in the drain after the real boot traversal settles', async () => {
+    const boot = await startStalledBoot();
+    let shutdown: Promise<void> | undefined;
+    try {
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(boot.isSettled()).toBe(true);
+      await boot.traversal;
+      let shutdownSettled = false;
+      shutdown = boot.mastra.shutdown({ drainTimeout: 500 }).then(() => {
+        shutdownSettled = true;
+      });
+      await vi.advanceTimersByTimeAsync(499);
+      expect(shutdownSettled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(shutdownSettled).toBe(true);
+      await shutdown;
+    } finally {
+      await boot.cleanup();
+      await shutdown;
+    }
+  });
+
+  it('eventually schedules the foreign-owner skip preceding a stalled real recovery, without retrying the timeout', async () => {
+    const boot = await startStalledBoot(true);
+    try {
+      expect(boot.aRecover.mock.calls.map(([runId]) => runId)).toEqual(['foreign', 'stalled']);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(boot.isSettled()).toBe(true);
+      expect(await boot.traversal).toEqual({ agents: 2, recovered: 1, succeeded: 1, failed: 0, skipped: 2 });
+      // The skipped foreign run is allowed to wait for the bounded batch.
+      // Its recheck must still be scheduled once that batch returns.
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(boot.aBatch).toHaveBeenCalledTimes(2);
+      expect(boot.aBatch).toHaveBeenLastCalledWith({ runId: 'foreign' });
+      expect(boot.aRecover.mock.calls.filter(([runId]) => runId === 'stalled')).toHaveLength(1);
+    } finally {
+      await boot.cleanup();
+    }
   });
 
   it('returns zeroed counts when no durable agents are registered', async () => {
@@ -181,6 +453,145 @@ describe('Mastra.recoverAllDurableAgents', () => {
     expect(spy).toHaveBeenLastCalledWith({ runId: 'live-elsewhere' });
     await vi.advanceTimersByTimeAsync(120_000);
     expect(spy).toHaveBeenCalledTimes(3);
+  });
+
+  describe('transient per-run recovery failures', () => {
+    const runId = 'transient-boot-recovery';
+    let durable: DurableAgent;
+    let mastra: Mastra;
+    let restart: ReturnType<typeof vi.fn>;
+
+    beforeEach(async () => {
+      vi.useFakeTimers();
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+      durable = makeDurable('transient-agent');
+      mastra = new Mastra({ agents: { durable: durable as any }, storage: store });
+      const workflows = (await store.getStore('workflows'))!;
+      await workflows.persistWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          value: {},
+          context: {
+            input: {
+              __workflowKind: 'durable-agent',
+              runId,
+              agentId: durable.id,
+              messageListState: { memoryInfo: null },
+            },
+          },
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          waitingPaths: {},
+          timestamp: Date.now(),
+        } as WorkflowRunState,
+      });
+      restart = vi.fn(async () => ({ status: 'success' }));
+      vi.spyOn(durable, 'getWorkflow').mockReturnValue({
+        createRun: vi.fn(async () => ({ restart })),
+      } as any);
+    });
+
+    afterEach(async () => {
+      await mastra.shutdown();
+      globalRunRegistry.delete(runId);
+    });
+
+    it('automatically recovers a transiently skipped run at retryAt without another boot or manual recovery', async () => {
+      const recover = vi
+        .spyOn(durable, 'recover')
+        .mockRejectedValueOnce(new Error('LOADING Redis is loading the dataset'));
+      const bulkRecover = vi.spyOn(durable, 'recoverActiveRuns');
+      const before = Date.now();
+
+      await expect(mastra.recoverAllDurableAgents()).resolves.toEqual({
+        agents: 1,
+        recovered: 0,
+        succeeded: 0,
+        failed: 0,
+        skipped: 1,
+      });
+      await expect(bulkRecover.mock.results[0]!.value).resolves.toEqual({
+        recovered: [{ runId, status: 'skipped', reason: 'transient-error', retryAt: before + 30_000 }],
+        succeeded: 0,
+        failed: 0,
+      });
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(recover).toHaveBeenCalledTimes(1);
+      expect(restart).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(recover).toHaveBeenCalledTimes(2);
+      expect(bulkRecover).toHaveBeenLastCalledWith({ runId });
+      expect(restart).toHaveBeenCalledTimes(1);
+      await expect(bulkRecover.mock.results[1]!.value).resolves.toEqual({
+        recovered: [{ runId, status: 'success' }],
+        succeeded: 1,
+        failed: 0,
+      });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(recover).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps scheduling resolved transient skips until recovery succeeds', async () => {
+      const recover = vi
+        .spyOn(durable, 'recover')
+        .mockRejectedValueOnce(new Error('LOADING Redis is loading the dataset'))
+        .mockRejectedValueOnce(Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }));
+      const bulkRecover = vi.spyOn(durable, 'recoverActiveRuns');
+
+      await mastra.recoverAllDurableAgents();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(recover).toHaveBeenCalledTimes(2);
+      await expect(bulkRecover.mock.results[1]!.value).resolves.toMatchObject({
+        recovered: [{ runId, status: 'skipped', reason: 'transient-error', retryAt: Date.now() + 30_000 }],
+        failed: 0,
+      });
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(recover).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(recover).toHaveBeenCalledTimes(3);
+      expect(restart).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(recover).toHaveBeenCalledTimes(3);
+    });
+
+    it('stops scheduling when the next per-run recovery fails permanently', async () => {
+      const permanentError = new Error('invalid agent configuration');
+      const recover = vi
+        .spyOn(durable, 'recover')
+        .mockRejectedValueOnce(new Error('LOADING Redis is loading the dataset'))
+        .mockRejectedValueOnce(permanentError);
+      const bulkRecover = vi.spyOn(durable, 'recoverActiveRuns');
+
+      await mastra.recoverAllDurableAgents();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(recover).toHaveBeenCalledTimes(2);
+      await expect(bulkRecover.mock.results[1]!.value).resolves.toEqual({
+        recovered: [{ runId, status: 'failed', error: permanentError }],
+        succeeded: 0,
+        failed: 1,
+      });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(recover).toHaveBeenCalledTimes(2);
+      expect(restart).not.toHaveBeenCalled();
+    });
+
+    it('cancels a pending transient retry on shutdown', async () => {
+      const recover = vi
+        .spyOn(durable, 'recover')
+        .mockRejectedValueOnce(new Error('LOADING Redis is loading the dataset'));
+
+      await expect(mastra.recoverAllDurableAgents()).resolves.toMatchObject({ skipped: 1, failed: 0 });
+      await mastra.shutdown();
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(recover).toHaveBeenCalledTimes(1);
+      expect(restart).not.toHaveBeenCalled();
+    });
   });
 
   it('shutdown() cancels pending re-checks', async () => {

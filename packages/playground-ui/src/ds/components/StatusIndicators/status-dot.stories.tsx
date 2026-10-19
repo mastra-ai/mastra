@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Status } from './status';
 import { StatusDot } from './status-dot';
-import { deployStates, type DeployState, type StatusPresentation } from './status-dot-styles';
+import { deployStates } from './status-dot-styles';
+import type { DeployState, StatusPresentation } from './status-dot-styles';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 
 const DESCRIPTIONS: Record<DeployState, string> = {

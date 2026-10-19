@@ -91,7 +91,7 @@ export function McpAppViewer({
       if (!onToolCall) {
         return { content: [{ type: 'text', text: 'Tool calls not supported' }] };
       }
-      const raw = await onToolCall(params.name, (params.arguments ?? {}) as Record<string, unknown>);
+      const raw = await onToolCall(params.name, params.arguments ?? {});
 
       // Detect if the result is already a CallToolResult (has content array with typed items)
       // or wrapped in an API envelope { result: CallToolResult }

@@ -275,7 +275,7 @@ const RESERVED_THREAD_METADATA_KEYS = [
 /** Packages that cannot import the list as a value pin their copy to it with `satisfies Record<ReservedThreadMetadataKey, true>`. */
 export type ReservedThreadMetadataKey = (typeof RESERVED_THREAD_METADATA_KEYS)[number];
 
-function isReservedThreadMetadataKey(key: string): boolean {
+export function isReservedThreadMetadataKey(key: string): boolean {
   // Legacy per-mode model keys remain reserved and read-only so existing threads can restore their model.
   return RESERVED_THREAD_METADATA_KEYS.some(reserved => reserved === key) || key.startsWith('modeModelId_');
 }
@@ -997,8 +997,10 @@ export class SessionThread {
 
   /**
    * Detach this host from the current thread without changing durable run state.
-   * Pending suspension prompts are removed from the host projection and can be
-   * rebuilt when a session binds the thread again.
+   * Pending suspension and approval prompts are removed from the host projection
+   * and can be rebuilt when a session binds the thread again. A parked tool
+   * approval is not declined: its run stays suspended and can still be answered,
+   * for example with `respondToPersistedToolApproval`.
    */
   detachFromCurrent(): void {
     this.#owner.abort({ localOnly: true, keepParked: true });
@@ -1528,6 +1530,11 @@ export class SessionStream {
   readonly #consumerFailureWaiters = new Set<(error: unknown) => void>();
   /** Set once the live subscription's run loop has failed; cleared on attach. */
   #consumerFailure: { error: unknown } | null = null;
+  /**
+   * Run id whose trailing chunks the live subscription drops after an abort.
+   * Cleared by a later run, by an explicit resume of that run, or on attach/teardown.
+   */
+  #abortedRunId: string | null = null;
 
   constructor(private readonly getSessionRun: () => { sessionId: string; runId: string | null }) {}
 
@@ -1616,6 +1623,38 @@ export class SessionStream {
     this.#key = key;
     this.#binding = { resourceId, threadId };
     this.#consumerFailure = null;
+    this.#abortedRunId = null;
+  }
+
+  /** Record that `runId` was aborted on `subscription`, so its trailing chunks are dropped. */
+  markAbortedRun({
+    subscription,
+    runId,
+  }: {
+    subscription: AgentThreadSubscription<any, true>;
+    runId: string | null;
+  }): void {
+    if (this.#subscription === subscription) this.#abortedRunId = runId;
+  }
+
+  /** The run id `subscription` is dropping chunks for, or null. */
+  abortedRunId({ subscription }: { subscription: AgentThreadSubscription<any, true> }): string | null {
+    return this.#subscription === subscription ? this.#abortedRunId : null;
+  }
+
+  /**
+   * Stop dropping chunks for the aborted run (only if it is `runId`, when given).
+   * Returns a callback that restores the filter while the same subscription is
+   * still live and no other run has replaced it, or undefined if nothing was cleared.
+   */
+  clearAbortedRun({ runId }: { runId?: string } = {}): (() => void) | undefined {
+    const cleared = this.#abortedRunId;
+    if (cleared === null || (runId !== undefined && cleared !== runId)) return undefined;
+    this.#abortedRunId = null;
+    const subscription = this.#subscription;
+    return () => {
+      if (this.#subscription === subscription && this.#abortedRunId === null) this.#abortedRunId = cleared;
+    };
   }
 
   /** Agent that owns `subscription`, when it is the live subscription. */
@@ -1669,6 +1708,7 @@ export class SessionStream {
     this.#agent = null;
     this.#key = null;
     this.#binding = null;
+    this.#abortedRunId = null;
     this.#notifyTeardown();
   }
 
@@ -1688,6 +1728,7 @@ export class SessionStream {
     this.#agent = null;
     this.#key = null;
     this.#binding = null;
+    this.#abortedRunId = null;
     this.#notifyTeardown();
   }
 }
@@ -1928,6 +1969,13 @@ export interface ApprovalDecision {
 }
 
 /**
+ * How a parked approval gate was released: a user (or abort) decision, or
+ * `detached` when the host let go of the thread without deciding, leaving the
+ * run parked in storage.
+ */
+type ApprovalGateResolution = ApprovalDecision | { decision: 'detached' };
+
+/**
  * Whether a tool approval/suspension response was claimed by a pending target.
  * `accepted: true` only means the command was taken, not that the resumed tool
  * later succeeded.
@@ -1954,8 +2002,8 @@ interface ApprovalGate {
   threadId?: string;
   /** Run that produced the gated call, when the producer knew it. */
   runId?: string;
-  promise: Promise<ApprovalDecision>;
-  resolve: (decision: ApprovalDecision) => void;
+  promise: Promise<ApprovalGateResolution>;
+  resolve: (resolution: ApprovalGateResolution) => void;
 }
 
 /**
@@ -2010,14 +2058,14 @@ export class SessionApproval {
     toolCallId: string;
     threadId?: string;
     runId?: string;
-  }): Promise<ApprovalDecision> {
+  }): Promise<ApprovalGateResolution> {
     const existing = [...this.#gates].find(
       gate => gate.toolCallId === toolCallId && gate.threadId === threadId && gate.runId === runId,
     );
     if (existing) return existing.promise;
 
-    let resolve!: (decision: ApprovalDecision) => void;
-    const promise = new Promise<ApprovalDecision>(r => {
+    let resolve!: (resolution: ApprovalGateResolution) => void;
+    const promise = new Promise<ApprovalGateResolution>(r => {
       resolve = r;
     });
     this.#gates.add({ toolCallId, toolName, threadId, runId, promise, resolve });
@@ -2093,6 +2141,22 @@ export class SessionApproval {
     for (const gate of gates) {
       this.#gates.delete(gate);
       gate.resolve({ decision: 'decline', declineContext: options.declineContext });
+    }
+    return gates.map(gate => gate.toolCallId);
+  }
+
+  /**
+   * Release parked gate(s) without a decision, for a host detaching from the
+   * thread. Each waiter resolves as `detached`, so the gated call is neither
+   * run nor declined: the run stays parked in storage and can be answered after
+   * a session binds the thread again. `filter` narrows the release exactly as
+   * for {@link cancel}. Returns the ids that were released.
+   */
+  detach(filter: ApprovalGateFilter = {}): string[] {
+    const gates = this.#matching(filter);
+    for (const gate of gates) {
+      this.#gates.delete(gate);
+      gate.resolve({ decision: 'detached' });
     }
     return gates.map(gate => gate.toolCallId);
   }
@@ -3352,6 +3416,8 @@ export class SessionDisplayState {
       getThreadId: () => string | null;
       /** Clear the session's follow-up queue when thread-scoped display state resets. */
       clearFollowUps: () => void;
+      /** The run the session is tracking, still set while its `agent_end` is applied. */
+      getRunId: () => string | null;
     },
   ) {}
 
@@ -3487,10 +3553,17 @@ export class SessionDisplayState {
         ds.isRunning = false;
         // A suspended run keeps its pending tool suspensions alive so the UI can
         // still render the prompts (e.g. `ask_user`, which pauses via the native
-        // tool-suspension primitive). When the run ends for any other reason the
-        // parked suspensions are abandoned, so clear them all.
+        // tool-suspension primitive). When the run ends for any other reason its
+        // parked suspensions are abandoned, so clear them. Another run on the
+        // thread can end while a prompt is still waiting, and answering that
+        // prompt still resumes its run, so keep the prompts of other runs.
         if (event.reason !== 'suspended') {
-          ds.pendingSuspensions.clear();
+          const runId = this.deps.getRunId();
+          for (const [key, suspension] of ds.pendingSuspensions) {
+            if (!runId || suspension.runId === undefined || suspension.runId === runId) {
+              ds.pendingSuspensions.delete(key);
+            }
+          }
         }
         // Mark any still-running tools as errored (handles abort mid-run)
         for (const [, tool] of ds.activeTools) {
@@ -4059,6 +4132,7 @@ export class Session<TState = unknown> {
   readonly #bus = new SessionBus();
   /** Process-local hooks that must finish before the session exposes a terminal agent event. */
   readonly #beforeAgentEndListeners = new Set<SessionBeforeAgentEndListener>();
+  #endingRunId: string | null | undefined;
   /** Tool categories granted "allow", bucketed by thread id (or the session-wide bucket). */
   readonly #grantedCategories = new Map<string, Set<string>>();
   /** Individual tool names granted "allow", bucketed by thread id (or the session-wide bucket). */
@@ -4153,6 +4227,7 @@ export class Session<TState = unknown> {
       getSubagentDisplayName: agentType => this.#resolveSubagentName?.(agentType),
       getThreadId: () => this.thread.getId(),
       clearFollowUps: () => this.cleanupFollowUpBinding(),
+      getRunId: () => (this.#endingRunId === undefined ? this.run.getRunId() : this.#endingRunId),
     });
     this.#bus.setDisplayState(this.displayState);
     const sessionState = new SessionState(
@@ -4282,7 +4357,14 @@ export class Session<TState = unknown> {
       }
     }
     if (reason !== 'suspended' && runId) this.#threadOwnerIdsByRunId.delete(runId);
-    this.emit(event);
+    // The display state clears the ending run's prompts; a listener above may
+    // already have moved the tracked run on, so hand it the run that ended.
+    this.#endingRunId = runId;
+    try {
+      this.emit(event);
+    } finally {
+      this.#endingRunId = undefined;
+    }
   }
 
   /** Await the terminal event for a specific accepted agent run. */
@@ -4503,7 +4585,12 @@ export class Session<TState = unknown> {
     // defer the abort for that other thread's gate.
     const abortThreadId = this.thread.getId() ?? undefined;
     const wasGated = this.approval.isArmed({ threadId: abortThreadId });
-    if (wasGated) {
+    // Detaching keeps a parked approval answerable: release this host's gates
+    // without a decision and leave the run parked in storage, like any other
+    // parked suspension below.
+    if (wasGated && options.keepParked) {
+      this.displayState.clearPendingApprovals(this.approval.detach({ threadId: abortThreadId }));
+    } else if (wasGated) {
       const gatedRunId = this.run.getRunId();
       this.run.requestAbort({ deferSignal: true });
       // The engine completes this teardown after its decline await; a rebind can
@@ -5287,23 +5374,92 @@ export class Session<TState = unknown> {
     untilIdle?: boolean | { maxIdleMs?: number };
     author?: MessageAuthor;
   }): Promise<void> {
-    const wasActive = this.stream.isActive();
-    const signal = this.sendSignal(
-      {
-        content: this.createMessageInput({ content, files }),
-        tracingContext,
-        tracingOptions,
-        requestContext: requestContextInput,
-        untilIdle,
-        author,
-      },
-      { requireDelivery: true },
-    );
+    let lastBlockingRunId: string | undefined;
+    while (true) {
+      const wasActive = this.stream.isActive();
+      const signal = this.sendSignal(
+        {
+          content: this.createMessageInput({ content, files }),
+          tracingContext,
+          tracingOptions,
+          requestContext: requestContextInput,
+          untilIdle,
+          author,
+        },
+        { requireDelivery: true },
+      );
+      // Another agent's run on the thread can't take this message, so the
+      // thread reports itself blocked. Wait for that run to end and send again,
+      // as a message sent just before that run started would have waited.
+      let blockingRunId: string | undefined;
+      const accepted = signal.accepted.then(settled => {
+        if (settled.action !== 'blocked') return settled;
+        blockingRunId = settled.runId;
+        return { action: settled.action };
+      });
 
-    if (wasActive) {
-      await signal.accepted;
-    } else {
-      await this.waitForAcceptedRunCompletion(signal.accepted);
+      if (wasActive) {
+        await accepted;
+      } else {
+        await this.waitForAcceptedRunCompletion(accepted);
+      }
+      if (blockingRunId === undefined) return;
+      // Blocked again by the run already waited out: the wait saw nothing it
+      // could wait for, so don't spin on resending.
+      if (blockingRunId === lastBlockingRunId) {
+        this.emit({
+          type: 'error',
+          error: new Error("Your message wasn't sent: another run still holds this thread. Try again shortly."),
+        });
+        return;
+      }
+      lastBlockingRunId = blockingRunId;
+      const waited = await this.#waitForOtherAgentRun();
+      if (waited === 'stopped') return;
+      // A parked run waits on its own prompt, so waiting can't free the thread.
+      if (waited === 'suspended') {
+        this.emit({
+          type: 'error',
+          error: new Error(
+            "Your message wasn't sent: another agent's run on this thread is waiting for an answer to its own prompt.",
+          ),
+        });
+        return;
+      }
+    }
+  }
+
+  /**
+   * Wait until no other run holds this session's thread and this session has
+   * seen it end, or until that run parks on a prompt (`'suspended'`).
+   * `'stopped'` when Stop is pressed while waiting.
+   */
+  async #waitForOtherAgentRun(): Promise<'free' | 'suspended' | 'stopped'> {
+    const threadId = this.thread.getId();
+    if (!threadId) return 'free';
+    const agent = this.machinery.getAgent();
+    const waiters = new AbortController();
+    let aborted = false;
+    const abortRequest = this.run
+      .waitForAbortRequest(waiters.signal, { after: this.run.getAbortGeneration() })
+      .then(() => {
+        aborted = true;
+      });
+    try {
+      const outcome = await Promise.race([
+        agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+          agent,
+          { memory: { thread: threadId, resource: this.identity.getResourceId() }, untilSuspended: true },
+          agent.getPubSub(),
+        ),
+        abortRequest,
+      ]);
+      if (aborted) return 'stopped';
+      if (outcome === 'suspended') return 'suspended';
+      await this.waitForStreamIdle();
+      return aborted ? 'stopped' : 'free';
+    } finally {
+      waiters.abort();
     }
   }
 
@@ -5757,16 +5913,19 @@ export class Session<TState = unknown> {
    * agent. `abortSignal` pins the run's own signal, because a successor run
    * replaces the session's abort controller.
    */
-  async approveToolCall(input: {
-    toolCallId?: string;
-    requestContext?: RequestContext;
-    runId?: string;
-    threadId?: string;
-    resourceId?: string;
-    agent?: Agent;
-    abortSignal?: AbortSignal;
-  }): Promise<void> {
-    await this.#approveToolCall(input);
+  async approveToolCall(
+    input: {
+      toolCallId?: string;
+      requestContext?: RequestContext;
+      runId?: string;
+      threadId?: string;
+      resourceId?: string;
+      agent?: Agent;
+      abortSignal?: AbortSignal;
+    },
+    onDispatch?: () => void,
+  ): Promise<void> {
+    await this.#approveToolCall(input, onDispatch);
   }
 
   /**
@@ -5848,17 +6007,20 @@ export class Session<TState = unknown> {
    * run that parked them, so a thread switch mid-run cannot redirect the
    * decline to another thread.
    */
-  async declineToolCall(input: {
-    toolCallId?: string;
-    requestContext?: RequestContext;
-    declineContext?: { reason?: string; message?: string };
-    runId?: string;
-    threadId?: string;
-    resourceId?: string;
-    agent?: Agent;
-    abortSignal?: AbortSignal;
-  }): Promise<void> {
-    await this.#declineToolCall(input);
+  async declineToolCall(
+    input: {
+      toolCallId?: string;
+      requestContext?: RequestContext;
+      declineContext?: { reason?: string; message?: string };
+      runId?: string;
+      threadId?: string;
+      resourceId?: string;
+      agent?: Agent;
+      abortSignal?: AbortSignal;
+    },
+    onDispatch?: () => void,
+  ): Promise<void> {
+    await this.#declineToolCall(input, onDispatch);
   }
 
   async #declineToolCall(
@@ -6010,7 +6172,7 @@ export class Session<TState = unknown> {
             ownedCalls.add(next.toolCallId);
             runScope?.set(SOURCE_APPROVAL_CALLS_KEY, ownedCalls);
             const policy = this.resolveToolApproval(chunk.payload.toolName, address.threadId);
-            const decision: Promise<ApprovalDecision> =
+            const decision: Promise<ApprovalGateResolution> =
               policy === 'ask'
                 ? this.approval.arm({ ...next, toolName: chunk.payload.toolName })
                 : Promise.resolve({ decision: policy === 'allow' ? ('approve' as const) : ('decline' as const) });
@@ -6032,7 +6194,7 @@ export class Session<TState = unknown> {
               let pendingDecision = decision;
               while (!approvalDisposed) {
                 const approval = await pendingDecision;
-                if (approvalDisposed) return;
+                if (approvalDisposed || approval.decision === 'detached') return;
                 let observer: Awaited<ReturnType<Session<TState>['observeSourceResume']>> | undefined;
                 let accepted = false;
                 let dispatchAttempted = false;
@@ -6195,8 +6357,12 @@ export class Session<TState = unknown> {
     });
     const toolsets = await this.machinery.buildToolsets(requestContext);
     let resumedSubscriptionBoundary: { promise: Promise<void>; cancel: () => void } | undefined;
+    let restoreAbortedRun: (() => void) | undefined;
     if (sourceIsActive()) {
       await this.thread.ensureSubscription(threadId, agent, requestContext, resourceId, sourceIsActive);
+      // A tool call can stay parked after its run was aborted. Resuming it reuses
+      // the aborted run id, so stop dropping that run's chunks on this subscription.
+      restoreAbortedRun = this.stream.clearAbortedRun({ runId: suspension.runId });
       if (sourceIsActive())
         resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
     }
@@ -6236,12 +6402,15 @@ export class Session<TState = unknown> {
           toolsets,
         },
       });
+      restoreAbortedRun = undefined;
       if (resumedSubscriptionBoundary) {
         await resumedSubscriptionBoundary.promise;
       } else {
         await observer?.promise;
       }
     } catch (error) {
+      // The resume never dispatched, so keep dropping the aborted run's trailing chunks.
+      restoreAbortedRun?.();
       if (!observer?.dispatched()) {
         this.suspensions.register({ ...address, toolName: suspension.toolName });
         this.#suspensionAgents.set(this.suspensions.get(address)!, agent);

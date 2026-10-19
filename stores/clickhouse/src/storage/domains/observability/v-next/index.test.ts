@@ -126,28 +126,6 @@ createObservabilityVNextTests({
   cleanup: async storage => {
     await storage.dangerouslyClearAll();
   },
-  readTimeToFirstChunkMs: async (_storage, { traceId, spanId }) => {
-    const { TABLE_SPAN_EVENTS } = await import('./ddl');
-    const client = createClient({
-      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
-      username: process.env.CLICKHOUSE_USERNAME || 'default',
-      password: process.env.CLICKHOUSE_PASSWORD || 'password',
-    });
-    try {
-      const result = await client.query({
-        query: `SELECT timeToFirstChunkMs FROM ${TABLE_SPAN_EVENTS}
-          WHERE traceId = {traceId:String} AND spanId = {spanId:String}
-          ORDER BY endedAt DESC LIMIT 1`,
-        query_params: { traceId, spanId },
-        format: 'JSONEachRow',
-      });
-      const [row] = (await result.json()) as { timeToFirstChunkMs: number | null }[];
-      if (!row) throw new Error(`span ${spanId} was not stored`);
-      return row.timeToFirstChunkMs;
-    } finally {
-      await client.close();
-    }
-  },
   // ClickHouse vNext serves discovery from refreshable materialized views.
   // In production they refresh on a schedule; in tests we need to trigger the
   // refresh by hand so discovery reads see writes from the same test.
@@ -1078,6 +1056,8 @@ LIMIT 1`,
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        'trace-query-time-to-first-chunk',
+        'trace-query-root-span-fields',
         'trace-aggregate',
         'span-query',
         'span-query-context-fields',
@@ -1104,6 +1084,8 @@ LIMIT 1`,
           'trace-query-tenant-scope',
           'feedback',
           'trace-query-context-ids',
+          'trace-query-time-to-first-chunk',
+          'trace-query-root-span-fields',
           'trace-aggregate',
           'span-query',
           'span-query-context-fields',

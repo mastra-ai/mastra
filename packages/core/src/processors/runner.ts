@@ -40,7 +40,7 @@ import {
   summarizeToolChoiceForSpan,
 } from './span-payload';
 import type { ProcessorStepOutput } from './step-schema';
-import { REPROCESS_PART_KEY } from './stream-reprocess';
+import { REPROCESS_PART_KEY, takeHeldParts } from './stream-reprocess';
 import { needsTrailingAssistantGuard, TrailingAssistantGuard } from './trailing-assistant-guard';
 import type {
   CachedLLMStepChunk,
@@ -951,6 +951,8 @@ export class ProcessorRunner {
     retryCount: number = 0,
     writer?: ProcessorStreamWriter,
     abortSignal?: AbortSignal,
+    /** Skip output processors before this index (the part was released by the one before it). */
+    startIndex: number = 0,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -967,6 +969,7 @@ export class ProcessorRunner {
       const isFinishChunk = part.type === 'finish';
 
       for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
+        if (index < startIndex) continue;
         // Handle workflows for stream processing
         if (isProcessorWorkflow(processorOrWorkflow)) {
           if (!processedPart) continue;
@@ -1054,7 +1057,7 @@ export class ProcessorRunner {
                 state: state.customState,
                 agent: this.agent,
                 abort: <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-                  throw new TripWire(reason || `Stream part blocked by ${processor.id}`, options, processor.id);
+                  throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
                 },
                 ...createObservabilityContext({ currentSpan: state.span }),
                 requestContext,
@@ -1232,6 +1235,114 @@ export class ProcessorRunner {
     return results;
   }
 
+  /**
+   * Call when a stream ends. Processors that hold parts until a later part
+   * arrives (`BatchPartsProcessor`, LLM-buffered checks) would otherwise drop
+   * what they hold when nothing follows it. Each held part is released and
+   * pushed through the processors after its holder, then any stashed parts are
+   * drained. Returns the results in emission order, stopping at the first block.
+   */
+  async flushHeldParts<OUTPUT>(
+    processorStates: Map<string, ProcessorState<OUTPUT>>,
+    observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
+    messageList?: MessageList,
+    retryCount: number = 0,
+    writer?: ProcessorStreamWriter,
+    abortSignal?: AbortSignal,
+  ): Promise<
+    Array<{
+      part: ChunkType<OUTPUT> | null | undefined;
+      blocked: boolean;
+      reason?: string;
+      tripwireOptions?: TripWireOptions<unknown>;
+      processorId?: string;
+    }>
+  > {
+    const results: Array<{
+      part: ChunkType<OUTPUT> | null | undefined;
+      blocked: boolean;
+      reason?: string;
+      tripwireOptions?: TripWireOptions<unknown>;
+      processorId?: string;
+    }> = [];
+
+    for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
+      let held: ChunkType[];
+      try {
+        if (isProcessorWorkflow(processorOrWorkflow)) {
+          const flush = processorOrWorkflow.__flushOutputStream;
+          if (!flush) continue;
+          const outputWriter: OutputWriter | undefined = writer
+            ? (chunk, options) => writer.custom(chunk, options)
+            : undefined;
+          held = await executeWithContext({
+            span: observabilityContext?.tracingContext?.currentSpan,
+            fn: () =>
+              flush({
+                inputData: {
+                  phase: 'outputStream',
+                  streamParts: [],
+                  state: {},
+                  messageList,
+                  retryCount,
+                  processorStates: this.processorStates,
+                  abortSignal,
+                  agent: this.agent,
+                } as ProcessorStepOutput,
+                ...observabilityContext,
+                requestContext: requestContext ?? new RequestContext(),
+                outputWriter,
+              }),
+          });
+        } else {
+          held = await takeHeldParts(processorStates.get(processorOrWorkflow.id)?.customState);
+        }
+      } catch (error) {
+        if (error instanceof TripWire) {
+          results.push({
+            part: null,
+            blocked: true,
+            reason: error.message,
+            tripwireOptions: error.options,
+            processorId: error.processorId || processorOrWorkflow.id,
+          });
+          return results;
+        }
+        throw error;
+      }
+
+      for (const part of held) {
+        const result = await this.processPart(
+          part as ChunkType<OUTPUT>,
+          processorStates,
+          observabilityContext,
+          requestContext,
+          messageList,
+          retryCount,
+          writer,
+          abortSignal,
+          index + 1,
+        );
+        results.push(result);
+        if (result.blocked) return results;
+        const reprocessed = await this.drainReprocessParts(
+          processorStates,
+          observabilityContext,
+          requestContext,
+          messageList,
+          retryCount,
+          writer,
+          abortSignal,
+        );
+        results.push(...reprocessed);
+        if (reprocessed.some(r => r.blocked)) return results;
+      }
+    }
+
+    return results;
+  }
+
   async runOutputProcessorsForStream<OUTPUT = undefined>(
     streamResult: MastraModelOutput<OUTPUT>,
     observabilityContext?: ObservabilityContext,
@@ -1252,6 +1363,30 @@ export class ProcessorRunner {
             const { done, value } = await reader.read();
 
             if (done) {
+              for (const r of await this.flushHeldParts(
+                processorStates,
+                observabilityContext,
+                undefined,
+                undefined,
+                0,
+                streamWriter,
+              )) {
+                if (r.blocked) {
+                  controller.enqueue({
+                    type: 'tripwire',
+                    payload: {
+                      reason: r.reason || 'Output processor blocked content',
+                      retry: r.tripwireOptions?.retry,
+                      metadata: r.tripwireOptions?.metadata,
+                      processorId: r.processorId,
+                    },
+                  });
+                  break;
+                }
+                if (r.part != null) {
+                  controller.enqueue(r.part);
+                }
+              }
               controller.close();
               break;
             }

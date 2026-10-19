@@ -11,16 +11,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "k3-256k": [
+    "k3": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "k3": [
-      {
-        "type": "toggle"
-      },
+    "k3-256k": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

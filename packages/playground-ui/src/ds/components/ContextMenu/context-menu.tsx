@@ -76,7 +76,7 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
     // Why: same stacking as DropdownMenu (z-50). Inside a modal Dialog/Drawer the popup must
     // portal into the trap container to stay clickable and above it; explicit `container` wins.
     const resolvedContainer = usePortalContainer(container);
-    const menu = useFluidMenu<HTMLDivElement>();
+    const menu = useFluidMenu();
 
     return (
       <ContextMenuPrimitive.Portal container={resolvedContainer}>
@@ -231,7 +231,7 @@ const ContextMenuSubContent = React.forwardRef<HTMLDivElement, ContextMenuSubCon
     };
 
     const resolvedContainer = usePortalContainer();
-    const menu = useFluidMenu<HTMLDivElement>();
+    const menu = useFluidMenu();
 
     return (
       <ContextMenuPrimitive.Portal container={resolvedContainer}>

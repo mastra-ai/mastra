@@ -964,6 +964,8 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        ...traceQueryOps.timeToFirstChunkFeatures,
+        'trace-query-root-span-fields',
         'trace-aggregate',
         ...spanQueryFeatures,
       ] as const;
@@ -986,6 +988,8 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'trace-query-tenant-scope',
       'feedback',
       'trace-query-context-ids',
+      ...traceQueryOps.timeToFirstChunkFeatures,
+      'trace-query-root-span-fields',
       'trace-aggregate',
       ...spanQueryFeatures,
     ] as const;

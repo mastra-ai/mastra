@@ -43,6 +43,16 @@ type TraceSelection = {
 
 export const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
 
+/**
+ * Core versions without the field reject it in strict query results, so it is only returned when core knows it.
+ * Core before 1.68 has no field registry at all.
+ */
+export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {});
+
+export const timeToFirstChunkFeatures = timeToFirstChunkSupported
+  ? (['trace-query-time-to-first-chunk'] as const)
+  : ([] as const);
+
 export function durationMsSql(startedAt: string, endedAt: string): string {
   return `dateDiff('millisecond', ${startedAt}, ${endedAt})`;
 }
@@ -63,8 +73,11 @@ const TRACE_FIELDS = {
   startedAt: { sql: 'r.startedAt', parameterType: "DateTime64(3, 'UTC')" },
   endedAt: { sql: 'r.endedAt', parameterType: "DateTime64(3, 'UTC')" },
   durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'Float64' },
+  timeToFirstChunkMs: { sql: 'r.timeToFirstChunkMs', parameterType: 'Float64' },
   entityName: { sql: 'r.entityName', parameterType: 'String' },
   entityType: { sql: 'r.entityType', parameterType: 'String' },
+  name: { sql: 'r.name', parameterType: 'String' },
+  spanType: { sql: 'r.spanType', parameterType: 'String' },
   environment: { sql: 'r.environment', parameterType: 'String' },
   status: { sql: TRACE_STATUS_SQL, parameterType: 'String' },
   tags: { sql: 'r.tags', parameterType: 'String' },
@@ -78,6 +91,7 @@ const SPAN_FIELDS = {
   startedAt: { sql: 's.startedAt', parameterType: "DateTime64(3, 'UTC')" },
   endedAt: { sql: 's.endedAt', parameterType: "DateTime64(3, 'UTC')" },
   durationMs: { sql: 's.durationMs', parameterType: 'Float64' },
+  timeToFirstChunkMs: { sql: 's.timeToFirstChunkMs', parameterType: 'Float64' },
   status: { sql: 's.status', parameterType: 'String' },
   error: { sql: 's.error', parameterType: 'String' },
   entityType: { sql: 's.entityType', parameterType: 'String' },
@@ -156,6 +170,7 @@ const TRACE_SELECT = `
   r.entityName AS entityName,
   r.entityType AS entityType,
   r.environment AS environment,
+  r.timeToFirstChunkMs AS timeToFirstChunkMs,
   ${TRACE_STATUS_SQL} AS status`;
 
 export class ParameterBuilder {
@@ -469,6 +484,7 @@ function compileClickHouseTraceScope(
       startedAt,
       endedAt,
       ${durationMsSql('startedAt', 'endedAt')} AS durationMs,
+      timeToFirstChunkMs,
       if(isNotNull(error), 'error', 'success') AS status,
       error,
       entityType,
@@ -1174,6 +1190,9 @@ export async function queryTraces(
     entityType: row.entityType == null ? null : String(row.entityType),
     environment: row.environment == null ? null : String(row.environment),
     status: row.status,
+    ...(timeToFirstChunkSupported && {
+      timeToFirstChunkMs: row.timeToFirstChunkMs == null ? null : Number(row.timeToFirstChunkMs),
+    }),
   });
 
   if (plan.paginationMode === 'delta') {

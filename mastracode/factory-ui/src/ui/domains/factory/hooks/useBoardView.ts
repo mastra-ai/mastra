@@ -36,6 +36,7 @@ export interface BoardView {
   setSearch: (next: string) => void;
   setSort: (next: BoardSort) => void;
   setLayout: (next: BoardLayout) => void;
+  resetProperties: () => void;
 }
 
 export function useBoardView({
@@ -115,6 +116,18 @@ export function useBoardView({
     setLayout: (next: BoardLayout) => {
       if (applied) savedViews.change({ settings: { ...applied.settings, layout: next } });
       else replaceParams(boardLayoutParams(searchParams, next));
+    },
+    resetProperties: () => {
+      if (applied) {
+        savedViews.change({ filters: [], settings: { ...applied.settings, sort: DEFAULT_BOARD_SORT } });
+        return;
+      }
+      const params = boardSortParams(
+        boardFilterParams(searchParams, boardFilterStateFromItems([], kind), kind),
+        DEFAULT_BOARD_SORT,
+      );
+      clearOpenCard(params);
+      replaceParams(params);
     },
   };
 }

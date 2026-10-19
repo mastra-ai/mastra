@@ -130,6 +130,7 @@ function SpanDataPanelContent({
   feedbackTabBadge?: ReactNode;
   isAnchor?: boolean;
 }) {
+  // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Built SDK declarations type attributes.usage as unknown.
   const usage = span.attributes?.usage as TokenUsage | undefined;
   const hasContext =
     (isAnchor ?? span.parentSpanId == null) &&

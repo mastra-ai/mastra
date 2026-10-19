@@ -2351,6 +2351,8 @@ type Shared_Type_6 = {
   modelVersion?: string | undefined;
   supportsMemory?: boolean | undefined;
   modelList?: Shared_Type_2[] | undefined;
+  /** False when the model list comes from a function and cannot be reordered or edited */
+  modelListEditable?: boolean | undefined;
   /** Default options for agent execution */
   defaultOptions?: Shared_Type_5 | undefined;
   defaultGenerateOptionsLegacy?:
@@ -3630,6 +3632,7 @@ type Shared_Type_64 = {
   entityType: string | null;
   environment: string | null;
   status: 'success' | 'error';
+  timeToFirstChunkMs?: (number | null) | undefined;
 };
 
 type Shared_Type_65 = {
@@ -3719,6 +3722,10 @@ type Shared_Type_67 = {
   traceQueryRootDuration: boolean;
   /** `runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries */
   traceQueryContextIds: boolean;
+  /** `timeToFirstChunkMs` in trace and span query results, and predicates on it in trace, thread and span queries */
+  traceQueryTimeToFirstChunk: boolean;
+  /** Root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct` */
+  traceQueryRootSpanFields: boolean;
   /** Trace query field discovery (POST /observability/traces/query/fields and /values) */
   traceQueryDiscovery: boolean;
   /** Trusted tenant scoping of trace and thread queries */
@@ -10776,6 +10783,7 @@ export type PostObservabilitySpansQuery_Response = {
     inputPreview: string | null;
     outputPreview: string | null;
     errorPreview: string | null;
+    timeToFirstChunkMs?: (number | null) | undefined;
   }[];
   page: {
     next: string | null;

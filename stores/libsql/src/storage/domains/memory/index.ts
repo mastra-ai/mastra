@@ -4,10 +4,9 @@ import {
   isBufferedChunkCoveredByCursor,
   maxObservationCursor,
   planReflectionGenerationText,
-  type UpdateActiveObservationsResult,
-  type UpdateBufferedObservationsResult,
   withObservationalMemoryLifecycleColumns,
 } from '@internal/core/memory';
+import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';

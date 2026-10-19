@@ -29,6 +29,7 @@ export function pickRenderer<D extends Described>(
  * and `error`, which are identical in both, so this is the one place the two types meet.
  */
 export function asCoreSpan(span: SpanRecord): CoreSpanRecord {
+  // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Generated SDK and core span types differ once workspace declarations are built.
   return span as unknown as CoreSpanRecord;
 }
 
