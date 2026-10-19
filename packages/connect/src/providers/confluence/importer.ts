@@ -17,6 +17,42 @@ import {
 
 const CONFLUENCE_WATERMARK_KEY = 'confluence:watermark';
 
+/**
+ * Atlassian 3LO tokens reach Confluence Cloud REST only through the OAuth
+ * gateway at `ex/confluence/{cloudId}/wiki/rest/api/...`; the bare
+ * `wiki/rest/api/...` path 404s under these credentials. The cloudId is
+ * discovered via the accessible-resources endpoint — the same mechanism the
+ * Jira tools use (packages/connect/src/providers/jira/tools/add-comment.ts:62-98).
+ * Unlike the Jira tool seam, the importer's `ImporterProviderContext` exposes
+ * no connection config/metadata (see ProjectConnection in client.ts:191-202),
+ * so the guarded proxy request is the only available source for the cloudId.
+ */
+const accessibleResourcesSchema = z.array(
+  z.object({
+    id: z.string(),
+    url: z.string().nullish(),
+    name: z.string().nullish(),
+  }),
+);
+
+async function resolveConfluenceCloudId(ctx: ImporterProviderContext): Promise<string> {
+  const discovery = accessibleResourcesSchema.safeParse(
+    await ctx.request({ method: 'GET', path: 'oauth/token/accessible-resources' }),
+  );
+  if (!discovery.success) {
+    throw new Error(
+      'Confluence cloudId discovery returned malformed accessible-resources data; cannot build the ex/confluence gateway path.',
+    );
+  }
+  const cloudId = discovery.data[0]?.id;
+  if (!cloudId) {
+    throw new Error(
+      'No accessible Confluence resource found for this connection; cannot resolve a cloudId for the ex/confluence gateway path.',
+    );
+  }
+  return cloudId;
+}
+
 const searchResultSchema = z.object({
   id: z.string(),
   type: z.string().nullish(),
@@ -109,6 +145,9 @@ function createConfluenceImporter(ctx: ImporterProviderContext) {
         ? `type=page and lastmodified >= "${previousWatermark}" order by lastmodified asc`
         : 'type=page order by lastmodified asc';
 
+      const cloudId = await resolveConfluenceCloudId(ctx);
+      const searchPath = `ex/confluence/${encodeURIComponent(cloudId)}/wiki/rest/api/content/search`;
+
       let start = 0;
       let latestSeen: string | undefined;
       const processed: ConfluenceResult[] = [];
@@ -118,7 +157,7 @@ function createConfluenceImporter(ctx: ImporterProviderContext) {
         const parsed = searchResponseSchema.parse(
           await ctx.request({
             method: 'GET',
-            path: 'wiki/rest/api/content/search',
+            path: searchPath,
             query: { cql, expand: 'body.storage,version,space,history.lastUpdated,ancestors', start, limit: pageSize },
           }),
         );
