@@ -635,6 +635,80 @@ describe('factory_transition_work_item', () => {
   });
 
   describe('factory_record_review_verdict', () => {
+    async function selfReviewingItem(storage: WorkItemsStorage, metadata: Record<string, unknown> = {}) {
+      const prepared = await prepareBoundItem(storage, 'github-issue', 'review');
+      await storage.update({
+        orgId: 'org-1',
+        id: prepared.item.id,
+        userId: 'user-1',
+        patch: { stages: ['review'], metadata: { authorTrusted: true, ...metadata } },
+      });
+      return prepared.item.id;
+    }
+
+    it('parks the card in Intake for a person once self-review hits the round limit', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const id = await selfReviewingItem(storage, { selfReviewRounds: 2 });
+      const context = requestContext();
+      const transition = vi.fn().mockResolvedValue({ status: 'accepted' });
+      const tools = await createFactoryTransitionTools({
+        requestContext: context,
+        storage,
+        transitionService: { transition } as never,
+      });
+
+      await expect(
+        execute(tools.factory_record_review_verdict as ExecutableTool, context, {
+          verdict: 'request changes',
+          reviewedHeadSha: 'abc1234def000000000000000000000000000000',
+          findings: 'Result: changes requested',
+        }),
+      ).resolves.toMatchObject({ selfReviewRounds: 3 });
+      expect(transition).toHaveBeenCalledWith(expect.objectContaining({ workItemId: id, stage: 'intake' }));
+    });
+
+    it.each([
+      ['approve', undefined, 1],
+      ['request changes', 'execute', 2],
+    ] as const)('records a self-review %s on the Work card (moves to %s)', async (verdict, stage, rounds) => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const id = await selfReviewingItem(storage, { selfReviewRounds: 1 });
+      const context = requestContext();
+      const transition = vi.fn().mockResolvedValue({ status: 'accepted' });
+      const tools = await createFactoryTransitionTools({
+        requestContext: context,
+        storage,
+        transitionService: { transition } as never,
+      });
+
+      await expect(
+        execute(tools.factory_record_review_verdict as ExecutableTool, context, {
+          verdict,
+          reviewedHeadSha: 'ABC1234DEF000000000000000000000000000000',
+          findings: 'Result: done',
+        }),
+      ).resolves.toMatchObject({ status: 'recorded', verdict, selfReviewRounds: rounds });
+
+      if (stage) {
+        expect(transition).toHaveBeenCalledWith(
+          expect.objectContaining({
+            workItemId: id,
+            board: 'work',
+            stage,
+            actor: expect.objectContaining({ type: 'agent' }),
+          }),
+        );
+      } else {
+        expect(transition).not.toHaveBeenCalled();
+      }
+      expect((await storage.get({ orgId: 'org-1', id }))?.metadata).toMatchObject({
+        selfReviewVerdict: verdict,
+        selfReviewedHeadSha: 'abc1234def000000000000000000000000000000',
+        selfReviewFindings: 'Result: done',
+        selfReviewRounds: rounds,
+      });
+    });
+
     async function reviewingItem(storage: WorkItemsStorage, stage = 'review') {
       const prepared = await prepareBoundItem(storage, 'github-pr');
       await storage.update({

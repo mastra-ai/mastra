@@ -171,7 +171,7 @@ The classifier evaluates the complete entry input. Add a preceding `mapping` ent
 
 Classifier output has two stable paths:
 
-- `answers.<question>` contains the typed answer. Route on its `choice`, `score`, or `probability` field according to the question type. Choice and score answers may include distributions.
+- `answers.<question>` contains the typed answer. Route on its `choice`, `score`, or `probability` field according to the question type. Choice and score answers may include distributions. A refused question is `{ "type": "refusal" }` with no `choice`, `score`, or `probability`, so it matches no condition on those fields. Compare `answers.<question>.type` with `"refusal"` to route refusals explicitly.
 - `usage` contains normalized token usage.
 
 Use an existing `conditional` entry to route on classifier output. For example, a following condition can compare `{ "path": "stepResults.classify-ticket.answers.route.choice" }` with `{ "literal": "billing" }`.

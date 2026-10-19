@@ -193,6 +193,9 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
 
+  /** Default timeout for foreground commands; background spawns are unaffected. */
+  protected defaultCommandTimeout?: number;
+
   /** Optional networking capability - implement to expose public port URLs */
   readonly networking?: SandboxNetworking;
 
@@ -332,6 +335,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
 
           const handle = await pm.spawn(fullCommand, {
             ...opts,
+            timeout: opts?.timeout ?? this.defaultCommandTimeout,
             ...(args?.length ? { originalInvocation: { command, args: [...args] } } : {}),
             // Unbounded retention lets a command with huge output grow the buffer past
             // V8's max string length, which throws RangeError inside the stdout handler
@@ -344,6 +348,10 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
           });
           try {
             const result = await handle.wait();
+            // A process the command left behind can still hold its output after
+            // the command returns. Nothing gets a PID to manage it once the
+            // handle is released, so stop it now.
+            if (handle.exitCode === undefined) await handle.kill();
 
             this.logger.debug('Command completed', {
               sandbox: this.name,

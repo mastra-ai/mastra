@@ -97,6 +97,18 @@ class TransformerTestBuilder {
     return this;
   }
 
+  addModelStepSpan(config: { spanId: string; parentSpanId: string; startedAt?: string }) {
+    this.spans.push({
+      traceId: this.traceId,
+      spanId: config.spanId,
+      parentSpanId: config.parentSpanId,
+      name: `step: ${config.spanId}`,
+      spanType: 'model_step',
+      startedAt: config.startedAt || '2025-01-01T00:01:30Z',
+    });
+    return this;
+  }
+
   addToolSpan(config: {
     spanId: string;
     parentSpanId: string;
@@ -104,13 +116,14 @@ class TransformerTestBuilder {
     input?: any;
     output?: any;
     startedAt?: string;
+    spanType?: 'tool_call' | 'mcp_tool_call';
   }) {
     const span = {
       traceId: this.traceId,
       spanId: config.spanId,
       parentSpanId: config.parentSpanId,
       name: `tool: ${config.toolId || 'test-tool'}`,
-      spanType: 'tool_call',
+      spanType: config.spanType || 'tool_call',
       startedAt: config.startedAt || '2025-01-01T00:02:00Z',
       input: config.input || { query: 'test' },
       output: config.output || { result: 'success' },
@@ -174,9 +187,10 @@ class TransformerTestScenarios {
           { role: 'user', content: 'What is the weather?' },
         ],
       })
+      .addModelStepSpan({ spanId: 'step-1', parentSpanId: 'llm-1' })
       .addToolSpan({
         spanId: 'tool-1',
-        parentSpanId: 'agent-1',
+        parentSpanId: 'step-1',
         toolId: 'weatherAPI',
         input: { location: 'Seattle' },
         output: { temperature: 72, condition: 'sunny' },
@@ -405,6 +419,84 @@ describe('Transformer Functions', () => {
       expect(toolPart).toBeDefined();
       expect(textPart).toBeDefined();
       expect(textPart?.text).toBe('The weather is sunny with 72°F');
+    });
+
+    it('should collect tool calls across model steps in start order', () => {
+      const trace = new TransformerTestBuilder()
+        .addAgentSpan({ spanId: 'agent-1' })
+        .addLLMSpan({ spanId: 'llm-1', parentSpanId: 'agent-1' })
+        .addModelStepSpan({ spanId: 'step-1', parentSpanId: 'llm-1', startedAt: '2025-01-01T00:01:10Z' })
+        .addModelStepSpan({ spanId: 'step-2', parentSpanId: 'llm-1', startedAt: '2025-01-01T00:01:20Z' })
+        .addToolSpan({ spanId: 'tool-b', parentSpanId: 'step-2', toolId: 'second', startedAt: '2025-01-01T00:01:21Z' })
+        .addToolSpan({ spanId: 'tool-a', parentSpanId: 'step-1', toolId: 'first', startedAt: '2025-01-01T00:01:11Z' })
+        .buildTrace();
+
+      const toolInvocations = transformTraceToScorerInputAndOutput(trace).output[0]?.content.toolInvocations;
+
+      expect(toolInvocations?.map(t => t.toolName)).toEqual(['first', 'second']);
+    });
+
+    it('should include MCP tool calls', () => {
+      const trace = new TransformerTestBuilder()
+        .addAgentSpan({ spanId: 'agent-1' })
+        .addLLMSpan({ spanId: 'llm-1', parentSpanId: 'agent-1' })
+        .addModelStepSpan({ spanId: 'step-1', parentSpanId: 'llm-1' })
+        .addToolSpan({ spanId: 'mcp-1', parentSpanId: 'step-1', toolId: 'mcpSearch', spanType: 'mcp_tool_call' })
+        .buildTrace();
+
+      const toolInvocations = transformTraceToScorerInputAndOutput(trace).output[0]?.content.toolInvocations;
+
+      expect(toolInvocations?.map(t => t.toolName)).toEqual(['mcpSearch']);
+    });
+
+    it('should not credit tool calls made inside sub-agents or inside other tools', () => {
+      const trace = new TransformerTestBuilder()
+        .addAgentSpan({ spanId: 'agent-1' })
+        .addLLMSpan({ spanId: 'llm-1', parentSpanId: 'agent-1' })
+        .addModelStepSpan({ spanId: 'step-1', parentSpanId: 'llm-1' })
+        // Agent used as a tool: the tool span is collected, its inner agent run is not walked
+        .addToolSpan({
+          spanId: 'agent-tool',
+          parentSpanId: 'step-1',
+          toolId: 'researcher',
+          startedAt: '2025-01-01T00:02:00Z',
+        })
+        .addAgentSpan({ spanId: 'inner-agent', parentSpanId: 'agent-tool', startedAt: '2025-01-01T00:02:01Z' })
+        .addLLMSpan({ spanId: 'inner-llm', parentSpanId: 'inner-agent', startedAt: '2025-01-01T00:02:02Z' })
+        .addModelStepSpan({ spanId: 'inner-step', parentSpanId: 'inner-llm', startedAt: '2025-01-01T00:02:03Z' })
+        .addToolSpan({
+          spanId: 'inner-tool',
+          parentSpanId: 'inner-step',
+          toolId: 'innerTool',
+          startedAt: '2025-01-01T00:02:04Z',
+        })
+        // Sub-agent run nested directly in the parent's step
+        .addAgentSpan({ spanId: 'sub-agent', parentSpanId: 'step-1', startedAt: '2025-01-01T00:03:00Z' })
+        .addLLMSpan({ spanId: 'sub-llm', parentSpanId: 'sub-agent', startedAt: '2025-01-01T00:03:01Z' })
+        .addModelStepSpan({ spanId: 'sub-step', parentSpanId: 'sub-llm', startedAt: '2025-01-01T00:03:02Z' })
+        .addToolSpan({
+          spanId: 'sub-tool',
+          parentSpanId: 'sub-step',
+          toolId: 'subTool',
+          startedAt: '2025-01-01T00:03:03Z',
+        })
+        .buildTrace();
+
+      const toolInvocations = transformTraceToScorerInputAndOutput(trace).output[0]?.content.toolInvocations;
+
+      expect(toolInvocations?.map(t => t.toolName)).toEqual(['researcher']);
+    });
+
+    it('should still collect tool spans attached directly to the agent span', () => {
+      const trace = new TransformerTestBuilder()
+        .addAgentSpan({ spanId: 'agent-1' })
+        .addLLMSpan({ spanId: 'llm-1', parentSpanId: 'agent-1' })
+        .addToolSpan({ spanId: 'tool-1', parentSpanId: 'agent-1', toolId: 'legacyTool' })
+        .buildTrace();
+
+      const toolInvocations = transformTraceToScorerInputAndOutput(trace).output[0]?.content.toolInvocations;
+
+      expect(toolInvocations?.map(t => t.toolName)).toEqual(['legacyTool']);
     });
   });
 

@@ -271,9 +271,10 @@ chunk }` to push into the active streaming widget, or `undefined` to skip
 rendering that event.
 
 After a user clicks Approve or Deny, Mastra sends an `approved` or `denied`
-event (`denied` includes `byUser`, which is undefined in DMs). A `post` result
-replaces the approval card in place. If the function returns nothing, a blank
-message, or throws, Mastra shows the default "Approved" or "Denied" card.
+event. Both include `byUser`, the name of the user who clicked, which is
+undefined in DMs. A `post` result replaces the approval card in place. If the
+function returns nothing, a blank message, or throws, Mastra shows the default
+"Approved" or "Denied" card, which names the user outside DMs.
 
 By default, a stream result opens a streaming session when none is active. Set
 `openIfEmpty: false` when the chunk only applies to an existing session. Mastra
@@ -513,6 +514,12 @@ The `ResolveResourceIdContext` passed to the function:
     description:
       'The built-in default (`${platform}:${message.author.userId}`). Return this to keep the current behavior.',
   },
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description:
+      "The per-message request context. Values a channel handler sets before calling `defaultHandler` (for example a tenant id) are readable here, so you don't need to look them up again.",
+  },
 ]}
 />
 
@@ -575,6 +582,11 @@ The `ResolveThreadIdContext` passed to the function:
     name: 'defaultThreadId',
     type: 'string',
     description: 'The built-in default (a random UUID). Return this to keep the current behavior.',
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description: 'The per-message request context, the same instance passed to `resolveResourceId`.',
   },
 ]}
 />

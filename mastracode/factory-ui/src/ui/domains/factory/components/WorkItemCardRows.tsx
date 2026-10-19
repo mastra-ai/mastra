@@ -1,4 +1,3 @@
-import { knownExternalAuthor } from '@mastra/factory/rules/types';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
@@ -15,7 +14,6 @@ import {
   CardActions,
   CardStatus,
   CommentCount,
-  ExternalAuthorBadge,
   MetadataLabels,
   SourceTitle,
   WorkItemSourceIcon,
@@ -53,7 +51,6 @@ export function WorkItemCardRows({
   open: boolean;
 }) {
   const otherStages = item.stages.filter(stage => stage !== columnStage);
-  const external = knownExternalAuthor(item);
   const verdict = columnReviewVerdict(item, columnStage);
 
   return (
@@ -90,11 +87,10 @@ export function WorkItemCardRows({
           ))}
         </div>
       )}
-      {(status.kind !== 'idle' || external || verdict) && (
+      {(status.kind !== 'idle' || verdict) && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <CardStatus status={status} />
           {verdict && <ReviewVerdictBadge verdict={verdict} />}
-          {external && <ExternalAuthorBadge className="ml-auto" />}
         </div>
       )}
       <CardActions
@@ -123,8 +119,24 @@ export function reviewVerdict(metadata: Record<string, unknown>): ReviewVerdict 
   return { approved: verdict === 'approve' && !outdated, outdated, label };
 }
 
+/**
+ * The last self-review verdict on a Work card, with the round count, shown while the
+ * branch moves between Building and Review before any change request exists.
+ */
+export function selfReviewVerdict(
+  metadata: Record<string, unknown>,
+): { approved: boolean; outdated: boolean; label: string } | undefined {
+  const verdict = metadata.selfReviewVerdict;
+  if (verdict !== 'approve' && verdict !== 'request changes') return undefined;
+  const rounds = typeof metadata.selfReviewRounds === 'number' ? metadata.selfReviewRounds : 0;
+  const label = `Self-review: ${verdict === 'approve' ? 'approved' : 'changes requested'}${rounds > 0 ? ` (round ${rounds})` : ''}`;
+  return { approved: verdict === 'approve', outdated: false, label };
+}
+
 export function columnReviewVerdict(item: WorkItem, columnStage: BoardStageId) {
-  return columnStage === 'review' ? reviewVerdict(item.metadata) : undefined;
+  if (columnStage === 'review') return reviewVerdict(item.metadata) ?? selfReviewVerdict(item.metadata);
+  if (columnStage === 'execute') return selfReviewVerdict(item.metadata);
+  return undefined;
 }
 
 export function ReviewVerdictBadge({ verdict }: { verdict: ReviewVerdict }) {
