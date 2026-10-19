@@ -17,7 +17,7 @@ export function createThreadQueryTests(
     const at = (seconds: number) => new Date(base.getTime() + seconds * 1000);
     const range = { from: at(10).toISOString(), to: at(20).toISOString() };
     const scope = { organizationId: 'org-a', resourceId: 'resource-a' };
-    const root = (traceId: string, seconds: number, extra = {}) =>
+    const root = (traceId: string, seconds: number, extra: Partial<CreateSpanRecord> = {}) =>
       makeSpan({
         ...scope,
         traceId,
@@ -197,7 +197,15 @@ export function createThreadQueryTests(
     it('keeps null and named organization identities separate during candidate expansion', async () => {
       await getStorage().batchCreateSpans({
         records: [
-          root('same', 15, { organizationId: null, threadId: 'same', input: 'null tenant' }),
+          root('same', 15, { organizationId: null, resourceId: null, threadId: 'same', input: 'null tenant' }),
+          root('same', 15.1, {
+            organizationId: null,
+            resourceId: null,
+            spanId: 'null-tenant-model',
+            parentSpanId: 'root-same',
+            spanType: SpanType.MODEL_GENERATION,
+            attributes: { model: 'gpt-4o', provider: 'openai' },
+          }),
           root('same', 16, { organizationId: 'org-a', threadId: 'same', input: 'named tenant' }),
         ],
       });
@@ -206,6 +214,9 @@ export function createThreadQueryTests(
       expect(rows.find(row => row.organizationId === null)).toMatchObject({
         traceCount: 1,
         inputPreview: 'null tenant',
+        resourceId: null,
+        model: 'gpt-4o',
+        provider: 'openai',
       });
       expect(rows.find(row => row.organizationId === 'org-a')).toMatchObject({
         traceCount: 1,
