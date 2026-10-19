@@ -63,6 +63,13 @@ const liftClass = cn(
   hoverTransition,
 );
 
+const enterClass = cn(
+  'opacity-0 group-focus-within/billing-illustration:opacity-100 group-hover/billing-illustration:opacity-100',
+  'motion-safe:[translate:0_-8px] motion-safe:group-focus-within/billing-illustration:[translate:0_0] motion-safe:group-hover/billing-illustration:[translate:0_0]',
+  'motion-safe:transition-[opacity,translate]',
+  hoverTransition,
+);
+
 const countIdle = (paths: BillingArtPaths) => paths.filter(([stroke]) => stroke === 'idle').length;
 
 function ArtPaths({ paths, dashed, firstIdle }: { paths: BillingArtPaths; dashed?: boolean; firstIdle: number }) {
@@ -81,7 +88,11 @@ function ArtPaths({ paths, dashed, firstIdle }: { paths: BillingArtPaths; dashed
 
 export function BillingIllustration({ name, tone = 'ink', className, ...props }: BillingIllustrationProps) {
   const maskId = `billing-illustration-${useId().replace(/[^\w-]/g, '')}`;
-  const { viewBox, paths, lifts = [], dashed } = artByName[name];
+  const { viewBox, paths, lifts = [], enters = [], dashed } = artByName[name];
+  const parts = [
+    ...lifts.map((part, index) => ({ part, className: liftClass, delay: index * staggerMs })),
+    ...enters.map(part => ({ part, className: enterClass, delay: 0 })),
+  ];
   const [x, y, width, height] = viewBox;
 
   return (
@@ -96,12 +107,14 @@ export function BillingIllustration({ name, tone = 'ink', className, ...props }:
       <mask id={maskId}>
         <g strokeWidth={1} strokeLinecap="round" strokeLinejoin="round">
           <ArtPaths paths={paths} dashed={dashed} firstIdle={0} />
-          {lifts.map((part, index) => (
-            <g key={index} className={liftClass} style={{ transitionDelay: `${index * staggerMs}ms` }}>
+          {parts.map(({ part, className, delay }, index) => (
+            <g key={index} className={className} style={{ transitionDelay: `${delay}ms` }}>
               <ArtPaths
                 paths={part}
                 dashed={dashed}
-                firstIdle={countIdle(paths) + lifts.slice(0, index).reduce((sum, lift) => sum + countIdle(lift), 0)}
+                firstIdle={
+                  countIdle(paths) + parts.slice(0, index).reduce((sum, earlier) => sum + countIdle(earlier.part), 0)
+                }
               />
             </g>
           ))}
