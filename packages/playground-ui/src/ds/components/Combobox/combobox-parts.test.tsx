@@ -3,7 +3,8 @@
 import '@/test/inert-resize-observer';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
+import { createRef, useState } from 'react';
+import type { RefObject } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Field, FieldLabel } from '../Field';
@@ -137,10 +138,12 @@ function ChipsField({
   initial,
   disabled,
   onValueChange,
+  fieldRef,
 }: {
   initial: Provider[];
   disabled?: boolean;
   onValueChange?: (value: Provider[]) => void;
+  fieldRef?: RefObject<HTMLDivElement | null>;
 }) {
   const [value, setValue] = useState(initial);
   return (
@@ -155,7 +158,7 @@ function ChipsField({
       }}
       autoHighlight
     >
-      <ComboboxChips>
+      <ComboboxChips ref={fieldRef} aria-label="Picked providers">
         <ComboboxValue>
           {(items: Provider[]) => (
             <>
@@ -362,6 +365,19 @@ describe('Combobox parts', () => {
 
       expect(chipNames()).toEqual(['Remove OpenAI']);
       expect(chipsInput().disabled).toBe(true);
+    });
+
+    it('names the chips toolbar with its aria-label', () => {
+      render(<ChipsField initial={[openai]} />);
+
+      expect(screen.getByRole('toolbar', { name: 'Picked providers' }).contains(chipsInput())).toBe(true);
+    });
+
+    it("hands the caller's ref the whole field", () => {
+      const fieldRef = createRef<HTMLDivElement>();
+      render(<ChipsField initial={[openai]} fieldRef={fieldRef} />);
+
+      expect(fieldRef.current?.contains(screen.getByRole('toolbar', { name: 'Picked providers' }))).toBe(true);
     });
   });
 

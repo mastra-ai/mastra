@@ -15,6 +15,7 @@ import { menuLabelClass, menuSeparatorClass } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import type { PortalContainer } from '@/ds/primitives/portal-container';
+import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
 /**
@@ -387,7 +388,7 @@ function ComboboxSeparator({ className, ...props }: BaseCombobox.Separator.Props
  * inside their own area so the chevron keeps its place on the first row. While the field is one
  * line it keeps the pill shape of every other field; once chips wrap it takes the Textarea corner.
  */
-function ComboboxChips({ className, children, ...props }: BaseCombobox.InputGroup.Props) {
+function ComboboxChips({ className, children, ref, 'aria-label': ariaLabel, ...props }: BaseCombobox.InputGroup.Props) {
   const fieldRef = React.useRef<HTMLDivElement>(null);
   const [multiline, setMultiline] = React.useState(false);
 
@@ -406,14 +407,17 @@ function ComboboxChips({ className, children, ...props }: BaseCombobox.InputGrou
   // Chips inside an InputGroup, like Base UI's multi-select example: the popup anchors to the group.
   return (
     <BaseCombobox.InputGroup
-      ref={fieldRef}
+      ref={mergeRefs(fieldRef, ref)}
       data-slot="combobox-chips"
       data-multiline={multiline ? '' : undefined}
       style={chipsFieldStyle}
       className={cn(fieldClass(), 'h-auto min-h-control-md items-start data-multiline:rounded-xl', className)}
       {...props}
     >
-      <BaseCombobox.Chips className="flex min-w-0 flex-1 flex-wrap gap-[3px]">{children}</BaseCombobox.Chips>
+      {/* The label names the chips toolbar, as it did when Chips was the outer element. */}
+      <BaseCombobox.Chips aria-label={ariaLabel} className="flex min-w-0 flex-1 flex-wrap gap-[3px]">
+        {children}
+      </BaseCombobox.Chips>
       {/* Same height as a chip, so the chevron centers on the first row. */}
       <span className="flex h-5.5 shrink-0 items-center">
         <ComboboxFieldTrigger />
