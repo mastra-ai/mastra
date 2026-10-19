@@ -1250,19 +1250,23 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       if (serverOnError) {
         return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
+      const explicitStatus = getExplicitErrorStatus(err);
+      // Log everything except 4xx client conditions, the same rule built-in routes use,
+      // so server faults stay visible even when the client gets a meaningful status.
+      const isClientError = explicitStatus !== undefined && explicitStatus >= 400 && explicitStatus < 500;
+      if (!isClientError) {
+        this.mastra.getLogger()?.error(`Custom route handler failed: ${c.req.method} ${c.req.path}`, {
+          method: c.req.method,
+          path: c.req.path,
+          error: err instanceof Error ? (err.stack ?? err.message) : String(err),
+        });
+      }
       // An error thrown with an HTTP status (Mastra's or Hono's HTTPException) is
       // deliberate: keep its status, message and problem.
-      if (getExplicitErrorStatus(err) !== undefined) {
+      if (explicitStatus !== undefined) {
         const { status, body } = formatErrorResponse(err);
         return c.json(body, status as ContentfulStatusCode);
       }
-      // Log before responding — otherwise the error is invisible on the server
-      // and the client only ever sees an opaque 500.
-      this.mastra.getLogger()?.error(`Custom route handler failed: ${c.req.method} ${c.req.path}`, {
-        method: c.req.method,
-        path: c.req.path,
-        error: err instanceof Error ? (err.stack ?? err.message) : String(err),
-      });
       return c.json({ error: 'Internal Server Error', problem: { code: SERVER_ERROR_CODES.UNEXPECTED_ERROR } }, 500);
     });
 

@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import ts from 'typescript-classic';
 import { describe, expect, it } from 'vitest';
 import { SERVER_ERROR_CODES, isServerErrorCode, isServerProblem } from './index';
 
@@ -75,20 +76,37 @@ describe('isServerProblem', () => {
   });
 });
 
-/** Returns the full text of each `<callee>(...)` call in `source`. */
-function findCalls(source: string, callee: string): string[] {
-  const calls: string[] = [];
-  for (let start = source.indexOf(callee); start !== -1; start = source.indexOf(callee, start + 1)) {
-    let depth = 0;
-    let end = start + callee.length - 1;
-    do {
-      if (source[end] === '(') depth++;
-      if (source[end] === ')') depth--;
-      end++;
-    } while (depth > 0 && end < source.length);
-    calls.push(source.slice(start, end));
-  }
-  return calls;
+/** Whether `node` is an object literal with its own top-level `code` property. */
+function hasCodeProperty(node: ts.Expression | undefined): boolean {
+  return (
+    !!node &&
+    ts.isObjectLiteralExpression(node) &&
+    node.properties.some(
+      property =>
+        (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)) &&
+        property.name.getText() === 'code',
+    )
+  );
+}
+
+/** Returns each `new HTTPException(...)` and `handleError(...)` call whose options carry no `code`. */
+function findUncodedCalls(fileName: string, source: string): string[] {
+  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
+  const uncoded: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isNewExpression(node) && node.expression.getText() === 'HTTPException') {
+      if (!hasCodeProperty(node.arguments?.[1])) uncoded.push(node.getText());
+    }
+    if (ts.isCallExpression(node) && node.expression.getText() === 'handleError') {
+      const fallback = node.arguments[1];
+      // A wrapper forwarding a `HandleErrorFallback` already has a `code` required by its type.
+      const forwardsTypedFallback = !!fallback && ts.isIdentifier(fallback) && fallback.text === 'fallback';
+      if (!forwardsTypedFallback && !hasCodeProperty(fallback)) uncoded.push(node.getText());
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return uncoded;
 }
 
 describe('built-in server code', () => {
@@ -100,11 +118,24 @@ describe('built-in server code', () => {
 
   it('passes a business code to every HTTPException and handleError call', () => {
     const missing = sources.flatMap(({ file, source }) =>
-      [...findCalls(source, 'new HTTPException('), ...findCalls(source, 'handleError(')]
-        // Skip the definition and wrappers forwarding a `HandleErrorFallback`, whose `code` is required by its type.
-        .filter(call => !call.includes('code') && !/^handleError\(\w+(: unknown|, fallback\))/.test(call))
-        .map(call => `${file}: ${call.slice(0, 80)}`),
+      findUncodedCalls(file, source).map(call => `${file}: ${call.slice(0, 80)}`),
     );
     expect(missing).toEqual([]);
+  });
+
+  it('ignores parentheses in strings and `code` outside the options object', () => {
+    const source = `
+      new HTTPException(400, { message: 'bad )', code: SERVER_ERROR_CODES.AGENT_NOT_FOUND });
+      new HTTPException(400, { message: 'missing code' });
+      new HTTPException(400, { message: String({ code: 1 }) });
+      handleError(error, { message: 'oops (', code: SERVER_ERROR_CODES.AGENT_GET_FAILED });
+      handleError(error, 'error code');
+      handleError(error, fallback);
+    `;
+    expect(findUncodedCalls('sample.ts', source)).toEqual([
+      "new HTTPException(400, { message: 'missing code' })",
+      'new HTTPException(400, { message: String({ code: 1 }) })',
+      "handleError(error, 'error code')",
+    ]);
   });
 });

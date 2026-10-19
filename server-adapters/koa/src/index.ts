@@ -138,7 +138,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
             status = (err as any).details.status;
           }
         }
-        const { body } = formatErrorResponse(error);
+        // Format the original throwable so status or problem fields on non-Error values survive.
+        const { body } = formatErrorResponse(err);
         ctx.status = status;
         ctx.body = { ...body, error: error.message || 'Unknown error' };
 

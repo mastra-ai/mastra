@@ -336,6 +336,43 @@ describe('custom route forwarding', () => {
     expect(errorSpy.mock.calls[0]![1]).toMatchObject({ method: 'GET', path: '/explode' });
     expect(String((errorSpy.mock.calls[0]![1] as { error: string }).error)).toContain('kaboom');
   });
+
+  it.each([
+    { status: 500, logged: true },
+    { status: 503, logged: true },
+    { status: 401, logged: false },
+    { status: 404, logged: false },
+  ])('keeps a $status thrown with a status and logs it: $logged', async ({ status, logged }) => {
+    const mastra = new Mastra({
+      logger: false,
+      server: {
+        apiRoutes: [
+          {
+            path: '/provider',
+            method: 'GET',
+            handler: async () => {
+              throw Object.assign(new Error('provider failed'), { status });
+            },
+          },
+        ],
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+    const errorSpy = vi.spyOn(mastra.getLogger(), 'error');
+
+    await expect(adapter.buildCustomRouteHandlerForTest()).resolves.toBe(true);
+    const response = await adapter.handleCustomRouteRequestForTest('http://localhost/provider', 'GET', {}, undefined);
+
+    expect(response!.status).toBe(status);
+    await expect(response!.json()).resolves.toEqual({
+      error: 'provider failed',
+      problem: { code: 'UNCATEGORIZED_ERROR' },
+    });
+    expect(errorSpy).toHaveBeenCalledTimes(logged ? 1 : 0);
+    if (logged) {
+      expect(errorSpy.mock.calls[0]![0]).toContain('GET /provider');
+    }
+  });
 });
 
 describe('agent channel webhook diagnostics', () => {

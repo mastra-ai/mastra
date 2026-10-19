@@ -29,4 +29,4 @@ if (isServerProblem(body.problem) && body.problem.code === SERVER_ERROR_CODES.AG
 throw new HTTPException(404, { message: 'Agent not found', code: 'AGENT_NOT_FOUND', metadata: { agentId } });
 ```
 
-Errors thrown with an HTTP status but no code (for example Hono's `HTTPException`, or an error with a `status` property) get `UNCATEGORIZED_ERROR` and keep their status. `UNEXPECTED_ERROR` is reserved for errors without a status. Custom routes now keep the status of the errors they throw instead of always returning 500.
+Errors thrown with an HTTP status but no code (for example Hono's `HTTPException`, or an error with a `status` property) get `UNCATEGORIZED_ERROR` and keep their status. `UNEXPECTED_ERROR` is reserved for errors without a status. Custom routes now keep the status of the errors they throw instead of always returning 500. Server logs still record every custom-route error except 4xx client errors.
