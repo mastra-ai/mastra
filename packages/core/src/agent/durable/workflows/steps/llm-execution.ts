@@ -1706,7 +1706,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   if (effectiveOutputProcessors.length > 0) {
                     try {
                       await getToolResultRunner().runProcessToolResult({
-                        steps: (inputData as any).accumulatedSteps ?? [],
+                        steps: expandDurableSteps((inputData as any).accumulatedSteps ?? []),
                         messages: messageList.get.all.db(),
                         messageList,
                         stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,

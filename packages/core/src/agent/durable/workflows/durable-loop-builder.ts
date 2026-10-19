@@ -1011,6 +1011,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
             const logger = mastra?.getLogger?.();
 
+            const steps = expandDurableSteps(state.accumulatedSteps);
+
             // Extract final text from last step
             const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
             let finalText = lastStep?.text;
@@ -1029,7 +1031,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 text: finalText ?? '',
                 usage: state.accumulatedUsage,
                 finishReason: state.lastStepResult?.reason ?? 'unknown',
-                steps: state.accumulatedSteps,
+                steps,
               },
             });
             if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
@@ -1066,7 +1068,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               output: {
                 text: finalText,
                 usage: state.accumulatedUsage,
-                steps: state.accumulatedSteps,
+                steps,
               },
               state: state.state,
             };
