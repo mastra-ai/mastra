@@ -97,7 +97,8 @@ export function BoardListRow({
           >
             {cells.labels}
           </span>
-          <span className="flex shrink-0 items-center empty:hidden">{cells.status}</span>
+          {/* Shrinks (an error truncates) so a long status never spills over the title. */}
+          <span className="flex max-w-80 min-w-0 items-center empty:hidden">{cells.status}</span>
         </span>
         <span
           onClick={stopRowClick}

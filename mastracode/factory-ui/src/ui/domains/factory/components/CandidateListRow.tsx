@@ -57,7 +57,7 @@ export function CandidateListRow({
           </span>
         ),
         labels: <MetadataLabels metadata={candidate.metadata} />,
-        status: <CardStatus status={status} />,
+        status: <CardStatus status={status} compact />,
         action: actions,
       }}
     />
