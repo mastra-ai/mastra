@@ -535,14 +535,16 @@ export class ObservationalMemory {
    *
    * Pass `threadId`/`resourceId` to wait only for that conversation's work. An engine shared by
    * many busy threads may never be fully idle, so an unscoped wait can last indefinitely there.
+   * A scope without the id this engine keys work on (`resourceId` for resource scope, `threadId`
+   * for thread scope) can't be matched to its work, so it falls back to waiting for all work.
    *
    * Background cycles enqueue further background work (a buffered observation can
    * trigger a reflection, which runs nested agent streams), so this drains repeatedly
    * until nothing is left rather than joining a single snapshot.
    */
   async settled(scope?: { threadId?: string | null; resourceId?: string | null }): Promise<void> {
-    const lockKey =
-      scope?.threadId || scope?.resourceId ? this.buffering.getLockKey(scope.threadId, scope.resourceId) : undefined;
+    const keyedId = this.scope === 'resource' ? scope?.resourceId : scope?.threadId;
+    const lockKey = keyedId ? this.buffering.getLockKey(scope!.threadId, scope!.resourceId) : undefined;
     const pending = () =>
       [...this.pendingBackgroundWork].filter(([, key]) => lockKey === undefined || key === lockKey).map(([w]) => w);
     // Bounded so a pathologically self-retriggering cycle degrades to a warning

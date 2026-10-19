@@ -267,12 +267,21 @@ describe('ObservationalMemory.settled', () => {
     expect((await om.getRecord('obs', 'r1'))?.isBufferingObservation).toBe(false);
   });
 
-  it('treats a scope with no ids as unscoped', async () => {
-    const om = createOm();
+  it.each([
+    ['no ids', 'thread', {}],
+    ['only resourceId on a thread-scoped engine', 'thread', { resourceId: 'r' }],
+    ['only threadId on a resource-scoped engine', 'resource', { threadId: 't' }],
+  ] as const)('waits for all work when the scope has %s', async (_label, engineScope, scope) => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: engineScope,
+      observation: { model: createNoopModel('mock-observer'), messageTokens: 1000, bufferTokens: false },
+      reflection: { model: createNoopModel('mock-reflector'), observationTokens: 40000 },
+    });
     const gate = deferred();
-    void om.trackBackgroundWork(gate.promise, om.buffering.getLockKey('t', 'r'));
+    void om.trackBackgroundWork(gate.promise, { threadId: 't', resourceId: 'r' });
 
-    const settled = om.settled({});
+    const settled = om.settled(scope);
     expect(await isPending(settled)).toBe(true);
     gate.resolve();
     await settled;
