@@ -20,9 +20,11 @@ export function handleError(error: unknown, fallback: { message: string; code: S
   });
 }
 
+// An HTTP exception without a business code (for example Hono's, thrown by a custom route)
+// was thrown on purpose, so it is uncategorized rather than unexpected.
 function getProblem(err: Error): ServerProblem {
   const problem = (err as { problem?: unknown }).problem;
-  return isServerProblem(problem) ? problem : { code: SERVER_ERROR_CODES.UNEXPECTED_ERROR };
+  return isServerProblem(problem) ? problem : { code: SERVER_ERROR_CODES.UNCATEGORIZED_ERROR };
 }
 
 export function errorHandler(err: Error, c: Context, isDev?: boolean): Response {

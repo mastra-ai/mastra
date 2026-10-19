@@ -1354,6 +1354,35 @@ describe('Hono Server Adapter', () => {
       expect(data).toEqual({ message: 'Hello from custom route!' });
     });
 
+    it('returns ROUTE_NOT_FOUND when no custom route handler matches', async () => {
+      const customRoutes = [
+        registerApiRoute('/custom/missing', {
+          method: 'GET',
+          // No handler is produced, so the framework matches the path but no Mastra handler does.
+          createHandler: async () => undefined as any,
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra, customApiRoutes: customRoutes });
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/custom/missing?x=1`);
+
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({
+        error: 'Not Found',
+        problem: { code: 'ROUTE_NOT_FOUND', metadata: { method: 'GET', path: '/custom/missing' } },
+      });
+    });
+
     it('should register custom API routes with POST method', async () => {
       const customRoutes = [
         registerApiRoute('/echo', {

@@ -14,7 +14,7 @@ import {
   getFGAProvider,
   ensureProblem,
   formatErrorResponse,
-  getCustomHTTPExceptionResponse,
+  getCustomHTTPExceptionResponseWithProblem,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -693,7 +693,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               method: route.method,
             });
           }
-          const customResponse = await getCustomHTTPExceptionResponse(error);
+          const customResponse = await getCustomHTTPExceptionResponseWithProblem(error);
           if (customResponse) {
             return customResponse;
           }
@@ -830,7 +830,16 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           executionCtx,
         );
         if (!response) {
-          return c.json({ error: 'Not Found' }, 404);
+          return c.json(
+            {
+              error: 'Not Found',
+              problem: {
+                code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
+                metadata: { method: c.req.method, path: c.req.path },
+              },
+            },
+            404,
+          );
         }
         return response;
       };

@@ -6,6 +6,7 @@ import { Agent } from '@mastra/core/agent';
 import type { IFGAProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
+import { HTTPException as HonoHTTPException } from 'hono/http-exception';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import { GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE } from '../handlers/agents';
@@ -13,7 +14,9 @@ import { HTTPException } from '../http-exception';
 import { createRoute } from './routes/route-builder';
 import {
   MastraServer,
+  formatErrorResponse,
   getCustomHTTPExceptionResponse,
+  getCustomHTTPExceptionResponseWithProblem,
   getFGAProvider,
   MASTRA_AUTH_MODE_KEY,
   normalizeQueryParams,
@@ -1347,6 +1350,65 @@ describe('registerUserMiddleware default implementation', () => {
 });
 
 describe('getCustomHTTPExceptionResponse', () => {
+  it('returns the attached response synchronously and unchanged', async () => {
+    const error = new HTTPException(409, {
+      code: 'TRACE_QUERY_CURSOR_CONFLICT',
+      res: Response.json({ message: 'no problem here' }, { headers: { 'X-Trace-Error': 'cursor' } }),
+    });
+
+    const response = getCustomHTTPExceptionResponse(error);
+
+    expect(response).toBeInstanceOf(Response);
+    expect(response?.status).toBe(409);
+    expect(response?.headers.get('x-trace-error')).toBe('cursor');
+    await expect(response?.json()).resolves.toEqual({ message: 'no problem here' });
+  });
+
+  it('returns undefined for message-only HTTP exceptions', () => {
+    expect(getCustomHTTPExceptionResponse(new HTTPException(404, { message: 'Not found' }))).toBeUndefined();
+  });
+});
+
+describe('formatErrorResponse', () => {
+  it('keeps the business code of a Mastra HTTPException', () => {
+    const error = new HTTPException(404, { message: 'nope', code: 'AGENT_NOT_FOUND', metadata: { agentId: 'a' } });
+    expect(formatErrorResponse(error)).toEqual({
+      status: 404,
+      body: { error: 'nope', problem: { code: 'AGENT_NOT_FOUND', metadata: { agentId: 'a' } } },
+    });
+  });
+
+  it('uses UNCATEGORIZED_ERROR for a Mastra HTTPException thrown without a code', () => {
+    expect(formatErrorResponse(new HTTPException(403, { message: 'Forbidden' }))).toEqual({
+      status: 403,
+      body: { error: 'Forbidden', problem: { code: 'UNCATEGORIZED_ERROR' } },
+    });
+  });
+
+  it('uses UNCATEGORIZED_ERROR for a Hono HTTPException', () => {
+    expect(formatErrorResponse(new HonoHTTPException(404, { message: 'Missing' }))).toEqual({
+      status: 404,
+      body: { error: 'Missing', problem: { code: 'UNCATEGORIZED_ERROR' } },
+    });
+  });
+
+  it('uses UNCATEGORIZED_ERROR for an error carrying a status', () => {
+    const error = Object.assign(new Error('Teapot'), { status: 418 });
+    expect(formatErrorResponse(error)).toEqual({
+      status: 418,
+      body: { error: 'Teapot', problem: { code: 'UNCATEGORIZED_ERROR' } },
+    });
+  });
+
+  it('uses UNEXPECTED_ERROR only for an error without a status', () => {
+    expect(formatErrorResponse(new Error('boom'))).toEqual({
+      status: 500,
+      body: { error: 'boom', problem: { code: 'UNEXPECTED_ERROR' } },
+    });
+  });
+});
+
+describe('getCustomHTTPExceptionResponseWithProblem', () => {
   it('adds the exception problem to an attached JSON response that has none', async () => {
     const error = new HTTPException(409, {
       code: 'TRACE_QUERY_CURSOR_CONFLICT',
@@ -1357,7 +1419,7 @@ describe('getCustomHTTPExceptionResponse', () => {
       ),
     });
 
-    const response = await getCustomHTTPExceptionResponse(error);
+    const response = await getCustomHTTPExceptionResponseWithProblem(error);
 
     expect(response?.status).toBe(409);
     expect(response?.headers.get('content-type')).toContain('application/json');
@@ -1376,7 +1438,7 @@ describe('getCustomHTTPExceptionResponse', () => {
       res: Response.json(body),
     });
 
-    const response = await getCustomHTTPExceptionResponse(error);
+    const response = await getCustomHTTPExceptionResponseWithProblem(error);
 
     await expect(response?.json()).resolves.toEqual(body);
   });
@@ -1387,7 +1449,7 @@ describe('getCustomHTTPExceptionResponse', () => {
       res: Response.json({ error: 'Bad query', problem: { code: 'NOT_IN_CATALOG' } }),
     });
 
-    const response = await getCustomHTTPExceptionResponse(error);
+    const response = await getCustomHTTPExceptionResponseWithProblem(error);
 
     await expect(response?.json()).resolves.toEqual({
       error: 'Bad query',
@@ -1402,7 +1464,7 @@ describe('getCustomHTTPExceptionResponse', () => {
       res: Response.json(['not', 'an', 'object']),
     });
 
-    const response = await getCustomHTTPExceptionResponse(error);
+    const response = await getCustomHTTPExceptionResponseWithProblem(error);
 
     await expect(response?.json()).resolves.toEqual({
       error: 'Bad query',
@@ -1418,7 +1480,7 @@ describe('getCustomHTTPExceptionResponse', () => {
       }),
     });
 
-    const response = await getCustomHTTPExceptionResponse(error);
+    const response = await getCustomHTTPExceptionResponseWithProblem(error);
 
     expect(response?.status).toBe(418);
     expect(response?.headers.get('content-type')).toBe('text/custom');
@@ -1428,7 +1490,9 @@ describe('getCustomHTTPExceptionResponse', () => {
 
   it('ignores message-only HTTP exceptions', async () => {
     await expect(
-      getCustomHTTPExceptionResponse(new HTTPException(404, { message: 'Not found', code: 'AGENT_NOT_FOUND' })),
+      getCustomHTTPExceptionResponseWithProblem(
+        new HTTPException(404, { message: 'Not found', code: 'AGENT_NOT_FOUND' }),
+      ),
     ).resolves.toBeUndefined();
   });
 
@@ -1436,7 +1500,7 @@ describe('getCustomHTTPExceptionResponse', () => {
     { status: 409, res: Response.json({ code: 'NOT_TRUSTED' }) },
     { status: 409, getResponse: () => Response.json({ code: 'NOT_TRUSTED' }) },
   ])('ignores non-HTTPException values', async error => {
-    await expect(getCustomHTTPExceptionResponse(error)).resolves.toBeUndefined();
+    await expect(getCustomHTTPExceptionResponseWithProblem(error)).resolves.toBeUndefined();
   });
 });
 

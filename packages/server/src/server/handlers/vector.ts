@@ -77,7 +77,14 @@ export async function upsertVectors({
   ids,
 }: VectorContext & UpsertRequest) {
   try {
-    if (!indexName || !vectors || !Array.isArray(vectors)) {
+    if (!indexName) {
+      throw new HTTPException(400, {
+        message: 'Invalid request index. indexName and vectors array are required.',
+        code: SERVER_ERROR_CODES.VECTOR_INDEX_NAME_REQUIRED,
+      });
+    }
+
+    if (!vectors || !Array.isArray(vectors)) {
       throw new HTTPException(400, {
         message: 'Invalid request index. indexName and vectors array are required.',
         code: SERVER_ERROR_CODES.VECTOR_VECTORS_REQUIRED,
@@ -101,7 +108,14 @@ export async function createIndex({
   metric,
 }: Pick<VectorContext, 'mastra' | 'vectorName'> & CreateIndexRequest) {
   try {
-    if (!indexName || typeof dimension !== 'number' || dimension <= 0) {
+    if (!indexName) {
+      throw new HTTPException(400, {
+        message: 'Invalid request index, indexName and positive dimension number are required.',
+        code: SERVER_ERROR_CODES.VECTOR_INDEX_NAME_REQUIRED,
+      });
+    }
+
+    if (typeof dimension !== 'number' || dimension <= 0) {
       throw new HTTPException(400, {
         message: 'Invalid request index, indexName and positive dimension number are required.',
         code: SERVER_ERROR_CODES.VECTOR_INDEX_DIMENSION_INVALID,
@@ -134,7 +148,14 @@ export async function queryVectors({
   includeVector,
 }: Pick<VectorContext, 'mastra' | 'vectorName'> & QueryRequest) {
   try {
-    if (!indexName || !queryVector || !Array.isArray(queryVector)) {
+    if (!indexName) {
+      throw new HTTPException(400, {
+        message: 'Invalid request query. indexName and queryVector array are required.',
+        code: SERVER_ERROR_CODES.VECTOR_INDEX_NAME_REQUIRED,
+      });
+    }
+
+    if (!queryVector || !Array.isArray(queryVector)) {
       throw new HTTPException(400, {
         message: 'Invalid request query. indexName and queryVector array are required.',
         code: SERVER_ERROR_CODES.VECTOR_QUERY_VECTOR_REQUIRED,
@@ -260,7 +281,14 @@ export const UPSERT_VECTORS_ROUTE = createRoute({
     try {
       const { indexName, vectors, metadata, ids } = params;
 
-      if (!indexName || !vectors || !Array.isArray(vectors)) {
+      if (!indexName) {
+        throw new HTTPException(400, {
+          message: 'Invalid request index. indexName and vectors array are required.',
+          code: SERVER_ERROR_CODES.VECTOR_INDEX_NAME_REQUIRED,
+        });
+      }
+
+      if (!vectors || !Array.isArray(vectors)) {
         throw new HTTPException(400, {
           message: 'Invalid request index. indexName and vectors array are required.',
           code: SERVER_ERROR_CODES.VECTOR_VECTORS_REQUIRED,
@@ -291,7 +319,14 @@ export const CREATE_INDEX_ROUTE = createRoute({
     try {
       const { indexName, dimension, metric } = params;
 
-      if (!indexName || typeof dimension !== 'number' || dimension <= 0) {
+      if (!indexName) {
+        throw new HTTPException(400, {
+          message: 'Invalid request index, indexName and positive dimension number are required.',
+          code: SERVER_ERROR_CODES.VECTOR_INDEX_NAME_REQUIRED,
+        });
+      }
+
+      if (typeof dimension !== 'number' || dimension <= 0) {
         throw new HTTPException(400, {
           message: 'Invalid request index, indexName and positive dimension number are required.',
           code: SERVER_ERROR_CODES.VECTOR_INDEX_DIMENSION_INVALID,
@@ -332,7 +367,14 @@ export const QUERY_VECTORS_ROUTE = createRoute({
     try {
       const { indexName, queryVector, topK, filter, includeVector } = params;
 
-      if (!indexName || !queryVector || !Array.isArray(queryVector)) {
+      if (!indexName) {
+        throw new HTTPException(400, {
+          message: 'Invalid request query. indexName and queryVector array are required.',
+          code: SERVER_ERROR_CODES.VECTOR_INDEX_NAME_REQUIRED,
+        });
+      }
+
+      if (!queryVector || !Array.isArray(queryVector)) {
         throw new HTTPException(400, {
           message: 'Invalid request query. indexName and queryVector array are required.',
           code: SERVER_ERROR_CODES.VECTOR_QUERY_VECTOR_REQUIRED,

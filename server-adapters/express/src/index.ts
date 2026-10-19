@@ -12,7 +12,7 @@ import {
   checkRouteFGA,
   ensureProblem,
   formatErrorResponse,
-  getCustomHTTPExceptionResponse,
+  getCustomHTTPExceptionResponseWithProblem,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -628,7 +628,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
               method: route.method,
             });
           }
-          const customResponse = await getCustomHTTPExceptionResponse(error);
+          const customResponse = await getCustomHTTPExceptionResponseWithProblem(error);
           if (customResponse) {
             customResponse.headers.forEach((value, name) => res.setHeader(name, value));
             res.status(customResponse.status).end(Buffer.from(await customResponse.arrayBuffer()));

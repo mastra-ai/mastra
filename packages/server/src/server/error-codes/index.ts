@@ -48,7 +48,10 @@ export const SERVER_ERROR_CODES = {
   SERVER_SHUTTING_DOWN: 'SERVER_SHUTTING_DOWN',
   STORAGE_NOT_CONFIGURED: 'STORAGE_NOT_CONFIGURED',
 
-  // Last resort: only for exceptions that escape every handler
+  // Fallbacks: the error was thrown on purpose with an HTTP status but no business code
+  // (for example from a custom route or middleware), so the status is meaningful.
+  UNCATEGORIZED_ERROR: 'UNCATEGORIZED_ERROR',
+  // Last resort: only for exceptions that escape every handler without a status
   UNEXPECTED_ERROR: 'UNEXPECTED_ERROR',
 
   // Auth

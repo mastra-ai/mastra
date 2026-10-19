@@ -5,6 +5,7 @@
  * This module provides the `HTTPException` class.
  */
 
+import { SERVER_ERROR_CODES } from './error-codes';
 import type { ServerErrorCode, ServerProblem } from './error-codes';
 
 type InfoStatusCode = 100 | 101 | 102 | 103;
@@ -68,7 +69,7 @@ export type StatusCode =
 
 /**
  * Options for creating an `HTTPException`.
- * @property code - Business error code from `SERVER_ERROR_CODES`, serialized as `problem.code`.
+ * @property code - Business error code from `SERVER_ERROR_CODES`, serialized as `problem.code`. Defaults to `UNCATEGORIZED_ERROR`.
  * @property metadata - Optional JSON-serializable details serialized as `problem.metadata`. Never put stack traces, raw causes or secrets here.
  * @property res - Optional response object to use.
  * @property message - Optional custom error message.
@@ -76,7 +77,7 @@ export type StatusCode =
  * @property stack - Optional stack trace for the error.
  */
 export type HTTPExceptionOptions = {
-  code: ServerErrorCode;
+  code?: ServerErrorCode;
   metadata?: Record<string, unknown>;
   res?: Response;
   message?: string;
@@ -117,15 +118,16 @@ export class HTTPException extends Error {
 
   /**
    * Creates an instance of `HTTPException`.
-   * @param status - HTTP status code for the exception.
+   * @param status - HTTP status code for the exception. Defaults to 500.
    * @param options - Additional options for the exception.
    */
-  constructor(status: StatusCode, options: HTTPExceptionOptions) {
-    super(options.message, { cause: options.cause });
-    this.res = options.res;
+  constructor(status: StatusCode = 500, options?: HTTPExceptionOptions) {
+    super(options?.message, { cause: options?.cause });
+    this.res = options?.res;
     this.status = status;
-    this.stack = options.stack || this.stack;
-    this.problem = options.metadata ? { code: options.code, metadata: options.metadata } : { code: options.code };
+    this.stack = options?.stack || this.stack;
+    const code = options?.code ?? SERVER_ERROR_CODES.UNCATEGORIZED_ERROR;
+    this.problem = options?.metadata ? { code, metadata: options.metadata } : { code };
   }
 
   /**

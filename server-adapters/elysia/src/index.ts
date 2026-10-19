@@ -11,7 +11,7 @@ import {
   checkRouteFGA,
   ensureProblem,
   formatErrorResponse,
-  getCustomHTTPExceptionResponse,
+  getCustomHTTPExceptionResponseWithProblem,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -787,7 +787,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
           method: route.method,
         });
 
-        const customResponse = await getCustomHTTPExceptionResponse(error);
+        const customResponse = await getCustomHTTPExceptionResponseWithProblem(error);
         if (customResponse) {
           return customResponse;
         }
@@ -906,7 +906,14 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         );
 
         if (!response) {
-          return new Response(JSON.stringify({ error: 'Not Found' }), {
+          const body = {
+            error: 'Not Found',
+            problem: {
+              code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
+              metadata: { method: ctx.request.method, path: new URL(ctx.request.url).pathname },
+            },
+          };
+          return new Response(JSON.stringify(body), {
             status: 404,
             headers: { 'Content-Type': 'application/json' },
           });

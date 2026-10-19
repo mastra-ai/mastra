@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { SERVER_ERROR_CODES, isServerErrorCode, isServerProblem } from './index';
 
@@ -70,5 +72,39 @@ describe('isServerProblem', () => {
   it('rejects non-objects', () => {
     expect(isServerProblem(null)).toBe(false);
     expect(isServerProblem('AGENT_NOT_FOUND')).toBe(false);
+  });
+});
+
+/** Returns the full text of each `<callee>(...)` call in `source`. */
+function findCalls(source: string, callee: string): string[] {
+  const calls: string[] = [];
+  for (let start = source.indexOf(callee); start !== -1; start = source.indexOf(callee, start + 1)) {
+    let depth = 0;
+    let end = start + callee.length - 1;
+    do {
+      if (source[end] === '(') depth++;
+      if (source[end] === ')') depth--;
+      end++;
+    } while (depth > 0 && end < source.length);
+    calls.push(source.slice(start, end));
+  }
+  return calls;
+}
+
+describe('built-in server code', () => {
+  // `code` is optional for compatibility with custom routes, so built-in throw sites are checked here instead.
+  const serverDir = join(__dirname, '..');
+  const sources = readdirSync(serverDir, { recursive: true, encoding: 'utf8' })
+    .filter(file => file.endsWith('.ts') && !file.endsWith('.d.ts') && !file.includes('.test.'))
+    .map(file => ({ file, source: readFileSync(join(serverDir, file), 'utf8') }));
+
+  it('passes a business code to every HTTPException and handleError call', () => {
+    const missing = sources.flatMap(({ file, source }) =>
+      [...findCalls(source, 'new HTTPException('), ...findCalls(source, 'handleError(')]
+        // Skip the definition and wrappers forwarding a `HandleErrorFallback`, whose `code` is required by its type.
+        .filter(call => !call.includes('code') && !/^handleError\(\w+(: unknown|, fallback\))/.test(call))
+        .map(call => `${file}: ${call.slice(0, 80)}`),
+    );
+    expect(missing).toEqual([]);
   });
 });

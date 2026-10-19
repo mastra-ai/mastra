@@ -8,6 +8,7 @@ import { MastraServerBase } from '@mastra/core/server';
 import type { ApiRoute, HttpLoggingConfig, ValidationErrorContext, ValidationErrorResponse } from '@mastra/core/server';
 import type { ExecutionContext } from 'hono';
 import { Hono } from 'hono';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { ZodError } from 'zod/v4';
 import { z } from 'zod/v4';
 
@@ -53,17 +54,25 @@ export type { MastraAuthMode } from '../constants';
 export { WorkflowRegistry, normalizeRoutePath } from '../utils';
 export { HTTPException };
 
-/**
- * Returns the custom `res` attached to an `HTTPException`. JSON bodies that
- * don't carry a valid `problem` get the exception's own problem added, so
- * every JSON error body keeps the `problem` contract. Other bodies are sent as is.
- */
-export async function getCustomHTTPExceptionResponse(error: unknown): Promise<Response | undefined> {
+/** Returns the custom `res` attached to an `HTTPException`, unchanged. */
+export function getCustomHTTPExceptionResponse(error: unknown): Response | undefined {
   if (!(error instanceof HTTPException) || !error.res) {
     return undefined;
   }
 
-  const response = error.getResponse();
+  return error.getResponse();
+}
+
+/**
+ * Like `getCustomHTTPExceptionResponse`, but JSON bodies that don't carry a
+ * valid `problem` get the exception's own problem added, so every JSON error
+ * body keeps the `problem` contract. Other bodies are sent as is.
+ */
+export async function getCustomHTTPExceptionResponseWithProblem(error: unknown): Promise<Response | undefined> {
+  const response = getCustomHTTPExceptionResponse(error);
+  if (!response || !(error instanceof HTTPException)) {
+    return response;
+  }
   if (!response.headers.get('content-type')?.toLowerCase().includes('application/json')) {
     return response;
   }
@@ -109,7 +118,7 @@ function getSafeFailingItems(error: unknown): unknown[] | undefined {
   return undefined;
 }
 
-function getErrorStatus(error: unknown): number {
+function getExplicitErrorStatus(error: unknown): number | undefined {
   if (error && typeof error === 'object') {
     const status = (error as { status?: unknown }).status;
     if (typeof status === 'number') return status;
@@ -119,17 +128,19 @@ function getErrorStatus(error: unknown): number {
       if (typeof detailsStatus === 'number') return detailsStatus;
     }
   }
-  return 500;
+  return undefined;
 }
 
 /**
  * Serializes an error thrown by a route handler into the status and JSON body
  * every adapter returns. The body always carries a `problem` with a catalog
- * code; `UNEXPECTED_ERROR` is only used for errors that escaped every handler
- * without a business code.
+ * code. Errors without a business code get `UNCATEGORIZED_ERROR` when they
+ * carry an HTTP status (thrown on purpose, for example by a custom route) and
+ * `UNEXPECTED_ERROR` otherwise.
  */
 export function formatErrorResponse(error: unknown): { status: number; body: ErrorResponseBody } {
-  const status = getErrorStatus(error);
+  const explicitStatus = getExplicitErrorStatus(error);
+  const status = explicitStatus ?? 500;
   const message = error instanceof Error ? error.message : 'Unknown error';
 
   let problem: ServerProblem;
@@ -139,6 +150,8 @@ export function formatErrorResponse(error: unknown): { status: number; body: Err
     problem = (error as { problem: ServerProblem }).problem;
   } else if (error && typeof error === 'object' && isServerErrorCode((error as { id?: unknown }).id)) {
     problem = { code: (error as { id: ServerErrorCode }).id };
+  } else if (explicitStatus !== undefined) {
+    problem = { code: SERVER_ERROR_CODES.UNCATEGORIZED_ERROR };
   } else {
     problem = { code: SERVER_ERROR_CODES.UNEXPECTED_ERROR };
   }
@@ -1236,6 +1249,12 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     app.onError((err, c) => {
       if (serverOnError) {
         return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
+      }
+      // An error thrown with an HTTP status (Mastra's or Hono's HTTPException) is
+      // deliberate: keep its status, message and problem.
+      if (getExplicitErrorStatus(err) !== undefined) {
+        const { status, body } = formatErrorResponse(err);
+        return c.json(body, status as ContentfulStatusCode);
       }
       // Log before responding — otherwise the error is invisible on the server
       // and the client only ever sees an opaque 500.

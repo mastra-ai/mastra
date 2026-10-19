@@ -167,7 +167,21 @@ function mergeMetadata(...parts: Array<Record<string, unknown> | undefined>): Re
 }
 
 // Helper to handle errors consistently
-export function handleError(error: unknown, fallback: HandleErrorFallback): never {
+/**
+ * Rethrows `error` as an `HTTPException` carrying a business `problem`.
+ * A string fallback is only the message: the code then depends on the error,
+ * `UNCATEGORIZED_ERROR` when it carries an HTTP status and `UNEXPECTED_ERROR` otherwise.
+ */
+export function handleError(error: unknown, fallbackOrMessage: HandleErrorFallback | string): never {
+  const fallback: Omit<HandleErrorFallback, 'code'> & { code?: ServerErrorCode } =
+    typeof fallbackOrMessage === 'string' ? { message: fallbackOrMessage } : fallbackOrMessage;
+  const resolveCode = (hasStatus: boolean): ServerErrorCode => {
+    const errorId = getErrorId(error);
+    if (isServerErrorCode(errorId)) return errorId;
+    if (fallback.code) return fallback.code;
+    return hasStatus ? SERVER_ERROR_CODES.UNCATEGORIZED_ERROR : SERVER_ERROR_CODES.UNEXPECTED_ERROR;
+  };
+
   // Already carries its own problem; rethrow as-is so nested handlers don't overwrite it.
   if (error instanceof HTTPException) {
     throw error;
@@ -214,7 +228,7 @@ export function handleError(error: unknown, fallback: HandleErrorFallback): neve
       message: error.message,
       stack: error.stack,
       cause: error,
-      code: isServerErrorCode(errorId) ? errorId : fallback.code,
+      code: resolveCode(true),
       metadata: mergeMetadata(fallback.metadata, getErrorDetails(error)),
     });
   }
@@ -259,14 +273,14 @@ export function handleError(error: unknown, fallback: HandleErrorFallback): neve
 
   const apiError = error as ApiError;
 
-  const apiErrorStatus = apiError.status || apiError.details?.status || 500;
+  const explicitStatus = apiError.status || apiError.details?.status;
 
-  throw new HTTPException(apiErrorStatus as StatusCode, {
+  throw new HTTPException((explicitStatus || 500) as StatusCode, {
     message: apiError.message || fallback.message,
     stack: apiError.stack,
     cause: apiError.cause,
     // An error whose id is already a catalog code keeps it; anything else gets the operation code.
-    code: isServerErrorCode(errorId) ? errorId : fallback.code,
+    code: resolveCode(Boolean(explicitStatus)),
     metadata: fallback.metadata,
   });
 }

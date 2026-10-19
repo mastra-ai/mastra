@@ -10,7 +10,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   formatErrorResponse,
-  getCustomHTTPExceptionResponse,
+  getCustomHTTPExceptionResponseWithProblem,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -722,7 +722,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             method: route.method,
           });
         }
-        const customResponse = await getCustomHTTPExceptionResponse(error);
+        const customResponse = await getCustomHTTPExceptionResponseWithProblem(error);
         if (customResponse) {
           customResponse.headers.forEach((value, name) => reply.header(name, value));
           await reply.status(customResponse.status).send(Buffer.from(await customResponse.arrayBuffer()));
@@ -882,7 +882,13 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           request.abortSignal,
         );
         if (!response) {
-          reply.status(404).send({ error: 'Not Found' });
+          reply.status(404).send({
+            error: 'Not Found',
+            problem: {
+              code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
+              metadata: { method: request.method, path: request.url.split('?')[0] },
+            },
+          });
           return;
         }
         // Merge headers set by Fastify hooks/plugins (e.g. @fastify/cors) into

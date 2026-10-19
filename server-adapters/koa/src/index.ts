@@ -11,7 +11,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   formatErrorResponse,
-  getCustomHTTPExceptionResponse,
+  getCustomHTTPExceptionResponseWithProblem,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -541,7 +541,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         });
         (ctx as any)._mastraLoggedNotImplementedError = httpStatus === 501 ? error : undefined;
       }
-      const customResponse = await getCustomHTTPExceptionResponse(error);
+      const customResponse = await getCustomHTTPExceptionResponseWithProblem(error);
       if (customResponse) {
         ctx.status = customResponse.status;
         customResponse.headers.forEach((value, name) => ctx.set(name, value));

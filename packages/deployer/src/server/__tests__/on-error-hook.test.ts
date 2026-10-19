@@ -1,5 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
+import { HTTPException } from 'hono/http-exception';
 import { describe, it, expect } from 'vitest';
 import { createHonoServer } from '../index';
 
@@ -127,6 +128,29 @@ describe('onError hook integration tests', () => {
 
       // Should use default error format from errorHandler
       expect(result).toEqual({ error: 'Internal Server Error', problem: { code: 'UNEXPECTED_ERROR' } });
+    });
+
+    it('should return UNCATEGORIZED_ERROR for an HTTPException thrown without a code', async () => {
+      const mastra = new Mastra({
+        server: {
+          apiRoutes: [
+            registerApiRoute('/test/hono-http-exception', {
+              method: 'GET',
+              handler: () => {
+                throw new HTTPException(404, { message: 'Thing not found' });
+              },
+              requiresAuth: false,
+            }),
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra, { tools: {} });
+
+      const response = await app.request(new Request('http://localhost/test/hono-http-exception'));
+
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: 'Thing not found', problem: { code: 'UNCATEGORIZED_ERROR' } });
     });
 
     it('should return the business problem for an unknown agent', async () => {

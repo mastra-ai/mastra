@@ -3,7 +3,7 @@ import type { ServerProblem } from '@mastra/server/error-codes';
 import { formatZodError, isZodError } from '@mastra/server/handlers/error';
 import {
   formatErrorResponse,
-  getCustomHTTPExceptionResponse,
+  getCustomHTTPExceptionResponseWithProblem,
   HTTPException as MastraHTTPException,
 } from '@mastra/server/server-adapter';
 import { Catch, HttpException, HttpStatus, Logger } from '@nestjs/common';
@@ -53,7 +53,7 @@ export class MastraExceptionFilter implements ExceptionFilter {
       return;
     }
 
-    const customResponse = await getCustomHTTPExceptionResponse(exception);
+    const customResponse = await getCustomHTTPExceptionResponseWithProblem(exception);
     if (customResponse) {
       customResponse.headers.forEach((value, name) => {
         if (name.toLowerCase() !== 'set-cookie') {
@@ -101,13 +101,14 @@ export class MastraExceptionFilter implements ExceptionFilter {
 
   /**
    * Resolve the business problem for an error. Exceptions thrown by Mastra code carry their own
-   * problem; express body-parser failures are mapped by type; anything else is unexpected.
+   * problem; Nest exceptions without one were thrown on purpose and are uncategorized;
+   * express body-parser failures are mapped by type.
    */
   private resolveProblem(exception: unknown, normalized: NormalizedError): ServerProblem {
     if (exception instanceof HttpException) {
       const response = exception.getResponse();
       const problem = typeof response === 'object' && response !== null ? (response as any).problem : undefined;
-      return isServerProblem(problem) ? problem : { code: SERVER_ERROR_CODES.UNEXPECTED_ERROR };
+      return isServerProblem(problem) ? problem : { code: SERVER_ERROR_CODES.UNCATEGORIZED_ERROR };
     }
 
     if (isZodError(exception)) {

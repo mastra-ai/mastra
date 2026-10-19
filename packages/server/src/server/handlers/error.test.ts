@@ -349,4 +349,48 @@ describe('handleError', () => {
       expect(capture(err).problem).toEqual({ code: 'OBSERVABILITY_OPERATION_NOT_SUPPORTED' });
     });
   });
+
+  describe('string fallback (pre-catalog signature)', () => {
+    function capture(error: unknown, message: string): HTTPException {
+      try {
+        handleError(error, message);
+      } catch (e) {
+        return e as HTTPException;
+      }
+      throw new Error('handleError did not throw');
+    }
+
+    it('uses the string as the message and UNEXPECTED_ERROR for an error without status', () => {
+      const caught = capture({}, 'Error getting agent');
+      expect(caught.status).toBe(500);
+      expect(caught.message).toBe('Error getting agent');
+      expect(caught.problem).toEqual({ code: 'UNEXPECTED_ERROR' });
+    });
+
+    it('uses UNCATEGORIZED_ERROR for an error that carries a status', () => {
+      const caught = capture(Object.assign(new Error('nope'), { status: 403 }), 'Error getting agent');
+      expect(caught.status).toBe(403);
+      expect(caught.problem).toEqual({ code: 'UNCATEGORIZED_ERROR' });
+    });
+
+    it('keeps an error id that is already a catalog code', () => {
+      const err = Object.assign(new Error('missing'), { id: 'AGENT_NOT_FOUND', status: 404 });
+      expect(capture(err, 'Error getting agent').problem.code).toBe('AGENT_NOT_FOUND');
+    });
+  });
+});
+
+describe('HTTPException', () => {
+  it('defaults to status 500 and UNCATEGORIZED_ERROR without options', () => {
+    const error = new HTTPException();
+    expect(error.status).toBe(500);
+    expect(error.problem).toEqual({ code: 'UNCATEGORIZED_ERROR' });
+  });
+
+  it('defaults the code to UNCATEGORIZED_ERROR when only a message is given', () => {
+    const error = new HTTPException(404, { message: 'Not here' });
+    expect(error.status).toBe(404);
+    expect(error.message).toBe('Not here');
+    expect(error.problem).toEqual({ code: 'UNCATEGORIZED_ERROR' });
+  });
 });
