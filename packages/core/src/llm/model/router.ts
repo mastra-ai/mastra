@@ -135,7 +135,6 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
   private readonly instanceGatewayCache = createGatewayModelCache();
   private readonly hasCustomGateways: boolean;
   #lastStreamTransport: StreamTransport | undefined;
-  #apiProviderId: string | undefined;
   #manager: GatewayManager;
 
   constructor(config: ModelRouterModelId | OpenAICompatibleConfig, customGateways?: MastraModelGatewayInterface[]) {
@@ -286,7 +285,6 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
    * (e.g. a missing API key); the model call reports that error itself.
    */
   async resolveApiProviderId(): Promise<string | undefined> {
-    if (this.#apiProviderId) return this.#apiProviderId;
     try {
       const resolved = this.#manager.resolveModelId(this.config.routerId);
       const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
@@ -297,7 +295,6 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
         trackStreamTransport: false,
         ...resolved,
       });
-      this.#apiProviderId = model.provider;
       return model.provider;
     } catch {
       return undefined;

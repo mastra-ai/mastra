@@ -141,6 +141,37 @@ describeForAllEngines('AIMock loop scenario: input processor', engine => {
     expect(messages.filter(m => m.role === 'system')).toHaveLength(2);
   });
 
+  it('appends the JSON prompt instruction after all merged system text', async () => {
+    const llm = getMock();
+    const chatModel = createOpenAICompatible({
+      name: 'vllm',
+      apiKey: 'test',
+      baseURL: `${llm.url.replace(/\/+$/, '')}/v1`,
+    }).chatModel(SCENARIO_MODEL_ID);
+
+    const { requests } = await runLoopScenario({
+      engine,
+      llm,
+      model: chatModel,
+      prompt: 'hi',
+      instructions: ['AGENT_RULE: be helpful.', 'SECOND_RULE: be brief.'],
+      structuredOutput: {
+        schema: z.object({ answer: z.string() }),
+        jsonPromptInjection: 'system',
+        instructions: 'JSON_RULE',
+      },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: '{"answer":"ok"}' });
+      },
+    });
+
+    expect(requests).toHaveLength(1);
+    const messages = (requests[0]!.body?.messages ?? []) as Array<{ role: string; content: unknown }>;
+    expect(messages.filter(m => m.role === 'system')).toEqual([
+      { role: 'system', content: 'AGENT_RULE: be helpful.\n\nSECOND_RULE: be brief.\n\nJSON_RULE' },
+    ]);
+  });
+
   it('leaves Anthropic system blocks separate', async () => {
     const llm = getMock();
     // aimock normalizes Anthropic requests to chat format, so capture the raw wire body.

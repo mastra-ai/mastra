@@ -44,6 +44,37 @@ describe('resolveApiProviderId', () => {
     expect(await resolveApiProviderId(undefined)).toBeUndefined();
   });
 
+  it('resolves again when the gateway resolves a different model', async () => {
+    let apiKey = 'chat-key';
+    class SwitchingGateway extends MastraModelGateway {
+      readonly id = 'switching';
+      readonly name = 'switching';
+      fetchProviders(): Promise<Record<string, ProviderConfig>> {
+        return Promise.resolve({
+          switching: { name: 'Switching', models: ['m'], apiKeyEnvVar: [], gateway: 'switching' },
+        });
+      }
+      buildUrl(): undefined {
+        return undefined;
+      }
+      getApiKey(): Promise<string> {
+        return Promise.resolve(apiKey);
+      }
+      resolveLanguageModel(args: { apiKey: string }): GatewayLanguageModel {
+        const model = createMockModel({ mockText: 'x' }) as GatewayLanguageModel;
+        Object.defineProperty(model, 'provider', {
+          value: args.apiKey === 'chat-key' ? 'switching.chat' : 'switching.responses',
+        });
+        return model;
+      }
+    }
+    const router = new ModelRouterLanguageModel('switching/m', [new SwitchingGateway()]);
+
+    expect(await router.resolveApiProviderId()).toBe('switching.chat');
+    apiKey = 'responses-key';
+    expect(await router.resolveApiProviderId()).toBe('switching.responses');
+  });
+
   it('leaves the transport handle of the last stream in place', async () => {
     const close = vi.fn();
     class TestAzureGateway extends MastraModelGateway {
