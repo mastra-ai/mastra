@@ -53,7 +53,35 @@ export async function findWakeSession<TState>(
     );
   const owner = candidates.find(session => session.thread.getId() === threadId) ?? candidates.find(matchesScope);
   if (!owner) return FOREIGN_THREAD;
-  const scope = owner.getThreadScope();
-  const scoped = Object.keys(scope).every(key => metadata[key] !== undefined);
-  return { session: owner, scope: scoped ? threadScopeKey(scope) : undefined };
+  return { session: owner, scope: threadLeaseScope(owner, metadata) };
+}
+
+/**
+ * The dispatch lease scopes a session needs: its own, plus the open thread's
+ * when that thread was created in another project. A session with another
+ * project's thread open runs its wakes (`findWakeSession`), so it competes for
+ * that project's lease with the project's own processes, and only the holder
+ * delivers.
+ */
+export async function sessionLeaseScopes<TState>(session: Session<TState>): Promise<Array<string | undefined>> {
+  const own = threadScopeKey(session.getThreadScope());
+  const threadId = session.thread.getId();
+  if (!threadId) return [own];
+  const thread = await session.thread.getById({ threadId });
+  if (!thread || thread.resourceId !== session.identity.getResourceId()) return [own];
+  const open = threadLeaseScope(session, thread.metadata as Record<string, unknown> | undefined);
+  return open === undefined || open === own ? [own] : [own, open];
+}
+
+/**
+ * The lease scope covering a thread for `session`: the thread's own values for
+ * the session's scope keys, or unset when the thread lacks any of them.
+ */
+function threadLeaseScope<TState>(
+  session: Session<TState>,
+  metadata: Record<string, unknown> = {},
+): string | undefined {
+  const keys = Object.keys(session.getThreadScope());
+  if (!keys.every(key => metadata[key] !== undefined)) return undefined;
+  return threadScopeKey(Object.fromEntries(keys.map(key => [key, String(metadata[key])])));
 }

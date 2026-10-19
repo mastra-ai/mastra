@@ -150,7 +150,7 @@ import type { StorageResult } from './utils/storage-factory.js';
 import { createStorageMaintenance, DEFAULT_RETENTION, resolveLocalDbFiles } from './utils/storage-maintenance.js';
 import type { StorageMaintenance } from './utils/storage-maintenance.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
-import { FOREIGN_THREAD, findWakeSession, threadScopeKey } from './utils/wake-session.js';
+import { FOREIGN_THREAD, findWakeSession, sessionLeaseScopes } from './utils/wake-session.js';
 import type { WakeSession } from './utils/wake-session.js';
 import { registerWorkflowBuilderPrimitives } from './workflows/register-primitives.js';
 
@@ -315,16 +315,14 @@ export interface MastraCodeConfig {
    * Embedders may extend processing but cannot replace built-in safety and compatibility policy.
    */
   inputProcessors?:
-    | InputProcessor[]
-    | ((args: { requestContext: RequestContext }) => InputProcessor[] | Promise<InputProcessor[]>);
+    InputProcessor[] | ((args: { requestContext: RequestContext }) => InputProcessor[] | Promise<InputProcessor[]>);
   /**
    * Output processor instances appended after Mastra Code's built-in output processors,
    * or a per-request resolver. They run before the memory layers the Agent appends,
    * so changes they make to response messages are persisted.
    */
   outputProcessors?:
-    | OutputProcessor[]
-    | ((args: { requestContext: RequestContext }) => OutputProcessor[] | Promise<OutputProcessor[]>);
+    OutputProcessor[] | ((args: { requestContext: RequestContext }) => OutputProcessor[] | Promise<OutputProcessor[]>);
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
   /**
@@ -365,8 +363,7 @@ export interface MastraCodeConfig {
   createInitialThread?: boolean;
   /** Trusted host instructions resolved outside mutable session state. */
   hostInstructions?:
-    | string
-    | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
+    string | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
   /** Commit co-author identity included in coding-agent commit guidance. Unspecified fields use core defaults. */
   coAuthor?: { name?: string; email?: string };
   /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
@@ -918,11 +915,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       : undefined;
   const notificationDispatcher = createResourceNotificationDispatcher({
     getMastra: () => controller.getMastra(),
-    getSessionScopes: () =>
-      [...liveSessions].map(session => ({
-        resourceId: session.identity.getResourceId(),
-        scope: threadScopeKey(session.getThreadScope()),
-      })),
+    getSessionScopes: async () =>
+      (
+        await Promise.all(
+          [...liveSessions].map(async session => {
+            const resourceId = session.identity.getResourceId();
+            return (await sessionLeaseScopes(session)).map(scope => ({ resourceId, scope }));
+          }),
+        )
+      ).flat(),
     leases: ownsNotificationDispatch ? (ownSignalsPubSub ?? dispatchLeasePubSub)?.getLeaseProvider() : undefined,
     owner: `${ownerId}:${process.pid}:${randomUUID()}`,
     onError: error => console.warn('Notification dispatch failed:', error),
@@ -1273,8 +1274,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     model: withCredentialTenantPreparation(async ctx => {
       // A session's own level wins, so skip the host lookup (and its failure modes) when one is set.
       const controller = ctx.requestContext.get('controller') as
-        | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
-        | undefined;
+        AgentControllerRequestContext<{ thinkingLevel?: unknown }> | undefined;
       const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
       return getDynamicModel(ctx, config?.settingsPath, {
         modeless,

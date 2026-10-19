@@ -26,7 +26,7 @@ import { z } from 'zod';
 
 import { createResourceNotificationDispatcher, shouldHoldNotificationDelivery } from '../notification-dispatch.js';
 import { createSignalsPubSub, notificationDispatchLeaseKey } from '../signals-pubsub.js';
-import { FOREIGN_THREAD, findWakeSession, threadScopeKey } from '../wake-session.js';
+import { FOREIGN_THREAD, findWakeSession, sessionLeaseScopes, threadScopeKey } from '../wake-session.js';
 
 const AGENT_ID = 'code-agent';
 const USAGE = { inputTokens: { total: 1 }, outputTokens: { total: 1 } };
@@ -77,6 +77,7 @@ function createProject(
     withDispatch = false,
     projectPath,
     threadProjects = {},
+    openThreadId = null,
   }: {
     rootDir: string;
     resourceId: string;
@@ -88,6 +89,8 @@ function createProject(
     projectPath?: string;
     /** The project each thread of the resource was created in (its `projectPath` tag), shared by every process. */
     threadProjects?: Record<string, string>;
+    /** The thread this process's session has open, whatever project it was created in. */
+    openThreadId?: string | null;
   },
 ) {
   // This process's one live session, as Mastra Code's delivery policy sees it.
@@ -96,7 +99,7 @@ function createProject(
     identity: { getResourceId: () => resourceId },
     getThreadScope: () => (projectPath ? { projectPath } : {}),
     thread: {
-      getId: () => null,
+      getId: () => openThreadId,
       getById: async ({ threadId }: { threadId: string }) =>
         threadProjects[threadId]
           ? { id: threadId, resourceId, metadata: { projectPath: threadProjects[threadId] } }
@@ -153,7 +156,8 @@ function createProject(
   const pubsub = createSignalsPubSub(resourceId, { rootDir });
   const dispatcher = createResourceNotificationDispatcher({
     getMastra: () => mastra,
-    getSessionScopes: () => (sessionLive ? [{ resourceId, scope: threadScopeKey(session.getThreadScope()) }] : []),
+    getSessionScopes: async () =>
+      sessionLive ? (await sessionLeaseScopes(session)).map(scope => ({ resourceId, scope })) : [],
     leases: pubsub.getLeaseProvider(),
     owner: name,
     // Ticked by hand.
@@ -382,7 +386,7 @@ describe("each Mastra Code process delivers its own resources' notifications", (
 
 describe('processes in different directories that share one resource', () => {
   /** Two checkouts of one repository: one resource, two projects, two processes. */
-  async function setUpCheckouts() {
+  async function setUpCheckouts({ mainOpenThreadId = null }: { mainOpenThreadId?: string | null } = {}) {
     const { rootDir, notifications, work, ours } = await setUp();
     const threadProjects = {
       'main-thread': '/repo/main',
@@ -391,7 +395,7 @@ describe('processes in different directories that share one resource', () => {
       'closed-thread': '/repo/closed',
     };
     const shared = { rootDir, resourceId: ours.resourceId, notifications, work, withDispatch: true, threadProjects };
-    const main = createProject('main', { ...shared, projectPath: '/repo/main' });
+    const main = createProject('main', { ...shared, projectPath: '/repo/main', openThreadId: mainOpenThreadId });
     const feature = createProject('feature', { ...shared, projectPath: '/repo/feature' });
     // `main` starts first, so it is the one holding the resource's dispatch lease.
     main.dispatcher.start();
@@ -429,6 +433,28 @@ describe('processes in different directories that share one resource', () => {
       'delivered',
     );
     expect(work.ran.slice(before).every(entry => entry.startsWith('main:'))).toBe(true);
+  }, 30_000);
+
+  it("delivers a thread once when one process has it open and its own project's process also runs", async () => {
+    // The user opened the feature checkout's thread from the main checkout's process (`/threads`).
+    const { notifications, work, main, round } = await setUpCheckouts({ mainOpenThreadId: 'feature-thread' });
+    for (let index = 0; index < 3; index++) {
+      await notifications.createNotification(
+        dueNotification(main.resourceId, 'feature-thread', { id: `for-feature-${index}` }),
+      );
+      await round();
+      await waitFor(() => work.inFlight === 0, 'runs to settle');
+    }
+    await round();
+    await waitFor(() => work.inFlight === 0, 'runs to settle');
+
+    for (let index = 0; index < 3; index++) {
+      const record = await notifications.getNotification({ threadId: 'feature-thread', id: `for-feature-${index}` });
+      expect(record?.status).toBe('delivered');
+    }
+    // Every run happened in one process: the two never both deliver the thread.
+    expect(new Set(work.ran.map(entry => entry.split(':')[0])).size).toBe(1);
+    expect(work.maxInFlight).toBe(1);
   }, 30_000);
 
   it('delivers a thread with no project once, from the process holding the resource', async () => {

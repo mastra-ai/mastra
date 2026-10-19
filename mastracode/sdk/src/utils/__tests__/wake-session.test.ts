@@ -1,7 +1,7 @@
 import type { Session } from '@mastra/core/agent-controller';
 import { describe, expect, it } from 'vitest';
 
-import { FOREIGN_THREAD, findWakeSession, threadScopeKey } from '../wake-session.js';
+import { FOREIGN_THREAD, findWakeSession, sessionLeaseScopes, threadScopeKey } from '../wake-session.js';
 
 type Thread = { id: string; resourceId: string; metadata?: Record<string, unknown> };
 
@@ -44,11 +44,11 @@ describe('findWakeSession', () => {
     expect(await findWakeSession(controller(a), [a], { resourceId: 'team', threadId: 'th-b' })).toBe(FOREIGN_THREAD);
   });
 
-  it('runs a thread in the session that has it open, even when its project tag names another checkout', async () => {
+  it('runs a thread in the session that has it open, under the dispatch lease of the project it belongs to', async () => {
     const openOnB = session('team', { projectPath: '/homes/a' }, threads, 'th-b');
     expect(await findWakeSession(controller(openOnB), [openOnB], { resourceId: 'team', threadId: 'th-b' })).toEqual({
       session: openOnB,
-      scope: scopeA,
+      scope: threadScopeKey({ projectPath: '/homes/b' }),
     });
   });
 
@@ -57,7 +57,7 @@ describe('findWakeSession', () => {
     const openOnA = session('team', { projectPath: '/homes/a' }, threads, 'th-b');
     expect(await findWakeSession(controller(b), [b, openOnA], { resourceId: 'team', threadId: 'th-b' })).toEqual({
       session: openOnA,
-      scope: scopeA,
+      scope: threadScopeKey({ projectPath: '/homes/b' }),
     });
   });
 
@@ -86,5 +86,27 @@ describe('threadScopeKey', () => {
     expect(threadScopeKey({ a: '1', b: '2' })).toBe(threadScopeKey({ b: '2', a: '1' }));
     expect(threadScopeKey({ projectPath: '/x' })).not.toBe(threadScopeKey({ projectPath: '/y' }));
     expect(threadScopeKey({})).toBeUndefined();
+  });
+});
+
+describe('sessionLeaseScopes', () => {
+  const threads: Thread[] = [
+    { id: 'th-a', resourceId: 'team', metadata: { projectPath: '/homes/a' } },
+    { id: 'th-b', resourceId: 'team', metadata: { projectPath: '/homes/b' } },
+    { id: 'th-old', resourceId: 'team', metadata: {} },
+  ];
+  const scopeA = threadScopeKey({ projectPath: '/homes/a' });
+
+  it("adds the open thread's project lease when that thread belongs to another project", async () => {
+    expect(await sessionLeaseScopes(session('team', { projectPath: '/homes/a' }, threads, 'th-b'))).toEqual([
+      scopeA,
+      threadScopeKey({ projectPath: '/homes/b' }),
+    ]);
+  });
+
+  it("needs only the session's own lease for its own, untagged or no open thread", async () => {
+    for (const open of ['th-a', 'th-old', null]) {
+      expect(await sessionLeaseScopes(session('team', { projectPath: '/homes/a' }, threads, open))).toEqual([scopeA]);
+    }
   });
 });
