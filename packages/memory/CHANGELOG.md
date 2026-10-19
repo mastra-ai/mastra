@@ -1,5 +1,16 @@
 # @mastra/memory
 
+## 1.39.0-alpha.3
+
+### Patch Changes
+
+- Fixed agents with observational memory losing the user's message and unread tool results partway through a turn. When observation ran between steps of a turn, it removed everything it had observed from the prompt, including the request the agent was working on and tool results the model had not read yet. The agent could then loop on tool calls or answer only part of the request. The current turn's input messages and the latest step's output now stay in the prompt until the turn ends. Results the model has already read are still compacted. ([#27502](https://github.com/mastra-ai/mastra/pull/27502))
+
+- `ObservationalMemory.settled()` now waits for buffered reflections. Previously it could resolve while a background reflection was still writing. ([#27381](https://github.com/mastra-ai/mastra/pull/27381))
+
+- Updated dependencies [[`ec84d93`](https://github.com/mastra-ai/mastra/commit/ec84d93cda24d56a0812086fcaace9e68ce8e089), [`79fd3b0`](https://github.com/mastra-ai/mastra/commit/79fd3b06a7cf59f7acb4591b9ba0f388d548fd17), [`f28b72f`](https://github.com/mastra-ai/mastra/commit/f28b72f255a460746f08c73b2a1d336bfc57757b), [`6c67158`](https://github.com/mastra-ai/mastra/commit/6c67158a10406adae195887167862d632bb54d64), [`ad8e752`](https://github.com/mastra-ai/mastra/commit/ad8e75217bcbb12986e7e77a30cb4af1be93c0fd), [`85a26af`](https://github.com/mastra-ai/mastra/commit/85a26af75fe62b7f2d8ac0b56d322798e5ae0616), [`e0077c3`](https://github.com/mastra-ai/mastra/commit/e0077c34070037ac77c264a9d5000a69c0dd2095)]:
+  - @mastra/core@1.79.0-alpha.5
+
 ## 1.39.0-alpha.2
 
 ### Patch Changes
