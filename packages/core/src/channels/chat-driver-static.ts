@@ -207,7 +207,11 @@ export async function runStaticDriver({
     }
 
     if (chunk.type === 'tool-call') {
-      if (channelToolNames.has(chunk.payload.toolName)) continue;
+      if (channelToolNames.has(chunk.payload.toolName)) {
+        // Post the reply before the channel tool (e.g. a reaction) acts on it.
+        await flushText();
+        continue;
+      }
       const enr = tracker.trackStart({
         toolCallId: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,

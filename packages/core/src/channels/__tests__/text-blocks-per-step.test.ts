@@ -41,7 +41,7 @@ function textBlock(index: number, text: string, citation?: { url: string; title:
   return events;
 }
 
-function message(blocks: AnthropicEvent[]): AnthropicEvent[] {
+function message(blocks: AnthropicEvent[], stopReason = 'end_turn'): AnthropicEvent[] {
   return [
     {
       type: 'message_start',
@@ -57,7 +57,7 @@ function message(blocks: AnthropicEvent[]): AnthropicEvent[] {
       },
     },
     ...blocks,
-    { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 20 } },
+    { type: 'message_delta', delta: { stop_reason: stopReason, stop_sequence: null }, usage: { output_tokens: 20 } },
     { type: 'message_stop' },
   ];
 }
@@ -97,9 +97,30 @@ const webSearchReply = message([
 // same way the agent's own `text` does, not invent a separator.
 const unseparatedReply = message([...textBlock(0, 'Done.'), ...textBlock(1, 'Next step')]);
 
+// Text, then a channel-owned tool that acts on the conversation. The reply
+// must be posted before the reaction lands.
+const reactionReply = message(
+  [
+    ...textBlock(0, 'Checking that.'),
+    {
+      type: 'content_block_start',
+      index: 1,
+      content_block: { type: 'tool_use', id: 'toolu_1', name: 'add_reaction', input: {} },
+    },
+    {
+      type: 'content_block_delta',
+      index: 1,
+      delta: { type: 'input_json_delta', partial_json: '{"messageId":"u1","emoji":"eyes"}' },
+    },
+    { type: 'content_block_stop', index: 1 },
+  ],
+  'tool_use',
+);
+
 const replies: Record<string, AnthropicEvent[]> = {
   'web-search': webSearchReply,
   unseparated: unseparatedReply,
+  reaction: reactionReply,
 };
 
 function createRecording() {
@@ -172,7 +193,9 @@ describe.each([
         let body = '';
         for await (const chunk of req) body += chunk;
         const prompt = JSON.stringify(JSON.parse(body).messages);
-        const reply = replies[Object.keys(replies).find(key => prompt.includes(key))!]!;
+        const reply = prompt.includes('tool_result')
+          ? message([])
+          : replies[Object.keys(replies).find(key => prompt.includes(key))!]!;
         res.writeHead(200, { 'content-type': 'text/event-stream' });
         for (const event of reply) res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
         res.end();
@@ -187,8 +210,7 @@ describe.each([
     await llm.stop();
   });
 
-  async function runReply(prompt: string) {
-    const recording = createRecording();
+  async function runReply(prompt: string, recording = createRecording()) {
     const channels = new AgentChannels({
       adapters: { test: { adapter: recording.adapter, ...adapterOptions } as any },
     });
@@ -198,11 +220,12 @@ describe.each([
       name: 'channel-text-blocks-agent',
       instructions: 'Answer with citations.',
       model: anthropic('claude-test'),
-      tools: { web_search: anthropic.tools.webSearch_20250305() },
+      tools: { web_search: anthropic.tools.webSearch_20250305(), ...(channels.getTools() as any) },
       outputProcessors: [new ChatChannelOutputProcessor(channels)],
     });
 
     const requestContext = new RequestContext();
+    requestContext.set('channel', { platform: 'test', threadId: recording.chatThread.id });
     requestContext.set(
       CHAT_CHANNEL_RENDER_CONTEXT_KEY,
       (channels as any)._buildRenderContext(recording.chatThread, 'test', {}),
@@ -225,5 +248,30 @@ describe.each([
 
     expect(text).toBe('Done.Next step');
     expect(posted).toEqual([text]);
+  });
+
+  it('posts the reply before a channel tool like add_reaction runs', async () => {
+    // Record when each reply finishes landing relative to the reaction.
+    const events: string[] = [];
+    const recording = createRecording();
+    recording.chatThread.post.mockImplementation(async (content: any) => {
+      if (content?.stream) {
+        let text = '';
+        for await (const piece of content.stream as AsyncIterable<unknown>) {
+          if (typeof piece === 'string') text += piece;
+        }
+        if (text) events.push(`post:${text}`);
+      } else if (content?.type !== 'card') {
+        events.push(`post:${content?.markdown ?? content}`);
+      }
+      return { id: 'm1', text: '' };
+    });
+    recording.adapter.addReaction.mockImplementation(async (_t: string, messageId: string, emoji: string) => {
+      events.push(`reaction:${messageId}:${emoji}`);
+    });
+
+    await runReply('reaction: look at this', recording);
+
+    expect(events).toEqual(['post:Checking that.', 'reaction:u1:eyes']);
   });
 });
