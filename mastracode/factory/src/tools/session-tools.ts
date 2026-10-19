@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import type { IntegrationTools } from '../integrations/base.js';
-import { userSessionBranch } from '../session/user-session-branch.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
 import {
   FactoryStartTransitionError,
@@ -19,6 +18,7 @@ import {
   resolveFactorySessionModel,
 } from '../session/factory-session.js';
 import { recordSessionRunStart } from '../session/run-audit.js';
+import { userSessionBranch } from '../session/user-session-branch.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
