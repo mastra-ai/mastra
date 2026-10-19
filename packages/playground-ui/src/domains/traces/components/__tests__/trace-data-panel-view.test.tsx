@@ -268,6 +268,34 @@ describe('TraceDataPanelView — trace summary description', () => {
   });
 });
 
+describe('TraceDataPanelView — trace error', () => {
+  const failedSpans = [
+    { ...rootSpanFixture[0], error: { name: 'AI_APICallError', message: 'Invalid reasoning effort' } },
+  ];
+
+  it("shows the root span's error without opening the span", () => {
+    render(<TraceDataPanelView {...baseProps} spans={failedSpans} />);
+
+    expect(screen.getByText('AI_APICallError')).toBeTruthy();
+    expect(screen.getByText('Invalid reasoning effort')).toBeTruthy();
+  });
+
+  it('opens the failed span from the error', () => {
+    const onSpanSelect = vi.fn();
+    render(<TraceDataPanelView {...baseProps} spans={failedSpans} onSpanSelect={onSpanSelect} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'View details' }));
+
+    expect(onSpanSelect).toHaveBeenLastCalledWith('root');
+  });
+
+  it('shows no error when the trace succeeded', () => {
+    render(<TraceDataPanelView {...baseProps} />);
+
+    expect(screen.queryByRole('button', { name: 'View details' })).toBeNull();
+  });
+});
+
 describe('TraceDataPanelView — span selected from the URL', () => {
   describe('when the trace is still loading', () => {
     it('keeps the requested span instead of clearing it', () => {

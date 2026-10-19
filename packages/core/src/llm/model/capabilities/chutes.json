@@ -63,6 +63,11 @@
         "type": "toggle"
       }
     ],
+    "Qwen/Qwen3.6-27B-TEE": [
+      {
+        "type": "toggle"
+      }
+    ],
     "Qwen/Qwen3-32B-TEE": [
       {
         "type": "toggle"
@@ -73,17 +78,12 @@
         "type": "toggle"
       }
     ],
-    "Qwen/Qwen3.6-27B-TEE": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731-TEE": [
       {
         "type": "toggle"
       }
     ],
     "deepseek-ai/DeepSeek-V3.2-TEE": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731-TEE": [
       {
         "type": "toggle"
       }

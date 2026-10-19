@@ -360,7 +360,8 @@ describe('TraceSpanPanel', () => {
 
     // Start time + duration are shown; the old key-value rows are gone.
     expect(screen.getByLabelText(/^Started at /)).not.toBeNull();
-    expect(screen.getByText('1s')).not.toBeNull();
+    // ("1s" also appears as the root span's duration in the tree, so allow multiple matches.)
+    expect(screen.getAllByText('1s').length).toBeGreaterThan(0);
     expect(screen.queryByText('Status')).toBeNull();
     expect(screen.queryByText('Ended at')).toBeNull();
     // Tab labels ("Spans") only render when score/feedback slots are provided;

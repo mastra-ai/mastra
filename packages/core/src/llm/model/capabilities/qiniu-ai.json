@@ -137,67 +137,7 @@
     "z-ai/glm-5"
   ],
   "reasoning": {
-    "doubao-seed-2.0-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-2.0-code": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-1.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-1.6-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-2.0-lite": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-2.0-mini": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen3-32b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-30b-a3b-thinking-2507": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "MiniMax-M1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-4.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-30b-a3b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-4.5-air": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen-turbo": [
       {
         "type": "toggle"
       }
@@ -207,7 +147,42 @@
         "type": "toggle"
       }
     ],
+    "doubao-seed-2.0-mini": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-lite": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-1.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen-turbo": [
+      {
+        "type": "toggle"
+      }
+    ],
     "qwen3.5-397b-a17b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-code": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-4.5-air": [
       {
         "type": "toggle"
       }
@@ -217,17 +192,27 @@
         "type": "toggle"
       }
     ],
-    "z-ai/glm-4.7": [
+    "doubao-seed-1.6-flash": [
       {
         "type": "toggle"
       }
     ],
-    "z-ai/glm-5": [
+    "glm-4.5": [
       {
         "type": "toggle"
       }
     ],
-    "minimax/minimax-m2": [
+    "MiniMax-M1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-30b-a3b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-30b-a3b-thinking-2507": [
       {
         "type": "toggle"
       }
@@ -242,7 +227,22 @@
         "type": "toggle"
       }
     ],
+    "minimax/minimax-m2": [
+      {
+        "type": "toggle"
+      }
+    ],
     "minimax/minimax-m2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "z-ai/glm-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "z-ai/glm-5": [
       {
         "type": "toggle"
       }
