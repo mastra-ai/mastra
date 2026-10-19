@@ -68,7 +68,6 @@ export function BoardViewControls({
             describeSettings={settings => <ViewSettingsSummary settings={settings} />}
           />
           <div className="flex shrink-0 items-center gap-2">
-            <BoardPropertiesMenu view={view} fields={fields} currentUserId={currentUserId} />
             <SegmentedControl aria-label="Layout" size="sm" iconOnly value={view.layout} onValueChange={view.setLayout}>
               <SegmentedControlItem value="list" aria-label={LAYOUT_LABELS.list} title={LAYOUT_LABELS.list}>
                 <List aria-hidden />
@@ -77,6 +76,7 @@ export function BoardViewControls({
                 <Kanban aria-hidden />
               </SegmentedControlItem>
             </SegmentedControl>
+            <BoardPropertiesMenu view={view} fields={fields} currentUserId={currentUserId} />
           </div>
         </>
       }

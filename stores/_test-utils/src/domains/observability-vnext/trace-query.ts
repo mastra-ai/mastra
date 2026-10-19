@@ -765,6 +765,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       endedAt: '2026-08-05T10:00:02.250Z',
     }),
     span(30, 'trace-c', 'root-c', {
+      spanType: 'workflow_run',
       threadId: 'thread-2',
       resourceId: null,
       startedAt: '2026-08-07T10:00:00.000Z',
@@ -2021,6 +2022,56 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [],
   },
   {
+    name: 'filters by the current root span name only',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'eq', left: { path: 'name' }, right: { literal: 'root-a' } },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'trace-scope name ignores superseded roots and child span names',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'in',
+        value: { path: 'name' },
+        set: ['root-a-old', 'medication_lookup', 'retrieve_medications'],
+      },
+    },
+    expected: [],
+  },
+  {
+    name: 'filters by the root span type without matching child span types',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'in', value: { path: 'spanType' }, set: ['workflow_run', 'tool_call', 'rag_action'] },
+    },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'excludes a root span type with ne',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'ne', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
+    },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'combines a root span type with a related span type',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
+          { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } } },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
     name: 'eq excludes traces whose nullable field is null',
     request: {
       timeRange: fullRange,
@@ -3078,6 +3129,10 @@ export function traceQueryDimensionValue(root: RawTraceQuerySpan, dimension: Tra
       return root.entityType;
     case 'entityName':
       return root.entityName;
+    case 'name':
+      return root.name;
+    case 'spanType':
+      return root.spanType;
     case 'environment':
       return root.environment;
     case 'threadId':
@@ -3120,6 +3175,8 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     timeToFirstChunkMs: root.timeToFirstChunkMs ?? null,
     entityName: traceQueryDimensionValue(root, 'entityName'),
     entityType: traceQueryDimensionValue(root, 'entityType'),
+    name: traceQueryDimensionValue(root, 'name'),
+    spanType: traceQueryDimensionValue(root, 'spanType'),
     environment: traceQueryDimensionValue(root, 'environment'),
     status: traceQueryDimensionValue(root, 'status'),
     tags: root.tags,
