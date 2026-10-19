@@ -9,6 +9,7 @@ The plan widget in `'grouped'` and `'timeline'` modes is quieter. The header is 
 Grouped mode is an adapter option on the channel provider:
 
 ```ts
+import { Mastra } from '@mastra/core';
 import { SlackProvider } from '@mastra/slack';
 
 export const mastra = new Mastra({
