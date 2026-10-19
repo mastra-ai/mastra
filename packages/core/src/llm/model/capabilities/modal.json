@@ -3,16 +3,16 @@
   "temperature": ["Qwen/Qwen3.8-2.4T-A95B", "thinkingmachines/Inkling-NVFP4", "zai-org/GLM-5.3-Flash"],
   "structuredOutput": ["Qwen/Qwen3.8-2.4T-A95B", "moonshotai/Kimi-K3", "zai-org/GLM-5.3-Flash"],
   "reasoning": {
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "Qwen/Qwen3.8-2.4T-A95B": [
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

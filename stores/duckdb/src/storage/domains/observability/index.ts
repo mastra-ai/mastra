@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
+import * as coreStorage from '@mastra/core/storage';
 import type {
   SpanQueryResponse,
   TrustedSpanQueryPlan,
@@ -112,6 +113,7 @@ import {
 import { deltaPollingFeatureEnabled } from './polling';
 import * as scoreOps from './scores';
 import * as spanQueryOps from './span-query';
+import * as threadQueryOps from './thread-query';
 import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as tracingOps from './tracing';
@@ -266,6 +268,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
         'trace-query',
         'trace-aggregate',
         ...spanQueryFeatures,
+        ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
@@ -290,6 +293,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       'trace-query',
       'trace-aggregate',
       ...spanQueryFeatures,
+      ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
       'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',
@@ -348,7 +352,15 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   override async getTraceQueryValues(plan: TrustedTraceQueryValuesPlan): Promise<GetTraceQueryValuesResponse> {
     return traceQueryOps.getTraceQueryValues(this.db, plan);
   }
-  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+  override async queryThreads(plan: coreStorage.TrustedThreadRowsQueryPlan): Promise<coreStorage.ThreadQueryResponse>;
+  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse> {
+    if (plan.result === 'threadRows') return threadQueryOps.queryThreadRows(this.db, plan);
     return traceQueryOps.queryThreads(this.db, plan);
   }
   async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {

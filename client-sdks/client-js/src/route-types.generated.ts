@@ -163,14 +163,14 @@ type InputShared_Auxiliary_230 =
       arg: InputShared_Auxiliary_230;
     };
 
-type InputShared_Auxiliary_264 =
+type InputShared_Auxiliary_271 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_264[];
+      args: InputShared_Auxiliary_271[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_264;
+      arg: InputShared_Auxiliary_271;
     }
   | {
       traces:
@@ -182,7 +182,7 @@ type InputShared_Auxiliary_264 =
           };
     };
 
-type InputShared_Auxiliary_692 =
+type InputShared_Auxiliary_699 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,27 +227,27 @@ type InputShared_Auxiliary_692 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_692[];
+      args: InputShared_Auxiliary_699[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_692;
+      arg: InputShared_Auxiliary_699;
     };
 
-type InputShared_Auxiliary_766 = {
+type InputShared_Auxiliary_773 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_766[] | undefined;
+  children?: InputShared_Auxiliary_773[] | undefined;
 };
 
-type Shared_Auxiliary_764 = {
+type Shared_Auxiliary_767 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_764[] | undefined;
+  children?: Shared_Auxiliary_767[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1808,7 +1808,7 @@ type InputShared_Type_88 = {
       }
     | undefined;
   steps: InputShared_Type_83[];
-  predicates: InputShared_Auxiliary_692[];
+  predicates: InputShared_Auxiliary_699[];
 };
 
 type InputShared_Type_89 = {
@@ -1822,7 +1822,7 @@ type InputShared_Type_89 = {
     | undefined;
   step: InputShared_Type_83;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_692;
+  predicate: InputShared_Auxiliary_699;
 };
 
 type InputShared_Type_90 =
@@ -3734,6 +3734,8 @@ type Shared_Type_67 = {
   traceAggregate: boolean;
   /** Advanced thread queries (POST /observability/threads/query) */
   threadQuery: boolean;
+  /** Full-history thread rows with activity windows, filters and sorting. Treat a missing value as unavailable. */
+  threadQueryRows: boolean;
   /** Span queries (POST /observability/spans/query) */
   spanQuery: boolean;
   /** Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit. */
@@ -4247,7 +4249,7 @@ type Shared_Type_83 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_764[] | undefined;
+  files?: Shared_Auxiliary_767[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -10682,29 +10684,90 @@ export interface PostObservabilityTracesAggregate_RouteContract {
 // ============================================================================
 // Route: POST /observability/threads/query
 // ============================================================================
-export type PostObservabilityThreadsQuery_Body = {
-  traces: {
-    timeRange: {
-      from: string;
-      to: string;
+export type PostObservabilityThreadsQuery_Body =
+  | {
+      timeRange:
+        | {
+            traces: {
+              from: string;
+              to: string;
+            };
+          }
+        | {
+            threads: {
+              from: string;
+              to: string;
+              field: 'startedAt' | 'endedAt';
+            };
+          };
+      where?: InputShared_Auxiliary_230 | undefined;
+      orderBy?: {
+        field: 'startedAt' | 'endedAt';
+        direction: 'asc' | 'desc';
+      }[];
+      page?: {
+        limit?: number;
+        after?: string | undefined;
+      };
+    }
+  | {
+      traces: {
+        timeRange: {
+          from: string;
+          to: string;
+        };
+        where?: InputShared_Auxiliary_207 | undefined;
+      };
+      where?: InputShared_Auxiliary_271 | undefined;
+      page?: {
+        limit?: number;
+        after?: (string | null) | undefined;
+      };
     };
-    where?: InputShared_Auxiliary_207 | undefined;
-  };
-  where?: InputShared_Auxiliary_264 | undefined;
-  page?: {
-    limit?: number;
-    after?: (string | null) | undefined;
-  };
-};
 
-export type PostObservabilityThreadsQuery_Response = {
-  threads: {
-    threadId: string;
-  }[];
-  page: {
-    next: string | null;
-  };
-};
+export type PostObservabilityThreadsQuery_Response =
+  | {
+      threads: {
+        organizationId: string | null;
+        threadId: string;
+        firstTraceId: string;
+        lastTraceId: string;
+        resourceId: string | null;
+        userId: string | null;
+        entityType: string | null;
+        entityId: string | null;
+        entityName: string | null;
+        entityVersionId: string | null;
+        runId: string | null;
+        sessionId: string | null;
+        requestId: string | null;
+        serviceName: string | null;
+        experimentId: string | null;
+        environment: string | null;
+        executionSource: string | null;
+        status: 'success' | 'error';
+        startedAt: string;
+        endedAt: string;
+        timeToFirstChunkMs: number | null;
+        inputPreview: string | null;
+        outputPreview: string | null;
+        errorPreview: string | null;
+        traceCount: number;
+        model: string | null;
+        provider: string | null;
+      }[];
+      page: {
+        next: string | null;
+      };
+    }
+  | {
+      threads: {
+        threadId: string;
+      }[];
+      page: {
+        next: string | null;
+      };
+    };
 
 export type PostObservabilityThreadsQuery_Request = Simplify<
   (never extends never ? {} : { params: never }) &
@@ -18659,7 +18722,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_766[] | undefined;
+  files?: InputShared_Auxiliary_773[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18717,7 +18780,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_766[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_773[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (

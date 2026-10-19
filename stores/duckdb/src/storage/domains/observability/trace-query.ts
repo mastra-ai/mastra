@@ -1063,3 +1063,13 @@ export async function queryThreads(db: DuckDBConnection, plan: TrustedThreadQuer
 export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate): SqlFragment {
   return compileScalarPredicate(predicate, SPAN_QUERY_FIELDS);
 }
+
+export function compileThreadQueryPredicate(predicate: TrustedTraceQueryScalarPredicate): SqlFragment {
+  const fields = Object.fromEntries(
+    Object.entries(coreStorage.THREAD_QUERY_FIELD_REGISTRY).map(([field, rule]) => [
+      field,
+      { sql: `s.${field}`, parameterType: rule.valueKind === 'timestamp' ? 'timestamp' : 'scalar' },
+    ]),
+  ) as Record<string, FieldDefinition>;
+  return compileScalarPredicate(predicate, fields);
+}

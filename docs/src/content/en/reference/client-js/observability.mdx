@@ -112,6 +112,121 @@ The additional identity, context and parent/root entity filters require an updat
 
 DuckDB returns `null` for parent/root entity type, ID and name, and for `executionSource`. Equality filters on these fields match no spans. Parent/root entity version IDs remain available.
 
+## Querying threads
+
+`queryTraceThreads()` returns thread summaries from completed traces through `POST /observability/threads/query`. Each row includes activity timestamps, trace counts, context and previews. Traces without a thread ID aren't included.
+
+```typescript
+const result = await mastraClient.queryTraceThreads({
+  timeRange: {
+    traces: {
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-02T00:00:00.000Z',
+    },
+  },
+  where: { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } },
+  orderBy: [{ field: 'endedAt', direction: 'desc' }],
+  page: { limit: 100 },
+})
+
+for (const thread of result.threads) {
+  console.log(thread.firstTraceId, thread.lastTraceId, thread.traceCount, thread.outputPreview)
+}
+```
+
+### Thread time ranges
+
+Choose exactly one time selector. Each range requires ISO timestamps with `from` earlier than `to`. The range includes `from` and excludes `to`.
+
+| Selector | Matches threads with |
+| - | - |
+| `timeRange.traces: { from, to }` | At least one trace that started in the window |
+| `timeRange.threads: { field: 'startedAt', from, to }` | Their first activity in the window |
+| `timeRange.threads: { field: 'endedAt', from, to }` | Their last activity in the window |
+
+For example, find threads whose most recent activity falls on October 1:
+
+```typescript
+const result = await mastraClient.queryTraceThreads({
+  timeRange: {
+    threads: {
+      field: 'endedAt',
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-02T00:00:00.000Z',
+    },
+  },
+})
+```
+
+Rows include the full retained history within the authorized scope, including traces before and after the window. Filters apply to these complete rows. An `environment` filter checks the first trace's environment.
+
+### Thread filters
+
+Use `where` to filter thread rows. Combine predicates with `and`, `or` and `not`.
+
+| Fields | Operators |
+| - | - |
+| `threadId`, `organizationId`, `firstTraceId`, `lastTraceId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| `resourceId`, `userId`, `runId`, `sessionId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | Same string operators |
+| `entityType`, `entityId`, `entityName`, `entityVersionId` | Same string operators |
+| `status` | `eq`, `ne`, `in`, `notIn`, with values `success` or `error` |
+| `startedAt`, `endedAt`, `timeToFirstChunkMs` | `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `in`, `notIn`, `exists`, `notExists` |
+| `traceCount` | `eq`, `ne`, `lt`, `lte`, `gt`, `gte` |
+
+For example, filter for threads from selected agents with at least three traces:
+
+```typescript
+const result = await mastraClient.queryTraceThreads({
+  timeRange: {
+    traces: {
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-02T00:00:00.000Z',
+    },
+  },
+  where: {
+    op: 'and',
+    args: [
+      { op: 'in', value: { path: 'entityId' }, set: ['support-agent', 'sales-agent'] },
+      { op: 'gte', left: { path: 'traceCount' }, right: { literal: 3 } },
+    ],
+  },
+})
+```
+
+Presence filters use `{ op: 'exists', path: 'userId' }` to check for a non-null value. Model/provider and previews are available in returned rows but aren't filterable.
+
+### Thread response
+
+The response is `{ threads, page: { next } }`, without a total count. Each entry in `threads` contains these fields:
+
+| Returned fields | Meaning |
+| - | - |
+| `threadId`, `organizationId` | Thread identity. Equal thread IDs in different organizations remain separate. |
+| `firstTraceId`, `lastTraceId` | Earliest and latest trace by start time. Equal start times use trace ID as a deterministic tie-breaker. |
+| `resourceId`, `userId`, `runId`, `sessionId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | First-trace context, or `null` when missing. |
+| `entityType`, `entityId`, `entityName`, `entityVersionId` | First-trace entity. |
+| `startedAt`, `endedAt` | Earliest start and maximum end time across the thread. |
+| `status` | `error` when the last-started trace's root span has an error, otherwise `success`. |
+| `traceCount` | Number of logical traces in the thread. |
+| `inputPreview` | First trace's input preview. |
+| `outputPreview`, `errorPreview` | Last-started trace's previews. |
+| `timeToFirstChunkMs` | First trace's root agent time to first chunk, in milliseconds. `null` when unavailable or the root isn't an agent. |
+| `model`, `provider` | Model/provider from the first completed model generation directly under the first trace's root agent. `null` when unavailable. |
+
+An earlier-started trace can finish last. In that case, it supplies `endedAt`, while the last-started trace still supplies status and output/error previews. Missing first-trace values aren't replaced with values from a later trace.
+
+### Thread ordering and pagination
+
+Ordering accepts exactly one of `startedAt` or `endedAt`, with direction `asc` or `desc`. The default is `endedAt` descending. Pages default to 100 rows and allow at most 1,000. Pass `result.page.next` as `page.after` with the same time selector, filters, scope and ordering. A `null` cursor means no more pages are available. Pagination reflects live data, so new traces can move a thread between pages.
+
+To load the traces within a thread, use [`queryTraces()`](#querying-traces) with a `threadId` filter and a time range covering the thread's activity.
+
+### Thread query support
+
+Check `capabilities.threadQueryRows` from `getObservabilityCapabilities()` before using this contract. A missing or false value means full thread rows aren't available. Older core or storage packages return a structured `501` for these requests. Legacy identity requests remain supported for mixed package versions.
+
+ClickHouse rejects broad thread queries when the authorized history exceeds 250,000 stored trace-root rows, including duplicate copies. A narrower time range can still succeed by selecting fewer candidate threads. Rejected queries return `503 TRACE_QUERY_RESOURCE_LIMIT` without partial results.
+
 ## Querying traces
 
 `queryTraces()` finds completed logical traces using trace fields and conditions over related spans. Every query requires an ISO timestamp range.

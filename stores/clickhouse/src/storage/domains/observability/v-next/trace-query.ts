@@ -1022,6 +1022,9 @@ function isClickHouseResourceLimit(error: unknown): boolean {
 export type ClickHouseTraceQueryExecutionLimits = {
   timeoutMs: number;
   memoryLimitBytes?: number;
+  maxThreads?: number;
+  maxBlockSize?: number;
+  spillThresholdBytes?: number;
 };
 
 export async function runWithClickHouseTraceQueryTimeout(
@@ -1041,6 +1044,14 @@ export async function runWithClickHouseTraceQueryTimeout(
         ...CH_SETTINGS,
         max_execution_time: resolvedTimeoutMs / 1000,
         ...(limits.memoryLimitBytes === undefined ? {} : { max_memory_usage: String(limits.memoryLimitBytes) }),
+        ...(limits.maxThreads === undefined ? {} : { max_threads: limits.maxThreads }),
+        ...(limits.maxBlockSize === undefined ? {} : { max_block_size: String(limits.maxBlockSize) }),
+        ...(limits.spillThresholdBytes === undefined
+          ? {}
+          : {
+              max_bytes_before_external_sort: String(limits.spillThresholdBytes),
+              max_bytes_before_external_group_by: String(limits.spillThresholdBytes),
+            }),
         ...(compiled.sharedSnapshot ? { enable_shared_storage_snapshot_in_query: 1 } : {}),
       },
     });
@@ -1299,4 +1310,22 @@ export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPred
   const parameters = new ParameterBuilder();
   const sql = compileScalarPredicate(predicate, SPAN_QUERY_FIELDS, parameters);
   return { sql, params: parameters.params };
+}
+
+/** Thread filters see full-history representative values, never individual member traces. */
+export function compileThreadQueryPredicate(
+  predicate: TrustedTraceQueryScalarPredicate,
+  parameters = new ParameterBuilder(),
+): SqlFragment {
+  const fields = Object.fromEntries(
+    Object.entries(coreStorage.THREAD_QUERY_FIELD_REGISTRY).map(([field, rule]) => [
+      field,
+      {
+        sql: `s.${field}`,
+        parameterType:
+          rule.valueKind === 'timestamp' ? "DateTime64(3, 'UTC')" : rule.valueKind === 'number' ? 'Float64' : 'String',
+      },
+    ]),
+  ) as Record<string, FieldDefinition>;
+  return { sql: compileScalarPredicate(predicate, fields, parameters), params: parameters.params };
 }

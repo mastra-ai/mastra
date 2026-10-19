@@ -651,6 +651,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           controller: deps.controller,
           memorySettings: deps.domains.memorySettings,
           sessionRetirement: deps.sessionRetirement,
+          // A local sandbox's destroy keeps the session directory, so recreate
+          // couldn't deliver the fresh checkout it promises there.
+          sandboxRecreateSupported: deps.sandbox !== undefined && deps.sandbox.provider !== 'local',
+          filesystem: deps.domains.filesystem,
           ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
           ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
         });

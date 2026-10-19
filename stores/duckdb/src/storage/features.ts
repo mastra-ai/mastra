@@ -1,5 +1,8 @@
 import * as coreStorage from '@mastra/core/storage';
 
+export const threadQueryFeatures =
+  typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : ([] as const);
+
 export const spanQueryFeatures =
   typeof coreStorage.planSpanQuery === 'function'
     ? (['span-query', 'span-query-context-fields'] as const)

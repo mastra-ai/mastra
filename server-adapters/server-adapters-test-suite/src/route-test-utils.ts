@@ -104,6 +104,7 @@ export function generateContextualValue(fieldName?: string): string {
   if (field.includes('message')) return 'test-message';
   if (field === 'responseid') return 'test-response';
   if (field.includes('transport')) return 'test-transport';
+  if (field === 'reorderedmodelids') return 'id1';
   if (field.includes('model')) return 'openai/gpt-4o';
   if (field.includes('action')) return 'merge-template';
   if (field.includes('entity')) return 'test-entity';

@@ -300,11 +300,13 @@ function compileScalarPredicate<TField extends string>(
 
   const parameter = `$${parameterOffset}`;
   const operators = { lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
+  // `value` is never null, so plain `=`/`<>` keep `IS [NOT] DISTINCT FROM` semantics while staying
+  // indexable. The null guards keep `NOT (...)` two-valued on null columns.
   if (predicate.operator === 'eq') {
-    return { sql: `${field} IS NOT DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
+    return { sql: `${field} IS NOT NULL AND ${field} = ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   if (predicate.operator === 'ne') {
-    return { sql: `${field} IS DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
+    return { sql: `${field} IS NULL OR ${field} <> ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   const operator = operators[predicate.operator];
   if (operator === undefined) throw new Error(`Unsupported trusted trace-query operator: ${predicate.operator}`);
@@ -1236,4 +1238,11 @@ export async function queryThreads(
 /** Compile a direct span-query filter using its dedicated field mapping. */
 export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate, offset: number): SqlFragment {
   return compileScalarPredicate(predicate, SPAN_QUERY_FIELDS, offset);
+}
+
+export function compileThreadQueryPredicate(predicate: TrustedTraceQueryScalarPredicate, offset: number): SqlFragment {
+  const fields = Object.fromEntries(
+    Object.keys(coreStorage.THREAD_QUERY_FIELD_REGISTRY).map(field => [field, `s."${field}"`]),
+  );
+  return compileScalarPredicate(predicate, fields, offset);
 }

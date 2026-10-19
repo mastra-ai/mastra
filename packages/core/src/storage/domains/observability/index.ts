@@ -157,3 +157,4 @@ export type {
 export * from './tracing';
 export * from './types';
 export * from './span-query';
+export * from './thread-query';
