@@ -1148,8 +1148,30 @@ export function normalizeTraceQueryTenantScope(
     : { organizationId: scope.organizationId, resourceId: scope.resourceId };
 }
 
+const STRUCTURAL_ISSUE_CODES = new Set<string>([
+  'invalid_type',
+  'invalid_value',
+  'invalid_union',
+  'invalid_key',
+  'invalid_element',
+  'unrecognized_keys',
+]);
+
+/**
+ * Reports the issues of the one union branch whose shape matched and that failed only checks
+ * (sizes, formats, refinements). Zod did this itself until 4.6.7 made an oversized array fail its
+ * size check before parsing the elements, which aborts the branch, so zod now reports only the union.
+ */
+function narrowUnionIssue(issue: z.core.$ZodIssue): z.core.$ZodIssue[] {
+  if (issue.code !== 'invalid_union') return [issue];
+  const matching = issue.errors
+    .map(branch => branch.flatMap(inner => narrowUnionIssue({ ...inner, path: [...issue.path, ...inner.path] })))
+    .filter(branch => branch.length > 0 && branch.every(inner => !STRUCTURAL_ISSUE_CODES.has(inner.code)));
+  return matching.length === 1 ? matching[0]! : [issue];
+}
+
 export function formatTraceQuerySchemaIssues(error: z.ZodError): TraceQueryIssue[] {
-  return error.issues.map(issue => {
+  return error.issues.flatMap(narrowUnionIssue).map(issue => {
     const customIssueCode =
       issue.code === 'custom'
         ? issue.message === PREDICATE_COMPLEXITY_MESSAGE
