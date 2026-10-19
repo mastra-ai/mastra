@@ -73,6 +73,13 @@ function sumTokens(usage: TraceUsageSummary | undefined): number | undefined {
   return (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0);
 }
 
+type FailedTrace = TracesListViewTrace & { spanId: string; errorPreview: string };
+
+/** A failed row whose error preview can open the full error from its span. */
+function isFailedTrace(trace: TracesListViewTrace): trace is FailedTrace {
+  return trace.status === 'error' && !!trace.errorPreview && !!trace.spanId;
+}
+
 export type TracesListViewProps = {
   traces: TracesListViewTrace[];
   isLoading?: boolean;
@@ -280,7 +287,7 @@ export function TracesListView({
                   <TracesDataList.InputCell input={trace.inputPreview ?? getInputPreview(trace.input)} />
                 )}
                 {hasTraceColumn(columnPreferences, 'output') &&
-                  (trace.status === 'error' && trace.errorPreview ? (
+                  (isFailedTrace(trace) ? (
                     <TraceErrorCell traceId={trace.traceId} spanId={trace.spanId} errorPreview={trace.errorPreview} />
                   ) : (
                     <TracesDataList.OutputCell
