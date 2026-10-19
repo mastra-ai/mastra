@@ -15,6 +15,7 @@ import type { OutputResult } from '../../processors';
 // barrel and creates an ESM init-time cycle.
 const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
+import { isFailedStreamChunk } from '../../processors/stream-reprocess';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
@@ -791,10 +792,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       // on every part, even when no stream processor consumes it.
       let observabilityContext: ObservabilityContext | undefined;
       const getObservabilityContext = () => (observabilityContext ??= resolveObservabilityContext(options));
+      // Set once the model stream errors or aborts; held parts are then dropped
+      // rather than released, since they belong to a failed (maybe retried) call.
+      let streamFailed = false;
 
       processedStream = stream.pipeThrough(
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
           async transform(chunk, controller) {
+            if (isFailedStreamChunk(chunk)) streamFailed = true;
             // Filter out intermediate finish chunks with 'tool-calls' reason
             // These are internal signals that shouldn't reach output processors
             //
@@ -923,6 +928,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
           async flush(controller) {
             // Release parts processors still hold (e.g. a partial BatchPartsProcessor
             // batch) so a model stream that ends mid-batch doesn't drop its tail.
+            // A failed or aborted stream drops them instead: a retry would duplicate
+            // them, and an abort must not emit content after cancellation.
+            if (streamFailed || options.abortSignal?.aborted) {
+              for (const part of await processorRunner.discardHeldParts(processorStates)) {
+                controller.enqueue(part as ChunkType<OUTPUT>);
+              }
+              processorRunner.endStreamProcessorSpans(processorStates, { keepStepScopedSpans: true });
+              return;
+            }
             const released = await processorRunner.flushHeldParts(
               processorStates,
               getObservabilityContext(),
@@ -957,7 +971,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
             // Only this step's model stream ended; the step's tool results are still to come.
             processorRunner.endStreamProcessorSpans(processorStates, { keepStepScopedSpans: true });
           },
-          cancel() {
+          async cancel() {
+            // The model call was torn down (e.g. a mid-stream disconnect being
+            // retried). What processors hold belongs to it and must not be
+            // released with the next call's parts.
+            await processorRunner.discardHeldParts(processorStates);
             processorRunner.endStreamProcessorSpans(processorStates);
           },
         }),
