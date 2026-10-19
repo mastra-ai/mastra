@@ -1,4 +1,5 @@
 import type { ScoringHookInput } from '../evals';
+import type { MastraScorerEntry } from '../evals/base';
 import type { Mastra } from '../mastra';
 import { unwrapMastraTracingProxy } from '../observability/context';
 
@@ -39,4 +40,18 @@ export function setScorerHookOwner(data: ScoringHookInput, owner?: Mastra): void
 export function isScorerHookForMastra(data: ScoringHookInput, mastra: Mastra): boolean {
   const ownerToken = scorerHookOwnerTokens.get(data);
   return !ownerToken || ownerToken === getScorerHookToken(mastra);
+}
+
+const scorerHookEntries = new WeakMap<ScoringHookInput, MastraScorerEntry>();
+
+/**
+ * Carry the exact scorer entry that produced a hook payload, so the hook scores with it
+ * instead of re-resolving by id (which can miss nested workflows or pick a same-id scorer).
+ */
+export function setScorerHookEntry(data: ScoringHookInput, entry: MastraScorerEntry): void {
+  scorerHookEntries.set(data, entry);
+}
+
+export function getScorerHookEntry(data: ScoringHookInput): MastraScorerEntry | undefined {
+  return scorerHookEntries.get(data);
 }
