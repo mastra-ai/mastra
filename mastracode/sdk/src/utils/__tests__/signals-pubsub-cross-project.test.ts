@@ -176,10 +176,12 @@ function createProject(
             deliveryPolicy: {
               decide: async input => {
                 const decision = defaultNotificationDeliveryDecision(input);
-                const owner = await findWakeSession(sessions, [session], {
-                  resourceId: input.record.resourceId!,
-                  threadId: input.record.threadId,
-                });
+                const owner = await findWakeSession(
+                  sessions,
+                  [session],
+                  { resourceId: input.record.resourceId!, threadId: input.record.threadId },
+                  pubsub.getLeaseProvider(),
+                );
                 if (owner === FOREIGN_THREAD) return { ...decision, hold: true };
                 const hold = shouldHoldNotificationDelivery({
                   resourceId: input.record.resourceId!,
@@ -393,6 +395,7 @@ describe('processes in different directories that share one resource', () => {
       'feature-thread': '/repo/feature',
       // A third checkout with no process running.
       'closed-thread': '/repo/closed',
+      'feature-other': '/repo/feature',
     };
     const shared = { rootDir, resourceId: ours.resourceId, notifications, work, withDispatch: true, threadProjects };
     const main = createProject('main', { ...shared, projectPath: '/repo/main', openThreadId: mainOpenThreadId });
@@ -455,6 +458,23 @@ describe('processes in different directories that share one resource', () => {
     // Every run happened in one process: the two never both deliver the thread.
     expect(new Set(work.ran.map(entry => entry.split(':')[0])).size).toBe(1);
     expect(work.maxInFlight).toBe(1);
+  }, 30_000);
+
+  it("keeps delivering a project's other threads while another process has one of them open", async () => {
+    const { notifications, work, main, round } = await setUpCheckouts({ mainOpenThreadId: 'feature-thread' });
+    await notifications.createNotification(dueNotification(main.resourceId, 'feature-other', { id: 'other' }));
+    await notifications.createNotification(dueNotification(main.resourceId, 'feature-thread', { id: 'open' }));
+
+    for (let index = 0; index < 6; index++) {
+      await round();
+      await waitFor(() => work.inFlight === 0, 'runs to settle');
+    }
+
+    expect((await notifications.getNotification({ threadId: 'feature-other', id: 'other' }))?.status).toBe('delivered');
+    expect((await notifications.getNotification({ threadId: 'feature-thread', id: 'open' }))?.status).toBe('delivered');
+    // The open thread runs in the process that has it open; the project's other thread in its own project's process.
+    expect(work.ran.filter(entry => entry.startsWith('main:')).length).toBeGreaterThan(0);
+    expect(work.ran.filter(entry => entry.startsWith('feature:')).length).toBeGreaterThan(0);
   }, 30_000);
 
   it('delivers a thread with no project once, from the process holding the resource', async () => {

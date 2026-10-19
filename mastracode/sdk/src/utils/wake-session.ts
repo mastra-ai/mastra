@@ -1,4 +1,7 @@
 import type { AgentController, Session } from '@mastra/core/agent-controller';
+import type { LeaseProvider } from '@mastra/core/events';
+
+import { notificationDispatchLeaseKey } from './signals-pubsub.js';
 
 /** A session here serves the thread's resource, but the thread belongs to another project. */
 export const FOREIGN_THREAD = Symbol('foreign-thread');
@@ -30,13 +33,19 @@ export function threadScopeKey(scope: Record<string, string>): string | undefine
  * with that process's workspace, tools and cwd. The thread's scope tags (the
  * ones `thread.create()` stamps, such as `projectPath`) say which session it
  * belongs to. A thread with no scope tags, or with tags no session here
- * contradicts, keeps going to the resource's session. A session that has the
- * thread open always owns it.
+ * contradicts, keeps going to the resource's session.
+ *
+ * A session that has the thread open always owns it. When the thread belongs to
+ * another project, that session delivers it under a lease for this one thread
+ * (`openThreadScope`), and the thread's own project yields it while another
+ * process holds that lease (`leases`), so only one process runs it and the
+ * project's other threads stay with the project.
  */
 export async function findWakeSession<TState>(
   controller: Pick<AgentController<TState>, 'getSessionByResource'>,
   liveSessions: Iterable<Session<TState>>,
   { resourceId, threadId }: { resourceId: string; threadId: string },
+  leases?: Pick<LeaseProvider, 'getLeaseOwner'>,
 ): Promise<WakeSession<TState> | typeof FOREIGN_THREAD | undefined> {
   const first = await controller.getSessionByResource(resourceId);
   if (!first) return undefined;
@@ -51,17 +60,25 @@ export async function findWakeSession<TState>(
     Object.entries(session.getThreadScope()).every(
       ([key, value]) => metadata[key] === undefined || metadata[key] === value,
     );
-  const owner = candidates.find(session => session.thread.getId() === threadId) ?? candidates.find(matchesScope);
+  const open = candidates.find(session => session.thread.getId() === threadId);
+  if (open) {
+    return { session: open, scope: matchesScope(open) ? threadLeaseScope(open, metadata) : openThreadScope(threadId) };
+  }
+  const owner = candidates.find(matchesScope);
   if (!owner) return FOREIGN_THREAD;
-  return { session: owner, scope: threadLeaseScope(owner, metadata) };
+  const scope = threadLeaseScope(owner, metadata);
+  if (
+    scope !== undefined &&
+    (await leases?.getLeaseOwner(notificationDispatchLeaseKey(resourceId, openThreadScope(threadId))))
+  ) {
+    return FOREIGN_THREAD;
+  }
+  return { session: owner, scope };
 }
 
 /**
- * The dispatch lease scopes a session needs: its own, plus the open thread's
- * when that thread was created in another project. A session with another
- * project's thread open runs its wakes (`findWakeSession`), so it competes for
- * that project's lease with the project's own processes, and only the holder
- * delivers.
+ * The dispatch lease scopes a session needs: its own, plus a lease for its open
+ * thread alone when that thread belongs to another project (`findWakeSession`).
  */
 export async function sessionLeaseScopes<TState>(session: Session<TState>): Promise<Array<string | undefined>> {
   const own = threadScopeKey(session.getThreadScope());
@@ -69,8 +86,16 @@ export async function sessionLeaseScopes<TState>(session: Session<TState>): Prom
   if (!threadId) return [own];
   const thread = await session.thread.getById({ threadId });
   if (!thread || thread.resourceId !== session.identity.getResourceId()) return [own];
-  const open = threadLeaseScope(session, thread.metadata as Record<string, unknown> | undefined);
-  return open === undefined || open === own ? [own] : [own, open];
+  const metadata = (thread.metadata as Record<string, unknown> | undefined) ?? {};
+  const foreign = Object.entries(session.getThreadScope()).some(
+    ([key, value]) => metadata[key] !== undefined && metadata[key] !== value,
+  );
+  return foreign ? [own, openThreadScope(threadId)] : [own];
+}
+
+/** The lease scope for one thread a session has open from another project. */
+function openThreadScope(threadId: string): string {
+  return threadScopeKey({ openThread: threadId })!;
 }
 
 /**

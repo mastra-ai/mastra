@@ -44,11 +44,11 @@ describe('findWakeSession', () => {
     expect(await findWakeSession(controller(a), [a], { resourceId: 'team', threadId: 'th-b' })).toBe(FOREIGN_THREAD);
   });
 
-  it('runs a thread in the session that has it open, under the dispatch lease of the project it belongs to', async () => {
+  it("runs another project's thread in the session that has it open, under a lease for that thread alone", async () => {
     const openOnB = session('team', { projectPath: '/homes/a' }, threads, 'th-b');
     expect(await findWakeSession(controller(openOnB), [openOnB], { resourceId: 'team', threadId: 'th-b' })).toEqual({
       session: openOnB,
-      scope: threadScopeKey({ projectPath: '/homes/b' }),
+      scope: threadScopeKey({ openThread: 'th-b' }),
     });
   });
 
@@ -57,6 +57,17 @@ describe('findWakeSession', () => {
     const openOnA = session('team', { projectPath: '/homes/a' }, threads, 'th-b');
     expect(await findWakeSession(controller(b), [b, openOnA], { resourceId: 'team', threadId: 'th-b' })).toEqual({
       session: openOnA,
+      scope: threadScopeKey({ openThread: 'th-b' }),
+    });
+  });
+
+  it('yields a thread to the process that has it open from another project', async () => {
+    const b = session('team', { projectPath: '/homes/b' }, threads);
+    const leases = (owner?: string) => ({ getLeaseOwner: async (_key: string) => owner });
+    const lookup = { resourceId: 'team', threadId: 'th-b' };
+    expect(await findWakeSession(controller(b), [b], lookup, leases('other-process'))).toBe(FOREIGN_THREAD);
+    expect(await findWakeSession(controller(b), [b], lookup, leases(undefined))).toEqual({
+      session: b,
       scope: threadScopeKey({ projectPath: '/homes/b' }),
     });
   });
@@ -97,10 +108,10 @@ describe('sessionLeaseScopes', () => {
   ];
   const scopeA = threadScopeKey({ projectPath: '/homes/a' });
 
-  it("adds the open thread's project lease when that thread belongs to another project", async () => {
+  it('adds a lease for the open thread alone when it belongs to another project', async () => {
     expect(await sessionLeaseScopes(session('team', { projectPath: '/homes/a' }, threads, 'th-b'))).toEqual([
       scopeA,
-      threadScopeKey({ projectPath: '/homes/b' }),
+      threadScopeKey({ openThread: 'th-b' }),
     ]);
   });
 
