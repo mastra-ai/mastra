@@ -1,8 +1,11 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import type { ChatCompletionRequest, LLMock } from '@copilotkit/aimock';
+import { DurableAgent, createDurableAgent, createEventedAgent } from '../../../agent/durable';
 import type { MastraScorer } from '../../../evals';
 import type { NetworkChunkType } from '../../../stream/types';
+import type { EngineSkipOptions } from './aimock-scenario';
 import { SCENARIO_MODEL_ID } from './types';
+import type { EngineVariant } from './types';
 
 /**
  * Helpers for `network-*` scenarios. `agent.network()` makes several kinds of
@@ -75,4 +78,30 @@ export async function drain(stream: AsyncIterable<unknown>): Promise<NetworkChun
   const chunks: NetworkChunkType[] = [];
   for await (const chunk of stream) chunks.push(chunk as NetworkChunkType);
   return chunks;
+}
+
+/**
+ * Network scenarios build their agents directly instead of through
+ * runLoopScenario, so the fs variant (agents assembled from fs entries) does not
+ * apply. Inngest needs its external host's wrapper, which network-fixtures cannot reach.
+ */
+export const NETWORK_ENGINE_SKIP: EngineSkipOptions = { skip: ['fs', 'inngest'] };
+
+const engineWrappers = new WeakMap<object, unknown>();
+
+/**
+ * Returns the agent that network()/resumeNetwork()/approve/decline should be
+ * called on for this engine. Repeated calls reuse one wrapper, so a resume
+ * goes through the same wrapper as the run it continues. An agent that is
+ * already wrapped is returned as is.
+ */
+export function forEngine<T extends object>(agent: T, engine: EngineVariant): T {
+  if (engine === 'normal' || agent instanceof DurableAgent) return agent;
+  let wrapped = engineWrappers.get(agent);
+  if (!wrapped) {
+    wrapped =
+      engine === 'evented' ? createEventedAgent({ agent: agent as any }) : createDurableAgent({ agent: agent as any });
+    engineWrappers.set(agent, wrapped);
+  }
+  return wrapped as T;
 }
