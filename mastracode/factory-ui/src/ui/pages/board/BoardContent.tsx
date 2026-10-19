@@ -67,6 +67,9 @@ function countUnfilteredCandidates({
   return participantCandidates.filter(candidate => !isPersistedCandidate(knownSourceKeys, candidate)).length;
 }
 
+// One item can sit in several stages; each copy is its own card.
+const workItemCardKey = (stageId: string, itemId: string) => `${stageId}/${itemId}`;
+
 export function BoardContent({
   factory,
   repository,
@@ -305,15 +308,14 @@ export function BoardContent({
         >
           <VirtualBoardItems
             items={stageWorkItems}
-            itemKey={item => item.id}
+            itemKey={item => workItemCardKey(stage.id, item.id)}
             layout={layout}
-            pinnedKey={targetItemId}
+            pinnedKey={targetItemId && workItemCardKey(stage.id, targetItemId)}
             renderItem={item => (
               <WorkItemCard
                 layout={layout}
                 item={item}
                 deepLinkRef={registerDeepLinkedCard(item.id)}
-                deepLinkCommentId={targetItemId === item.id ? targetCommentId : undefined}
                 highlighted={targetItemId === item.id}
                 columnStage={stage.id}
                 relatedItems={relatedItemsFor(item)}
@@ -392,6 +394,11 @@ export function BoardContent({
         layout={layout}
         stages={stageViews}
         totalTaskCount={totalTaskCount}
+        linkedComment={
+          targetItemId !== undefined && targetCommentId !== undefined && targetStages[0] !== undefined
+            ? { cardKey: workItemCardKey(targetStages[0], targetItemId), commentId: targetCommentId }
+            : undefined
+        }
         onDrop={dropWithRepository}
         toolbar={
           <BoardViewControls
