@@ -462,6 +462,12 @@ The `command` argument is a shell string and is concatenated verbatim into the r
       'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
   },
   {
+    name: 'filesystem',
+    type: 'PlatformSandboxFilesystem',
+    description:
+      "The sandbox's disk through E2B's files API, sent straight to the VM with the same lease `executeCommand()` uses. Requires an E2B-backed sandbox. Paths are absolute and not confined to a root. `appendFile`, `copyFile`, and writes with `overwrite: false` aren't atomic. See [Native filesystem](/reference/workspace/sandbox#native-filesystem).",
+  },
+  {
     name: 'templatePending',
     type: '{ templateId: string; retryAfterMs: number } | undefined',
     description:
