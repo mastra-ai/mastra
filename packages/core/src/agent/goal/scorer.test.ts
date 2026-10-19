@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { createScorer } from '../../evals/base';
 import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
+import { TRAILING_ASSISTANT_GUARD_CONTINUATION_KEY } from '../../processors/trailing-assistant-guard';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
@@ -145,7 +146,7 @@ describe('createGoalScorer latest user message text extraction', () => {
         content: {
           format: 2,
           parts: [{ type: 'text', text: 'Continue.' }],
-          metadata: { trailingAssistantGuardContinuation: true },
+          metadata: { [TRAILING_ASSISTANT_GUARD_CONTINUATION_KEY]: true },
         },
       },
     ]);

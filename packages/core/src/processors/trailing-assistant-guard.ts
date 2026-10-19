@@ -7,11 +7,12 @@ import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from './
 
 const SETTLED_TOOL_STATES = new Set(['result', 'output-error']);
 
-const CONTINUATION_METADATA_KEY = 'trailingAssistantGuardContinuation';
+/** Metadata key that marks the synthetic user turn appended by {@link TrailingAssistantGuard}. */
+export const TRAILING_ASSISTANT_GUARD_CONTINUATION_KEY = 'trailingAssistantGuardContinuation';
 
 /** Whether `message` is the synthetic user turn appended by {@link TrailingAssistantGuard}. */
-function isTrailingAssistantGuardContinuation(message: MastraDBMessage): boolean {
-  return message.content.metadata?.[CONTINUATION_METADATA_KEY] === true;
+export function isTrailingAssistantGuardContinuation(message: MastraDBMessage): boolean {
+  return message.content.metadata?.[TRAILING_ASSISTANT_GUARD_CONTINUATION_KEY] === true;
 }
 
 /**
@@ -137,7 +138,7 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
       content: {
         format: 2,
         parts: [{ type: 'text', text: willUseResponseFormat ? 'Generate the structured response.' : 'Continue.' }],
-        metadata: { [CONTINUATION_METADATA_KEY]: true },
+        metadata: { [TRAILING_ASSISTANT_GUARD_CONTINUATION_KEY]: true },
       },
       createdAt,
     };
