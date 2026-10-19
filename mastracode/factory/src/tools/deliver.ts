@@ -10,7 +10,13 @@ export const FACTORY_SESSION_NOTIFICATION_SOURCE = 'factory-session';
 
 export type FactoryDeliveryController = Pick<
   MountedMastraCode['controller'],
-  'queryThreadById' | 'queryThreads' | 'getSessionByResource' | 'createSession' | 'getCurrentAgent'
+  | 'queryThreadById'
+  | 'queryThreads'
+  | 'setThreadModel'
+  | 'listAvailableModels'
+  | 'getSessionByResource'
+  | 'createSession'
+  | 'getCurrentAgent'
 >;
 
 export interface FactoryDeliveryTarget {
