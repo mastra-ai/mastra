@@ -20,6 +20,7 @@ import { switchModeWithPack } from './model-packs/apply.js';
 import { isLocalOnlyCommand } from './runtime.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
+import { resetTerminalBackground, restoreTerminalBackground } from './terminal-background.js';
 import { theme } from './theme.js';
 import { isEventRoutedToCurrentThread } from './thread-routing.js';
 import { isSubconsciousEnabled } from './utils/experimental-features.js';
@@ -93,7 +94,9 @@ export function setupKeyboardShortcuts(
     }
 
     state.ui.stop();
+    resetTerminalBackground();
     const onContinue = () => {
+      restoreTerminalBackground();
       state.ui.start();
       state.ui.requestRender();
     };
@@ -102,6 +105,7 @@ export function setupKeyboardShortcuts(
       process.kill(process.pid, 'SIGTSTP');
     } catch {
       process.off('SIGCONT', onContinue);
+      restoreTerminalBackground();
       state.ui.start();
       state.ui.requestRender();
       showError(state, 'Unable to suspend in the current terminal');
@@ -504,7 +508,6 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
     { name: 'browser', description: 'Configure browser automation' },
-    { name: 'theme', description: 'Switch color theme (picker, list, or name)' },
     { name: 'update', description: 'Check for and install updates' },
     { name: 'api-keys', description: 'Manage API keys for model providers' },
     { name: 'plugins', description: 'Manage Mastra Code plugins' },

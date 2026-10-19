@@ -76,7 +76,14 @@ export const streamingRenderStabilityScenario: McE2eScenario = {
 
     terminal.write('\x15');
     await terminal.flushInput?.();
-    terminal.submit('/theme light');
+    terminal.submit('/settings');
+    await runtime.waitForScreenText(/Terminal background/, terminal);
+    terminal.write('\x1b[B'.repeat(3) + '\r');
+    await runtime.waitForScreenText(/Built-in light theme/, terminal);
+    terminal.write('\x1b[B'.repeat(2) + '\r');
+    await runtime.waitForScreenText(/Theme\s+light/, terminal);
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Terminal background/, terminal);
     await runtime.waitForScreenText(/Theme set to light/i, terminal);
     assertStableOutput(terminal.serialize().view);
 

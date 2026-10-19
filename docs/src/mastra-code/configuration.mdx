@@ -779,27 +779,20 @@ Mastra Code detects your terminal's color scheme and applies a matching dark or 
 ### Detection order
 
 1. `MASTRA_THEME` environment variable: `dark`, `light`, a theme name, or a `light/dark` pair
-1. Persisted setting from `/theme` (stored in `settings.json`)
+1. Persisted setting from `/settings` → **Theme** (stored in `settings.json`)
 1. OSC 11 query: asks your terminal for its actual background color
 1. `COLORFGBG` environment variable (set by some terminals like iTerm2 and Konsole)
 1. Falls back to dark theme
 
 ### Switching themes
 
-Use the `/theme` command to change the theme at runtime:
+Open `/settings` and select **Theme**. Moving through the list previews each theme; Enter keeps it and Esc restores the previous one. The choice is persisted across sessions.
 
-```
-/theme                                      # interactive picker with live preview
-/theme light                                # built-in light
-/theme dark                                 # built-in dark
-/theme auto                                 # follow the terminal with the built-in palettes
-/theme tokyo-night                          # a bundled or custom theme
-/theme catppuccin-latte/catppuccin-mocha    # follow the terminal with a light/dark pair
-/theme status                               # active mode and stored preference
-/theme list                                 # all available themes
-```
+### Terminal background
 
-The choice is persisted across sessions.
+By default, Mastra Code leaves your terminal's background color alone and adapts its text colors to it. Turn on `/settings` → **Terminal background** to paint the terminal with the theme's background color instead. Mastra Code uses the OSC 11 escape sequence, so this works in terminals that support it, such as Ghostty, iTerm2, kitty, and WezTerm. Your own background comes back when Mastra Code exits or is suspended with Ctrl+Z.
+
+Themes without their own background, including `auto` and themes that follow your terminal's appearance, leave the terminal background unchanged.
 
 ## macOS sleep prevention
 

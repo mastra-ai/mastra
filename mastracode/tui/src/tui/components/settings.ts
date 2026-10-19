@@ -33,6 +33,9 @@ export interface SettingsConfig {
   experimentalAgent: ExperimentalAgent | null;
   backgroundToolsEnabled: boolean;
   webSearchProvider: WebSearchProviderSetting;
+  theme: string;
+  themeOptions: { value: string; description: string }[];
+  terminalBackground: boolean;
   tavilyKeyAvailable: boolean;
   parallelKeyAvailable: boolean;
 }
@@ -50,6 +53,11 @@ export interface SettingsCallbacks {
   onExperimentalAgentChange: (agent: ExperimentalAgent | null) => void;
   onBackgroundToolsChange: (enabled: boolean) => void;
   onWebSearchProviderChange: (provider: WebSearchProviderSetting) => void;
+  /** Apply a theme temporarily while the picker moves. */
+  onThemePreview: (theme: string) => void;
+  /** Apply and save a theme. Resolves false if it couldn't be applied. */
+  onThemeChange: (theme: string) => Promise<boolean>;
+  onTerminalBackgroundChange: (enabled: boolean) => void;
   onApiKeys?: () => void;
   onClose: () => void;
 }
@@ -64,8 +72,10 @@ class SelectSubmenu extends SelectList {
     currentValue: string,
     onSelect: (value: string) => void | Promise<void>,
     onBack: () => void,
+    onHighlight?: (value: string) => void,
   ) {
     super(items, Math.min(items.length, 8), getSelectListTheme());
+    if (onHighlight) this.onSelectionChange = item => onHighlight(item.value);
 
     const currentIndex = items.findIndex(i => i.value === currentValue);
     if (currentIndex !== -1) {
@@ -322,6 +332,56 @@ export class SettingsComponent extends Box implements Focusable {
               config.thinkingLevel = value;
               callbacks.onThinkingLevelChange(value);
               done(getThinkingLabel(value));
+            },
+            () => done(),
+          ),
+      },
+      {
+        id: 'theme',
+        label: 'Theme',
+        description: 'Color theme. Moving through the list previews each theme.',
+        currentValue: config.theme,
+        submenu: (_currentValue, done) => {
+          const saved = config.theme;
+          return new SelectSubmenu(
+            config.themeOptions.map(option => ({
+              value: option.value,
+              label: `  ${option.value}`,
+              description: option.description,
+            })),
+            saved,
+            async value => {
+              if (await callbacks.onThemeChange(value)) {
+                config.theme = value;
+              } else {
+                callbacks.onThemePreview(saved);
+              }
+              done(config.theme);
+            },
+            () => {
+              callbacks.onThemePreview(saved);
+              done();
+            },
+            value => callbacks.onThemePreview(value),
+          );
+        },
+      },
+      {
+        id: 'terminalBackground',
+        label: 'Terminal background',
+        description: "Paint the terminal's background with the theme's color. Your own color comes back on exit.",
+        currentValue: config.terminalBackground ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              { value: 'on', label: '  On', description: "Use the theme's background color" },
+              { value: 'off', label: '  Off', description: "Keep your terminal's background color" },
+            ],
+            config.terminalBackground ? 'on' : 'off',
+            value => {
+              config.terminalBackground = value === 'on';
+              callbacks.onTerminalBackgroundChange(config.terminalBackground);
+              done(config.terminalBackground ? 'On' : 'Off');
             },
             () => done(),
           ),
