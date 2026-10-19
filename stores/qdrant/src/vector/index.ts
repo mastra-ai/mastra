@@ -610,7 +610,7 @@ export class QdrantVector extends MastraVector {
             limit: 100,
             offset,
             with_payload: false,
-            with_vector: update.vector ? false : true, // Only fetch vectors if not updating them
+            with_vector: !update.vector, // Only fetch vectors if not updating them
           });
 
           matchingPoints.push(

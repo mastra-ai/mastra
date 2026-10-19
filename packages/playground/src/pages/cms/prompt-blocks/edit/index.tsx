@@ -148,7 +148,7 @@ function CmsPromptBlocksEditForm({
       void queryClient.invalidateQueries({ queryKey: ['stored-prompt-block'] });
       void queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
       toast.success('Prompt block published');
-      void navigate(paths.promptBlocksLink());
+      navigate(paths.promptBlocksLink());
     } catch (error) {
       toast.error(`Failed to publish: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
@@ -165,7 +165,7 @@ function CmsPromptBlocksEditForm({
         void queryClient.invalidateQueries({ queryKey: ['stored-prompt-block'] });
         void queryClient.invalidateQueries({ queryKey: ['prompt-block-versions', blockId] });
         toast.success('Version published');
-        void navigate(paths.promptBlocksLink());
+        navigate(paths.promptBlocksLink());
       } catch (error) {
         toast.error(`Failed to publish version: ${error instanceof Error ? error.message : 'Unknown error'}`);
       } finally {

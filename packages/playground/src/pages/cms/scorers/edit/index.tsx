@@ -149,7 +149,7 @@ function CmsScorersEditForm({
       void queryClient.invalidateQueries({ queryKey: ['scorers'] });
       void queryClient.invalidateQueries({ queryKey: ['stored-scorers'] });
       toast.success('Scorer published');
-      void navigate(paths.scorerLink(scorerId));
+      navigate(paths.scorerLink(scorerId));
     } catch (error) {
       toast.error(`Failed to publish scorer: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
@@ -166,7 +166,7 @@ function CmsScorersEditForm({
         void queryClient.invalidateQueries({ queryKey: ['stored-scorers'] });
         void queryClient.invalidateQueries({ queryKey: ['scorer-versions', scorerId] });
         toast.success('Version published');
-        void navigate(paths.scorerLink(scorerId));
+        navigate(paths.scorerLink(scorerId));
       } catch (error) {
         toast.error(`Failed to publish version: ${error instanceof Error ? error.message : 'Unknown error'}`);
       } finally {
