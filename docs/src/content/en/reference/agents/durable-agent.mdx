@@ -313,6 +313,8 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
 
 Reconnects to an existing run. Use this after a network disconnection. For the supported general reconnect flow, omit `offset` to replay all available cached events before receiving live events.
 
+When observing from another process, the observing agent must have the same `id` as the agent that started the run. If the persisted run belongs to an agent with a different ID, `observe()` throws `DURABLE_AGENT_OBSERVE_AGENT_MISMATCH`, matching the ownership checks in `resume()` and `recover()`.
+
 For runs configured with `structuredOutput`, an observer in another process reconstructs `output.object` from the persisted schema and replayed text.
 
 ```typescript
@@ -669,7 +671,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
     type: "AgentExecutionOptions['stopWhen']",
     isOptional: true,
     description:
-      'Predicate or composition that ends the agentic loop early. The closure rides on the in-process run registry; cross-process resumes degrade to `maxSteps` only.',
+      'Predicate or composition that ends the agentic loop early. If it throws, `fullStream` rejects without emitting a `step-finish` or `error` chunk. Durable transports preserve the error name and message, but not its stack, cause, or subclass identity. The closure rides on the in-process run registry; cross-process resumes degrade to `maxSteps` only.',
   },
   {
     name: 'system',

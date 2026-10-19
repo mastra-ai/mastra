@@ -454,6 +454,7 @@ interface AggregateRootSpec {
   cursorId: number;
   traceId: string;
   entityName: string | null;
+  entityId?: string;
   startedAt: string;
   durationMs: number;
   error?: boolean;
@@ -468,6 +469,7 @@ function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
   const organizationId = spec.organizationId ?? 'org-a';
   const root = span(spec.cursorId, spec.traceId, spec.traceId, {
     entityName: spec.entityName,
+    entityId: spec.entityId ?? null,
     environment: spec.environment ?? 'production',
     organizationId,
     threadId: spec.threadId,
@@ -515,7 +517,7 @@ function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
  * | research-2  | 5   | 12000 | yes | t-10   | acme       | yes    | staging, org-b            |
  * | scheduler-1 | 1   | 1000  |     | t-11   |            |        | percentiles interpolate   |
  * | scheduler-2 | 3   | 3000  |     | t-11   |            |        |                           |
- * | unnamed-1   | 2   | 700   |     | t-12   |            |        | `entityName: null`        |
+ * | unnamed-1   | 2   | 700   |     | t-12   |            |        | `entityName: null`, `entityId: nightly-scorer` |
  *
  * Whole-window groups by `entityName`: triage 6 (2 errors, p95 8000), billing 5 (1 error,
  * p95 2500), support 4 (1 error, p95 6000), research 2 (1 error, p95 12000), scheduler 2
@@ -723,6 +725,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 600,
       traceId: 'unnamed-1',
       entityName: null,
+      entityId: 'nightly-scorer',
       startedAt: '2026-08-02T10:00:00.000Z',
       durationMs: 700,
       threadId: 't-12',
@@ -1108,6 +1111,19 @@ export const TRACE_AGGREGATE_CONFORMANCE_CASES: TraceAggregateConformanceCase[] 
         { dimensions: { status: 'success' }, measures: { count: 15, 'countDistinct.traceId': 15 } },
         { dimensions: { status: 'error' }, measures: { count: 5, 'countDistinct.traceId': 5 } },
       ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'entityId groups the traces that have no entityName',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'notExists', path: 'entityName' },
+      groupBy: ['entityId'],
+      measures: ['count'],
+    },
+    expected: {
+      rows: [{ dimensions: { entityId: 'nightly-scorer' }, measures: { count: 1 } }],
       truncated: false,
     },
   },

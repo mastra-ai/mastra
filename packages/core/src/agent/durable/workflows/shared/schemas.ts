@@ -196,6 +196,8 @@ export const baseIterationStateSchema = z.object({
   // Span data, carried unchanged so every iteration shares one trace
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),
+  // First chunk clock, carried so the final step can end the generation and AGENT_RUN with it
+  completionStartTime: z.coerce.date().optional(),
 });
 
 /**

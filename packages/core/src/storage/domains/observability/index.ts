@@ -57,6 +57,8 @@ export {
   TRACE_QUERY_PRESENCE_OPERATORS,
   TRACE_QUERY_ARRAY_OPERATORS,
   TRACE_QUERY_FIELD_REGISTRY,
+  SPAN_QUERY_FIELD_REGISTRY,
+  type SpanQueryField,
   TraceQueryValidationError,
   TraceQueryCursorError,
   TraceQueryExecutionError,

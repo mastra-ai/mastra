@@ -6,6 +6,7 @@ import { flushSync } from 'react-dom';
 import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel, alwaysHighlightProps } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
+import type { FilterBarOptionSection } from './filter-bar-option-list';
 import { findGroup } from './filter-bar-tree';
 import { matchesQueryFilter } from './match-query';
 import type { FilterBarDraft, FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
@@ -39,6 +40,19 @@ const ADVANCED_FIELD: FilterBarField = {
   icon: BracesIcon,
   operators: [],
 };
+
+/** The field list split into its `section`s, in order; undefined when no field has a section. */
+function sectionFields(fields: readonly FilterBarField[]): FilterBarOptionSection<FilterBarField>[] | undefined {
+  if (!fields.some(field => field.section)) return undefined;
+  const sections: FilterBarOptionSection<FilterBarField>[] = [];
+  for (const field of fields) {
+    const heading = field.section ?? '';
+    const last = sections.at(-1);
+    if (last && last.value === heading) last.items.push(field);
+    else sections.push({ value: heading, items: [field] });
+  }
+  return sections;
+}
 
 export type FilterBarInputProps = {
   placeholder?: string;
@@ -263,12 +277,13 @@ function FilterBarInputImpl({
     }
   };
 
-  const optionsForStep: Record<Step, readonly Item[]> = {
-    field: visibleFields,
+  const fieldSections = sectionFields(visibleFields);
+  const optionsForStep: Record<Step, readonly Item[] | readonly FilterBarOptionSection<Item>[]> = {
+    field: fieldSections ?? visibleFields,
     operator: fieldOperators,
     value: valueStep.options,
   };
-  const items: readonly Item[] = emptyForStepChange ? EMPTY_ITEMS : optionsForStep[step];
+  const items = emptyForStepChange ? EMPTY_ITEMS : optionsForStep[step];
 
   // A search field is the way out for text that names no field, so it survives the field
   // step's own filtering whatever was typed; every other item matches on its label.
@@ -403,6 +418,7 @@ function FilterBarInputImpl({
               {step === 'field' && (
                 <FilterBarOptionList<FilterBarField>
                   aria-label="Fields"
+                  sectioned={fieldSections !== undefined}
                   getKey={f => f.id}
                   renderOption={f => (
                     <>

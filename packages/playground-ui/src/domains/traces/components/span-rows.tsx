@@ -2,6 +2,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import { Fragment, useEffect } from 'react';
 import { getSpanDescendantIds } from '../hooks/get-all-span-ids';
 import type { UISpan, UISpanStyle } from '../types';
+import { getOverallLatency } from '../utils/span-timing';
 import { getSpanTypeUi } from './shared';
 
 export type SpanRowExpansion = {
@@ -48,7 +49,7 @@ export type SpanRowsProps = SharedRowProps & {
  * only mounted while their parent is expanded.
  */
 export function SpanRows({ spans, ...rowProps }: SpanRowsProps) {
-  const overallLatency = spans[0]?.latency || 0;
+  const overallLatency = getOverallLatency(spans);
   const overallStartTime = spans[0]?.startTime || '';
 
   return (

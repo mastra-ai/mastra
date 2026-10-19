@@ -68,6 +68,50 @@ const selected = await mastraClient.getTrace(list.spans[0].traceId)
 
 It accepts the same filtering, ordering and delta-polling arguments as `listTraces()`. Use `listTraces()` when you actually need the full span payloads.
 
+## Querying spans
+
+`querySpans()` returns completed span summaries across traces. It requires a positive ISO timestamp range over span start time and supports cursor pagination:
+
+```typescript
+const result = await mastraClient.querySpans({
+  timeRange: {
+    from: '2026-10-01T00:00:00.000Z',
+    to: '2026-10-02T00:00:00.000Z',
+  },
+  where: {
+    op: 'and',
+    args: [
+      { op: 'eq', left: { path: 'threadId' }, right: { literal: 'thread-123' } },
+      { op: 'gte', left: { path: 'durationMs' }, right: { literal: 1000 } },
+    ],
+  },
+  orderBy: [{ field: 'startedAt', direction: 'desc' }],
+  page: { limit: 100 },
+})
+
+// Pass result.page.next as page.after to continue with the same filters and ordering.
+console.log(result.spans)
+```
+
+Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt` or `endedAt`, ascending or descending, and defaults to descending start time.
+
+| Fields | Operators |
+| - | - |
+| `traceId`, `spanId`, `parentSpanId`, `threadId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| `organizationId`, `resourceId`, `runId`, `sessionId`, `userId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | Same string operators |
+| Entity, parent entity and root entity `Type`, `Id`, `Name`, `VersionId` fields, such as `parentEntityId` | Same string operators |
+| `name`, `spanType`, `status` | Same string operators; `name` also accepts `matches` / `notMatches` for normalized whole words and phrases |
+| `startedAt`, `endedAt`, `durationMs` | Comparisons, membership and presence |
+| `error` | `exists`, `notExists` |
+
+Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', value: { path: 'spanType' }, set: ['agent_run', 'tool_call'] }`. A span's status is `error` when it has an error and `success` otherwise.
+
+Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews. Model/provider are available in returned rows but aren't filterable.
+
+The additional identity, context and parent/root entity filters require an updated storage adapter. With an older adapter, requests using these filters return a structured `422` error.
+
+DuckDB returns `null` for parent/root entity type, ID and name, and for `executionSource`. Equality filters on these fields match no spans. Parent/root entity version IDs remain available.
+
 ## Querying traces
 
 `queryTraces()` finds completed logical traces using trace fields and conditions over related spans. Every query requires an ISO timestamp range.

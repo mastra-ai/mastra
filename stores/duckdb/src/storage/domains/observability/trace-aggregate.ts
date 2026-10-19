@@ -26,6 +26,7 @@ import type { CompiledDuckDBTraceQuery } from './trace-query';
 const DIMENSION_SQL: Record<string, string> = {
   entityType: 'r.entityType',
   entityName: 'r.entityName',
+  entityId: 'r.entityId',
   environment: 'r.environment',
   status: TRACE_STATUS_SQL,
   serviceName: 'r.serviceName',

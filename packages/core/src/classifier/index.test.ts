@@ -102,7 +102,7 @@ describe('Classifier', () => {
     });
 
     expect(doEvaluate).toHaveBeenCalledWith({
-      state: { content: 'hello' },
+      state: [{ type: 'json', value: { content: 'hello' } }],
       questions: {
         unsafe: {
           ...booleanQuestions.unsafe,
@@ -200,6 +200,36 @@ describe('Classifier', () => {
 
       expect(doDecide).toHaveBeenCalledTimes(1);
       expect(doEvaluate).not.toHaveBeenCalled();
+    });
+
+    it('converts state into provider parts like the AI SDK does', async () => {
+      const doDecide = vi.fn<DecisionModelV4['doDecide']>(async () => ({
+        answers: { unsafe: { type: 'boolean', probability: 0.5 } },
+        warnings: [],
+      }));
+      const classifier = new Classifier({
+        id: 'parts',
+        model: createDecisionModel(doDecide),
+        questions: booleanQuestions,
+      });
+      const parts = [
+        { type: 'text', text: 'hi' },
+        { type: 'json', value: { a: 1 } },
+      ] as const;
+
+      await classifier.decide({ state: 'I was charged twice' });
+      await classifier.decide({ state: { message: 'hi' } });
+      await classifier.decide({ state: parts });
+      await classifier.decide({ state: ['a', 1] });
+      await classifier.decide({ state: [{ type: 'text', text: 'hi' }, 'b'] });
+
+      expect(doDecide.mock.calls.map(([options]) => options.state)).toEqual([
+        [{ type: 'text', text: 'I was charged twice' }],
+        [{ type: 'json', value: { message: 'hi' } }],
+        parts,
+        [{ type: 'json', value: ['a', 1] }],
+        [{ type: 'json', value: [{ type: 'text', text: 'hi' }, 'b'] }],
+      ]);
     });
 
     it('keeps the deprecated evaluate() and MastraEvaluationModel working', async () => {

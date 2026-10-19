@@ -28,3 +28,14 @@ export const traceQueryValuesFixture: GetTraceQueryValuesResponse = {
   ],
   valuesTruncated: false,
 };
+
+export const traceQueryFieldsWithAggregateFixture: GetTraceQueryFieldsResponse = {
+  ...traceQueryFieldsFixture,
+  aggregate: {
+    dimensions: [
+      { path: 'entityName', valueKind: 'string' },
+      { path: 'status', valueKind: 'string' },
+    ],
+    measures: [{ name: 'count', kind: 'count', unit: 'count', approximate: false }],
+  },
+};

@@ -1,4 +1,5 @@
 import type {
+  AggregateTracesResponse,
   GetObservabilityCapabilitiesResponse,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesResponse,
@@ -185,3 +186,81 @@ export const traceQueryTagValues: GetTraceQueryValuesResponse = {
   ],
   valuesTruncated: false,
 };
+
+export const traceAggregateCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    traceAggregate: true,
+  },
+};
+
+/** The server can group by status and entity name only. */
+export const traceQueryFieldsWithAggregate: GetTraceQueryFieldsResponse = {
+  ...emptyTraceQueryFields,
+  aggregate: {
+    dimensions: [
+      { path: 'entityName', valueKind: 'string' },
+      { path: 'status', valueKind: 'string' },
+    ],
+    measures: [
+      { name: 'count', kind: 'count', unit: 'count', approximate: false },
+      { name: 'errorCount', kind: 'count', unit: 'count', approximate: false },
+      { name: 'errorRate', kind: 'ratio', unit: 'ratio', approximate: false },
+      { name: 'duration.p50', kind: 'duration', unit: 'ms', approximate: true },
+      { name: 'duration.p95', kind: 'duration', unit: 'ms', approximate: true },
+      { name: 'tokens.input.sum', kind: 'tokens', unit: 'tokens', approximate: false },
+      { name: 'tokens.output.sum', kind: 'tokens', unit: 'tokens', approximate: false },
+      { name: 'cost.sum', kind: 'cost', unit: 'currency', approximate: false },
+    ],
+  },
+};
+
+const groupedTrace = (traceId: string, entityName: string, status: 'success' | 'error') => ({
+  ...traceQueryPage.traces[0]!,
+  traceId,
+  rootSpanId: `span-${traceId}`,
+  name: entityName,
+  entityName,
+  entityType: 'agent',
+  status,
+});
+
+/** One selection seen two ways: as the trace list and grouped by agent, so counts can be checked against the list. */
+export const groupedTraceQueryPage: TraceQueryKeysetTraceResponse = {
+  traces: [
+    groupedTrace('trace-1', 'support-agent', 'success'),
+    groupedTrace('trace-2', 'support-agent', 'error'),
+    groupedTrace('trace-3', 'support-agent', 'success'),
+    groupedTrace('trace-4', 'billing-agent', 'success'),
+  ],
+  page: { next: null },
+};
+
+export function aggregateByEntityName(page: TraceQueryKeysetTraceResponse): AggregateTracesResponse {
+  const groups = new Map<string, { count: number; errors: number }>();
+  for (const trace of page.traces) {
+    const key = trace.entityName ?? '';
+    const group = groups.get(key) ?? { count: 0, errors: 0 };
+    group.count += 1;
+    if (trace.status === 'error') group.errors += 1;
+    groups.set(key, group);
+  }
+  return {
+    rows: [...groups].map(([entityName, { count, errors }]) => ({
+      dimensions: { entityName },
+      measures: {
+        count,
+        errorCount: errors,
+        errorRate: errors / count,
+        'duration.p50': 1000,
+        'duration.p95': 1000,
+        'tokens.input.sum': null,
+        'tokens.output.sum': null,
+        'cost.sum': null,
+      },
+      cost: { coverage: null, unit: null },
+    })),
+    truncated: false,
+  };
+}

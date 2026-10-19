@@ -122,6 +122,11 @@ const TRACE_SYNTHETIC_PARAM_BY_FIELD: Record<string, string> = {
 };
 
 export const TRACE_LIST_MODE_PARAM = 'listMode';
+/** Grouped view of the Traces table: the dimensions (comma-separated) to group by and the measure (`<measure>:<dir>`) to sort groups by. */
+export const TRACE_GROUP_BY_PARAM = 'groupBy';
+export const TRACE_GROUP_SORT_PARAM = 'groupSort';
+/** Grouped view only: filters on the groups' measures (`<measure>:<op>:<value>,…`). */
+export const TRACE_GROUP_HAVING_PARAM = 'groupHaving';
 /** Branch-mode only: identifies the anchor span that defines the displayed subtree.
  *  Stable across intra-panel span navigation (which only changes `spanId`). */
 export const TRACE_ANCHOR_SPAN_ID_PARAM = 'anchorSpanId';
@@ -270,6 +275,7 @@ export function hasAnyTraceFilterParams(params: URLSearchParams): boolean {
   if (params.has(TRACE_ROOT_ENTITY_TYPE_PARAM)) return true;
   if (params.has(TRACE_STATUS_PARAM)) return true;
   if (params.has(TRACE_LIST_MODE_PARAM)) return true;
+  if (params.has(TRACE_GROUP_BY_PARAM)) return true;
   if (params.has(TRACE_FILTER_GROUP_PARAM)) return true;
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
     if (params.has(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId])) return true;
@@ -735,6 +741,10 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
 
   const listMode = searchParams.get(TRACE_LIST_MODE_PARAM);
   if (listMode) next.set(TRACE_LIST_MODE_PARAM, listMode);
+  for (const param of [TRACE_GROUP_BY_PARAM, TRACE_GROUP_SORT_PARAM, TRACE_GROUP_HAVING_PARAM]) {
+    const value = searchParams.get(param);
+    if (value) next.set(param, value);
+  }
 
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
     const param = TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId];

@@ -39,6 +39,7 @@ import {
   buildAuthDisabledRoutes,
   buildAuthRoutes,
   createFactoryAuthGate,
+  createFactoryInteractiveMarker,
   createFactoryRouteAuth,
   factoryUserOrgId,
   getFactoryAuthOrgId,
@@ -47,6 +48,7 @@ import {
 } from './auth.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
+import { boardForWorkItem } from './boards/semantics.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
 import { touchFeed } from './feed-events.js';
@@ -137,6 +139,7 @@ import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/work-items/base.js';
 import { timedPhase } from './timing.js';
+import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
 
@@ -819,6 +822,11 @@ export class MastraFactory {
             const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
             return project?.autoApprovePlans ?? false;
           },
+          selfReviewEnabled: async ({ orgId, factoryProjectId }) => {
+            await factoryProjectsStorage.ensureReady();
+            const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+            return project?.selfReviewEnabled ?? false;
+          },
           ...(onTerminalStage ? { onTerminalStage } : {}),
           ...(githubIntegration
             ? {
@@ -1213,6 +1221,55 @@ export class MastraFactory {
                       requestContext,
                       providers: sourceControlToolProviders,
                       audit: auditDomain,
+                      testChecksEnabled: async ({ orgId, factoryProjectId }) => {
+                        await factoryProjectsStorage.ensureReady();
+                        const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+                        return project?.reviewTestChecksEnabled ?? false;
+                      },
+                      ...(workItemsStorage
+                        ? {
+                            selfReviewApprovedHead: async () => {
+                              const resolution = await resolveFactorySessionAddress({
+                                requestContext,
+                                storage: workItemsStorage,
+                              });
+                              if (!resolution) return undefined;
+                              const binding =
+                                resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
+                              if (!binding) return undefined;
+                              const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+                              if (!item || boardForWorkItem(item) !== 'work') return undefined;
+                              if (typeof item.metadata?.openPullRequestNumber === 'number') return undefined;
+                              // A verdict already recorded still binds the change request to its head.
+                              if (item.metadata?.selfReviewVerdict === undefined) {
+                                await factoryProjectsStorage.ensureReady();
+                                const project = await factoryProjectsStorage.get({
+                                  orgId: binding.orgId,
+                                  id: binding.factoryProjectId,
+                                });
+                                if (!project?.selfReviewEnabled) return undefined;
+                              }
+                              const sha = item.metadata?.selfReviewedHeadSha;
+                              return item.metadata?.selfReviewVerdict === 'approve' && typeof sha === 'string'
+                                ? sha
+                                : null;
+                            },
+                            boundChangeRequestId: async () => {
+                              const resolution = await resolveFactorySessionAddress({
+                                requestContext,
+                                storage: workItemsStorage,
+                              });
+                              if (!resolution) return undefined;
+                              const binding =
+                                resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
+                              if (binding?.role !== 'review') return undefined;
+                              const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+                              const source = item?.externalSource;
+                              if (!source || !/pull-request|merge-request/.test(source.type)) return undefined;
+                              return /(\d+)$/.exec(source.externalId)?.[1];
+                            },
+                          }
+                        : {}),
                     }),
                   );
                 }
@@ -1261,6 +1318,41 @@ export class MastraFactory {
                       ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
                     }),
                   );
+                  if (storage.isDomainReady('source-control')) {
+                    const scope = await resolveFactoryToolScope({
+                      requestContext,
+                      authEnabled: routeAuth.enabled(),
+                      sessions: sourceControlSessions,
+                      projects: factoryProjectsStorage,
+                      workItems: workItemsStorage,
+                    });
+                    if (scope) {
+                      mergeTools(
+                        'factory-tools',
+                        createFactoryTools({
+                          scope,
+                          deps: {
+                            workItems: workItemsStorage,
+                            comments: workItemCommentsStorage,
+                            feed: commentsDomain,
+                            audit: auditStorage,
+                            boards: this.#boards,
+                            transitionService,
+                            auditRecorder: auditDomain,
+                            sessions: sourceControlSessions,
+                            messaging: async () => {
+                              const controller = this.#prepared?.base.controller;
+                              const notifications = await controller
+                                ?.getMastra()
+                                ?.getStorage()
+                                ?.getStore('notifications');
+                              return controller && notifications ? { controller, notifications } : null;
+                            },
+                          },
+                        }),
+                      );
+                    }
+                  }
                 }
                 for (const { integration, ready, ensureReady } of toolIntegrations) {
                   if (!ready && ensureReady) {
@@ -1432,6 +1524,7 @@ export class MastraFactory {
             // provider snapshot so model calls see DB rows, then SPA + CORS.
             return {
               middleware: [
+                createFactoryInteractiveMarker(),
                 createCustomProvidersPrimer({ auth: routeAuth, storage: customProvidersStorage, authEnabled: false }),
                 ...spa,
               ],
@@ -1507,6 +1600,13 @@ export class MastraFactory {
           workItems: workItemsStorage,
           modelDefaults: modelDefaultsStorage,
         }),
+      { blocking: true },
+    );
+
+    // Factory tools fall in the SDK's `mcp` category (default `ask`); allow the
+    // no-approval ones per session before the session's first turn.
+    prepared.base.controller.onSessionCreated(
+      session => applyFactoryToolPermissions(session, { sessions: sourceControlSessions }),
       { blocking: true },
     );
 
