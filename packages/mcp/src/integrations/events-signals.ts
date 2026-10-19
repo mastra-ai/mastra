@@ -221,8 +221,9 @@ export class MCPEventsSignalProvider extends SignalProvider {
       kind: 'mcp-event',
       priority: this.#options.priority ?? 'medium',
       summary: formatUntrustedEvent({
-        header: `MCP event ${JSON.stringify(event)} from server ${JSON.stringify(server)}.`,
-        data: { eventId: occurrence.eventId, timestamp: occurrence.timestamp, data: occurrence.data },
+        // Event names are advertised by the server, so they stay inside the escaped block too.
+        header: 'MCP event notification.',
+        data: { server, event, eventId: occurrence.eventId, timestamp: occurrence.timestamp, data: occurrence.data },
         footer: truncated ? GAP_NOTE : undefined,
       }),
       attributes: { server, event, ...(truncated ? { truncated: true } : {}) },
@@ -243,8 +244,8 @@ export class MCPEventsSignalProvider extends SignalProvider {
       kind: 'mcp-event-subscription-ended',
       priority: 'high',
       summary: formatUntrustedEvent({
-        header: `The subscription to MCP event ${JSON.stringify(event)} from server ${JSON.stringify(server)} ended; no further events will arrive. The server's reason follows.`,
-        data: { error: message },
+        header: 'An MCP event subscription ended; no further events will arrive. Its details follow.',
+        data: { server, event, error: message },
       }),
       attributes: { server, event },
       payload: { server, event, arguments: live.target.args, error: message },

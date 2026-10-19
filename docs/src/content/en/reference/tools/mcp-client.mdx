@@ -1096,7 +1096,7 @@ await repoEvents.subscribeThread(
 )
 ```
 
-Threads that subscribe to the same server, event and arguments share one MCP subscription. Argument key order doesn't matter. Each occurrence becomes a notification with `kind: 'mcp-event'` and `attributes: { server, event }`. The raw occurrence is in `payload`. The notification `summary`, which is the only part the model reads, labels the event data as untrusted and wraps it in an `<untrusted-mcp-event-data>` block that the data can't close. When the server reports a gap, `attributes.truncated` is `true` and the summary says that events may have been skipped.
+Threads that subscribe to the same server, event and arguments share one MCP subscription. Argument key order doesn't matter. Each occurrence becomes a notification with `kind: 'mcp-event'` and `attributes: { server, event }`. The raw occurrence is in `payload`. The notification `summary`, which is the only part the model reads, labels the event as untrusted and wraps its data, together with the server-advertised event name, in an `<untrusted-mcp-event-data>` block that the content can't close. When the server reports a gap, `attributes.truncated` is `true` and the summary says that events may have been skipped.
 
 If the subscription ends, for example because the server terminates it, each subscribed thread receives a `high` priority notification with `kind: 'mcp-event-subscription-ended'` and the threads are unsubscribed.
 
