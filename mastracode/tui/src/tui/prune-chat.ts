@@ -29,6 +29,9 @@ function disposeRemovedComponentReferences(state: TUIState, removed: ReadonlySet
   state.assistantRenderRegistry.disposeComponents(removed);
 
   deleteRemovedMapValues(state.messageComponentsById, removed);
+  for (const tool of state.pendingTools.values()) {
+    if (removed.has(tool as unknown as Component)) tool.stopLiveUpdates?.();
+  }
   deleteRemovedMapValues(state.pendingTools, removed);
   deleteRemovedMapValues(state.pendingSubagents, removed);
   deleteRemovedMapValues(state.pendingAskUserComponents, removed);
