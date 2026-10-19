@@ -397,8 +397,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         const successfulResults = inputData.filter(tc => tc.result !== undefined);
         if (successfulResults.length) {
           for (const toolCall of successfulResults) {
-            // Parallel results may already have streamed as their call finished.
-            if (await earlyToolResults?.take(toolCall.toolCallId)) continue;
+            // Parallel results may already have streamed as their call finished, possibly
+            // before a suspension this run resumed from.
+            if ((await earlyToolResults?.take(toolCall.toolCallId)) || toolCall.streamedEarly) continue;
             const emission = await emitToolResult(toolCall, initialResult);
             if (!emission.ok) {
               return bailOnToolResultTripwire(emission.tripwire);
@@ -489,8 +490,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // by processOutputStream's 'tool-result' case in llm-execution-step.
           if (toolCall.result === undefined) continue;
 
-          // Parallel results may already have streamed as their call finished.
-          if (await earlyToolResults?.take(toolCall.toolCallId)) continue;
+          // Parallel results may already have streamed as their call finished, possibly
+          // before a suspension this run resumed from.
+          if ((await earlyToolResults?.take(toolCall.toolCallId)) || toolCall.streamedEarly) continue;
           const emission = await emitToolResult(toolCall, initialResult);
           if (!emission.ok) {
             return bailOnToolResultTripwire(emission.tripwire);

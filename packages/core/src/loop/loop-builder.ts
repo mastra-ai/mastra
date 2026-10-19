@@ -315,8 +315,8 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       ...toolCallStep,
       execute: async params => {
         const output = await toolCallStep.execute(params);
-        earlyToolResults.settle(output as any, params.getStepResult(llmExecutionStep as any));
-        return output;
+        const queued = earlyToolResults.settle(output as any, params.getStepResult(llmExecutionStep as any));
+        return queued ? { ...(output as object), streamedEarly: true } : output;
       },
     };
     const llmMappingStep = this.llmMappingStep(llmExecutionStep, earlyToolResults);

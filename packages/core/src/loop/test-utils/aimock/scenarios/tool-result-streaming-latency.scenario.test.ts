@@ -122,6 +122,91 @@ describeForAllEngines('Tool results stream as each parallel call finishes', engi
     expect(saved).toContain('420');
   });
 
+  it('keeps step results, model history and the saved thread in call order when calls finish in reverse', async () => {
+    const memory = new MockMemory();
+    // Each call waits for the one after it, so they finish hotels, cars, flights: the reverse of
+    // the order the model called them.
+    let hotelDone!: () => void;
+    let carDone!: () => void;
+    const hotelFinished = new Promise<void>(resolve => (hotelDone = resolve));
+    const carFinished = new Promise<void>(resolve => (carDone = resolve));
+    const searchFlights = createTool({
+      id: 'searchFlights',
+      description: 'Search flights.',
+      inputSchema: z.object({ to: z.string() }),
+      execute: async () => {
+        await carFinished;
+        return { cheapest: 420 };
+      },
+    });
+    const rentCar = createTool({
+      id: 'rentCar',
+      description: 'Find a rental car.',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async () => {
+        await hotelFinished;
+        setTimeout(carDone, 0);
+        return { daily: 35 };
+      },
+    });
+    const findHotel = createTool({
+      id: 'findHotel',
+      description: 'Find a hotel.',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async () => {
+        setTimeout(hotelDone, 0);
+        return { nightly: 110 };
+      },
+    });
+
+    const { output, llm, chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Plan my Lisbon trip: flights, a car and a hotel.',
+      tools: { searchFlights, rentCar, findHotel },
+      stopWhen: stepCountIs(5),
+      memory,
+      ...THREAD,
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [
+              { id: 'call_flights', name: 'searchFlights', arguments: { to: 'Lisbon' } },
+              { id: 'call_car', name: 'rentCar', arguments: { city: 'Lisbon' } },
+              { id: 'call_hotel', name: 'findHotel', arguments: { city: 'Lisbon' } },
+            ],
+          },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Flights $420, car $35/day, hotel $110/night.' });
+      },
+    });
+
+    const callOrder = ['call_flights', 'call_car', 'call_hotel'];
+    expect([...resultIds(chunks!)].sort()).toEqual([...callOrder].sort());
+    expect((await output.toolResults).map(r => r.payload.toolCallId)).toEqual(callOrder);
+    expect((await output.steps)[0]!.toolResults.map(r => r.payload.toolCallId)).toEqual(callOrder);
+
+    const sentBack = (llm.getRequests().at(-1)!.body.messages as Array<{ role: string; tool_call_id?: string }>)
+      .filter(m => m.role === 'tool')
+      .map(m => m.tool_call_id);
+    expect(sentBack).toEqual(callOrder);
+
+    const savedResults = (await memory.recall(THREAD)).messages.flatMap(m =>
+      (m.content.parts ?? []).flatMap(p =>
+        p.type === 'tool-invocation' && p.toolInvocation.state === 'result'
+          ? [[p.toolInvocation.toolCallId, p.toolInvocation.result]]
+          : [],
+      ),
+    );
+    expect(savedResults).toEqual([
+      ['call_flights', { cheapest: 420 }],
+      ['call_car', { daily: 35 }],
+      ['call_hotel', { nightly: 110 }],
+    ]);
+  });
+
   it('a processToolResult abort on the early result stops the run without streaming the slow result', async () => {
     const { tools, markWeatherStreamed } = createTools();
     const blockWeather: Processor = {
