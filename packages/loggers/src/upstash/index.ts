@@ -64,11 +64,12 @@ export class UpstashTransport extends LoggerTransport {
 
   // The interval only keeps the process alive while records are waiting to be sent, so an idle transport
   // doesn't stop a script from exiting, but buffered records still get delivered (or retried) first.
+  // Web-standard runtimes return a numeric timer id without ref()/unref(), so those calls are optional.
   private updateIntervalRef() {
     if (this.logBuffer.length > 0 || this.flushPromise) {
-      this.flushIntervalId.ref();
+      this.flushIntervalId.ref?.();
     } else {
-      this.flushIntervalId.unref();
+      this.flushIntervalId.unref?.();
     }
   }
 

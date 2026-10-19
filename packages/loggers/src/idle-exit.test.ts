@@ -166,3 +166,75 @@ describe('UpstashTransport process lifecycle', () => {
     expect(pushed).toEqual(['buffered before exit']);
   });
 });
+
+// Web-standard runtimes (e.g. Cloudflare Workers without Node global timers) return a numeric id from
+// setInterval, with no ref()/unref(). The transports must still construct, buffer, and flush there.
+const numericTimersPrelude = `
+  const realSetInterval = globalThis.setInterval;
+  const realClearInterval = globalThis.clearInterval;
+  const timers = new Map();
+  let nextId = 1;
+  globalThis.setInterval = (fn, ms, ...args) => {
+    const id = nextId++;
+    timers.set(id, realSetInterval(fn, ms, ...args));
+    return id;
+  };
+  globalThis.clearInterval = id => {
+    realClearInterval(timers.get(id));
+    timers.delete(id);
+  };
+`;
+
+describe('process lifecycle with web-standard numeric timer ids', () => {
+  it('HttpTransport constructs, buffers a write, and flushes it on destroy', async () => {
+    const received: string[] = [];
+    const url = await startServer((_req, body, res) => {
+      received.push(...JSON.parse(body).logs.map((log: { msg: string }) => log.msg));
+      res.end('{}');
+    });
+
+    const result = await runScript(`
+      ${numericTimersPrelude}
+      const { HttpTransport } = await import(${JSON.stringify(httpTransportPath)});
+      const transport = new HttpTransport({ url: ${JSON.stringify(`${url}/logs`)} });
+      transport.write({ level: 30, msg: 'numeric timer id' });
+      transport.clearBuffer();
+      transport.write({ level: 30, msg: 'numeric timer id' });
+      await new Promise((resolve, reject) => {
+        transport.once('close', resolve);
+        transport.once('error', reject);
+        transport.destroy();
+      });
+    `);
+
+    expect(result.stderr).not.toContain('TypeError');
+    expect(result).toMatchObject({ timedOut: false, code: 0 });
+    expect(received).toEqual(['numeric timer id']);
+  });
+
+  it('UpstashTransport constructs, buffers a write, and flushes it on destroy', async () => {
+    const pushed: string[] = [];
+    const url = await startServer((_req, body, res) => {
+      const [[command, _list, ...values]] = JSON.parse(body);
+      if (command === 'LPUSH') pushed.push(...values.map((value: string) => JSON.parse(value).msg));
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify([{ result: pushed.length }, { result: 'OK' }]));
+    });
+
+    const result = await runScript(`
+      ${numericTimersPrelude}
+      const { UpstashTransport } = await import(${JSON.stringify(upstashTransportPath)});
+      const transport = new UpstashTransport({ upstashUrl: ${JSON.stringify(url)}, upstashToken: 'test' });
+      transport.write({ level: 30, msg: 'numeric timer id' });
+      await new Promise((resolve, reject) => {
+        transport.once('close', resolve);
+        transport.once('error', reject);
+        transport.destroy();
+      });
+    `);
+
+    expect(result.stderr).not.toContain('TypeError');
+    expect(result).toMatchObject({ timedOut: false, code: 0 });
+    expect(pushed).toEqual(['numeric timer id']);
+  });
+});
