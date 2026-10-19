@@ -3216,6 +3216,9 @@ export class AgentThreadStreamRuntime {
       this.#clearSuspendedRun(state, record.runId);
       this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
       state.sweptLeasedRunIds.set(record.runId, now);
+      // A run parked across its suspension keeps its stream open, so subscribers
+      // reading it would never reach the runs queued behind it.
+      this.#stopReadingDisplacedRun(state, record.runId);
       if (
         state.activeThreadRunIds.get(staleKey) === record.runId &&
         state.activeThreadStreamIds.get(staleKey) === streamId
