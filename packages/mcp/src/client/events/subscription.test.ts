@@ -131,6 +131,47 @@ describe('EventSubscription', () => {
   });
 });
 
+describe('EventSubscription buffer bound', () => {
+  it('drops the oldest unread occurrences past maxBufferedEvents, flags the next one and reports once', async () => {
+    const port = new FakePort();
+    const pending = EventSubscription.start({
+      port,
+      serverName: 'srv',
+      name: 'test.event',
+      driver: pushDriver,
+      options: { maxBufferedEvents: 3 },
+      defaultStreamOpenTimeoutMs: 1000,
+      random: () => 1,
+    });
+    await vi.waitFor(() => expect(port.streams).toHaveLength(1));
+    port.lastStream.confirm({ cursor: 'c0' });
+    const sub = await pending;
+    const errors: MastraError[] = [];
+    sub.onError(error => errors.push(error));
+    // A server floods the stream while nobody reads.
+    for (let i = 1; i <= 10; i++) port.lastStream.event(`e${i}`, `c${i}`);
+
+    const iterator = sub[Symbol.asyncIterator]();
+    const read: Array<[string, boolean]> = [];
+    for (let i = 0; i < 3; i++) {
+      const { value } = await iterator.next();
+      read.push([value.eventId, sub.truncated]);
+    }
+    expect(read).toEqual([
+      ['e8', true],
+      ['e9', false],
+      ['e10', false],
+    ]);
+    expect(sub.cursor).toBe('c10');
+    expect(errors.map(error => error.id)).toEqual(['MCP_EVENTS_BUFFER_OVERFLOW']);
+
+    // Catching up re-arms the report for the next overflow.
+    for (let i = 11; i <= 15; i++) port.lastStream.event(`e${i}`, `c${i}`);
+    expect(errors).toHaveLength(2);
+    await sub.cancel();
+  });
+});
+
 describe('selectDeliveryMode', () => {
   const details = { serverName: 'srv', eventName: 'e' };
 

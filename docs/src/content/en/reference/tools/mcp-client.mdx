@@ -1028,6 +1028,14 @@ The client picks `push` (a long-lived `events/stream` request) when the event of
     description: 'Number of recent event ids remembered to drop duplicate occurrences.',
   },
   {
+    name: 'maxBufferedEvents',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description:
+      "Most occurrences held while your loop isn't reading. When full, the oldest unread occurrence is dropped, the next one has `truncated` set, and `onError` receives `MCP_EVENTS_BUFFER_OVERFLOW`.",
+  },
+  {
     name: 'retry',
     type: '{ initialDelayMs?: number; maxDelayMs?: number; factor?: number; maxAttempts?: number }',
     isOptional: true,
