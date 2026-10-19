@@ -53,6 +53,8 @@ export class EventSubscription implements MCPEventSubscription {
   /** Position covering only occurrences already handed to the consumer. */
   private yieldedCursor: string | null;
   private currentTruncated = false;
+  /** A gap was reported and the next delivered occurrence is the first one after it. */
+  private pendingGap = false;
   private readonly port: EventsPort;
   private readonly driver: DeliveryDriver;
   private readonly resolved: ResolvedDeliveryOptions;
@@ -68,7 +70,12 @@ export class EventSubscription implements MCPEventSubscription {
   private readonly seenOrder: string[] = [];
 
   /** Undelivered occurrences, each with the position that becomes safe once it is yielded. */
-  private readonly buffer: { value: MCPEventOccurrence; cursorAfter?: { cursor: string | null } }[] = [];
+  private readonly buffer: {
+    value: MCPEventOccurrence;
+    cursorAfter?: { cursor: string | null };
+    /** First occurrence after a reported gap. */
+    afterGap?: boolean;
+  }[] = [];
   private readonly waiters: Waiter[] = [];
   private ending?: { error?: MastraError };
   private endingDelivered = false;
@@ -173,6 +180,7 @@ export class EventSubscription implements MCPEventSubscription {
     const entry = this.buffer.shift();
     if (entry) {
       if (entry.cursorAfter) this.yieldedCursor = entry.cursorAfter.cursor;
+      this.currentTruncated = entry.afterGap === true;
       return Promise.resolve({ value: entry.value, done: false });
     }
     if (this.ending) {
@@ -193,9 +201,23 @@ export class EventSubscription implements MCPEventSubscription {
       this.seenOrder.push(occurrence.eventId);
       if (this.seenOrder.length > this.dedupWindow) this.seenIds.delete(this.seenOrder.shift()!);
     }
+    const afterGap = this.pendingGap;
+    this.pendingGap = false;
     const waiter = this.waiters.shift();
-    if (waiter) waiter.resolve({ value: occurrence, done: false });
-    else this.buffer.push({ value: occurrence });
+    if (waiter) {
+      this.currentTruncated = afterGap;
+      waiter.resolve({ value: occurrence, done: false });
+    } else this.buffer.push({ value: occurrence, ...(afterGap ? { afterGap } : {}) });
+  }
+
+  /**
+   * Records a gap reported by the server. `truncated` turns true now if nothing is waiting to be
+   * yielded, and stays true until an occurrence received after the gap has been yielded and the
+   * next one is requested, so a consumer reading it per occurrence sees the gap exactly once.
+   */
+  private markGap(): void {
+    this.pendingGap = true;
+    if (this.buffer.length === 0) this.currentTruncated = true;
   }
 
   /**
@@ -263,9 +285,10 @@ export class EventSubscription implements MCPEventSubscription {
       },
       deliver: occurrence => this.enqueue(occurrence),
       setPosition: (cursor, truncated) => {
+        if (truncated) this.markGap();
         this.setPosition(cursor ?? null);
-        if (truncated !== undefined) this.currentTruncated = truncated;
       },
+      markGap: () => this.markGap(),
       established: () => {
         this.sessionHealthy = true;
         if (!this.isEstablished) {

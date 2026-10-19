@@ -107,7 +107,11 @@ export interface MCPEventSubscription extends AsyncIterable<MCPEventOccurrence> 
    * do not persist it.
    */
   readonly cursor: string | null;
-  /** Whether the latest confirmation from the server reported a gap (occurrences were skipped). */
+  /**
+   * Whether the server reported a gap (occurrences were skipped) right before the occurrence just
+   * yielded. It turns true when the gap is reported, stays true while the first occurrence after
+   * the gap is being handled, and is false again for the occurrences after it.
+   */
   readonly truncated: boolean;
   /** Registers a handler for recoverable errors. Returns a function that removes it. */
   onError(handler: (error: MCPEventSubscriptionError) => void): () => void;

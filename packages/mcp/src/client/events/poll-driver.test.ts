@@ -126,11 +126,40 @@ describe('poll delivery', () => {
     await sub.cancel();
   });
 
-  it('surfaces truncated from the latest response', async () => {
-    const port = new FakePort().queuePoll(pollResult({ cursor: 'a', truncated: true }), pollResult({ cursor: 'b' }));
+  it('keeps a reported gap until the first occurrence after it is yielded', async () => {
+    const port = new FakePort().queuePoll(
+      pollResult({ cursor: 'a', truncated: true }),
+      // The gap must survive empty polls that report no gap.
+      pollResult({ cursor: 'b' }),
+      pollResult({ events: [occurrence('e1'), occurrence('e2')], cursor: 'c' }),
+    );
     const sub = await start(port);
     expect(sub.truncated).toBe(true);
     await vi.advanceTimersByTimeAsync(1000);
+    expect(sub.truncated).toBe(true);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const iterator = sub[Symbol.asyncIterator]();
+    expect((await iterator.next()).value.eventId).toBe('e1');
+    expect(sub.truncated).toBe(true);
+    expect((await iterator.next()).value.eventId).toBe('e2');
+    expect(sub.truncated).toBe(false);
+    await sub.cancel();
+  });
+
+  it('flags the events of a truncated page, not the events of the next page', async () => {
+    const port = new FakePort().queuePoll(
+      pollResult({ cursor: 'a' }),
+      pollResult({ events: [occurrence('e1')], cursor: 'b', truncated: true }),
+      pollResult({ events: [occurrence('e2')], cursor: 'c' }),
+    );
+    const sub = await start(port);
+    const iterator = sub[Symbol.asyncIterator]();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect((await iterator.next()).value.eventId).toBe('e1');
+    expect(sub.truncated).toBe(true);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect((await iterator.next()).value.eventId).toBe('e2');
     expect(sub.truncated).toBe(false);
     await sub.cancel();
   });

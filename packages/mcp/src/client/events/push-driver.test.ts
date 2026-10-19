@@ -55,6 +55,22 @@ describe('push delivery', () => {
     await sub.cancel();
   });
 
+  it('flags only the first occurrence after a gap', async () => {
+    const port = new FakePort();
+    const pending = start(port, { cursor: 'saved' });
+    await vi.advanceTimersByTimeAsync(0);
+    port.lastStream.confirm({ cursor: 'c0', truncated: true });
+    const sub = await pending;
+    const iterator = sub[Symbol.asyncIterator]();
+    port.lastStream.event('e1', 'c1');
+    port.lastStream.event('e2', 'c2');
+    expect((await iterator.next()).value.eventId).toBe('e1');
+    expect(sub.truncated).toBe(true);
+    expect((await iterator.next()).value.eventId).toBe('e2');
+    expect(sub.truncated).toBe(false);
+    await sub.cancel();
+  });
+
   it('delivers occurrences without the routing meta and advances the cursor per occurrence', async () => {
     const port = new FakePort();
     const pending = start(port);

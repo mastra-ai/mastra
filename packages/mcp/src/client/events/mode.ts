@@ -24,8 +24,13 @@ export interface DeliveryContext {
   readonly cursor: string | null;
   /** Hands an occurrence to the subscriber (de-duplicated by `eventId`). */
   deliver(occurrence: EventOccurrence): void;
-  /** Records the position the server confirmed. An absent cursor is `null`: no replay. */
+  /**
+   * Records the position the server confirmed. An absent cursor is `null`: no replay.
+   * `truncated: true` also records a gap (see {@link markGap}).
+   */
   setPosition(cursor: string | null | undefined, truncated?: boolean): void;
+  /** Records a server-reported gap before the occurrences that follow it. */
+  markGap(): void;
   /** Signals that the server accepted the subscription during this session. */
   established(): void;
   reportError(error: MastraError): void;
