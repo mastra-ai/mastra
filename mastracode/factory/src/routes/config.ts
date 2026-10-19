@@ -320,11 +320,15 @@ export function resolveDeploymentModelProviders(providers: readonly string[] | u
   return resolved;
 }
 
+function grantingTenantRecord(records: CredentialRecord[], authProviderId: string) {
+  return (
+    records.find(r => r.scope === 'user' && r.provider === authProviderId) ??
+    records.find(r => r.scope === 'org' && r.provider === authProviderId)
+  );
+}
+
 function tenantCredentialLabel(records: CredentialRecord[] | undefined, provider: string) {
-  const authProviderId = getAuthProviderId(provider);
-  const record =
-    records?.find(r => r.scope === 'user' && r.provider === authProviderId) ??
-    records?.find(r => r.scope === 'org' && r.provider === authProviderId);
+  const record = records && grantingTenantRecord(records, getAuthProviderId(provider));
   return record && credentialLabel(provider, record.credential.type);
 }
 
@@ -354,9 +358,7 @@ export async function buildProviderAccess({
       if (isDeploymentModelProvider(provider)) {
         return deploymentProviders?.has(provider) && hasModelKey(provider) ? 'apikey' : false;
       }
-      const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
-      const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
-      const credential = userRec?.credential ?? orgRec?.credential;
+      const credential = grantingTenantRecord(tenantCredentials, authProviderId)?.credential;
       if (credential?.type === 'oauth') return 'oauth';
       if (credential?.type === 'api_key' && credential.key.trim().length > 0) return 'apikey';
       return false;
