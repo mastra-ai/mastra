@@ -8,7 +8,15 @@ import type { ButtonVariant } from './Button';
 import { Button } from './Button';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
-const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'ghost', 'link'];
+const ALL_VARIANTS: ButtonVariant[] = [
+  'default',
+  'primary',
+  'destructive',
+  'destructive-ghost',
+  'ghost',
+  'subtle',
+  'link',
+];
 
 const meta: Meta<typeof Button> = {
   title: 'Elements/Button',
