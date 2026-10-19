@@ -5,6 +5,8 @@
  * (e.g. a Railway VM) rather than on the server host. File operations are
  * implemented by shelling out through the sandbox's `executeCommand`, so the
  * agent's file tools and command tools share one VM and one view of the repo.
+ * When the sandbox exposes its own `filesystem`, single-entry operations use
+ * it instead, which takes one round trip rather than several commands.
  *
  * Paths are workspace-relative (`/src/foo.ts`) and resolve under the sandbox
  * working directory (`basePath`). A traversal guard rejects any path that
@@ -60,6 +62,11 @@ export interface SandboxCommandResult {
 /** Minimal sandbox surface the filesystem needs. */
 export interface SandboxExec {
   readonly id: string;
+  /**
+   * The sandbox's own file API, when it has one (`WorkspaceSandbox.filesystem`).
+   * Single-entry operations go through it instead of shell commands.
+   */
+  readonly filesystem?: WorkspaceFilesystem;
   executeCommand(
     command: string,
     args?: string[],
@@ -80,7 +87,19 @@ export interface SandboxFilesystemOptions {
   workdir: string | (() => Promise<string> | string);
   /** Optional stable id; defaults to a sandbox-derived id. */
   id?: string;
+  /**
+   * Check that symlinks don't lead outside the workdir when using the
+   * sandbox's native filesystem. Off by default: native file APIs follow
+   * symlinks, and inside a sandbox the agent can read anything with a command
+   * anyway. Turn it on when files are served to someone other than the agent.
+   *
+   * Each path is checked once per instance, so keep such instances
+   * short-lived. Without a native filesystem the shell path always checks.
+   */
+  verifySymlinks?: boolean;
 }
+
+type ContainmentCheck = 'target' | 'dest' | 'parent';
 
 /** Default per-command deadline so a hung sandbox can't block file tools forever. */
 const COMMAND_TIMEOUT_MS = 30_000;
@@ -188,10 +207,14 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   private readonly workdirSource: string | (() => Promise<string> | string);
   private resolvedBase?: string;
   private resolvingBase?: Promise<string>;
+  private readonly verifySymlinks: boolean;
+  /** `check:absolutePath` keys that passed while the entry existed. */
+  private readonly verified = new Set<string>();
 
   constructor(options: SandboxFilesystemOptions) {
     this.sandbox = options.sandbox;
     this.workdirSource = options.workdir;
+    this.verifySymlinks = options.verifySymlinks ?? false;
     if (typeof options.workdir === 'string') this.resolvedBase = options.workdir;
     // Include the workdir when known: one sandbox can back several
     // filesystems rooted at different checkouts, and each needs a distinct
@@ -291,7 +314,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
    * busybox. If the path exists but cannot be canonicalized we fail CLOSED:
    * returning without a check would let a symlink bypass containment.
    */
-  private async assertContainedRealpath(abs: string, inputPath: string): Promise<void> {
+  private async assertContainedRealpath(abs: string, inputPath: string): Promise<boolean> {
     const result = await this.exec(
       [
         `p=${shellQuote(abs)}`,
@@ -307,7 +330,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     );
     // Path doesn't exist yet: nothing to canonicalize (writes to a fresh leaf
     // are covered by assertContainedDest checking the parent directory).
-    if (result.exitCode === EXIT_NOT_FOUND) return;
+    if (result.exitCode === EXIT_NOT_FOUND) return false;
     const [root, real] = result.stdout.split('\n').map(s => s.trim());
     if (result.exitCode !== 0 || !root || !real) {
       throw new Error(`Unable to verify path stays within workspace root: ${inputPath}`);
@@ -315,6 +338,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     if (real !== root && !real.startsWith(`${root}/`)) {
       throw new Error(`Path escapes workspace root (symlink): ${inputPath}`);
     }
+    return true;
   }
 
   /**
@@ -324,15 +348,33 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
    * of its nearest existing ancestor directory, since a symlinked parent is the
    * escape vector (e.g. `link -> /etc` then writing `link/passwd`).
    */
-  private async assertContainedDest(abs: string, inputPath: string): Promise<void> {
+  private async assertContainedDest(abs: string, inputPath: string): Promise<boolean> {
     // First check the target itself (covers overwriting an existing symlink).
-    await this.assertContainedRealpath(abs, inputPath);
+    const exists = await this.assertContainedRealpath(abs, inputPath);
     // Then check the parent directory's realpath; readlink -f resolves the
     // nearest existing ancestor when the leaf doesn't exist yet.
     const parent = posixPath.dirname(abs);
     if (parent && parent !== abs) {
       await this.assertContainedRealpath(parent, inputPath);
     }
+    return exists;
+  }
+
+  /**
+   * Before a native filesystem call, run the containment check the shell path
+   * runs for that operation, when `verifySymlinks` is on. A pass is remembered
+   * only for an entry that exists: a missing path may later appear as a
+   * symlink that leads outside the workdir.
+   */
+  private async verifyNative(check: ContainmentCheck, abs: string, inputPath: string): Promise<void> {
+    if (!this.verifySymlinks) return;
+    const key = `${check}:${abs}`;
+    if (this.verified.has(key)) return;
+    const existed =
+      check === 'dest'
+        ? await this.assertContainedDest(abs, inputPath)
+        : await this.assertContainedRealpath(check === 'parent' ? posixPath.dirname(abs) : abs, inputPath);
+    if (existed) this.verified.add(key);
   }
 
   private async execOk(script: string, context: string): Promise<SandboxCommandResult> {
@@ -347,6 +389,11 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('target', abs, path);
+      return native.readFile(abs, options);
+    }
     await this.assertContainedRealpath(abs, path);
     // Guard clauses first: redirecting from a directory "succeeds" with empty
     // output on some shells, so classify before reading.
@@ -367,6 +414,12 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    // overwrite: false stays on the shell, where noclobber makes it atomic.
+    if (native && options?.overwrite !== false) {
+      await this.verifyNative('dest', abs, path);
+      return native.writeFile(abs, content, options);
+    }
     await this.assertContainedDest(abs, path);
     const b64 = toBuffer(content).toString('base64');
     const dir = posixPath.dirname(abs);
@@ -398,6 +451,11 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async deleteFile(path: string, options?: RemoveOptions): Promise<void> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('parent', abs, path);
+      return native.deleteFile(abs, options);
+    }
     // Contain the parent's realpath: deleting `link/file` where `link` points
     // outside the workdir must fail, while deleting a symlink entry itself
     // (which lives inside the workdir) stays allowed.
@@ -499,6 +557,11 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('dest', abs, path);
+      return native.mkdir(abs, options);
+    }
     await this.assertContainedDest(abs, path);
     const flag = options?.recursive === false ? '' : '-p ';
     await this.execOk(`mkdir ${flag}${shellQuote(abs)}`, `mkdir ${path}`);
@@ -506,6 +569,11 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async rmdir(path: string, options?: RemoveOptions): Promise<void> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('parent', abs, path);
+      return native.rmdir(abs, options);
+    }
     // Same parent containment as deleteFile — `rm -r` through a symlinked
     // parent would otherwise delete outside the workspace.
     await this.assertContainedRealpath(posixPath.dirname(abs), path);
@@ -522,6 +590,11 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('target', abs, path);
+      return native.readdir(abs, options);
+    }
     await this.assertContainedRealpath(abs, path);
     if (options?.recursive) {
       // Recursive listing emitting "type\tpath". `find -printf` is GNU-only
@@ -954,12 +1027,20 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async exists(path: string): Promise<boolean> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) return native.exists(abs);
     const result = await this.exec(`test -e ${shellQuote(abs)}`);
     return result.exitCode === 0;
   }
 
   async stat(path: string): Promise<FileStat> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('target', abs, path);
+      const info = await native.stat(abs);
+      return { ...info, name: posixPath.basename(abs), path: `/${posixPath.relative(this.basePath, abs)}` };
+    }
     await this.assertContainedRealpath(abs, path);
     // GNU stat: %F=type, %s=size, %Y=mtime (epoch seconds), %W=birth (or -1).
     // BSD/macOS stat (local sandbox hosts) rejects `-c`; fall back to its

@@ -250,7 +250,14 @@ function seedSessionSandbox(
     workdir = WORKDIR,
     comparisonBase = BASE_SHA,
     trackedChanges,
-  }: { sessionRowId?: string; workdir?: string; comparisonBase?: string; trackedChanges?: string } = {},
+    filesystem,
+  }: {
+    sessionRowId?: string;
+    workdir?: string;
+    comparisonBase?: string;
+    trackedChanges?: string;
+    filesystem?: unknown;
+  } = {},
 ) {
   const executeCommand = vi.fn(
     async (command: string, args: string[] = [], _options?: { maxRetainedBytes?: number }) => {
@@ -278,6 +285,7 @@ function seedSessionSandbox(
         provider: 'local',
         workingDirectory: workdir.slice(0, workdir.lastIndexOf('/')),
         executeCommand,
+        ...(filesystem !== undefined && { filesystem }),
       }) as never,
   );
   return { executeCommand };
@@ -498,6 +506,50 @@ describe('readSessionWorkspaceFile', () => {
     });
 
     await expect(readSessionWorkspaceFile(makeSession(), '.artifacts')).rejects.toThrow('Path is a directory');
+  });
+
+  describe('when the sandbox has a native filesystem', () => {
+    const abs = `${WORKDIR}/.artifacts/understand-pr/HISTORY.md`;
+    function nativeFilesystem(content: string) {
+      return {
+        stat: vi.fn(async (path: string) => ({
+          name: 'HISTORY.md',
+          path,
+          type: 'file',
+          size: content.length,
+          createdAt: new Date(0),
+          modifiedAt: new Date(1_700_000_000_000),
+        })),
+        readFile: vi.fn(async () => Buffer.from(content, 'utf8')),
+      };
+    }
+
+    it('reads through it after one symlink check for the path', async () => {
+      const filesystem = nativeFilesystem('# History');
+      const { executeCommand } = seedSessionSandbox(
+        script =>
+          script.includes(`p='${abs}'`) ? { exitCode: 0, stdout: `${WORKDIR}\n${abs}` } : { exitCode: 1, stdout: '' },
+        { filesystem },
+      );
+
+      const file = await readSessionWorkspaceFile(makeSession(), '.artifacts/understand-pr/HISTORY.md');
+
+      expect(file).toMatchObject({ content: '# History', contentType: 'text' });
+      expect(executeCommand).toHaveBeenCalledTimes(1);
+      expect(filesystem.stat).toHaveBeenCalledWith(abs);
+      expect(filesystem.readFile).toHaveBeenCalledWith(abs, undefined);
+    });
+
+    it('refuses a symlink that leads outside the checkout', async () => {
+      const filesystem = nativeFilesystem('root:x:0:0');
+      seedSessionSandbox(() => ({ exitCode: 0, stdout: `${WORKDIR}\n/etc/passwd` }), { filesystem });
+
+      await expect(readSessionWorkspaceFile(makeSession(), '.artifacts/understand-pr/HISTORY.md')).rejects.toThrow(
+        'Path escapes workspace root (symlink)',
+      );
+      expect(filesystem.stat).not.toHaveBeenCalled();
+      expect(filesystem.readFile).not.toHaveBeenCalled();
+    });
   });
 
   it('errors without provisioning when this process holds no sandbox for the session', async () => {
