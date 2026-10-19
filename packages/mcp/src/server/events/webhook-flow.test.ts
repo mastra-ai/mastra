@@ -203,6 +203,56 @@ describe('webhook delivery end to end', () => {
     expect(receiver.requests).toEqual([]);
   });
 
+  it('falls back to push when the server is at its webhook subscription cap, unless webhook is forced', async () => {
+    const server = new MCPServer({
+      id: 'webhook-cap-fallback',
+      name: 'Webhook cap fallback',
+      version: '1.0.0',
+      tools: {},
+      events: {
+        'ticket.created': defineEvent({
+          inputSchema: z.object({ project: z.string() }),
+          payloadSchema: z.object({ id: z.string(), project: z.string() }),
+          match: (args, data) => data.project === args.project,
+        }),
+      },
+      eventsOptions: {
+        webhook: { url: { allowPrivate: true, allowInsecure: true }, maxSubscriptionsPerPrincipal: 1 },
+      },
+    });
+    const served: ServedHTTP = await serveHTTP(server, { auth: authFromHeader });
+    cleanups.push(() => served.close());
+    let mcp: MCPClient | undefined;
+    const receiver = await serveReceiver(request => mcp!.events.handleWebhook(request));
+    cleanups.push(() => receiver.close());
+    mcp = new MCPClient({
+      id: 'webhook-cap-fallback-client',
+      servers: { tickets: { url: served.url, requestInit: { headers: { authorization: 'Bearer alice' } } } },
+      webhook: { url: receiver.url },
+    });
+    cleanups.push(() => mcp!.disconnect());
+
+    const first = await mcp.events.subscribe('tickets', 'ticket.created', { project: 'a' });
+    expect(first.mode).toBe('webhook');
+
+    const second = await mcp.events.subscribe('tickets', 'ticket.created', { project: 'b' });
+    expect(second.mode).toBe('push');
+    const errors: unknown[] = [];
+    second.onError(error => errors.push(error));
+    expect(errors).toEqual([
+      expect.objectContaining({
+        id: 'MCP_EVENTS_WEBHOOK_UNAVAILABLE',
+        details: expect.objectContaining({ code: -32025, fallback: 'push' }),
+      }),
+    ]);
+    const emitted = await server.events.emit('ticket.created', { id: 'T-1', project: 'b' });
+    expect(await nextEvent(second)).toMatchObject({ eventId: emitted.eventId });
+
+    await expect(
+      mcp.events.subscribe('tickets', 'ticket.created', { project: 'c' }, { delivery: 'webhook' }),
+    ).rejects.toMatchObject({ cause: expect.objectContaining({ details: expect.objectContaining({ code: -32025 }) }) });
+  });
+
   it('handleWebhook answers 404 when the client has no webhook settings', async () => {
     const mcp = new MCPClient({ id: 'webhook-flow-unconfigured', servers: {} });
     cleanups.push(() => mcp.disconnect());

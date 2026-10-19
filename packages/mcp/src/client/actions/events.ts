@@ -20,6 +20,13 @@ const DRIVERS = { webhook: webhookDriver, push: pushDriver, poll: pollDriver } s
 /** Upper bound on `events/list` pages followed, so a server cannot page a client forever. */
 const MAX_LIST_PAGES = 100;
 
+/** Webhook rejections after which a default subscription uses the next delivery mode. */
+const WEBHOOK_FALLBACK_CODES: readonly number[] = [
+  EVENTS_ERROR_CODES.Forbidden,
+  EVENTS_ERROR_CODES.Unsupported,
+  EVENTS_ERROR_CODES.ResourceExhausted,
+];
+
 /** The JSON-RPC error code a subscription start was rejected with, if any. */
 function rejectionCode(error: unknown): number | undefined {
   if (error instanceof ProtocolError) return error.code;
@@ -109,10 +116,11 @@ export class EventClientActions {
     try {
       return await start(mode);
     } catch (error) {
-      // Webhook needs an authenticated HTTP connection; without one the server answers Forbidden
-      // or Unsupported, and a default subscription falls back to the next mode instead of failing.
+      // Webhook needs an authenticated HTTP connection (Forbidden or Unsupported without one) and
+      // the server caps webhook subscriptions (ResourceExhausted). A default subscription falls back
+      // to the next mode instead of failing.
       const code = rejectionCode(error);
-      if (code !== EVENTS_ERROR_CODES.Forbidden && code !== EVENTS_ERROR_CODES.Unsupported) throw error;
+      if (code === undefined || !WEBHOOK_FALLBACK_CODES.includes(code)) throw error;
       const fallback = selectDeliveryMode(descriptor.delivery, undefined, details);
       this.logger.debug(`[${this.client.name}] Webhook subscribe to '${name}' rejected (${code}); using ${fallback}`);
       return start(

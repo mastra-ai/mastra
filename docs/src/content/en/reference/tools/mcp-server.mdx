@@ -1904,7 +1904,7 @@ The server enforces these rules:
     isOptional: true,
     defaultValue: '1000',
     description:
-      'Most webhook subscriptions this process keeps across all callers. New subscriptions past the limit are rejected with `-32025`; refreshing an existing one still works.',
+      'Most webhook subscriptions this process keeps across all callers. New subscriptions past the limit are rejected with `-32025`, and a Mastra client falls back to push or poll unless it forced webhook delivery. Refreshing an existing subscription still works.',
   },
   {
     name: 'maxSubscriptionsPerPrincipal',

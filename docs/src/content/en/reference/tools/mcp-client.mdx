@@ -1154,7 +1154,7 @@ The client refreshes each subscription before it expires by repeating `events/su
 
 Webhook state lives in this process: run the receiving route in the same process as the `MCPClient` that subscribed.
 
-Webhook delivery needs an authenticated HTTP connection to the server, because the server ties each webhook subscription to the caller. Over stdio, or over HTTP without authentication, the server rejects `events/subscribe`. A subscription that didn't force a mode then falls back to `push` or `poll`, and the first `onError` handler receives `MCP_EVENTS_WEBHOOK_UNAVAILABLE` with the rejection `code` and the `fallback` mode in its details. Forcing `delivery: 'webhook'` rejects instead.
+Webhook delivery needs an authenticated HTTP connection to the server, because the server ties each webhook subscription to the caller. Over stdio, or over HTTP without authentication, the server rejects `events/subscribe`; it also rejects new subscriptions once its webhook subscription cap is reached (`-32025`). A subscription that didn't force a mode then falls back to `push` or `poll`, and the first `onError` handler receives `MCP_EVENTS_WEBHOOK_UNAVAILABLE` with the rejection `code` and the `fallback` mode in its details. Forcing `delivery: 'webhook'` rejects instead.
 
 Subscriptions on one server with the same event name and arguments share a single server-side webhook subscription. Each one gets every occurrence through its own iterator, and the client sends `events/unsubscribe` only when the last of them is cancelled.
 
