@@ -5356,23 +5356,71 @@ export class Session<TState = unknown> {
     untilIdle?: boolean | { maxIdleMs?: number };
     author?: MessageAuthor;
   }): Promise<void> {
-    const wasActive = this.stream.isActive();
-    const signal = this.sendSignal(
-      {
-        content: this.createMessageInput({ content, files }),
-        tracingContext,
-        tracingOptions,
-        requestContext: requestContextInput,
-        untilIdle,
-        author,
-      },
-      { requireDelivery: true },
-    );
+    let lastBlockingRunId: string | undefined;
+    while (true) {
+      const wasActive = this.stream.isActive();
+      const signal = this.sendSignal(
+        {
+          content: this.createMessageInput({ content, files }),
+          tracingContext,
+          tracingOptions,
+          requestContext: requestContextInput,
+          untilIdle,
+          author,
+        },
+        { requireDelivery: true },
+      );
+      // Another agent's run on the thread can't take this message, so the
+      // thread reports itself blocked. Wait for that run to end and send again,
+      // as a message sent just before that run started would have waited.
+      let blockingRunId: string | undefined;
+      const accepted = signal.accepted.then(settled => {
+        if (settled.action !== 'blocked') return settled;
+        blockingRunId = settled.runId;
+        return { action: settled.action };
+      });
 
-    if (wasActive) {
-      await signal.accepted;
-    } else {
-      await this.waitForAcceptedRunCompletion(signal.accepted);
+      if (wasActive) {
+        await accepted;
+      } else {
+        await this.waitForAcceptedRunCompletion(accepted);
+      }
+      // Blocked again by the run already waited for: waiting can't free the thread.
+      if (blockingRunId === undefined || blockingRunId === lastBlockingRunId) return;
+      lastBlockingRunId = blockingRunId;
+      if (!(await this.#waitForOtherAgentRun())) return;
+    }
+  }
+
+  /**
+   * Wait until no other agent's run holds this session's thread, and this
+   * session has seen that run end. False when Stop is pressed while waiting.
+   */
+  async #waitForOtherAgentRun(): Promise<boolean> {
+    const threadId = this.thread.getId();
+    if (!threadId) return true;
+    const agent = this.machinery.getAgent();
+    const waiters = new AbortController();
+    let aborted = false;
+    const abortRequest = this.run
+      .waitForAbortRequest(waiters.signal, { after: this.run.getAbortGeneration() })
+      .then(() => {
+        aborted = true;
+      });
+    try {
+      await Promise.race([
+        agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+          agent,
+          { memory: { thread: threadId, resource: this.identity.getResourceId() } },
+          agent.getPubSub(),
+        ),
+        abortRequest,
+      ]);
+      if (aborted) return false;
+      await this.waitForStreamIdle();
+      return !aborted;
+    } finally {
+      waiters.abort();
     }
   }
 

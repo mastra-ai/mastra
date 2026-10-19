@@ -1,0 +1,160 @@
+/**
+ * A message the user sends while another agent is mid-run on the session's
+ * thread waits for that run to end, then runs. The thread runtime reports the
+ * thread blocked by the other agent's run; the message must not be dropped.
+ */
+import { describe, expect, it, vi } from 'vitest';
+import { Agent } from '../../agent';
+import { createDurableAgent } from '../../agent/durable';
+import { InMemoryServerCache } from '../../cache';
+import { EventEmitterPubSub } from '../../events';
+import { Mastra } from '../../mastra';
+import { MockMemory } from '../../memory/mock';
+import { InMemoryStore } from '../../storage';
+import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { AgentController } from '../agent-controller';
+import { createMockWorkspace } from '../test-utils';
+
+vi.setConfig({ testTimeout: 30_000 });
+
+const reply = (text: string) =>
+  new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'stream-start', warnings: [] });
+      controller.enqueue({ type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) });
+      controller.enqueue({ type: 'text-start', id: 'text-1' });
+      controller.enqueue({ type: 'text-delta', id: 'text-1', delta: text });
+      controller.enqueue({ type: 'text-end', id: 'text-1' });
+      controller.enqueue({
+        type: 'finish',
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      });
+      controller.close();
+    },
+  });
+
+/** A session on a thread, plus another agent whose model call waits for `releaseOther()`. */
+async function createHarness(id: string, durable: boolean) {
+  const storage = new InMemoryStore();
+  const memory = new MockMemory({ storage });
+  // What each agent's model was asked, one entry per model call.
+  const prompts: string[] = [];
+  const otherPrompts: string[] = [];
+  let releaseOther!: () => void;
+  const otherReleased = new Promise<void>(resolve => (releaseOther = resolve));
+
+  const baseAgent = new Agent({
+    id: `${id}-agent`,
+    name: `${id} agent`,
+    instructions: 'You help.',
+    memory,
+    model: new MastraLanguageModelV2Mock({
+      doStream: async ({ prompt }) => {
+        prompts.push(JSON.stringify(prompt));
+        return { stream: reply('here') };
+      },
+    }),
+  });
+  // Another agent that runs on the session's thread, as a goal judge or an
+  // application's own `stream` call does.
+  const otherAgent = new Agent({
+    id: `${id}-other`,
+    name: `${id} other`,
+    instructions: 'You check.',
+    memory,
+    model: new MastraLanguageModelV2Mock({
+      doStream: async ({ prompt }) => {
+        otherPrompts.push(JSON.stringify(prompt));
+        await otherReleased;
+        return { stream: reply('checked') };
+      },
+    }),
+  });
+
+  const cache = new InMemoryServerCache();
+  const pubsub = new EventEmitterPubSub();
+  const agent = durable ? createDurableAgent({ agent: baseAgent, cache, pubsub }) : baseAgent;
+  const mastra = new Mastra({
+    agents: { [`${id}-agent`]: agent as any, [`${id}-other`]: otherAgent },
+    logger: false,
+    storage,
+    cache,
+    pubsub,
+  });
+  const registeredAgent = mastra.getAgent(`${id}-agent`);
+  const controller = new AgentController({
+    agent: registeredAgent,
+    pubsub,
+    workspace: createMockWorkspace(),
+    id: `${id}-controller`,
+    storage,
+    modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
+    initialState: { yolo: true } as any,
+  });
+  await controller.init();
+  const session = await controller.createSession({ id: `${id}-session`, ownerId: 'owner-1' });
+  await session.thread.create();
+
+  /** Start the other agent on the session's thread and wait until its model call is in flight. */
+  const startOther = async () => {
+    const output = await mastra.getAgent(`${id}-other`).stream('Is the work done?', {
+      memory: { thread: session.thread.getId()!, resource: session.identity.getResourceId() },
+    });
+    await vi.waitFor(() => expect(otherPrompts).toHaveLength(1));
+    return output;
+  };
+
+  return { session, sessionAgent: registeredAgent, prompts, otherPrompts, releaseOther, startOther };
+}
+
+describe.each([false, true])('a message sent while another agent runs on the thread, durable=%s', durable => {
+  it('runs once the other run has ended', async () => {
+    const h = await createHarness('waits', durable);
+    const other = await h.startOther();
+
+    let otherEnded = false;
+    const sent = h.session.sendMessage({ content: 'Are you there?' }).then(() => otherEnded);
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(h.prompts).toHaveLength(0);
+
+    h.releaseOther();
+    await other.consumeStream();
+    otherEnded = true;
+
+    // The message didn't return before the other run ended, and then ran as the session's own run.
+    expect(await sent).toBe(true);
+    expect(h.prompts).toHaveLength(1);
+    expect(h.prompts[0]).toContain('Are you there?');
+    expect(h.otherPrompts.join('')).not.toContain('Are you there?');
+  });
+
+  it('is dropped when Stop is pressed while it waits', async () => {
+    const h = await createHarness('stopped', durable);
+    const other = await h.startOther();
+
+    const sent = h.session.sendMessage({ content: 'Are you there?' });
+    await new Promise(resolve => setTimeout(resolve, 200));
+    await h.session.abort();
+    await sent;
+
+    h.releaseOther();
+    await other.consumeStream();
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(h.prompts).toHaveLength(0);
+  });
+
+  it('still reports the thread blocked to a signal sent straight to the agent', async () => {
+    const h = await createHarness('blocked', durable);
+    const other = await h.startOther();
+
+    const result = h.sessionAgent.sendSignal(
+      { type: 'user', contents: 'Are you there?' },
+      { resourceId: h.session.identity.getResourceId(), threadId: h.session.thread.getId()! },
+    );
+    expect((await result.accepted).action).toBe('blocked');
+
+    h.releaseOther();
+    await other.consumeStream();
+  });
+});
