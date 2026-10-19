@@ -16,6 +16,16 @@ describe('highlightCode', () => {
     expect(lines).toEqual(['<c>/* one</c>', '<c>two */</c>', '<k>let</k><d> x</d>']);
   });
 
+  // Same rules cli-highlight applied, so previews look the same after the switch.
+  it('leaves top-level scopes the theme does not name uncolored, and nested ones in their parent color', () => {
+    expect(highlightCode('.a { color: red; }', 'css', colors)).toBe('.a<d> { </d>color<d>: red; }</d>');
+    expect(highlightCode('x = "a\\n"', 'python', colors)).toBe('<d>x = </d><s>"a\\n"</s>');
+  });
+
+  it('colors an embedded language like the surrounding text', () => {
+    expect(highlightCode('RUN npm ci', 'dockerfile', colors)).toBe('<k>RUN</k><d> npm ci</d>');
+  });
+
   it('registers html through the xml grammar', () => {
     expect(highlightCode('<p>', 'html', { ...colors, tag: tag('t') })).toContain('<t>');
   });

@@ -76,10 +76,16 @@ function colorLines(color: (text: string) => string, text: string): string {
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#x27': "'", '#39': "'" };
 
-/** Convert highlight.js HTML to ANSI: each text run takes the color of its innermost themed scope. */
+const uncolored = (text: string) => text;
+
+/**
+ * Convert highlight.js HTML to ANSI the way cli-highlight did: text outside any scope takes the
+ * `default` color, a scope the theme doesn't name inherits its parent's color (a top-level one stays
+ * uncolored), and an embedded language's wrapper (`<span class="javascript">`) is transparent.
+ */
 function htmlToAnsi(html: string, colors: HighlightTheme): string {
-  const plain = colors.default ?? ((text: string) => text);
-  const stack: Array<((text: string) => string) | undefined> = [];
+  const plain = colors.default ?? uncolored;
+  const stack: Array<(text: string) => string> = [];
   let out = '';
   // Adjacent runs that share a color are joined, so entities don't split them into extra escape codes.
   let pending = '';
@@ -90,8 +96,10 @@ function htmlToAnsi(html: string, colors: HighlightTheme): string {
   };
   for (const match of html.matchAll(/<span class="([^"]*)">|<\/span>|&(amp|lt|gt|quot|#x27|#39);|[^<&]+|[<&]/g)) {
     if (match[1] !== undefined) {
-      const scope = match[1].split(' ')[0]!.replace(/^hljs-/, '');
-      stack.push(colors[scope] ?? stack[stack.length - 1]);
+      const className = match[1].split(' ')[0]!;
+      const parent = stack[stack.length - 1];
+      if (!className.startsWith('hljs-')) stack.push(parent ?? plain);
+      else stack.push(colors[className.slice('hljs-'.length)] ?? parent ?? uncolored);
       continue;
     }
     if (match[0] === '</span>') {
