@@ -18,8 +18,10 @@ export const pollDriver: DeliveryDriver = {
       );
       if (signal.aborted) return;
 
+      // The gap precedes this page's events, so record it before delivering them.
+      if (result.truncated) context.markGap();
       for (const occurrence of result.events) context.deliver(occurrence);
-      context.setPosition(result.cursor, result.truncated ?? false);
+      context.setPosition(result.cursor);
       context.established();
 
       // Drain a backlog immediately, but never spin on an empty "more" page.
