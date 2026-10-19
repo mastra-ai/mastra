@@ -14,7 +14,7 @@ import type { BoardFilterState } from '../boardFilters';
 import { boardLayoutFromParams, boardLayoutParams } from '../boardLayout';
 import type { BoardLayout } from '../boardLayout';
 import type { BoardSort } from '../boardOrder';
-import { withPeopleFolded } from '../boardPeople';
+import { withPeopleFolded, withPeopleUnfolded } from '../boardPeople';
 import type { PersonIdentity } from '../boardPeople';
 import { BOARD_VIEW_QUERY, boardViewSettingsSchema, savedBoardViewsStorageKey } from '../boardSavedViews';
 import type { BoardViewSettings } from '../boardSavedViews';
@@ -102,9 +102,10 @@ export function useBoardView({
       setSearchParams(params, { replace: true });
     },
     setFilters: (next: BoardFilterState) => {
-      const params = applied ? new URLSearchParams(searchParams) : boardFilterParams(searchParams, next);
+      const stored = withPeopleUnfolded(next, personId);
+      const params = applied ? new URLSearchParams(searchParams) : boardFilterParams(searchParams, stored);
       clearOpenCard(params);
-      if (applied) savedViews.change({ filters: boardFilterItems(next) });
+      if (applied) savedViews.change({ filters: boardFilterItems(stored) });
       if (params.toString() !== searchParams.toString()) replaceParams(params);
     },
     clearFilters: () => {

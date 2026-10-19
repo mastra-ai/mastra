@@ -299,7 +299,9 @@ describe('BoardPage filters', () => {
     await closePropertiesMenus(user);
     await waitFor(() => expect(screen.getByText('Card unrelated')).toBeInTheDocument());
     await togglePropertyOption(user, MENU, 'Author', /You$/);
-    await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('author=factory%3Auser-alice'));
+    await waitFor(() =>
+      expect(screen.getByTestId('board-url')).toHaveTextContent('author=factory%3Auser-alice&author=github%3Aalice'),
+    );
     expect(screen.getByText('Card authored')).toBeInTheDocument();
     expect(screen.queryByText('Card requested')).not.toBeInTheDocument();
     await waitFor(() => expect(candidateTitles()).toEqual(['Pull 20']));

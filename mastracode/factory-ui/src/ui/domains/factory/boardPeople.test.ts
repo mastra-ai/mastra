@@ -14,9 +14,9 @@ import {
   boardPersonIdentity,
   candidateMatchesPeople,
   withPeopleFolded,
+  withPeopleUnfolded,
   workItemMatchesPeople,
 } from './boardPeople';
-import type { PersonIdentity } from './boardPeople';
 import type { BoardKind } from './boardStages';
 import type { AuditEventPage } from './services/audit';
 import type { WorkItem } from './services/workItems';
@@ -73,7 +73,7 @@ const activityPage: AuditEventPage = {
   },
 };
 
-const asIs: PersonIdentity = participantId => participantId;
+const asIs = boardPersonIdentity(undefined, undefined);
 
 function picks(entries: Array<[string, string]>, kind: BoardKind = 'review') {
   return boardFiltersFromParams(new URLSearchParams(entries), kind);
@@ -174,20 +174,25 @@ describe('board person filters', () => {
     expect(workItemMatchesPeople(item, activityPage, picks([['author', 'factory:user-hubot']]), personId)).toBe(false);
   });
 
-  it('folds an old GitHub-login pick of the signed-in user onto them', () => {
-    const personId = boardPersonIdentity('user-octo', 'octocat');
-    const folded = withPeopleFolded(
+  it("shows the signed-in user's GitHub-login pick as them and stores it so a teammate's link still matches", () => {
+    const octo = boardPersonIdentity('user-octo', 'octocat');
+    const shown = withPeopleFolded(
       picks([
         ['teammate', 'github:octocat'],
         ['author', 'github:hubot'],
         ['label', 'github:octocat'],
       ]),
-      personId,
+      octo,
     );
 
-    expect([...folded.teammate]).toEqual(['factory:user-octo']);
-    expect([...folded.author]).toEqual(['github:hubot']);
-    expect([...folded.label]).toEqual(['github:octocat']);
+    expect([...shown.teammate]).toEqual(['factory:user-octo']);
+    expect([...shown.author]).toEqual(['github:hubot']);
+    expect([...shown.label]).toEqual(['github:octocat']);
+
+    const stored = withPeopleUnfolded(picks([['author', 'factory:user-octo']]), octo);
+    expect([...stored.author]).toEqual(['factory:user-octo', 'github:octocat']);
+    const hubot = boardPersonIdentity('user-hubot', 'hubot');
+    expect(workItemMatchesPeople(item, activityPage, withPeopleFolded(stored, hubot), hubot)).toBe(true);
   });
 
   it('offers Reviewer only on review boards and ignores the retired relevance parameter', () => {

@@ -32,25 +32,41 @@ export function factoryParticipantId(userId: string): string {
   return `factory:${userId}`;
 }
 
-/** Folds every identity of one person onto one participant id, so picking them matches all of their cards. */
-export type PersonIdentity = (participantId: string) => string;
+/** `fold` names every identity of one person by one participant id; `aliases` lists every id that one stands for. */
+export interface PersonIdentity {
+  fold: (participantId: string) => string;
+  aliases: (participantId: string) => string[];
+}
 
 /** Only the signed-in user's GitHub link is known to the browser; everyone else stays one identity per provider. */
 export function boardPersonIdentity(
   currentUserId: string | undefined,
   githubLogin: string | null | undefined,
 ): PersonIdentity {
-  if (!currentUserId || !githubLogin) return participantId => participantId;
+  if (!currentUserId || !githubLogin)
+    return { fold: participantId => participantId, aliases: participantId => [participantId] };
   const githubId = `github:${githubLogin.toLowerCase()}`;
   const factoryId = factoryParticipantId(currentUserId);
-  return participantId => (participantId === githubId ? factoryId : participantId);
+  return {
+    fold: participantId => (participantId === githubId ? factoryId : participantId),
+    aliases: participantId => (participantId === factoryId ? [factoryId, githubId] : [participantId]),
+  };
 }
 
-/** `filters` with every picked person under the id `personId` folds them onto. */
+function withPeopleMapped(filters: BoardFilterState, ids: (picked: string) => string[]): BoardFilterState {
+  const mapped: Record<BoardFilterFieldId, ReadonlySet<string>> = { ...filters };
+  for (const fieldId of BOARD_PERSON_FIELDS) mapped[fieldId] = new Set([...filters[fieldId]].flatMap(ids));
+  return mapped;
+}
+
+/** What the menu shows: each picked person once, under the id `personId` folds them onto. */
 export function withPeopleFolded(filters: BoardFilterState, personId: PersonIdentity): BoardFilterState {
-  const folded: Record<BoardFilterFieldId, ReadonlySet<string>> = { ...filters };
-  for (const fieldId of BOARD_PERSON_FIELDS) folded[fieldId] = new Set([...filters[fieldId]].map(personId));
-  return folded;
+  return withPeopleMapped(filters, picked => [personId.fold(picked)]);
+}
+
+/** What links and saved views store: every id a pick stands for, so they still match for someone who can't fold it. */
+export function withPeopleUnfolded(filters: BoardFilterState, personId: PersonIdentity): BoardFilterState {
+  return withPeopleMapped(filters, personId.aliases);
 }
 
 interface RelatedCard {
@@ -188,7 +204,7 @@ function matchesPeople(relations: BoardRelations, people: BoardPeopleFilters, pe
   return BOARD_PERSON_FIELDS.every(fieldId => {
     const picked = people[fieldId];
     if (picked.size === 0) return true;
-    return PERSON_FIELD_ROLES[fieldId].some(role => [...relations[role]].some(id => picked.has(personId(id))));
+    return PERSON_FIELD_ROLES[fieldId].some(role => [...relations[role]].some(id => picked.has(personId.fold(id))));
   });
 }
 
@@ -199,6 +215,7 @@ export function workItemMatchesPeople(
   personId: PersonIdentity,
   liveCandidate?: BoardCandidate,
 ): boolean {
+  if (BOARD_PERSON_FIELDS.every(fieldId => people[fieldId].size === 0)) return true;
   return matchesPeople(workItemRelations(item, activityPage, liveCandidate), people, personId);
 }
 
@@ -226,7 +243,7 @@ export function boardParticipants({
   const participants = new Map<string, BoardParticipant>();
   const add = (participant: BoardParticipant | undefined) => {
     if (!participant) return;
-    const id = personId(participant.id);
+    const id = personId.fold(participant.id);
     const existing = participants.get(id);
     if (!existing) {
       participants.set(id, { ...participant, id });
