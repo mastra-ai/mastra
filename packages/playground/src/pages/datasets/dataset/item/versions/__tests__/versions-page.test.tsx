@@ -114,6 +114,8 @@ describe('DatasetItemVersionsComparePage', () => {
       expect(screen.getByRole('button', { name: /Default View/ })).toBeDefined();
       expect(screen.getAllByText('Input')).toHaveLength(2);
       expect(screen.getAllByText('Tool Mocks')).toHaveLength(2);
+      expect(screen.getAllByText('Request Context')).toHaveLength(2);
+      expect(screen.getAllByText('Not set in this version')).toHaveLength(2);
       expect(screen.queryByText('No version selected')).toBeNull();
     });
 
