@@ -19,6 +19,7 @@ import type { MastraScorers } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
@@ -467,7 +468,8 @@ export function createStep<TProcessorId extends string>(
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
-  InferPublicSchema<typeof ProcessorStepInputSchema>,
+  // Typed with the output shape so processor steps chain with .then(): each step accepts what the previous one returns.
+  InferPublicSchema<typeof ProcessorStepOutputSchema>,
   InferPublicSchema<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
@@ -1340,7 +1342,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
                 runId: agentRunId,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 // Pass model/tools configuration fields - types match ProcessInputStepArgs
-                model: model!,
+                model: model as MastraLanguageModel,
                 tools,
                 toolChoice,
                 activeTools,

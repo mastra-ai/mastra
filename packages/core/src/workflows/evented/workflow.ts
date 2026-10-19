@@ -17,6 +17,7 @@ import { RequestContext } from '../../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
+import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import {
@@ -1339,7 +1340,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 runId: agentRunId,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 // Pass model/tools configuration fields - types match ProcessInputStepArgs
-                model: model!,
+                model: model as MastraLanguageModel,
                 tools,
                 toolChoice,
                 activeTools,

@@ -182,7 +182,8 @@ export type ProcessorToolResultPhaseType = {
   toolName: string;
   toolCallId: string;
   args?: unknown;
-  result?: unknown;
+  /** Raw value returned by tool.execute(). Named `toolResultValue` so it does not collide with the outputResult `result` field. */
+  toolResultValue?: unknown;
   providerExecuted?: boolean;
   systemMessages?: CoreMessageType[];
   steps?: Array<StepResult<ToolSet>>;
@@ -221,7 +222,7 @@ export type ProcessorStepOutputType = {
   args?: unknown;
   toolResultValue?: unknown;
   providerExecuted?: boolean;
-  model?: MastraLanguageModel;
+  model?: ProcessorStepModelConfig;
   tools?: ProcessorStepToolsConfig;
   toolChoice?: ToolChoice<ToolSet>;
   activeTools?: string[];
@@ -649,7 +650,7 @@ export const ProcessorToolResultPhaseSchema = z.object({
   toolName: z.string().describe('Name of the tool that was executed'),
   toolCallId: z.string().describe('Unique identifier for this specific tool call'),
   args: z.unknown().optional().describe('Arguments the LLM passed to the tool'),
-  result: z.unknown().optional().describe('Raw value returned by tool.execute() (already serialized)'),
+  toolResultValue: z.unknown().optional().describe('Raw value returned by tool.execute() (already serialized)'),
   providerExecuted: z
     .boolean()
     .optional()
@@ -729,7 +730,7 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   retryCount: z.number().optional(),
 
   // Model and tools configuration (for inputStep phase)
-  model: z.custom<MastraLanguageModel>().optional(),
+  model: z.custom<ProcessorStepModelConfig>().optional(),
   tools: z.custom<ProcessorStepToolsConfig>().optional(),
   toolChoice: z.custom<ToolChoice<ToolSet>>().optional(),
   activeTools: z.array(z.string()).optional(),
