@@ -21,6 +21,12 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
   const [panelCollapsed, setPanelCollapsed] = useState(true);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const isMobile = useIsMobile();
+  // Close the drawer when the layout leaves mobile, so narrowing the window again doesn't reopen it.
+  const [wasMobile, setWasMobile] = useState(isMobile);
+  if (wasMobile !== isMobile) {
+    setWasMobile(isMobile);
+    if (!isMobile) setIsDrawerOpen(false);
+  }
   // The mobile drawer owns its own open state, so the portal must not be gated on collapse there.
   const isCollapsed = !isMobile && panelCollapsed;
   const isOpen = isMobile ? isDrawerOpen : !panelCollapsed;
