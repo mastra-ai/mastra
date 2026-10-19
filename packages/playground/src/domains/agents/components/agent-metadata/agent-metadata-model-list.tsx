@@ -111,7 +111,7 @@ export const AgentMetadataModelList = ({
 const AgentMetadataReadOnlyModelList = ({ modelList }: { modelList: AgentMetadataModelListType }) => (
   <div className="flex flex-col gap-2">
     <Txt variant="caption" tone="muted">
-      This model list is set in code and can't be edited here.
+      This model list is dynamic and can't be edited here.
     </Txt>
     {modelList.map(modelConfig => (
       <div key={modelConfig.id} className="flex items-center gap-2 rounded-lg bg-sidebar p-2">

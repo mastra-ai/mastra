@@ -141,7 +141,7 @@ describe('AgentOverviewPanel', () => {
   });
 
   describe('model list editability', () => {
-    const READ_ONLY_NOTE = "This model list is set in code and can't be edited here.";
+    const READ_ONLY_NOTE = "This model list is dynamic and can't be edited here.";
 
     it('shows a function-valued model list without edit controls', async () => {
       installHandlers({ agent: { ...dynamicFallbackAgent, modelListEditable: false } });
