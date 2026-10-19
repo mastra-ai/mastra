@@ -470,6 +470,8 @@ export const POLL_MCP_SERVER_EVENT_ROUTE = createRoute({
   description: 'Reads occurrences of an event type, like the events/poll MCP request (experimental)',
   tags: ['MCP'],
   requiresAuth: true,
+  // Same permission as streaming: both read occurrences through the event's source.
+  requiresPermission: 'mcp:execute',
   handler: async ({
     mastra,
     serverId,
