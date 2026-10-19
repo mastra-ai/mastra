@@ -109,7 +109,14 @@ export interface OMSession {
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
 interface ModelCatalog {
   listAvailableModels: () => Promise<
-    Array<{ id?: string; modelName?: string; provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }>
+    Array<{
+      id?: string;
+      modelName?: string;
+      provider: string;
+      hasApiKey: boolean;
+      apiKeyEnvVar?: string;
+      releaseDate?: string;
+    }>
   >;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
   getSessionByResource?: (resourceId: string, scope?: string) => Promise<OMSession | undefined>;
@@ -964,9 +971,18 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 deploymentProviders,
               }),
             ]);
-            const catalog = models.flatMap(({ id, provider, modelName }) =>
+            const catalog = models.flatMap(({ id, provider, modelName, releaseDate }) =>
               typeof id === 'string' && canUseModelProvider(access, provider)
-                ? [{ id, provider, modelName, hasApiKey: true, reasoningOptions: getModelReasoningOptions(id) }]
+                ? [
+                    {
+                      id,
+                      provider,
+                      modelName,
+                      releaseDate,
+                      hasApiKey: true,
+                      reasoningOptions: getModelReasoningOptions(id),
+                    },
+                  ]
                 : [],
             );
             // Append the caller's custom provider models (DB-backed, org rows in
@@ -991,6 +1007,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                         id,
                         provider: record.providerId,
                         modelName: model,
+                        releaseDate: undefined,
                         hasApiKey: true,
                         reasoningOptions: undefined,
                       });

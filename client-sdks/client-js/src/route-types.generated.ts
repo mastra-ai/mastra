@@ -2395,6 +2395,11 @@ type Shared_Type_7 = {
   connected: boolean;
   docUrl?: string | undefined;
   models: string[];
+  modelReleaseDates?:
+    | {
+        [key: string]: string;
+      }
+    | undefined;
 };
 
 type Shared_Type_8 =
@@ -22750,6 +22755,7 @@ export type GetAgentControllerControllerIdModels_Response = {
     id: string;
     provider: string;
     modelName: string;
+    releaseDate?: string | undefined;
     hasApiKey: boolean;
     useCount: number;
   }[];

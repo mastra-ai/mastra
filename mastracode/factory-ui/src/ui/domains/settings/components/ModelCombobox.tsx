@@ -1,6 +1,6 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxSingleProps } from '@mastra/playground-ui/components/Combobox';
-import { formatModelName } from '@mastra/playground-ui/utils/model';
+import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui/utils/model';
 import { Box, Sparkles } from 'lucide-react';
 import { useMemo } from 'react';
 
@@ -81,7 +81,14 @@ export function ModelCombobox({
 }) {
   const autoEffectiveModelId = auto ? (auto.effectiveModelId ?? null) : undefined;
   const options = useMemo(() => {
-    const catalog = models.map(m => modelOption(m.id, m.provider));
+    const catalog = models
+      .toSorted(
+        (a, b) =>
+          a.provider.localeCompare(b.provider) ||
+          compareModelReleaseDates(a.releaseDate, b.releaseDate) ||
+          a.id.localeCompare(b.id),
+      )
+      .map(m => modelOption(m.id, m.provider));
     const known = new Set(catalog.map(o => o.value));
     const autoChoice = autoEffectiveModelId === undefined ? [] : [autoOption(autoEffectiveModelId)];
     const isAutoValue = autoChoice.length > 0 && value === AUTO_VALUE;

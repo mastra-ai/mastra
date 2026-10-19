@@ -485,6 +485,8 @@ export interface AvailableModel {
   provider: string;
   /** Model name without provider prefix */
   modelName: string;
+  /** ISO release date, when supplied by the model catalog. */
+  releaseDate?: string;
   /** Whether the provider has valid authentication */
   hasApiKey: boolean;
   /** Environment variable for the provider's API key */

@@ -15,6 +15,7 @@ export interface AvailableModelOption {
   id: string;
   provider: string;
   modelName: string;
+  releaseDate?: string;
   hasApiKey: boolean;
   reasoningOptions?: ModelReasoningOption[];
 }

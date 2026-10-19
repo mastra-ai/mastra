@@ -108,6 +108,12 @@ vi.mock('@mastra/core/llm', async () => {
 });
 
 describe('getProvidersHandler', () => {
+  it('includes catalog release dates for model pickers', async () => {
+    const result = await GET_PROVIDERS_ROUTE.handler({});
+    const openai = result.providers.find(provider => provider.id === 'openai');
+    expect(openai?.modelReleaseDates?.['gpt-5']).toBe('2025-08-07');
+  });
+
   // Store original env
   const originalEnv = process.env;
 
