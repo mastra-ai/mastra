@@ -722,7 +722,7 @@ describe('TraceDataPanelView — following the spans it is given', () => {
       <TraceDataPanelView {...baseProps} spans={rootSpanFixture} onSaveAsDatasetItem={onSaveAsDatasetItem} />,
     );
 
-    const otherRoot = [{ ...(rootSpanFixture[0] as (typeof rootSpanFixture)[number]), spanId: 'other-root' }];
+    const otherRoot = [{ ...rootSpanFixture[0], spanId: 'other-root' }];
     rerender(<TraceDataPanelView {...baseProps} spans={otherRoot} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
     openTraceActions();

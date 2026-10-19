@@ -46,7 +46,7 @@ export function useHighlight(code: string, lang: string | undefined): Highlighte
 
 export function tokenStyle(token: ThemedToken): CSSProperties | undefined {
   if (token.htmlStyle && typeof token.htmlStyle === 'object') {
-    return token.htmlStyle as CSSProperties;
+    return token.htmlStyle;
   }
 
   return token.color ? { color: token.color } : undefined;

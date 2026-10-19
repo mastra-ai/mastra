@@ -78,7 +78,7 @@ function Select<Value = string>({ children, items, onValueChange, ...props }: Se
 
   return (
     <SelectPrimitive.Root
-      items={derivedItems as SelectRootProps<Value>['items']}
+      items={derivedItems}
       onValueChange={onValueChange ? (value, eventDetails) => onValueChange(value as Value, eventDetails) : undefined}
       {...props}
     >

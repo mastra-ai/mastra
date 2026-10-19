@@ -36,6 +36,7 @@ const indexOmPartsByCycleId = (parts: MastraDBMessage['content']['parts'], targe
     const existing = target.get(cycleId) || {};
     // The discriminant `omPart.type` and `key` are paired in OM_TYPE_TO_KEY, so
     // the assignment is sound; TS cannot correlate the two unions on its own.
+    // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- TS intersects the indexed write's value types to undefined.
     (existing[key] as OmIndexablePart) = omPart;
     target.set(cycleId, existing);
   }

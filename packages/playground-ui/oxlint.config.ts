@@ -46,6 +46,7 @@ export default defineConfig({
   settings: { tailwindcss: { entryPoint: './src/index.css' } },
   ignorePatterns: ['storybook-static/**'],
   rules: {
+    'typescript/no-unnecessary-type-assertion': 'error',
     'react/only-export-components': [
       'warn',
       {

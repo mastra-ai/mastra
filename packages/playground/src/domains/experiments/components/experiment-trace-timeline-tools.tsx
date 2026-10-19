@@ -84,7 +84,7 @@ export function ExperimentTraceTimelineTools({
         })}
         {hasOtherSpanTypes && (
           <Button
-            onClick={() => handleToggle('other' as ExperimentUISpanType)}
+            onClick={() => handleToggle('other')}
             className={fadedTypes?.includes('other') ? 'opacity-40' : ''}
             icon={<CircleDashedIcon />}
           >

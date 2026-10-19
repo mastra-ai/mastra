@@ -272,12 +272,12 @@ function projectSessionRoutes(
         ) {
           return c.json({ error: 'Invalid sessionId' }, 400);
         }
-        const requestedSessionId = body.sessionId as string | undefined;
+        const requestedSessionId = body.sessionId;
         const sessionId = requestedSessionId ?? globalThis.crypto.randomUUID();
         if (body.title !== undefined && typeof body.title !== 'string') {
           return c.json({ error: 'Invalid title' }, 400);
         }
-        const normalizedTitle = body.title === undefined ? null : normalizeSessionTitle(body.title as string);
+        const normalizedTitle = body.title === undefined ? null : normalizeSessionTitle(body.title);
         let branch: string;
         if (body.branch === undefined) branch = `${USER_SESSION_BRANCH_PREFIX}${sessionId}`;
         else if (isValidGitRef(body.branch)) branch = body.branch;

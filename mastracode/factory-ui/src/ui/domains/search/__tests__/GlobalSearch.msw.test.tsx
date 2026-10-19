@@ -348,7 +348,7 @@ describe('Global search', () => {
           slug: 'other-provider/repo',
         };
         const item: WorkItem = {
-          ...workItems[3]!,
+          ...workItems[3],
           source: provider === 'github' ? 'github-issue' : 'gitlab-issue',
           board: 'release',
           stages: ['shipped'],
@@ -560,7 +560,7 @@ describe('Global search', () => {
 
   it('keeps search open while choosing a repository for an unattributed work item', async () => {
     const item = {
-      ...workItems[3]!,
+      ...workItems[3],
       board: 'custom',
       metadata: { number: 777 },
     };
@@ -825,7 +825,7 @@ describe('Global search', () => {
   });
 
   it('refuses to open a session on a custom-board card while automation is already starting a run on it', async () => {
-    const item = { ...workItems[3]!, board: 'custom', metadata: { number: 777 } };
+    const item = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
     const requests = stubSearchApi({ workItems: [item] });
     stubAutomationStartingRunOn(item.id);
     const user = userEvent.setup();
@@ -877,7 +877,7 @@ describe('Global search', () => {
   });
 
   it('refuses to open a second session while the session chosen through the repository picker is still starting', async () => {
-    const item = { ...workItems[3]!, board: 'custom', metadata: { number: 777 } };
+    const item = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
     stubSearchApi({ workItems: [item] });
     const starts: unknown[] = [];
     let releaseStart = () => {};
