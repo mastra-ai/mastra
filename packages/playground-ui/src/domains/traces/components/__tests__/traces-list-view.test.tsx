@@ -1,10 +1,20 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { afterEach, assert, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TracesListView } from '../traces-list-view';
 import type { TracesListViewTrace } from '../traces-list-view';
+import {
+  FAILED_SPAN_ID,
+  FAILED_TRACE_ID,
+  errorPreview,
+  failedSpanDetail,
+  fullErrorMessage,
+} from './fixtures/trace-error-cell';
+import { server } from '@/test/msw-server';
+import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
 
 // jsdom implements neither ResizeObserver nor element layout; without both the
 // virtualizer sees a zero-height scroll container and renders no rows. The stub
@@ -191,34 +201,43 @@ describe('TracesListView — type column', () => {
   });
 });
 
-describe('TracesListView — output column', () => {
-  const error = 'This request requires more credits, or fewer max_tokens. You requested up to 4096 tokens.';
-
-  it('shows the error in a tooltip when hovering a failed row', async () => {
-    render(
-      <TracesListView
-        traces={[makeTrace({ traceId: 'trace-failed', status: 'error', errorPreview: error })]}
-        onTraceClick={vi.fn()}
-      />,
-    );
-
-    expect(screen.queryByRole('tooltip')).toBeNull();
-    await userEvent.hover(screen.getByText(error));
-
-    expect((await screen.findByRole('tooltip')).textContent).toBe(error);
+describe('TracesListView — failed row error', () => {
+  const failedRow = makeTrace({
+    traceId: FAILED_TRACE_ID,
+    spanId: FAILED_SPAN_ID,
+    status: 'error',
+    errorPreview,
   });
 
-  it('shows no tooltip over the output of a successful row', async () => {
-    render(
-      <TracesListView
-        traces={[makeTrace({ traceId: 'trace-ok', status: 'success', outputPreview: 'Sunny, 22°C' })]}
-        onTraceClick={vi.fn()}
-      />,
+  beforeEach(() => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () =>
+        HttpResponse.json(failedSpanDetail),
+      ),
     );
+  });
 
-    await userEvent.hover(screen.getByText('Sunny, 22°C'));
+  it('shows the full error from the span when hovering the cut-off preview', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TracesListView traces={[failedRow]} onTraceClick={vi.fn()} />);
 
-    await expect(screen.findByRole('tooltip')).rejects.toThrow();
+    await user.hover(screen.getByText(errorPreview));
+
+    expect(await screen.findByText(fullErrorMessage)).not.toBeNull();
+    expect(screen.getByText('AI_APICallError')).not.toBeNull();
+  });
+
+  it('copies the error from the card without opening the trace', async () => {
+    const user = userEvent.setup();
+    const onTraceClick = vi.fn();
+    renderWithProviders(<TracesListView traces={[failedRow]} onTraceClick={onTraceClick} />);
+
+    await user.hover(screen.getByText(errorPreview));
+    await screen.findByText(fullErrorMessage);
+    await user.click(screen.getByRole('button', { name: 'Copy error' }));
+
+    expect(await navigator.clipboard.readText()).toBe(fullErrorMessage);
+    expect(onTraceClick).not.toHaveBeenCalled();
   });
 });
 

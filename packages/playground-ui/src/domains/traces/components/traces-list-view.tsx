@@ -11,6 +11,7 @@ import {
 } from '../trace-list-columns';
 import type { TraceColumnPreferences, TraceCustomColumn, TraceUsageSummary } from '../trace-list-columns';
 import { getInputPreview, getSpanDurationMs } from '../utils/span-utils';
+import { TraceErrorCell } from './trace-error-cell';
 import { DataList, DataListSkeletonRows, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
 import type { DataListSort } from '@/ds/components/DataList';
 import { splitColumns } from '@/ds/components/DataList/shared';
@@ -278,13 +279,16 @@ export function TracesListView({
                 {hasTraceColumn(columnPreferences, 'input') && (
                   <TracesDataList.InputCell input={trace.inputPreview ?? getInputPreview(trace.input)} />
                 )}
-                {hasTraceColumn(columnPreferences, 'output') && (
-                  <TracesDataList.OutputCell
-                    output={trace.outputPreview}
-                    error={trace.errorPreview}
-                    status={trace.status}
-                  />
-                )}
+                {hasTraceColumn(columnPreferences, 'output') &&
+                  (trace.status === 'error' && trace.errorPreview ? (
+                    <TraceErrorCell traceId={trace.traceId} spanId={trace.spanId} errorPreview={trace.errorPreview} />
+                  ) : (
+                    <TracesDataList.OutputCell
+                      output={trace.outputPreview}
+                      error={trace.errorPreview}
+                      status={trace.status}
+                    />
+                  ))}
                 <TracesDataList.StatusCell status={trace.status} />
                 {hasTraceColumn(columnPreferences, 'duration') && (
                   <DataList.NumberCell font="mono">
