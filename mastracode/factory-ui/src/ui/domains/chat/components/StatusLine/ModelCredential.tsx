@@ -3,9 +3,11 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Building2, KeyRound, User } from 'lucide-react';
+import { Building2, KeyRound, Server, User } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
+import type { ModelCredentialHolder } from '../../../../../hooks/useAvailableModels';
 import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
 import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandIcon';
 import { useChatModels } from '../../context/useChatModels';
@@ -16,14 +18,18 @@ import type { FactoryAuthState } from '../../../auth/services/auth';
 
 type CredentialHolder =
   | { kind: 'organization' }
+  | { kind: 'deployment' }
   | { kind: 'teammate-owner'; name?: string; avatarUrl?: string }
   | { kind: 'you'; name?: string; avatarUrl?: string; ownsSession: boolean };
 
-function personalHolder(
+function resolveHolder(
+  credentialHolder: ModelCredentialHolder,
   owner: ThreadOwner | undefined,
   viewer: FactoryAuthState['user'],
   isDraft: boolean,
 ): CredentialHolder {
+  if (credentialHolder === 'organization') return { kind: 'organization' };
+  if (credentialHolder === 'deployment') return { kind: 'deployment' };
   if (owner && owner.id !== viewer?.userId) {
     return { kind: 'teammate-owner', name: owner.name, avatarUrl: owner.avatarUrl };
   }
@@ -33,6 +39,7 @@ function personalHolder(
 
 function describeHolder(holder: CredentialHolder): string {
   if (holder.kind === 'organization') return 'Shared by the organization';
+  if (holder.kind === 'deployment') return 'Configured on the server';
   if (holder.kind === 'teammate-owner') return holder.name ? `${holder.name} · session owner` : 'Session owner';
   if (!holder.ownsSession) return holder.name ? `${holder.name} (you)` : 'You';
   return holder.name ? `${holder.name} · session owner (you)` : 'You · session owner';
@@ -45,23 +52,20 @@ function teammateWarning(holder: CredentialHolder, credential: string): string |
 
 const badgeShell = 'flex size-icon-sm items-center justify-center rounded-full border border-border bg-card';
 
-function HolderBadge({ holder }: { holder: CredentialHolder }) {
-  if (holder.kind === 'organization') {
-    return (
-      <span className={badgeShell}>
-        <Building2 className="size-2.5" />
-      </span>
-    );
-  }
-  if (!holder.name) {
-    return (
-      <span className={badgeShell}>
-        <User className="size-2.5" />
-      </span>
-    );
-  }
+function GlyphBadge({ icon: Icon }: { icon: LucideIcon }) {
   return (
-    <span className="flex [&>[data-slot=avatar]]:size-icon-sm">
+    <span className={badgeShell}>
+      <Icon className="size-2.5" />
+    </span>
+  );
+}
+
+function HolderBadge({ holder }: { holder: CredentialHolder }) {
+  if (holder.kind === 'organization') return <GlyphBadge icon={Building2} />;
+  if (holder.kind === 'deployment') return <GlyphBadge icon={Server} />;
+  if (!holder.name) return <GlyphBadge icon={User} />;
+  return (
+    <span className="[&>[data-slot=avatar]]:size-icon-sm flex">
       <Avatar name={holder.name} src={holder.avatarUrl} size="xs" />
     </span>
   );
@@ -71,18 +75,14 @@ export function ModelCredential() {
   const authQuery = useFactoryAuth();
   const { owner, draftSessionId } = useChatSessionContext();
   const { activeModelId } = useChatModels();
-  const { modelScope, catalogTarget } = useChatModelScope();
+  const { catalogTarget } = useChatModelScope();
   const modelsQuery = useAvailableModelsQuery(catalogTarget);
-
-  if (!authQuery.data?.authEnabled || !modelScope) return null;
-
-  const holder: CredentialHolder =
-    modelScope === 'factory'
-      ? { kind: 'organization' }
-      : personalHolder(owner, authQuery.data.user, Boolean(draftSessionId));
   const model = modelsQuery.data?.find(candidate => candidate.id === activeModelId);
-  const credential =
-    model?.credentialLabel ?? (model ? `${providerDisplayName(model.provider)} connection` : 'Model connection');
+
+  if (!authQuery.data?.authEnabled || !model?.credentialHolder) return null;
+
+  const holder = resolveHolder(model.credentialHolder, owner, authQuery.data.user, Boolean(draftSessionId));
+  const credential = model.credentialLabel ?? `${providerDisplayName(model.provider)} connection`;
   const holderDescription = describeHolder(holder);
   const warning = teammateWarning(holder, credential);
 
@@ -100,14 +100,14 @@ export function ModelCredential() {
           />
         }
       >
-        <ProviderBrandIcon provider={model?.provider ?? ''} fallback={<KeyRound className="size-3.5" />} />
+        <ProviderBrandIcon provider={model.provider} fallback={<KeyRound className="size-3.5" />} />
         <span className="absolute -right-1 -bottom-1">
           <HolderBadge holder={holder} />
         </span>
       </TooltipTrigger>
       <TooltipContent className="grid gap-1">
         <span className="font-medium">{credential}</span>
-        <span className="flex items-center gap-1.5 text-muted-foreground">
+        <span className="text-muted-foreground flex items-center gap-1.5">
           <HolderBadge holder={holder} />
           {holderDescription}
         </span>

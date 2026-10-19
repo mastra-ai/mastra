@@ -7,6 +7,8 @@ import type { AvailableModelsFilter } from '../api/keys';
 import { fetchSessionModelCatalog, sessionModelCatalogQueryOptions } from './useSessionModelCatalog';
 import type { SessionModelCatalog, SessionModelCatalogTarget } from './useSessionModelCatalog';
 
+export type ModelCredentialHolder = 'personal' | 'organization' | 'deployment';
+
 /** One selectable model from `GET /web/config/models` (credentialed providers only). */
 export interface AvailableModelOption {
   id: string;
@@ -15,6 +17,7 @@ export interface AvailableModelOption {
   hasApiKey: boolean;
   reasoningOptions?: ModelReasoningOption[];
   credentialLabel?: string;
+  credentialHolder?: ModelCredentialHolder;
 }
 
 export interface AvailableModelsTarget extends AvailableModelsFilter {

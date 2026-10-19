@@ -327,9 +327,20 @@ function grantingTenantRecord(records: CredentialRecord[], authProviderId: strin
   );
 }
 
-function tenantCredentialLabel(records: CredentialRecord[] | undefined, provider: string) {
-  const record = records && grantingTenantRecord(records, getAuthProviderId(provider));
-  return record && credentialLabel(provider, record.credential.type);
+type ModelCredentialHolder = 'personal' | 'organization' | 'deployment';
+
+function tenantModelCredential(
+  records: CredentialRecord[] | undefined,
+  provider: string,
+): { credentialLabel?: string; credentialHolder?: ModelCredentialHolder } {
+  if (!records) return {};
+  if (isDeploymentModelProvider(provider)) return { credentialHolder: 'deployment' };
+  const record = grantingTenantRecord(records, getAuthProviderId(provider));
+  if (!record) return {};
+  return {
+    credentialLabel: credentialLabel(provider, record.credential.type),
+    credentialHolder: record.scope === 'user' ? 'personal' : 'organization',
+  };
 }
 
 /**
@@ -401,6 +412,7 @@ export interface ModelCatalogEntry {
   hasApiKey: true;
   reasoningOptions: ReturnType<typeof getModelReasoningOptions> | undefined;
   credentialLabel?: string;
+  credentialHolder?: ModelCredentialHolder;
 }
 
 /**
@@ -440,7 +452,7 @@ export async function buildModelCatalog({
             modelName,
             hasApiKey: true as const,
             reasoningOptions: getModelReasoningOptions(id),
-            credentialLabel: tenantCredentialLabel(tenantCredentials, provider),
+            ...tenantModelCredential(tenantCredentials, provider),
           },
         ]
       : [],
@@ -450,6 +462,9 @@ export async function buildModelCatalog({
   if (listCustomProviders) {
     try {
       const known = new Set(catalog.map(m => m.id));
+      const customProviderCredential: { credentialHolder?: ModelCredentialHolder } = tenantCredentials
+        ? { credentialHolder: 'organization' }
+        : {};
       for (const record of await listCustomProviders()) {
         for (const model of record.models) {
           const id = `${record.providerId}/${model}`;
@@ -461,7 +476,7 @@ export async function buildModelCatalog({
             modelName: model,
             hasApiKey: true,
             reasoningOptions: undefined,
-            credentialLabel: undefined,
+            ...customProviderCredential,
           });
         }
       }

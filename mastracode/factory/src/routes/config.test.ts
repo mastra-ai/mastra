@@ -608,6 +608,7 @@ describe('GET /web/config/models', () => {
           hasApiKey: true,
           reasoningOptions: fableReasoning,
           credentialLabel: 'Claude Pro/Max',
+          credentialHolder: 'personal',
         },
       ],
     });
@@ -655,7 +656,7 @@ describe('GET /web/config/models', () => {
     expect((await app.request('/web/config/models?factoryId=missing')).status).toBe(404);
   });
 
-  it('labels the credential from the scope a reply will use, not a personal login that shadows it', async () => {
+  it('names the credential and its holder from the scope a reply will use, not a personal login that shadows it', async () => {
     const seed = await createFactoryStorageForTests();
     await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
       type: 'oauth',
@@ -684,14 +685,22 @@ describe('GET /web/config/models', () => {
         factoryProjects: seed.projects,
       }).routes(),
     );
-    const catalog = z.object({ models: z.array(z.object({ credentialLabel: z.string().optional() })) });
-    const label = async (query: string) => {
+    const catalog = z.object({
+      models: z.array(z.object({ credentialLabel: z.string().optional(), credentialHolder: z.string().optional() })),
+    });
+    const credential = async (query: string) => {
       const res = await app.request(`/web/config/models${query}`);
-      return catalog.parse(await res.json()).models[0]?.credentialLabel;
+      return catalog.parse(await res.json()).models[0];
     };
 
-    expect(await label(`?factoryId=${orgProject.id}`)).toBe('Anthropic API key');
-    expect(await label('?scope=user')).toBe('Claude Pro/Max');
+    expect(await credential(`?factoryId=${orgProject.id}`)).toEqual({
+      credentialLabel: 'Anthropic API key',
+      credentialHolder: 'organization',
+    });
+    expect(await credential('?scope=user')).toEqual({
+      credentialLabel: 'Claude Pro/Max',
+      credentialHolder: 'personal',
+    });
   });
 
   it('includes Bedrock models for a tenant only when the deployment opted in', async () => {
@@ -732,6 +741,7 @@ describe('GET /web/config/models', () => {
           provider: 'amazon-bedrock',
           modelName: 'anthropic.claude-x',
           hasApiKey: true,
+          credentialHolder: 'deployment',
         },
       ],
     });
@@ -768,7 +778,9 @@ describe('GET /web/config/models', () => {
     const res = await app.request('/web/config/models');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      models: [{ id: 'acme/fast-1', provider: 'acme', modelName: 'fast-1', hasApiKey: true }],
+      models: [
+        { id: 'acme/fast-1', provider: 'acme', modelName: 'fast-1', hasApiKey: true, credentialHolder: 'organization' },
+      ],
     });
   });
 
