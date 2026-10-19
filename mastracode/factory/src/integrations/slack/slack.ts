@@ -14,6 +14,7 @@ import { createSlackAdapter } from '@mastra/slack';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
+import { FACTORY_INTERACTIVE_KEY } from '../../auth.js';
 import {
   primeTenantCredentialsForRequestContext,
   primeTenantCredentialsForTenant,
@@ -40,6 +41,7 @@ import type { ModelDefaultsStorage } from '../../storage/domains/model-defaults/
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
 import type { FactoryChannelsConfig } from '../base.js';
 import { prepareSessionRunContext } from '../subscription-session.js';
 
@@ -658,8 +660,8 @@ async function prepareExistingSessionOwnerContext(
   thread: HandlerThread,
   deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
-  options: { expectedOrgId?: string; requireInternalThread: boolean },
-): Promise<'ready' | 'organization-mismatch'> {
+  options: { expectedOrgId?: string; senderUserId?: string; requireInternalThread: boolean },
+): Promise<'ready' | 'organization-mismatch' | 'access-denied'> {
   const sourceControls = configuredSourceControls(deps);
   if (sourceControls.length === 0 && !options.requireInternalThread) return 'ready';
 
@@ -671,6 +673,16 @@ async function prepareExistingSessionOwnerContext(
     return 'ready';
   }
   if (sourceControls.length === 0 || internalThread.resourceId.startsWith('channel:')) return 'ready';
+  const sessions = createSourceControlSessionLookup(sourceControls);
+  const sessionRow = await sessions.getBySessionId(internalThread.resourceId);
+  if (
+    sessionRow &&
+    sessionRow.orgId === options.expectedOrgId &&
+    sessionRow.visibility === 'private' &&
+    sessionRow.userId !== options.senderUserId
+  ) {
+    return 'access-denied';
+  }
   if (!options.expectedOrgId) {
     throw new Error(
       `Could not authorize the owner of Slack Factory session ${internalThread.resourceId}: the sender's account link has no organization.`,
@@ -680,7 +692,7 @@ async function prepareExistingSessionOwnerContext(
   const preparation = await prepareSessionRunContext(
     ctx.requestContext,
     internalThread.resourceId,
-    { sessions: createSourceControlSessionLookup(sourceControls) },
+    { sessions },
     { expectedOrgId: options.expectedOrgId },
   );
   if (preparation === 'organization-mismatch') return preparation;
@@ -728,8 +740,13 @@ async function gateDispatch(
     ctx.requestContext.set('user', { id: sender.link.userId, organizationId: sender.link.orgId });
     const ownerContext = await prepareExistingSessionOwnerContext(thread, deps, ctx, {
       expectedOrgId: sender.link.orgId,
+      senderUserId: sender.link.userId,
       requireInternalThread: options.requireInternalThread,
     });
+    if (ownerContext === 'access-denied') {
+      await thread.post('This private Factory session belongs to another user.');
+      return null;
+    }
     if (ownerContext === 'organization-mismatch') {
       await thread.post('This thread belongs to a Factory session in another organization.');
       return null;
@@ -743,6 +760,12 @@ async function gateDispatch(
     const route = await resolveFactoryForLink({ thread, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;
     if (route.status === 'resolved') {
+      // The model runs with the session owner's credentials, but Factory tools
+      // must act as the authenticated Slack sender, not the session owner.
+      if (sender.link.orgId) {
+        ctx.requestContext.set(FACTORY_SLACK_SENDER_KEY, { userId: sender.link.userId, orgId: sender.link.orgId });
+        ctx.requestContext.set(FACTORY_INTERACTIVE_KEY, true);
+      }
       return { routed: { link: sender.link, factoryProjectId: route.factoryProjectId } };
     }
   }

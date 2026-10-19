@@ -27,6 +27,19 @@ export function useSetDefaultModel() {
   });
 }
 
+export interface ApplyDefaultModelResponse {
+  modelId: string;
+  applied: string[];
+  skipped: Array<{ sessionId: string; reason: 'not-running' | 'thread-missing' | 'apply-failed' }>;
+}
+
+export function useApplyDefaultModel() {
+  const { client } = useApiConfig();
+  return useMutation({
+    mutationFn: () => client.post<ApplyDefaultModelResponse>('/web/config/default-model/apply', {}),
+  });
+}
+
 export function useClearDefaultModel() {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();

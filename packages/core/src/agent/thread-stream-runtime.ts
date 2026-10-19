@@ -846,10 +846,8 @@ export class AgentThreadStreamRuntime {
   /**
    * Start a background timer that renews the cross-process lease at
    * TTL/3 intervals while the run is still going. If the lease is lost
-   * (e.g. expired due to clock skew or pubsub outage) the renewal
-   * stops itself — there's nothing useful we can do from the runner
-   * side beyond log; the original owner will keep running until the run
-   * itself errors or completes.
+   * (e.g. expired due to clock skew or pubsub outage) the renewal stops
+   * and the run is aborted, since a successor may already own the thread.
    */
   #startLeaseRenewal(pubsub: PubSub, key: string, runId: string): void {
     const state = this.#getState(pubsub);
@@ -861,9 +859,13 @@ export class AgentThreadStreamRuntime {
         .renewLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)
         .then(renewed => {
           if (!renewed) {
-            // If renewLease reports the lease is gone, stop renewing; the current stream may still finish,
-            // but another process can now claim the thread until this run completes or errors.
+            // Another process may already own the thread, so stop this run instead of letting it keep
+            // calling the model and tools beside its successor.
             this.#stopLeaseRenewal(pubsub, runId, timer);
+            const preparedRun = state.preparedRunsById.get(runId);
+            if (preparedRun) preparedRun.abortController.abort(new AgentThreadLeaseLostError(runId));
+            // Durable runs own their controller outside the thread runtime.
+            else state.threadRunsById.get(runId)?.agent.abortRunStream(runId);
           } else if (state.sweptLeasedRunIds.has(runId)) {
             // A renewal in flight when the sweep stopped this timer still extended the lease.
             state.sweptLeasedRunIds.set(runId, Date.now());

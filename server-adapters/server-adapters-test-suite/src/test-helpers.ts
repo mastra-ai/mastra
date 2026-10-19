@@ -387,7 +387,14 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   const testTool = createTestTool({ id: 'test-tool' });
 
   // Create test agent with memory and mocks
-  const agent = createTestAgent({ name: 'test-agent', memory });
+  const agent = createTestAgent({
+    name: 'test-agent',
+    memory,
+    model: [
+      { id: 'id1', model: 'openai/gpt-4o', maxRetries: 3 },
+      { id: 'id2', model: 'openai/gpt-4o-mini', maxRetries: 3 },
+    ],
+  });
   mockAgentMethods(agent);
 
   // Mock Agent.prototype.generate for routes that create new Agent instances
@@ -669,6 +676,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         'trace-query-discovery',
         'trace-aggregate',
         'thread-query',
+        'thread-query-rows',
         'span-query',
       ]);
       vi.spyOn(observability, 'queryTraces').mockResolvedValue({ traces: [], page: { next: null } });

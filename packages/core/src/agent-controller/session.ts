@@ -171,7 +171,10 @@ export const MODEL_PERSISTENCE_VERSION_KEY = 'modelPersistenceVersion' as const;
 
 const modelPersistenceQueues = new Map<string, Promise<void>>();
 
-async function runModelPersistenceOperation<T>(threadId: string | undefined, operation: () => Promise<T>): Promise<T> {
+export async function runModelPersistenceOperation<T>(
+  threadId: string | undefined,
+  operation: () => Promise<T>,
+): Promise<T> {
   if (!threadId) return operation();
 
   const previous = modelPersistenceQueues.get(threadId) ?? Promise.resolve();

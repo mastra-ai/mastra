@@ -91,6 +91,7 @@ async function seedFactory(parentVisibility: SourceControlSessionVisibility = 'o
 
 function fakeController(calls: string[], onSessionCreated: (session: FakeSession) => void = () => {}) {
   const created: Array<{ options: Record<string, unknown>; session: ReturnType<typeof fakeSession> }> = [];
+  const storedThreads = new Map<string, { resourceId: string; metadata: Record<string, unknown>; updatedAt: Date }>();
   function fakeSession(id: string) {
     let state: Record<string, unknown> = {};
     const settings = new Map<string, unknown>();
@@ -119,6 +120,10 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
         rename: vi.fn(async () => undefined),
         getSetting: async ({ key }: { key: string }) => settings.get(key),
         setSetting: vi.fn(async ({ key, value }: { key: string; value: unknown }) => void settings.set(key, value)),
+        setSettingOn: vi.fn(async ({ threadId, key, value }: { threadId: string; key: string; value: unknown }) => {
+          if (threadId !== id) throw new Error('Wrong thread');
+          settings.set(key, value);
+        }),
       },
       sendSignal: vi.fn((_input: unknown, _options: { requestContext: RequestContext }) => {
         calls.push('kickoff');
@@ -130,11 +135,39 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
     createSession: vi.fn(async (options: Record<string, unknown>) => {
       const session = fakeSession(options.threadId as string);
       created.push({ options, session });
+      storedThreads.set(options.threadId as string, {
+        resourceId: options.resourceId as string,
+        metadata: {},
+        updatedAt: new Date(),
+      });
       onSessionCreated(session);
       return session;
     }),
     getSessionByResource: vi.fn(
       async (resourceId: string) => created.find(entry => entry.options.resourceId === resourceId)?.session ?? null,
+    ),
+    queryThreads: vi.fn(async ({ resourceId }: { resourceId: string }) =>
+      [...storedThreads.entries()]
+        .filter(([, thread]) => thread.resourceId === resourceId)
+        .map(([id, thread]) => ({ id, ...thread })),
+    ),
+    listAvailableModels: vi.fn(async () => [
+      { id: 'openai/gpt-5.6', provider: 'openai', modelName: 'gpt-5.6', hasApiKey: true },
+      { id: 'openai/gpt-6.1-sol', provider: 'openai', modelName: 'gpt-6.1-sol', hasApiKey: true },
+      { id: 'anthropic/claude-opus-4-1', provider: 'anthropic', modelName: 'claude-opus-4-1', hasApiKey: false },
+    ]),
+    setThreadModel: vi.fn(
+      async ({ resourceId, threadId, modelId }: { resourceId: string; threadId: string; modelId: string }) => {
+        const thread = storedThreads.get(threadId);
+        if (!thread || thread.resourceId !== resourceId) throw new Error('Thread not found for session.');
+        const live = (await controller.getSessionByResource(resourceId)) as FakeSession | null;
+        if (live?.thread.getId() === threadId) {
+          await live.model.switch(modelId);
+          return { live: true };
+        }
+        thread.metadata.currentModelId = modelId;
+        return { live: false };
+      },
     ),
   };
   return { controller, created };
@@ -188,7 +221,6 @@ async function setup(
       id: threadId,
       resourceId: threadOwner(threadId),
     }),
-    queryThreads: async () => [],
     // Sessions this test created are themselves; anything else (the parent) is a live stub.
     getSessionByResource: async (resourceId: string) =>
       (await controller.getSessionByResource(resourceId)) ?? {
@@ -229,14 +261,84 @@ async function setup(
     auditRecorder: audit,
     startCoordinator: () => (coordinatorOption === 'none' ? undefined : { prepare }),
   };
-  const tool = createFactorySessionTools(seeded.scope, deps).factory_start_session!;
+  const tools = createFactorySessionTools(seeded.scope, deps);
+  const tool = tools.factory_start_session!;
   const start = (input: Record<string, unknown>) =>
     (tool as unknown as { execute: (input: unknown, context: unknown) => Promise<unknown> }).execute(input, {});
-  return { ...seeded, calls, controller, created, start, tool, prepare, transition, notifications, reports };
+  const switchModel = (input: Record<string, unknown>) =>
+    (
+      tools.factory_switch_session_model! as unknown as {
+        execute: (input: unknown, context: unknown) => Promise<unknown>;
+      }
+    ).execute(input, {});
+  return {
+    ...seeded,
+    calls,
+    controller,
+    created,
+    start,
+    switchModel,
+    tool,
+    prepare,
+    transition,
+    notifications,
+    reports,
+  };
 }
 
 beforeEach(() => {
   prime.mockReset();
+});
+
+describe('factory_switch_session_model', () => {
+  it('switches a running session immediately, a stopped one for its next run, and rejects unavailable models or other users', async () => {
+    const env = await setup();
+    const started = (await env.start({ prompt: 'Investigate the build.' })) as { sessionId: string };
+    const live = env.created[0]!.session;
+    vi.mocked(live.model.switch).mockClear();
+
+    await expect(env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' })).resolves.toEqual({
+      sessionId: started.sessionId,
+      threadId: started.sessionId,
+      modelId: 'openai/gpt-5.6',
+      live: true,
+    });
+    expect(live.model.switch).toHaveBeenCalledWith('openai/gpt-5.6');
+    expect(env.created).toHaveLength(1);
+
+    env.controller.getSessionByResource.mockResolvedValue(null);
+    await expect(env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-6.1-sol' })).resolves.toEqual({
+      sessionId: started.sessionId,
+      threadId: started.sessionId,
+      modelId: 'openai/gpt-6.1-sol',
+      live: false,
+    });
+    expect(live.model.switch).toHaveBeenCalledTimes(1);
+    expect(env.created).toHaveLength(1);
+
+    await expect(
+      env.switchModel({ sessionId: started.sessionId, modelId: 'anthropic/claude-opus-4-1' }),
+    ).rejects.toThrow('not available');
+    await expect(env.switchModel({ sessionId: started.sessionId, modelId: 'made-up/model' })).rejects.toThrow(
+      'not available',
+    );
+    expect(env.controller.setThreadModel).toHaveBeenCalledTimes(2);
+
+    await env.sourceControl.sessions.create({
+      sessionId: 'other-user-session',
+      projectRepositoryId: env.projectRepository.id,
+      factoryProjectId: env.scope.factoryProjectId,
+      orgId: env.scope.orgId,
+      userId: 'someone-else',
+      branch: 'user/session-other-user-session',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    await expect(env.switchModel({ sessionId: 'other-user-session', modelId: 'openai/gpt-5.6' })).rejects.toThrow(
+      'not owned by you',
+    );
+    await expect(env.switchModel({ sessionId: 'missing', modelId: 'openai/gpt-5.6' })).rejects.toThrow('not found');
+  });
 });
 
 describe('factory_start_session in side mode', () => {
