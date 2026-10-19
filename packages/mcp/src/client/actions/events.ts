@@ -7,6 +7,9 @@ import { pollDriver } from '../events/poll-driver';
 import { pushDriver } from '../events/push-driver';
 import type { MCPEventSubscribeOptions, MCPEventSubscription } from '../events/types';
 
+/** Upper bound on `events/list` pages followed, so a server cannot page a client forever. */
+const MAX_LIST_PAGES = 100;
+
 interface EventClientActionsConfig {
   client: InternalMastraMCPClient;
   logger: IMastraLogger;
@@ -124,8 +127,12 @@ export class EventClientActions {
   private async fetchDescriptors(): Promise<EventDescriptor[]> {
     const events: EventDescriptor[] = [];
     let cursor: string | undefined;
+    let pages = 0;
     try {
       do {
+        if (++pages > MAX_LIST_PAGES) {
+          throw new Error(`events/list returned more than ${MAX_LIST_PAGES} pages`);
+        }
         const page = await this.client.listEvents(cursor);
         events.push(...page.events);
         cursor = page.nextCursor;

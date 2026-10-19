@@ -36,6 +36,7 @@ export type MCPEventDeliveryMode = 'poll' | 'push';
  * - `MCP_EVENTS_SUBSCRIPTION_FAILED` – a non-retryable JSON-RPC error (`details.code`). Ends the subscription.
  * - `MCP_EVENTS_SUBSCRIPTION_TERMINATED` – the server terminated the subscription (`details.code`). Ends it.
  * - `MCP_EVENTS_RETRIES_EXHAUSTED` – `retry.maxAttempts` was reached. Ends the subscription.
+ * - `MCP_EVENTS_BUFFER_OVERFLOW` – the consumer fell `maxBufferedEvents` behind and the oldest unread occurrences were dropped; the next one is flagged `truncated`.
  *
  * @experimental SEP-3415 is a draft; this API may change.
  */
@@ -80,6 +81,12 @@ export interface MCPEventSubscribeOptions {
   streamOpenTimeoutMs?: number;
   /** Number of recent `eventId`s remembered for de-duplication. Default 1000. */
   dedupWindow?: number;
+  /**
+   * Most occurrences held for a consumer that is not reading. When full, the oldest is dropped,
+   * the next occurrence is flagged `truncated`, and `MCP_EVENTS_BUFFER_OVERFLOW` is reported.
+   * Default 1000.
+   */
+  maxBufferedEvents?: number;
   /** Backoff for transient failures. */
   retry?: MCPEventRetryOptions;
   /** Aborting it is the same as calling `cancel()`. */

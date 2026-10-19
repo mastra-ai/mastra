@@ -3,7 +3,7 @@ import { ProtocolError } from '@modelcontextprotocol/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EVENTS_ERROR_CODES } from '../../shared/events';
 import { FakePort, occurrence, pollResult } from './__fixtures__/fake-port';
-import { pollDriver } from './poll-driver';
+import { MAX_DRAIN_PAGES, pollDriver } from './poll-driver';
 import { EventSubscription } from './subscription';
 import type { MCPEventSubscribeOptions } from './types';
 
@@ -91,6 +91,22 @@ describe('poll delivery', () => {
     const ids = [];
     for (let i = 0; i < 3; i++) ids.push((await iterator.next()).value.eventId);
     expect(ids).toEqual(['e1', 'e2', 'e3']);
+    await sub.cancel();
+  });
+
+  it('applies the poll floor after MAX_DRAIN_PAGES pages from a server that always reports more', async () => {
+    const pages = Array.from({ length: MAX_DRAIN_PAGES + 3 }, (_, i) =>
+      pollResult({ events: [occurrence(`e${i}`)], cursor: `c${i}`, hasMore: true, nextPollMs: 0 }),
+    );
+    const port = new FakePort().queuePoll(...pages);
+    const sub = await start(port);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(port.pollCalls).toHaveLength(MAX_DRAIN_PAGES + 1);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(port.pollCalls).toHaveLength(MAX_DRAIN_PAGES + 1);
+    await vi.advanceTimersByTimeAsync(1);
+    // The two scripted pages left are drained, then one more poll waits on the unscripted server.
+    expect(port.pollCalls).toHaveLength(MAX_DRAIN_PAGES + 4);
     await sub.cancel();
   });
 

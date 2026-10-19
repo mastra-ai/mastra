@@ -13,6 +13,7 @@ import type {
 } from './types';
 
 const DEFAULT_DEDUP_WINDOW = 1000;
+const DEFAULT_MAX_BUFFERED_EVENTS = 1000;
 const DEFAULT_RETRY = { initialDelayMs: 1000, maxDelayMs: 30_000, factor: 2, maxAttempts: Infinity };
 
 export interface EventSubscriptionConfig {
@@ -66,6 +67,9 @@ export class EventSubscription implements MCPEventSubscription {
   private readonly abort = new AbortController();
   private readonly errorHandlers = new Set<(error: MCPEventSubscriptionError) => void>();
   private readonly dedupWindow: number;
+  private readonly maxBuffered: number;
+  /** Set when the buffer dropped occurrences; cleared once the consumer catches up. */
+  private overflowing = false;
   private readonly seenIds = new Set<string>();
   private readonly seenOrder: string[] = [];
 
@@ -104,6 +108,7 @@ export class EventSubscription implements MCPEventSubscription {
     this.onClose = config.onClose;
     this.random = config.random ?? Math.random;
     this.dedupWindow = options.dedupWindow ?? DEFAULT_DEDUP_WINDOW;
+    this.maxBuffered = Math.max(1, options.maxBufferedEvents ?? DEFAULT_MAX_BUFFERED_EVENTS);
     this.retry = { ...DEFAULT_RETRY, ...options.retry };
     this.resolved = {
       maxAgeMs: options.maxAgeMs,
@@ -181,6 +186,7 @@ export class EventSubscription implements MCPEventSubscription {
     if (entry) {
       if (entry.cursorAfter) this.yieldedCursor = entry.cursorAfter.cursor;
       this.currentTruncated = entry.afterGap === true;
+      if (this.buffer.length === 0) this.overflowing = false;
       return Promise.resolve({ value: entry.value, done: false });
     }
     if (this.ending) {
@@ -207,7 +213,32 @@ export class EventSubscription implements MCPEventSubscription {
     if (waiter) {
       this.currentTruncated = afterGap;
       waiter.resolve({ value: occurrence, done: false });
-    } else this.buffer.push({ value: occurrence, ...(afterGap ? { afterGap } : {}) });
+    } else {
+      this.buffer.push({ value: occurrence, ...(afterGap ? { afterGap } : {}) });
+      if (this.buffer.length > this.maxBuffered) this.dropOldest();
+    }
+  }
+
+  /**
+   * Drops the oldest unread occurrence so a server cannot grow the queue without bound, and flags
+   * the occurrence that is now first as following a gap.
+   */
+  private dropOldest(): void {
+    const dropped = this.buffer.shift()!;
+    const next = this.buffer[0]!;
+    next.afterGap = true;
+    // Keep a pending cursor marker on the dropped entry with the entry that replaces it, unless
+    // that entry already carries a later one.
+    if (dropped.cursorAfter && !next.cursorAfter) next.cursorAfter = dropped.cursorAfter;
+    if (this.overflowing) return;
+    this.overflowing = true;
+    this.emitError(
+      eventsError(
+        'MCP_EVENTS_BUFFER_OVERFLOW',
+        `The consumer of '${this.name}' fell ${this.maxBuffered} occurrences behind; the oldest unread ones were dropped`,
+        { ...this.details, maxBufferedEvents: this.maxBuffered },
+      ),
+    );
   }
 
   /**
