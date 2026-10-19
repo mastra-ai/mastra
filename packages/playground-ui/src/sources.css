@@ -1,0 +1,2 @@
+/* Workspace dev servers scan source directly so CSS updates do not wait for dist. */
+@source './';

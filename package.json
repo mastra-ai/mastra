@@ -62,7 +62,7 @@
     "build:auth": "pnpm turbo build --filter \"./auth/*\" --filter \"./packages/auth\" --filter \"./server-adapters/*\"",
     "build:observability": "pnpm turbo build --filter \"./observability/*\"",
     "build:workspaces": "pnpm turbo build --filter \"./workspaces/*\"",
-    "dev:playground": "pnpm turbo run dev --filter ./packages/playground-ui --filter ./packages/playground --filter ./client-sdks/react",
+    "dev:playground": "pnpm turbo run dev --filter ./packages/playground",
     "dev:playground:full": "pnpm install && pnpm setup && pnpm --dir examples/agent install && pnpm --dir examples/agent dev:ui",
     "factory:build": "pnpm --dir mastracode/web run prebuild",
     "factory:dev": "tsx mastracode/web/src/factory-dev/cli.ts",

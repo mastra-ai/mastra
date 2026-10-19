@@ -2,6 +2,9 @@
   "$schema": "https://v2-9-16.turborepo.dev/schema.json",
   "extends": ["//"],
   "tasks": {
+    "dev": {
+      "with": ["@mastra/playground-ui#dev", "@mastra/react#dev"]
+    },
     "dev:api": {
       "dependsOn": ["^build"],
       "cache": false,

@@ -2,6 +2,12 @@
 
 Reusable React components, hooks, domains, and design tokens used by Mastra Studio. It provides the UI building blocks for logs, memory, metrics, traces, and agent management.
 
+## Workspace development
+
+From the repository root, run `pnpm dev:playground` for Studio or `pnpm --dir mastracode/web dev:ui` for Factory after completing its setup. Each app's Turbo `dev` task starts this package's watcher and the `@mastra/react` watcher alongside Vite.
+
+The apps resolve `sources.css` to `src/sources.css` only in their Vite dev servers. Tailwind watches shared source directly, so CSS regeneration does not wait for compiled output. Builds and installed consumers keep the published `sources.css`, which scans `dist/**/*.js`.
+
 ## Installation
 
 ```bash

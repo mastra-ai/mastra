@@ -216,7 +216,7 @@ const routesManifestPlugin = (): Plugin => {
   };
 };
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const commonConfig: UserConfig = {
     plugins: [stubNodeBuiltinsPlugin, tailwindcss(), react(), routesManifestPlugin()],
     base: './',
@@ -225,6 +225,9 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve(__dirname, './src'),
         '@internal-temp': path.resolve(__dirname, './src/vendor/@mastra'),
+        ...(command === 'serve' && {
+          '@mastra/playground-ui/sources.css': path.resolve(__dirname, '../playground-ui/src/sources.css'),
+        }),
       },
     },
     build: {
