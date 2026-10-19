@@ -348,7 +348,8 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopO
   _internal: StreamInternal;
   rotateResponseMessageId: (sealMessageId?: string) => string;
   streamState: {
-    serialize: () => any;
+    /** Pass a suspension chunk the step just emitted so the state reflects it. */
+    serialize: (pendingSuspension?: { usage?: LanguageModelUsage }) => any;
     deserialize: (state: any) => void;
   };
   methodType: ModelMethodType;
