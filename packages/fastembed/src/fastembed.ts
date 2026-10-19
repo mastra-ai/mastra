@@ -80,6 +80,17 @@ interface SparseModelInfo {
 
 type ModelInput = Record<string, ort.Tensor>;
 
+/**
+ * ONNX Runtime's CPU memory arena keeps every buffer it has handed out and grows with each new input
+ * shape, so a long-lived embedder climbs by hundreds of MB (bge-small: ~270 MB more after 160 batches
+ * of varying length). Without it, freed buffers go back to the allocator for a small per-run cost.
+ */
+function sessionOptions(
+  executionProviders: ort.InferenceSession.SessionOptions['executionProviders'],
+): ort.InferenceSession.SessionOptions {
+  return { executionProviders, graphOptimizationLevel: 'all', enableCpuMemArena: false };
+}
+
 function normalize(v: number[]): number[] {
   const norm = Math.sqrt(v.reduce((acc, val) => acc + val * val, 0));
   const epsilon = 1e-12;
@@ -250,10 +261,7 @@ export class FlagEmbedding extends Embedding {
     if (!fs.existsSync(modelPath)) {
       throw new Error(`Model file not found at ${modelPath}`);
     }
-    const session = await ort.InferenceSession.create(modelPath, {
-      executionProviders,
-      graphOptimizationLevel: 'all',
-    });
+    const session = await ort.InferenceSession.create(modelPath, sessionOptions(executionProviders));
     return new FlagEmbedding(tokenizer, session, model);
   }
 
@@ -452,10 +460,7 @@ export class SparseTextEmbedding extends SparseEmbedding {
       throw new Error(`Model file not found at ${modelPath}`);
     }
 
-    const session = await ort.InferenceSession.create(modelPath, {
-      executionProviders,
-      graphOptimizationLevel: 'all',
-    });
+    const session = await ort.InferenceSession.create(modelPath, sessionOptions(executionProviders));
 
     return new SparseTextEmbedding(tokenizer, session);
   }
