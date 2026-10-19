@@ -77,7 +77,7 @@ const UNCLIPPED: CSSProperties = { overflow: 'visible' };
  */
 export function StudioFrame({ children, className }: { children: React.ReactNode; className?: string }) {
   const isMobile = useIsMobile();
-  const { hasPanel, panelHandle, onPanelResize } = useRouteSidePanel();
+  const { hasPanel, panelHandle, onPanelResize, isDrawerOpen, onDrawerOpenChange } = useRouteSidePanel();
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: 'studio-frame-layout-v1',
     storage: localStorage,
@@ -117,11 +117,18 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
           </>
         )}
       </PanelGroup>
-      {hasPanel && isMobile && (
-        <PanelDrawer direction="right" label="Open details panel">
-          <RouteSidePanelSlot className="h-full min-h-0" />
-        </PanelDrawer>
-      )}
+      {hasPanel &&
+        isMobile && (
+          // Opened from the page's own header toggle; a floating edge trigger would sit on the header's actions.
+          <PanelDrawer
+            direction="right"
+            label="Open details panel"
+            open={isDrawerOpen}
+            onOpenChange={onDrawerOpenChange}
+          >
+            <RouteSidePanelSlot className="h-full min-h-0" />
+          </PanelDrawer>
+        )}
     </div>
   );
 }

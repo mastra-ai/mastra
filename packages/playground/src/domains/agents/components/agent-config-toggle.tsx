@@ -6,7 +6,7 @@ import { OVERVIEW_PANEL_SHORTCUT } from './overview-panel-shortcuts';
 import { useRouteSidePanel } from '@/lib/route-side-panel';
 
 export function AgentConfigToggle() {
-  const { isCollapsed, toggle } = useRouteSidePanel();
+  const { isOpen, toggle } = useRouteSidePanel();
 
   return (
     <Button
@@ -14,11 +14,10 @@ export function AgentConfigToggle() {
       size="icon-sm"
       type="button"
       aria-label="Config"
-      aria-pressed={!isCollapsed}
-      className="max-lg:hidden"
+      aria-pressed={isOpen}
       tooltip={
         <span className="inline-flex items-center gap-1.5">
-          {isCollapsed ? 'Show Config panel' : 'Hide Config panel'}
+          {isOpen ? 'Hide Config panel' : 'Show Config panel'}
           <Kbd size="xs">{OVERVIEW_PANEL_SHORTCUT}</Kbd>
         </span>
       }

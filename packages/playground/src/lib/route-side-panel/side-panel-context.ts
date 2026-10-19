@@ -11,7 +11,12 @@ export interface SidePanelState {
   panelHandle: RefObject<CollapsiblePanelHandle | null>;
   /** Derived: collapsed on desktop (from the panel's `onResize`); never collapsed on mobile, where the drawer owns its own open state. */
   isCollapsed: boolean;
+  /** Whether the panel is showing: the resizable panel on desktop, the drawer on mobile. */
+  isOpen: boolean;
   onPanelResize: (sizeInPixels: number) => void;
+  /** Mobile drawer open state; the layout's drawer has no trigger of its own, pages open it through `toggle()`. */
+  isDrawerOpen: boolean;
+  onDrawerOpenChange: (open: boolean) => void;
   toggle: () => void;
 }
 

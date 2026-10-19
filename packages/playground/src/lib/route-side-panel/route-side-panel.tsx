@@ -19,9 +19,11 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
   const [el, setEl] = useState<HTMLElement | null>(null);
   const [owners, setOwners] = useState<PanelOwner[]>([]);
   const [panelCollapsed, setPanelCollapsed] = useState(true);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const isMobile = useIsMobile();
   // The mobile drawer owns its own open state, so the portal must not be gated on collapse there.
   const isCollapsed = !isMobile && panelCollapsed;
+  const isOpen = isMobile ? isDrawerOpen : !panelCollapsed;
   const panelHandle = useRef<CollapsiblePanelHandle | null>(null);
   const orderRef = useRef(0);
 
@@ -51,12 +53,27 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
     return active?.owner ?? null;
   }, [owners]);
 
-  const toggle = useCallback(() => panelHandle.current?.toggle(), []);
+  const toggle = useCallback(() => {
+    if (isMobile) setIsDrawerOpen(open => !open);
+    else panelHandle.current?.toggle();
+  }, [isMobile]);
   const onPanelResize = useCallback((sizeInPixels: number) => setPanelCollapsed(sizeInPixels <= 0), []);
 
   const value = useMemo(
-    () => ({ el, setEl, activeOwner, register, panelHandle, isCollapsed, onPanelResize, toggle }),
-    [activeOwner, el, isCollapsed, onPanelResize, register, toggle],
+    () => ({
+      el,
+      setEl,
+      activeOwner,
+      register,
+      panelHandle,
+      isCollapsed,
+      isOpen,
+      onPanelResize,
+      isDrawerOpen,
+      onDrawerOpenChange: setIsDrawerOpen,
+      toggle,
+    }),
+    [activeOwner, el, isCollapsed, isOpen, onPanelResize, isDrawerOpen, register, toggle],
   );
   return <SidePanelContext.Provider value={value}>{children}</SidePanelContext.Provider>;
 }
