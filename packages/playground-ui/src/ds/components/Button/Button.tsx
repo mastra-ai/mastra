@@ -14,24 +14,26 @@ import {
 import { controlStateColorTransition, focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-// Adornments for text-mode buttons: gap between icon+label and larger radius.
-// - `[data-slot=button-icon]` styles the `<Icon>` wrapper rendered by the `icon` prop — the only
-//   supported way to pair an icon with a label (always on the left, fixed gap).
-// - `[&>svg]` only remains for label-less text-mode buttons (e.g. CopyButton) that pass a bare
-//   SVG as children.
-// Excluded from icon-mode because icon-mode wraps children in `<Icon>` and uses its own
-// `rounded-full` (circle).
+// Text-mode buttons are pills. An adornment takes back some of the label's side padding, so
+// the icon sits as far from the edge as from the label (measured against shadcn's Button,
+// which pads `pl-2` beside a 6px gap). Padding, not negative margins, so the gap stays the
+// one gap token.
+// - `[data-slot=button-icon]` / `[data-slot=button-icon-end]` are the `<Icon>` wrappers the
+//   `icon` and `iconEnd` props render.
+// - `>svg` covers callers that pass a bare SVG as a leading child. A label-less one (e.g.
+//   CopyButton) also gets the right side via `LABELLESS_SVG`.
+// Excluded from icon-mode, which is a fixed square with its own `rounded-full` (circle).
 const TEXT_MODE_ADORNMENTS = cn(
-  'gap-[.75em] rounded-full',
-  '[&>[data-slot=button-icon]]:ml-[-.3em]',
-  '[&>[data-slot=button-icon-end]]:-mr-1',
-  '[&>svg]:mx-[-.3em]',
+  'rounded-full',
+  'has-[>[data-slot=button-icon-end]]:pr-2 has-[>[data-slot=button-icon]]:pl-2 has-[>svg]:pl-2',
 );
+
+const LABELLESS_SVG = 'has-[>svg]:pr-2';
 
 const LINK_LAYOUT = cn(
   'relative size-auto gap-1 rounded-xs px-0 text-label',
   'before:absolute before:-inset-x-2',
-  '[&>[data-slot=button-icon-end]]:mr-0 [&>[data-slot=button-icon]]:ml-0 [&>svg]:mx-0',
+  'has-[>[data-slot=button-icon-end]]:pr-0 has-[>[data-slot=button-icon]]:pl-0 has-[>svg]:pl-0',
 );
 
 const LINK_LABEL = cn(
@@ -104,9 +106,9 @@ export const buttonVariants = cva(
         ),
       },
       size: {
-        sm: cn(controlSizeClasses.sm, iconSizeClasses.sm, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        md: cn(controlSizeClasses.md, iconSizeClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        lg: cn(controlSizeClasses.lg, iconSizeClasses.lg, 'px-[1em]', TEXT_MODE_ADORNMENTS),
+        sm: cn(controlSizeClasses.sm, iconSizeClasses.sm, 'gap-1 px-[.9em]', TEXT_MODE_ADORNMENTS),
+        md: cn(controlSizeClasses.md, iconSizeClasses.md, 'gap-1.5 px-[.9em]', TEXT_MODE_ADORNMENTS),
+        lg: cn(controlSizeClasses.lg, iconSizeClasses.lg, 'gap-1.5 px-[1em]', TEXT_MODE_ADORNMENTS),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
         // so icon-mode and text-mode use the same press feedback. The glyph is sized by the `Icon`
         // wrapper the component puts around an icon-mode child, keyed off the same scale.
@@ -302,7 +304,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       // Icon-mode is a square: a group that overrides the rung has to move the width with
       // the height or the circle turns into a pill (see buttons-group.css).
       'data-shape': iconMode ? 'icon' : undefined,
-      className: cn(buttonVariants({ variant, size: resolvedSize }), className),
+      className: cn(buttonVariants({ variant, size: resolvedSize }), isLabelless && LABELLESS_SVG, className),
       ...props,
     };
 

@@ -91,12 +91,21 @@ export const WithIcon: Story = {
 
 export const WithIconSizes: Story = {
   render: () => (
-    <div className="flex items-center gap-4">
-      {(['sm', 'md', 'lg'] as const).map(size => (
-        <Button key={size} size={size} icon={<Plus />}>
-          Add Item
-        </Button>
-      ))}
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-4">
+        {(['sm', 'md', 'lg'] as const).map(size => (
+          <Button key={size} size={size} icon={<Plus />}>
+            Add Item
+          </Button>
+        ))}
+      </div>
+      <div className="flex items-center gap-4">
+        {(['sm', 'md', 'lg'] as const).map(size => (
+          <Button key={size} size={size} iconEnd={<ArrowUpRight />}>
+            Open portal
+          </Button>
+        ))}
+      </div>
     </div>
   ),
 };

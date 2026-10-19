@@ -36,7 +36,7 @@ export const menuItemDestructiveClass = cn(
 );
 
 // Trailing indicator (check / submenu chevron) — applied to a wrapper element, not the
-// svg itself, because the Button recipe's `[&>svg]:mx-[-.3em]` would beat `ml-auto`.
+// svg itself, so the Button recipe's `[&>svg]` adornment padding never treats it as a leading icon.
 export const menuItemTrailingIconClass =
   'ml-auto flex size-[1.1em] shrink-0 items-center justify-center [&>svg]:size-full';
 
