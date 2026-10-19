@@ -5386,9 +5386,20 @@ export class Session<TState = unknown> {
         await this.waitForAcceptedRunCompletion(accepted);
       }
       if (blockingRunId === undefined) return;
-      // Blocked again by the run already waited for: it is parked on a prompt
-      // of its own, so waiting can't free the thread.
+      // Blocked again by the run already waited out: the wait saw nothing it
+      // could wait for, so don't spin on resending.
       if (blockingRunId === lastBlockingRunId) {
+        this.emit({
+          type: 'error',
+          error: new Error("Your message wasn't sent: another run still holds this thread. Try again shortly."),
+        });
+        return;
+      }
+      lastBlockingRunId = blockingRunId;
+      const waited = await this.#waitForOtherAgentRun();
+      if (waited === 'stopped') return;
+      // A parked run waits on its own prompt, so waiting can't free the thread.
+      if (waited === 'suspended') {
         this.emit({
           type: 'error',
           error: new Error(
@@ -5397,19 +5408,17 @@ export class Session<TState = unknown> {
         });
         return;
       }
-      lastBlockingRunId = blockingRunId;
-      if (!(await this.#waitForOtherAgentRun())) return;
     }
   }
 
   /**
-   * Wait until no other agent's run holds this session's thread, or that run
-   * has parked on a prompt, and this session has seen it end. False when Stop
-   * is pressed while waiting.
+   * Wait until no other run holds this session's thread and this session has
+   * seen it end, or until that run parks on a prompt (`'suspended'`).
+   * `'stopped'` when Stop is pressed while waiting.
    */
-  async #waitForOtherAgentRun(): Promise<boolean> {
+  async #waitForOtherAgentRun(): Promise<'free' | 'suspended' | 'stopped'> {
     const threadId = this.thread.getId();
-    if (!threadId) return true;
+    if (!threadId) return 'free';
     const agent = this.machinery.getAgent();
     const waiters = new AbortController();
     let aborted = false;
@@ -5419,7 +5428,7 @@ export class Session<TState = unknown> {
         aborted = true;
       });
     try {
-      await Promise.race([
+      const outcome = await Promise.race([
         agentThreadStreamRuntime.waitForCrossAgentThreadRun(
           agent,
           { memory: { thread: threadId, resource: this.identity.getResourceId() }, untilSuspended: true },
@@ -5427,9 +5436,10 @@ export class Session<TState = unknown> {
         ),
         abortRequest,
       ]);
-      if (aborted) return false;
+      if (aborted) return 'stopped';
+      if (outcome === 'suspended') return 'suspended';
       await this.waitForStreamIdle();
-      return !aborted;
+      return aborted ? 'stopped' : 'free';
     } finally {
       waiters.abort();
     }

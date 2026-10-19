@@ -7,8 +7,10 @@ import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../../agent/durable';
+import { agentThreadStreamRuntime } from '../../agent/thread-stream-runtime';
 import { InMemoryServerCache } from '../../cache';
 import { EventEmitterPubSub } from '../../events';
+import type { EventCallback, SubscribeOptions } from '../../events/types';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
@@ -71,15 +73,44 @@ const settlesWithin = (promise: Promise<unknown>, ms: number) =>
   Promise.race([promise.then(() => true), new Promise<boolean>(resolve => setTimeout(() => resolve(false), ms))]);
 
 /**
+ * Delivers thread events to subscriptions made before `armed` 50ms late. A
+ * backend whose subscriptions receive events independently gives no order
+ * between them, so a wait can see an event before the session has recorded it.
+ */
+class LateEarlySubscribersPubSub extends EventEmitterPubSub {
+  armed = false;
+  #late = new Map<EventCallback, EventCallback>();
+
+  override async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions) {
+    if (this.armed || !topic.startsWith('agent.thread-stream.')) return super.subscribe(topic, cb, options);
+    const late: EventCallback = (event, ack, nack) =>
+      new Promise(resolve => setTimeout(resolve, 50)).then(() => cb(event, ack, nack));
+    this.#late.set(cb, late);
+    return super.subscribe(topic, late, options);
+  }
+
+  override async unsubscribe(topic: string, cb: EventCallback) {
+    return super.unsubscribe(topic, this.#late.get(cb) ?? cb);
+  }
+}
+
+/**
  * A session on a thread, plus another agent whose model call waits for
  * `releaseOther()`. With `otherParks`, the other agent then parks on a prompt
  * of its own instead of replying. With `sharedPubSub`, the other agent uses the
- * session agent's own pubsub, so both share one thread runtime.
+ * session agent's own pubsub, so both share one thread runtime. With
+ * `lateEarlySubscribers`, thread subscriptions made before the test arms the
+ * pubsub get events late.
  */
-async function createHarness(id: string, durable: boolean, { otherParks = false, sharedPubSub = false } = {}) {
+async function createHarness(
+  id: string,
+  durable: boolean,
+  { otherParks = false, sharedPubSub = false, lateEarlySubscribers = false } = {},
+) {
   const storage = new InMemoryStore();
   const cache = new InMemoryServerCache();
-  const pubsub = new EventEmitterPubSub();
+  const pubsub = new LateEarlySubscribersPubSub();
+  pubsub.armed = !lateEarlySubscribers;
   const memory = new MockMemory({ storage });
   // What each agent's model was asked, one entry per model call.
   const prompts: string[] = [];
@@ -153,7 +184,7 @@ async function createHarness(id: string, durable: boolean, { otherParks = false,
     if (event.type === 'error') errors.push(event.error.message);
   });
 
-  return { session, sessionAgent: registeredAgent, prompts, otherPrompts, errors, releaseOther, startOther };
+  return { session, sessionAgent: registeredAgent, pubsub, prompts, otherPrompts, errors, releaseOther, startOther };
 }
 
 describe.each([false, true])('a message sent while another agent runs on the thread, durable=%s', durable => {
@@ -235,6 +266,41 @@ describe.each([false, true])('a message sent while another agent runs on the thr
     expect(other.status).toBe('suspended');
     expect(h.prompts).toHaveLength(0);
     expect(h.errors).toHaveLength(1);
+  });
+
+  it('stops waiting when the park reaches the wait before the session has recorded it', async () => {
+    const h = await createHarness('parks-recorded-late', durable, { otherParks: true, lateEarlySubscribers: true });
+    const other = await h.startOther();
+
+    h.pubsub.armed = true;
+    const sent = h.session.sendMessage({ content: 'Are you there?' });
+    await new Promise(resolve => setTimeout(resolve, 200));
+    h.releaseOther();
+    await other.consumeStream();
+    expect(await settlesWithin(sent, 5_000)).toBe(true);
+
+    expect(h.prompts).toHaveLength(0);
+    expect(h.errors).toEqual([
+      "Your message wasn't sent: another agent's run on this thread is waiting for an answer to its own prompt.",
+    ]);
+  });
+
+  it('says the thread is still held when the wait ends but the same run still blocks it', async () => {
+    const h = await createHarness('still-held', durable);
+    const other = await h.startOther();
+    // A wait that finds nothing to wait for, as for a run held in a process this one can't see.
+    const wait = vi.spyOn(agentThreadStreamRuntime, 'waitForCrossAgentThreadRun').mockResolvedValue(undefined);
+    try {
+      expect(await settlesWithin(h.session.sendMessage({ content: 'Are you there?' }), 5_000)).toBe(true);
+      expect(wait).toHaveBeenCalledTimes(1);
+    } finally {
+      wait.mockRestore();
+    }
+
+    expect(h.prompts).toHaveLength(0);
+    expect(h.errors).toEqual(["Your message wasn't sent: another run still holds this thread. Try again shortly."]);
+    h.releaseOther();
+    await other.consumeStream();
   });
 
   it('still reports the thread blocked to a signal sent straight to the agent', async () => {
