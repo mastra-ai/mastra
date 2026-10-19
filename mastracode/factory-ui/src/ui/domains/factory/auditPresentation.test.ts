@@ -7,8 +7,8 @@ import {
   auditDetailLine,
   auditNamespacesForCategories,
   auditVisibleMetadata,
-  type AuditNamespace,
 } from './auditPresentation';
+import type { AuditNamespace } from './auditPresentation';
 import type { AuditEvent } from './services/audit';
 
 function event(overrides: Partial<AuditEvent> = {}): AuditEvent {
