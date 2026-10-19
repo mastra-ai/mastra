@@ -273,6 +273,11 @@ describe('DurableAgent step data (#26780)', () => {
     expect(finish.steps).toHaveLength(3);
     expect(finish.toolCalls.map((c: any) => c.payload?.toolName ?? c.toolName)).toEqual(['free', 'gated']);
     expect(finish.toolResults).toHaveLength(2);
+    // The first step finished before the approval, so its content comes from the run's stored steps.
+    expect(finish.steps[0].content.find((part: any) => part.type === 'tool-result')).toMatchObject({
+      toolCallId: 'call-free',
+      output: { type: 'json', value: { ok: true } },
+    });
     expect(finish.steps.at(-1).response?.modelId).toBe('resume-model');
     expect(finish.steps.at(-1).response?.messages?.length).toBeGreaterThan(0);
   }, 30000);
