@@ -1,6 +1,7 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { getShortId } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
@@ -12,15 +13,20 @@ import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import {
   CalendarIcon,
+  ChevronDownIcon,
   CircleAlertIcon,
   ClockIcon,
   CoinsIcon,
+  Link2Icon,
   GaugeIcon,
   HashIcon,
   HistoryIcon,
+  PencilIcon,
   TargetIcon,
   StarIcon,
 } from 'lucide-react';
+import { useState } from 'react';
+import { RenameExperimentDialog } from '../rename-experiment-dialog';
 import type { ComparisonRole } from './build-comparison-rows';
 import { ComparisonDatasetVersion } from './comparison-dataset-version';
 import {
@@ -68,23 +74,40 @@ export interface ComparisonSideTitleProps {
   onSetBaseline?: () => void;
 }
 
-/** Title of one comparison side: which experiment it is, and its Baseline/Contender badge. */
+/** Title of one comparison side: a menu to view or rename the experiment, and its Baseline/Contender badge. */
 export function ComparisonSideTitle({ role, label, experiment, onSetBaseline }: ComparisonSideTitleProps) {
   const { Link } = useLinkComponent();
+  const [renameOpen, setRenameOpen] = useState(false);
   const shortId = experiment ? (getShortId(experiment.id) ?? experiment.id) : null;
+  // The rename route is dataset-scoped, so caller-run experiments without a dataset can't be renamed.
+  const canRename = Boolean(experiment?.datasetId);
 
   return (
     <div className="flex min-w-0 items-center gap-2">
       {experiment && (
-        <Button
-          render={<Link href={`/experiments/${experiment.id}`} />}
-          size="sm"
-          className="max-w-full min-w-0"
-          aria-label={`Open experiment ${experiment.name || shortId}`}
-        >
-          <span className="min-w-0 truncate">{experiment.name || shortId}</span>
-        </Button>
+        <DropdownMenu>
+          <DropdownMenu.Trigger
+            render={
+              <Button size="sm" className="max-w-full min-w-0">
+                <span className="min-w-0 truncate">{experiment.name || shortId}</span>
+                <ChevronDownIcon aria-hidden />
+              </Button>
+            }
+          />
+          <DropdownMenu.Content align="start" className="min-w-48">
+            <DropdownMenu.Item render={<Link href={`/experiments/${experiment.id}`} />}>
+              <Link2Icon /> View experiment
+            </DropdownMenu.Item>
+            {canRename && (
+              <DropdownMenu.Item onSelect={() => setRenameOpen(true)}>
+                <PencilIcon /> Rename experiment
+              </DropdownMenu.Item>
+            )}
+          </DropdownMenu.Content>
+        </DropdownMenu>
       )}
+      {/* Mounted on demand so the form state is seeded from the experiment each time it opens. */}
+      {experiment && renameOpen && <RenameExperimentDialog experiment={experiment} open onOpenChange={setRenameOpen} />}
       <div className="ml-auto shrink-0">
         {onSetBaseline ? (
           <Tooltip>

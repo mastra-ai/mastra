@@ -155,7 +155,7 @@ describe('experiments comparison table', () => {
       renderComparison();
 
       const baseline = await screen.findByRole('columnheader', { name: 'Baseline' });
-      expect(within(baseline).getByRole('link', { name: /^Open experiment/ })).toBeTruthy();
+      expect(within(baseline).getByRole('button', { name: BASELINE_ID })).toBeTruthy();
       expect(within(baseline).queryByRole('region', { name: 'Summary' })).toBeNull();
       expect(within(await findSummaryOf('Baseline')).getByRole('region', { name: 'Summary' })).toBeTruthy();
     });
@@ -716,6 +716,46 @@ describe('experiments comparison table', () => {
       expect(await screen.findByRole('menuitemcheckbox', { name: 'Duration' })).toBeTruthy();
       expect(screen.queryByRole('menuitemcheckbox', { name: 'Cost' })).toBeNull();
       expect(screen.queryByRole('menuitemcheckbox', { name: 'Tokens' })).toBeNull();
+    });
+  });
+
+  describe('when an experiment is renamed from its column title', () => {
+    let patchBodies: unknown[];
+
+    beforeEach(() => {
+      patchBodies = [];
+      let contender = makeExperiment(CONTENDER_ID, 2);
+      server.use(
+        http.get(`${experimentsBase}/${CONTENDER_ID}`, () => HttpResponse.json(contender)),
+        http.patch(`${experimentsBase}/${CONTENDER_ID}`, async ({ request }) => {
+          const body = (await request.json()) as Partial<DatasetExperiment>;
+          patchBodies.push(body);
+          contender = { ...contender, ...body };
+          return HttpResponse.json(contender);
+        }),
+      );
+    });
+
+    const renameContender = async () => {
+      renderComparison();
+      fireEvent.click(await screen.findByRole('button', { name: CONTENDER_ID }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename experiment' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Rename Experiment' });
+      fireEvent.change(within(dialog).getByLabelText(/^Name/), { target: { value: 'Faster prompt' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    };
+
+    it('saves the new name of that experiment', async () => {
+      await renameContender();
+
+      await waitFor(() => expect(patchBodies).toEqual([{ name: 'Faster prompt', description: '' }]));
+    });
+
+    it('shows the new name in the column title', async () => {
+      await renameContender();
+
+      const contender = await screen.findByRole('columnheader', { name: 'Contender 1' });
+      expect(await within(contender).findByRole('button', { name: 'Faster prompt' })).toBeTruthy();
     });
   });
 });

@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ComparisonSideSummary, ComparisonSideTitle } from '../comparison-side-header';
-import { blankNameExperiment, namedExperiment, unnamedExperiment } from './fixtures/experiments';
+import { blankNameExperiment, datasetlessExperiment, namedExperiment, unnamedExperiment } from './fixtures/experiments';
 import { TestLinkProvider } from '@/test/link-provider';
 
 function renderColumn(ui: ReactElement) {
@@ -323,34 +323,48 @@ describe('ComparisonSideTitle', () => {
   afterEach(cleanup);
 
   describe('when the experiment has a name', () => {
-    it('labels the experiment link with the name and links to its full id', () => {
+    const openMenu = () => {
       renderColumn(<ComparisonSideTitle role="baseline" label="Baseline" experiment={namedExperiment} />);
+      fireEvent.click(screen.getByRole('button', { name: 'entity-extraction / model-a' }));
+    };
 
-      const link = screen.getByRole('link', { name: 'Open experiment entity-extraction / model-a' });
-      expect(link.getAttribute('href')).toBe(`/experiments/${namedExperiment.id}`);
+    it('offers to view the experiment page, in the same tab', async () => {
+      openMenu();
+
+      const item = await screen.findByRole('menuitem', { name: 'View experiment' });
+      expect(item.getAttribute('href')).toBe(`/experiments/${namedExperiment.id}`);
+      expect(item.getAttribute('target')).toBeNull();
     });
 
-    it('links to the experiment page in the same tab', () => {
-      renderColumn(<ComparisonSideTitle role="baseline" label="Baseline" experiment={namedExperiment} />);
+    it('offers to rename the experiment', async () => {
+      openMenu();
 
-      const link = screen.getByRole('link', { name: 'Open experiment entity-extraction / model-a' });
-      expect(link.getAttribute('target')).toBeNull();
-      expect(link.getAttribute('rel')).toBeNull();
+      expect(await screen.findByRole('menuitem', { name: 'Rename experiment' })).toBeDefined();
     });
   });
 
   describe('when the experiment has no usable name', () => {
-    it('falls back to the shortened id as the link label', () => {
+    it('falls back to the shortened id as the title', () => {
       renderColumn(<ComparisonSideTitle role="contender" label="Contender 1" experiment={unnamedExperiment} />);
 
-      expect(screen.getByRole('link', { name: 'Open experiment c0ffee00' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'c0ffee00' })).toBeDefined();
       expect(screen.queryByText(unnamedExperiment.id)).toBeNull();
     });
 
     it('falls back to the shortened id when the name is an empty string', () => {
       renderColumn(<ComparisonSideTitle role="contender" label="Contender 1" experiment={blankNameExperiment} />);
 
-      expect(screen.getByRole('link', { name: 'Open experiment b1a11c00' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'b1a11c00' })).toBeDefined();
+    });
+  });
+
+  describe('when the experiment belongs to no dataset', () => {
+    it('does not offer to rename it', async () => {
+      renderColumn(<ComparisonSideTitle role="baseline" label="Baseline" experiment={datasetlessExperiment} />);
+      fireEvent.click(screen.getByRole('button', { name: 'entity-extraction / model-a' }));
+
+      expect(await screen.findByRole('menuitem', { name: 'View experiment' })).toBeDefined();
+      expect(screen.queryByRole('menuitem', { name: 'Rename experiment' })).toBeNull();
     });
   });
 
