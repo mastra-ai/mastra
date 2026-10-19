@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Bell, Check, ChevronDown, Copy, Folder, Play, Plus, Search, Settings, Trash2, X } from 'lucide-react';
 import { Icon, type IconSize } from './Icon';
 import {
   AgentIcon,
@@ -43,6 +44,7 @@ import {
   WorkflowCoinIcon,
   WorkflowIcon,
 } from './index';
+import { Button } from '@/ds/components/Button';
 import { Sizes } from '@/ds/tokens/sizes';
 
 const meta: Meta<typeof Icon> = {
@@ -268,6 +270,57 @@ export const BrandIcons: Story = {
           <OpenAIIcon />
         </Icon>
         <span className="text-caption text-muted-foreground">OpenAI</span>
+      </div>
+    </div>
+  ),
+};
+
+const strokeGlyphs = [Plus, Search, Settings, ChevronDown, Trash2, Copy, X, Check, Folder, Bell];
+
+// Every lucide icon takes its line weight from the `--icon-stroke-*` token of its size,
+// whichever way it is sized. Use this story for before/after shots of a stroke change.
+export const Stroke: Story = {
+  render: () => (
+    <div className="flex flex-col gap-6">
+      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+        <div key={size} className="flex items-center gap-6">
+          <span className="w-16 text-caption text-muted-foreground">
+            {size} · {Sizes[`icon-${size}`]}
+          </span>
+          {['text-foreground', 'text-muted-foreground'].map(tone => (
+            <div key={tone} className={`flex items-center gap-3 ${tone}`}>
+              {strokeGlyphs.map(Glyph => (
+                <Icon key={Glyph.displayName} size={size}>
+                  <Glyph />
+                </Icon>
+              ))}
+            </div>
+          ))}
+        </div>
+      ))}
+      <div className="flex items-center gap-3">
+        <Button size="sm" icon={<Plus />}>
+          Add Header
+        </Button>
+        <Button size="md" icon={<Plus />}>
+          Add Header
+        </Button>
+        <Button size="lg" icon={<Play />}>
+          Run
+        </Button>
+        <Button size="icon-md" tooltip="Copy">
+          <Copy />
+        </Button>
+      </div>
+      <div className="flex items-center gap-3 text-muted-foreground">
+        <span className="w-16 text-caption">Off-rung</span>
+        <Search className="size-3" />
+        <Search className="size-3.5" />
+        <Search className="size-4" />
+        <Search className="size-5" />
+        <span className="flex items-center [&>svg]:size-3.5">
+          <Folder />
+        </span>
       </div>
     </div>
   ),

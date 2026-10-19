@@ -40,3 +40,15 @@
   --spacing-avatar-lg: 40px;
   --spacing-dropdown: 300px;
 }
+
+/* Icon line weight, in screen pixels, per icon rung. The line thickens a little as the
+   icon grows so a glyph carries about the weight of the label beside it: a fixed 1px
+   read as disabled at 16px and up, a fixed 1.5px clots at 12px. The base rule in
+   `components.css` applies them to every lucide icon by its size class, so components
+   size icons and never set `stroke-width`. */
+:root {
+  --icon-stroke-xs: 1.25px; /* 12px */
+  --icon-stroke-sm: 1.25px; /* 14px */
+  --icon-stroke-md: 1.5px; /* 16px */
+  --icon-stroke-lg: 1.75px; /* 20px and up */
+}
