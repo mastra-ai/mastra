@@ -356,6 +356,8 @@ export interface RunLoopScenarioOptions {
    * activeTools/messages per step and assert the change lands in the request.
    */
   prepareStep?: any;
+  /** Tool payload transform policy forwarded to `agent.stream({ transform })`. */
+  transform?: any;
   /**
    * Memory instance attached to the agent. Combine with `threadId`/`resourceId`
    * to exercise conversation-history recall and working memory across turns.
@@ -371,6 +373,8 @@ export interface RunLoopScenarioOptions {
    * or `semanticRecall` (enable/disable semantic recall).
    */
   memoryOptions?: { lastMessages?: number | false; semanticRecall?: boolean };
+  /** Forwarded to `agent.stream({ memory: { onTitleGenerated } })`. */
+  onTitleGenerated?: (title: string) => void | Promise<void>;
   /**
    * Workspace attached to the agent. Passed into tool execution context so tools
    * can read `workspace.filesystem` / `workspace.sandbox` mid-loop.

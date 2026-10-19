@@ -5,7 +5,8 @@
  * tool can park at one step until the test releases a gate or the run's abort
  * signal fires, so tests coordinate on events, not on timing.
  */
-import { Agent, type AgentConfig } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
+import type { AgentConfig } from '@mastra/core/agent';
 import type { MastraMemory } from '@mastra/core/memory';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';

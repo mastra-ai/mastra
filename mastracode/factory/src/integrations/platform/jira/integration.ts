@@ -30,12 +30,8 @@ import { resolveJiraRules } from '../../jira/default-rules.js';
 import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.js';
 import { jiraReconciliationEnabled, jiraReconciliationInterval } from '../../jira/reconciliation-config.js';
 import { attachJiraRules } from '../../jira/rules.js';
-import {
-  logPlatformInfo,
-  PlatformApiClient,
-  platformApiClientConfigFromEnv,
-  type PlatformApiClientConfig,
-} from '../api-client.js';
+import { logPlatformInfo, PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
+import type { PlatformApiClientConfig } from '../api-client.js';
 import { buildPlatformJiraAgentTools } from './agent-tools.js';
 import { buildPlatformJiraRoutes } from './routes.js';
 

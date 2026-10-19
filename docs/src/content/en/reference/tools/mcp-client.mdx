@@ -233,7 +233,7 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
     isOptional: true,
     defaultValue: "'throw'",
     description:
-      "How to handle tool execution failures the server reports in-band with `isError: true`. `'throw'` raises a `MastraError` carrying the server's error text, so the failure reaches tool spans, stream chunks, scorers, and the model. `'return'` resolves with the raw result and ignores `isError`.",
+      "How to handle tool execution failures the server reports in-band with `isError: true`. `'throw'` raises a `MastraError` carrying the server's error text, so the failure reaches tool spans, stream chunks, scorers, and the model. Any `structuredContent` is kept on `error.details.structuredContent` as a JSON string. `'return'` resolves with the full `CallToolResult` (`isError`, `content`, and `structuredContent`) instead of throwing.",
   },
   {
     name: 'jsonSchemaValidator',

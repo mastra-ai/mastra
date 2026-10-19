@@ -1,5 +1,6 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { MastraClient } from '@mastra/client-js';
+import type { SendAgentSignalParams } from '@mastra/client-js';
 import type { AIV5Type, MastraDBMessage, MastraToolInvocationPart } from '@mastra/core/agent/message-list';
 import { AIV5Adapter } from '@mastra/core/agent/message-list';
 import type { CoreUserMessage } from '@mastra/core/llm';
@@ -221,7 +222,20 @@ interface SharedArgs {
   tracingOptions?: TracingOptions;
 }
 
-export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMessage[] } & (
+/** JSON-serializable metadata attached to a user message sent through `useChat`. */
+export type UserMessageMetadata = NonNullable<SendAgentSignalParams['signal']['metadata']>;
+
+export type SendMessageArgs = {
+  message: string;
+  coreUserMessages?: CoreUserMessage[];
+  /**
+   * Custom metadata for the user message. It is merged into the optimistic
+   * message's `content.metadata` and, on the thread-signals path, sent with the
+   * outgoing message. Internal keys (`mode`, `status`, `clientMessageId`) take
+   * precedence over user-supplied values.
+   */
+  metadata?: UserMessageMetadata;
+} & (
   | ({ mode: 'generate' } & Omit<GenerateArgs, 'coreUserMessages'>)
   | ({ mode: 'stream' } & Omit<StreamArgs, 'coreUserMessages'>)
   | ({ mode: 'network' } & Omit<NetworkArgs, 'coreUserMessages'>)
@@ -244,6 +258,8 @@ export type StreamArgs = SharedArgs & {
    * and the outgoing message metadata so the server echo can reconcile them.
    */
   clientMessageId?: string;
+  /** Custom user-message metadata sent alongside the thread signal. */
+  metadata?: UserMessageMetadata;
 };
 
 export type NetworkArgs = SharedArgs & {
@@ -820,6 +836,7 @@ export const useChat = ({
     clientToolsResolver,
     signalId,
     clientMessageId,
+    metadata,
   }: StreamArgs) => {
     const {
       frequencyPenalty,
@@ -961,9 +978,13 @@ export const useChat = ({
 
     try {
       const result = await agent.sendMessage({
-        message: clientMessageId
-          ? { contents: messageContents, metadata: { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } }
-          : messageContents,
+        message:
+          clientMessageId || metadata
+            ? {
+                contents: messageContents,
+                metadata: { ...metadata, ...(clientMessageId ? { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } : {}) },
+              }
+            : messageContents,
         resourceId: resourceId || agentId,
         threadId,
         ifIdle: {
@@ -994,6 +1015,7 @@ export const useChat = ({
               id: resolvedSignalId,
               type: 'user-message',
               contents: messageContents,
+              ...(metadata ? { metadata } : {}),
             },
             resourceId: resourceId || agentId,
             threadId,
@@ -1356,13 +1378,22 @@ export const useChat = ({
     setIsRunning(false);
   };
 
-  const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {
+  const sendMessage = async ({ mode = 'stream', metadata: userMetadata, ...args }: SendMessageArgs) => {
     if (!isRunning && !isAwaitingToolApproval) _currentRunId.current = undefined;
     const coreUserMessages = [createUserMessage(args.message, args.coreUserMessages)];
 
     // Use the same multipart message for the request and optimistic display.
     // Sending separate attachment messages would persist separate rows on reload.
-    const dbUserMessage = fromCoreUserMessagesToMastraDBMessage(coreUserMessages);
+    const coreDbUserMessage = fromCoreUserMessagesToMastraDBMessage(coreUserMessages);
+    const dbUserMessage: MastraDBMessage = userMetadata
+      ? {
+          ...coreDbUserMessage,
+          content: {
+            ...coreDbUserMessage.content,
+            metadata: { ...coreDbUserMessage.content.metadata, ...userMetadata },
+          },
+        }
+      : coreDbUserMessage;
     const clientSetId =
       mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current && !threadSignalsDisabled
         ? `client-set-${uuid()}`
@@ -1390,7 +1421,7 @@ export const useChat = ({
       if (mode === 'generate') {
         await generate({ ...args, coreUserMessages });
       } else if (mode === 'stream') {
-        await stream({ ...args, coreUserMessages, signalId, clientMessageId });
+        await stream({ ...args, coreUserMessages, signalId, clientMessageId, metadata: userMetadata });
       } else if (mode === 'network') {
         await network({ ...args, coreUserMessages });
       }

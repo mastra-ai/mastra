@@ -12,7 +12,7 @@ import { createTimeoutAbortSignal } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
-import { MASTRA_SCOPES_KEY, RequestContext } from '../../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
 import { toStandardSchema } from '../../schema';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
@@ -27,7 +27,7 @@ import type {
 import { ChunkFrom } from '../../stream/types';
 import type { CoreTool } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
-import { deepMerge } from '../../utils';
+import { deepMerge, rebindProcessorTools } from '../../utils';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
@@ -40,6 +40,7 @@ import { applyResolvedAgentScopes, resolveAgentScopes, restoreRunAgentScopes } f
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
+import { resolveThreadIdFromArgs } from '../utils';
 
 import { publishAbortRequest } from './abort-transport';
 import {
@@ -116,6 +117,25 @@ const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
 const RECOVER_RUN_NOT_ACTIVE_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE';
 /** Stores already reported as unable to fence run writes, so each is warned about once per process. */
 const unfencedStoresWarned = new WeakSet<WorkflowsStorage | MemoryStorage>();
+
+/**
+ * Reserved request-context keys win over `memory` options, matching the base Agent: server
+ * middleware sets them from the authenticated identity so a request body cannot route memory
+ * to another user's thread or resource.
+ */
+function applyReservedMemoryContextKeys<T extends { requestContext?: RequestContext; memory?: any }>(
+  options: T | undefined,
+): T | undefined {
+  const requestContext = options?.requestContext;
+  if (!options || !requestContext) return options;
+  const threadId = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+  const resourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+  if (!threadId && !resourceId) return options;
+  const memory = { ...(options.memory ?? {}) };
+  if (threadId) memory.thread = resolveThreadIdFromArgs({ memory, overrideId: threadId });
+  if (resourceId) memory.resource = resourceId;
+  return { ...options, memory };
+}
 
 const TRANSIENT_RECOVERY_RETRY_DELAY_MS = 30_000;
 const TRANSIENT_RECOVERY_ERROR_CODES = new Set([
@@ -2533,9 +2553,11 @@ export class DurableAgent<
    * the run's topics are shared with the new owner's consumers, which must not
    * see this execution's chunks or the `finish` its abort produces.
    *
-   * The evented engine publishes on `mastra.pubsub` instead of this pubsub, so
-   * nothing could drop that `finish`. Its runs are not aborted and fail at
-   * their next ownership check.
+   * The evented engine publishes on `mastra.pubsub` instead of this pubsub.
+   * Its shared workflow controller must not be aborted on ownership loss:
+   * that would publish a cancellation to the recovering execution. Durable
+   * step guards instead cancel invocation-local work and suppress its stream
+   * publications, leaving engine failure and settlement events untouched.
    *
    * @internal
    */
@@ -2783,7 +2805,7 @@ export class DurableAgent<
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    options = await this.#resolveExecutionOptions(options);
+    options = await this.#resolveExecutionOptions(applyReservedMemoryContextKeys(options));
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set.
     // Strip `untilIdle` before passing to the wrapper so its internal
@@ -3393,7 +3415,8 @@ export class DurableAgent<
     // A warm resume reuses the tools built for the first request, which close
     // over its request context and delegation hooks (#25960). Rebuild them for
     // this call and swap in only entries still holding a request-built tool, so
-    // tools a processor added or replaced are kept. Cold resumes already
+    // tools a processor added or replaced are kept. Processor-added tools are
+    // rebuilt for this call's request context instead (#27544). Cold resumes already
     // rebuilt everything in prepare() above.
     if (!coldSnapshot && (options?.requestContext || options?.delegation)) {
       try {
@@ -3423,8 +3446,9 @@ export class DurableAgent<
         };
         for (const reg of new Set([entry, getRunRegistryEntry(runId, this.#mastra)])) {
           if (!reg) continue;
-          reg.tools = refresh(reg.tools ?? {}, reg.requestTools);
-          if (reg.baseTools) reg.baseTools = refresh(reg.baseTools, reg.requestTools);
+          reg.tools = rebindProcessorTools(refresh(reg.tools ?? {}, reg.requestTools), resumeRequestContext);
+          if (reg.baseTools)
+            reg.baseTools = rebindProcessorTools(refresh(reg.baseTools, reg.requestTools), resumeRequestContext);
           reg.requestTools = requestTools;
         }
       } catch (error) {
@@ -4344,7 +4368,7 @@ export class DurableAgent<
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<FullOutput<TOutput>> {
-    options = await this.#resolveExecutionOptions(options);
+    options = await this.#resolveExecutionOptions(applyReservedMemoryContextKeys(options));
 
     // Enforce agent-level FGA (agents:execute) before durable execution — see
     // stream() above. Durable/evented generate would otherwise skip the gate.

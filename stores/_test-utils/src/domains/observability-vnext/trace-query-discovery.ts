@@ -96,6 +96,8 @@ export const TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE = {
 export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [
     span(1, 'trace-a', 'root-a-old', {
+      name: 'superseded-root',
+      spanType: 'processor_run',
       startedAt: '2026-08-02T10:00:00.000Z',
       metadata: { superseded: 'old' },
       environment: 'development',
@@ -157,6 +159,8 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
       attributes: { model: 'claude-sonnet-4-6', provider: 'anthropic' },
     }),
     span(30, 'trace-c', 'root-c', {
+      name: 'nightly-sync',
+      spanType: 'workflow_run',
       startedAt: '2026-08-12T10:00:00.000Z',
       metadata: { region: 'eu-west-1', customer: 'acme' },
       error: { message: 'failed' },
@@ -169,6 +173,8 @@ export const TRACE_QUERY_DISCOVERY_FIXTURE_DATA: TraceQueryFixtureData = {
       attributes: { model: 'gpt-5', provider: 'openai' },
     }),
     span(40, 'trace-pending', 'root-pending', {
+      name: 'pending-root',
+      spanType: 'processor_run',
       isPending: true,
       startedAt: '2026-08-13T10:00:00.000Z',
       endedAt: null,

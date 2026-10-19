@@ -15,6 +15,7 @@ import type { OutputResult } from '../../processors';
 // barrel and creates an ESM init-time cycle.
 const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
+import { isFailedStreamChunk } from '../../processors/stream-reprocess';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
@@ -791,10 +792,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       // on every part, even when no stream processor consumes it.
       let observabilityContext: ObservabilityContext | undefined;
       const getObservabilityContext = () => (observabilityContext ??= resolveObservabilityContext(options));
+      // Set once the model stream errors or aborts; held parts are then dropped
+      // rather than released, since they belong to a failed (maybe retried) call.
+      let streamFailed = false;
 
       processedStream = stream.pipeThrough(
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
           async transform(chunk, controller) {
+            if (isFailedStreamChunk(chunk)) streamFailed = true;
             // Filter out intermediate finish chunks with 'tool-calls' reason
             // These are internal signals that shouldn't reach output processors
             //
@@ -920,11 +925,57 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               }
             }
           },
-          flush() {
+          async flush(controller) {
+            // Release parts processors still hold (e.g. a partial BatchPartsProcessor
+            // batch) so a model stream that ends mid-batch doesn't drop its tail.
+            // A failed or aborted stream drops them instead: a retry would duplicate
+            // them, and an abort must not emit content after cancellation.
+            if (streamFailed || options.abortSignal?.aborted) {
+              for (const part of await processorRunner.discardHeldParts(processorStates)) {
+                controller.enqueue(part as ChunkType<OUTPUT>);
+              }
+              processorRunner.endStreamProcessorSpans(processorStates, { keepStepScopedSpans: true });
+              return;
+            }
+            const released = await processorRunner.flushHeldParts(
+              processorStates,
+              getObservabilityContext(),
+              options.requestContext,
+              self.messageList,
+              0,
+              {
+                custom: async (data, writerOptions) => {
+                  persistProcessorDataChunk(self.messageList, writerOptions?.messageId ?? self.messageId, data);
+                  controller.enqueue(data as ChunkType<OUTPUT>);
+                },
+              },
+              options.abortSignal,
+            );
+            for (const r of released) {
+              if (r.blocked) {
+                controller.enqueue({
+                  type: 'tripwire',
+                  payload: {
+                    reason: r.reason || 'Output processor blocked content',
+                    retry: r.tripwireOptions?.retry,
+                    metadata: r.tripwireOptions?.metadata,
+                    processorId: r.processorId,
+                  },
+                } as ChunkType<OUTPUT>);
+                break;
+              }
+              if (r.part != null) {
+                controller.enqueue(r.part as ChunkType<OUTPUT>);
+              }
+            }
             // Only this step's model stream ended; the step's tool results are still to come.
             processorRunner.endStreamProcessorSpans(processorStates, { keepStepScopedSpans: true });
           },
-          cancel() {
+          async cancel() {
+            // The model call was torn down (e.g. a mid-stream disconnect being
+            // retried). What processors hold belongs to it and must not be
+            // released with the next call's parts.
+            await processorRunner.discardHeldParts(processorStates);
             processorRunner.endStreamProcessorSpans(processorStates);
           },
         }),
@@ -2577,10 +2628,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   /** `#usageCount` plus the suspended step's usage, following the same missing-key rules. */
-  #getUsageCountWithSuspendedStep(): LLMStepResult<OUTPUT>['usage'] {
-    if (!this.#suspendedStepUsage) return this.#usageCount;
+  #getUsageCountWithSuspendedStep(
+    suspendedStepUsage: LanguageModelUsage | undefined = this.#suspendedStepUsage,
+  ): LLMStepResult<OUTPUT>['usage'] {
+    if (!suspendedStepUsage) return this.#usageCount;
     const usageCount = { ...this.#usageCount };
-    accumulateUsage(usageCount, new Set(this.#usageCountMissing), this.#suspendedStepUsage);
+    accumulateUsage(usageCount, new Set(this.#usageCountMissing), suspendedStepUsage);
     return usageCount;
   }
 
@@ -2787,10 +2840,26 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     return this.#status;
   }
 
-  serializeState() {
+  /**
+   * @param pendingSuspension A suspension chunk the step has emitted but this output may not have
+   * processed yet. Tool suspension snapshots the stream state right after emitting the chunk, so
+   * the state is serialized as if the chunk was processed; otherwise a resumed run would not know
+   * which usage its suspended leg already reported.
+   */
+  serializeState(pendingSuspension?: { usage?: LanguageModelUsage }) {
     const { steps, requests } = dedupeStepRequests(packStepMessageMirrors(this.#bufferedSteps));
+    // A restored run keeps status 'suspended' until it finishes, and its resumed step-finish clears
+    // the suspended step usage, so either one missing means the pending suspension is new.
+    const recordSuspension =
+      pendingSuspension !== undefined && (this.#status !== 'suspended' || this.#suspendedStepUsage === undefined);
+    const suspendedStepUsage = recordSuspension
+      ? (this.#suspendedStepUsage ?? pendingSuspension.usage)
+      : this.#suspendedStepUsage;
+    const generationReportedUsage = recordSuspension
+      ? this.#getTotalUsage(this.#getUsageCountWithSuspendedStep(suspendedStepUsage))
+      : this.#generationReportedUsage;
     return {
-      status: this.#status,
+      status: recordSuspension ? 'suspended' : this.#status,
       bufferedSteps: steps,
       bufferedStepRequests: requests,
       bufferedReasoningDetails: this.#bufferedReasoningDetails,
@@ -2814,10 +2883,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       usageCount: this.#usageCount,
       usageCountMissing: [...this.#usageCountMissing],
       lastStepUsage: this.#lastStepUsage,
-      suspendedStepUsage: this.#suspendedStepUsage,
-      generationReportedUsage: this.#generationReportedUsage,
+      suspendedStepUsage,
+      generationReportedUsage,
       tripwire: this.#tripwire,
-      wasSuspended: this.#wasSuspended,
+      wasSuspended: this.#wasSuspended || recordSuspension,
       messageList: this.messageList.serialize(),
     };
   }

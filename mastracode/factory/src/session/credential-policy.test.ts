@@ -794,6 +794,13 @@ describe('trusted Factory credential policy', () => {
       await session.sendMessage({ content: 'test', requestContext: context(c.req.param('resourceId')) });
       return c.json({ modelId: session.model.get() });
     });
+    // The session row's POST starts the conversation; state writes only act on a started session.
+    await controller.createSession({
+      id: sourceSession.sessionId,
+      resourceId: sourceSession.sessionId,
+      threadId: sourceSession.sessionId,
+      requestContext: context(sourceSession.sessionId),
+    });
     const path = `/sessions/${sourceSession.sessionId}`;
     const write = await app.request(`${path}/state`, {
       method: 'PUT',

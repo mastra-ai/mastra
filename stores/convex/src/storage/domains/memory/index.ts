@@ -1,8 +1,5 @@
-import {
-  assertActiveObservationsApplied,
-  type UpdateActiveObservationsResult,
-  type UpdateBufferedObservationsResult,
-} from '@internal/core/memory';
+import { assertActiveObservationsApplied } from '@internal/core/memory';
+import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
