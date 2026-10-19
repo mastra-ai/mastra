@@ -9,11 +9,10 @@ export interface RecreateSandboxTarget {
   sessionId: string;
   factoryId: string | undefined;
   workspacePath: string;
-  threadId: string;
 }
 
 export function useRecreateSessionSandbox(
-  { sessionId, factoryId, workspacePath, threadId }: RecreateSandboxTarget,
+  { sessionId, factoryId, workspacePath }: RecreateSandboxTarget,
   { onSuccess }: { onSuccess?: () => void } = {},
 ) {
   const { baseUrl } = useApiConfig();
@@ -23,7 +22,9 @@ export function useRecreateSessionSandbox(
     mutationFn: () => recreateSessionSandbox(baseUrl, sessionId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceChanges(workspacePath) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFiles(workspacePath, threadId) });
+      // Every thread's listing and every open file belonged to the destroyed sandbox.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFilesScope(workspacePath) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFileScope(workspacePath) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(sessionId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
       toast('Sandbox recreated. Send a message to continue.');

@@ -162,6 +162,9 @@ describe('Recreate sandbox in the workspace panel', () => {
     const counts = installHandlers({ capabilities: { recreateSandbox: true } });
     const { client } = renderPanel();
     client.setQueryData(queryKeys.sessions(FACTORY_ID), { sessions: [] });
+    // Listings and file contents from other threads of the same workspace.
+    client.setQueryData(queryKeys.workspaceFiles(WORKSPACE, 'thread-other'), { files: [{ path: 'old.ts' }] });
+    client.setQueryData(queryKeys.workspaceFile(WORKSPACE, 'old.ts', 'thread-other'), { path: 'old.ts' });
     await screen.findByText('+5');
     await waitForMutationsIdle(client);
     const before = { ...counts };
@@ -175,6 +178,10 @@ describe('Recreate sandbox in the workspace panel', () => {
     expect(counts.files).toBeGreaterThan(before.files);
     expect(counts.session).toBeGreaterThan(before.session);
     expect(client.getQueryState(queryKeys.sessions(FACTORY_ID))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(queryKeys.workspaceFiles(WORKSPACE, 'thread-other'))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(queryKeys.workspaceFile(WORKSPACE, 'old.ts', 'thread-other'))?.isInvalidated).toBe(
+      true,
+    );
     expect(await screen.findByText('Sandbox recreated. Send a message to continue.')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
   });

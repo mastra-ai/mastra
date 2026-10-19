@@ -137,9 +137,7 @@ export function WorkspaceViewerPanel({
       commentCount={workItem?.commentCount}
       onShowComments={workItem ? showFeed : undefined}
       recreateSandbox={
-        canRecreateSandbox && sessionId
-          ? { sessionId, factoryId: factoryProjectId, workspacePath, threadId }
-          : undefined
+        canRecreateSandbox && sessionId ? { sessionId, factoryId: factoryProjectId, workspacePath } : undefined
       }
     />
   );

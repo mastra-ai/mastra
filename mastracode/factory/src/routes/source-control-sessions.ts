@@ -12,6 +12,7 @@ import type { SessionRetirementCoordinator } from '../sandbox/session-retirement
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { seedSessionOrg } from '../session/org-seed.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
+import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type {
@@ -52,6 +53,8 @@ export interface SourceControlSessionRoutesOptions {
   sessionRetirement?: SessionRetirementCoordinator;
   /** Whether the host sandbox can recreate a session's sandbox (false for local). */
   sandboxRecreateSupported?: boolean;
+  /** Turn-end file listings, cleared on recreate so the panel stops showing the old sandbox's files. */
+  filesystem?: Pick<FilesystemStorage, 'deleteResourceFiles'>;
   /** How long recreate waits for an aborted run to settle before destroying. */
   abortSettleTimeoutMs?: number;
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
@@ -515,6 +518,13 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             sessionId: session.sessionId,
           });
           if (outcome === 'not-found') return c.json({ error: 'Session not found' }, 404);
+          // The captured listings describe the destroyed sandbox; the next turn re-captures.
+          await options.filesystem?.deleteResourceFiles({ resourceId: session.sessionId }).catch(error => {
+            console.warn('[Factory Sessions] Failed to clear file listings after sandbox recreate', {
+              sessionId: session.sessionId,
+              error,
+            });
+          });
           return c.json({ recreated: true, aborted });
         } catch (error) {
           console.error('[Factory Sessions] Failed to recreate session sandbox', {
