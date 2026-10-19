@@ -28,6 +28,17 @@ import type { E2BSandbox } from './index';
 
 type E2BFiles = Sandbox['files'];
 
+/** The files calls the filesystem makes, each one retried on its own. */
+interface FilesCalls {
+  read(path: string, opts: { format: 'bytes' }): Promise<Uint8Array>;
+  write(path: string, data: string | ArrayBuffer): Promise<unknown>;
+  list(path: string, opts?: { depth?: number }): Promise<EntryInfo[]>;
+  makeDir(path: string): Promise<boolean>;
+  rename(oldPath: string, newPath: string): Promise<unknown>;
+  remove(path: string): Promise<void>;
+  getInfo(path: string): Promise<EntryInfo>;
+}
+
 /** Default recursion depth for `readdir({ recursive: true })`, matching `LocalFilesystem`. */
 const DEFAULT_MAX_DEPTH = 100;
 
@@ -260,14 +271,29 @@ export class E2BSandboxFilesystem extends MastraFilesystem {
     });
   }
 
-  async #run<T>(fn: (files: E2BFiles) => Promise<T>): Promise<T> {
+  /**
+   * Run an operation with each files call wrapped in `retryOnDead`, so a
+   * sandbox that died mid-operation is restarted and only the call that failed
+   * runs again; the calls before it are never replayed.
+   */
+  async #run<T>(fn: (files: FilesCalls) => Promise<T>): Promise<T> {
     await this.#sandbox.ensureRunning();
-    // Re-read `e2b` inside the closure: a retry after a dead sandbox gets the new handle.
-    return this.#sandbox.retryOnDead(() => fn(this.#sandbox.e2b.files));
+    // Re-read `e2b` on every call: after a restart it is a new handle.
+    const call = <R>(invoke: (files: E2BFiles) => Promise<R>) =>
+      this.#sandbox.retryOnDead(() => invoke(this.#sandbox.e2b.files));
+    return fn({
+      read: path => call(files => files.read(path, { format: 'bytes' })),
+      write: (path, data) => call(files => files.write(path, data)),
+      list: (path, opts) => call(files => files.list(path, opts)),
+      makeDir: path => call(files => files.makeDir(path)),
+      rename: (oldPath, newPath) => call(files => files.rename(oldPath, newPath)),
+      remove: path => call(files => files.remove(path)),
+      getInfo: path => call(files => files.getInfo(path)),
+    });
   }
 
   /** `getInfo` without following the entry itself, or `undefined` when nothing is there. */
-  async #info(files: E2BFiles, abs: string): Promise<EntryInfo | undefined> {
+  async #info(files: FilesCalls, abs: string): Promise<EntryInfo | undefined> {
     try {
       return await files.getInfo(abs);
     } catch (error) {
@@ -276,13 +302,13 @@ export class E2BSandboxFilesystem extends MastraFilesystem {
     }
   }
 
-  async #assertParentDirectory(files: E2BFiles, abs: string, path: string): Promise<void> {
+  async #assertParentDirectory(files: FilesCalls, abs: string, path: string): Promise<void> {
     const parent = await this.#info(files, posix.dirname(abs));
     if (!parent?.type) throw new DirectoryNotFoundError(posix.dirname(path));
     if (parent.type !== 'dir') throw new NotDirectoryError(posix.dirname(path));
   }
 
-  async #write(files: E2BFiles, abs: string, path: string, data: string | ArrayBuffer): Promise<void> {
+  async #write(files: FilesCalls, abs: string, path: string, data: string | ArrayBuffer): Promise<void> {
     try {
       await files.write(abs, data);
     } catch (error) {
@@ -293,7 +319,7 @@ export class E2BSandboxFilesystem extends MastraFilesystem {
   }
 
   async #copyOne(
-    files: E2BFiles,
+    files: FilesCalls,
     srcAbs: string,
     destAbs: string,
     dest: string,
@@ -305,7 +331,7 @@ export class E2BSandboxFilesystem extends MastraFilesystem {
   }
 
   async #copyTree(
-    files: E2BFiles,
+    files: FilesCalls,
     srcAbs: string,
     destAbs: string,
     options: CopyOptions | undefined,

@@ -47,7 +47,7 @@ const isDeadSandbox = (error: unknown) =>
 
 const isFileNotFound = (error: unknown) => error instanceof NotFoundError && !isDeadSandbox(error);
 
-/** A failure that says nothing about the file: the sandbox is gone or the request never got an answer. */
+/** A failure that isn't a file-level answer from envd: the sandbox is gone, the call timed out, or it failed before envd replied. */
 export const isBrokenSandboxError = (error: unknown) =>
   isDeadSandbox(error) || error instanceof TimeoutError || !(error instanceof SandboxError);
 

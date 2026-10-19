@@ -659,6 +659,25 @@ describe('PlatformSandbox.filesystem', () => {
     expect(sandbox.status).toBe('stopped');
   });
 
+  it('drops the fresh lease too when the retried call loses the sandbox', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(created())
+      .mockResolvedValueOnce(e2bLease('stale'))
+      .mockResolvedValueOnce(e2bLease('fresh'))
+      .mockResolvedValueOnce(json({ error: { message: 'Gone', type: 'gone' } }, { status: 410 }));
+    const timeout = new TimeoutError('502: The sandbox was not found');
+    const { sandbox } = makeSandbox(fetchMock, jwt =>
+      Object.assign(new FakeFiles(root), {
+        read: async () => {
+          throw jwt === 'stale' ? new AuthenticationError('unauthorized') : timeout;
+        },
+      }),
+    );
+    await expect(sandbox.filesystem.readFile('/a.txt')).rejects.toBe(timeout);
+    await expect(sandbox.filesystem.readFile('/a.txt')).rejects.toBeInstanceOf(SandboxDestroyedError);
+  });
+
   it('keeps the cached lease after an ordinary file error', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(created()).mockResolvedValueOnce(e2bLease());
     const { sandbox } = makeSandbox(fetchMock);

@@ -1590,7 +1590,12 @@ export class PlatformSandbox extends MastraSandbox {
         if (error instanceof AuthenticationError) {
           if (this._lease === current.lease) this._lease = null;
           current = await this._filesHandle(operation, 2);
-          return invoke(current.files);
+          try {
+            return await invoke(current.files);
+          } catch (retryError) {
+            if (isBrokenSandboxError(retryError) && this._lease === current.lease) this._lease = null;
+            throw retryError;
+          }
         }
         if (isBrokenSandboxError(error) && this._lease === current.lease) this._lease = null;
         throw error;

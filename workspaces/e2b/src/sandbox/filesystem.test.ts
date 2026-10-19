@@ -531,6 +531,33 @@ describe('E2BSandbox.filesystem', () => {
     expect(fresh.calls).toEqual(['getInfo /w/a.txt']);
   });
 
+  it('retries only the call that hit the dead sandbox, never the calls that already succeeded', async () => {
+    await mkdir(join(root, 'w/src'));
+    await writeFile(join(root, 'w/src/1.txt'), '1');
+    await writeFile(join(root, 'w/src/2.txt'), '2');
+    const writes: string[] = [];
+    const handle = (label: string, dieOn?: string) => {
+      const files = new FakeFiles(root);
+      const write = files.write.bind(files);
+      files.write = async (path, data) => {
+        writes.push(`${label} ${path}`);
+        if (path === dieOn) throw new E2BFileNotFoundError('paused sandbox sbx_old not found');
+        return write(path, data);
+      };
+      return files;
+    };
+    const sandbox = runningSandbox(handle('old', '/w/out/2.txt'));
+    vi.spyOn(sandbox, 'ensureRunning').mockImplementation(async () => {
+      const current = sandbox as unknown as { _sandbox: Sandbox | null };
+      if (!current._sandbox) current._sandbox = { files: handle('new') } as unknown as Sandbox;
+      sandbox.status = 'running';
+    });
+
+    await sandbox.filesystem.copyFile('/w/src', '/w/out', { recursive: true, overwrite: false });
+    expect(writes).toEqual(['old /w/out/1.txt', 'old /w/out/2.txt', 'new /w/out/2.txt']);
+    expect(await readFile(join(root, 'w/out/2.txt'), 'utf-8')).toBe('2');
+  });
+
   it('surfaces the error when the sandbox is dead again after the restart', async () => {
     const dead = () => {
       const files = new FakeFiles(root);
