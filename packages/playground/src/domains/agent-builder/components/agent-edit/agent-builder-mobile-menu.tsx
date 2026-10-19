@@ -6,7 +6,6 @@ import { useNavigate } from 'react-router';
 import { useVisibilityChange } from '../../hooks/use-visibility-change-agent';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import { DeleteAgentMenuItem } from './delete-agent-action';
-import type { Visibility } from './visibility-select';
 
 export interface AgentBuilderMobileMenuProps {
   /** Agent the publish actions apply to. */
@@ -96,7 +95,7 @@ interface VisibilityMenuItemProps {
 
 function VisibilityMenuItem({ agentId, disabled }: VisibilityMenuItemProps) {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const value = (useWatch({ control: formMethods.control, name: 'visibility' }) ?? 'private') as Visibility;
+  const value = useWatch({ control: formMethods.control, name: 'visibility' }) ?? 'private';
   const { requestChange, dialog } = useVisibilityChange(agentId);
 
   return (

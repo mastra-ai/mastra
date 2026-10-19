@@ -101,9 +101,7 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
       }
     | undefined;
 
-  const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(
-    dataSource.instructions as Parameters<typeof mapInstructionBlocksFromApi>[0],
-  );
+  const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(dataSource.instructions);
 
   return {
     name: dataSource.name || '',
@@ -135,7 +133,7 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
     instructionBlocks,
     skills: normalizeSkillsFromApi(dataSource.skills),
     workspace: normalizeWorkspaceFromApi(dataSource.workspace),
-    variables: dataSource.requestContextSchema as AgentFormValues['variables'],
+    variables: dataSource.requestContextSchema,
   };
 }
 

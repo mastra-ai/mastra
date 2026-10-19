@@ -185,7 +185,10 @@ import * as traceQueryOps from './trace-query';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
 
-const spanQueryFeatures = typeof coreStorage.planSpanQuery === 'function' ? (['span-query'] as const) : ([] as const);
+const spanQueryFeatures =
+  typeof coreStorage.planSpanQuery === 'function'
+    ? (['span-query', 'span-query-context-fields'] as const)
+    : ([] as const);
 
 function buildSignalMigrationRequiredMessage(args: {
   store: 'ClickHouse';
@@ -961,6 +964,8 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        ...traceQueryOps.timeToFirstChunkFeatures,
+        'trace-query-root-span-fields',
         'trace-aggregate',
         ...spanQueryFeatures,
       ] as const;
@@ -983,6 +988,8 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'trace-query-tenant-scope',
       'feedback',
       'trace-query-context-ids',
+      ...traceQueryOps.timeToFirstChunkFeatures,
+      'trace-query-root-span-fields',
       'trace-aggregate',
       ...spanQueryFeatures,
     ] as const;

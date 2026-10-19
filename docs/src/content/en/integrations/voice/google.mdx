@@ -661,6 +661,33 @@ voice.close()
     ],
   },
   {
+    name: 'inputAudioTranscription',
+    type: 'GeminiAudioTranscriptionConfig',
+    description:
+      "Transcription settings for the user's speech. Set `languageCodes` to BCP-47 hints (for example `['es-ES']`) so short or accented utterances aren't transcribed in the wrong language. Without hints, the server auto-detects the language. Applied when the session connects.",
+    isOptional: true,
+    properties: [
+      {
+        type: 'GeminiAudioTranscriptionConfig',
+        parameters: [
+          {
+            name: 'languageCodes',
+            type: 'string[]',
+            description: 'BCP-47 language codes present in the audio.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'outputAudioTranscription',
+    type: 'GeminiAudioTranscriptionConfig',
+    description:
+      "Transcription settings for the model's speech. Takes the same `languageCodes` hints as `inputAudioTranscription`. Applied when the session connects.",
+    isOptional: true,
+  },
+  {
     name: 'debug',
     type: 'boolean',
     description: 'Enable debug logging for troubleshooting.',

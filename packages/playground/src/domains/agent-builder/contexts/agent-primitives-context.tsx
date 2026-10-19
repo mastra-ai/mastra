@@ -92,7 +92,7 @@ export const AgentPrimitivesProvider = ({ agentId, children }: AgentPrimitivesPr
 
   const value = useMemo<AgentPrimitivesValue>(
     () => ({
-      agentId: agentId!,
+      agentId: agentId,
       storedAgent: storedAgent ?? undefined,
       toolsData: toolsData ?? {},
       agentsData: agentsData ?? {},

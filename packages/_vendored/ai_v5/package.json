@@ -31,8 +31,8 @@
   "scripts": {
     "build": "tsdown --silent --config tsdown.config.ts",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "keywords": [],
   "author": "",
@@ -49,7 +49,6 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai": "^5.0.221",
-    "eslint": "^10.7.0",
     "json-schema": "^0.4.0",
     "msw": "^2.12.11",
     "resolve.exports": "^2.0.3",

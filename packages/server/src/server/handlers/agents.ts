@@ -96,6 +96,7 @@ import {
   getContextResourceId,
   requireEffectiveResourceId,
   getEffectiveThreadId,
+  applyEffectiveThreadId,
   enforceThreadAccess,
   mergeBodyRequestContext,
   validateThreadOwnership,
@@ -485,6 +486,8 @@ export interface SerializedAgent {
   modelId?: string;
   modelVersion?: string;
   supportsMemory?: boolean;
+  /** False when the model list comes from a function and cannot be reordered or edited */
+  modelListEditable?: boolean;
   modelList?: Array<
     Omit<AgentModelManagerConfig, 'model'> & {
       model: {
@@ -959,6 +962,7 @@ async function formatAgentList({
     supportsMemory,
     defaultOptions,
     modelList,
+    modelListEditable: modelList ? typeof agent.model !== 'function' : undefined,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
@@ -1278,6 +1282,7 @@ async function formatAgent({
     modelVersion: model?.specificationVersion,
     supportsMemory,
     modelList,
+    modelListEditable: modelList ? typeof agent.model !== 'function' : undefined,
     defaultOptions,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
@@ -1585,7 +1590,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           resource: effectiveResourceId ?? memoryOption.resource,
-          thread: effectiveThreadId ?? memoryOption.thread,
+          thread: applyEffectiveThreadId(memoryOption.thread, effectiveThreadId),
         };
       }
 
@@ -1985,7 +1990,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           resource: effectiveResourceId ?? memoryOption.resource,
-          thread: effectiveThreadId ?? memoryOption.thread,
+          thread: applyEffectiveThreadId(memoryOption.thread, effectiveThreadId),
         };
       }
 
@@ -2632,7 +2637,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           resource: effectiveResourceId ?? memoryOption.resource,
-          thread: effectiveThreadId ?? memoryOption.thread,
+          thread: applyEffectiveThreadId(memoryOption.thread, effectiveThreadId),
         };
       }
 
@@ -3132,7 +3137,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           ...(effectiveResourceId ? { resource: effectiveResourceId } : {}),
-          ...(effectiveThreadId ? { thread: effectiveThreadId } : {}),
+          ...(effectiveThreadId ? { thread: applyEffectiveThreadId(memoryOption?.thread, effectiveThreadId) } : {}),
         } as NonNullable<typeof authorizedMemoryOption>;
       }
 
@@ -3337,7 +3342,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           ...(effectiveResourceId ? { resource: effectiveResourceId } : {}),
-          ...(effectiveThreadId ? { thread: effectiveThreadId } : {}),
+          ...(effectiveThreadId ? { thread: applyEffectiveThreadId(memoryOption?.thread, effectiveThreadId) } : {}),
         } as NonNullable<typeof authorizedMemoryOption>;
       }
 
@@ -3689,12 +3694,22 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
         ...(editorConfig && editorConfig.model === true ? { versionOptions: { status: 'draft' as const } } : {}),
       });
 
+      if (typeof agent.model === 'function') {
+        throw new HTTPException(409, {
+          message: 'Agent model list is dynamic (model is a function) and cannot be edited',
+        });
+      }
+
       const modelList = await agent.getModelList(requestContext);
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
 
-      agent.reorderModels(reorderedModelIds);
+      const applied = agent.reorderModels(reorderedModelIds);
+      if (applied === false) {
+        throw new HTTPException(400, { message: 'Agent model list could not be reordered' });
+      }
+
       const reorderedModelList = await agent.getModelList(requestContext);
       if (reorderedModelList) {
         await persistEditorOwnedModelList({ mastra, agent, modelList: reorderedModelList });
@@ -3729,6 +3744,12 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
         ...(editorConfig && editorConfig.model === true ? { versionOptions: { status: 'draft' as const } } : {}),
       });
 
+      if (typeof agent.model === 'function') {
+        throw new HTTPException(409, {
+          message: 'Agent model list is dynamic (model is a function) and cannot be edited',
+        });
+      }
+
       const modelList = await agent.getModelList(requestContext);
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
@@ -3749,7 +3770,11 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
         ...(enabled !== undefined ? { enabled } : {}),
       };
 
-      agent.updateModelInModelList(updated);
+      const applied = agent.updateModelInModelList(updated);
+      if (applied === false) {
+        throw new HTTPException(404, { message: `Model config with id ${modelConfigId} not found` });
+      }
+
       const updatedModelList = await agent.getModelList(requestContext);
       if (updatedModelList) {
         await persistEditorOwnedModelList({ mastra, agent, modelList: updatedModelList });

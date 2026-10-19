@@ -170,6 +170,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+  timeToFirstChunkMs Nullable(Float64),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -248,6 +249,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+  timeToFirstChunkMs Nullable(Float64),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -351,6 +353,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+  timeToFirstChunkMs Nullable(Float64),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -1334,6 +1337,12 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   // Deletion requests: `predicateValues` is outside the sort key, so guard
   // lookups via `has()` need a skip index to avoid a per-scope full scan.
   addBloomIndex(TABLE_DELETION_REQUESTS, 'idx_predicateValues', 'predicateValues'),
+  // Time to first chunk. The trace_roots / trace_branches views copy span_events
+  // with SELECT *, so both targets need the column too. They get it first so no
+  // write lands while the source has a column its targets lack.
+  addColumn(TABLE_TRACE_ROOTS, 'timeToFirstChunkMs', 'Nullable(Float64)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'timeToFirstChunkMs', 'Nullable(Float64)'),
+  addColumn(TABLE_SPAN_EVENTS, 'timeToFirstChunkMs', 'Nullable(Float64)'),
 ];
 
 /**

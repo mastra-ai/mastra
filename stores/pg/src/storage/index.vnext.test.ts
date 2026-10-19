@@ -134,12 +134,15 @@ describe('PostgresStoreVNext', () => {
           'trace-query',
           'trace-aggregate',
           'span-query',
+          'span-query-context-fields',
           'trace-query-root-duration',
           'trace-query-discovery',
           'thread-query',
           'trace-query-tenant-scope',
           'feedback',
           'trace-query-context-ids',
+          'trace-query-time-to-first-chunk',
+          'trace-query-root-span-fields',
         ]);
 
         coreFeatures.delete('observability-delta-polling');
@@ -155,12 +158,15 @@ describe('PostgresStoreVNext', () => {
           'trace-query',
           'trace-aggregate',
           'span-query',
+          'span-query-context-fields',
           'trace-query-root-duration',
           'trace-query-discovery',
           'thread-query',
           'trace-query-tenant-scope',
           'feedback',
           'trace-query-context-ids',
+          'trace-query-time-to-first-chunk',
+          'trace-query-root-span-fields',
         ]);
       } finally {
         coreFeatures.clear();

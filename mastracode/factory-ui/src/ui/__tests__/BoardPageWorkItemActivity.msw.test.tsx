@@ -5,6 +5,12 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
+import {
+  closePropertiesMenus,
+  openPropertiesMenu,
+  openPropertySubmenu,
+  togglePropertyOption,
+} from '../../../e2e/ui/properties-menu';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 
@@ -290,8 +296,6 @@ function renderBoard(board: 'work' | 'review', search = '') {
   return { ...rendered, router };
 }
 
-const filterInput = () => screen.getByRole('combobox', { name: 'Add filter' });
-
 async function expectActivity(name: string, eventLabel: string, avatarAvailable = true) {
   const user = userEvent.setup();
   const trigger = await screen.findByRole('button', { name: `View activity by ${name}` });
@@ -352,12 +356,7 @@ describe('Board work-item activity', () => {
     await waitForMutationsIdle(client);
 
     await screen.findByText('Authored issue');
-    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
-    await user.type(filterInput(), 'teammate{ArrowDown}{Enter}');
-    await user.type(filterInput(), 'octo');
-    expect(screen.queryByRole('option', { name: /Grace Hopper/ })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole('option', { name: /octocat/ }));
-    await user.click(screen.getByRole('button', { name: /^Done.*↵$/ }));
+    await togglePropertyOption(user, 'Board properties', 'Teammate', /octocat/);
 
     await waitFor(() => {
       expect(new URLSearchParams(router.state.location.search).get('teammate')).toBe('github:octocat');
@@ -366,12 +365,10 @@ describe('Board work-item activity', () => {
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
     expect(screen.queryByText('Unrelated issue')).not.toBeInTheDocument();
 
-    await user.type(filterInput(), 'relevant{ArrowDown}{Enter}');
-    await screen.findByRole('option', { name: 'Worked on' });
-    expect(screen.queryByRole('option', { name: 'Review requested' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('option', { name: 'Worked on' }));
-    await user.click(screen.getByRole('option', { name: 'Assigned' }));
-    await user.keyboard('{Meta>}{Enter}{/Meta}');
+    await openPropertySubmenu(user, 'Board properties', 'Relevant because');
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'Review requested' })).not.toBeInTheDocument();
+    await closePropertiesMenus(user);
+    await togglePropertyOption(user, 'Board properties', 'Relevant because', 'Authored');
     await waitFor(() => {
       expect(new URLSearchParams(router.state.location.search).get('relevance')).toBe('worked,assigned');
     });
@@ -379,8 +376,8 @@ describe('Board work-item activity', () => {
     expect(screen.queryByText('Authored issue')).not.toBeInTheDocument();
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
 
-    await user.keyboard('{Escape}');
-    await user.click(screen.getByRole('button', { name: 'Clear filters' }));
+    await openPropertiesMenu(user, 'Board properties');
+    await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
     await waitFor(() => {
       const params = new URLSearchParams(router.state.location.search);
       expect(params.get('teammate')).toBeNull();
@@ -389,7 +386,8 @@ describe('Board work-item activity', () => {
     expect(screen.getByText('Authored issue')).toBeInTheDocument();
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
     expect(screen.getByText('Unrelated issue')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
+    await closePropertiesMenus(user);
+    expect(screen.getByRole('button', { name: 'Board properties' })).toBeInTheDocument();
   });
 
   it('restores work filters from a shared URL', async () => {
@@ -466,11 +464,7 @@ describe('Board work-item activity', () => {
 
     await screen.findByText('Linear planning item');
     await waitFor(() => expect(linearIssuesRequested).toHaveBeenCalled());
-    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
-    await user.type(filterInput(), 'teammate{ArrowDown}{Enter}');
-    await user.type(filterInput(), 'Linear Ada');
-    await user.click(await screen.findByRole('option', { name: /Linear Ada/i }));
-    await user.click(screen.getByRole('button', { name: /^Done.*↵$/ }));
+    await togglePropertyOption(user, 'Board properties', 'Teammate', /Linear Ada/i);
 
     expect(screen.getByText('Linear planning item')).toBeInTheDocument();
   });
@@ -525,30 +519,21 @@ describe('Board work-item activity', () => {
     await waitForMutationsIdle(client);
 
     await screen.findByText('Authored PR');
-    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
-    await user.type(filterInput(), 'teammate{ArrowDown}{Enter}');
-    await user.click(await screen.findByRole('option', { name: /octocat/ }));
-    await user.click(screen.getByRole('button', { name: /^Done.*↵$/ }));
+    await togglePropertyOption(user, 'Board properties', 'Teammate', /octocat/);
 
     expect(screen.getByText('Authored PR')).toBeInTheDocument();
     expect(screen.getByText('Assigned PR')).toBeInTheDocument();
     expect(screen.getByText('Requested PR')).toBeInTheDocument();
     expect(screen.queryByText('Worked PR')).not.toBeInTheDocument();
 
-    await user.type(filterInput(), 'relevant{ArrowDown}{Enter}');
-    await user.click(await screen.findByRole('option', { name: 'Worked on' }));
-    await user.click(screen.getByRole('option', { name: 'Assigned' }));
-    await user.click(screen.getByRole('option', { name: 'Review requested' }));
-    await user.keyboard('{Meta>}{Enter}{/Meta}');
+    await togglePropertyOption(user, 'Board properties', 'Relevant because', 'Authored');
 
     expect(screen.queryByText('Authored PR')).not.toBeInTheDocument();
     expect(screen.getByText('Assigned PR')).toBeInTheDocument();
     expect(screen.getByText('Requested PR')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('combobox', { name: /^Value: .*octocat/ }));
-    await user.click(await screen.findByRole('option', { name: /octocat/ }));
-    await user.click(screen.getByRole('option', { name: /Ada Lovelace/ }));
-    await user.click(screen.getByRole('button', { name: /^Done.*↵$/ }));
+    await togglePropertyOption(user, 'Board properties', 'Teammate', /Ada Lovelace/);
+    await togglePropertyOption(user, 'Board properties', 'Teammate', /octocat/);
 
     expect(screen.getByText('Worked PR')).toBeInTheDocument();
     expect(screen.queryByText('Authored PR')).not.toBeInTheDocument();

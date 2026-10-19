@@ -82,23 +82,6 @@ export function CommentCount({ count }: { count: number }) {
   );
 }
 
-export function ExternalAuthorBadge({ className }: { className?: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Badge size="xs" tabIndex={0} className={cn('relative z-10', className)}>
-            External
-          </Badge>
-        }
-      />
-      <TooltipContent side="bottom" className="max-w-64">
-        From someone without write access — never starts a run on its own, even with auto-start runs on.
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
 export function CardStatus({ status }: { status: BoardCardStatus }) {
   // A parked run is surfaced by the highlighted "Start suggested run" action, not a status badge.
   if (status.kind === 'idle' || status.kind === 'waiting') return null;
@@ -223,8 +206,9 @@ export function CardActions({
   );
 }
 
+// A routine move stays quiet so the one urgent pill on the board is the only raised control.
 function pillVariant(action: CardAction, main: boolean) {
-  return main && action.urgent && !action.disabled ? 'primary' : 'default';
+  return main && action.urgent && !action.disabled ? 'primary' : 'ghost';
 }
 
 function CardActionButton({

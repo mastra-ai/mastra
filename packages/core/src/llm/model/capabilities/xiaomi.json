@@ -17,22 +17,12 @@
         "type": "toggle"
       }
     ],
-    "mimo-v2-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
     "mimo-v2.5": [
       {
         "type": "toggle"
       }
     ],
-    "mimo-v2-omni": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mimo-v2.6-pro-ultraspeed": [
+    "mimo-v2-flash": [
       {
         "type": "toggle"
       }
@@ -42,7 +32,7 @@
         "type": "toggle"
       }
     ],
-    "mimo-v2.5-pro": [
+    "mimo-v2.5-pro-ultraspeed": [
       {
         "type": "toggle"
       }
@@ -52,7 +42,17 @@
         "type": "toggle"
       }
     ],
-    "mimo-v2.5-pro-ultraspeed": [
+    "mimo-v2.6-pro-ultraspeed": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2-omni": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2.5-pro": [
       {
         "type": "toggle"
       }

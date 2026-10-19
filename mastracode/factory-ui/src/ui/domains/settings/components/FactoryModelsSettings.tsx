@@ -8,12 +8,7 @@ import { FactoryModelScopeSection } from './FactoryModelScopeSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 
-interface FactoryModelsSettingsProps {
-  models: AvailableModelOption[];
-  modelsLoaded: boolean;
-}
-
-export function FactoryModelsSettings({ models, modelsLoaded }: FactoryModelsSettingsProps) {
+export function FactoryModelsSettings({ models }: { models: AvailableModelOption[] }) {
   const { anyConnected, providersKnown } = useProviderConnectionState();
 
   const providerSubsections = (
@@ -39,9 +34,7 @@ export function FactoryModelsSettings({ models, modelsLoaded }: FactoryModelsSet
     >
       <SettingsContainer>
         <FactoryModelScopeSection />
-        {(!providersKnown || anyConnected) && (
-          <FactoryDefaultModelSection models={models} modelsLoaded={modelsLoaded} />
-        )}
+        {(!providersKnown || anyConnected) && <FactoryDefaultModelSection models={models} />}
       </SettingsContainer>
     </SettingsSubsection>
   );

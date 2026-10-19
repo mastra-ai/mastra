@@ -1,6 +1,7 @@
 import { formatSkillActivation } from '@mastra/core/workspace';
 import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
+import { requireLocal } from '../runtime.js';
 import { isCurrentThreadActive, sendSlashCommandMessage } from './send-slash-command-message.js';
 import { isUserInvocable } from './skill-filters.js';
 import type { SlashCommandContext } from './types.js';
@@ -13,8 +14,9 @@ function escapeSkillBoundary(value: string): string {
 
 async function resolveWorkspace(ctx: SlashCommandContext) {
   let workspace = ctx.getResolvedWorkspace();
-  if (!workspace && ctx.controller.hasWorkspace()) {
-    workspace = await ctx.controller.resolveWorkspace({ session: ctx.state.session });
+  const local = requireLocal(ctx.state, 'Skills');
+  if (!workspace && local.controller.hasWorkspace()) {
+    workspace = await local.controller.resolveWorkspace({ session: local.session });
   }
   return workspace;
 }

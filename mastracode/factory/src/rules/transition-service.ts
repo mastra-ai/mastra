@@ -87,6 +87,18 @@ export interface FactoryTransitionServiceOptions {
      * the seat that drove its own transition (an agent tool call) untouched. */
     actor: FactoryRuleActor;
   }) => Promise<void> | void;
+  /**
+   * Called after a transition commits a stage change, e.g. to tell the item's
+   * followers. Not awaited, and failures are logged: a notification must never
+   * fail or delay the committed transition.
+   */
+  onTransitionCommitted?: (args: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+    fromStage: string | undefined;
+    toStage: string;
+  }) => Promise<void> | void;
   /** Upper bound on how long a committed transition waits for
    * `onTerminalStage` before returning (default 30s). The cleanup continues
    * in the background past the bound. */
@@ -107,6 +119,8 @@ export interface FactoryTransitionServiceOptions {
    * a plan without explicit approval is a plan a person must review.
    */
   autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
+  /** Resolves whether a project self-reviews Work items before the change request opens. Unset means off. */
+  selfReviewEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
 }
 
 function rejection(
@@ -231,7 +245,9 @@ export class FactoryTransitionService {
   readonly #onTerminalStage: FactoryTransitionServiceOptions['onTerminalStage'];
   readonly #terminalCleanupTimeoutMs: number;
   readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
+  readonly #onTransitionCommitted: FactoryTransitionServiceOptions['onTransitionCommitted'];
   readonly #autoApprovePlans: FactoryTransitionServiceOptions['autoApprovePlans'];
+  readonly #selfReviewEnabled: FactoryTransitionServiceOptions['selfReviewEnabled'];
   readonly #audit: AuditRecorder | undefined;
 
   constructor(options: FactoryTransitionServiceOptions) {
@@ -242,7 +258,9 @@ export class FactoryTransitionService {
     this.#timeoutMs = options.timeoutMs ?? RULE_TIMEOUT_MS;
     this.#onTerminalStage = options.onTerminalStage;
     this.#onAccepted = options.onAccepted;
+    this.#onTransitionCommitted = options.onTransitionCommitted;
     this.#autoApprovePlans = options.autoApprovePlans;
+    this.#selfReviewEnabled = options.selfReviewEnabled;
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
 
@@ -272,7 +290,30 @@ export class FactoryTransitionService {
     }
     const result = await this.#evaluateAndCommit(request, transitionId, item);
     await this.#recordTransition(request, item, result);
+    this.#notifyCommitted(request, item, result);
     return result;
+  }
+
+  #notifyCommitted(request: FactoryTransitionRequest, item: WorkItemRow, result: FactoryTransitionResult): void {
+    const onTransitionCommitted = this.#onTransitionCommitted;
+    if (!onTransitionCommitted || result.status !== 'accepted') return;
+    // Board-neutral: `currentStage` only knows the built-in rule stages.
+    const fromStage = item.stages.length === 1 ? item.stages[0] : undefined;
+    if (result.stage === fromStage) return;
+    // Inside the chain so a synchronous throw is isolated the same way an async rejection is.
+    void Promise.resolve()
+      .then(() =>
+        onTransitionCommitted({
+          orgId: request.orgId,
+          factoryProjectId: request.factoryProjectId,
+          workItemId: item.id,
+          fromStage,
+          toStage: result.stage,
+        }),
+      )
+      .catch(error => {
+        console.warn(`[factory] stage notification failed for work item ${item.id}:`, error);
+      });
   }
 
   /** A rejection can outlive its work item: the row still names the id the caller asked for. */
@@ -482,6 +523,10 @@ export class FactoryTransitionService {
                 'This card comes from outside the write-access circle; a person must resume it from the Factory board.',
             };
           }
+          const selfReviewEnabled =
+            request.board === 'work' && this.#selfReviewEnabled
+              ? await this.#selfReviewEnabled({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
+              : false;
           const decisions: FactoryCommitDecision[] = [];
           for (const rule of resolveFactoryStageRules(this.#boards, {
             board: request.board,
@@ -493,6 +538,7 @@ export class FactoryTransitionService {
           })) {
             const context: FactoryStageRuleContext = Object.freeze({
               ...contextBase,
+              selfReviewEnabled,
               stage: rule.phase === 'exit' ? fromStage : request.stage,
             });
             const raw = await rule.handler(context);

@@ -6,6 +6,7 @@
  * signal fires, so tests coordinate on events, not on timing.
  */
 import { Agent } from '@mastra/core/agent';
+import type { AgentConfig } from '@mastra/core/agent';
 import type { MastraMemory } from '@mastra/core/memory';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
@@ -37,6 +38,7 @@ export interface StepAgentOptions {
   finalText?: string;
   onToolEvent?: (event: StepToolEvent) => void;
   onModelCall?: (call: number) => void;
+  outputProcessors?: AgentConfig['outputProcessors'];
 }
 
 export interface Gate<T = void> {
@@ -69,6 +71,7 @@ export function createStepAgent({
   memory,
   onToolEvent,
   onModelCall,
+  outputProcessors,
 }: StepAgentOptions) {
   let calls = 0;
   const model = new MastraLanguageModelV2Mock({
@@ -143,6 +146,7 @@ export function createStepAgent({
     model,
     tools: { step },
     ...(memory ? { memory } : {}),
+    ...(outputProcessors ? { outputProcessors } : {}),
   });
   return { agent, model, modelCalls: () => calls };
 }

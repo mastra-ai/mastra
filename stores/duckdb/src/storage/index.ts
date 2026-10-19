@@ -8,7 +8,7 @@ import type {
   ObservabilityDuckDBConfig,
   ObservabilityStorageDuckDB as ObservabilityStorageDuckDBImpl,
 } from './domains/observability/index';
-import { spanQueryFeatures } from './features';
+import { spanQueryFeatures, timeToFirstChunkFeatures } from './features';
 
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
@@ -31,6 +31,8 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'trace-query-tenant-scope',
   'feedback',
   'trace-query-context-ids',
+  ...timeToFirstChunkFeatures,
+  'trace-query-root-span-fields',
 ] as const;
 const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'metrics',
@@ -51,6 +53,8 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'trace-query-tenant-scope',
   'feedback',
   'trace-query-context-ids',
+  ...timeToFirstChunkFeatures,
+  'trace-query-root-span-fields',
 ] as const;
 
 function isObservabilityCompatibilityError(error: unknown): boolean {

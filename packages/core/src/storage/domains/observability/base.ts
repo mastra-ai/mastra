@@ -115,10 +115,13 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  *   `environment-discovery`, `tag-discovery`: the matching `get*` filter discovery method
  * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
  * - `span-query`: `querySpans` over completed spans
+ * - `span-query-context-fields`: identity, context and parent/root entity predicates added to `querySpans`
  * - `trace-query`: `queryTraces`
  * - `trace-aggregate`: `aggregateTraces`
  * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
  * - `trace-query-context-ids`: `runId`, `sessionId`, `userId` and `organizationId` predicates in trace/thread queries
+ * - `trace-query-time-to-first-chunk`: `timeToFirstChunkMs` on trace and span query results and predicates
+ * - `trace-query-root-span-fields`: root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
  * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
@@ -135,6 +138,7 @@ export type ObservabilityStorageFeature =
   | 'tag-discovery'
   | 'metric-discovery'
   | 'span-query'
+  | 'span-query-context-fields'
   | 'trace-query'
   | 'trace-aggregate'
   | 'trace-query-root-duration'
@@ -142,7 +146,9 @@ export type ObservabilityStorageFeature =
   | 'thread-query'
   | 'trace-query-tenant-scope'
   | 'feedback'
-  | 'trace-query-context-ids';
+  | 'trace-query-context-ids'
+  | 'trace-query-time-to-first-chunk'
+  | 'trace-query-root-span-fields';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).

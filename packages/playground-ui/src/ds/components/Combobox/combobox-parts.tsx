@@ -315,7 +315,7 @@ function ComboboxContent({
 
 /** The scrolling list. Children: a render function per item (or per group), like Base UI's List. */
 function ComboboxList({ className, ...props }: BaseCombobox.List.Props) {
-  const menu = useFluidMenu<HTMLDivElement>();
+  const menu = useFluidMenu();
   return (
     <ScrollArea maxHeight="var(--spacing-dropdown)">
       <ScrollAreaViewport className="scroll-py-8">
