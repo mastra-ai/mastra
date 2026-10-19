@@ -91,6 +91,7 @@ async function seedFactory(parentVisibility: SourceControlSessionVisibility = 'o
 
 function fakeController(calls: string[], onSessionCreated: (session: FakeSession) => void = () => {}) {
   const created: Array<{ options: Record<string, unknown>; session: ReturnType<typeof fakeSession> }> = [];
+  const storedThreads = new Map<string, { resourceId: string; metadata: Record<string, unknown>; updatedAt: Date }>();
   function fakeSession(id: string) {
     let state: Record<string, unknown> = {};
     const settings = new Map<string, unknown>();
@@ -134,11 +135,40 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
     createSession: vi.fn(async (options: Record<string, unknown>) => {
       const session = fakeSession(options.threadId as string);
       created.push({ options, session });
+      storedThreads.set(options.threadId as string, {
+        resourceId: options.resourceId as string,
+        metadata: {},
+        updatedAt: new Date(),
+      });
       onSessionCreated(session);
       return session;
     }),
     getSessionByResource: vi.fn(
       async (resourceId: string) => created.find(entry => entry.options.resourceId === resourceId)?.session ?? null,
+    ),
+    queryThreads: vi.fn(async ({ resourceId }: { resourceId: string }) =>
+      [...storedThreads.entries()]
+        .filter(([, thread]) => thread.resourceId === resourceId)
+        .map(([id, thread]) => ({ id, ...thread })),
+    ),
+    setThreadSettingOn: vi.fn(
+      async ({
+        resourceId,
+        threadId,
+        key,
+        value,
+      }: {
+        resourceId: string;
+        threadId: string;
+        key: string;
+        value: unknown;
+      }) => {
+        const thread = storedThreads.get(threadId);
+        if (!thread || thread.resourceId !== resourceId) throw new Error('Thread not found for session.');
+        thread.metadata[key] = value;
+        const live = created.find(entry => entry.options.threadId === threadId)?.session;
+        if (live) await live.thread.setSettingOn({ threadId, key, value });
+      },
     ),
   };
   return { controller, created };
@@ -192,7 +222,6 @@ async function setup(
       id: threadId,
       resourceId: threadOwner(threadId),
     }),
-    queryThreads: async () => [],
     // Sessions this test created are themselves; anything else (the parent) is a live stub.
     getSessionByResource: async (resourceId: string) =>
       (await controller.getSessionByResource(resourceId)) ?? {
@@ -263,7 +292,7 @@ beforeEach(() => {
 });
 
 describe('factory_switch_session_model', () => {
-  it('switches an owned running session without recreating it and rejects sessions owned by others', async () => {
+  it('switches an owned live or stopped session without recreating it and rejects sessions owned by others', async () => {
     const env = await setup();
     const started = (await env.start({ prompt: 'Investigate the build.' })) as { sessionId: string };
     const live = env.created[0]!.session;
@@ -274,6 +303,15 @@ describe('factory_switch_session_model', () => {
       modelId: 'openai/gpt-5.6',
     });
     expect(await live.thread.getSetting({ key: 'currentModelId' })).toBe('openai/gpt-5.6');
+    expect(env.created).toHaveLength(1);
+
+    env.controller.getSessionByResource.mockResolvedValue(null);
+    await expect(env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-6.1-sol' })).resolves.toEqual({
+      sessionId: started.sessionId,
+      threadId: started.sessionId,
+      modelId: 'openai/gpt-6.1-sol',
+    });
+    expect(await live.thread.getSetting({ key: 'currentModelId' })).toBe('openai/gpt-6.1-sol');
     expect(env.created).toHaveLength(1);
 
     await env.sourceControl.sessions.create({

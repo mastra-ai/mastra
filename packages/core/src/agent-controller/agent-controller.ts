@@ -1339,6 +1339,23 @@ export class AgentController<TState = {}> {
     };
   }
 
+  /** Persist a setting on a resource's stored thread without creating a session. */
+  async setThreadSettingOn({
+    resourceId,
+    threadId,
+    key,
+    value,
+  }: {
+    resourceId: string;
+    threadId: string;
+    key: string;
+    value: unknown;
+  }): Promise<void> {
+    const thread = await this.queryThreadById({ threadId });
+    if (!thread || thread.resourceId !== resourceId) throw new Error('Thread not found for session.');
+    await this.writeThreadMetadataValues(threadId, { [key]: value });
+  }
+
   /**
    * List threads directly from storage, without constructing a {@link Session}.
    * Read-only server endpoints use this so a GET on `/threads` doesn't spin up

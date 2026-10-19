@@ -35,6 +35,33 @@ async function createSession(
 }
 
 describe('session.model.switch', () => {
+  it('updates a stored thread by resource and rejects another resource', async () => {
+    const storage = new InMemoryStore();
+    const { controller, session } = await createSession(undefined, storage);
+    const thread = await session.thread.create();
+    const { controller: restarted } = await createSession(undefined, storage);
+    const resourceId = (await controller.queryThreadById({ threadId: thread.id }))!.resourceId;
+
+    await expect(
+      restarted.setThreadSettingOn({
+        resourceId: 'other-session',
+        threadId: thread.id,
+        key: 'currentModelId',
+        value: 'openai/gpt-5.5',
+      }),
+    ).rejects.toThrow('Thread not found for session.');
+    await restarted.setThreadSettingOn({
+      resourceId,
+      threadId: thread.id,
+      key: 'currentModelId',
+      value: 'openai/gpt-5.5',
+    });
+    expect((await controller.queryThreadById({ threadId: thread.id }))?.metadata?.currentModelId).toBe(
+      'openai/gpt-5.5',
+    );
+    expect((await restarted.queryThreadById({ threadId: thread.id }))?.metadata?.currentModelId).toBe('openai/gpt-5.5');
+  });
+
   it('persists and restores the model and thinking level together', async () => {
     const storage = new InMemoryStore();
     const { session } = await createSession(undefined, storage);

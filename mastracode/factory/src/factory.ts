@@ -1033,19 +1033,34 @@ export class MastraFactory {
       const callerUserId = getFactoryAuthUserId(user);
       const callerOrgId = factoryUserOrgId(user);
       const factoryProjectId = binding?.factoryProjectId ?? scope?.factoryProjectId;
-      // Project-scoped sessions share one row per project, addressed by the
-      // sentinel user id the settings UI picks when it passes a `factoryId`;
-      // unscoped sessions read the caller's own row. Both are rows the
-      // settings UI writes, so intent and the run agree without any session
-      // mutation.
-      const target = factoryProjectId
-        ? {
-            orgId: binding?.orgId ?? scope?.factoryOrgId ?? callerOrgId ?? 'local',
-            userId: factoryMemorySettingsUserId(factoryProjectId),
-          }
-        : callerUserId && callerOrgId
-          ? { orgId: callerOrgId, userId: callerUserId }
-          : { orgId: 'local', userId: 'local' };
+      // A project tag also appears on user sessions; only worker sessions use
+      // the project's memory settings. An explicit Auto in a user's row must
+      // not inherit the project's model.
+      const controller = requestContext.get('controller') as { resourceId?: string } | undefined;
+      const session =
+        !binding && callerUserId && callerOrgId && controller?.resourceId
+          ? await sourceControlSessions.getBySessionId(controller.resourceId)
+          : null;
+      const isUserSession = Boolean(
+        session?.factoryProjectId &&
+        session.orgId === callerOrgId &&
+        !session.originSessionId &&
+        !session.originThreadId &&
+        !(await workItemsStorage.hasRunBindingForSession({
+          orgId: session.orgId,
+          factoryProjectId: session.factoryProjectId,
+          sessionId: session.sessionId,
+        })),
+      );
+      const target =
+        factoryProjectId && !isUserSession
+          ? {
+              orgId: binding?.orgId ?? scope?.factoryOrgId ?? callerOrgId ?? 'local',
+              userId: factoryMemorySettingsUserId(factoryProjectId),
+            }
+          : callerUserId && callerOrgId
+            ? { orgId: callerOrgId, userId: callerUserId }
+            : { orgId: 'local', userId: 'local' };
       const record = await memorySettingsStorage.get(target);
       // A channel sender's own settings beat the project's for every knob they
       // saved. Best-effort: a failed personal read keeps the project's row.
