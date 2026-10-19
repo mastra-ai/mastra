@@ -7,10 +7,8 @@ import type { FactorySessionState } from '../context/ChatSessionContext';
 import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
 import { useAgentControllerSessionInit } from '../../../../hooks/useAgentControllerSessionInit';
-import {
-  type AgentControllerLiveState,
-  useAgentControllerSessionSync,
-} from '../../../../hooks/useAgentControllerSessionSync';
+import { useAgentControllerSessionSync } from '../../../../hooks/useAgentControllerSessionSync';
+import type { AgentControllerLiveState } from '../../../../hooks/useAgentControllerSessionSync';
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 type SseConnectionState = 'never' | 'connected' | 'dropped';

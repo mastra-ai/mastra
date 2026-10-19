@@ -21,7 +21,8 @@ import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settin
 
 import { SlackNotConfigured } from '../domains/settings/components/ConnectedAccountsSection';
 import { SettingsSubsection } from '../domains/settings/components/SettingsSubsection';
-import { connectSlackUrl, type ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
+import { connectSlackUrl } from '../domains/settings/services/channelAccounts';
+import type { ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
 import { SettingsPageLayout } from './SettingsPage';
 
 const linkedDateFormatter = new Intl.DateTimeFormat(undefined, {
