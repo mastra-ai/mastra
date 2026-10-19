@@ -96,10 +96,10 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
           'factory shared memory observational recall observer reflector thresholds attachments summarize context',
       },
       {
-        id: 'skills',
-        label: SETTINGS_SECTION_LABELS.skills,
+        id: 'boards',
+        label: SETTINGS_SECTION_LABELS.boards,
         icon: BookOpen,
-        searchText: 'skills factory triage plan review agent instructions prompts stages',
+        searchText: 'boards phases skills factory triage plan review agent instructions prompts stages',
       },
       {
         id: 'behavior',

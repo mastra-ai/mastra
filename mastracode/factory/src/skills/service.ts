@@ -64,6 +64,32 @@ function escapeSkillBoundary(value: string): string {
   return value.replaceAll('</skill>', '&lt;/skill&gt;');
 }
 
+/**
+ * Activates a skill from a Factory's skill library. Library skills are not in
+ * the session's workspace, so the whole body travels with every full kickoff.
+ */
+export function formatLibrarySkillMessage(input: { name: string; content: string; arguments?: string }): string {
+  const args = input.arguments?.trim();
+  const content = `${input.content.trim()}${args ? `\n\nARGUMENTS: ${args}` : ''}`;
+  return `<skill name="${input.name}">\n${escapeSkillBoundary(content)}\n</skill>`;
+}
+
+/**
+ * Continues a library skill pass already delivered to this session. Library skills aren't in the
+ * workspace, so the run can't re-open them with the skill tool; their instructions are earlier in
+ * the thread. A resume names the phase's current kickoff but does not resend its body, so a
+ * kickoff changed mid-run applies from the next full pass, not from the resume.
+ */
+export function formatLibrarySkillResumeMessage(input: { name: string; arguments?: string }): string {
+  const args = input.arguments?.trim();
+  const content = [
+    `Resume the active ${input.name} session — it is already open in this thread; continue it rather than restarting.`,
+    `The ${input.name} instructions were delivered earlier in this thread; follow them.`,
+    ...(args ? [`ARGUMENTS: ${args}`] : []),
+  ].join('\n');
+  return `<skill name="${input.name}">\n${escapeSkillBoundary(content)}\n</skill>`;
+}
+
 /** Kicks a run off from a plain prompt, for runs that activate no skill. */
 export async function resolvePromptInvocation(
   controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>,

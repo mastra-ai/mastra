@@ -75,12 +75,13 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@copilotkit/aimock": "^1.29.0",
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@internal/workspace": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/pg": "workspace:*",
     "@mastra/server": "workspace:*",
-    "@internal/types-builder": "workspace:*",
-    "@internal/workspace": "workspace:*",
     "@types/node": "22.20.1",
     "tsdown": "0.22.9",
     "typescript": "catalog:ts6",

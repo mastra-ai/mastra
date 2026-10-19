@@ -12,6 +12,57 @@ export interface BoardRegistry extends Iterable<[string, InstalledBoard]> {
   entries(): MapIterator<[string, InstalledBoard]>;
 }
 
+/**
+ * A registry whose stored boards (built from the UI or API) can change at runtime. Code-defined
+ * boards are fixed; stored boards are installed, replaced, and removed as users edit them.
+ */
+export interface LiveBoardRegistry extends BoardRegistry {
+  /** Whether `id` is a code-defined board, which users cannot edit or delete. */
+  isCodeDefined(id: string): boolean;
+  /** The Factory a stored board belongs to; undefined for code-defined or unknown boards. */
+  ownerOf(id: string): string | undefined;
+  /** Installs or replaces a stored board owned by one Factory. */
+  install(board: InstalledBoard, factoryProjectId: string): void;
+  /** Removes a stored board. */
+  uninstall(id: string): void;
+  /** Bumped by every local `install` and `uninstall`, so a reload can tell its snapshot went stale. */
+  readonly generation: number;
+  /**
+   * Replaces every stored board, e.g. after reloading them from storage. Pass the `generation` read
+   * before the snapshot was loaded: if a local write happened since, the stale snapshot is dropped.
+   */
+  replaceStored(boards: readonly StoredBoardEntry[], loadedAtGeneration?: number): void;
+  /** Sets how stored boards are reloaded; a lookup that misses a stored board id triggers it in the background. */
+  setStoredReloader(reload: () => Promise<void>): void;
+  /** Reloads stored boards (e.g. ones created on another replica); a no-op until a reloader is set. */
+  reloadStored(): Promise<void>;
+}
+
+/** Prefix of server-generated ids for boards built from the UI or API. */
+export const STORED_BOARD_ID_PREFIX = 'custom-';
+
+/**
+ * How long a replica trusts its stored boards. A lookup of a stored board after this long reloads them
+ * in the background, so a replica that only dispatches or handles webhooks still sees edits and
+ * deletions made on another replica.
+ */
+export const STORED_BOARD_MAX_AGE_MS = 30_000;
+
+export interface StoredBoardEntry {
+  board: InstalledBoard;
+  factoryProjectId: string;
+}
+
+/**
+ * Whether a Factory may use `boardId`: code-defined boards are shared, stored boards belong to the
+ * Factory that created them. A `null` Factory (e.g. an unrouted intake binding) sees code boards only.
+ */
+export function boardAvailableTo(registry: BoardRegistry, boardId: string, factoryProjectId: string | null): boolean {
+  if (!registry.has(boardId)) return false;
+  const owner = 'ownerOf' in registry ? (registry as LiveBoardRegistry).ownerOf(boardId) : undefined;
+  return owner === undefined || owner === factoryProjectId;
+}
+
 export const defaultBoards = Object.freeze([workBoard, reviewBoard]) as readonly InstalledBoard[];
 
 export function createBoardRegistry(
@@ -19,24 +70,82 @@ export function createBoardRegistry(
     boards?: readonly InstalledBoard[];
     includeDefaultBoards?: boolean;
   } = {},
-): BoardRegistry {
+): LiveBoardRegistry {
   const installed = options.includeDefaultBoards === false ? [] : defaultBoards;
-  const registry = new Map<string, InstalledBoard>();
-
+  const codeDefined = new Map<string, InstalledBoard>();
   for (const board of [...installed, ...(options.boards ?? [])]) {
-    if (registry.has(board.id)) {
+    if (codeDefined.has(board.id)) {
       throw new Error(`MastraFactory: duplicate board id '${board.id}' in 'boards'.`);
     }
-    registry.set(board.id, board);
+    codeDefined.set(board.id, board);
   }
+  const registry = new Map(codeDefined);
+  const owners = new Map<string, string>();
+  let reloader: (() => Promise<void>) | undefined;
+  let generation = 0;
+  let storedLoadedAt = 0;
+  const reloadOnMiss = (id: string) => {
+    if (reloader && id.startsWith(STORED_BOARD_ID_PREFIX)) void reloader();
+  };
+  const reloadIfStale = (id: string) => {
+    if (Date.now() - storedLoadedAt > STORED_BOARD_MAX_AGE_MS) reloadOnMiss(id);
+  };
+
+  const assertStored = (id: string) => {
+    if (codeDefined.has(id)) throw new Error(`MastraFactory: board '${id}' is defined in code and cannot be replaced.`);
+  };
 
   return Object.freeze({
-    size: registry.size,
-    get: registry.get.bind(registry),
-    has: registry.has.bind(registry),
-    keys: registry.keys.bind(registry),
-    values: registry.values.bind(registry),
-    entries: registry.entries.bind(registry),
-    [Symbol.iterator]: registry[Symbol.iterator].bind(registry),
+    get size() {
+      return registry.size;
+    },
+    get generation() {
+      return generation;
+    },
+    get(id: string) {
+      const board = registry.get(id);
+      if (board) reloadIfStale(id);
+      else reloadOnMiss(id);
+      return board;
+    },
+    has(id: string) {
+      const found = registry.has(id);
+      if (found) reloadIfStale(id);
+      else reloadOnMiss(id);
+      return found;
+    },
+    keys: () => registry.keys(),
+    values: () => registry.values(),
+    entries: () => registry.entries(),
+    [Symbol.iterator]: () => registry[Symbol.iterator](),
+    isCodeDefined: (id: string) => codeDefined.has(id),
+    ownerOf: (id: string) => owners.get(id),
+    install(board: InstalledBoard, factoryProjectId: string) {
+      assertStored(board.id);
+      registry.set(board.id, board);
+      owners.set(board.id, factoryProjectId);
+      generation++;
+    },
+    uninstall(id: string) {
+      assertStored(id);
+      generation++;
+      registry.delete(id);
+      owners.delete(id);
+    },
+    replaceStored(entries: readonly StoredBoardEntry[], loadedAtGeneration?: number) {
+      if (loadedAtGeneration !== undefined && loadedAtGeneration !== generation) return;
+      for (const { board } of entries) assertStored(board.id);
+      for (const id of owners.keys()) registry.delete(id);
+      owners.clear();
+      for (const { board, factoryProjectId } of entries) {
+        registry.set(board.id, board);
+        owners.set(board.id, factoryProjectId);
+      }
+      storedLoadedAt = Date.now();
+    },
+    setStoredReloader(reload: () => Promise<void>) {
+      reloader = reload;
+    },
+    reloadStored: () => reloader?.() ?? Promise.resolve(),
   });
 }

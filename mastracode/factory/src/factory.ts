@@ -47,8 +47,9 @@ import {
   getFactoryAuthUserId,
 } from './auth.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
-import type { BoardRegistry, InstalledBoard } from './boards/index.js';
+import type { InstalledBoard, LiveBoardRegistry } from './boards/index.js';
 import { boardForWorkItem } from './boards/semantics.js';
+import { debouncedStoredBoardReload, loadStoredBoards } from './boards/stored-board.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
 import { touchFeed } from './feed-events.js';
@@ -132,12 +133,15 @@ import { FactoryFeedReader } from './storage/domains/comments/feed-context.js';
 import type { WorkItemFeedPublisher } from './storage/domains/comments/feed-sync.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
+import { FactoryBoardsStorage } from './storage/domains/factory-boards/base.js';
+import { FactorySkillLibraryStorage } from './storage/domains/factory-skills/base.js';
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { factoryMemorySettingsUserId, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { MemorySettingsRecord } from './storage/domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
+import { PhaseSkillsStorage } from './storage/domains/phase-skills/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
@@ -451,7 +455,7 @@ export class MastraFactory {
   /** The normalized sandbox, set by `prepare()`. Undefined until then and when sandboxes are disabled. */
   #sandbox: FactorySandbox | undefined;
   #sandboxDescription: FactorySandboxDescription | undefined;
-  readonly #boards: BoardRegistry;
+  readonly #boards: LiveBoardRegistry;
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
@@ -604,6 +608,9 @@ export class MastraFactory {
     workItemsStorage.useTerminalPhasePredicate(item => isTerminalWorkItem(this.#boards, item));
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
     const modelDefaultsStorage = storage.registerDomain(new ModelDefaultsStorage());
+    const phaseSkillsStorage = storage.registerDomain(new PhaseSkillsStorage());
+    const skillLibraryStorage = storage.registerDomain(new FactorySkillLibraryStorage());
+    const boardsStorage = storage.registerDomain(new FactoryBoardsStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
@@ -623,6 +630,9 @@ export class MastraFactory {
       intake: intakeStorage,
       modelCredentials: modelCredentialsStorage,
       modelDefaults: modelDefaultsStorage,
+      phaseSkills: phaseSkillsStorage,
+      skillLibrary: skillLibraryStorage,
+      storedBoards: boardsStorage,
       memorySettings: memorySettingsStorage,
       customProviders: customProvidersStorage,
       filesystem: filesystemStorage,
@@ -688,6 +698,12 @@ export class MastraFactory {
     // Single init path: backend connection failure is a hard boot error;
     // registered app domains initialize fail-soft inside FactoryStorage.
     await timedPhase('prepare.storage.init', () => storage.init());
+    await timedPhase('prepare.boards.load', () =>
+      loadStoredBoards(this.#boards, boardsStorage, (boardId, error) =>
+        console.warn(`[factory] Skipping stored board '${boardId}':`, error),
+      ).catch(error => console.warn('[factory] Could not load stored boards:', error)),
+    );
+    this.#boards.setStoredReloader(debouncedStoredBoardReload(this.#boards, boardsStorage));
 
     // Per-tenant model credentials: once the credentials domain is up, model
     // resolution goes through the caller's own store and the SDK stops
@@ -1539,6 +1555,8 @@ export class MastraFactory {
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,
                 boards: this.#boards,
+                phaseSkills: phaseSkillsStorage,
+                skillLibrary: skillLibraryStorage,
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
                 isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();

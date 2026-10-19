@@ -143,6 +143,8 @@ export const queryKeys = {
   om: (resourceId: string | undefined, scope?: string, factoryId?: string) =>
     ['om', resourceId ?? null, scope ?? null, factoryId ?? null] as const,
   factorySkills: () => ['factory', 'skills'] as const,
+  phaseSkills: (factoryId: string | undefined) => ['factory', 'phase-skills', factoryId] as const,
+  skillLibrary: (factoryId: string | undefined) => ['factory', 'skill-library', factoryId] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
   workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>

@@ -3,6 +3,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
+import { boardAvailableTo } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { cardLabels, moveCardToBoard } from '../boards/relocate.js';
 import type { Intake, IntakeItem } from '../capabilities/intake.js';
@@ -536,7 +537,10 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
             const project = await projects.get({ orgId: tenant.orgId, id: binding.factoryProjectId });
             if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
           }
-          if (binding.board !== null && !boardRegistry?.has(binding.board)) {
+          if (
+            binding.board !== null &&
+            !(boardRegistry && boardAvailableTo(boardRegistry, binding.board, binding.factoryProjectId))
+          ) {
             return c.json({ error: 'invalid_board', message: `Board '${binding.board}' is not installed.` }, 422);
           }
 
@@ -660,7 +664,10 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
             const project = await projects.get({ orgId: tenant.orgId, id: route.factoryProjectId });
             if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
           }
-          if (route.board !== null && !boardRegistry?.has(route.board)) {
+          if (
+            route.board !== null &&
+            !(boardRegistry && boardAvailableTo(boardRegistry, route.board, route.factoryProjectId))
+          ) {
             return c.json({ error: 'invalid_board', message: `Board '${route.board}' is not installed.` }, 422);
           }
 

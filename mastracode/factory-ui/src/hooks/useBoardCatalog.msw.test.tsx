@@ -12,6 +12,7 @@ const catalog: BoardCatalogResponse = {
     {
       id: 'release',
       title: 'Release Preview',
+      custom: false,
       initialPhase: 'queued',
       phases: [
         { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'shipping' }] },

@@ -30,8 +30,8 @@ export type {
   BoardTransitionPolicyContext,
   BoardTransitionPolicyResult,
 } from './transition-policy.js';
-export { createBoardRegistry, defaultBoards } from './registry.js';
-export type { BoardRegistry, InstalledBoard } from './registry.js';
+export { boardAvailableTo, createBoardRegistry, defaultBoards } from './registry.js';
+export type { BoardRegistry, InstalledBoard, LiveBoardRegistry, StoredBoardEntry } from './registry.js';
 import { isReviewBoardPhase, reviewBoard } from './review.js';
 import { isWorkBoardPhase, workBoard } from './work.js';
 

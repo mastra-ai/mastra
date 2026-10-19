@@ -1337,6 +1337,93 @@ describe('FactoryDecisionDispatcher', () => {
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
+  it.each([
+    {
+      label: 'a library skill in place of a named skill',
+      decision: { skillName: 'understand-issue', arguments: 'Issue 42' },
+      kickoff: { skillName: 'my-build', prompt: null },
+      library: { name: 'my-build', content: 'Build the card.' },
+      expected: /^<skill name="my-build">\nBuild the card\.\n\nARGUMENTS: Issue 42\n<\/skill>$/,
+    },
+    {
+      label: 'a library skill in place of a prompt-only kickoff',
+      decision: { prompt: 'Build issue 42' },
+      kickoff: { skillName: 'my-build', prompt: null },
+      library: { name: 'my-build', content: 'Build the card.' },
+      expected: /^<skill name="my-build">\nBuild the card\.\n\nARGUMENTS: Build issue 42\n<\/skill>$/,
+    },
+    {
+      label: 'a prompt',
+      decision: { prompt: 'Build issue 42' },
+      kickoff: { skillName: null, prompt: 'Ship it carefully.' },
+      library: null,
+      expected: /^Ship it carefully\.\n\nBuild issue 42$/,
+    },
+    {
+      label: 'the built-in kickoff when the library skill was deleted',
+      decision: { prompt: 'Build issue 42' },
+      kickoff: { skillName: 'my-build', prompt: null },
+      library: null,
+      expected: /^Build issue 42$/,
+    },
+  ])("runs $label for the card's phase", async ({ decision, kickoff, library, expected }) => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      idempotencyKey: 'skill-override',
+      ...decision,
+    } as never);
+    const { controller, session } = createSession();
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-null',
+      kickoffMessage: null,
+    });
+    const get = vi.fn(async () => kickoff);
+    const getSkill = vi.fn(async () => library);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      primeCredentials: async () => {},
+      phaseSkills: { get } as never,
+      skillLibrary: { get: getSkill } as never,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(get).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      boardId: 'work',
+      phaseId: 'execute',
+    });
+    expect(session.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contents: expect.stringMatching(expected),
+      }),
+      expect.anything(),
+    );
+  });
+
   it('delivers a compact continuation instead of the full skill body when the invokeSkill decision sets resume', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {

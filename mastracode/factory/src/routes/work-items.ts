@@ -11,8 +11,8 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { createBoardRegistry } from '../boards/index.js';
-import type { BoardRegistry } from '../boards/index.js';
+import { boardAvailableTo, createBoardRegistry } from '../boards/index.js';
+import type { BoardRegistry, LiveBoardRegistry } from '../boards/index.js';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import type {
@@ -60,6 +60,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   workItems: WorkItemsStorage;
   /** Boards installed for this Factory instance. */
   boardRegistry?: BoardRegistry;
+  /** Reloads boards built in the UI, so this replica sees ones another replica created. Debounced by the caller. */
+  reloadStoredBoards?: () => Promise<void>;
   /** Comments domain — backs the mention attention provider. */
   comments: WorkItemCommentsStorage;
   /** Per-project queue-health threshold config. */
@@ -328,19 +330,24 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         handler: async c => {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
+          await this.deps.reloadStoredBoards?.();
+          const boards = this.#boards;
           return c.json({
-            boards: [...this.#boards].map(([id, board]) => ({
-              id,
-              title: board.title,
-              initialPhase: board.initialPhase,
-              phases: Object.entries(board.phases).map(([phaseId, phase]) => ({
-                id: phaseId,
-                title: phase.title,
-                kind: phase.kind,
-                ...(phase.kind === 'working' ? { role: phase.role } : {}),
-                transitions: (board.transitions[phaseId] ?? []).map(({ outcome, to }) => ({ outcome, to })),
+            boards: [...boards]
+              .filter(([id]) => boardAvailableTo(this.#boards, id, resolved.factoryProjectId))
+              .map(([id, board]) => ({
+                id,
+                title: board.title,
+                custom: 'ownerOf' in boards && (boards as LiveBoardRegistry).ownerOf(id) !== undefined,
+                initialPhase: board.initialPhase,
+                phases: Object.entries(board.phases).map(([phaseId, phase]) => ({
+                  id: phaseId,
+                  title: phase.title,
+                  kind: phase.kind,
+                  ...(phase.kind === 'working' ? { role: phase.role } : {}),
+                  transitions: (board.transitions[phaseId] ?? []).map(({ outcome, to }) => ({ outcome, to })),
+                })),
               })),
-            })),
           });
         },
       }),
@@ -635,7 +642,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const existing = await workItems.get({ orgId: tenant.orgId, id });
           if (!existing) return c.json({ error: 'Work item not found' }, 404);
           if (patch.board !== undefined) {
-            const board = this.#boards.get(patch.board);
+            const board = boardAvailableTo(this.#boards, patch.board, existing.factoryProjectId)
+              ? this.#boards.get(patch.board)
+              : undefined;
             const stage = patch.stages?.length === 1 ? patch.stages[0] : undefined;
             if (existing.board !== null) {
               return c.json({ error: 'board_already_assigned' }, 409);

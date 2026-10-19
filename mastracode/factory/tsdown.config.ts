@@ -26,7 +26,7 @@ const rewriteRelativeSpecifiersPlugin = {
  * the @mastra/code-sdk build setup.
  */
 export default defineConfig({
-  entry: ['src/**/*.ts', '!src/**/*.test.ts', '!src/**/test-utils.ts', '!src/**/__tests__/**'],
+  entry: ['src/**/*.ts', '!src/**/*.test.ts', '!src/**/test-utils.ts', '!src/**/__tests__/**', '!src/scenarios/**'],
   format: ['esm'],
   fixedExtension: false,
   nodeProtocol: 'strip',
