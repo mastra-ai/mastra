@@ -4257,7 +4257,13 @@ export class AgentThreadStreamRuntime {
 
   async waitForCrossAgentThreadRun(
     agent: Agent<any, any, any, any>,
-    options: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext; runId?: string },
+    options: {
+      memory?: AgentExecutionOptions<any>['memory'];
+      requestContext?: RequestContext;
+      runId?: string;
+      /** Also stop waiting once the run holding the thread parks on a prompt. */
+      untilSuspended?: boolean;
+    },
     pubsub?: PubSub,
   ) {
     const { threadId, resourceId } = this.#getThreadTarget(options);
@@ -4300,7 +4306,10 @@ export class AgentThreadStreamRuntime {
           if (!this.#isThreadBlockingRun(state, activeRecord)) {
             return;
           }
-          if (activeRecord.agent.id === agent.id && !this.#isActivelyRunning(activeRecord)) {
+          if (
+            (options.untilSuspended || activeRecord.agent.id === agent.id) &&
+            !this.#isActivelyRunning(activeRecord)
+          ) {
             // Same-agent record that is suspended/suspending: waiting could block indefinitely
             // on human input (resume/approval), so preserve the historical exemption.
             return;
@@ -4325,7 +4334,9 @@ export class AgentThreadStreamRuntime {
           continue;
         }
 
-        await this.#waitForRemoteRunToFinish(pubsub, key, activeRunId);
+        if (options.untilSuspended && this.#isSuspendedRun(state, activeRunId)) return;
+        await this.#waitForRemoteRunToFinish(pubsub, key, activeRunId, options.untilSuspended);
+        if (options.untilSuspended && this.#isSuspendedRun(state, activeRunId)) return;
       }
     } finally {
       control.references--;
@@ -4387,7 +4398,7 @@ export class AgentThreadStreamRuntime {
     }
   }
 
-  async #waitForRemoteRunToFinish(pubsub: PubSub | undefined, key: string, runId: string) {
+  async #waitForRemoteRunToFinish(pubsub: PubSub | undefined, key: string, runId: string, untilSuspended = false) {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const { provider, isFallback } = this.#resolveLeaseProvider(resolvedPubSub);
     const topic = this.#threadTopic(key);
@@ -4452,12 +4463,16 @@ export class AgentThreadStreamRuntime {
       if (isTerminal) {
         clearRemoteActive(data.streamId);
         finish();
+      } else if (untilSuspended && data?.type === 'run-suspended' && data.runId === runId) {
+        finish();
       }
     };
 
     try {
       await resolvedPubSub.subscribe(topic, onEvent);
       subscribed = true;
+      // It may have parked before this subscription could see it.
+      if (untilSuspended && this.#isSuspendedRun(this.#getState(resolvedPubSub), runId)) finish();
       if (!isFallback) timer = setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS);
       await wait;
     } catch {

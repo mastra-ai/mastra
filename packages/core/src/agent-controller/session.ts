@@ -5385,16 +5385,27 @@ export class Session<TState = unknown> {
       } else {
         await this.waitForAcceptedRunCompletion(accepted);
       }
-      // Blocked again by the run already waited for: waiting can't free the thread.
-      if (blockingRunId === undefined || blockingRunId === lastBlockingRunId) return;
+      if (blockingRunId === undefined) return;
+      // Blocked again by the run already waited for: it is parked on a prompt
+      // of its own, so waiting can't free the thread.
+      if (blockingRunId === lastBlockingRunId) {
+        this.emit({
+          type: 'error',
+          error: new Error(
+            "Your message wasn't sent: another agent's run on this thread is waiting for an answer to its own prompt.",
+          ),
+        });
+        return;
+      }
       lastBlockingRunId = blockingRunId;
       if (!(await this.#waitForOtherAgentRun())) return;
     }
   }
 
   /**
-   * Wait until no other agent's run holds this session's thread, and this
-   * session has seen that run end. False when Stop is pressed while waiting.
+   * Wait until no other agent's run holds this session's thread, or that run
+   * has parked on a prompt, and this session has seen it end. False when Stop
+   * is pressed while waiting.
    */
   async #waitForOtherAgentRun(): Promise<boolean> {
     const threadId = this.thread.getId();
@@ -5411,7 +5422,7 @@ export class Session<TState = unknown> {
       await Promise.race([
         agentThreadStreamRuntime.waitForCrossAgentThreadRun(
           agent,
-          { memory: { thread: threadId, resource: this.identity.getResourceId() } },
+          { memory: { thread: threadId, resource: this.identity.getResourceId() }, untilSuspended: true },
           agent.getPubSub(),
         ),
         abortRequest,

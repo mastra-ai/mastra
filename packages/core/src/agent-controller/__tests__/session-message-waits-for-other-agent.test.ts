@@ -4,6 +4,7 @@
  * thread blocked by the other agent's run; the message must not be dropped.
  */
 import { describe, expect, it, vi } from 'vitest';
+import z from 'zod';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../../agent/durable';
 import { InMemoryServerCache } from '../../cache';
@@ -12,6 +13,7 @@ import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { createTool } from '../../tools';
 import { AgentController } from '../agent-controller';
 import { createMockWorkspace } from '../test-utils';
 
@@ -34,8 +36,46 @@ const reply = (text: string) =>
     },
   });
 
-/** A session on a thread, plus another agent whose model call waits for `releaseOther()`. */
-async function createHarness(id: string, durable: boolean) {
+const requestAccess = createTool({
+  id: 'request-access',
+  description: 'Ask the user for access to a path.',
+  inputSchema: z.object({ path: z.string() }),
+  execute: async (_input, context) => {
+    await context?.agent?.suspend?.({ kind: 'access_request' });
+    return 'unreachable';
+  },
+});
+
+const askForAccess = () =>
+  new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'stream-start', warnings: [] });
+      controller.enqueue({ type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) });
+      controller.enqueue({
+        type: 'tool-call',
+        toolCallId: 'call-1',
+        toolName: 'requestAccess',
+        input: '{"path":"/x"}',
+      });
+      controller.enqueue({
+        type: 'finish',
+        finishReason: 'tool-calls',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      });
+      controller.close();
+    },
+  });
+
+/** Whether `promise` settles within `ms`. */
+const settlesWithin = (promise: Promise<unknown>, ms: number) =>
+  Promise.race([promise.then(() => true), new Promise<boolean>(resolve => setTimeout(() => resolve(false), ms))]);
+
+/**
+ * A session on a thread, plus another agent whose model call waits for
+ * `releaseOther()`. With `otherParks`, the other agent then parks on a prompt
+ * of its own instead of replying.
+ */
+async function createHarness(id: string, durable: boolean, { otherParks = false } = {}) {
   const storage = new InMemoryStore();
   const memory = new MockMemory({ storage });
   // What each agent's model was asked, one entry per model call.
@@ -63,11 +103,12 @@ async function createHarness(id: string, durable: boolean) {
     name: `${id} other`,
     instructions: 'You check.',
     memory,
+    tools: { requestAccess },
     model: new MastraLanguageModelV2Mock({
       doStream: async ({ prompt }) => {
         otherPrompts.push(JSON.stringify(prompt));
         await otherReleased;
-        return { stream: reply('checked') };
+        return { stream: otherParks ? askForAccess() : reply('checked') };
       },
     }),
   });
@@ -105,7 +146,12 @@ async function createHarness(id: string, durable: boolean) {
     return output;
   };
 
-  return { session, sessionAgent: registeredAgent, prompts, otherPrompts, releaseOther, startOther };
+  const errors: string[] = [];
+  session.subscribe(event => {
+    if (event.type === 'error') errors.push(event.error.message);
+  });
+
+  return { session, sessionAgent: registeredAgent, prompts, otherPrompts, errors, releaseOther, startOther };
 }
 
 describe.each([false, true])('a message sent while another agent runs on the thread, durable=%s', durable => {
@@ -142,6 +188,36 @@ describe.each([false, true])('a message sent while another agent runs on the thr
     await other.consumeStream();
     await new Promise(resolve => setTimeout(resolve, 200));
     expect(h.prompts).toHaveLength(0);
+  });
+
+  it('says it was not sent when the other run is parked on a prompt of its own', async () => {
+    const h = await createHarness('parked', durable, { otherParks: true });
+    const other = await h.startOther();
+    h.releaseOther();
+    await other.consumeStream();
+    expect(other.status).toBe('suspended');
+
+    expect(await settlesWithin(h.session.sendMessage({ content: 'Are you there?' }), 5_000)).toBe(true);
+
+    expect(h.prompts).toHaveLength(0);
+    expect(h.errors).toEqual([
+      "Your message wasn't sent: another agent's run on this thread is waiting for an answer to its own prompt.",
+    ]);
+  });
+
+  it('stops waiting and says so when the other run parks on a prompt while the message waits', async () => {
+    const h = await createHarness('parks-later', durable, { otherParks: true });
+    const other = await h.startOther();
+
+    const sent = h.session.sendMessage({ content: 'Are you there?' });
+    await new Promise(resolve => setTimeout(resolve, 200));
+    h.releaseOther();
+    await other.consumeStream();
+    expect(await settlesWithin(sent, 5_000)).toBe(true);
+
+    expect(other.status).toBe('suspended');
+    expect(h.prompts).toHaveLength(0);
+    expect(h.errors).toHaveLength(1);
   });
 
   it('still reports the thread blocked to a signal sent straight to the agent', async () => {
