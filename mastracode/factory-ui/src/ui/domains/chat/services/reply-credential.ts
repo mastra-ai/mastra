@@ -5,17 +5,6 @@ export interface ThreadOwner {
   avatarUrl?: string;
 }
 
-function credentialHolder(
-  credentialOwnerId: string | undefined,
-  threadOwner: ThreadOwner | undefined,
-  viewerId: string | undefined,
-): string {
-  if (credentialOwnerId === undefined) return 'Organization';
-  if (credentialOwnerId === viewerId) return 'Your';
-  if (credentialOwnerId === threadOwner?.id && threadOwner.name) return `${threadOwner.name}’s`;
-  return 'Personal';
-}
-
 /**
  * Names the credential the server stamped on a reply when it answered:
  * `credentialLabel` ("Claude Pro/Max") and, for a personal credential,
@@ -29,6 +18,8 @@ export function replyCredentialLabel(
 ): string | undefined {
   const { credentialLabel, credentialOwnerId } = metadata;
   if (typeof credentialLabel !== 'string') return undefined;
-  const ownerId = typeof credentialOwnerId === 'string' ? credentialOwnerId : undefined;
-  return `${credentialHolder(ownerId, threadOwner, viewerId)} ${credentialLabel}`;
+  if (typeof credentialOwnerId !== 'string') return `Organization ${credentialLabel}`;
+  if (credentialOwnerId === viewerId) return `Your ${credentialLabel}`;
+  if (credentialOwnerId === threadOwner?.id && threadOwner.name) return `${threadOwner.name}’s ${credentialLabel}`;
+  return `Personal ${credentialLabel}`;
 }

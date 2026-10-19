@@ -13,6 +13,10 @@ import { NextReplyCredential } from './NextReplyCredential';
 import { QueuedFollowUps } from './QueuedFollowUps';
 import { RuntimeActivity } from './RuntimeActivity';
 
+/**
+ * Session status strip below the composer. Pure composition root: each child
+ * reads its own slice of the existing chat/session context.
+ */
 export function StatusLine() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId: string }>();
   const { projectPath, factorySessionState } = useChatSessionContext();
