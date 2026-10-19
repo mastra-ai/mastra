@@ -21,11 +21,13 @@ import { EventStream } from './stream';
 
 const DEFAULT_MAX_EVENTS = 100;
 const DEFAULT_LIST_PAGE_SIZE = 100;
+export const DEFAULT_EVENTS_MAX_STREAMS = 1024;
 
 export interface EventHandlerDeps {
   registry: ServerEventRegistry;
   heartbeatIntervalMs: number;
   listPageSize?: number;
+  maxStreams?: number;
   getLogger: () => IMastraLogger;
   jsonSchema: (schema: unknown, options: { io: 'input' | 'output' }) => Record<string, unknown> | undefined;
   /** Runs one request under the server's request span with its resolved request context. */
@@ -126,6 +128,9 @@ export function registerEventHandlers(server: Server, deps: EventHandlerDeps): v
         const event = registry.resolve(params.name, 'push');
         const args = await registry.validateArguments(event, params.arguments ?? {});
         const buffer = bufferOf(event);
+        if (registry.openStreams.size >= (deps.maxStreams ?? DEFAULT_EVENTS_MAX_STREAMS)) {
+          throw new ProtocolError(EVENTS_ERROR_CODES.ResourceExhausted, 'Too many open event streams');
+        }
         const subscriptionId = ctx.mcpReq.id;
         const { match } = event.definition;
         const stream = new EventStream({
