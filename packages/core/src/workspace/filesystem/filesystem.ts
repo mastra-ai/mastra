@@ -128,7 +128,8 @@ export interface WalkOptions {
   includeHidden?: boolean;
   /**
    * Still return `.gitignore` files when hidden entries are excluded, so the
-   * caller can apply them. Providers may ignore this.
+   * caller can apply them. Providers that ignore this return no nested
+   * `.gitignore` files, so their rules don't apply to the listing.
    */
   includeGitignoreFiles?: boolean;
   /**

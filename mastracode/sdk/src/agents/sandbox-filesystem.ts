@@ -667,14 +667,17 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   private toolsCheck: Promise<SearchTools> | undefined;
 
   private searchTools(): Promise<SearchTools> {
-    this.toolsCheck ??= this.exec(SEARCH_TOOLS_PROBE).then(
-      result => {
-        const found = new Set(result.stdout.split('\n').map(line => line.trim()));
-        return { rg: found.has('rg'), gnuGrep: found.has('gnu-grep'), git: found.has('git') };
-      },
-      () => ({ rg: false, gnuGrep: false, git: false }),
-    );
-    return this.toolsCheck;
+    const check = (this.toolsCheck ??= this.exec(SEARCH_TOOLS_PROBE).then(result => {
+      if (result.exitCode !== 0) throw new Error(`search tool probe exited with ${result.exitCode}`);
+      const found = new Set(result.stdout.split('\n').map(line => line.trim()));
+      return { rg: found.has('rg'), gnuGrep: found.has('gnu-grep'), git: found.has('git') };
+    }));
+    // Only a successful probe is cached; a failed one (e.g. the sandbox wasn't
+    // ready) is retried on the next search instead of pinning the slow path.
+    return check.catch(() => {
+      if (this.toolsCheck === check) this.toolsCheck = undefined;
+      return { rg: false, gnuGrep: false, git: false };
+    });
   }
 
   private async grepWithRipgrep(abs: string, options: FilesystemGrepOptions): Promise<FilesystemGrepResult[]> {

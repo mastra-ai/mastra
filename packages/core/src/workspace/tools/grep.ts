@@ -401,6 +401,14 @@ Usage:
         // Format native capability results with the same host-side filtering
         // (gitignore/glob/hidden/.git/text) and limits as the walk path.
         if (nativeResults) {
+          // Providers may return ignored files; load the .gitignore files
+          // between searchPath and each result before filtering.
+          await workspaceIgnore.addParentsOf(
+            nativeResults.map(result => {
+              const rel = result.path.replace(/^\.\//, '');
+              return searchPath.endsWith('/') ? `${searchPath}${rel}` : `${searchPath}/${rel}`;
+            }),
+          );
           for (const result of nativeResults) {
             if (truncated) break;
 

@@ -822,6 +822,51 @@ describe('workspace_grep', () => {
     expect(result).toContain('repo/src/app.ts');
   });
 
+  it('applies .gitignore files below the search path to native grep results', async () => {
+    await fs.mkdir(path.join(tempDir, 'repo', 'pkg'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'repo', '.gitignore'), 'dist/\n');
+    await fs.writeFile(path.join(tempDir, 'repo', 'pkg', '.gitignore'), 'gen/\n');
+    class NativeGrepFilesystem extends LocalFilesystem {
+      async grep(): Promise<FilesystemGrepResult[]> {
+        const match = [{ line: 1, column: 0, text: 'findme' }];
+        return [
+          { path: 'repo/src/app.ts', matches: match },
+          { path: 'repo/dist/app.js', matches: match },
+          { path: 'repo/pkg/gen/out.ts', matches: match },
+          { path: 'repo/pkg/src/lib.ts', matches: match },
+        ];
+      }
+    }
+    const workspace = new Workspace({ filesystem: new NativeGrepFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' }, { workspace });
+
+    expect(result).toContain('2 matches across 2 files');
+    expect(result).toContain('repo/src/app.ts');
+    expect(result).toContain('repo/pkg/src/lib.ts');
+    expect(result).not.toContain('app.js');
+    expect(result).not.toContain('out.ts');
+  });
+
+  it('lets a deeper .gitignore re-include what a parent ignores', async () => {
+    await fs.mkdir(path.join(tempDir, 'repo', 'logs'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'repo', '.gitignore'), '*.log\n');
+    await fs.writeFile(path.join(tempDir, 'repo', 'logs', '.gitignore'), '!keep.log\n');
+    await fs.writeFile(path.join(tempDir, 'repo', 'logs', 'keep.log'), 'findme');
+    await fs.writeFile(path.join(tempDir, 'repo', 'logs', 'drop.log'), 'findme');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir, textExtensions: ['.log'] }),
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' }, { workspace });
+
+    expect(result).toContain('1 match across 1 file');
+    expect(result).toContain('repo/logs/keep.log');
+    expect(result).not.toContain('drop.log');
+  });
+
   it('should not search files with an unregistered extension by default', async () => {
     await fs.writeFile(path.join(tempDir, 'a.sasx'), 'findme');
     const workspace = new Workspace({

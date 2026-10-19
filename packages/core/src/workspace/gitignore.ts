@@ -29,6 +29,12 @@ export interface WorkspaceIgnore {
   addListings(
     listings: Array<[directory: string, entries: readonly Pick<FileEntry, 'name' | 'type'>[] | undefined]>,
   ): Promise<void>;
+  /**
+   * Read the `.gitignore` of every directory between the target and each of
+   * `filePaths`, for results that didn't come from a walk (native grep).
+   * Directories already ignored are not read into.
+   */
+  addParentsOf(filePaths: readonly string[]): Promise<void>;
 }
 
 export interface LoadWorkspaceIgnoreOptions {
@@ -72,16 +78,26 @@ export async function loadWorkspaceIgnore(
       { concurrency: GITIGNORE_READ_CONCURRENCY },
     );
   };
+  // Like git, a deeper .gitignore overrides a shallower one, so `!keep.log`
+  // in a subdirectory re-includes a file a parent's `*.log` ignored.
   const matchesRules = (path: string, isDirectory: boolean): boolean => {
     const key = pathKey(path);
+    const applicable: Array<[relative: string, ig: ReturnType<typeof ignore>]> = [];
     for (const [directory, ig] of rules) {
       let relative: string;
       if (directory === '') relative = key;
       else if (key.startsWith(`${directory}/`)) relative = key.slice(directory.length + 1);
       else continue;
-      if (relative && ig.ignores(isDirectory ? `${relative}/` : relative)) return true;
+      if (relative) applicable.push([isDirectory ? `${relative}/` : relative, ig]);
     }
-    return false;
+    applicable.sort(([a], [b]) => b.length - a.length);
+    let ignored = false;
+    for (const [relative, ig] of applicable) {
+      const result = ig.test(relative);
+      if (result.ignored) ignored = true;
+      else if (result.unignored) ignored = false;
+    }
+    return ignored;
   };
 
   let targetIsIgnored = false;
@@ -94,12 +110,11 @@ export async function loadWorkspaceIgnore(
     targetIsIgnored = pathKey(target) !== '' && matchesRules(target, true);
   }
   const applyGitignore = useGitignore && !targetIsIgnored;
+  const isIgnored = (path: string, isDirectory: boolean) =>
+    (skipNodeModules && NODE_MODULES.test(pathKey(path))) || (applyGitignore && matchesRules(path, isDirectory));
 
   return {
-    ignores(path, isDirectory) {
-      if (skipNodeModules && NODE_MODULES.test(pathKey(path))) return true;
-      return applyGitignore && matchesRules(path, isDirectory);
-    },
+    ignores: isIgnored,
     async addListings(listings) {
       if (!applyGitignore) return;
       await addFrom(
@@ -107,6 +122,24 @@ export async function loadWorkspaceIgnore(
           .filter(([, entries]) => entries?.some(entry => entry.type === 'file' && entry.name === '.gitignore'))
           .map(([directory]) => directory),
       );
+    },
+    async addParentsOf(filePaths) {
+      if (!applyGitignore) return;
+      const targetKey = pathKey(target);
+      const byDepth = new Map<number, Set<string>>();
+      for (const filePath of filePaths) {
+        for (const directory of ancestorDirectories(filePath).slice(1)) {
+          const key = pathKey(directory);
+          if (key === targetKey || (targetKey && !key.startsWith(`${targetKey}/`))) break;
+          const depth = key.split('/').length;
+          if (!byDepth.has(depth)) byDepth.set(depth, new Set());
+          byDepth.get(depth)!.add(directory);
+        }
+      }
+      // Shallowest first, so a directory a parent ignores is never read into.
+      for (const depth of [...byDepth.keys()].sort((a, b) => a - b)) {
+        await addFrom([...byDepth.get(depth)!].filter(directory => !isIgnored(directory, true)));
+      }
     },
   };
 }
