@@ -216,20 +216,20 @@
   }
 
   svg.lucide:is(
-      .size-5,
-      .size-6,
-      .size-7,
-      .size-8,
-      .size-10,
-      .size-icon-lg,
-      .h-5,
-      .h-6,
-      .h-7,
-      .h-8,
-      .h-10,
-      [width='18'],
-      [width='20']
-    ),
+    .size-5,
+    .size-6,
+    .size-7,
+    .size-8,
+    .size-10,
+    .size-icon-lg,
+    .h-5,
+    .h-6,
+    .h-7,
+    .h-8,
+    .h-10,
+    [width='18'],
+    [width='20']
+  ),
   :is(
       [class~='[&>svg]:size-5'],
       [class~='[&_svg]:size-5'],
