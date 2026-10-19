@@ -418,6 +418,9 @@ describe('approval', () => {
         'factory_start_session',
         'factory_answer_approval',
         'factory_switch_session_model',
+        'factory_list_side_sessions',
+        'factory_subscribe_session',
+        'factory_unsubscribe_session',
       ].sort(),
     );
   });
