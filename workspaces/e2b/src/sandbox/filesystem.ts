@@ -274,7 +274,9 @@ export class E2BSandboxFilesystem extends MastraFilesystem {
   /**
    * Run an operation with each files call wrapped in `retryOnDead`, so a
    * sandbox that died mid-operation is restarted and only the call that failed
-   * runs again; the calls before it are never replayed.
+   * runs again; the calls before it are never replayed. If the sandbox was
+   * killed and replaced rather than paused, the rest of a multi-call operation
+   * (a recursive copy) runs against the new sandbox's disk.
    */
   async #run<T>(fn: (files: FilesCalls) => Promise<T>): Promise<T> {
     await this.#sandbox.ensureRunning();
