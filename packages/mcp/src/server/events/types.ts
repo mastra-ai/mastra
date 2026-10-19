@@ -192,6 +192,13 @@ export interface MCPServerWebhookOptions {
   };
   /** Undelivered events held per subscription before the oldest are dropped and a `gap` is sent. Defaults to 1000. */
   maxPending?: number;
+  /**
+   * Most webhook subscriptions this process keeps, across all callers. A new subscription past
+   * the limit is rejected with -32025; refreshing an existing one is not. Defaults to 1000.
+   */
+  maxSubscriptions?: number;
+  /** Most webhook subscriptions one authenticated caller can hold. Defaults to 100. */
+  maxSubscriptionsPerPrincipal?: number;
   /** How long deliveries are signed with both the old and the new secret after a rotation. Defaults to 5 minutes. */
   secretGraceMs?: number;
   /** Sends one POST. Defaults to `node:http`/`node:https`, connecting to the validated address. */

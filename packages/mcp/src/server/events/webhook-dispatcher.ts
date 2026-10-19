@@ -46,6 +46,8 @@ interface Settings {
   suspendFailureRate: number;
   maxPending: number;
   secretGraceMs: number;
+  maxSubscriptions: number;
+  maxSubscriptionsPerPrincipal: number;
 }
 
 function resolveSettings(options: MCPServerWebhookOptions): Settings {
@@ -65,6 +67,8 @@ function resolveSettings(options: MCPServerWebhookOptions): Settings {
     suspendFailureRate: options.suspend?.failureRate ?? 0.95,
     maxPending: options.maxPending ?? 1000,
     secretGraceMs: options.secretGraceMs ?? 5 * MINUTE,
+    maxSubscriptions: options.maxSubscriptions ?? 1000,
+    maxSubscriptionsPerPrincipal: options.maxSubscriptionsPerPrincipal ?? 100,
   };
 }
 
@@ -183,12 +187,13 @@ export class WebhookDispatcher {
   ): Promise<SubscribeEventsResult> {
     const url = params.delivery.url;
     const id = WebhookDispatcher.subscriptionId({ principal, url, name: event.name, arguments: args });
+    if (!this.states.has(id)) this.assertCapacity(principal);
     const resolved = await this.resolveUrl(url);
 
     const grantMs = this.grantTtl(params.ttlMs);
     if (!this.isVerified(principal, url, resolved.url)) {
       await this.verify(id, params.delivery.secret, resolved);
-      this.verified.set(`${principal}\n${url}`, Date.now() + this.settings.verificationTtlMs);
+      this.rememberVerified(`${principal}\n${url}`);
     }
 
     const now = Date.now();
@@ -243,6 +248,28 @@ export class WebhookDispatcher {
       cursor: state.watermark,
       ...(replay.truncated ? { truncated: true } : {}),
     };
+  }
+
+  private assertCapacity(principal: string): void {
+    const { maxSubscriptions, maxSubscriptionsPerPrincipal } = this.settings;
+    let held = 0;
+    for (const state of this.states.values()) if (state.record.principal === principal) held++;
+    if (this.states.size >= maxSubscriptions || held >= maxSubscriptionsPerPrincipal) {
+      throw new ProtocolError(EVENTS_ERROR_CODES.ResourceExhausted, 'Too many webhook subscriptions');
+    }
+  }
+
+  /** Records a verified `(principal, url)` pair, dropping expired pairs and the oldest past a cap. */
+  private rememberVerified(key: string): void {
+    const now = Date.now();
+    for (const [entry, until] of this.verified) if (until <= now) this.verified.delete(entry);
+    this.verified.delete(key);
+    this.verified.set(key, now + this.settings.verificationTtlMs);
+    const limit = this.settings.maxSubscriptions * 2;
+    for (const entry of this.verified.keys()) {
+      if (this.verified.size <= limit) break;
+      this.verified.delete(entry);
+    }
   }
 
   private async persist(record: WebhookSubscriptionRecord): Promise<void> {

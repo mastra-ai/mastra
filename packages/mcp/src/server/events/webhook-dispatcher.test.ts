@@ -236,6 +236,36 @@ describe('WebhookDispatcher verification', () => {
     expect(h.controls('verification')).toHaveLength(3);
   });
 
+  it('rejects new subscriptions past the global and per-principal caps with -32025, but still refreshes', async () => {
+    const h = create({ maxSubscriptions: 3, maxSubscriptionsPerPrincipal: 2 });
+    await h.subscribe({ arguments: { project: 'a' } });
+    await h.subscribe({ arguments: { project: 'b' } });
+    const perPrincipal = await rejection(h.subscribe({ arguments: { project: 'c' } }));
+    expect(perPrincipal).toBeInstanceOf(ProtocolError);
+    expect((perPrincipal as ProtocolError).code).toBe(-32025);
+    await expect(h.subscribe({ arguments: { project: 'a' } })).resolves.toHaveProperty('deliveryStatus');
+
+    await h.subscribe({ principal: 'bob' });
+    const global = await rejection(h.subscribe({ principal: 'carol' }));
+    expect((global as ProtocolError).code).toBe(-32025);
+
+    await h.dispatcher.unsubscribe({ principal: 'alice', url: URL_A, name: 'tasks', arguments: { project: 'b' } });
+    await expect(h.subscribe({ principal: 'carol' })).resolves.toHaveProperty('id');
+  });
+
+  it('forgets expired verified pairs and keeps at most twice maxSubscriptions of them', async () => {
+    const h = create({ maxSubscriptions: 2, verificationTtlMs: 60_000 });
+    const verified = h.dispatcher['verified'] as Map<string, number>;
+    for (const principal of ['p1', 'p2', 'p3', 'p4', 'p5']) {
+      await h.subscribe({ principal });
+      await h.dispatcher.unsubscribe({ principal, url: URL_A, name: 'tasks', arguments: {} });
+    }
+    expect(verified.size).toBe(4);
+    await vi.advanceTimersByTimeAsync(60_001);
+    await h.subscribe({ principal: 'p6' });
+    expect([...verified.keys()]).toEqual([`p6\n${URL_A}`]);
+  });
+
   it('skips the handshake for allowlisted URLs', async () => {
     const h = create({ allowedUrls: url => url.hostname === 'hooks.example.com' });
     await h.subscribe();

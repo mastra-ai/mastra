@@ -1899,6 +1899,21 @@ The server enforces these rules:
       'Undelivered occurrences kept per subscription. On overflow the oldest are dropped and the client receives a `gap` body, so it reports `truncated: true`.',
   },
   {
+    name: 'maxSubscriptions',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description:
+      'Most webhook subscriptions this process keeps across all callers. New subscriptions past the limit are rejected with `-32025`; refreshing an existing one still works.',
+  },
+  {
+    name: 'maxSubscriptionsPerPrincipal',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '100',
+    description: 'Most webhook subscriptions one authenticated caller can hold.',
+  },
+  {
     name: 'secretGraceMs',
     type: 'number',
     isOptional: true,
