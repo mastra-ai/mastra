@@ -318,110 +318,118 @@ describe('isStepResultStub', () => {
     expect(isStepResultStub(ok(1))).toBe(false);
     expect(isStepResultStub(null)).toBe(false);
   });
+});
 
-  describe('overlapping writes', () => {
-    /** A store whose writes resolve only when the test says so. */
-    function heldStore() {
-      const held: { resolve: () => void }[] = [];
-      const persistWorkflowSnapshot = vi.fn(
-        (_args: any) => new Promise<void>(resolve => held.push({ resolve: () => resolve() })),
-      );
-      return { store: { persistWorkflowSnapshot } as unknown as WorkflowsStorage, persistWorkflowSnapshot, held };
+describe('RunJournal overlapping writes', () => {
+  /** A store whose writes settle only when the test says so. */
+  function heldStore() {
+    const held: { resolve: () => void; reject: (error: Error) => void }[] = [];
+    const calls: { checkpoint: boolean; stepIds: string[]; state: boolean }[] = [];
+    const hold = (checkpoint: boolean) => (args: any) => {
+      calls.push({ checkpoint, stepIds: Object.keys(args.steps), state: args.state !== undefined });
+      return new Promise<void>((resolve, reject) => held.push({ resolve: () => resolve(), reject }));
+    };
+    const store = {
+      writeWorkflowRunCheckpoint: vi.fn(hold(true)),
+      appendWorkflowRunEntries: vi.fn(hold(false)),
+    } as unknown as WorkflowsStorage;
+    return { store, calls, held };
+  }
+
+  async function settle(writes: Promise<void>[], held: { resolve: () => void }[], order: number[]) {
+    for (const i of order) {
+      held[i]!.resolve();
+      await writes[i];
     }
+  }
 
-    async function settle(writes: Promise<void>[], held: { resolve: () => void }[], order: number[]) {
-      for (const i of order) {
-        held[i]!.resolve();
-        await writes[i];
-      }
-    }
+  /** Writes and settles at once, returning what the write sent. */
+  async function writeNow(journal: RunJournal, store: ReturnType<typeof heldStore>, context: Record<string, unknown>) {
+    const write = journal.write({ snapshot: snapshot(context) });
+    store.held.at(-1)!.resolve();
+    await write;
+    return store.calls.at(-1);
+  }
 
-    it.each([
-      ['older first', [0, 1]],
-      ['newer first', [1, 0]],
-    ])('resends a step two writes carried with different values (%s)', async (_, order) => {
-      const { store, persistWorkflowSnapshot, held } = heldStore();
-      const journal = new RunJournal({});
-      const context: Record<string, unknown> = { x: ok(1) };
+  it.each([
+    ['older first', [0, 1]],
+    ['newer first', [1, 0]],
+  ])('resends a step two writes carried with different values (%s)', async (_, order) => {
+    const held = heldStore();
+    const journal = journalFor(held.store, {});
+    const context: Record<string, unknown> = { x: ok(1) };
 
-      const writes = [write(journal, store, snapshot(context))];
-      context.x = ok(2);
-      writes.push(write(journal, store, snapshot(context)));
-      await settle(writes, held, order);
+    const writes = [journal.write({ snapshot: snapshot(context) })];
+    context.x = ok(2);
+    writes.push(journal.write({ snapshot: snapshot(context) }));
+    await settle(writes, held.held, order);
 
-      const next = write(journal, store, snapshot(context));
-      held[2]!.resolve();
-      await next;
-      expect(persistWorkflowSnapshot.mock.calls[2]![0].changes).toEqual({ stepIds: ['x'], state: false });
+    expect(await writeNow(journal, held, context)).toEqual({ checkpoint: false, stepIds: ['x'], state: false });
+    expect(await writeNow(journal, held, context)).toEqual({ checkpoint: false, stepIds: [], state: false });
+  });
 
-      const after = write(journal, store, snapshot(context));
-      held[3]!.resolve();
-      await after;
-      expect(persistWorkflowSnapshot.mock.calls[3]![0].changes).toEqual({ stepIds: [], state: false });
-    });
+  it('records a step two writes carried with the same value', async () => {
+    const held = heldStore();
+    const journal = journalFor(held.store, {});
+    const context: Record<string, unknown> = { x: ok(1) };
 
-    it('records a step two writes carried with the same value', async () => {
-      const { store, persistWorkflowSnapshot, held } = heldStore();
-      const journal = new RunJournal({});
-      const context: Record<string, unknown> = { x: ok(1) };
+    const writes = [journal.write({ snapshot: snapshot(context) })];
+    context.y = ok(2);
+    writes.push(journal.write({ snapshot: snapshot(context) }));
+    expect(held.calls[1]).toEqual({ checkpoint: false, stepIds: ['x', 'y'], state: false });
+    await settle(writes, held.held, [1, 0]);
 
-      const writes = [write(journal, store, snapshot(context))];
-      context.y = ok(2);
-      writes.push(write(journal, store, snapshot(context)));
-      expect(persistWorkflowSnapshot.mock.calls[1]![0].changes).toEqual({ stepIds: ['x', 'y'], state: false });
-      await settle(writes, held, [1, 0]);
+    expect(await writeNow(journal, held, context)).toEqual({ checkpoint: false, stepIds: [], state: false });
+  });
 
-      const next = write(journal, store, snapshot(context));
-      held[2]!.resolve();
-      await next;
-      expect(persistWorkflowSnapshot.mock.calls[2]![0].changes).toEqual({ stepIds: [], state: false });
-    });
+  it.each([
+    ['checkpoint first', [0, 1]],
+    ['append first', [1, 0]],
+  ])('resends the steps and state a checkpoint may have wiped (%s)', async (_, order) => {
+    const held = heldStore();
+    const journal = journalFor(held.store);
+    const context: Record<string, unknown> = { a: ok(1) };
 
-    it.each([
-      ['checkpoint first', [0, 1]],
-      ['append first', [1, 0]],
-    ])('writes a checkpoint after a write overlapped one (%s)', async (_, order) => {
-      const { store, persistWorkflowSnapshot, held } = heldStore();
-      const journal = new RunJournal();
-      const context: Record<string, unknown> = { a: ok(1) };
+    const writes = [journal.write({ snapshot: snapshot(context) })];
+    context.b = ok(2);
+    writes.push(journal.write({ snapshot: snapshot(context) }));
+    expect(held.calls.map(call => call.checkpoint)).toEqual([true, false]);
+    await settle(writes, held.held, order);
 
-      const writes = [write(journal, store, snapshot(context))];
-      context.b = ok(2);
-      writes.push(write(journal, store, snapshot(context)));
-      expect(persistWorkflowSnapshot.mock.calls.map(([args]) => args.changes)).toEqual([
-        undefined,
-        { stepIds: ['a', 'b'], state: false },
-      ]);
-      await settle(writes, held, order);
+    // `a` went out with the same value in both, so only `b` is in doubt.
+    expect(await writeNow(journal, held, context)).toEqual({ checkpoint: false, stepIds: ['b'], state: true });
+    expect(await writeNow(journal, held, context)).toEqual({ checkpoint: false, stepIds: [], state: false });
+  });
 
-      const next = write(journal, store, snapshot(context));
-      held[2]!.resolve();
-      await next;
-      expect(persistWorkflowSnapshot.mock.calls[2]![0].changes).toBeUndefined();
+  it('keeps unsure steps in memory, so evicting after an overlap needs no checkpoint', async () => {
+    const held = heldStore();
+    const journal = journalFor(held.store);
+    const context: Record<string, any> = { a: ok(1) };
 
-      const after = write(journal, store, snapshot(context));
-      held[3]!.resolve();
-      await after;
-      expect(persistWorkflowSnapshot.mock.calls[3]![0].changes).toEqual({ stepIds: [], state: false });
-    });
+    const writes = [journal.write({ snapshot: snapshot(context) })];
+    context.b = ok(2);
+    writes.push(journal.write({ snapshot: snapshot(context) }));
+    await settle(writes, held.held, [1, 0]);
 
-    it('marks steps unsure even when the other write fails', async () => {
-      const { store, persistWorkflowSnapshot } = fakeStore();
-      const journal = new RunJournal({});
-      const context: Record<string, unknown> = { x: ok(1) };
-      let fail!: (error: Error) => void;
-      persistWorkflowSnapshot.mockImplementationOnce(() => new Promise<void>((_, reject) => (fail = reject)));
+    journal.evict(context, []);
+    expect(isStepResultStub(context.a)).toBe(true);
+    expect(context.b).toEqual(ok(2));
+    expect(await writeNow(journal, held, context)).toEqual({ checkpoint: false, stepIds: ['b'], state: true });
+  });
 
-      const first = write(journal, store, snapshot(context));
-      context.x = ok(2);
-      await write(journal, store, snapshot(context));
-      // A failed write may still have committed, after the other one.
-      fail(new Error('timeout'));
-      await expect(first).rejects.toThrow('timeout');
+  it('marks steps unsure even when the other write fails', async () => {
+    const held = heldStore();
+    const journal = journalFor(held.store, {});
+    const context: Record<string, unknown> = { x: ok(1) };
 
-      await write(journal, store, snapshot(context));
-      expect(persistWorkflowSnapshot.mock.calls[2]![0].changes).toEqual({ stepIds: ['x'], state: false });
-    });
+    const first = journal.write({ snapshot: snapshot(context) });
+    context.x = ok(2);
+    await writeNow(journal, held, context);
+    // A failed write may still have committed, after the other one.
+    held.held[0]!.reject(new Error('timeout'));
+    await expect(first).rejects.toThrow('timeout');
+
+    expect(await writeNow(journal, held, context)).toEqual({ checkpoint: false, stepIds: ['x'], state: false });
   });
 });
 

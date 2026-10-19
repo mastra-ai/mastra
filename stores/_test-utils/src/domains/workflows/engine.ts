@@ -188,12 +188,22 @@ export function createWorkflowEngineTests({
 
     it('sends only the changed steps on each v2 write', async () => {
       const STEPS = 10;
-      const writes: { status: string; changes?: { stepIds: string[]; state: boolean } }[] = [];
-      const persist = store.persistWorkflowSnapshot;
-      store.persistWorkflowSnapshot = function (args) {
-        if (args.storageVersion === 2) writes.push({ status: args.snapshot.status, changes: args.changes });
-        return persist.call(this, args);
+      const writes: { checkpoint: boolean; status: string; stepIds: string[]; state: boolean }[] = [];
+      const { writeWorkflowRunCheckpoint, appendWorkflowRunEntries, persistWorkflowSnapshot } = store;
+      store.writeWorkflowRunCheckpoint = function (args) {
+        writes.push({ checkpoint: true, status: args.header.status, stepIds: Object.keys(args.steps), state: true });
+        return writeWorkflowRunCheckpoint.call(this, args);
       };
+      store.appendWorkflowRunEntries = function (args) {
+        writes.push({
+          checkpoint: false,
+          status: args.header.status,
+          stepIds: Object.keys(args.steps),
+          state: args.state !== undefined,
+        });
+        return appendWorkflowRunEntries.call(this, args);
+      };
+      store.persistWorkflowSnapshot = () => Promise.reject(new Error('a v2 run wrote through persistWorkflowSnapshot'));
 
       try {
         let workflow: any = createWorkflow({
@@ -215,15 +225,16 @@ export function createWorkflowEngineTests({
         expect(result.result).toEqual({ n: STEPS });
 
         // createRun's pending write and the first running write are checkpoints; every later write is an append.
-        expect(writes.slice(0, 2).map(w => w.changes)).toEqual([undefined, undefined]);
+        expect(writes.slice(0, 2).map(w => w.checkpoint)).toEqual([true, true]);
         const appends = writes.slice(2);
         expect(appends.length).toBeGreaterThan(STEPS);
-        for (const { status, changes } of appends) {
-          expect(changes!.stepIds).toHaveLength(status === 'running' ? 1 : 0);
+        for (const { checkpoint, status, stepIds } of appends) {
+          expect(checkpoint).toBe(false);
+          expect(stepIds).toHaveLength(status === 'running' ? 1 : 0);
         }
-        expect(appends.filter(w => w.changes!.state)).toEqual([
-          { status: 'running', changes: { stepIds: ['s5'], state: true } },
-          { status: 'success', changes: { stepIds: [], state: true } },
+        expect(appends.filter(w => w.state)).toEqual([
+          { checkpoint: false, status: 'running', stepIds: ['s5'], state: true },
+          { checkpoint: false, status: 'success', stepIds: [], state: true },
         ]);
 
         const stored = await store.loadWorkflowSnapshot({ workflowName: id('sequential'), runId, storageVersion: 2 });
@@ -232,7 +243,7 @@ export function createWorkflowEngineTests({
         expect(Object.keys(stored!.context)).toEqual(['input', ...Array.from({ length: STEPS }, (_, i) => `s${i}`)]);
         expect(stored!.context[`s${STEPS - 1}`]).toMatchObject({ status: 'success', output: { n: STEPS } });
       } finally {
-        store.persistWorkflowSnapshot = persist;
+        Object.assign(store, { writeWorkflowRunCheckpoint, appendWorkflowRunEntries, persistWorkflowSnapshot });
       }
     });
   });
