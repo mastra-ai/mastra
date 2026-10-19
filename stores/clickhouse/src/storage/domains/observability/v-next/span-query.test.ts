@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@clickhouse/client';
 import type { ClickHouseClient } from '@clickhouse/client';
-import { createPreviewTests, createSpanQueryTests } from '@internal/storage-test-utils';
+import { createPreviewTests, createSpanQueryTests, createThreadQueryTests } from '@internal/storage-test-utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { SpanType } from '@mastra/core/observability';
 import { planSpanQuery, TraceQueryExecutionError, TraceQueryResourceLimitError } from '@mastra/core/storage';
@@ -30,6 +30,16 @@ afterAll(async () => {
   await admin.close();
 });
 createSpanQueryTests(() => storage, { completionOnly: true, immutableStartedAt: true });
+createThreadQueryTests(() => storage, {
+  writeSpanWithoutPreviews: async span => {
+    await client.insert({
+      table: TABLE_SPAN_EVENTS,
+      values: [{ ...spanRecordToRow(span), inputPreview: null, outputPreview: null, errorPreview: null }],
+      format: 'JSONEachRow',
+      clickhouse_settings: CH_INSERT_SETTINGS,
+    });
+  },
+});
 createPreviewTests(() => storage, {
   // The row as the writer stored it before the preview columns existed.
   writeSpanWithoutPreviews: async span => {

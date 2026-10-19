@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { createPreviewTests, createSpanQueryTests } from '@internal/storage-test-utils';
+import { createPreviewTests, createSpanQueryTests, createThreadQueryTests } from '@internal/storage-test-utils';
 import { planSpanQuery } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -25,6 +25,14 @@ afterAll(async () => {
   await pool.end();
 });
 createSpanQueryTests(() => storage);
+createThreadQueryTests(() => storage, {
+  writeSpanWithoutPreviews: async span => {
+    const insert = buildInsert(schemaName, TABLE_SPAN_EVENTS, [
+      { ...spanRecordToRow(span), inputPreview: null, outputPreview: null, errorPreview: null },
+    ])!;
+    await client.query(insert.text, insert.values);
+  },
+});
 createPreviewTests(() => storage, {
   // A row as written before the preview columns existed: payloads set, previews NULL.
   writeSpanWithoutPreviews: async span => {

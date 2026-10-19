@@ -112,6 +112,53 @@ The additional identity, context and parent/root entity filters require an updat
 
 DuckDB returns `null` for parent/root entity type, ID and name, and for `executionSource`. Equality filters on these fields match no spans. Parent/root entity version IDs remain available.
 
+## Querying threads
+
+`queryTraceThreads()` returns one row per thread using completed logical traces. Choose exactly one time selector:
+
+```typescript
+const result = await mastraClient.queryTraceThreads({
+  timeRange: {
+    traces: {
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-02T00:00:00.000Z',
+    },
+  },
+  where: { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } },
+  orderBy: [{ field: 'endedAt', direction: 'desc' }],
+  page: { limit: 100 },
+})
+
+for (const thread of result.threads) {
+  console.log(thread.firstTraceId, thread.lastTraceId, thread.traceCount, thread.outputPreview)
+}
+```
+
+`timeRange.traces` finds threads with a trace that started in the window. To select by thread activity, use `timeRange.threads: { field: 'startedAt' | 'endedAt', from, to }` instead. The range includes `from` and excludes `to`.
+
+Rows include the full retained history within the authorized scope, including traces before and after the window. Filters apply to these complete rows. An `environment` filter checks the first trace's environment.
+
+| Returned fields | Meaning |
+| - | - |
+| `threadId`, `organizationId` | Thread identity. Equal thread IDs in different organizations remain separate. |
+| `firstTraceId`, `lastTraceId` | Earliest and latest trace by start time. Equal start times use trace ID as a deterministic tie-breaker. |
+| `resourceId`, `userId`, `runId`, `sessionId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | First-trace context, or `null` when missing. |
+| `entityType`, `entityId`, `entityName`, `entityVersionId` | First-trace entity. |
+| `startedAt`, `endedAt` | Earliest start and maximum end time across the thread. |
+| `status` | `success` or `error` from the last-started trace. |
+| `traceCount` | Number of logical traces in the thread. |
+| `inputPreview` | First trace's input preview. |
+| `outputPreview`, `errorPreview` | Last-started trace's previews. |
+| `timeToFirstChunkMs`, `model`, `provider` | First root agent's time to first chunk in milliseconds and its first model generation's model/provider. Values are nullable. |
+
+An earlier-started trace can finish last. In that case, it supplies `endedAt`, while the last-started trace still supplies status and output/error previews. Missing first-trace values aren't replaced with values from a later trace.
+
+String identity, context and entity fields support `eq`, `ne`, `in`, `notIn`, `exists` and `notExists`. Status supports equality and membership. Activity timestamps and `timeToFirstChunkMs` support comparisons, membership and presence. `traceCount` supports comparisons. Combine predicates with `and`, `or` and `not`. Model/provider and previews are display-only.
+
+Ordering accepts exactly one of `startedAt` or `endedAt`, with direction `asc` or `desc`. The default is `endedAt` descending. Pages default to 100 rows and allow at most 1,000. Pass `result.page.next` as `page.after` with the same time selector, filters, scope and ordering. Pagination reflects live data, so new traces can move a thread between pages.
+
+Check `capabilities.threadQueryRows` from `getObservabilityCapabilities()` before using this contract. A missing or false value means full thread rows aren't available. Older core or storage packages return a structured `501` for these requests. Legacy identity requests remain supported for mixed package versions.
+
 ## Querying traces
 
 `queryTraces()` finds completed logical traces using trace fields and conditions over related spans. Every query requires an ISO timestamp range.

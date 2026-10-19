@@ -1,4 +1,4 @@
-import { createSpanQueryTests, makeSpan } from '@internal/storage-test-utils';
+import { createSpanQueryTests, createThreadQueryTests, makeSpan } from '@internal/storage-test-utils';
 import type { ObservabilityStorage } from '@mastra/core/storage';
 import { planSpanQuery } from '@mastra/core/storage';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -14,6 +14,16 @@ beforeAll(async () => {
 });
 afterAll(() => store.close());
 createSpanQueryTests(() => storage, { eventSourced: true });
+createThreadQueryTests(() => storage, {
+  writeSpanWithoutPreviews: async span => {
+    await storage.batchCreateSpans({ records: [span] });
+    await db.execute(
+      `UPDATE span_events SET inputPreview = NULL, outputPreview = NULL, errorPreview = NULL,
+      hasInputPayload = NULL, hasOutputPayload = NULL, hasErrorPayload = NULL WHERE traceId = ? AND spanId = ?`,
+      [span.traceId, span.spanId],
+    );
+  },
+});
 
 it('returns null and applies null predicates for fields not stored by DuckDB', async () => {
   const startedAt = new Date();

@@ -671,6 +671,34 @@ export const SPAN_QUERY_FIELD_REGISTRY = {
 
 export type SpanQueryField = keyof typeof SPAN_QUERY_FIELD_REGISTRY;
 
+/** Direct thread-row predicates apply after full-history representative selection. */
+export const THREAD_QUERY_FIELD_REGISTRY = {
+  threadId: stringField(false),
+  organizationId: stringField(false),
+  firstTraceId: stringField(false),
+  lastTraceId: stringField(false),
+  resourceId: stringField(false),
+  userId: stringField(false),
+  entityType: stringField(false),
+  entityId: stringField(false),
+  entityName: stringField(false),
+  entityVersionId: stringField(false),
+  runId: stringField(false),
+  sessionId: stringField(false),
+  requestId: stringField(false),
+  serviceName: stringField(false),
+  experimentId: stringField(false),
+  environment: stringField(false),
+  executionSource: stringField(false),
+  status: { ...stringField(false), operators: ['eq', 'ne', 'in', 'notIn'] },
+  startedAt: orderedField('timestamp'),
+  endedAt: orderedField('timestamp'),
+  traceCount: { ...orderedField('number'), operators: ['eq', 'ne', 'lt', 'lte', 'gt', 'gte'] },
+  timeToFirstChunkMs: orderedField('number'),
+} as const satisfies Record<string, FieldRule>;
+
+export type ThreadQueryField = keyof typeof THREAD_QUERY_FIELD_REGISTRY;
+
 const METADATA_FIELD_RULE: FieldRule = {
   valueKind: 'string',
   operators: TRACE_QUERY_STRING_OPERATORS,
@@ -683,6 +711,7 @@ export type TraceQuerySpanField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['spa
 export type TraceQueryScoreField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['scores'];
 export type TraceQueryFeedbackField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['feedback'];
 export type TraceQueryCanonicalField =
+  | ThreadQueryField
   | SpanQueryField
   | TraceQueryField
   | TraceQuerySpanField
@@ -922,7 +951,7 @@ export function resolveTraceQueryTimeoutMs(timeoutMs = TRACE_QUERY_DEFAULT_TIMEO
   return timeoutMs;
 }
 
-type PredicateContext = TraceQueryPredicateScope | 'spanQuery';
+type PredicateContext = TraceQueryPredicateScope | 'spanQuery' | 'threadQuery';
 
 interface PlannerState {
   nodes: number;
@@ -1453,6 +1482,15 @@ export function planSpanQuerySelectionPredicate(
   return planPredicate(where, 'spanQuery', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
 }
 
+/** @internal Shares scalar validation without admitting related-trace predicates. */
+export function planThreadQuerySelectionPredicate(
+  where: TraceQueryScalarPredicate,
+  issues: TraceQueryIssue[],
+): TrustedTraceQueryScalarPredicate | undefined {
+  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  return planPredicate(where, 'threadQuery', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
+}
+
 function planPredicate(
   predicate: TraceQueryPredicate | TraceQueryScalarPredicate,
   context: PredicateContext,
@@ -1639,6 +1677,7 @@ function planPredicate(
 }
 
 function rulesForContext(context: PredicateContext): Record<string, FieldRule> {
+  if (context === 'threadQuery') return THREAD_QUERY_FIELD_REGISTRY;
   if (context === 'spanQuery') return SPAN_QUERY_FIELD_REGISTRY;
   return TRACE_QUERY_FIELD_REGISTRY[context];
 }
