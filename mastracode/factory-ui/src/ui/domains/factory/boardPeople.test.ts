@@ -195,7 +195,7 @@ describe('board person filters', () => {
     expect(workItemMatchesPeople(item, activityPage, withPeopleFolded(stored, hubot), hubot)).toBe(true);
   });
 
-  it('offers Reviewer only on review boards and ignores the retired relevance parameter', () => {
+  it('offers Review requested only on review boards and ignores the retired relevance parameter', () => {
     const work = picks(
       [
         ['reviewer', 'github:monalisa'],

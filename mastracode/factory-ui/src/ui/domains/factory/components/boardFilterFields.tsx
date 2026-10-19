@@ -32,7 +32,7 @@ const FIELD_PRESENTATION: Record<BoardFilterFieldId, { label: string; icon: Luci
   teammate: { label: 'Involves', icon: UsersRound },
   author: { label: 'Author', icon: UserRoundPen },
   assignee: { label: 'Assignee', icon: UserRoundCheck },
-  reviewer: { label: 'Reviewer', icon: UserRoundSearch },
+  reviewer: { label: 'Review requested', icon: UserRoundSearch },
   worked: { label: 'Worked on by', icon: Activity },
   label: { label: 'Label', icon: Tag },
 };

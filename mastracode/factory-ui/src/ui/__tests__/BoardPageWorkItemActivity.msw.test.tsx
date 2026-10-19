@@ -522,13 +522,13 @@ describe('Board work-item activity', () => {
     expect(screen.queryByText('Worked PR')).not.toBeInTheDocument();
 
     await togglePropertyOption(user, 'Board properties', 'Involves', /octocat/);
-    await togglePropertyOption(user, 'Board properties', 'Reviewer', /octocat/);
+    await togglePropertyOption(user, 'Board properties', 'Review requested', /octocat/);
 
     expect(screen.queryByText('Authored PR')).not.toBeInTheDocument();
     expect(screen.queryByText('Assigned PR')).not.toBeInTheDocument();
     expect(screen.getByText('Requested PR')).toBeInTheDocument();
 
-    await togglePropertyOption(user, 'Board properties', 'Reviewer', /octocat/);
+    await togglePropertyOption(user, 'Board properties', 'Review requested', /octocat/);
     await togglePropertyOption(user, 'Board properties', 'Worked on by', /You$/);
 
     expect(screen.getByText('Worked PR')).toBeInTheDocument();

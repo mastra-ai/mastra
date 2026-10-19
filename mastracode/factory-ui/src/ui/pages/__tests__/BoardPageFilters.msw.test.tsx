@@ -250,7 +250,7 @@ describe('BoardPage filters', () => {
     expect(screen.getByText('Card bug')).toBeInTheDocument();
     expect(candidateTitles()).toEqual([]);
     await openPropertiesMenu(user, MENU);
-    expect(screen.queryByRole('menuitem', { name: /^Reviewer/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /^Review requested/ })).not.toBeInTheDocument();
     await closePropertiesMenus(user);
   });
 
@@ -265,7 +265,7 @@ describe('BoardPage filters', () => {
     expect(screen.getByText('Card requested')).toBeInTheDocument();
     await togglePropertyOption(user, MENU, 'Involves', /alice/i);
     await togglePropertyOption(user, MENU, 'Author', /bob/i);
-    await togglePropertyOption(user, MENU, 'Reviewer', /alice/i);
+    await togglePropertyOption(user, MENU, 'Review requested', /alice/i);
     await waitFor(() => expect(screen.queryByText('Card unrelated')).not.toBeInTheDocument());
     expect(screen.getByTestId('board-url')).toHaveTextContent('author=github%3Abob&reviewer=github%3Aalice');
     expect(screen.getByText('Card requested')).toBeInTheDocument();
