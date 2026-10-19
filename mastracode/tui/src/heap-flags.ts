@@ -25,12 +25,12 @@ export function heapFlagRelaunchArgv(proc: {
   if (proc.env[OPT_OUT_ENV] === '1') return undefined;
   // Bun and Deno expose process.execve too, but don't take V8 flags this way.
   if (proc.versions.bun || proc.versions.deno) return undefined;
-  const options = [...proc.execArgv, ...splitNodeOptions(proc.env.NODE_OPTIONS ?? '')];
-  const missing = HEAP_FLAGS.filter(flag => {
-    const name = flag.split('=')[0]!;
-    // The flag itself, not its name inside another option's value (`--title=--max-semi-space-size`).
-    return !options.some(option => option === name || option.startsWith(`${name}=`));
-  });
+  // Option names only, with V8's underscore spelling (`--max_semi_space_size`) read as dashes.
+  const setNames = [...proc.execArgv, ...splitNodeOptions(proc.env.NODE_OPTIONS ?? '')].map(option =>
+    option.split('=')[0]!.replaceAll('_', '-'),
+  );
+  // The flag itself counts, not its name inside another option's value (`--title=--max-semi-space-size`).
+  const missing = HEAP_FLAGS.filter(flag => !setNames.includes(flag.split('=')[0]!));
   if (missing.length === 0) return undefined;
   return [proc.execPath, ...missing, ...proc.execArgv, ...proc.argv.slice(1)];
 }

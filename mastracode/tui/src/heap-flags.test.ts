@@ -25,6 +25,9 @@ describe('heapFlagRelaunchArgv', () => {
     expect(heapFlagRelaunchArgv(proc({ execArgv: ['--max-semi-space-size=8'] }))).toBeUndefined();
     expect(heapFlagRelaunchArgv(proc({ execArgv: ['--max-semi-space-size=32'] }))).toBeUndefined();
     expect(heapFlagRelaunchArgv(proc({ env: { NODE_OPTIONS: '--max-semi-space-size=2' } }))).toBeUndefined();
+    // V8 also accepts underscores; the user's value must win over ours.
+    expect(heapFlagRelaunchArgv(proc({ env: { NODE_OPTIONS: '--max_semi_space_size=64' } }))).toBeUndefined();
+    expect(heapFlagRelaunchArgv(proc({ execArgv: ['--max_semi_space_size=64'] }))).toBeUndefined();
     expect(
       heapFlagRelaunchArgv(proc({ env: { NODE_OPTIONS: '--title="a b" --max-semi-space-size=4' } })),
     ).toBeUndefined();
