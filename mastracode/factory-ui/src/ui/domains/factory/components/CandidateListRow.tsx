@@ -31,7 +31,7 @@ export function CandidateListRow({
       title={candidate.title}
       cardRef={morph.setCardElement}
       expanded={morph.open}
-      onOpen={morph.openDetails}
+      onToggleDetails={morph.toggleDetails}
       dragPayload={candidatePayload(candidate)}
       menu={menu}
       createdAt={sourceCreatedAt(candidate.metadata)}

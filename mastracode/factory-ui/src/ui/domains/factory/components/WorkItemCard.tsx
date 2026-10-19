@@ -1,17 +1,19 @@
+import { ActivityWick } from '@mastra/playground-ui/components/Activity';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
-import { useParams } from 'react-router';
 
+import { useParams } from 'react-router';
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
 import { boardCardState } from '../boardCardState';
-import { nextBoardPhase, primaryCardMove, proposedCardRun, movingCardStatus } from '../workItemCardPresentation';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
 import { itemThreadSession } from '../boardItems';
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import type { BoardLayout } from '../boardLayout';
 import { itemBoard } from '../boardStages';
 import {
   awaitsTriageDecision,
@@ -27,18 +29,16 @@ import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import { relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
-import type { BoardLayout } from '../boardLayout';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
-import { ActivityWick } from '@mastra/playground-ui/components/Activity';
-import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
+import { nextBoardPhase, primaryCardMove, proposedCardRun, movingCardStatus } from '../workItemCardPresentation';
 import { CardDetailsHint, REVEAL_ON_CARD_HOVER } from './BoardCardParts';
 import { RelatedWorkItemLink } from './RelatedWorkItemLink';
 import { WorkItemCardRows } from './WorkItemCardRows';
 import { WorkItemDetailsPanel } from './WorkItemDetailsPanel';
+import { WorkItemListRow } from './WorkItemListRow';
 import type { WorkItemMenuProps } from './WorkItemMenuItems';
 import { WorkItemMenuItems } from './WorkItemMenuItems';
-import { WorkItemListRow } from './WorkItemListRow';
 
 export function WorkItemCard({
   item,
@@ -225,6 +225,7 @@ export function WorkItemCard({
       status={status}
       actions={actions}
       menu={<WorkItemMenuItems {...panelMenu} />}
+      layout={layout}
     />
   );
 

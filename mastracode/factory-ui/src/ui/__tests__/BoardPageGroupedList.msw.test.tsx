@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
@@ -150,5 +150,55 @@ describe('Default grouped issue list', () => {
     await act(() => router.navigate(`/factories/${FACTORY_ID}/work?item=recent-card&comment=comment-b`));
 
     await waitFor(() => expect(stageToggle('Triage')).toHaveAttribute('aria-expanded', 'true'));
+  });
+
+  it.each([
+    { width: 'wide', narrowQuery: undefined },
+    { width: 'too narrow to dock', narrowQuery: '(max-width: 1279px)' },
+  ])('toggles the details panel from its row and switches it to another row ($width)', async ({ narrowQuery }) => {
+    vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+      matches: query === narrowQuery,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    onTestFinished(() => {
+      vi.restoreAllMocks();
+    });
+    renderBoard();
+    const user = userEvent.setup();
+    const triage = await screen.findByTestId('board-column-triage');
+    const movedRow = await within(triage).findByText('Moved recently');
+    const createdRow = within(triage).getByText('Created later');
+
+    await user.click(movedRow);
+    expect(await screen.findByRole('dialog', { name: 'Moved recently' })).toBeInTheDocument();
+    await user.click(movedRow);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    await user.click(movedRow);
+    await screen.findByRole('dialog', { name: 'Moved recently' });
+    await user.click(createdRow);
+    expect(await screen.findByRole('dialog', { name: 'Created later' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Moved recently' })).not.toBeInTheDocument());
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+  });
+
+  it('closes the docked panel on Escape from its composer and puts focus back on the row', async () => {
+    renderBoard();
+    const user = userEvent.setup();
+    const triage = await screen.findByTestId('board-column-triage');
+    await user.click(await within(triage).findByText('Moved recently'));
+    const panel = await screen.findByRole('dialog', { name: 'Moved recently' });
+
+    await user.click(within(panel).getByRole('textbox', { name: 'Comment' }));
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(within(triage).getByRole('article', { name: 'Moved recently' })).toHaveFocus();
   });
 });
