@@ -49,7 +49,7 @@ function isTextLikeMimeType(mimeType: string | undefined): boolean {
 
 /**
  * Validates a single `mediaTypes` pattern. Accepts:
- * - A wildcard media type — match anything
+ * - `*` or `*​/*` — match anything
  * - `type/*` — match all subtypes of a top-level type (e.g. `image/*`)
  * - `type/subtype` — exact mime type (e.g. `application/pdf`, `application/vnd.api+json`)
  *

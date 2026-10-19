@@ -62,7 +62,8 @@ export default defineConfig({
     'no-global-assign': 'error',
     'no-import-assign': 'error',
     'no-invalid-regexp': 'error',
-    'no-irregular-whitespace': 'error',
+    // Documentation may need zero-width whitespace to keep examples inside a block comment.
+    'no-irregular-whitespace': ['error', { skipComments: true }],
     'no-iterator': 'error',
     'no-new-native-nonconstructor': 'error',
     'no-nonoctal-decimal-escape': 'error',
