@@ -298,9 +298,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
    * that must not consume input without a transport (signal drain) guard on
    * `pubsub` before draining.
    */
-  protected override emitChunk(runtime: DurableLoopRuntime, chunk: unknown): void | Promise<void> {
+  protected override emitChunk(runtime: DurableLoopRuntime, chunk: unknown, messageId?: string): void | Promise<void> {
     if (!runtime.pubsub) return;
-    return emitChunkEvent(runtime.pubsub, runtime.runId, chunk as any);
+    return emitChunkEvent(runtime.pubsub, runtime.runId, chunk as any, messageId);
   }
 
   // ── Step factories ─────────────────────────────────────────────────────
@@ -353,7 +353,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             drainPendingSignals: rt.drainPendingSignals,
             rotateResponseMessageId: sealMessageId => list().rotateResponseMessageId(sealMessageId),
             addSignal: signal => list().addSignal(signal),
-            emitChunk: chunk => this.emitChunk(rt, chunk),
+            emitChunk: chunk => this.emitChunk(rt, chunk, execOutput.messageId),
             sealMessageId: execOutput.messageId,
             // Durable's shipped contract: drain is best-effort — redelivery
             // re-runs this site and signals stay queued on failure.
@@ -673,7 +673,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         }
 
         try {
-          await this.emitChunk(rt, deferredChunk);
+          // An input processor may have rotated the response message during llm-execution.
+          await this.emitChunk(rt, deferredChunk, state.lastStepResult?.messageId ?? state.messageId);
         } catch (error) {
           rt.logger?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
         }
@@ -737,7 +738,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             drainPendingSignals: rt.drainPendingSignals,
             rotateResponseMessageId: () => list().rotateResponseMessageId(),
             addSignal: signal => list().addSignal(signal),
-            emitChunk: chunk => this.emitChunk(rt, chunk),
+            emitChunk: chunk => this.emitChunk(rt, chunk, state.messageId),
             // Durable's shipped contract: drain is best-effort — redelivery
             // re-runs this site and signals stay queued on failure.
             errorPolicy: 'best-effort',

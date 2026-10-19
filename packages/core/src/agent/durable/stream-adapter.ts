@@ -9,6 +9,7 @@ import type { TracingContext } from '../../observability';
 import type { OutputProcessorOrWorkflow, ProcessorState } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue, safeError } from '../../stream/base';
+import { withChunkMessageId } from '../../stream/base/message-id';
 import { MastraModelOutput } from '../../stream/base/output';
 import { markChunkOutputProcessed } from '../../stream/base/output-processed';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
@@ -932,19 +933,22 @@ function generationTag(runId: string, generation?: number): { generation?: numbe
 }
 
 /**
- * Helper to emit a chunk event to pubsub
+ * Helper to emit a chunk event to pubsub.
+ * `messageId` is the persisted assistant message the chunk belongs to; callers take it from
+ * durable step input/state so it survives a resume in another process.
  */
 export async function emitChunkEvent<OUTPUT = undefined>(
   pubsub: PubSub,
   runId: string,
   chunk: ChunkType<OUTPUT> | DataChunkType,
+  messageId?: string,
   outputProcessed?: boolean,
 ): Promise<void> {
   const topic = AGENT_STREAM_TOPIC(runId);
   await pubsub.publish(topic, {
     type: AgentStreamEventTypes.CHUNK,
     runId,
-    data: chunk,
+    data: withChunkMessageId(chunk, messageId),
     // The chunk crosses the pubsub as JSON; keep when it was produced.
     producedAt: getChunkProducedAt(chunk) ?? Date.now(),
     ...(outputProcessed ? { outputProcessed } : {}),
@@ -1016,7 +1020,7 @@ export async function emitStepStartEvent(
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.STEP_START,
     runId,
-    data: chunk,
+    data: withChunkMessageId(chunk, data.messageId),
     ...generationTag(runId),
   });
 }

@@ -196,6 +196,8 @@ const durableLLMOutputSchema = z.object({
     signalPreempted: z.boolean().optional(),
     totalUsage: z.any().optional(),
     tripwire: z.any().optional(),
+    // Final response message id; input processors can rotate it during the step.
+    messageId: z.string().optional(),
   }),
   metadata: z.any(),
   processorRetryCount: z.number().optional(),
@@ -317,29 +319,39 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
         // Emit the deferred error chunk so consumers see it
         if (pubsub) {
-          await emitChunkEvent(pubsub, runId, {
-            type: 'error',
+          await emitChunkEvent(
+            pubsub,
             runId,
-            from: ChunkFrom.AGENT,
-            // Serialize explicitly: a raw Error JSON-stringifies to `{}` on plain
-            // transports, which destroys the producer stack and makes crashes
-            // unattributable on the consumer side. Own fields (statusCode, ...)
-            // are kept so the caller sees the full provider error.
-            payload: { error: serializeError(fatalError) },
-          });
+            {
+              type: 'error',
+              runId,
+              from: ChunkFrom.AGENT,
+              // Serialize explicitly: a raw Error JSON-stringifies to `{}` on plain
+              // transports, which destroys the producer stack and makes crashes
+              // unattributable on the consumer side. Own fields (statusCode, ...)
+              // are kept so the caller sees the full provider error.
+              payload: { error: serializeError(fatalError) },
+            },
+            messageId,
+          );
 
           if (!signalPreempted) {
             // Emit step-finish so MastraModelOutput resolves finishReason to 'error'.
-            await emitChunkEvent(pubsub, runId, {
-              type: 'step-finish',
+            await emitChunkEvent(
+              pubsub,
               runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                stepResult: { reason: 'error', isContinued: false },
-                output: { usage },
-                metadata: {},
+              {
+                type: 'step-finish',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  stepResult: { reason: 'error', isContinued: false },
+                  output: { usage },
+                  metadata: {},
+                },
               },
-            });
+              messageId,
+            );
           }
         }
 
@@ -414,17 +426,22 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         });
 
         if (pubsub) {
-          await emitChunkEvent(pubsub, runId, {
-            type: 'tripwire',
+          await emitChunkEvent(
+            pubsub,
             runId,
-            from: ChunkFrom.AGENT,
-            payload: {
-              reason: registryTripwire.reason || '',
-              retry: registryTripwire.retry,
-              metadata: registryTripwire.metadata,
-              processorId: registryTripwire.processorId,
+            {
+              type: 'tripwire',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                reason: registryTripwire.reason || '',
+                retry: registryTripwire.retry,
+                metadata: registryTripwire.metadata,
+                processorId: registryTripwire.processorId,
+              },
             },
-          });
+            messageId,
+          );
         }
 
         return {
@@ -520,6 +537,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               pubsub,
               runId,
               { type: 'reasoning-end', runId, from: ChunkFrom.AGENT, payload: { id } },
+              currentMessageId,
               true,
             );
           }
@@ -567,7 +585,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           }),
         );
         if (pubsub) {
-          await emitChunkEvent(pubsub, runId, feedbackSignal.toDataPart());
+          await emitChunkEvent(pubsub, runId, feedbackSignal.toDataPart(), currentMessageId);
         }
       }
       const initialEchoes = signalRegistry?.initialSignalEchoes?.splice(0) ?? [];
@@ -588,7 +606,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       );
       if (pubsub) {
         for (const signal of [...initialEchoes, ...admittedSignals]) {
-          await emitChunkEvent(pubsub, runId, signal.toDataPart());
+          await emitChunkEvent(pubsub, runId, signal.toDataPart(), currentMessageId);
         }
       }
       // Mirror Agent: later iterations continue the same assistant message behind a step-start
@@ -803,7 +821,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               const inputStepWriter = pubsub
                 ? {
                     custom: async (data: { type: string }) => {
-                      await emitChunkEvent(pubsub, runId, data as any);
+                      await emitChunkEvent(pubsub, runId, data as any, currentMessageId);
                     },
                   }
                 : undefined;
@@ -900,7 +918,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           // matching how the durable tool-call step builds its writer.
                           outputWriter: pubsub
                             ? async (chunk: any) => {
-                                await emitChunkEvent(pubsub, runId, chunk as ChunkType);
+                                await emitChunkEvent(pubsub, runId, chunk as ChunkType, currentMessageId);
                               }
                             : undefined,
                         },
@@ -949,17 +967,22 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     retry: error.options?.retry,
                   });
                   if (pubsub) {
-                    await emitChunkEvent(pubsub, runId, {
-                      type: 'tripwire',
+                    await emitChunkEvent(
+                      pubsub,
                       runId,
-                      from: ChunkFrom.AGENT,
-                      payload: {
-                        processorId: error.processorId,
-                        reason: error.message,
-                        retry: error.options?.retry,
-                        metadata: error.options?.metadata,
+                      {
+                        type: 'tripwire',
+                        runId,
+                        from: ChunkFrom.AGENT,
+                        payload: {
+                          processorId: error.processorId,
+                          reason: error.message,
+                          retry: error.options?.retry,
+                          metadata: error.options?.metadata,
+                        },
                       },
-                    });
+                      currentMessageId,
+                    );
                   }
                   // Return a bail response instead of throwing — the dowhile
                   // predicate will see isContinued: false and stop the loop,
@@ -1069,7 +1092,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const requestStepWriter = pubsub
               ? {
                   custom: async (data: { type: string }) => {
-                    await emitChunkEvent(pubsub, runId, data as any);
+                    await emitChunkEvent(pubsub, runId, data as any, currentMessageId);
                   },
                 }
               : undefined;
@@ -1102,17 +1125,22 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   // Emit a tripwire chunk and return a bail response so the
                   // dowhile loop stops gracefully with reason: 'tripwire'.
                   if (pubsub) {
-                    await emitChunkEvent(pubsub, runId, {
-                      type: 'tripwire',
+                    await emitChunkEvent(
+                      pubsub,
                       runId,
-                      from: ChunkFrom.AGENT,
-                      payload: {
-                        processorId: error.processorId,
-                        reason: error.message,
-                        retry: error.options?.retry,
-                        metadata: error.options?.metadata,
+                      {
+                        type: 'tripwire',
+                        runId,
+                        from: ChunkFrom.AGENT,
+                        payload: {
+                          processorId: error.processorId,
+                          reason: error.message,
+                          retry: error.options?.retry,
+                          metadata: error.options?.metadata,
+                        },
                       },
-                    });
+                      currentMessageId,
+                    );
                   }
                   return {
                     ...(await storeMessageListState(params, messageList.serialize())),
@@ -1603,7 +1631,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   ) => {
                     ownership?.throwIfLost();
                     persistProcessorDataChunk(messageList, writerOptions?.messageId ?? currentMessageId, data);
-                    await emitChunkEvent(pubsub, runId, data as any);
+                    await emitChunkEvent(pubsub, runId, data as any, currentMessageId);
                   },
                 }
               : undefined;
@@ -1616,7 +1644,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     ownership?.throwIfLost();
                     persistProcessorDataChunk(messageList, writerOptions?.messageId ?? currentMessageId, data);
                     try {
-                      await emitChunkEvent(pubsub, runId, data as any, true);
+                      await emitChunkEvent(pubsub, runId, data as any, currentMessageId, true);
                     } catch (error) {
                       ownership?.throwIfLost();
                       throw new DurableChunkPublishError(error);
@@ -1910,7 +1938,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           }
                           trackOpenReasoning(chunk, openReasoningIds);
                           try {
-                            await emitChunkEvent(pubsub, runId, chunk, true);
+                            await emitChunkEvent(pubsub, runId, chunk, currentMessageId, true);
                           } catch (error) {
                             ownership?.throwIfLost();
                             throw new DurableChunkPublishError(error);
@@ -1941,7 +1969,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     }
                   } else {
                     trackOpenReasoning(clientChunk, openReasoningIds);
-                    await emitChunkEvent(pubsub, runId, clientChunk);
+                    await emitChunkEvent(pubsub, runId, clientChunk, currentMessageId);
                   }
                 }
 
@@ -2046,6 +2074,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       providerExecuted: payload.providerExecuted,
                       output: payload.output,
                       activeTools: currentActiveTools ?? null,
+                      messageId: currentMessageId,
                       ...(effectiveTool?.requireApproval ? { requireApproval: true } : {}),
                       ...(effectiveTool?.hasSuspendSchema ? { hasSuspendSchema: true } : {}),
                     });
@@ -2421,17 +2450,22 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // chunk was already published by processAndEmitChunk.
             if (toolResultTripwire || outputStreamBlocked) {
               if (toolResultTripwire && pubsub) {
-                await emitChunkEvent(pubsub, runId, {
-                  type: 'tripwire',
+                await emitChunkEvent(
+                  pubsub,
                   runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    processorId: toolResultTripwire.processorId,
-                    reason: toolResultTripwire.message,
-                    retry: toolResultTripwire.options?.retry,
-                    metadata: toolResultTripwire.options?.metadata,
+                  {
+                    type: 'tripwire',
+                    runId,
+                    from: ChunkFrom.AGENT,
+                    payload: {
+                      processorId: toolResultTripwire.processorId,
+                      reason: toolResultTripwire.message,
+                      retry: toolResultTripwire.options?.retry,
+                      metadata: toolResultTripwire.options?.metadata,
+                    },
                   },
-                });
+                  currentMessageId,
+                );
               }
               return {
                 ...(await storeMessageListState(params, messageList.serialize())),
@@ -2486,17 +2520,22 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     retry: error.options?.retry,
                   });
                   if (pubsub) {
-                    await emitChunkEvent(pubsub, runId, {
-                      type: 'tripwire',
+                    await emitChunkEvent(
+                      pubsub,
                       runId,
-                      from: ChunkFrom.AGENT,
-                      payload: {
-                        processorId: error.processorId,
-                        reason: error.message,
-                        retry: error.options?.retry,
-                        metadata: error.options?.metadata,
+                      {
+                        type: 'tripwire',
+                        runId,
+                        from: ChunkFrom.AGENT,
+                        payload: {
+                          processorId: error.processorId,
+                          reason: error.message,
+                          retry: error.options?.retry,
+                          metadata: error.options?.metadata,
+                        },
                       },
-                    });
+                      currentMessageId,
+                    );
                   }
                   return {
                     ...(await storeMessageListState(params, messageList.serialize())),
@@ -2579,7 +2618,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     ) => {
                       ownership?.throwIfLost();
                       persistProcessorDataChunk(messageList, writerOptions?.messageId ?? currentMessageId, data);
-                      await emitChunkEvent(pubsub, runId, data as any);
+                      await emitChunkEvent(pubsub, runId, data as any, currentMessageId);
                     },
                   }
                 : undefined;
@@ -2668,6 +2707,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 isContinued: shouldRetry || (!processOutputStepTripwire && isContinued),
                 totalUsage: usage,
                 headers: rawResponse?.headers,
+                messageId: currentMessageId,
                 request,
                 tripwire: stepTripwire,
               },

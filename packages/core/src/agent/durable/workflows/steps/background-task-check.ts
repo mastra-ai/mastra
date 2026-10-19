@@ -70,7 +70,7 @@ export function createDurableBackgroundTaskCheckStep() {
         },
         emitChunk: chunk => {
           if (!pubsub) return;
-          return emitChunkEvent(pubsub, runId, chunk as any);
+          return emitChunkEvent(pubsub, runId, chunk as any, typedInput.messageId);
         },
       });
 

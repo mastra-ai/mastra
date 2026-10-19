@@ -132,6 +132,7 @@ describe('durable step-start chunk shape', () => {
       type: 'step-start',
       runId,
       from: 'AGENT',
+      messageId: 'msg-1',
       payload: {
         stepId: 'llm-execution',
         messageId: 'msg-1',

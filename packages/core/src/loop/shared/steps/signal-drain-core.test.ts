@@ -88,3 +88,14 @@ describe('drainSignalsToTranscript — error policy split', () => {
     expect(emitted).toHaveLength(2);
   });
 });
+
+describe('drainSignalsToTranscript — message attribution', () => {
+  it('stamps drained signal chunks with the signal id, since the signal is saved as its own message', async () => {
+    const { deps, emitted } = makeDeps({
+      sealMessageId: 'msg-sealed',
+      addSignal: (signal: any) => ({ toDataPart: () => ({ type: 'data-signal', data: { id: signal.id } }) }),
+    });
+    await expect(drainSignalsToTranscript(deps)).resolves.toEqual({ drained: true, nextMessageId: 'msg-next' });
+    expect(emitted).toEqual([expect.objectContaining({ type: 'data-signal', messageId: 'sig-1' })]);
+  });
+});

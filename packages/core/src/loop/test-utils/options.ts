@@ -514,6 +514,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "messageId": "id-0",
                 "modelId": "mock-model-id",
@@ -527,6 +528,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "0",
                 "providerMetadata": undefined,
@@ -536,6 +538,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "0",
                 "providerMetadata": undefined,
@@ -546,6 +549,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "0",
                 "providerMetadata": undefined,
@@ -555,6 +559,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "args": {
                   "value": "value",
@@ -569,6 +574,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "args": {
                   "value": "value",
@@ -584,6 +590,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "messageId": "id-0",
                 "messages": {
@@ -947,6 +954,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "messageId": "id-0",
                 "modelId": "mock-model-id",
@@ -960,6 +968,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "text-1",
                 "providerMetadata": undefined,
@@ -969,6 +978,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "text-1",
                 "providerMetadata": undefined,
@@ -979,6 +989,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "text-1",
                 "providerMetadata": undefined,
@@ -989,6 +1000,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "text-1",
                 "type": "text-end",
@@ -998,6 +1010,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "messageId": "id-0",
                 "messages": {
@@ -4091,6 +4104,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         {
           runId: 'test-run-id',
           from: 'AGENT',
+          messageId: 'id-0',
           type: 'step-start',
           payload: {
             request: {},
@@ -4105,6 +4119,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           type: 'error',
           runId: 'test-run-id',
           from: 'AGENT',
+          messageId: 'id-0',
           payload: {
             type: 'error',
             error: new Error('test error'),
@@ -4460,6 +4475,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         models: modelWithRawChunks,
         messageList,
         includeRawChunks: true,
+        experimental_generateMessageId: () => 'msg-0',
       });
 
       const chunks = await convertAsyncIterableToArray(result.fullStream);
@@ -4468,6 +4484,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         [
           {
             "from": "AGENT",
+            "messageId": "msg-0",
             "payload": {
               "content": "should appear",
               "type": "raw-data",
@@ -4818,6 +4835,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "messageId": "id-0",
                 "modelId": "mock-model-id",
@@ -4830,6 +4848,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "0",
                 "providerMetadata": undefined,
@@ -4839,6 +4858,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "text-1",
                 "providerMetadata": undefined,
@@ -4848,6 +4868,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "0",
                 "providerMetadata": undefined,
@@ -4858,6 +4879,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "text-1",
                 "providerMetadata": undefined,
@@ -4868,6 +4890,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "text-1",
                 "providerMetadata": undefined,
@@ -4878,6 +4901,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "text-2",
                 "providerMetadata": undefined,
@@ -4887,6 +4911,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "text-2",
                 "providerMetadata": undefined,
@@ -4897,6 +4922,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "text-2",
                 "providerMetadata": undefined,
@@ -4907,6 +4933,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "3",
                 "providerMetadata": undefined,
@@ -4916,6 +4943,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "0",
                 "providerMetadata": undefined,
@@ -4926,6 +4954,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "3",
                 "providerMetadata": undefined,
@@ -4936,6 +4965,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "text-2",
                 "providerMetadata": undefined,
@@ -4946,6 +4976,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "text-1",
                 "providerMetadata": undefined,
@@ -4956,6 +4987,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "0",
                 "providerMetadata": undefined,
@@ -4965,6 +4997,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "text-2",
                 "providerMetadata": undefined,
@@ -4975,6 +5008,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "text-2",
                 "type": "text-end",
@@ -4984,6 +5018,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "3",
                 "providerMetadata": undefined,
@@ -4993,6 +5028,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "text-1",
                 "type": "text-end",
@@ -5002,6 +5038,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "messageId": "id-0",
                 "messages": {
@@ -5585,6 +5622,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "messageId": "id-0",
                 "modelId": "mock-model-id",
@@ -5598,6 +5636,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "id-2",
                 "providerMetadata": undefined,
@@ -5607,6 +5646,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "id-0",
               "payload": {
                 "id": "id-2",
                 "providerMetadata": undefined,
@@ -5914,6 +5954,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "msg-0",
               "payload": {
                 "messageId": "msg-0",
                 "modelId": "mock-model-id",
@@ -5927,6 +5968,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "msg-0",
               "payload": {
                 "args": {
                   "value": "value",
@@ -5941,6 +5983,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "msg-0",
               "payload": {
                 "args": {
                   "value": "value",
@@ -5956,6 +5999,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "msg-0",
               "payload": {
                 "messageId": "msg-0",
                 "messages": {
@@ -6187,6 +6231,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "msg-0",
               "payload": {
                 "messageId": "msg-0",
                 "modelId": "mock-model-id",
@@ -6200,6 +6245,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "msg-0",
               "payload": {
                 "id": "id-2",
                 "providerMetadata": undefined,
@@ -6209,6 +6255,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
+              "messageId": "msg-0",
               "payload": {
                 "id": "id-2",
                 "providerMetadata": undefined,

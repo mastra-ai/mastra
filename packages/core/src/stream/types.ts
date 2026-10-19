@@ -94,6 +94,11 @@ interface BaseChunkType {
   traceId?: string;
   from: ChunkFrom;
   metadata?: Record<string, any>;
+  /**
+   * Id of the persisted assistant message this chunk's content belongs to.
+   * A single run can produce several messages; absent on run-lifecycle chunks (`start`, `finish`, `abort`).
+   */
+  messageId?: string;
 }
 
 interface ResponseMetadataPayload {

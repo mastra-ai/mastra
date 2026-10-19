@@ -193,6 +193,7 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
         expect.anything(),
         RUN_ID,
         expect.objectContaining({ type: 'tool-result', payload: expect.objectContaining({ result: REDACTED_RESULT }) }),
+        undefined,
         true,
       );
       expect(JSON.stringify(vi.mocked(emitChunkEvent).mock.calls)).not.toContain('raw-value');
