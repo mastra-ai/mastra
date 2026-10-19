@@ -13,7 +13,7 @@ import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 
-import { Memory } from '../../../index';
+import { Memory } from '@mastra/memory';
 
 export const USER_REQUEST = 'USER_REQUEST_MARKER: look up the order status for order 4471 and report it back.';
 export const FINAL_ANSWER = 'Order 4471 has shipped.';
