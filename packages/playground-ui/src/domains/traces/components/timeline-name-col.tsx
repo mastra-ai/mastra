@@ -2,7 +2,7 @@ import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 import type { UISpan, UISpanStyle } from '../types';
-import { SPAN_TREE_INDENT, SPAN_TREE_LINE, SPAN_TREE_PAD_Y, SpanTreeRail } from './span-tree-rail';
+import { SPAN_TREE_INDENT, SPAN_TREE_LINE, SPAN_TREE_META_GAP, SPAN_TREE_PAD_Y, SpanTreeRail } from './span-tree-rail';
 import { SpanTypeBadge } from './span-type-badge';
 import { Txt } from '@/ds/components/Txt';
 import { focusRing, focusRingInset } from '@/ds/primitives/transitions';
@@ -127,7 +127,13 @@ export function TimelineNameCol({
 
           {/* Duration always stacks under the name. */}
           {meta && (
-            <Txt as="span" variant="caption" tone="muted" className="mt-[0.5px] truncate pl-2 leading-4 tabular-nums">
+            <Txt
+              as="span"
+              variant="caption"
+              tone="muted"
+              style={{ marginTop: SPAN_TREE_META_GAP }}
+              className="truncate pl-2 leading-4 tabular-nums"
+            >
               {meta}
             </Txt>
           )}
