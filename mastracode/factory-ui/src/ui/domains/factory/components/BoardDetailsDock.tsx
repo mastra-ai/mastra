@@ -1,6 +1,7 @@
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import type { ReactNode } from 'react';
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useState } from 'react';
 
 import { BoardDetailsDockContext } from '../context/BoardDetailsDockContext';
 import { useBoardOpenCard } from '../context/useBoardOpenCard';
@@ -13,15 +14,11 @@ export function BoardDetailsDock({ enabled, children }: { enabled: boolean; chil
   const [element, setElement] = useState<HTMLElement | null>(null);
   const { openKey, setCardOpen } = useBoardOpenCard();
 
-  const closeOpenCardOnEscape = useEffectEvent((event: KeyboardEvent) => {
-    if (event.key === 'Escape' && !event.defaultPrevented && openKey !== undefined) setCardOpen(openKey, false);
-  });
-  useEffect(() => {
-    if (!docked) return;
-    const onKeyDown = (event: KeyboardEvent) => closeOpenCardOnEscape(event);
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [docked]);
+  const closeOpenCard = openKey === undefined ? undefined : () => setCardOpen(openKey, false);
+  useKeydown(
+    { Escape: () => closeOpenCard?.() },
+    { enabled: docked && closeOpenCard !== undefined, insideFields: true },
+  );
 
   return (
     <div className="flex min-h-0 flex-1">
