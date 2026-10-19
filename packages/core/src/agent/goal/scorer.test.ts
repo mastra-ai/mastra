@@ -2,13 +2,10 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { createScorer } from '../../evals/base';
-import type { ProcessInputStepArgs } from '../../processors';
 import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
-import { TrailingAssistantGuard } from '../../processors/trailing-assistant-guard';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
-import { MessageList } from '../message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../message-list';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING } from './objective';
 import { createGoalScorer } from './scorer';
@@ -129,26 +126,29 @@ describe('createGoalScorer latest user message text extraction', () => {
     expect(prompt).not.toContain('<system-reminder>Please continue naturally</system-reminder>');
   });
 
-  it("skips TrailingAssistantGuard's synthetic continuation when selecting the latest user content", async () => {
-    const messageList = new MessageList({ threadId: 'thread-1' });
-    messageList.add(createUserMessage({ format: 2, parts: [{ type: 'text', text: 'Pick option B' }] }), 'input');
-    messageList.add(
+  // The real-run path is covered by goal-judge-guard-continuation.scenario.test.ts.
+  // There the guard's turn is also removed from the list before the judge runs
+  // (#27568), so this filter is the backstop: it is proven here in isolation.
+  it('skips a marked TrailingAssistantGuard continuation when selecting the latest user content', async () => {
+    const prompt = await captureJudgePromptForMessages([
+      createUserMessage({ format: 2, parts: [{ type: 'text', text: 'Pick option B' }] }),
       {
         id: 'msg-assistant',
         role: 'assistant',
         createdAt: new Date('2026-01-01T00:00:01.000Z'),
         content: { format: 2, parts: [{ type: 'text', text: 'Working on option B' }] },
       },
-      'response',
-    );
-    new TrailingAssistantGuard().processInputStep({
-      messages: messageList.get.all.db(),
-      messageList,
-      model: { provider: 'google.generative-ai', modelId: 'gemini-3.5-flash-lite' },
-    } as unknown as ProcessInputStepArgs);
-    expect(messageList.get.all.db().at(-1)?.content.parts).toMatchObject([{ type: 'text', text: 'Continue.' }]);
-
-    const prompt = await captureJudgePromptForMessages(messageList.get.all.db());
+      {
+        id: 'msg-continue',
+        role: 'user',
+        createdAt: new Date('2026-01-01T00:00:02.000Z'),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Continue.' }],
+          metadata: { trailingAssistantGuardContinuation: true },
+        },
+      },
+    ]);
 
     expect(prompt).toContain('Latest user message:\\nPick option B');
     expect(prompt).toContain('Assistant steps since that user message: 1');

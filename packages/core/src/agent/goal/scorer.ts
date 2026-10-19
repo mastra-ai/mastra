@@ -90,6 +90,8 @@ function isSyntheticReminderContent(content: string): boolean {
 }
 
 function isLatestUserCandidateForGoal(message: MastraDBMessage): boolean {
+  // The loop already removes the guard's synthetic turn after each LLM call
+  // (#27568); this check is the backstop for any path that keeps it in the list.
   if (!isUserMessageForGoal(message) || isTrailingAssistantGuardContinuation(message)) return false;
   const textContent = extractTextContent(message.content);
   return textContent.trim() !== '' && !isSyntheticReminderContent(textContent);
