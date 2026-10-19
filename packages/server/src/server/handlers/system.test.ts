@@ -21,6 +21,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
   traceQueryTimeToFirstChunk: false,
+  traceQueryRootSpanFields: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   traceAggregate: false,

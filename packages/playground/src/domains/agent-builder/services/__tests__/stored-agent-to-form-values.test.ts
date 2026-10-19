@@ -35,7 +35,7 @@ describe('storedAgentToFormValues', () => {
       agents: { 'agent-x': {} },
       workflows: { 'wf-1': {} },
       workspace: { type: 'id', workspaceId: 'ws-1' },
-    } as never);
+    });
 
     expect(result).toEqual({
       name: 'Researcher',
@@ -58,7 +58,7 @@ describe('storedAgentToFormValues', () => {
       id: 'agent-1',
       name: 'A',
       skills: { s1: { description: 'desc' }, s2: {} },
-    } as never);
+    });
 
     expect(result.skills).toEqual({ s1: true, s2: true });
   });
@@ -71,7 +71,7 @@ describe('storedAgentToFormValues', () => {
         { when: { type: 'always' }, value: { s1: { description: 'one' } } },
         { when: { type: 'always' }, value: { s2: {} } },
       ],
-    } as never);
+    });
 
     expect(result.skills).toEqual({ s1: true, s2: true });
   });
@@ -81,7 +81,7 @@ describe('storedAgentToFormValues', () => {
       id: 'agent-1',
       name: 'A',
       instructions: { type: 'rule' },
-    } as never);
+    });
 
     expect(result.instructions).toBe('');
   });
@@ -91,7 +91,7 @@ describe('storedAgentToFormValues', () => {
       id: 'agent-1',
       name: 'A',
       model: { provider: 'openai', name: 'gpt-4o' },
-    } as never);
+    });
 
     expect(result.model).toEqual({ provider: 'openai', name: 'gpt-4o' });
   });
@@ -101,7 +101,7 @@ describe('storedAgentToFormValues', () => {
       id: 'agent-1',
       name: 'A',
       model: [{ when: { type: 'always' }, value: { provider: 'openai', name: 'gpt-4o' } }],
-    } as never);
+    });
 
     expect(result.model).toBeUndefined();
   });
@@ -111,7 +111,7 @@ describe('storedAgentToFormValues', () => {
       id: 'agent-1',
       name: 'A',
       metadata: { avatarUrl: 'https://cdn.example/a.png' },
-    } as never);
+    });
 
     expect(result.avatarUrl).toBe('https://cdn.example/a.png');
   });
@@ -121,7 +121,7 @@ describe('storedAgentToFormValues', () => {
       id: 'agent-1',
       name: 'A',
       metadata: { other: 'value' },
-    } as never);
+    });
 
     expect(result.avatarUrl).toBeUndefined();
   });
@@ -132,7 +132,7 @@ describe('storedAgentToFormValues', () => {
       name: 'A',
       visibility: 'public',
       browser: { enabled: true },
-    } as never);
+    });
 
     expect(result.visibility).toBe('public');
     expect(result.browserEnabled).toBe(true);
@@ -151,15 +151,15 @@ describe('extractStaticModel', () => {
   });
 
   it('returns undefined when provider is missing or empty', () => {
-    expect(extractStaticModel({ name: 'gpt-4o' } as never)).toBeUndefined();
+    expect(extractStaticModel({ name: 'gpt-4o' })).toBeUndefined();
     expect(extractStaticModel({ provider: '', name: 'gpt-4o' })).toBeUndefined();
-    expect(extractStaticModel({ provider: 42, name: 'gpt-4o' } as never)).toBeUndefined();
+    expect(extractStaticModel({ provider: 42, name: 'gpt-4o' })).toBeUndefined();
   });
 
   it('returns undefined when name is missing or empty', () => {
-    expect(extractStaticModel({ provider: 'openai' } as never)).toBeUndefined();
+    expect(extractStaticModel({ provider: 'openai' })).toBeUndefined();
     expect(extractStaticModel({ provider: 'openai', name: '' })).toBeUndefined();
-    expect(extractStaticModel({ provider: 'openai', name: 42 } as never)).toBeUndefined();
+    expect(extractStaticModel({ provider: 'openai', name: 42 })).toBeUndefined();
   });
 
   it('returns the static model when both provider and name are valid strings', () => {

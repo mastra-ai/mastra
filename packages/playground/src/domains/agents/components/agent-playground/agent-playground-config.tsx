@@ -60,7 +60,7 @@ function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchem
       </div>
       {hasChildren && (
         <div className="ml-1 border-l border-border">
-          {Object.entries(prop.properties!).map(([childName, childProp]) => (
+          {Object.entries(prop.properties).map(([childName, childProp]) => (
             <VariableProperty key={childName} name={childName} prop={childProp} depth={depth + 1} />
           ))}
         </div>

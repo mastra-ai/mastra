@@ -133,7 +133,7 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
     instructionBlocks,
     skills: normalizeSkillsFromApi(dataSource.skills),
     workspace: normalizeWorkspaceFromApi(dataSource.workspace),
-    variables: dataSource.requestContextSchema as AgentFormValues['variables'],
+    variables: dataSource.requestContextSchema,
   };
 }
 

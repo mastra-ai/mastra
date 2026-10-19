@@ -16,7 +16,7 @@ export function PromptBlockEditMain({ form, formResetKey = 0 }: PromptBlockEditM
   const { control, setValue } = form;
 
   const schema = useWatch({ control, name: 'variables' });
-  const rules = useWatch({ control, name: 'rules' }) as RuleGroup | undefined;
+  const rules = useWatch({ control, name: 'rules' });
 
   const handleRulesChange = (ruleGroup: RuleGroup | undefined) => {
     setValue('rules', ruleGroup, { shouldDirty: true });
