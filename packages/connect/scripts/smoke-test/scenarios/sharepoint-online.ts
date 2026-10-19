@@ -20,6 +20,26 @@ export const sharepointOnlineScenario: Scenario = {
   summary: 'drive item + list + content type + site column + site page CRUD',
   async run({ tools, runId, call, log }) {
     const steps: ScenarioStep[] = [];
+    const accountType = process.env.MASTRA_SMOKE_MICROSOFT_ACCOUNT_TYPE?.trim().toLowerCase();
+    if (accountType === 'personal') {
+      steps.push(
+        makeStep(
+          'account requirement',
+          undefined,
+          'skip',
+          'SharePoint Online requires a Microsoft work or school account.',
+        ),
+      );
+      return steps;
+    }
+    steps.push(
+      makeStep(
+        'account type',
+        undefined,
+        'pass',
+        accountType ?? 'unknown; set MASTRA_SMOKE_MICROSOFT_ACCOUNT_TYPE=work for capability classification',
+      ),
+    );
     const missing = requireTools(tools, [
       'sharepoint_online_get_site',
       'sharepoint_online_list_drives',
