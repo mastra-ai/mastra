@@ -41,6 +41,7 @@ export interface PlatformConnectProvider {
  */
 export const PLATFORM_CONNECT_PROVIDERS: Record<string, PlatformConnectProvider> = {
   jira: { integrationId: 'jira', connectionIntegrationIds: ['jira'] },
+  linear: { integrationId: 'linear', connectionIntegrationIds: ['linear'] },
   'incident-io': { integrationId: 'incident-io', connectionIntegrationIds: ['incident-io'] },
   gitlab: { integrationId: 'gitlab', connectionIntegrationIds: ['gitlab'] },
 };

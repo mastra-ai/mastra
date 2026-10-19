@@ -157,6 +157,14 @@ export interface LinearCreatedComment {
   url: string;
 }
 
+/** The issue created by {@link LinearIntegration.createIssue}. */
+export interface LinearCreatedIssue {
+  id: string;
+  identifier: string;
+  title: string;
+  url: string;
+}
+
 const LINEAR_ISSUES_PAGE_SIZE = 30;
 const ISSUE_COMMENTS_PAGE_SIZE = 50;
 const LINEAR_TEAMS_PAGE_SIZE = 100;
@@ -184,6 +192,8 @@ export interface LinearConnectionCheck {
   connected: boolean;
   /** Whether the granted OAuth scope allows posting issue comments. */
   canComment: boolean;
+  /** Whether the granted OAuth scope allows creating issues. */
+  canCreateIssues: boolean;
   checkedAt: number;
 }
 
@@ -249,6 +259,10 @@ interface IssueIdQueryData {
 
 interface CommentCreateMutationData {
   commentCreate: { success: boolean; comment: { id: string; url: string } | null };
+}
+
+interface IssueCreateMutationData {
+  issueCreate: { success: boolean; issue: LinearCreatedIssue | null };
 }
 
 /** POST a GraphQL query to Linear with the given OAuth access token. */
@@ -394,6 +408,15 @@ export class LinearIntegration implements FactoryIntegration {
   }
 
   /**
+   * Whether the connection's token can create issues. Connections made before
+   * `issues:create` was requested can't until the org reconnects Linear.
+   */
+  canCreateIssues(connection: LinearConnectionRow): boolean {
+    const scopes = (connection.scope ?? '').split(/[\s,]+/).filter(Boolean);
+    return scopes.some(scope => scope === 'issues:create' || scope === 'write' || scope === 'admin');
+  }
+
+  /**
    * In-flight refreshes keyed by org. Linear rotates refresh tokens, so two
    * concurrent refreshes with the same token would invalidate each other —
    * single-flight ensures one exchange per org and shares the result.
@@ -469,6 +492,7 @@ export class LinearIntegration implements FactoryIntegration {
     const check: LinearConnectionCheck = {
       connected: connection !== null,
       canComment: connection !== null && this.canPostComments(connection),
+      canCreateIssues: connection !== null && this.canCreateIssues(connection),
       checkedAt: Date.now(),
     };
     this.#connectionChecks.set(orgId, check);
@@ -640,9 +664,10 @@ export class LinearIntegration implements FactoryIntegration {
     url.searchParams.set('client_id', this.#clientId);
     url.searchParams.set('redirect_uri', redirectUri);
     url.searchParams.set('response_type', 'code');
-    // `comments:create` lets the agent's linear_create_comment tool post
-    // comments; everything else the integration does is read-only.
-    url.searchParams.set('scope', 'read,comments:create');
+    // `comments:create` and `issues:create` let the agent's
+    // linear_create_comment / linear_create_issue tools write; everything
+    // else the integration does is read-only.
+    url.searchParams.set('scope', 'read,comments:create,issues:create');
     url.searchParams.set('state', state);
     url.searchParams.set('prompt', 'consent');
     return url.toString();
@@ -1122,6 +1147,24 @@ export class LinearIntegration implements FactoryIntegration {
     return data.commentCreate.comment;
   }
 
+  /** Create an issue in a team (by team UUID). */
+  async createIssue(
+    accessToken: string,
+    input: { teamId: string; title: string; description?: string; priority?: number },
+  ): Promise<LinearCreatedIssue> {
+    const data = await linearGraphql<IssueCreateMutationData>(
+      accessToken,
+      `mutation IssueCreate($input: IssueCreateInput!) {
+        issueCreate(input: $input) { success issue { id identifier title url } }
+      }`,
+      { input },
+    );
+    if (!data.issueCreate.success || !data.issueCreate.issue) {
+      throw new Error('Linear did not accept the issue.');
+    }
+    return data.issueCreate.issue;
+  }
+
   // ── FactoryIntegration surface ───────────────────────────────────────────
 
   workers(ctx: IntegrationContext): MastraWorker[] {
@@ -1158,7 +1201,7 @@ export class LinearIntegration implements FactoryIntegration {
   }
 
   /**
-   * Org-scoped agent tools: issue detail + comment tools for sessions whose
+   * Org-scoped agent tools: issue detail, comment, and create-issue tools for sessions whose
    * project belongs to an org with an active Linear connection.
    */
   async agentTools(args: { requestContext: RequestContext }): Promise<IntegrationTools> {

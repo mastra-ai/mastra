@@ -18,6 +18,8 @@ let projectLookupShouldFail = false;
 const fetchLinearIssueDetail = vi.fn();
 const createLinearIssueComment = vi.fn();
 const refreshLinearAccessToken = vi.fn();
+const createLinearIssue = vi.fn();
+const listLinearTeams = vi.fn();
 
 let PROJECT_ID = '';
 const ORG_ID = 'org-1';
@@ -53,7 +55,7 @@ function seedConnection(overrides: Partial<UpsertLinearConnectionInput> = {}): P
     accessToken: 'linear-token',
     refreshToken: 'linear-refresh',
     expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-    scope: 'read,comments:create',
+    scope: 'read,comments:create,issues:create',
     workspaceName: 'Acme',
     workspaceUrlKey: 'acme',
     ...overrides,
@@ -102,6 +104,10 @@ beforeEach(async () => {
     return createLinearIssueComment(input.connection.accessToken, input.issueId, input.body);
   });
   vi.spyOn(linear, 'refreshAccessToken').mockImplementation(refreshLinearAccessToken);
+  vi.spyOn(linear, 'createIssue').mockImplementation(createLinearIssue);
+  vi.spyOn(linear, 'listTeams').mockImplementation(listLinearTeams);
+  createLinearIssue.mockReset();
+  listLinearTeams.mockReset();
   fetchLinearIssueDetail.mockReset();
   createLinearIssueComment.mockReset();
   refreshLinearAccessToken.mockReset();
@@ -130,12 +136,25 @@ describe('buildLinearAgentTools — exposure gating', () => {
     expect(tools).toEqual({});
   });
 
-  it('withholds linear_create_comment when the connection scope is read-only', async () => {
+  it('withholds the write tools when the connection scope is read-only', async () => {
     await seedProject();
     await seedConnection({ scope: 'read' });
     const tools = await buildLinearAgentTools({ linear, requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toHaveProperty('linear_get_issue');
     expect(tools).not.toHaveProperty('linear_create_comment');
+    expect(tools).not.toHaveProperty('linear_create_issue');
+  });
+
+  it('exposes linear_create_issue only when the scope includes issues:create', async () => {
+    await seedProject();
+    await seedConnection();
+    expect(await buildLinearAgentTools({ linear, requestContext: requestContextFor(PROJECT_ID) })).toHaveProperty(
+      'linear_create_issue',
+    );
+    await seedConnection({ scope: 'read,comments:create' });
+    const tools = await buildLinearAgentTools({ linear, requestContext: requestContextFor(PROJECT_ID) });
+    expect(tools).toHaveProperty('linear_create_comment');
+    expect(tools).not.toHaveProperty('linear_create_issue');
   });
 
   it('treats legacy connections without a recorded scope as read-only', async () => {
@@ -307,5 +326,65 @@ describe('linear_create_comment — execute', () => {
     const tool = await getTool();
     const result = await (tool.execute as any)({ issue: 'ENG-42', body: 'Hello' });
     expect(result).toEqual({ error: 'Failed to post Linear comment: Linear did not accept the comment.' });
+  });
+});
+
+describe('linear_create_issue — execute', () => {
+  const ENG = { id: 'team-eng', key: 'ENG', name: 'Engineering' };
+  const OPS = { id: 'team-ops', key: 'OPS', name: 'Operations' };
+  const created = { id: 'issue-1', identifier: 'ENG-7', title: 'Flaky test', url: 'https://linear.app/acme/issue/ENG-7' };
+
+  async function getTool() {
+    await seedProject();
+    await seedConnection();
+    const tools = await buildLinearAgentTools({ linear, requestContext: requestContextFor(PROJECT_ID) });
+    return tools.linear_create_issue!;
+  }
+
+  it('creates the issue in the requested team by key', async () => {
+    listLinearTeams.mockResolvedValue([ENG, OPS]);
+    createLinearIssue.mockResolvedValue(created);
+    const tool = await getTool();
+    const result = await (tool.execute as any)({ title: 'Flaky test', description: 'Fails 1 in 5.', team: 'eng', priority: 2 });
+    expect(createLinearIssue).toHaveBeenCalledWith('linear-token', {
+      teamId: 'team-eng',
+      title: 'Flaky test',
+      description: 'Fails 1 in 5.',
+      priority: 2,
+    });
+    expect(result).toEqual({ created: true, identifier: 'ENG-7', url: 'https://linear.app/acme/issue/ENG-7' });
+  });
+
+  it('uses the only team when none is given', async () => {
+    listLinearTeams.mockResolvedValue([ENG]);
+    createLinearIssue.mockResolvedValue(created);
+    const tool = await getTool();
+    await (tool.execute as any)({ title: 'Flaky test' });
+    expect(createLinearIssue).toHaveBeenCalledWith('linear-token', { teamId: 'team-eng', title: 'Flaky test' });
+  });
+
+  it('asks for a team when the workspace has several', async () => {
+    listLinearTeams.mockResolvedValue([ENG, OPS]);
+    const tool = await getTool();
+    const result = await (tool.execute as any)({ title: 'Flaky test' });
+    expect(createLinearIssue).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      error: 'Specify a Linear team. Available teams: ENG (Engineering), OPS (Operations).',
+    });
+  });
+
+  it('reports an unknown team with the available keys', async () => {
+    listLinearTeams.mockResolvedValue([ENG]);
+    const tool = await getTool();
+    const result = await (tool.execute as any)({ title: 'Flaky test', team: 'XYZ' });
+    expect(result).toEqual({ error: 'Linear team "XYZ" was not found. Available teams: ENG (Engineering).' });
+  });
+
+  it('maps create failures to a tool error', async () => {
+    listLinearTeams.mockResolvedValue([ENG]);
+    createLinearIssue.mockRejectedValue(new Error('Linear did not accept the issue.'));
+    const tool = await getTool();
+    const result = await (tool.execute as any)({ title: 'Flaky test' });
+    expect(result).toEqual({ error: 'Failed to create Linear issue: Linear did not accept the issue.' });
   });
 });
