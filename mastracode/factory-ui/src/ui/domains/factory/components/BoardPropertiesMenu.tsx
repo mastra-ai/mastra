@@ -1,5 +1,4 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 import { ArrowUpDown, LayersPlus } from 'lucide-react';
 
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
@@ -7,55 +6,8 @@ import { boardFilterItems, boardFiltersActive, boardFilterValues, withBoardFilte
 import { boardSortOptions, DEFAULT_BOARD_SORT } from '../boardSort';
 import type { BoardKind } from '../boardStages';
 import type { BoardView } from '../hooks/useBoardView';
+import { BoardFilterSubmenu } from './BoardFilterSubmenu';
 import type { BoardFilterField } from './boardFilterFields';
-
-function selectionHint(options: readonly FilterBarOption[], selected: readonly string[]): string | undefined {
-  if (selected.length === 0) return undefined;
-  if (selected.length > 1) return `${selected.length} selected`;
-  const only = options.find(option => option.value === selected[0]);
-  return only?.label ?? selected[0];
-}
-
-function BoardFilterSub({
-  field,
-  selected,
-  onChange,
-}: {
-  field: BoardFilterField;
-  selected: readonly string[];
-  onChange: (values: string[]) => void;
-}) {
-  const offered = new Set(field.suggestions.map(option => option.value));
-  const options = [
-    ...field.suggestions,
-    ...selected.filter(value => !offered.has(value)).map((value): FilterBarOption => ({ value })),
-  ];
-  if (options.length === 0) return null;
-  const Icon = field.icon;
-
-  return (
-    <DropdownMenu.Sub>
-      <DropdownMenu.SubTrigger hint={selectionHint(options, selected)}>
-        {Icon && <Icon aria-hidden />}
-        <span>{field.label}</span>
-      </DropdownMenu.SubTrigger>
-      <DropdownMenu.SubContent>
-        {options.map(option => (
-          <DropdownMenu.CheckboxItem
-            key={option.value}
-            checked={selected.includes(option.value)}
-            onCheckedChange={checked =>
-              onChange(checked ? [...selected, option.value] : selected.filter(value => value !== option.value))
-            }
-          >
-            {option.start}
-            <span>{option.label ?? option.value}</span>
-          </DropdownMenu.CheckboxItem>
-        ))}
-      </DropdownMenu.SubContent>
-    </DropdownMenu.Sub>
-  );
-}
 
 export function BoardPropertiesMenu({
   kind,
@@ -89,7 +41,7 @@ export function BoardPropertiesMenu({
       {fields
         .filter(field => !field.hidden)
         .map(field => (
-          <BoardFilterSub
+          <BoardFilterSubmenu
             key={field.id}
             field={field}
             selected={boardFilterValues(items, field.id)}
