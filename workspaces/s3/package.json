@@ -1,7 +1,7 @@
 {
   "name": "@mastra/s3",
   "version": "0.6.4",
-  "description": "S3-compatible filesystem provider for Mastra workspaces (AWS S3, Cloudflare R2, MinIO)",
+  "description": "S3-compatible filesystem provider for Mastra workspaces (AWS S3, Cloudflare R2, Neon Object Storage, MinIO)",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

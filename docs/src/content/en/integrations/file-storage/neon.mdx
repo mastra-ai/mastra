@@ -1,0 +1,173 @@
+---
+title: "Neon Object Storage | File Storage"
+description: "Store Mastra workspace files in Neon Object Storage, an S3-compatible bucket that branches with your Neon Postgres database."
+packages:
+  - "@mastra/s3"
+---
+
+# Neon Object Storage
+
+[Neon Object Storage](https://neon.com/docs/storage/overview) is S3-compatible storage built into a Neon project. Buckets belong to a branch, and a child branch starts with a copy-on-write copy of its parent's files. Mastra connects to it through [`S3Filesystem`](/integrations/file-storage/amazon-s3), so agents get workspace files that branch together with the rows in your [Neon Postgres](/integrations/databases/neon) database. For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
+
+## Before you begin
+
+You'll need:
+
+- A [Neon](https://neon.com) project in a region that supports Object Storage: `aws-us-east-1`, `aws-us-east-2`, `aws-eu-central-1`, or `aws-ap-southeast-1`
+- The [Neon CLI](https://neon.com/docs/cli/install)
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/s3
+```
+
+## Create a bucket
+
+Declare the bucket in `neon.ts` at the root of your project:
+
+```typescript title="neon.ts"
+import { defineConfig } from '@neon/config/v1'
+
+export default defineConfig({
+  buckets: {
+    'agent-files': {},
+  },
+})
+```
+
+Buckets are private by default. Set `access: 'public_read'` to allow anonymous reads.
+
+Link the directory to your Neon project, then create the bucket on the linked branch:
+
+```bash
+neon link
+neon deploy
+```
+
+`neon deploy` creates the bucket and writes the branch's storage credentials to `.env`, or to `.env.local` when no `.env` exists. `mastra dev` loads either file.
+
+To create a bucket without `neon.ts`, run `neon bucket create agent-files`, then pull the credentials yourself:
+
+```bash
+neon env pull --service object-storage
+```
+
+## Environment variables
+
+Neon sets four variables for object storage:
+
+| Variable | Value |
+| - | - |
+| `AWS_ACCESS_KEY_ID` | Access key for a branch credential |
+| `AWS_SECRET_ACCESS_KEY` | Secret key for that credential |
+| `AWS_ENDPOINT_URL_S3` | S3 endpoint of the branch |
+| `AWS_REGION` | Region of the project, such as `us-east-2` |
+
+A credential works on the branch it was issued for and on that branch's children. Inside a [Neon Function](/integrations/deploy/neon), Neon injects these variables, so you don't need a `.env` file.
+
+## Usage
+
+Pass the variables to `S3Filesystem` and assign the workspace to an agent:
+
+```typescript title="src/mastra/agents/file-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { S3Filesystem } from '@mastra/s3'
+
+const workspace = new Workspace({
+  filesystem: new S3Filesystem({
+    bucket: 'agent-files',
+    region: process.env.AWS_REGION,
+    endpoint: process.env.AWS_ENDPOINT_URL_S3,
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  }),
+})
+
+export const fileAgent = new Agent({
+  id: 'file-agent',
+  name: 'file-agent',
+  instructions: 'You manage files in the workspace.',
+  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+  workspace,
+})
+```
+
+Always set `endpoint`. Neon only accepts path-style requests, and `S3Filesystem` switches to them only when `endpoint` is set. Without it, the AWS SDK still reads `AWS_ENDPOINT_URL_S3` but sends virtual-hosted requests (`agent-files.<endpoint-host>`), which fail TLS verification.
+
+`S3Filesystem` recognizes Neon endpoints. It sets `icon` to `'neon'` and `displayName` to `Neon Object Storage`, so Studio shows a Neon mount in the file tree.
+
+Use `prefix` to give each agent, user, or thread its own folder in one bucket:
+
+```typescript
+const filesystem = new S3Filesystem({
+  bucket: 'agent-files',
+  prefix: `users/${userId}`,
+  region: process.env.AWS_REGION,
+  endpoint: process.env.AWS_ENDPOINT_URL_S3,
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+})
+```
+
+The prefix limits which keys the filesystem addresses. It isn't an authorization boundary.
+
+## Branches
+
+Each branch has its own storage endpoint. When you create a branch, it starts with every bucket and file from its parent at that point in time. Writes and deletes on the child don't change the parent, and later writes on the parent don't appear in the child.
+
+Use this to give a preview deployment, a test run, or an experimental agent a full copy of production files without copying any data:
+
+```bash
+neon checkout preview/new-tools --create
+```
+
+`neon checkout --create` creates the branch, pins it in `.neon`, and pulls the child branch's variables into `.env`, including its endpoint. The parent's credential also works on the child, but the endpoint must be the child's. Delete the branch to discard its files.
+
+## Skill blob storage
+
+`S3BlobStore` holds the content-addressable skill blobs that [`MastraEditor`](/reference/editor/mastra-editor) produces. It takes the same connection options:
+
+```typescript
+import { S3BlobStore } from '@mastra/s3'
+
+const blobStore = new S3BlobStore({
+  bucket: 'agent-files',
+  region: process.env.AWS_REGION!,
+  endpoint: process.env.AWS_ENDPOINT_URL_S3,
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+})
+```
+
+## FilesSDK adapter
+
+If you use [`FilesSDKFilesystem`](/integrations/file-storage/vercel-files), the `neon` adapter reads the same `AWS_*` variables. Install it with the AWS SDK packages it loads:
+
+```bash npm2yarn
+npm install @mastra/files-sdk files-sdk @aws-sdk/client-s3 @aws-sdk/s3-presigned-post @aws-sdk/s3-request-presigner
+```
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { FilesSDKFilesystem } from '@mastra/files-sdk'
+import { Files } from 'files-sdk'
+import { neon } from 'files-sdk/neon'
+
+const workspace = new Workspace({
+  filesystem: new FilesSDKFilesystem({
+    files: new Files({ adapter: neon({ bucket: 'agent-files' }) }),
+    icon: 'neon',
+    displayName: 'Neon Object Storage',
+  }),
+})
+```
+
+## Related
+
+- [S3Filesystem reference](/integrations/file-storage/amazon-s3)
+- [Neon Postgres](/integrations/databases/neon)
+- [Deploy to Neon](/integrations/deploy/neon)
+- [Neon Object Storage documentation](https://neon.com/docs/storage/overview)
+- [S3 compatibility on Neon](https://neon.com/docs/storage/s3-compatibility)
