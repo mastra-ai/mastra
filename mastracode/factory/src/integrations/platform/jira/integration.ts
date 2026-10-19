@@ -349,7 +349,13 @@ export class PlatformJiraIntegration implements FactoryIntegration {
         throw error;
       }
     }
-    const comment = await resolved.context.api.createComment(key, input.body);
+    let comment;
+    try {
+      comment = await resolved.context.api.createComment(key, input.body);
+    } catch (error) {
+      if (error instanceof JiraApiError && error.status === 404) return null;
+      throw error;
+    }
     return {
       id: comment.id,
       url: `${resolved.context.siteUrl}/browse/${key}?focusedCommentId=${comment.id}`,
@@ -484,6 +490,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
     const api = new JiraApiClient({
       baseUrl: `${proxyBaseUrl}/ex/jira/${encodeURIComponent(cloudId)}`,
       accessToken: this.#clientConfig.accessToken,
+      ...(this.#clientConfig.projectId ? { projectId: this.#clientConfig.projectId } : {}),
       ...(this.#clientConfig.fetchImpl ? { fetchImpl: this.#clientConfig.fetchImpl } : {}),
     });
     let siteUrl = this.#siteUrlByConnectionId.get(connection.id);

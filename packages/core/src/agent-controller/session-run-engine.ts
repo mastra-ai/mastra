@@ -7,21 +7,28 @@ import type {
   MastraProviderMetadata,
   MastraToolInvocationPart,
 } from '../agent/message-list/state/types';
+import { AgentThreadLeaseLostError, agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { AgentThreadSubscription } from '../agent/types';
-import { getErrorFromUnknown } from '../error';
+import { getErrorFromUnknown, MastraError } from '../error';
+import { isLeaseProvider } from '../events/pubsub';
 import type { RequestContext } from '../request-context';
-import type { GoalEvaluationPayload } from '../stream/types';
+import type { GoalEvaluationPayload, IsTaskCompletePayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { Session, SessionMachinery } from './session';
-import { ABORTED_BY_USER_REASON, SUSPENDED_RUN_AGENT_KEY, SUSPENDED_RUN_MEMORY_KEY } from './session';
 import {
-  addOptionalUsageField,
+  ABORTED_BY_USER_REASON,
+  SOURCE_APPROVAL_CALLS_KEY,
+  SUSPENDED_RUN_AGENT_KEY,
+  SUSPENDED_RUN_MEMORY_KEY,
+} from './session';
+import {
   describeNonSuccessFinishReason,
   describeServerSideFallback,
   getDisplayTransform,
-  getUsageNumber,
+  toStepTokenUsage,
 } from './stream-content';
-import type { ActiveSubagentState, TokenUsage } from './types';
+import { createEmptyTokenUsage } from './types';
+import type { ActiveSubagentState, AgentControllerEvent, TokenUsage } from './types';
 
 /**
  * The transient state of a single in-flight agent stream: the assistant message
@@ -54,8 +61,6 @@ type StreamIgnoredChunk =
   | StreamPayloadChunk<'tool-call-resumed'>
   | StreamPayloadChunk<'step-output'>
   | StreamPayloadChunk<'watch'>
-  | StreamPayloadChunk<'tripwire'>
-  | StreamPayloadChunk<'is-task-complete'>
   | StreamPayloadChunk<'background-task-started'>
   | StreamPayloadChunk<'background-task-completed'>
   | StreamPayloadChunk<'background-task-failed'>
@@ -80,9 +85,11 @@ type StreamChunk =
   | StreamPayloadChunk<'tool-call-approval'>
   | StreamPayloadChunk<'tool-call-suspended'>
   | StreamPayloadChunk<'error'>
+  | StreamPayloadChunk<'tripwire'>
   | StreamPayloadChunk<'step-finish'>
   | StreamPayloadChunk<'finish'>
   | StreamPayloadChunk<'goal'>
+  | StreamPayloadChunk<'is-task-complete'>
   | StreamDataChunk<'data-om-status'>
   | StreamDataChunk<'data-om-observation-start'>
   | StreamDataChunk<'data-om-observation-end'>
@@ -141,6 +148,11 @@ function getNestedRecord(
   key: string,
 ): Record<string, unknown> | undefined {
   return record ? getRecord(record[key]) : undefined;
+}
+
+function isTaskCompletePayload(value: unknown): value is IsTaskCompletePayload {
+  const record = getRecord(value);
+  return Boolean(record && typeof record.passed === 'boolean' && Array.isArray(record.results));
 }
 
 function isGoalEvaluationPayload(value: unknown): value is GoalEvaluationPayload {
@@ -221,6 +233,7 @@ async function abortDeadline(run: Session['run'], guard: AbortSignal, graceMs: n
 }
 
 type StreamState = {
+  resourceId: string;
   threadId?: string;
   currentMessage: MastraDBMessage;
   lastFinishedMessage?: MastraDBMessage;
@@ -323,6 +336,13 @@ export class SessionRunEngine {
     message.content.metadata.errorMessage = errorMessage;
   }
 
+  private stampResponseModel(message: MastraDBMessage, stepStart: StreamChunkPayload): void {
+    const modelId = getString(stepStart.modelId);
+    if (!modelId) return;
+    const provider = getString(stepStart.provider);
+    message.content.metadata = { ...message.content.metadata, modelId, ...(provider ? { provider } : {}) };
+  }
+
   private startCurrentMessage(state: StreamState): boolean {
     if (state.messageStarted) return false;
     this.#session.emit({ type: 'message_start', message: structuredClone(state.currentMessage) });
@@ -378,8 +398,12 @@ export class SessionRunEngine {
     state.completedToolPrelude = false;
   }
 
-  createStreamState(threadId = this.#session.thread.getId() ?? undefined): StreamState {
+  createStreamState(
+    threadId = this.#session.thread.getId() ?? undefined,
+    resourceId = this.#session.identity.getResourceId(),
+  ): StreamState {
     return {
+      resourceId,
       threadId,
       currentMessage: this.createEmptyAssistantMessage(threadId),
       messageStarted: false,
@@ -530,6 +554,7 @@ export class SessionRunEngine {
           chunk.type === 'finish' ||
           chunk.type === 'error' ||
           chunk.type === 'abort' ||
+          chunk.type === 'tripwire' ||
           chunk.type === 'tool-call-suspended' ||
           this.#session.run.isAbortRequested()
         ) {
@@ -594,6 +619,7 @@ export class SessionRunEngine {
   ): Promise<{ message: MastraDBMessage; suspended?: boolean } | undefined> {
     if ('runId' in chunk && chunk.runId) {
       this.#session.run.setRunId({ runId: chunk.runId });
+      this.#session.__captureRunThreadOwnerId(chunk.runId, requestContext);
     }
 
     if (isSpanChunk(chunk)) {
@@ -652,8 +678,13 @@ export class SessionRunEngine {
         // the next, so every id after the first marks that boundary — rotate
         // with it, or the persisted tail comes back as a duplicate on reload.
         // An emitted id never changes, and an id binds to one message only.
-        const messageId = getString(getPayload(chunk).messageId);
-        if (!messageId || state.offeredResponseIds.has(messageId)) break;
+        const payload = getPayload(chunk);
+        const messageId = getString(payload.messageId);
+        if (!messageId) break;
+        if (state.offeredResponseIds.has(messageId)) {
+          if (messageId === state.currentMessage.id) this.stampResponseModel(state.currentMessage, payload);
+          break;
+        }
         // A resumed tool can finish before the first model step starts. Seal
         // that tool-only prelude without changing its already observable id.
         if (
@@ -670,6 +701,7 @@ export class SessionRunEngine {
         if (!this.isCurrentMessageObserved(state)) {
           state.currentMessage.id = messageId;
         }
+        this.stampResponseModel(state.currentMessage, payload);
         break;
       }
 
@@ -895,6 +927,65 @@ export class SessionRunEngine {
           abortSignal: this.#session.run.getAbortSignal(),
         };
 
+        if (
+          binding.runId &&
+          this.#machinery.getRunScope(binding.runId)?.get(SOURCE_APPROVAL_CALLS_KEY)?.has(toolCallId)
+        )
+          break;
+
+        // A retained approval prompt can be replayed after this run has already
+        // advanced to a generic tool suspension. Ignore that obsolete prompt and
+        // let the matching `tool-call-suspended` chunk restore the current gate.
+        const currentRunId = binding.runId;
+        const currentThreadId = binding.threadId;
+        const pubsub = typeof agent.getPubSub === 'function' ? agent.getPubSub() : undefined;
+        const getLeaseProvider = (pubsub as { getLeaseProvider?: () => unknown } | undefined)?.getLeaseProvider;
+        const hasPersistentLease = getLeaseProvider
+          ? getLeaseProvider.call(pubsub) !== undefined
+          : isLeaseProvider(pubsub);
+        const currentSuspension =
+          currentRunId && currentThreadId && hasPersistentLease
+            ? agentThreadStreamRuntime.getResumableThreadRunSuspension(
+                {
+                  threadId: currentThreadId,
+                  resourceId: binding.resourceId,
+                  runId: currentRunId,
+                  toolCallId,
+                },
+                pubsub,
+              )
+            : undefined;
+        let currentSuspensionRequiresApproval = currentSuspension ? currentSuspension.kind === 'approval' : undefined;
+        if (
+          currentRunId &&
+          hasPersistentLease &&
+          currentSuspensionRequiresApproval === undefined &&
+          typeof agent.listSuspendedRuns === 'function'
+        ) {
+          try {
+            const result = await agent.listSuspendedRuns({
+              threadId: currentThreadId,
+              resourceId: binding.resourceId,
+            });
+            currentSuspensionRequiresApproval = result?.runs
+              .find(run => run.runId === currentRunId)
+              ?.toolCalls.find(toolCall => toolCall.toolCallId === toolCallId)?.requiresApproval;
+          } catch (error) {
+            if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+              throw error;
+            }
+          }
+        }
+        if (currentSuspensionRequiresApproval === false) {
+          break;
+        }
+
+        if (
+          this.#session.approval.isArmed({ toolCallId, threadId: binding.threadId, runId: binding.runId }) ||
+          (binding.runId && this.#machinery.getRunScope(binding.runId)?.get(SOURCE_APPROVAL_CALLS_KEY)?.has(toolCallId))
+        )
+          break;
+
         if (policy === 'allow') {
           await this.#session.approveToolCall({ toolCallId, requestContext, ...binding });
           break;
@@ -983,8 +1074,9 @@ export class SessionRunEngine {
         // a rebind during that await must not pair this run with the new
         // session's resource.
         const suspRunId = this.#session.run.getRunId();
-        const suspThreadId = this.#session.thread.getId();
-        const suspResourceId = this.#session.identity.getResourceId();
+        const suspThreadId = state.threadId;
+        const suspResourceId = state.resourceId;
+        let emitSuspension = true;
         if (suspRunId) {
           const runScope = this.#machinery.getRunScope(suspRunId);
           // A subscription restored for the current mode can replay this
@@ -1012,6 +1104,12 @@ export class SessionRunEngine {
             // abort settlement must still target where the suspended
             // invocation was persisted. register() preserves the original
             // binding when a replayed stream re-emits the same suspension.
+            emitSuspension = !this.#session.suspensions.has({
+              toolCallId: suspToolCallId,
+              runId: suspRunId,
+              threadId: suspThreadId,
+              resourceId: suspResourceId,
+            });
             this.#session.suspensions.register({
               toolCallId: suspToolCallId,
               runId: suspRunId,
@@ -1023,15 +1121,19 @@ export class SessionRunEngine {
         }
         state.isSuspended = true;
 
-        this.#session.emit({
+        const suspensionEvent: AgentControllerEvent = {
           type: 'tool_suspended',
-          threadId: state.threadId,
+          resourceId: suspResourceId,
+          threadId: suspThreadId,
+          runId: suspRunId ?? undefined,
           toolCallId: suspToolCallId,
           toolName: suspToolName,
           args: suspArgs,
           suspendPayload: suspPayload,
           resumeSchema: suspResumeSchema,
-        });
+        };
+        if (emitSuspension) this.#session.emit(suspensionEvent);
+        else this.#session.displayState.apply(suspensionEvent);
 
         break;
       }
@@ -1039,9 +1141,33 @@ export class SessionRunEngine {
       case 'error': {
         const streamError = getErrorFromUnknown(getPayload(chunk).error);
         this.#session.emit({ type: 'error', error: streamError });
+        if (!(streamError instanceof AgentThreadLeaseLostError)) {
+          this.retractFailedRunSuspensions({
+            resourceId: state.resourceId,
+            threadId: state.threadId,
+            runId: chunk.runId ?? this.#session.run.getRunId(),
+            reason: streamError.message,
+          });
+        }
+        break;
+      }
+
+      case 'tripwire': {
+        // A processor tripwire ends the run with no `finish` chunk. Record it as
+        // the terminal error so the run settles with a visible reason.
+        const payload = getPayload(chunk);
+        const reason = getString(payload.reason) || 'A processor stopped the run.';
+        const processorId = getString(payload.processorId);
+        const errorMessage = processorId ? `Processor "${processorId}" stopped the run: ${reason}` : reason;
+        this.setStopReason(state.currentMessage, 'error', true);
+        this.setErrorMessage(state.currentMessage, errorMessage);
+        state.terminalError = errorMessage;
+        state.terminalFinishReason = 'tripwire';
         this.retractFailedRunSuspensions({
+          resourceId: state.resourceId,
+          threadId: state.threadId,
           runId: chunk.runId ?? this.#session.run.getRunId(),
-          reason: streamError.message,
+          reason: errorMessage,
         });
         break;
       }
@@ -1053,56 +1179,30 @@ export class SessionRunEngine {
           state.currentMessage.content.parts.every(
             part => part.type === 'tool-invocation' && part.toolInvocation.state === 'result',
           );
-        const usage = getRecord(getPayload(chunk).output)?.usage;
-        const usageRecord = getRecord(usage);
-        if (usageRecord) {
-          // A step whose usage payload carries no usable primary count (missing,
-          // nested-object, or all-undefined shapes) must NOT be coerced into a
-          // {0,0,0} tally: doing so fabricates a false `usage_update` event and
-          // persists a false zero that is indistinguishable from a measured zero.
-          // Only fold/persist/emit when at least one primary count is present.
-          // A genuine measured zero arrives as an explicit numeric 0, which
-          // `getUsageNumber` reports as present.
-          const rawPrompt = getUsageNumber(usageRecord, 'promptTokens') ?? getUsageNumber(usageRecord, 'inputTokens');
-          const rawCompletion =
-            getUsageNumber(usageRecord, 'completionTokens') ?? getUsageNumber(usageRecord, 'outputTokens');
-          const rawTotal = getUsageNumber(usageRecord, 'totalTokens');
-          const hasPrimaryCount = rawPrompt !== undefined || rawCompletion !== undefined || rawTotal !== undefined;
-          if (hasPrimaryCount) {
-            const promptTokens = rawPrompt ?? 0;
-            const completionTokens = rawCompletion ?? 0;
-            const totalTokens = rawTotal ?? promptTokens + completionTokens;
-            const stepUsage: TokenUsage = {
-              promptTokens,
-              completionTokens,
-              totalTokens,
-            };
-            addOptionalUsageField(stepUsage, 'reasoningTokens', getUsageNumber(usageRecord, 'reasoningTokens'));
-            addOptionalUsageField(stepUsage, 'cachedInputTokens', getUsageNumber(usageRecord, 'cachedInputTokens'));
-            addOptionalUsageField(
-              stepUsage,
-              'cacheCreationInputTokens',
-              getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
-            );
-            addOptionalUsageField(
-              stepUsage,
-              'cacheCreationInputTokens5m',
-              getUsageNumber(usageRecord, 'cacheCreationInputTokens5m'),
-            );
-            addOptionalUsageField(
-              stepUsage,
-              'cacheCreationInputTokens1h',
-              getUsageNumber(usageRecord, 'cacheCreationInputTokens1h'),
-            );
-            if (usageRecord.raw !== undefined) {
-              stepUsage.raw = usageRecord.raw;
+        const stepUsage = toStepTokenUsage(getRecord(getPayload(chunk).output)?.usage);
+        if (stepUsage) {
+          const bindingGeneration = this.#session.run.bindingGeneration();
+          let savedUsage: TokenUsage | undefined;
+          try {
+            // The execution callback finishes before this chunk is broadcast.
+            // Replace the hydrated total, rather than adding already-saved replay.
+            if (state.threadId) {
+              const thread = await this.#session.thread.getById({ threadId: state.threadId });
+              savedUsage = thread?.metadata?.tokenUsage as TokenUsage | undefined;
             }
-
-            this.#session.addUsage(stepUsage);
-
-            this.#machinery.persistTokenUsage().catch(() => {});
-            this.#session.emit({ type: 'usage_update', usage: stepUsage });
+          } catch {
+            // Keep the last projection if storage cannot be read; replay is not a new measurement.
+            break;
           }
+          if (
+            this.#session.run.bindingGeneration() !== bindingGeneration ||
+            this.#session.thread.getId() !== state.threadId ||
+            this.#session.identity.getResourceId() !== state.resourceId
+          )
+            break;
+          if (savedUsage) this.#session.setTokenUsage({ ...createEmptyTokenUsage(), ...savedUsage });
+          else this.#session.addUsage(stepUsage);
+          this.#session.emit({ type: 'usage_update', usage: stepUsage });
         }
         break;
       }
@@ -1153,6 +1253,17 @@ export class SessionRunEngine {
         const goalPayload = getPayload(chunk);
         if (isGoalEvaluationPayload(goalPayload)) {
           this.#session.emit({ type: 'goal_evaluation', payload: goalPayload });
+        }
+        break;
+      }
+
+      case 'is-task-complete': {
+        // The completion check marks a boundary between attempts, like `goal`:
+        // close the current message and forward the verdict to subscribers.
+        this.finishCurrentMessageAndRotate(state);
+        const taskCompletePayload = getPayload(chunk);
+        if (isTaskCompletePayload(taskCompletePayload)) {
+          this.#session.emit({ type: 'task_complete_evaluation', payload: taskCompletePayload });
         }
         break;
       }
@@ -1271,11 +1382,15 @@ export class SessionRunEngine {
             });
           }
 
+          // A retrying marker reports one failed attempt of a cycle OM is still working on;
+          // only the cycle's final failure may stop the run.
+          const retrying = Object.hasOwn(payload, 'retrying') && payload.retrying === true;
           if (
-            !Object.hasOwn(payload, 'failurePolicy') ||
-            !Object.hasOwn(payload, 'failureKind') ||
-            payload.failurePolicy !== 'continue' ||
-            payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model')
+            !retrying &&
+            (!Object.hasOwn(payload, 'failurePolicy') ||
+              !Object.hasOwn(payload, 'failureKind') ||
+              payload.failurePolicy !== 'continue' ||
+              payload.failureKind !== (operationType === 'reflection' ? 'reflector-model' : 'observer-model'))
           ) {
             this.abortForOmFailure({ operationType, stage: 'run', error });
             return { message: state.currentMessage };
@@ -1610,10 +1725,14 @@ export class SessionRunEngine {
     suspended,
     error,
     aborted,
+    resourceId,
+    threadId,
   }: {
     suspended?: boolean;
     error?: boolean;
     aborted?: boolean;
+    resourceId?: string;
+    threadId?: string;
   }): Promise<void> {
     const reason = error
       ? 'error'
@@ -1622,30 +1741,65 @@ export class SessionRunEngine {
         : aborted || this.#session.run.isAbortRequested()
           ? 'aborted'
           : 'complete';
+    // A follower Session mirrors suspensions from runs it does not own. Once
+    // such a run completes (it was resumed elsewhere), its parked calls were
+    // answered, so drop them without a cancellation event. Error and tripwire
+    // finishes retract in their chunk handlers; lease loss keeps them parked.
+    const runId = this.#session.run.getRunId();
+    if (reason === 'complete' && resourceId && threadId && runId) {
+      for (const s of this.#session.suspensions.deleteForRun({ resourceId, threadId, runId })) {
+        this.#session.displayState.deletePendingSuspension({
+          resourceId: s.resourceId,
+          threadId: s.threadId,
+          runId: s.runId,
+          toolCallId: s.toolCallId,
+        });
+      }
+    }
     await this.#session.finishAgentRun(reason);
     this.#session.run.reset();
   }
 
-  private retractFailedRunSuspensions({ runId, reason }: { runId: string | null; reason: string }): void {
-    if (!runId) return;
+  private retractFailedRunSuspensions({
+    resourceId,
+    threadId,
+    runId,
+    reason,
+  }: {
+    resourceId: string | undefined;
+    threadId: string | undefined;
+    runId: string | null;
+    reason: string;
+  }): void {
+    if (!resourceId || !threadId || !runId) return;
 
-    for (const { toolCallId, toolName } of this.#session.suspensions.deleteForRun({ runId })) {
+    for (const suspension of this.#session.suspensions.deleteForRun({ resourceId, threadId, runId })) {
       this.#session.emit({
         type: 'tool_suspension_cancelled',
-        toolCallId,
-        toolName,
+        resourceId: suspension.resourceId,
+        threadId: suspension.threadId,
+        runId: suspension.runId,
+        toolCallId: suspension.toolCallId,
+        toolName: suspension.toolName,
         reason,
       });
     }
   }
 
-  private async handleSubscribedStreamError(error: unknown): Promise<void> {
+  private async handleSubscribedStreamError(error: unknown, resourceId: string, threadId: string): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
       await this.#session.finishAgentRun('aborted');
     } else {
       const streamError = getErrorFromUnknown(error);
       this.#session.emit({ type: 'error', error: streamError });
-      this.retractFailedRunSuspensions({ runId: this.#session.run.getRunId(), reason: streamError.message });
+      if (!(streamError instanceof AgentThreadLeaseLostError)) {
+        this.retractFailedRunSuspensions({
+          resourceId,
+          threadId,
+          runId: this.#session.run.getRunId(),
+          reason: streamError.message,
+        });
+      }
       await this.#session.finishAgentRun('error');
     }
     this.#session.stream.detach();
@@ -1653,7 +1807,9 @@ export class SessionRunEngine {
   }
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk, true>): Promise<void> {
-    const threadId = this.#session.thread.getId() ?? undefined;
+    const binding = this.#session.stream.getBinding({ subscription });
+    if (!binding) return;
+    const { resourceId, threadId } = binding;
     const agent = this.#session.stream.getAgent({ subscription }) ?? this.#machinery.getAgent();
     let currentRun: StreamState | undefined;
     let requestContext!: RequestContext;
@@ -1675,12 +1831,18 @@ export class SessionRunEngine {
         if (runId && abortedRunId) abortedRunId = undefined;
 
         if (!currentRun) {
-          currentRun = this.createStreamState(threadId);
+          currentRun = this.createStreamState(threadId, resourceId);
           this.#session.run.nextOperation();
           this.#session.run.ensureAbortController();
           this.#session.run.setRunId({ runId });
           this.#session.run.setTraceId({ traceId: null });
-          requestContext = await this.#machinery.buildRequestContext(subscription.__getCurrentRunRequestContext?.());
+          requestContext = await this.#machinery.buildRequestContext(subscription.__getCurrentRunRequestContext?.(), {
+            threadId,
+            resourceId,
+            runId: runId ?? undefined,
+            execution: true,
+          });
+          if (!this.#session.stream.isCurrent({ subscription })) break;
           this.#session.emit({ type: 'agent_start' });
         }
 
@@ -1695,6 +1857,7 @@ export class SessionRunEngine {
             chunk.type === 'finish' ||
             chunk.type === 'error' ||
             chunk.type === 'abort' ||
+            chunk.type === 'tripwire' ||
             chunk.type === 'tool-call-suspended'
           ) {
             const suspended =
@@ -1724,6 +1887,8 @@ export class SessionRunEngine {
               suspended,
               error: isError,
               aborted,
+              resourceId: currentRun.resourceId,
+              threadId: currentRun.threadId,
             });
             currentRun = undefined;
             if (aborted) {
@@ -1734,7 +1899,7 @@ export class SessionRunEngine {
             }
           }
         } catch (error) {
-          await this.handleSubscribedStreamError(error);
+          await this.handleSubscribedStreamError(error, resourceId, threadId);
           currentRun = undefined;
         }
       }
@@ -1755,7 +1920,11 @@ export class SessionRunEngine {
       // Graceful stream close without explicit terminal chunk.
       if (currentRun && this.#session.stream.isCurrent({ subscription })) {
         const streamResult = this.finishStreamState(currentRun);
-        await this.finishSubscribedStreamRun({ suspended: streamResult.suspended });
+        await this.finishSubscribedStreamRun({
+          suspended: streamResult.suspended,
+          resourceId: currentRun.resourceId,
+          threadId: currentRun.threadId,
+        });
         currentRun = undefined;
       }
 
@@ -1767,7 +1936,7 @@ export class SessionRunEngine {
       }
     } catch (error) {
       if (this.#session.stream.isCurrent({ subscription })) {
-        await this.handleSubscribedStreamError(error);
+        await this.handleSubscribedStreamError(error, resourceId, threadId);
       }
     }
   }

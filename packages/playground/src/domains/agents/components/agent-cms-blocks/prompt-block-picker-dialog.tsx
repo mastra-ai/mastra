@@ -7,10 +7,11 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@mastra/playground-ui/components/Dialog';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { FileText, Search } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { useState } from 'react';
 
 import { useStoredPromptBlocks } from '@/domains/prompt-blocks';
@@ -75,16 +76,13 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
         <DialogHeader>
           <DialogTitle>Select a prompt block</DialogTitle>
           <DialogDescription>Choose a saved prompt block to reference</DialogDescription>
-          <div className="mt-2 flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <input
-              type="text"
-              value={search}
-              onChange={e => handleSearchChange(e.target.value)}
-              placeholder="Search prompt blocks..."
-              className="flex-1 bg-transparent text-caption text-foreground outline-hidden placeholder:text-muted-foreground"
-            />
-          </div>
+          <SearchInput
+            label="Search prompt blocks"
+            className="mt-2"
+            placeholder="Search prompt blocks..."
+            value={search}
+            onValueChange={handleSearchChange}
+          />
         </DialogHeader>
         <DialogBody>
           {isLoading ? (

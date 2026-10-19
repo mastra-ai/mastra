@@ -56,7 +56,7 @@ describe('FilterableList', () => {
   it('local search filters the rows by label', async () => {
     const { getByTestId, queryByTestId } = renderList();
 
-    const input = getByTestId('list-filter-search').querySelector('input');
+    const input = getByTestId('list-filter-search');
     expect(input).toBeTruthy();
     fireEvent.change(input!, { target: { value: 'bet' } });
 
@@ -97,7 +97,7 @@ describe('FilterableList', () => {
   it('shows a no-matches message when the search excludes everything', async () => {
     const { getByTestId, findByText } = renderList();
 
-    const input = getByTestId('list-filter-search').querySelector('input');
+    const input = getByTestId('list-filter-search');
     fireEvent.change(input!, { target: { value: 'zzz' } });
 
     expect(await findByText('No matches')).toBeTruthy();

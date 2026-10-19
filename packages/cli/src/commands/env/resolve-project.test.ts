@@ -35,9 +35,20 @@ describe('resolveProject', () => {
     expect((await resolveProject('t', 'org', 'my-app')).id).toBe('proj-1');
   });
 
-  it('prefers MASTRA_PROJECT_ID over the flag', async () => {
+  it('prefers the explicit --project flag over MASTRA_PROJECT_ID', async () => {
     process.env.MASTRA_PROJECT_ID = 'proj-2';
-    expect((await resolveProject('t', 'org', 'my-app')).id).toBe('proj-2');
+    expect((await resolveProject('t', 'org', 'my-app')).id).toBe('proj-1');
+  });
+
+  it('uses MASTRA_PROJECT_ID when no flag is passed', async () => {
+    process.env.MASTRA_PROJECT_ID = 'proj-2';
+    expect((await resolveProject('t', 'org')).id).toBe('proj-2');
+  });
+
+  it('prefers MASTRA_PROJECT_ID over the linked .mastra-project.json', async () => {
+    process.env.MASTRA_PROJECT_ID = 'proj-2';
+    vi.mocked(loadProjectConfig).mockResolvedValue({ projectId: 'proj-1' } as never);
+    expect((await resolveProject('t', 'org')).id).toBe('proj-2');
   });
 
   it('falls back to the linked .mastra-project.json', async () => {

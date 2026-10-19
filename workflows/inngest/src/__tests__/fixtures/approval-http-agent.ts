@@ -86,9 +86,9 @@ export function buildApprovalHttpAgent({
     description: 'Save a note',
     inputSchema: z.object({ text: z.string() }),
     requireApproval: true,
-    execute: async input => {
+    execute: async (input, context) => {
       mkdirSync(outDir, { recursive: true });
-      writeFileSync(`${outDir}/note.txt`, input.text);
+      writeFileSync(`${outDir}/note.txt`, JSON.stringify({ text: input.text, resumeData: context?.agent?.resumeData }));
       return { saved: true };
     },
   });

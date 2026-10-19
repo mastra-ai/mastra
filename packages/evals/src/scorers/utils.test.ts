@@ -1724,6 +1724,58 @@ describe('Scorer Utils', () => {
         expect(result.matchedSteps).toBe(0);
       });
 
+      it('should match provider_tool_call ExpectedStep when toolArgs match', () => {
+        const actual: Trajectory = {
+          steps: [{ stepType: 'provider_tool_call', name: 'web_search', toolArgs: { query: 'hello' }, success: true }],
+        };
+        const expected: { steps: ExpectedStep[] } = {
+          steps: [{ name: 'web_search', stepType: 'provider_tool_call', toolArgs: { query: 'hello' }, success: true }],
+        };
+
+        const result = compareTrajectories(actual, expected);
+        expect(result.score).toBe(1);
+        expect(result.matchedSteps).toBe(1);
+      });
+
+      it('should fail provider_tool_call ExpectedStep when toolArgs differ', () => {
+        const actual: Trajectory = {
+          steps: [{ stepType: 'provider_tool_call', name: 'web_search', toolArgs: { query: 'different' } }],
+        };
+        const expected: { steps: ExpectedStep[] } = {
+          steps: [{ name: 'web_search', stepType: 'provider_tool_call', toolArgs: { query: 'hello' } }],
+        };
+
+        const result = compareTrajectories(actual, expected);
+        expect(result.matchedSteps).toBe(0);
+        expect(result.missingSteps).toEqual(['web_search']);
+      });
+
+      it('should fail provider_tool_call ExpectedStep when toolResult differs', () => {
+        const actual: Trajectory = {
+          steps: [{ stepType: 'provider_tool_call', name: 'web_search', toolResult: { hits: 1 } }],
+        };
+        const expected: { steps: ExpectedStep[] } = {
+          steps: [{ name: 'web_search', stepType: 'provider_tool_call', toolResult: { hits: 2 } }],
+        };
+
+        const result = compareTrajectories(actual, expected);
+        expect(result.matchedSteps).toBe(0);
+        expect(result.missingSteps).toEqual(['web_search']);
+      });
+
+      it('should fail provider_tool_call ExpectedStep when success differs', () => {
+        const actual: Trajectory = {
+          steps: [{ stepType: 'provider_tool_call', name: 'web_search', toolArgs: { query: 'hello' }, success: false }],
+        };
+        const expected: { steps: ExpectedStep[] } = {
+          steps: [{ name: 'web_search', stepType: 'provider_tool_call', toolArgs: { query: 'hello' }, success: true }],
+        };
+
+        const result = compareTrajectories(actual, expected);
+        expect(result.matchedSteps).toBe(0);
+        expect(result.missingSteps).toEqual(['web_search']);
+      });
+
       it('should match by name+type only when no data fields are specified', () => {
         const actual: Trajectory = {
           steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { query: 'anything' } }],
@@ -2024,6 +2076,52 @@ describe('Scorer Utils', () => {
       const result = checkTrajectoryEfficiency(trajectory, { noRedundantCalls: true });
       expect(result.redundantCalls).toEqual([{ name: 'lookup', index: 2 }]);
       expect(result.score).toBeLessThan(1);
+    });
+
+    it('should detect redundant tool calls separated by processor_run and model_generation steps', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          {
+            stepType: 'agent_run' as const,
+            name: 'agent',
+            children: [
+              { stepType: 'model_generation' as const, name: 'model' },
+              { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'test' } },
+              { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+              { stepType: 'model_generation' as const, name: 'model' },
+              { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'test' } },
+            ],
+          },
+        ],
+      };
+      const result = checkTrajectoryEfficiency(trajectory, { noRedundantCalls: true });
+      expect(result.redundantCalls).toEqual([{ name: 'search', index: 4 }]);
+    });
+
+    it('should not flag identical tool calls separated by a different tool call', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'test' } },
+          { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+          { stepType: 'tool_call' as const, name: 'lookup', toolArgs: { id: 1 } },
+          { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+          { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'test' } },
+        ],
+      };
+      const result = checkTrajectoryEfficiency(trajectory, { noRedundantCalls: true });
+      expect(result.redundantCalls).toEqual([]);
+    });
+
+    it('should not flag tool calls with different args separated by processor_run', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'a' } },
+          { stepType: 'processor_run' as const, name: 'processor', processorId: 'p' },
+          { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'b' } },
+        ],
+      };
+      const result = checkTrajectoryEfficiency(trajectory, { noRedundantCalls: true });
+      expect(result.redundantCalls).toEqual([]);
     });
 
     it('should check token budget from model_generation steps', () => {

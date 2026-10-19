@@ -1,4 +1,5 @@
-import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Input } from '@mastra/playground-ui/components/Input';
 import type { WorkflowRunActionsContext } from '@mastra/playground-ui/domains/workflows/workflow/workflow-trigger';
 import { useState } from 'react';
 
@@ -23,14 +24,15 @@ export function WorkflowRunActions({ workflowId, resourceId, setResourceId }: Wo
         }}
         onSaveExtra={() => setResourceId(resourceIdDraft)}
         extraFields={
-          <TextFieldBlock
-            name="workflow-run-resource-id"
-            label="Resource ID"
-            value={resourceIdDraft}
-            onChange={event => setResourceIdDraft(event.target.value)}
-            placeholder="e.g. tenant-42"
-            helpText="Ignored when server auth derives the resource ID from the user."
-          />
+          <Field>
+            <FieldLabel>Resource ID</FieldLabel>
+            <Input
+              value={resourceIdDraft}
+              onChange={event => setResourceIdDraft(event.target.value)}
+              placeholder="e.g. tenant-42"
+            />
+            <FieldDescription>Ignored when server auth derives the resource ID from the user.</FieldDescription>
+          </Field>
         }
       />
     </>

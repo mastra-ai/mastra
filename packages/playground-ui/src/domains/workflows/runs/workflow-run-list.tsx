@@ -1,12 +1,12 @@
 import type { MastraClient } from '@mastra/client-js';
-import { ChevronRight } from 'lucide-react';
+import { useDeleteWorkflowRun, useWorkflowRun, useWorkflowRuns } from '@mastra/react/hooks/workflows';
 import { useState } from 'react';
 import { z } from 'zod';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import { getRunResourceId, getRunTimestamp } from '../utils';
-import { useDeleteWorkflowRun, useWorkflowRun, useWorkflowRuns } from '@/domains/workflows/hooks/use-workflow-runs';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Spinner } from '@/ds/components/Spinner';
@@ -15,6 +15,7 @@ import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { useLinkComponent } from '@/lib/framework';
 import { formatDate } from '@/utils/date-format';
+import { toast } from '@/utils/toast';
 
 export interface WorkflowRecentRunsProps {
   workflowId: string;
@@ -83,18 +84,24 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
     setEndOfListElement,
     isFetchingNextPage,
     hasNextPage,
-  } = useWorkflowRuns(workflowId, { summary: true });
+  } = useWorkflowRuns({ workflowId: workflowId, summary: true });
   // The list only carries summary snapshots; the active run's input comes from the full run.
-  const { data: activeRun } = useWorkflowRun(workflowId, runId ?? '');
+  const { data: activeRun } = useWorkflowRun({
+    workflowId: workflowId,
+    runId: runId ?? '',
+    queryOptions: { enabled: Boolean(workflowId && runId) },
+  });
   const activeRunInput = formatRunInput(activeRun?.payload);
-  const { mutateAsync: deleteRun } = useDeleteWorkflowRun(workflowId);
+  const { mutateAsync: deleteRun } = useDeleteWorkflowRun({ workflowId: workflowId });
 
   const handleDelete = async (runId: string) => {
     try {
       await deleteRun({ runId });
+      toast.success('Workflow run deleted successfully');
       setDeleteRunId(null);
       navigate(paths.workflowLink(workflowId));
     } catch {
+      toast.error('Failed to delete workflow run');
       setDeleteRunId(null);
     }
   };
@@ -105,7 +112,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
     <>
       <Collapsible open={isOpen} onOpenChange={setIsOpen} className="flex min-h-0 flex-col">
         <CollapsibleTrigger className="flex shrink-0 items-center gap-2 px-4 py-3 text-left text-caption text-muted-foreground">
-          <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground motion-reduce:transition-none" />
+          <DisclosureChevron direction="right" className="size-4 text-muted-foreground" />
           <span>Recent runs</span>
           {!isLoading && !error && (
             <Txt as="span" variant="meta" tone="muted">
@@ -152,11 +159,17 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
                               </span>
                             )}
                             <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-                              <Txt as="span" variant="caption" className="flex w-full min-w-0 items-center gap-2">
-                                <span className="min-w-0 flex-1 truncate font-medium text-foreground" title={run.runId}>
+                              <span className="flex w-full min-w-0 items-center gap-2">
+                                <Txt
+                                  as="span"
+                                  variant="column"
+                                  tone="ink"
+                                  className="min-w-0 flex-1 truncate"
+                                  title={run.runId}
+                                >
                                   {run.runId}
-                                </span>
-                              </Txt>
+                                </Txt>
+                              </span>
                               <WorkflowRunMeta
                                 timestamp={getRunTimestamp(snapshot?.timestamp)}
                                 resourceId={getRunResourceId(run)}

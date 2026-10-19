@@ -6,6 +6,7 @@ export const omPackStartupRestoreScenario: McE2eScenario = {
   name: 'om-pack-startup-restore',
   description: 'Restores a persisted built-in OM pack into observer and reflector model state at startup.',
   testName: 'restores built-in OM pack defaults through /om on startup',
+  enableObservationalMemory: true,
   useOpenAIModel: true,
   aimockFixture: 'om-pack-startup-restore.json',
   env: () => ({
@@ -20,7 +21,6 @@ export const omPackStartupRestoreScenario: McE2eScenario = {
       completedAt: new Date(0).toISOString(),
       skippedAt: null,
       version: 1,
-      quietModePreferenceSelected: true,
     };
     settings.models = {
       ...settings.models,

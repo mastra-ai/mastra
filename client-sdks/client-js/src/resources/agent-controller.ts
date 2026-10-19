@@ -1,4 +1,5 @@
 import type {
+  AgentControllerThinkingLevel,
   AgentControllerThread,
   AgentControllerWireEvent,
   MastraDBMessage,
@@ -35,7 +36,7 @@ import type {
   SendNotificationResult,
   ToolCategory,
 } from '../types';
-import { parseClientRequestContext } from '../utils';
+import { isTerminalReconnectError, parseClientRequestContext } from '../utils';
 import { BaseResource } from './base';
 
 /**
@@ -173,6 +174,7 @@ const KNOWN_AGENT_CONTROLLER_EVENT_TYPES = new Set<string>(
     thread_changed: true,
     thread_created: true,
     thread_deleted: true,
+    thread_owner_changed: true,
     thread_title_updated: true,
     subagent_start: true,
     subagent_text_delta: true,
@@ -203,6 +205,7 @@ const KNOWN_AGENT_CONTROLLER_EVENT_TYPES = new Set<string>(
     workspace_ready: true,
     workspace_error: true,
     workspace_status_changed: true,
+    task_complete_evaluation: true,
     info: true,
     error: true,
   } satisfies Record<KnownAgentControllerEvent['type'], true>),
@@ -560,6 +563,13 @@ export class AgentControllerSession extends BaseResource {
           try {
             reconnectedResponse = await requestStream();
           } catch (error) {
+            if (cancelled) return;
+            // Auth denials and other client errors won't resolve by resubscribing;
+            // 408/429 stay retryable.
+            if (isTerminalReconnectError(error)) {
+              safeOnError(error);
+              return;
+            }
             result = { kind: 'transport_error', error };
           }
         }
@@ -630,7 +640,10 @@ export class AgentControllerSession extends BaseResource {
   async approveTool(
     toolCallId: string,
     approved: boolean,
-    options?: AgentControllerRequestOptions,
+    options?: AgentControllerRequestOptions & {
+      /** Also grant the tool's category to the call's thread ("always allow"). */
+      alwaysAllowCategory?: boolean;
+    },
   ): Promise<AgentControllerCommandAck> {
     const requestContext = parseClientRequestContext(options?.requestContext);
     return this.request<AgentControllerCommandAck>(this.url(`${this.base()}/tool-approval`), {
@@ -638,7 +651,12 @@ export class AgentControllerSession extends BaseResource {
       // Not idempotent: a replay after a lost response would be rejected as not_pending
       // and misreport an applied decision as ignored.
       retries: 0,
-      body: { toolCallId, approved, ...(requestContext ? { requestContext } : {}) },
+      body: {
+        toolCallId,
+        approved,
+        ...(options?.alwaysAllowCategory ? { alwaysAllowCategory: true } : {}),
+        ...(requestContext ? { requestContext } : {}),
+      },
     });
   }
 
@@ -662,12 +680,23 @@ export class AgentControllerSession extends BaseResource {
     });
   }
 
-  /** Inject a message into the in-flight run without starting a new turn. */
-  async steer(message: string, options?: AgentControllerRequestOptions): Promise<void> {
+  /**
+   * Aborts the in-flight run, then sends the message as a new turn.
+   * Pass a structured message to attach files, as with `sendMessage`.
+   */
+  async steer(
+    message: string | { content: string; files?: Array<{ data: string; mediaType: string; filename?: string }> },
+    options?: AgentControllerRequestOptions,
+  ): Promise<void> {
+    const { content, files } = typeof message === 'string' ? { content: message, files: undefined } : message;
     const requestContext = parseClientRequestContext(options?.requestContext);
     await this.request(this.url(`${this.base()}/steer`), {
       method: 'POST',
-      body: { message, ...(requestContext ? { requestContext } : {}) },
+      body: {
+        message: content,
+        ...(files?.length ? { files } : {}),
+        ...(requestContext ? { requestContext } : {}),
+      },
     });
   }
 
@@ -687,11 +716,17 @@ export class AgentControllerSession extends BaseResource {
     await this.request(this.url(`${this.base()}/mode`), { method: 'POST', body: { modeId } });
   }
 
-  /** Switch the model. Defaults to thread scope. */
-  async switchModel(modelId: string, options?: { scope?: 'global' | 'thread'; modeId?: string }): Promise<void> {
+  /**
+   * Switch the session model and persist it to the active thread. When
+   * `thinkingLevel` is provided it is applied and persisted with the model.
+   */
+  async switchModel(
+    modelId: string,
+    { thinkingLevel }: { thinkingLevel?: AgentControllerThinkingLevel } = {},
+  ): Promise<void> {
     await this.request(this.url(`${this.base()}/model`), {
       method: 'POST',
-      body: { modelId, scope: options?.scope, modeId: options?.modeId },
+      body: thinkingLevel !== undefined ? { modelId, thinkingLevel } : { modelId },
     });
   }
 
@@ -801,12 +836,21 @@ export class AgentControllerSession extends BaseResource {
   /**
    * Queue a follow-up message. If the session is idle it sends immediately;
    * if a run is active it queues for after completion.
+   * Pass a structured message to attach files, as with `sendMessage`.
    */
-  async followUp(message: string, options?: AgentControllerRequestOptions): Promise<void> {
+  async followUp(
+    message: string | { content: string; files?: Array<{ data: string; mediaType: string; filename?: string }> },
+    options?: AgentControllerRequestOptions,
+  ): Promise<void> {
+    const { content, files } = typeof message === 'string' ? { content: message, files: undefined } : message;
     const requestContext = parseClientRequestContext(options?.requestContext);
     await this.request(this.url(`${this.base()}/follow-up`), {
       method: 'POST',
-      body: { message, ...(requestContext ? { requestContext } : {}) },
+      body: {
+        message: content,
+        ...(files?.length ? { files } : {}),
+        ...(requestContext ? { requestContext } : {}),
+      },
     });
   }
 

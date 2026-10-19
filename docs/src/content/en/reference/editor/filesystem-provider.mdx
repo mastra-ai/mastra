@@ -63,7 +63,8 @@ new MastraEditor({
 ## Implementing a provider
 
 ```typescript title="src/providers/my-filesystem.ts"
-import type { FilesystemProvider, WorkspaceFilesystem } from '@mastra/core/editor'
+import type { FilesystemProvider } from '@mastra/core/editor'
+import type { WorkspaceFilesystem } from '@mastra/core/workspace'
 
 export const myFilesystemProvider: FilesystemProvider<{ bucket: string; region: string }> = {
   id: 'my-fs',

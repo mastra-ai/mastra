@@ -14,12 +14,16 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
+import { InMemoryStore } from '../../../storage';
+import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 
 /** @param onCall - invoked as soon as the model starts streaming, to synchronize on a live run. */
 function createAbortableModel(onCall?: () => void) {
@@ -66,6 +70,27 @@ function createAbortableModel(onCall?: () => void) {
   });
 }
 
+function createErrorModel() {
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      stream: new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: [] });
+          controller.enqueue({
+            type: 'response-metadata',
+            id: 'id-0',
+            modelId: 'mock-model-id',
+            timestamp: new Date(0),
+          });
+          controller.enqueue({ type: 'error', error: new Error('Terminal provider failure') });
+          controller.close();
+        },
+      }),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+    }),
+  });
+}
+
 describe('DurableAgent abort signal', () => {
   let pubsub: EventEmitterPubSub;
 
@@ -108,6 +133,65 @@ describe('DurableAgent abort signal', () => {
     expect(abortPayload).toBeDefined();
 
     cleanup();
+  });
+
+  it.each([
+    ['durable', createDurableAgent],
+    ['evented', createEventedAgent],
+  ] as const)('%s abort emits an abort chunk and does not invoke onFinish', async (_kind, createAgent) => {
+    const baseAgent = new Agent({
+      id: `abort-parity-${_kind}`,
+      name: `Abort Parity ${_kind}`,
+      instructions: 'Test',
+      model: createAbortableModel() as LanguageModelV2,
+    });
+    const agent = createAgent({ agent: baseAgent, pubsub });
+    const onAbort = vi.fn();
+    const onFinish = vi.fn();
+    const result = await agent.stream('Go', { onAbort, onFinish });
+    const chunks: any[] = [];
+    const consumption = (async () => {
+      try {
+        for await (const chunk of result.output.fullStream) chunks.push(chunk);
+      } catch {
+        // The provider stream terminates with AbortError after the public abort chunk.
+      }
+    })();
+
+    await new Promise(r => setTimeout(r, 10));
+    result.abort();
+    await consumption;
+
+    expect(chunks.some(chunk => chunk.type === 'abort')).toBe(true);
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onFinish).not.toHaveBeenCalled();
+    result.cleanup();
+  });
+
+  it.each([
+    ['durable', createDurableAgent],
+    ['evented', createEventedAgent],
+  ] as const)('%s failure invokes onError and does not invoke onFinish', async (_kind, createAgent) => {
+    const baseAgent = new Agent({
+      id: `error-parity-${_kind}`,
+      name: `Error Parity ${_kind}`,
+      instructions: 'Test',
+      model: createErrorModel() as LanguageModelV2,
+    });
+    const agent = createAgent({ agent: baseAgent, pubsub });
+    const onError = vi.fn();
+    const onFinish = vi.fn();
+    const result = await agent.stream('Go', {
+      modelSettings: { maxRetries: 0 },
+      onError,
+      onFinish,
+    });
+
+    await result.output.consumeStream().catch(() => undefined);
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onFinish).not.toHaveBeenCalled();
+    result.cleanup();
   });
 
   it('onAbort receives the text streamed before the abort', async () => {
@@ -165,77 +249,176 @@ describe('DurableAgent abort signal', () => {
     cleanup();
   });
 
-  it('persists already-streamed assistant text to memory after abort (#22593)', async () => {
-    const mockMemory = new MockMemory();
-    const mockModel = new MockLanguageModelV2({
-      doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
-        stream: new ReadableStream({
-          start(controller) {
-            controller.enqueue({ type: 'stream-start', warnings: [] });
-            controller.enqueue({
-              type: 'response-metadata',
-              id: 'id-0',
-              modelId: 'mock-model-id',
-              timestamp: new Date(0),
-            });
-            controller.enqueue({ type: 'text-start', id: 'text-1' });
-            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Hello' });
-            abortSignal?.addEventListener(
-              'abort',
-              () => {
-                const err = new Error('Aborted');
-                err.name = 'AbortError';
-                controller.error(err);
-              },
-              { once: true },
-            );
-          },
+  it.each([
+    ['durable', createDurableAgent],
+    ['evented', createEventedAgent],
+  ] as const)(
+    '%s abort preserves partial text without persisting the remaining iteration steps',
+    async (_kind, createAgent) => {
+      const mockMemory = new MockMemory();
+      const mockModel = new MockLanguageModelV2({
+        doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Hello' });
+              abortSignal?.addEventListener(
+                'abort',
+                () => {
+                  const err = new Error('Aborted');
+                  err.name = 'AbortError';
+                  controller.error(err);
+                },
+                { once: true },
+              );
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
         }),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-      }),
-    });
-    const baseAgent = new Agent({
-      id: 'abort-persist-agent',
-      name: 'Abort Persist Agent',
-      instructions: 'Test',
-      model: mockModel as LanguageModelV2,
-      memory: mockMemory,
-    });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      });
+      const baseAgent = new Agent({
+        id: 'abort-persist-agent',
+        name: 'Abort Persist Agent',
+        instructions: 'Test',
+        model: mockModel as LanguageModelV2,
+        memory: mockMemory,
+      });
+      const durableAgent = createAgent({ agent: baseAgent, pubsub });
+      const storage = new InMemoryStore();
+      new Mastra({ agents: { durableAgent }, storage, pubsub, logger: false });
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const persistedSteps = vi.spyOn(workflowsStore, 'updateWorkflowResults');
+      const onFinish = vi.fn();
 
-    const threadId = 'thread-abort-persist';
-    const resourceId = 'resource-abort-persist';
+      const threadId = 'thread-abort-persist';
+      const resourceId = 'resource-abort-persist';
 
-    let abortPayload: { steps: unknown[]; text?: string } | undefined;
-    const { output, abort, cleanup } = await durableAgent.stream('Go', {
-      memory: { thread: threadId, resource: resourceId },
-      onAbort: data => {
-        abortPayload = data;
+      let abortPayload: { steps: unknown[]; text?: string } | undefined;
+      const { output, abort, cleanup } = await durableAgent.stream('Go', {
+        memory: { thread: threadId, resource: resourceId },
+        onFinish,
+        onAbort: data => {
+          abortPayload = data;
+        },
+      });
+
+      // Abort once the streamed text is observed, so the abort deterministically
+      // lands after the delta reached the collector.
+      for await (const chunk of output.fullStream as AsyncIterable<{ type: string }>) {
+        if (chunk.type === 'text-delta') abort();
+      }
+
+      expect(abortPayload?.text).toBe('Hello');
+      const lastStep = abortPayload?.steps.at(-1) as { finishReason?: string } | undefined;
+      expect(lastStep?.finishReason).toBe('abort');
+
+      // Wait for the finalize-run flush to land in memory.
+      await vi.waitFor(async () => {
+        const { messages } = await mockMemory.recall({ threadId, resourceId });
+        const assistantMessage = messages.find(message => message.role === 'assistant');
+        expect(assistantMessage, 'partial assistant message was not persisted to memory after abort').toBeDefined();
+        expect(JSON.stringify(assistantMessage?.content)).toContain('Hello');
+        expect(assistantMessage?.content.parts?.some(part => part.type === 'error')).toBe(false);
+      });
+      expect(onFinish).not.toHaveBeenCalled();
+
+      const stepIds = persistedSteps.mock.calls.map(([args]) => args.stepId);
+      if (_kind === 'evented') expect(stepIds).toContain('durable-llm-execution');
+      for (const stepId of [
+        'extract-tool-calls',
+        'collect-tool-results',
+        'durable-llm-mapping',
+        'durable-agentic-execution-bg-task-check',
+        'durable-agentic-execution-signal-drain',
+        'update-iteration-state',
+        'durable-is-task-complete',
+        'durable-goal',
+      ]) {
+        expect(stepIds).not.toContain(stepId);
+      }
+
+      cleanup();
+    },
+  );
+
+  it.each([
+    ['durable', createDurableAgent],
+    ['evented', createEventedAgent],
+  ] as const)('%s preserves completed-step usage when the next LLM call is aborted', async (_kind, createAgent) => {
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async ({ abortSignal }) => {
+        const first = calls++ === 0;
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              if (first) {
+                controller.enqueue({ type: 'tool-call', toolCallId: 'call-1', toolName: 'step', input: '{}' });
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                });
+                controller.close();
+              } else {
+                controller.enqueue({ type: 'text-start', id: 'partial' });
+                controller.enqueue({ type: 'text-delta', id: 'partial', delta: 'Partial second response' });
+                abortSignal?.addEventListener(
+                  'abort',
+                  () => {
+                    const error = new Error('Aborted');
+                    error.name = 'AbortError';
+                    controller.error(error);
+                  },
+                  { once: true },
+                );
+              }
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
       },
     });
-
-    // Abort once the streamed text is observed, so the abort deterministically
-    // lands after the delta reached the collector.
-    for await (const chunk of output.fullStream as AsyncIterable<{ type: string }>) {
-      if (chunk.type === 'text-delta') abort();
-    }
-
-    expect(abortPayload?.text).toBe('Hello');
-    const lastStep = abortPayload?.steps.at(-1) as { finishReason?: string } | undefined;
-    expect(lastStep?.finishReason).toBe('abort');
-
-    // Wait for the finalize-run flush to land in memory.
-    await vi.waitFor(async () => {
-      const recalled = await mockMemory.recall({ threadId, resourceId });
-      expect(recalled.messages.length).toBeGreaterThan(0);
+    const agent = createAgent({
+      agent: new Agent({
+        id: 'abort-usage-agent',
+        name: 'Abort Usage Agent',
+        instructions: 'Test',
+        model,
+        tools: {
+          step: createTool({
+            id: 'step',
+            description: 'Take a step',
+            inputSchema: z.object({}),
+            execute: async () => 'done',
+          }),
+        },
+      }),
+      pubsub,
     });
-
-    const { messages } = await mockMemory.recall({ threadId, resourceId });
-    const assistantMessage = messages.find(message => message.role === 'assistant');
-    expect(assistantMessage, 'partial assistant message was not persisted to memory after abort').toBeDefined();
-    expect(JSON.stringify(assistantMessage?.content)).toContain('Hello');
-    expect(assistantMessage?.content.parts?.some(part => part.type === 'error')).toBe(false);
-
+    new Mastra({ agents: { agent }, storage: new InMemoryStore(), pubsub, logger: false });
+    const onAbort = vi.fn();
+    const onFinish = vi.fn();
+    const { output, abort, cleanup } = await agent.stream('Go', { maxSteps: 3, onAbort, onFinish });
+    for await (const chunk of output.fullStream) {
+      if (chunk.type === 'text-delta') await abort();
+    }
+    expect(calls).toBe(2);
+    expect(onAbort).toHaveBeenCalledOnce();
+    expect(onFinish).not.toHaveBeenCalled();
+    const result = onAbort.mock.calls[0]?.[0];
+    expect(result.text).toBe('Partial second response');
+    expect(result.steps).toHaveLength(2);
+    expect(result.steps[0]?.usage).toMatchObject({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+    expect(result.steps.at(-1)?.finishReason).toBe('abort');
     cleanup();
   });
 
@@ -299,7 +482,8 @@ describe('DurableAgent abort signal', () => {
 
     await vi.waitFor(async () => {
       const recalled = await mockMemory.recall({ threadId, resourceId });
-      expect(recalled.messages.length).toBeGreaterThan(0);
+      const assistantMessage = recalled.messages.find(message => message.role === 'assistant');
+      expect(JSON.stringify(assistantMessage?.content)).toContain('Hello');
     });
 
     const { messages } = await mockMemory.recall({ threadId, resourceId });
@@ -323,11 +507,13 @@ describe('DurableAgent abort signal', () => {
     const source = await durableAgent.stream('Go');
     await new Promise(r => setTimeout(r, 10));
 
-    let finishReason: string | undefined;
+    let abortPayload: unknown;
+    const onFinish = vi.fn();
     const observed = await durableAgent.observe(source.runId, {
-      onFinish: result => {
-        finishReason = result.finishReason;
+      onAbort: data => {
+        abortPayload = data;
       },
+      onFinish,
     });
 
     const sourceConsumption = source.output.consumeStream().catch(() => undefined);
@@ -338,7 +524,8 @@ describe('DurableAgent abort signal', () => {
 
     await Promise.all([sourceConsumption, observedConsumption]);
 
-    expect(finishReason).toBe('abort');
+    expect(abortPayload).toBeDefined();
+    expect(onFinish).not.toHaveBeenCalled();
 
     source.cleanup();
   });

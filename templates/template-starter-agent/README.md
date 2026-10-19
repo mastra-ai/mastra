@@ -13,14 +13,12 @@ This starter provides you with a general-purpose Mastra agent that can research 
 - Conversation memory, generated thread titles, task tracking, web search, and web page fetching
 - Recurring schedules that persist across restarts
 - Edit the agent's instructions and author new workflows from Mastra Studio; changes save as files under `./mastra/editor`
-- Streams survive client disconnects and process restarts, and unfinished runs pick back up when the server starts
 
 ## Get started
 
 1. Copy `.env.example` to `.env` and set:
    - `MASTRA_GATEWAY_API_KEY` — model access via the Mastra gateway
    - `DATABASE_URL` — a Postgres connection string
-   - `REDIS_URL` — a Redis connection string
 2. Optionally attach integrations to your Mastra platform project and set `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` to make them available to the agent.
 3. Run:
 

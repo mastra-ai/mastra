@@ -43,9 +43,9 @@ export type NotificationDeliveryPolicyInput = {
  * Custom delivery decision logic. Runs at receipt time (when the notification
  * is sent) and, for records the receipt-time decision deferred or scheduled
  * for summary, AGAIN at delivery time when the dispatch workflow picks them
- * up. At delivery time only the decision's `streamOptions` is honored — the
- * record's persisted schedule already fixed when and how it delivers — so
- * deciders should be side-effect free.
+ * up. At delivery time only the decision's `streamOptions` and `hold` are
+ * honored — the record's persisted schedule already fixed when and how it
+ * delivers — so deciders should be side-effect free.
  */
 export type NotificationDeliveryPolicyDecider = (
   input: NotificationDeliveryPolicyInput,

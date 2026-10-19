@@ -350,7 +350,13 @@ export class JiraIntegration implements FactoryIntegration {
         throw err;
       }
     }
-    const comment = await this.api.createComment(key, body);
+    let comment;
+    try {
+      comment = await this.api.createComment(key, body);
+    } catch (err) {
+      if (err instanceof JiraApiError && err.status === 404) return null;
+      throw err;
+    }
     return {
       id: comment.id,
       url: `${this.baseUrl}/browse/${key}?focusedCommentId=${comment.id}`,

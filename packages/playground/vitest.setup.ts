@@ -1,6 +1,10 @@
+import { configure } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, vi } from 'vitest';
 
 import { server } from './src/test/msw-server';
+
+// Full-suite runs share CPU across workers; the 1s default makes waitFor flaky under load.
+configure({ asyncUtilTimeout: 3000 });
 
 vi.mock('@mastra/playground-ui/components/ScrollArea', () => import('@/test/mock-scroll-area'));
 

@@ -12,6 +12,7 @@ import type { ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 import { ToolMockMatcher } from './tool-mocks';
+import type { AgentExperimentOutput, ScorerExperimentOutput } from './types';
 
 /**
  * Common fields extracted from both FullOutput (v2/v3) and GenerateTextResult/GenerateObjectResult (v1).
@@ -20,11 +21,11 @@ import { ToolMockMatcher } from './tool-mocks';
 interface AgentGenerateResult {
   text?: string;
   object?: unknown;
-  toolCalls?: unknown[];
-  toolResults?: unknown[];
-  sources?: unknown[];
-  files?: unknown[];
-  usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+  toolCalls?: Record<string, unknown>[];
+  toolResults?: Record<string, unknown>[];
+  sources?: Record<string, unknown>[];
+  files?: Record<string, unknown>[];
+  usage?: Record<string, unknown>;
   reasoningText?: string;
   traceId?: string;
   error?: Error;
@@ -82,12 +83,14 @@ async function executeScorer(
       console.warn(`Scorer ${scorer.id} returned invalid score: ${result.score}`);
     }
 
+    const output: ScorerExperimentOutput = {
+      score,
+      reason: typeof result.reason === 'string' ? result.reason : null,
+      ...(result.notScorable ? { notScorable: result.notScorable } : {}),
+    };
+
     return {
-      output: {
-        score,
-        reason: typeof result.reason === 'string' ? result.reason : null,
-        ...(result.notScorable ? { notScorable: result.notScorable } : {}),
-      },
+      output,
       error: null,
       traceId: null, // Scorers don't produce traces
     };
@@ -359,7 +362,7 @@ async function executeAgent(
 
   // Only persist fields relevant to experiment evaluation — drop provider metadata,
   // duplicate messages, steps trace, and other debugging internals
-  const trimmedOutput = {
+  const trimmedOutput: AgentExperimentOutput = {
     text: result.text,
     object: result.object,
     toolCalls: result.toolCalls,
@@ -369,7 +372,8 @@ async function executeAgent(
     usage: result.usage,
     reasoningText: result.reasoningText,
     traceId,
-    error: result.error ?? null,
+    // Error instances serialize to {} — persist the readable parts explicitly
+    error: result.error ? { message: result.error.message, stack: result.error.stack } : null,
   };
 
   return {

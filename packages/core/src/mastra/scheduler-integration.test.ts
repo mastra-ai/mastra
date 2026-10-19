@@ -593,6 +593,43 @@ describe('Mastra — workflow scheduler integration', () => {
       await second.shutdown();
     });
 
+    it('registers a declarative schedule whose cron has no future occurrence as completed', async () => {
+      const storage = new MockStore();
+
+      const mastra = await boot(storage, buildScheduledWorkflow({ cron: '0 0 10 23 9 * 2020' }));
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const row = await schedulesStore.getSchedule('wf_rolling-wf');
+
+      expect(row?.status).toBe('completed');
+      expect(row?.cron).toBe('0 0 10 23 9 * 2020');
+      await mastra.shutdown();
+    });
+
+    it('completes a declarative schedule when a redeploy passes an exhausted cron, and re-arms it when the cron can fire again', async () => {
+      const storage = new MockStore();
+      const schedulesStore = (await storage.getStore('schedules'))!;
+
+      const first = await boot(storage, buildScheduledWorkflow({ cron: '*/5 * * * *' }));
+      expect((await schedulesStore.getSchedule('wf_rolling-wf'))?.status).toBe('active');
+      await first.shutdown();
+
+      // Exhausted cron: the row is completed instead of skipping the write, so
+      // the rest of the patch (target payload here) still lands.
+      const second = await boot(storage, buildScheduledWorkflow({ cron: '0 0 10 23 9 * 2020', inputData: { v: 2 } }));
+      const completed = await schedulesStore.getSchedule('wf_rolling-wf');
+      expect(completed?.status).toBe('completed');
+      expect(completed?.cron).toBe('0 0 10 23 9 * 2020');
+      expect((completed!.target as any).inputData).toEqual({ v: 2 });
+      await second.shutdown();
+
+      // A cadence that can fire again reactivates the completed row.
+      const third = await boot(storage, buildScheduledWorkflow({ cron: '*/5 * * * *' }));
+      const reactivated = await schedulesStore.getSchedule('wf_rolling-wf');
+      expect(reactivated?.status).toBe('active');
+      expect(reactivated!.nextFireAt).toBeGreaterThan(Date.now());
+      await third.shutdown();
+    });
+
     it('updates the target payload when inputData changes', async () => {
       const storage = new MockStore();
 

@@ -9,6 +9,7 @@ import {
   emptyFeedback,
   emptyTraceSpanScores,
   traceSpans,
+  traceSpansWithPayload,
   emptyEnvironments,
   emptyServiceNames,
   emptyTags,
@@ -153,6 +154,26 @@ describe('LogsPage log drawer', () => {
 
       expect(await screen.findByRole('dialog', { name: /trace-a/ })).toBeTruthy();
       expect(screen.getByTestId('location').textContent).toContain('traceId=trace-a');
+    });
+  });
+
+  describe('when the opened trace has a span whose payload holds the searched term', () => {
+    it('keeps only the span matching the payload text in the trace drawer search', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceSpansWithPayload)),
+      );
+      renderPage('/logs?logId=log-1');
+      const logDialog = await screen.findByRole('dialog', { name: /^Log / });
+      fireEvent.click(within(logDialog).getByRole('button', { name: /^Trace/ }));
+      const traceDialog = await screen.findByRole('dialog', { name: /trace-a/ });
+      expect(await within(traceDialog).findByText('llm call')).toBeTruthy();
+
+      fireEvent.change(within(traceDialog).getByPlaceholderText('Search spans...'), {
+        target: { value: 'zanzibar-payload-term' },
+      });
+
+      await waitFor(() => expect(within(traceDialog).queryByText('llm call')).toBeNull());
+      expect(within(traceDialog).getByText('weather tool')).toBeTruthy();
     });
   });
 

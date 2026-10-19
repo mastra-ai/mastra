@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 function quoteSql(value: string): string {
@@ -169,13 +170,16 @@ values
     await runtime.waitForScreenText(/E2E notification reload fixture/i, terminal, 8_000);
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/low · triage-note · dismissed/i, terminal, 8_000);
-    await runtime.waitForScreenText(/low · deployment-success · archived/i, terminal, 8_000);
-    await runtime.waitForScreenText(/medium · comment-batch · pending/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Notification reload dismissed target: stale triage reminder/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Notification reload archived target: canary completed earlier/i, terminal, 8_000);
     await runtime.waitForScreenText(/Notification reload coalesced target/i, terminal, 8_000);
     await runtime.waitForScreenText(/Notification summary: 1 pending/i, terminal, 8_000);
     await runtime.waitForScreenText(/linear: 1/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Use notification_inbox to inspect pending notifications/i, terminal, 8_000);
+    // Notifications render title and message rows only: no priority/kind/status row and no usage hint.
+    expect(terminal.serialize().view).not.toMatch(
+      /triage-note · dismissed|deployment-success · archived|comment-batch · pending/i,
+    );
+    expect(terminal.serialize().view).not.toMatch(/Use notification_inbox to inspect pending notifications/i);
 
     terminal.keyCtrlC();
   },

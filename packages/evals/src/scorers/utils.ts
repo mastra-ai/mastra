@@ -1008,7 +1008,7 @@ export type ToolResultInfo = {
  *
  * @example
  * ```ts
- * import { extractToolResults } from '@mastra/evals/scorers';
+ * import { extractToolResults } from '@mastra/evals/scorers/utils';
  * import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt';
  *
  * const scorer = createHallucinationScorer({
@@ -1284,6 +1284,7 @@ function compareRelaxedOrder(
 const COMPARABLE_FIELDS_BY_TYPE: Record<string, string[]> = {
   tool_call: ['toolArgs', 'toolResult', 'success'],
   mcp_tool_call: ['toolArgs', 'toolResult', 'mcpServer', 'success'],
+  provider_tool_call: ['toolArgs', 'toolResult', 'success'],
   model_generation: ['modelId', 'promptTokens', 'completionTokens', 'finishReason'],
   agent_run: ['agentId'],
   workflow_step: ['stepId', 'status', 'output'],
@@ -1466,10 +1467,14 @@ export function checkTrajectoryEfficiency(
     for (const step of steps) {
       if (step.children?.length) siblingLists.push(step.children);
     }
-    for (let i = 1; i < steps.length; i++) {
-      const prev = steps[i - 1]!;
+    // processor_run and model_generation steps are interleaved between tool calls in
+    // trace-derived trajectories, so they must not break adjacency.
+    let prev: TrajectoryStep | undefined;
+    for (let i = 0; i < steps.length; i++) {
       const curr = steps[i]!;
+      if (curr.stepType === 'processor_run' || curr.stepType === 'model_generation') continue;
       if (
+        prev &&
         prev.name === curr.name &&
         prev.stepType === curr.stepType &&
         (prev.stepType === 'tool_call' || prev.stepType === 'mcp_tool_call')
@@ -1484,6 +1489,7 @@ export function checkTrajectoryEfficiency(
           // If serialization fails, don't flag as redundant
         }
       }
+      prev = curr;
     }
   }
 

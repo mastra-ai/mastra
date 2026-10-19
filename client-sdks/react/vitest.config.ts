@@ -9,7 +9,10 @@ export default defineConfig({
   },
   test: {
     name: 'unit:client-sdks/react',
-    isolate: false,
+    isolate: true,
+    setupFiles: ['./src/test/vitest-setup.ts'],
+    testTimeout: 15000,
+    env: { TZ: 'UTC' },
     coverage: {
       provider: 'v8', // or 'istanbul'
     },

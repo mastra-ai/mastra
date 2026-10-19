@@ -1,12 +1,10 @@
 export { EmptyFactoryState } from './components/EmptyFactoryState';
 export { ConnectRepositoriesPanel } from './components/ConnectRepositoriesPanel';
 export { FactorySwitcher } from './components/FactorySwitcher';
-export { UserSessionsSection } from './components/UserSessionsSection';
-export { WorkspacesSection } from './components/WorkspacesSection';
+export { SessionsSection } from './components/SessionsSection';
 export * from '../../../hooks/useGithubGitOps';
 export * from '../../../hooks/useGithubRepos';
 export * from '../../../hooks/useGithubStatus';
-export * from '../../../hooks/useRepositorySettings';
 export * from '../../../hooks/useFactories';
 export * from '../../../hooks/useWorkspaces';
 export * from './services/github';

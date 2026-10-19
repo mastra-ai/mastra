@@ -1,0 +1,114 @@
+import type { MastraClient } from '@mastra/client-js';
+import { queryOptions as tanstackQueryOptions, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { UseQueryOptions, UseQueryResult } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
+import type { MastraQueryOptions } from '../shared/query-options';
+
+/**
+ * Key, fetcher and stale policy of the `trace-spans` query. Every observer of this key must
+ * share these (rather than only the key) so one observer with a stricter `staleTime` does not
+ * refetch data another one considers fresh.
+ */
+type TraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
+
+export const traceSpansQueryOptions = (
+  client: MastraClient,
+  traceId: string | null | undefined,
+): UseQueryOptions<TraceResponse, Error, TraceResponse, (string | null | undefined)[]> =>
+  tanstackQueryOptions({
+    queryKey: ['trace-spans', traceId],
+    queryFn: async () => {
+      if (!traceId) {
+        throw new Error('Trace ID is required');
+      }
+      const res = await client.getTrace(traceId);
+      return res;
+    },
+    // Resumed runs and delayed exports can append spans even when every known span has ended.
+    staleTime: 0,
+  });
+
+/**
+ * Every span of a single trace, with its full payload.
+ *
+ * The lightweight projection exists to keep blob columns off the read path of a
+ * *list*, where the cost is paid once per trace on screen. A trace that is open
+ * has already narrowed that to one, and the panel both renders and searches
+ * these spans -- `input`, `output` and `attributes` included -- so the
+ * projection would only hide content the reader is looking at.
+ */
+export type TraceSpansData = Awaited<ReturnType<MastraClient['getTrace']>>;
+
+/**
+ * Does not guard on empty ids; pass `queryOptions: { enabled }` to skip the fetch.
+ */
+export function useTraceSpans<TData = TraceSpansData>({
+  traceId,
+  passive = false,
+  queryOptions,
+}: {
+  traceId: string | null | undefined;
+  passive?: boolean;
+  queryOptions?: MastraQueryOptions<TraceSpansData, TData, (string | null | undefined)[]>;
+}): UseQueryResult<TData> {
+  const client = useMastraClient();
+
+  const { queryKey, queryFn, enabled, staleTime } = traceSpansQueryOptions(client, traceId);
+
+  return useQuery<TraceSpansData, Error, TData, (string | null | undefined)[]>({
+    queryKey,
+    queryFn,
+    enabled,
+    staleTime,
+    // History rows share updates but leave automatic refreshes to the selected detail.
+    refetchOnMount: !passive,
+    refetchOnWindowFocus: !passive,
+    refetchOnReconnect: !passive,
+    ...queryOptions,
+  });
+}
+
+/**
+ * Returns a function that loads a full trace through the shared `trace-spans` cache, so an
+ * imperative read (e.g. an export) and the trace panel always see the same payload.
+ */
+export function useFetchTraceSpans(): (traceId: string) => Promise<TraceSpansData> {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+
+  return (traceId: string) => queryClient.fetchQuery(traceSpansQueryOptions(client, traceId));
+}
+
+/**
+ * Observes the `trace-spans` query of several traces at once and projects each one with `select`.
+ * Traces still loading (or failed) yield `fallback(traceId)` so the result always lines up with `traceIds`.
+ */
+export function useTraceSpansQueries<T>({
+  traceIds,
+  select,
+  fallback,
+  queryOptions,
+}: {
+  traceIds: string[];
+  select: (traceId: string, data: TraceSpansData) => T;
+  fallback: (traceId: string) => T;
+  /** Applied to every per-trace query. */
+  queryOptions?: MastraQueryOptions<TraceSpansData, T, (string | null | undefined)[]>;
+}): T[] {
+  const client = useMastraClient();
+
+  return useQueries({
+    queries: traceIds.map(traceId => ({
+      ...traceSpansQueryOptions(client, traceId),
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      select: (data: TraceSpansData) => select(traceId, data),
+      ...queryOptions,
+    })),
+    combine: results =>
+      results.map((result, index) =>
+        result.data === undefined ? fallback(traceIds[index] ?? '') : (result.data as T),
+      ),
+  });
+}

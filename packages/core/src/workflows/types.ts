@@ -395,6 +395,13 @@ export type WorkflowStateField =
   | 'requestContext'
   | 'tracingContext';
 
+export interface NestedWorkflowParent {
+  workflowId: string;
+  runId: string;
+  stepId: string;
+  foreachIndex?: number;
+}
+
 export interface WorkflowRunState {
   // Core state info
   runId: string;
@@ -416,6 +423,12 @@ export interface WorkflowRunState {
    * logical execution attempt rather than a broker delivery.
    */
   eventedExecutionClaims?: string[];
+  /**
+   * Epoch ms when an agent resume claimed this suspended run (status `pending`). Lets a later
+   * resume recognize a claim abandoned by a process that died before starting the run.
+   * @internal
+   */
+  resumeClaimedAt?: number;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
   stepExecutionPath?: string[];
@@ -425,6 +438,7 @@ export interface WorkflowRunState {
    * as children of the original suspended span.
    */
   tracingContext?: WorkflowStateTracingContext;
+  parentWorkflow?: NestedWorkflowParent;
 }
 
 /**
@@ -564,6 +578,29 @@ export interface WorkflowOptions {
    * for reduced snapshot writes and serialize their own resumes.
    */
   allowUnclaimedResumes?: boolean;
+
+  /**
+   * Identifies step errors raised because this execution lost, or could not
+   * confirm, ownership of the run — for example a durable agent run taken
+   * over by `recover()`. Another execution may be driving the run from its
+   * stored snapshot, so the evented engine fails such a run without any
+   * storage write: no step-result merge, no terminal `failed` update, and no
+   * snapshot cleanup.
+   *
+   * @internal Set by durable agent workflows.
+   */
+  isOwnershipLostError?: (error: unknown) => boolean;
+
+  /**
+   * Whether the serialized request context carried by a run event belongs to a
+   * different execution of the run than `requestContext` — for example one
+   * that lost the run to `recover()` but is still publishing. A caller waiting
+   * on the evented engine ignores such an execution's finish event and keeps
+   * waiting for its own.
+   *
+   * @internal Set by durable agent workflows.
+   */
+  isForeignExecution?: (eventRequestContext: unknown, requestContext: RequestContext) => boolean;
 
   /**
    * Transforms the run snapshot immediately before it is persisted.
@@ -999,7 +1036,7 @@ export type StepParams<
     TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
     TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
     DefaultEngineType,
-    TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+    InferWorkflowRequestContext<TRequestContextSchema>
   >;
 };
 
@@ -1231,6 +1268,26 @@ export type WorkflowConfig<
 export type InferSchemaOutput<T> = T extends PublicSchema<any> ? InferPublicSchema<T> : unknown;
 
 /**
+ * Infers the request context type for workflows and steps.
+ *
+ * Workflows validate request context without decoding it, so step code sees the raw input values.
+ * Unlike `InferPublicSchema`, this does not resolve a Standard Schema's optional `~standard.types`
+ * to its transformed output, which would type raw values as decoded ones.
+ */
+export type InferWorkflowRequestContext<T> =
+  T extends PublicSchema<any>
+    ? T extends { _output: infer Output }
+      ? Output
+      : T extends { _type: infer Output }
+        ? Output
+        : T extends { '~standard': { types: { output: infer Output } } }
+          ? Output
+          : T extends PublicSchema<infer Output>
+            ? Output
+            : never
+    : unknown;
+
+/**
  * Schema-typed variant of `WorkflowConfig` used by `createWorkflow` factories.
  *
  * Instead of inferring output types through the `PublicSchema<TOutput>` union
@@ -1264,7 +1321,7 @@ export type CreateWorkflowParams<
   schedule?: WorkflowScheduleInput<
     NoInfer<InferSchemaOutput<TInputSchema>>,
     NoInfer<InferSchemaOutput<TStateSchema>>,
-    NoInfer<InferSchemaOutput<TRequestContextSchema>>
+    NoInfer<InferWorkflowRequestContext<TRequestContextSchema>>
   >;
 };
 
@@ -1305,6 +1362,7 @@ export type SubsetOf<TStepState, TState> =
 export type ExecutionContext = {
   workflowId: string;
   runId: string;
+  parentWorkflow?: NestedWorkflowParent;
   executionPath: number[];
   stepExecutionPath?: string[];
   activeStepsPath: Record<string, number[]>;

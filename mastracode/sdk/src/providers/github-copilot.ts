@@ -17,7 +17,7 @@ import type { JSONSchema7 } from '@mastra/schema-compat';
 import { applyCompatLayer, GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
-import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
+import { ProviderAuthRequiredError, rejectUnauthorizedResponse } from '../auth/provider-auth-error.js';
 import { COPILOT_HEADERS, fetchCopilotModels, getGitHubCopilotBaseUrl } from '../auth/providers/github-copilot.js';
 import type { CopilotModelEntry, GitHubCopilotCredentials } from '../auth/providers/github-copilot.js';
 import { AuthStorage } from '../auth/storage.js';
@@ -186,7 +186,10 @@ export function buildGitHubCopilotOAuthFetch(
       ...(body ? ({ duplex: 'half' } as RequestInit) : {}),
     });
     try {
-      return await fetch(finalRequest);
+      return await rejectUnauthorizedResponse(await fetch(finalRequest), {
+        providerName: 'GitHub Copilot',
+        requestUrl: finalUrl.toString(),
+      });
     } catch (error) {
       if (error && typeof error === 'object') {
         Object.assign(error as Record<string, unknown>, {

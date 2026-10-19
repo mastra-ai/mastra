@@ -5,6 +5,7 @@ import { MockStore } from '../storage';
 import { createBackgroundTask } from './create';
 import { BackgroundTaskManager } from './manager';
 import type { BackgroundTaskManagerConfig, TaskContext } from './types';
+import { slimProgressChunk } from './workflow';
 
 /** Create a per-task context with the given execute function */
 function ctx(executeFn: (args: any, opts?: any) => Promise<any>): TaskContext {
@@ -2026,6 +2027,113 @@ describe('BackgroundTaskManager', () => {
       abortController.abort();
     });
 
+    it('drops nested output past the wrapper depth limit instead of publishing it unslimmed', () => {
+      const leaf = {
+        type: 'step-start',
+        from: 'AGENT',
+        payload: { messageId: 'm', request: { body: 'x'.repeat(100_000) } },
+      };
+      let chunk: unknown = leaf;
+      for (let i = 0; i < 30; i++) chunk = { type: 'tool-output', payload: { output: chunk } };
+      expect(JSON.stringify(slimProgressChunk(chunk)).length).toBeLessThan(5_000);
+    });
+
+    it('publishes data a tool writes itself unchanged, even when it looks like an agent chunk', () => {
+      const userData = {
+        type: 'finish',
+        payload: { messages: { all: ['keep'] }, output: { steps: ['keep'] }, metadata: { request: { body: 'keep' } } },
+      };
+      const chunk = {
+        type: 'tool-output',
+        from: 'USER',
+        runId: 'r1',
+        payload: { output: userData, toolCallId: 'c1', toolName: 'tool' },
+      };
+      expect(slimProgressChunk(chunk)).toBe(chunk);
+      const wrapped = { type: 'workflow-step-output', from: 'WORKFLOW', payload: { output: chunk } };
+      expect(slimProgressChunk(wrapped)).toBe(wrapped);
+    });
+
+    it('publishes nested agent step/finish chunks without request snapshots or repeated args', async () => {
+      const published: any[] = [];
+      const originalPublish = pubsub.publish.bind(pubsub);
+      vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event) => {
+        if ((event as any).type === 'task.output') published.push(event);
+        return originalPublish(topic, event);
+      });
+
+      const bigFile = 'x'.repeat(100_000);
+      const wrap = (inner: unknown) => ({
+        type: 'workflow-step-output',
+        runId: 'wf-1',
+        from: 'WORKFLOW',
+        payload: { output: inner },
+      });
+      const executeFn = vi.fn().mockImplementation(async (_args: any, opts: { onProgress?: (chunk: any) => void }) => {
+        await opts.onProgress?.(
+          wrap({
+            type: 'step-start',
+            from: 'AGENT',
+            payload: { messageId: 'm1', request: { body: bigFile }, inputMessages: [bigFile] },
+          }),
+        );
+        await opts.onProgress?.(
+          wrap({
+            type: 'step-finish',
+            from: 'AGENT',
+            payload: {
+              messageId: 'm1',
+              stepResult: { reason: 'stop' },
+              output: { text: 'hi', usage: { totalTokens: 3 }, steps: [bigFile] },
+              metadata: { request: { body: bigFile }, modelId: 'gpt-5' },
+              messages: { all: [bigFile], user: [], nonUser: [] },
+            },
+          }),
+        );
+        await opts.onProgress?.(
+          wrap({
+            type: 'finish',
+            from: 'AGENT',
+            payload: {
+              stepResult: { reason: 'stop' },
+              output: { usage: { totalTokens: 3 }, steps: [bigFile] },
+              metadata: { request: { body: bigFile } },
+              messages: { all: [bigFile], user: [], nonUser: [] },
+              response: { id: 'resp-1', modelId: 'gpt-5' },
+            },
+          }),
+        );
+        await opts.onProgress?.(wrap({ type: 'workflow-step-progress', payload: { id: 'step', completedCount: 1 } }));
+        return 'done';
+      });
+
+      await manager.enqueue(
+        { toolName: 'tool', toolCallId: 'c1', args: { file: bigFile }, agentId: 'a1', runId: 'run-1' },
+        ctx(executeFn),
+      );
+      await vi.waitFor(() => expect(published).toHaveLength(4));
+
+      for (const event of published) {
+        expect(event.data.args).toBeUndefined();
+        expect(JSON.stringify(event).length).toBeLessThan(2_000);
+      }
+      const [start, stepFinish, finish, progress] = published.map(e => e.data.chunk.payload.output);
+      expect(start).toEqual({ type: 'step-start', from: 'AGENT', payload: { messageId: 'm1' } });
+      expect(stepFinish.payload).toEqual({
+        messageId: 'm1',
+        stepResult: { reason: 'stop' },
+        output: { text: 'hi', usage: { totalTokens: 3 } },
+        metadata: { modelId: 'gpt-5' },
+      });
+      expect(finish.payload).toEqual({
+        stepResult: { reason: 'stop' },
+        output: { usage: { totalTokens: 3 } },
+        metadata: {},
+        response: { id: 'resp-1', modelId: 'gpt-5' },
+      });
+      expect(progress).toEqual({ type: 'workflow-step-progress', payload: { id: 'step', completedCount: 1 } });
+    });
+
     it('throttles progress output chunks while still emitting completion', async () => {
       const { mgr, cleanup } = await makeLocalManager({ enabled: true, progressThrottleMs: 100 });
 
@@ -2301,6 +2409,124 @@ describe('BackgroundTaskManager', () => {
       });
 
       abortController.abort();
+    });
+
+    describe('resource scoping', () => {
+      const enqueueFor = (resourceId: string | undefined, toolCallId: string, result: string) =>
+        manager.enqueue(
+          {
+            toolName: 'tool',
+            toolCallId,
+            args: { secret: `${toolCallId}-args` },
+            agentId: 'a1',
+            runId: `run-${toolCallId}`,
+            threadId: `thread-${toolCallId}`,
+            resourceId,
+          },
+          ctx(vi.fn().mockResolvedValue(result)),
+        );
+
+      const collect = async (stream: ReadableStream<Record<string, unknown>>, abort: AbortController) => {
+        await tick();
+        abort.abort();
+        const events: any[] = [];
+        const reader = stream.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          events.push(value);
+        }
+        return events;
+      };
+
+      it('does not deliver resource-scoped task events to an unscoped subscriber', async () => {
+        const abortController = new AbortController();
+        const stream = manager.stream({ agentId: 'a1', abortSignal: abortController.signal });
+
+        await enqueueFor('victim', 'victim-call', 'SECRET');
+        await enqueueFor(undefined, 'shared-call', 'shared');
+
+        const events = await collect(stream, abortController);
+        expect(events.map(e => e.payload.toolCallId)).not.toContain('victim-call');
+        expect(JSON.stringify(events)).not.toContain('SECRET');
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            type: 'background-task-completed',
+            payload: expect.objectContaining({ toolCallId: 'shared-call', result: 'shared' }),
+          }),
+        );
+      });
+
+      it('delivers only the subscribed resource across threads', async () => {
+        const abortController = new AbortController();
+        const stream = manager.stream({ agentId: 'a1', resourceId: 'user-1', abortSignal: abortController.signal });
+
+        await enqueueFor('user-1', 'own-call', 'mine');
+        await enqueueFor('user-2', 'other-call', 'theirs');
+        await enqueueFor(undefined, 'unscoped-call', 'unscoped');
+
+        const events = await collect(stream, abortController);
+        expect(new Set(events.map(e => e.payload.toolCallId))).toEqual(new Set(['own-call']));
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            type: 'background-task-completed',
+            payload: expect.objectContaining({ result: 'mine' }),
+          }),
+        );
+      });
+
+      it('treats an empty-string resource id as a resource, not as unscoped', async () => {
+        const unscopedAbort = new AbortController();
+        const unscoped = manager.stream({ agentId: 'a1', abortSignal: unscopedAbort.signal });
+        const emptyAbort = new AbortController();
+        const empty = manager.stream({ agentId: 'a1', resourceId: '', abortSignal: emptyAbort.signal });
+
+        await enqueueFor('', 'empty-call', 'EMPTY');
+        await enqueueFor('user-1', 'user-call', 'USER');
+
+        const unscopedEvents = await collect(unscoped, unscopedAbort);
+        expect(unscopedEvents.map(e => e.payload.toolCallId)).not.toContain('empty-call');
+
+        const emptyEvents = await collect(empty, emptyAbort);
+        expect(new Set(emptyEvents.map(e => e.payload.toolCallId))).toEqual(new Set(['empty-call']));
+      });
+
+      it('delivers every resource when allResources is set', async () => {
+        const abortController = new AbortController();
+        const stream = manager.stream({ allResources: true, abortSignal: abortController.signal });
+
+        await enqueueFor('user-1', 'one-call', 'r1');
+        await enqueueFor('user-2', 'two-call', 'r2');
+
+        const events = await collect(stream, abortController);
+        expect(new Set(events.map(e => e.payload.toolCallId))).toEqual(new Set(['one-call', 'two-call']));
+      });
+
+      it('excludes other resources from the existing-task snapshot', async () => {
+        const blocking = () => ctx(vi.fn().mockImplementation(() => new Promise(() => {})));
+        await manager.enqueue(
+          { toolName: 'tool', toolCallId: 'victim-call', args: {}, agentId: 'a1', runId: 'r1', resourceId: 'victim' },
+          blocking(),
+        );
+        await manager.enqueue(
+          { toolName: 'tool', toolCallId: 'shared-call', args: {}, agentId: 'a1', runId: 'r2' },
+          blocking(),
+        );
+        await tick();
+
+        const unscopedAbort = new AbortController();
+        const unscoped = await collect(manager.stream({ abortSignal: unscopedAbort.signal }), unscopedAbort);
+        expect(unscoped.map(e => e.payload.toolCallId)).toEqual(['shared-call']);
+
+        const victimTask = (await manager.listTasks({ resourceId: 'victim' })).tasks[0]!;
+        const byIdAbort = new AbortController();
+        const byId = await collect(manager.stream({ taskId: victimTask.id, abortSignal: byIdAbort.signal }), byIdAbort);
+        expect(byId).toEqual([]);
+
+        const allAbort = new AbortController();
+        const all = await collect(manager.stream({ allResources: true, abortSignal: allAbort.signal }), allAbort);
+        expect(new Set(all.map(e => e.payload.toolCallId))).toEqual(new Set(['victim-call', 'shared-call']));
+      });
     });
 
     it('closes when abortSignal fires', async () => {

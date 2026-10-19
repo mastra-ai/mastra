@@ -36,7 +36,7 @@ const mockEvaluationModel = {
   supportedQuestionTypes: ['choice', 'score', 'boolean'],
 } as any;
 
-/** A configured classifier whose evaluate() is stubbed, so tests stay deterministic. */
+/** A configured classifier whose decide() is stubbed, so tests stay deterministic. */
 function stubClassifier(answers: Record<string, unknown>, id = 'triage') {
   const classifier = new Classifier({
     id,
@@ -62,7 +62,7 @@ function stubClassifier(answers: Record<string, unknown>, id = 'triage') {
     warnings: [],
     response: { modelId: 'stub', timestamp: new Date() },
   });
-  (classifier as any).evaluate = evaluate;
+  (classifier as any).decide = evaluate;
   return { classifier, evaluate };
 }
 
@@ -80,8 +80,8 @@ function choicesFrom(classifier: Classifier<any>, extra: Record<string, unknown>
     ...extra,
   } as any);
   const built = (processor as any).classifierOrId as Classifier<any>;
-  (built as any).evaluate = async (args: any) => {
-    const result = await classifier.evaluate(args);
+  (built as any).decide = async (args: any) => {
+    const result = await classifier.decide(args);
     return { ...result, answers: { model: (result.answers as any).complexity } };
   };
   return processor;
@@ -206,7 +206,7 @@ describe('ModelSelectionProcessor', () => {
       } as any);
     }
 
-    /** Swap in a stubbed evaluate() on the classifier the processor built for itself. */
+    /** Swap in a stubbed decide() on the classifier the processor built for itself. */
     function stubBuiltClassifier(processor: ModelSelectionProcessor<any>, answers: Record<string, unknown>) {
       const built = (processor as any).classifierOrId as Classifier<any>;
       const evaluate = vi.fn().mockResolvedValue({
@@ -215,7 +215,7 @@ describe('ModelSelectionProcessor', () => {
         warnings: [],
         response: { modelId: 'stub', timestamp: new Date() },
       });
-      (built as any).evaluate = evaluate;
+      (built as any).decide = evaluate;
       return evaluate;
     }
 
@@ -317,7 +317,7 @@ describe('ModelSelectionProcessor', () => {
     it('reports abstention when the classifier fails', async () => {
       const seen: any[] = [];
       const { classifier } = stubClassifier({});
-      (classifier as any).evaluate = vi.fn().mockRejectedValue(new Error('judge down'));
+      (classifier as any).decide = vi.fn().mockRejectedValue(new Error('judge down'));
       const processor = choicesFrom(classifier, {
         onDecision: d => void seen.push(d),
       });

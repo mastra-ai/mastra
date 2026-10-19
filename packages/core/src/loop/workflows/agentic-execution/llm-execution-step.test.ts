@@ -40,6 +40,7 @@ type IterationData = {
   processorRetryCount?: number;
   fallbackModelIndex?: number;
   processorRetryFeedback?: string;
+  backgroundTaskPending?: boolean;
 };
 
 describe('createLLMExecutionStep gateway provider tools', () => {
@@ -2108,14 +2109,19 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       } as any,
     } as unknown as OuterLLMRun<{}>);
 
-    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+    const result = await llmExecutionStep.execute(
+      createExecuteParams({ ...createIterationInput(), backgroundTaskPending: true }),
+    );
 
     expect(doStream).toHaveBeenCalledTimes(1);
     expect(onAbort).toHaveBeenCalledOnce();
     // Nothing streamed before the abort, so the partial text is an empty string
     // rather than undefined.
     expect(onAbort).toHaveBeenCalledWith(expect.objectContaining({ text: '' }));
-    expect(result.stepResult).toMatchObject({ reason: 'tripwire', isContinued: false });
+    expect(result).toMatchObject({
+      backgroundTaskPending: true,
+      stepResult: { reason: 'abort', isContinued: false },
+    });
   });
 
   it('hands onAbort the text streamed before the abort', async () => {
@@ -2483,8 +2489,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(result.stepResult.reason).toBe('retry');
     expect(result.messageId).toBe('rotated-response-id');
 
-    // The rotated id only splits the transcript if the failed response was
-    // sealed; without the boundary the retry merges back under `msg-0`.
+    // The failed attempt's partial response is rolled back, so the retry neither
+    // merges into it nor replays it to the model (#26081).
     messageList.add(
       {
         id: result.messageId,
@@ -2498,7 +2504,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       .db()
       .filter(message => message.role === 'assistant')
       .map(message => message.id);
-    expect(assistantIds).toEqual(['msg-0', 'rotated-response-id']);
+    expect(assistantIds).toEqual(['rotated-response-id']);
+    expect(JSON.stringify(messageList.get.all.db())).not.toContain('half a sentence');
   });
 
   it('passes the rotated response message id to processor custom data writers', async () => {
@@ -3750,5 +3757,67 @@ describe('per-step modelSettings precedence (call-time < per-model < processor)'
     expect(setInferenceContext).toHaveBeenCalledTimes(1);
     expect((setInferenceContext.mock.calls[0]?.[0] as any)?.parameters?.temperature).toBe(0.1);
     expect(doStream.mock.calls[0]?.[0]?.temperature).toBe(0.1);
+  });
+
+  it.each([
+    { sampled: true, expectedToolNames: ['lookup'] },
+    { sampled: false, expectedToolNames: undefined },
+  ])(
+    'serializes MODEL_INFERENCE tool definitions only for a sampled trace (sampled: $sampled)',
+    async ({ sampled, expectedToolNames }) => {
+      const doStream = finishingStream();
+      const setInferenceContext = vi.fn();
+      const modelSpanTracker = {
+        // An unsampled trace still gets a tracker, backed by a no-op span.
+        getTracingContext: vi.fn(() => ({ currentSpan: { isValid: sampled } })),
+        reportGenerationError: vi.fn(),
+        endGeneration: vi.fn(),
+        updateGeneration: vi.fn(),
+        wrapStream: vi.fn(<T>(stream: T) => stream),
+        startStep: vi.fn(),
+        setInferenceContext,
+        startInference: vi.fn(),
+      };
+
+      const llmExecutionStep = baseRun({
+        modelSpanTracker: modelSpanTracker as any,
+        tools: { lookup: { description: 'Look something up', inputSchema: z.object({ query: z.string() }) } },
+        models: [{ id: 'test-model', maxRetries: 0, model: mockModel(doStream) }],
+      });
+
+      await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+      const context = setInferenceContext.mock.calls[0]?.[0] as any;
+      expect(context?.tools?.map((tool: any) => tool.name)).toEqual(expectedToolNames);
+      // The provider still gets the tool either way.
+      expect(doStream.mock.calls[0]?.[0]?.tools?.map((tool: any) => tool.name)).toEqual(['lookup']);
+    },
+  );
+
+  it('records provider tools on MODEL_INFERENCE with the type a v3 model receives', async () => {
+    const doStream = finishingStream();
+    const setInferenceContext = vi.fn();
+    const modelSpanTracker = {
+      getTracingContext: vi.fn(() => ({ currentSpan: { isValid: true } })),
+      reportGenerationError: vi.fn(),
+      endGeneration: vi.fn(),
+      updateGeneration: vi.fn(),
+      wrapStream: vi.fn(<T>(stream: T) => stream),
+      startStep: vi.fn(),
+      setInferenceContext,
+      startInference: vi.fn(),
+    };
+
+    const llmExecutionStep = baseRun({
+      modelSpanTracker: modelSpanTracker as any,
+      tools: { search: { id: 'openai.web_search', type: 'provider-defined', args: {} } },
+      models: [{ id: 'test-model', maxRetries: 0, model: { ...mockModel(doStream), specificationVersion: 'v3' } }],
+    });
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    const sentType = doStream.mock.calls[0]?.[0]?.tools?.[0]?.type;
+    expect(sentType).toBe('provider');
+    expect((setInferenceContext.mock.calls[0]?.[0] as any)?.tools?.[0]?.type).toBe(sentType);
   });
 });

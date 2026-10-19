@@ -2,6 +2,7 @@ import { Radio as RadioPrimitive } from '@base-ui/react/radio';
 import { RadioGroup as RadioGroupPrimitive } from '@base-ui/react/radio-group';
 import * as React from 'react';
 
+import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { controlHeight } from '@/ds/primitives/control-size';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -39,6 +40,9 @@ export type SegmentedControlProps<T extends string = string> = RadioGroupPassthr
  * A single choice between a few short options, all visible at once. A radio group underneath:
  * one tab stop, arrow keys move the selection. The selected item is marked by a thumb that
  * slides between items, so items keep their natural width.
+ *
+ * Use it to set a value (a policy, a theme, on/off), where the layout around it stays the same.
+ * When the choice swaps what is shown below it (Form vs JSON, Overview vs Playground), use `Tabs`.
  *
  * ```tsx
  * <SegmentedControl aria-label="Permission" value={policy} onValueChange={setPolicy}>
@@ -108,6 +112,7 @@ export function SegmentedControl<T extends string = string>({
           if (isItemValue(next)) onValueChange(next);
         }}
         aria-label={ariaLabel}
+        {...keepOwnAccessibleName({ 'aria-label': ariaLabel, 'aria-labelledby': props['aria-labelledby'] })}
         data-slot="segmented-control"
         data-size={size}
         className={cn(
@@ -162,6 +167,7 @@ export function SegmentedControlItem({
   return (
     <RadioPrimitive.Root
       {...props}
+      render={<span aria-labelledby={props['aria-labelledby']} />}
       ref={itemRef}
       value={value}
       disabled={disabled}

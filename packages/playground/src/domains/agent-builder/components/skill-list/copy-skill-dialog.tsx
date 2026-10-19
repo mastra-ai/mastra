@@ -1,5 +1,6 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
-import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { useEffect, useState } from 'react';
 
 export interface CopySkillDialogProps {
@@ -53,16 +54,17 @@ export function CopySkillDialog({
           </AlertDialog.Description>
         </AlertDialog.Header>
         <AlertDialog.Body>
-          <TextFieldBlock
-            name="copy-skill-name"
-            label="New skill name"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="my-skill-copy"
-            autoFocus
-            testId="copy-skill-name-input"
-            errorMsg={collides ? `You already have a skill named "${trimmed}".` : undefined}
-          />
+          <Field invalid={collides}>
+            <FieldLabel>New skill name</FieldLabel>
+            <Input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="my-skill-copy"
+              autoFocus
+              data-testid="copy-skill-name-input"
+            />
+            <FieldError>{collides ? `You already have a skill named "${trimmed}".` : undefined}</FieldError>
+          </Field>
         </AlertDialog.Body>
         <AlertDialog.Footer>
           <AlertDialog.Cancel disabled={isPending}>Cancel</AlertDialog.Cancel>

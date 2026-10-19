@@ -1,8 +1,8 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
-import { useDatasetMutations, useDataset, useDatasets } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { Check, Tag, X } from 'lucide-react';
+import { useDatasetMutations, useDataset, useDatasets } from '@mastra/react/hooks/datasets';
+import { Check, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { getAllDatasetTags } from '../datasets-list/helpers';
@@ -21,7 +21,7 @@ export interface DatasetTagsEditorProps {
  * change persists immediately; removal is via the badge only.
  */
 export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
-  const { data: dataset } = useDataset(datasetId);
+  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
   const { data: datasetsData } = useDatasets();
   const { updateDataset } = useDatasetMutations();
   const [search, setSearch] = useState('');
@@ -75,12 +75,7 @@ export function DatasetTagsEditor({ datasetId }: DatasetTagsEditorProps) {
         value={undefined}
         onValueChange={handleAdd}
         onInputValueChange={setSearch}
-        placeholder={
-          <span className="flex items-center gap-1.5">
-            <Tag className="size-3.5" />
-            Add tag
-          </span>
-        }
+        placeholder="Add tag"
         searchPlaceholder="Search or create tag..."
         emptyText="Type to create a tag"
         variant="ghost"

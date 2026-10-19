@@ -79,6 +79,27 @@ describe('DataList fluid hover', () => {
     expect(activeRows().map(r => r.textContent)).toEqual(['b']);
   });
 
+  it("gives the highlight the hovered row's own corners", async () => {
+    await setup(
+      <>
+        <DataList.RowButton style={{ borderRadius: '8px 8px 0px 0px' }}>a</DataList.RowButton>
+        <DataList.RowButton style={{ borderRadius: '0px' }}>b</DataList.RowButton>
+      </>,
+    );
+    const highlightRadius = () =>
+      grid()
+        .querySelector<HTMLElement>('[data-slot=fluid-hover-highlight]')
+        ?.style.getPropertyValue('--fluid-hover-item-radius');
+
+    hoverAt(5);
+    await flushFrames();
+    expect(highlightRadius()).toBe('8px 8px 0px 0px');
+
+    hoverAt(ROW_HEIGHT + 5);
+    await flushFrames();
+    expect(highlightRadius()).toBe('0px');
+  });
+
   it('lights the RowWrapper, never the nested RowButton', async () => {
     await setup(
       <>
@@ -144,5 +165,44 @@ describe('DataList fluid hover', () => {
     await flushFrames();
     expect(activeRows().map(r => r.textContent)).not.toEqual(['b']);
     expect(activeRows()).toHaveLength(1);
+  });
+
+  it('lights a Group row only while the pointer is on or between its rows', async () => {
+    render(
+      <DataList data-testid="list" columns="1fr">
+        <DataList.Group data-testid="intake">
+          <DataList.RowButton>a</DataList.RowButton>
+          <DataList.RowButton>b</DataList.RowButton>
+          <button type="button">Load more</button>
+        </DataList.Group>
+        <DataList.Group data-testid="done">
+          <DataList.Subheader>Nothing done yet</DataList.Subheader>
+        </DataList.Group>
+      </DataList>,
+    );
+    const rowGap = 4;
+    stubLayout(screen.getByTestId('intake'), 0);
+    stubLayout(screen.getByRole('button', { name: 'a' }), 0);
+    stubLayout(screen.getByRole('button', { name: 'b' }), ROW_HEIGHT + rowGap);
+    stubLayout(screen.getByTestId('done'), ROW_HEIGHT * 4);
+    Object.defineProperty(grid(), 'getBoundingClientRect', {
+      value: () => ({ top: 0, left: 0, width: 200, height: 5 * ROW_HEIGHT, right: 200, bottom: 5 * ROW_HEIGHT }),
+    });
+    await flushFrames();
+
+    fireEvent.mouseMove(screen.getByTestId('intake'), { clientX: 10, clientY: ROW_HEIGHT + rowGap - 1 });
+    await flushFrames();
+    expect(activeRows().map(r => r.textContent)).toEqual(['b']);
+
+    fireEvent.mouseMove(screen.getByRole('button', { name: 'Load more' }), {
+      clientX: 10,
+      clientY: ROW_HEIGHT * 2 + rowGap + 10,
+    });
+    await flushFrames();
+    expect(activeRows()).toHaveLength(0);
+
+    fireEvent.mouseMove(screen.getByText('Nothing done yet'), { clientX: 10, clientY: ROW_HEIGHT * 4 + 5 });
+    await flushFrames();
+    expect(activeRows()).toHaveLength(0);
   });
 });

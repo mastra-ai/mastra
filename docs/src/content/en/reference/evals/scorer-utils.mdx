@@ -41,7 +41,7 @@ import {
 
 ### `getAssistantMessageFromRunOutput`
 
-Extracts the text content from the first assistant message in the run output.
+Extracts the text content from the last assistant message that contains text in the run output. Trailing assistant messages without text (for example, tool-call-only messages) are skipped.
 
 ```typescript
 const scorer = createScorer({
@@ -329,7 +329,7 @@ const trajectory = extractTrajectory(agentOutputMessages)
 // trajectory.rawOutput — the original MastraDBMessage[] array
 ```
 
-**Returns:** `Trajectory`: Contains `steps: TrajectoryStep[]`, `totalDurationMs`, and `rawOutput`.
+**Returns:** `Trajectory`: Contains `steps: TrajectoryStep[]` and `rawOutput`.
 
 ### `extractWorkflowTrajectory`
 
@@ -383,12 +383,12 @@ const trajectory = extractTrajectoryFromTrace(traceData.spans, rootSpanId)
 | `AGENT_RUN` | `agent_run` | `agentId` (from entity ID) |
 | `WORKFLOW_RUN` | `workflow_run` | `workflowId` (from entity ID) |
 | `WORKFLOW_STEP` | `workflow_step` | `output` |
-| `WORKFLOW_CONDITIONAL` | `workflow_conditional` | `conditionCount`, `selectedSteps` |
-| `WORKFLOW_PARALLEL` | `workflow_parallel` | `branchCount`, `parallelSteps` |
-| `WORKFLOW_LOOP` | `workflow_loop` | `loopType`, `totalIterations` |
-| `WORKFLOW_SLEEP` | `workflow_sleep` | `sleepDurationMs`, `sleepType` |
-| `WORKFLOW_WAIT_EVENT` | `workflow_wait_event` | `eventName`, `eventReceived` |
-| `PROCESSOR_RUN` | `processor_run` | `processorId` |
+| `WORKFLOW_CONDITIONAL` | `workflow_conditional` | Base fields only (`name`, `durationMs`, `metadata`) |
+| `WORKFLOW_PARALLEL` | `workflow_parallel` | Base fields only (`name`, `durationMs`, `metadata`) |
+| `WORKFLOW_LOOP` | `workflow_loop` | Base fields only (`name`, `durationMs`, `metadata`) |
+| `WORKFLOW_SLEEP` | `workflow_sleep` | Base fields only (`name`, `durationMs`, `metadata`) |
+| `WORKFLOW_WAIT_EVENT` | `workflow_wait_event` | Base fields only (`name`, `durationMs`, `metadata`) |
+| `PROCESSOR_RUN` | `processor_run` | Base fields only (`name`, `durationMs`, `metadata`) |
 
 Spans with types `GENERIC`, `MODEL_STEP`, `MODEL_CHUNK`, and `WORKFLOW_CONDITIONAL_EVAL` are skipped as noise.
 
