@@ -161,7 +161,7 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 
 | Predicate context | Fields | Operators |
 | - | - | - |
-| Trace | `traceId`, `threadId`, `resourceId`, `runId`, `sessionId`, `userId`, `organizationId`, `entityName`, `entityType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace | `traceId`, `threadId`, `resourceId`, `runId`, `sessionId`, `userId`, `organizationId`, `entityName`, `entityType`, `name`, `spanType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace metadata | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace | `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Trace | `tags` | `includes`, `notIncludes`, `exists`, `notExists` |
@@ -169,6 +169,8 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 | Span | `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId`, `runId`, `sessionId`, `userId`, `organizationId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Span | `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Span | `error` | `exists`, `notExists` |
+
+Trace-scope `name` and `spanType` read the current root span, so `{ op: 'eq', left: { path: 'spanType' }, right: { literal: 'workflow_run' } }` selects traces started by a workflow run. Inside `spans.some` or `spans.none`, the same fields match any span in the trace.
 
 Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`. Tag predicates name the stored tag collection in `path`. `includes` and `notIncludes` also take one tag in `value`, while `exists` and `notExists` take only `op` and `path`. See [Filter by tags](#filter-by-tags). Text predicates use the comparison shape with a string literal. See [Filter by text](#filter-by-text).
 
@@ -624,7 +626,7 @@ Value suggestions are available for these canonical fields:
 
 | Scope | Fields |
 | - | - |
-| Trace | `entityName`, `entityType`, `environment`, `status`, `tags` |
+| Trace | `entityName`, `entityType`, `name`, `spanType`, `environment`, `status`, `tags` |
 | Spans | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityName` |
 
 Each executable top-level string `metadata.<key>` field also supports value suggestions in the `trace` scope. Identifiers, timestamps, durations, time to first chunk, errors, and version IDs don't. The fields response still includes canonical fields with `valueSuggestions: false`. The values endpoint rejects those paths with `422 TRACE_QUERY_INVALID`.

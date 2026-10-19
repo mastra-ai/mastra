@@ -76,6 +76,8 @@ const TRACE_FIELDS = {
   timeToFirstChunkMs: { sql: 'r.timeToFirstChunkMs', parameterType: 'Float64' },
   entityName: { sql: 'r.entityName', parameterType: 'String' },
   entityType: { sql: 'r.entityType', parameterType: 'String' },
+  name: { sql: 'r.name', parameterType: 'String' },
+  spanType: { sql: 'r.spanType', parameterType: 'String' },
   environment: { sql: 'r.environment', parameterType: 'String' },
   status: { sql: TRACE_STATUS_SQL, parameterType: 'String' },
   tags: { sql: 'r.tags', parameterType: 'String' },

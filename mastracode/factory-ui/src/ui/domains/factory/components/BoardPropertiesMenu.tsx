@@ -1,5 +1,5 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ArrowUpDown, LayersPlus } from 'lucide-react';
+import { ArrowUpDown, Funnel, LayersPlus } from 'lucide-react';
 
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
 import { boardFilterItems, boardFiltersActive, boardFilterValues, withBoardFilterValues } from '../boardFilters';
@@ -28,6 +28,7 @@ export function BoardPropertiesMenu({
     <PropertiesMenu
       label="Board properties"
       variant="default"
+      icon={<Funnel size={15} aria-hidden />}
       changedCount={changedCount}
       onReset={view.resetProperties}
     >

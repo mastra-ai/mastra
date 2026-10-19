@@ -67,6 +67,8 @@ const TRACE_FIELDS = {
   timeToFirstChunkMs: 'r."timeToFirstChunkMs"',
   entityName: 'r."entityName"',
   entityType: 'r."entityType"',
+  name: 'r."name"',
+  spanType: 'r."spanType"',
   environment: 'r."environment"',
   status: TRACE_STATUS_SQL,
   tags: 'r."tags"',
@@ -298,11 +300,13 @@ function compileScalarPredicate<TField extends string>(
 
   const parameter = `$${parameterOffset}`;
   const operators = { lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
+  // `value` is never null, so plain `=`/`<>` keep `IS [NOT] DISTINCT FROM` semantics while staying
+  // indexable. The null guards keep `NOT (...)` two-valued on null columns.
   if (predicate.operator === 'eq') {
-    return { sql: `${field} IS NOT DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
+    return { sql: `${field} IS NOT NULL AND ${field} = ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   if (predicate.operator === 'ne') {
-    return { sql: `${field} IS DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
+    return { sql: `${field} IS NULL OR ${field} <> ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   const operator = operators[predicate.operator];
   if (operator === undefined) throw new Error(`Unsupported trusted trace-query operator: ${predicate.operator}`);
@@ -413,6 +417,8 @@ const ROOT_PUSHDOWN_FIELDS = new Set<string>([
   'endedAt',
   'entityName',
   'entityType',
+  'name',
+  'spanType',
   'environment',
 ]);
 

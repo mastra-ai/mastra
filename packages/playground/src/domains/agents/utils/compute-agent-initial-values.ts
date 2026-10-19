@@ -22,12 +22,12 @@ export function mapAgentResponseToDataSource(agent: GetAgentResponse): AgentData
   // Parse requestContextSchema from stringified JSON to an object.
   // Code agents serialize with superjson.stringify(), so we use superjsonParse
   // to unwrap the {json: {...}} envelope. Stored agents provide a plain object.
-  let requestContextSchema: unknown;
+  let requestContextSchema: AgentDataSource['requestContextSchema'];
   if (agent.requestContextSchema) {
     try {
       requestContextSchema =
         typeof agent.requestContextSchema === 'string'
-          ? superjsonParse(agent.requestContextSchema)
+          ? superjsonParse<AgentDataSource['requestContextSchema']>(agent.requestContextSchema)
           : agent.requestContextSchema;
     } catch {
       // Invalid JSON — skip
@@ -65,7 +65,7 @@ export interface AgentDataSource {
   mcpClients?: unknown;
   skills?: StoredAgentResponse['skills'];
   workspace?: StoredAgentResponse['workspace'];
-  requestContextSchema?: unknown;
+  requestContextSchema?: AgentFormValues['variables'];
 }
 
 export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<AgentFormValues> {
@@ -133,7 +133,7 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
     instructionBlocks,
     skills: normalizeSkillsFromApi(dataSource.skills),
     workspace: normalizeWorkspaceFromApi(dataSource.workspace),
-    variables: dataSource.requestContextSchema as AgentFormValues['variables'],
+    variables: dataSource.requestContextSchema,
   };
 }
 

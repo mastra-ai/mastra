@@ -188,6 +188,8 @@ if (capabilities.traceAggregate) {
 }
 ```
 
+`groupBy` accepts the root span's `name` and `spanType` as well as entity and context fields. Every `groupBy` field can also be used in `where` to drill into a group, except `serviceName`, `executionSource`, and `experimentId`, which are groupable only.
+
 Each row has `dimensions` keyed by `groupBy` field, `measures` keyed by measure name, a `bucket` timestamp when `interval` is set, and `cost` coverage when a cost measure is requested. `truncated` is `true` when more groups matched than `limit`.
 
 Check `capabilities.traceAggregate` before calling. Unlike `traceQuery`, a missing value means the server doesn't support aggregation. The client retries server errors like `queryTraces()` but doesn't retry `422` validation errors.

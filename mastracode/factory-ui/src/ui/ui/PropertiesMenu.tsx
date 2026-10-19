@@ -9,6 +9,7 @@ export function PropertiesMenu({
   onReset,
   align = 'start',
   variant = 'ghost',
+  icon = <Settings2 size={15} aria-hidden />,
   children,
 }: {
   label: string;
@@ -16,6 +17,7 @@ export function PropertiesMenu({
   onReset: () => void;
   align?: 'start' | 'end';
   variant?: DropdownMenuTriggerProps['variant'];
+  icon?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -26,7 +28,7 @@ export function PropertiesMenu({
         aria-label={changedCount === 0 ? label : `${label}, ${changedCount} changed`}
         tooltip={label}
       >
-        <Settings2 size={15} aria-hidden />
+        {icon}
         {changedCount > 0 && <span className="tabular-nums">{changedCount}</span>}
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align={align}>
