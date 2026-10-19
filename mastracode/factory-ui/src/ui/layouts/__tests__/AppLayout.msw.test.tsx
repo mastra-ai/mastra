@@ -1,5 +1,5 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, Link, RouterProvider } from 'react-router';
@@ -138,6 +138,33 @@ describe('AppLayout', () => {
     const [collapsedToggle, ...extraWhileCollapsed] = screen.getAllByRole('button', { name: 'Toggle sidebar' });
     expect(extraWhileCollapsed).toHaveLength(0);
     expect(collapsedToggle).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('toggles the sidebar with [ but not on key repeat or while typing in a field', async () => {
+    stubFactory();
+    renderApp(`/factories/${FACTORY_ID}/slots`);
+
+    await screen.findByRole('heading', { name: 'Slots page' });
+    // The toggle moves between the sidebar and the page header, so look it up each time.
+    const expanded = () => screen.getByRole('button', { name: 'Toggle sidebar' }).getAttribute('aria-expanded');
+    expect(expanded()).toBe('true');
+
+    await userEvent.keyboard('[[');
+    await waitFor(() => expect(expanded()).toBe('false'));
+
+    // Holding the key must not flip it back on auto-repeat.
+    fireEvent.keyDown(document.body, { key: '[', repeat: true });
+    expect(expanded()).toBe('false');
+
+    await userEvent.keyboard('[[');
+    await waitFor(() => expect(expanded()).toBe('true'));
+
+    const field = document.createElement('input');
+    document.body.append(field);
+    await userEvent.type(field, '[[');
+    expect(field).toHaveValue('[');
+    expect(expanded()).toBe('true');
+    field.remove();
   });
 
   it('keeps the shell mounted when switching between draft sessions', async () => {
