@@ -15,15 +15,17 @@ vi.unmock('node:crypto');
 
 /**
  * Checks every storage v2 engine write: the run read back right after it must match the
- * snapshot the engine wrote, which `RunJournal.write` is the last to see whole. Returns the
- * mismatches found so far.
+ * snapshot the engine wrote, which `RunJournal.write` is the last to see whole. A step's start
+ * write (`stepIds` set) can overlap other writes, so it sends only its steps and the header, and
+ * only those are checked. Returns the mismatches found so far.
  */
 function checkStorageV2Writes(): string[] {
   const mismatches: string[] = [];
   const write = RunJournal.prototype.write;
   RunJournal.prototype.write = async function (this: RunJournal, args) {
     const { store, workflowName, runId } = this;
-    if (!store) return write.call(this, args);
+    // A foreach iteration's start write names no step and writes nothing.
+    if (!store || args.stepIds?.length === 0) return write.call(this, args);
     const { context } = args.snapshot;
     // Cloning makes plain copies of stubs, so note them first.
     const stubbed = new Set(Object.keys(context).filter(stepId => isStepResultStub(context[stepId])));
@@ -38,6 +40,7 @@ function checkStorageV2Writes(): string[] {
       expected,
       run && ({ ...run.header, context: run.steps, value: run.state } as WorkflowRunState),
       stubbed,
+      args.stepIds,
     );
     if (problem) mismatches.push(`${workflowName}/${runId} (${expected.status}): ${problem}`);
   };
@@ -48,16 +51,18 @@ function storageV2WriteMismatch(
   expected: WorkflowRunState,
   stored: WorkflowRunState | null,
   stubbed: Set<string>,
+  stepIds: readonly string[] | undefined,
 ): string | undefined {
   if (!stored) return 'the run was not stored';
-  const { context: expectedContext, ...expectedRest } = expected;
-  const { context: storedContext, ...storedRest } = stored;
+  const { context: expectedContext, value: expectedState, ...expectedRest } = expected;
+  const { context: storedContext, value: storedState, ...storedRest } = stored;
   try {
     expect(storedRest).toEqual(expectedRest);
-    for (const [stepId, result] of Object.entries(expectedContext)) {
+    if (!stepIds) expect(storedState, 'state').toEqual(expectedState);
+    for (const stepId of stepIds ?? Object.keys(expectedContext)) {
       // A stub holds only the stored result's summary.
       const actual = stubbed.has(stepId) ? summarizeStepResult(storedContext[stepId] as any) : storedContext[stepId];
-      expect(actual, `step ${stepId}`).toEqual(result);
+      expect(actual, `step ${stepId}`).toEqual(expectedContext[stepId]);
     }
   } catch (error) {
     return (error as Error).message;
