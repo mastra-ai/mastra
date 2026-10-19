@@ -27,7 +27,7 @@ export function EntryTitle({
         </Txt>
       ) : (
         <Link to={boardItemPath(factoryProjectId, target)} className="min-w-0 truncate hover:underline">
-          <Txt as="span" variant={variant} tone={tone} className="truncate">
+          <Txt as="span" variant={variant} tone={tone} className="block truncate">
             {entry.title}
           </Txt>
         </Link>
