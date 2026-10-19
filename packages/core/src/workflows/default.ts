@@ -1341,6 +1341,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
       return { ...result, runId };
     } finally {
+      journal?.close();
       this.#journals.delete(runId);
     }
   }

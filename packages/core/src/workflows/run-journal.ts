@@ -48,7 +48,7 @@ export function isStepResultStub(value: unknown): boolean {
  * what it believes is stored. So a write that can overlap others names its steps (`stepIds`) and
  * sends only those, and overlapping writes name different steps. Everything else (other steps'
  * changes, the state, the checkpoint) goes out with boundary writes, which the engine makes only
- * when no other write of the run is in flight.
+ * when no other write of the run is in flight. `write` throws when a write breaks that.
  *
  * @internal
  */
@@ -61,6 +61,10 @@ export class RunJournal {
   #written: Map<string, unknown>;
   #stateDirty = false;
   #needsCheckpoint: boolean;
+  /** Store writes sent and not yet settled, and whether one of them is a boundary write. */
+  #inFlight = 0;
+  #boundaryInFlight = false;
+  #closed = false;
 
   /**
    * @param seed The step results already in storage (a resumed or restarted run's loaded snapshot
@@ -89,6 +93,14 @@ export class RunJournal {
   }
 
   /**
+   * Called when the run's execution ends. A step of a parallel or branch block can still be
+   * running then (the block's `Promise.all` rejects on the first failure), and its write is dropped.
+   */
+  close(): void {
+    this.#closed = true;
+  }
+
+  /**
    * @param stepIds Set by a write that can be in flight together with other writes of the run (a
    * step's start write): only these steps are sent, never the state, and no other write in flight
    * may name them. Leave it unset for a boundary write, made when no other write of the run is in
@@ -106,7 +118,7 @@ export class RunJournal {
     stepIds?: readonly string[];
   }): Promise<void> {
     const store = this.store;
-    if (!store) return;
+    if (!store || this.#closed) return;
 
     const boundary = stepIds === undefined;
     // The checkpoint replaces every stored entry, so no other write may be in flight with it. The
@@ -145,8 +157,21 @@ export class RunJournal {
     const steps: StepResults = {};
     for (const stepId of sent) steps[stepId] = results[stepId] as StepResult<any, any, any, any>;
 
+    // The engine makes boundary writes only where nothing else of the run is running. Failing here
+    // finds an engine path that breaks that before it loses a write.
+    if (this.#boundaryInFlight || (boundary && this.#inFlight > 0)) {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_OVERLAPPING_WRITE',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.SYSTEM,
+        text: `Storage v2 run ${this.runId} started a write while ${boundary ? 'another write' : 'a boundary write'} was in flight.`,
+      });
+    }
+
     this.#needsCheckpoint = false;
     if (boundary) this.#stateDirty = false;
+    this.#inFlight++;
+    if (boundary) this.#boundaryInFlight = true;
     try {
       const run = { workflowName: this.workflowName, runId: this.runId, resourceId, header, steps };
       if (checkpoint) {
@@ -161,6 +186,9 @@ export class RunJournal {
       if (checkpoint) this.#needsCheckpoint = true;
       if (stateDirty) this.#stateDirty = true;
       throw error;
+    } finally {
+      this.#inFlight--;
+      if (boundary) this.#boundaryInFlight = false;
     }
     for (const stepId of sent) {
       this.#written.set(stepId, steps[stepId]);

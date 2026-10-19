@@ -270,6 +270,106 @@ describe('storageVersion per run', () => {
     expect(bRuns).toBe(2);
   });
 
+  it('makes no v1 write for a parallel step that starts after the run stopped on a failed write', async () => {
+    const storage = new MockStore();
+    const store = storage.stores.workflows!;
+    let checked!: () => void;
+    const checking = new Promise<void>(resolve => (checked = resolve));
+    let bRan = false;
+    const workflow = createWorkflow({
+      id: 'split',
+      inputSchema: num,
+      outputSchema: z.any(),
+      options: { storageVersion: 2 },
+    })
+      .parallel([
+        addOne('a'),
+        createStep({
+          id: 'b',
+          // Checks its input against another service, so it starts after a.
+          inputSchema: num.refine(async () => {
+            await checking;
+            return true;
+          }),
+          outputSchema: num,
+          stateSchema: marks,
+          execute: async ({ inputData }) => {
+            bRan = true;
+            return { n: inputData.n + 1 };
+          },
+        }),
+      ])
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { split: workflow } });
+    const run = await workflow.createRun();
+
+    const appended: string[][] = [];
+    const append = store.appendWorkflowRunEntries.bind(store);
+    store.appendWorkflowRunEntries = async args => {
+      appended.push(Object.keys(args.steps));
+      if ('a' in args.steps) throw new Error('store down');
+      return append(args);
+    };
+    const persistSnapshot = vi.spyOn(store, 'persistWorkflowSnapshot');
+
+    // a's start write fails, so the block's Promise.all rejects and the run stops while b checks its input.
+    await expect(run.start({ inputData: { n: 0 } })).rejects.toThrow('store down');
+    checked();
+    await vi.waitFor(() => expect(bRan).toBe(true));
+
+    expect(persistSnapshot).not.toHaveBeenCalled();
+    expect(appended).toEqual([['a']]);
+  });
+
+  it("drops a stopped run's parallel step write instead of adding it to a later execution of the run", async () => {
+    const storage = new MockStore();
+    const store = storage.stores.workflows!;
+    let checked!: () => void;
+    const checking = new Promise<void>(resolve => (checked = resolve));
+    const workflow = createWorkflow({
+      id: 'split',
+      inputSchema: num,
+      outputSchema: z.any(),
+      options: { storageVersion: 2 },
+    })
+      .parallel([
+        addOne('a'),
+        createStep({
+          id: 'b',
+          inputSchema: num.refine(async () => {
+            await checking;
+            return true;
+          }),
+          outputSchema: num,
+          stateSchema: marks,
+          execute: async ({ inputData }) => ({ n: inputData.n + 1 }),
+        }),
+      ])
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { split: workflow } });
+    const run = await workflow.createRun();
+
+    const started: string[] = [];
+    const append = store.appendWorkflowRunEntries.bind(store);
+    store.appendWorkflowRunEntries = async args => {
+      for (const [id, result] of Object.entries(args.steps)) {
+        if ((result as { status?: string }).status === 'running') started.push(id);
+      }
+      if (started.length === 1) throw new Error('store down');
+      return append(args);
+    };
+
+    await expect(run.start({ inputData: { n: 0 } })).rejects.toThrow('store down');
+    // Restart the run while the first execution's b still checks its input.
+    const restarted = (await workflow.createRun({ runId: run.runId })).restart();
+    await vi.waitFor(() => expect(started).toEqual(['a', 'a']));
+    checked();
+
+    expect((await restarted).status).toBe('success');
+    // Only the restarted execution's b starts in storage.
+    expect(started).toEqual(['a', 'a', 'b']);
+  });
+
   it('makes sync getStepResult throw inside v2 steps', async () => {
     const workflow = createWorkflow({
       id: 'sync-read',

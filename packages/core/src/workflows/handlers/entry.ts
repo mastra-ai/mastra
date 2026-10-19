@@ -6,6 +6,7 @@ import { resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
 import { WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
+import type { RunJournal } from '../run-journal';
 import type {
   EntryExecutionResult,
   ExecutionContext,
@@ -170,6 +171,13 @@ export interface PersistStepUpdateParams {
    * other write in flight may name them. Unset, the write sends every change.
    */
   stepIds?: string[];
+  /**
+   * Storage v2: the journal of the execution this write belongs to, set by a step's start write.
+   * The step can still be running after its run stopped (see `RunJournal.close`), when the engine
+   * no longer has the run's journal, or has the journal of a later execution of the run. Unset,
+   * the write uses the run's current journal.
+   */
+  journal?: RunJournal;
 }
 
 export async function persistStepUpdate(
@@ -248,7 +256,7 @@ export async function persistStepUpdate(
       tracingContext,
     };
 
-    const journal = engine.getRunJournal(runId);
+    const journal = params.journal ?? engine.getRunJournal(runId);
     if (journal) {
       await journal.write({ resourceId, snapshot, stepIds });
     } else {
