@@ -385,40 +385,40 @@ describe('handler dispatch gating', () => {
     expect(prime.mock.invocationCallOrder[0]).toBeLessThan(defaultHandler.mock.invocationCallOrder[0]!);
   });
 
-  it.each([
-    ['owner-1', true],
-    ['responder-1', false],
-  ])('only grants management tools when linked sender %s owns the existing session', async (senderId, interactive) => {
-    const thread = makeSubscribedThread();
-    const accountLinks = fullStore({ orgId: 'org-1', userId: senderId, defaultFactoryProjectId: 'fp-1' });
-    const projects = makeProjects([{ id: 'fp-1' }]);
-    const sourceControl = {
-      sessions: {
-        getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'owner-1' }),
-      },
-    } as any;
-    const mastra = {
-      getStorage: () => ({
-        getStore: vi.fn().mockResolvedValue({
-          listThreads: vi.fn().mockResolvedValue({
-            threads: [{ id: 'thread-1', resourceId: 'session-1' }],
+  it.each(['owner-1', 'responder-1'])(
+    'keeps interactive tools for linked sender %s in the existing session',
+    async senderId => {
+      const thread = makeSubscribedThread();
+      const accountLinks = fullStore({ orgId: 'org-1', userId: senderId, defaultFactoryProjectId: 'fp-1' });
+      const projects = makeProjects([{ id: 'fp-1' }]);
+      const sourceControl = {
+        sessions: {
+          getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'owner-1' }),
+        },
+      } as any;
+      const mastra = {
+        getStorage: () => ({
+          getStore: vi.fn().mockResolvedValue({
+            listThreads: vi.fn().mockResolvedValue({
+              threads: [{ id: 'thread-1', resourceId: 'session-1' }],
+            }),
           }),
         }),
-      }),
-    };
-    const defaultHandler = vi.fn();
-    const handlers = createHandlers({ accountLinks, projects, sourceControl });
-    const message = makeMessage('T-1');
+      };
+      const defaultHandler = vi.fn();
+      const handlers = createHandlers({ accountLinks, projects, sourceControl });
+      const message = makeMessage('T-1');
 
-    const ctx = handlerCtx(mastra);
-    await handlers.onSubscribedMessage!(thread, message, defaultHandler, ctx);
+      const ctx = handlerCtx(mastra);
+      await handlers.onSubscribedMessage!(thread, message, defaultHandler, ctx);
 
-    expect(defaultHandler).toHaveBeenCalledWith(thread, message);
-    expect(sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
-    expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
-    expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY) === true).toBe(interactive);
-    expect(primedUsers.at(-1)).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
-  });
+      expect(defaultHandler).toHaveBeenCalledWith(thread, message);
+      expect(sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
+      expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+      expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).toBe(true);
+      expect(primedUsers.at(-1)).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+    },
+  );
 
   it('rejects an existing Factory session when the responder is linked to another organization', async () => {
     const thread = makeSubscribedThread();
@@ -555,6 +555,7 @@ describe('handler dispatch gating', () => {
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
     expect(ctx.requestContext.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
+    expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).toBeUndefined();
   });
 
   it('does not stamp a tenant for an unlinked sender, and does not dispatch', async () => {
