@@ -100,12 +100,13 @@ class LateEarlySubscribersPubSub extends EventEmitterPubSub {
  * of its own instead of replying. With `sharedPubSub`, the other agent uses the
  * session agent's own pubsub, so both share one thread runtime. With
  * `lateEarlySubscribers`, thread subscriptions made before the test arms the
- * pubsub get events late.
+ * pubsub get events late. Without `controllerPubSub`, the controller is given
+ * no pubsub of its own, so its session agent keeps the application's.
  */
 async function createHarness(
   id: string,
   durable: boolean,
-  { otherParks = false, sharedPubSub = false, lateEarlySubscribers = false } = {},
+  { otherParks = false, sharedPubSub = false, lateEarlySubscribers = false, controllerPubSub = true } = {},
 ) {
   const storage = new InMemoryStore();
   const cache = new InMemoryServerCache();
@@ -159,7 +160,7 @@ async function createHarness(
   const registeredAgent = mastra.getAgent(`${id}-agent`);
   const controller = new AgentController({
     agent: registeredAgent,
-    pubsub,
+    ...(controllerPubSub ? { pubsub } : {}),
     workspace: createMockWorkspace(),
     id: `${id}-controller`,
     storage,
@@ -207,6 +208,27 @@ describe.each([false, true])('a message sent while another agent runs on the thr
     expect(h.prompts[0]).toContain('Are you there?');
     expect(h.otherPrompts.join('')).not.toContain('Are you there?');
   });
+
+  it.each([false, true])(
+    "waits for the other run when the controller has no pubsub of its own, other agent built with the application's pubsub=%s",
+    async sharedPubSub => {
+      const h = await createHarness(`no-controller-pubsub-${sharedPubSub}`, durable, {
+        controllerPubSub: false,
+        sharedPubSub,
+      });
+      const other = await h.startOther();
+
+      const sent = h.session.sendMessage({ content: 'Are you there?' });
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(h.prompts).toHaveLength(0);
+
+      h.releaseOther();
+      await other.consumeStream();
+      expect(await settlesWithin(sent, 5_000)).toBe(true);
+      await vi.waitFor(() => expect(h.prompts).toHaveLength(1), { timeout: 3_000 });
+      expect(h.prompts[0]).toContain('Are you there?');
+    },
+  );
 
   it('is dropped when Stop is pressed while it waits', async () => {
     const h = await createHarness('stopped', durable);
