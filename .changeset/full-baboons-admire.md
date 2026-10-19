@@ -2,7 +2,7 @@
 '@mastra/clickhouse': minor
 ---
 
-Added full-history thread rows with previews, trace counts, activity timestamps, filters and cursor pagination. Legacy thread identity queries remain supported.
+Added thread rows with previews, trace counts, activity timestamps, filters and cursor pagination. Legacy thread identity queries remain supported.
 
 ```ts
 import { planThreadRowsQuery } from '@mastra/core/storage';
