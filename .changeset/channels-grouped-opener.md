@@ -21,23 +21,3 @@ export const mastra = new Mastra({
   },
 });
 ```
-
-`@mastra/core/processors` now exports `REPROCESS_PART_KEY` and `FLUSH_HELD_PARTS_KEY`, so output processors outside core can emit a second part for one input (return one, stash the other for the runner to re-drive) the same way `BatchPartsProcessor` does:
-
-```ts
-import { REPROCESS_PART_KEY } from '@mastra/core/processors';
-import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
-import type { ChunkType } from '@mastra/core/stream';
-
-// Appends a trailer to each text block: on `text-end`, return a final
-// `text-delta` and stash the `text-end` so the runner re-drives it next.
-export class TrailerProcessor implements Processor {
-  readonly id = 'trailer';
-
-  async processOutputStream({ part, state }: ProcessOutputStreamArgs): Promise<ChunkType> {
-    if (part.type !== 'text-end') return part;
-    state[REPROCESS_PART_KEY] = part;
-    return { type: 'text-delta', runId: part.runId, from: part.from, payload: { id: part.payload.id, text: ' ↗' } };
-  }
-}
-```

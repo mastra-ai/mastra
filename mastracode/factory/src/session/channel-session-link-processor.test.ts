@@ -1,4 +1,5 @@
-import { REPROCESS_PART_KEY } from '@mastra/core/processors';
+import { ProcessorRunner } from '@mastra/core/processors';
+import type { Processor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType } from '@mastra/core/stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -28,33 +29,29 @@ const textEnd = (id = 't1'): ChunkType =>
   ({ type: 'text-end', runId: 'r', from: 'AGENT', payload: { id } }) as ChunkType;
 const textBlock = (...texts: string[]): ChunkType[] => [...texts.map(t => textDelta(t)), textEnd()];
 
+const silentLogger = { debug() {}, info() {}, warn() {}, error() {} } as any;
+
 /**
- * Drives the chunks through one processor instance with shared per-run
- * state, re-driving anything stashed under REPROCESS_PART_KEY the way the
- * ProcessorRunner does after each emitted part.
+ * Drives the chunks through core's real ProcessorRunner, so the re-drive of
+ * the stashed `text-end` is the runner's own and not a re-implementation.
+ * `downstream` receives whatever the link processor emits, in order.
  */
-async function render(requestContext: RequestContext, chunks: ChunkType[]) {
-  const processor = new FactoryChannelSessionLinkProcessor();
-  const state: Record<string, unknown> = {};
+async function render(requestContext: RequestContext, chunks: ChunkType[], downstream: Processor[] = []) {
+  const runner = new ProcessorRunner({
+    inputProcessors: [],
+    outputProcessors: [new FactoryChannelSessionLinkProcessor(), ...downstream],
+    logger: silentLogger,
+    agentName: 'factory',
+  });
+  const states = new Map();
   const out: ChunkType[] = [];
-  const drive = async (part: ChunkType) => {
-    const result = await processor.processOutputStream({
-      part,
-      state,
-      requestContext,
-      streamParts: [],
-      abort: () => {
-        throw new Error('abort');
-      },
-    } as any);
-    if (result) out.push(result);
-    const stashed = state[REPROCESS_PART_KEY] as ChunkType | undefined;
-    if (stashed) {
-      delete state[REPROCESS_PART_KEY];
-      await drive(stashed);
+  for (const part of chunks) {
+    const primary = await runner.processPart(part, states, undefined, requestContext);
+    if (primary.part) out.push(primary.part);
+    for (const r of await runner.drainReprocessParts(states, undefined, requestContext)) {
+      if (r.part) out.push(r.part);
     }
-  };
-  for (const part of chunks) await drive(part);
+  }
   return out;
 }
 
@@ -87,10 +84,21 @@ describe('FactoryChannelSessionLinkProcessor', () => {
     expect(texts(out)).toEqual([`On it — checking. [↗](${LINK})`, 'Done.']);
   });
 
-  it('emits the link as a delta ahead of the text-end so the block closes after it', async () => {
-    const out = await render(newSessionContext(), textBlock('Hi'));
+  it('emits the link as a delta ahead of the text-end, and downstream processors see both in order', async () => {
+    const seen: string[] = [];
+    const spy: Processor = {
+      id: 'spy',
+      async processOutputStream({ part }) {
+        seen.push(part.type);
+        return part;
+      },
+    };
+    const out = await render(newSessionContext(), textBlock('Hi'), [spy]);
     expect(out.map(c => c.type)).toEqual(['text-delta', 'text-delta', 'text-end']);
     expect((out[1] as any).payload).toEqual({ id: 't1', text: ` [↗](${LINK})` });
+    // The stashed text-end is re-driven through the whole chain, not just
+    // emitted — guards the mirrored REPROCESS_PART_KEY against a core rename.
+    expect(seen).toEqual(['text-delta', 'text-delta', 'text-end']);
   });
 
   it('is marked by the channel handler under a stable key', () => {

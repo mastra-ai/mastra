@@ -1,5 +1,4 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import { REPROCESS_PART_KEY } from '@mastra/core/processors';
 import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType } from '@mastra/core/stream';
@@ -16,6 +15,14 @@ export const NEW_CHANNEL_SESSION_KEY = 'factory__newChannelSession';
 export function markNewChannelSession(requestContext: RequestContext): void {
   requestContext.set(NEW_CHANNEL_SESSION_KEY, true);
 }
+
+/**
+ * State key the core ProcessorRunner reads to re-drive one extra part through
+ * the output chain after the part a processor returned. Internal to core
+ * (`processors/stream-reprocess.ts`, used by `BatchPartsProcessor`); mirrored
+ * here rather than exported so Factory's one use doesn't widen core's API.
+ */
+const REPROCESS_PART_KEY = '__mastraReprocessPart';
 
 /**
  * Appends a bare `↗` link to the first text block of a new channel session,
