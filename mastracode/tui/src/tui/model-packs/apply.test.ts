@@ -68,7 +68,7 @@ function makeContext(modelId = 'provider/old') {
   const stateSet = vi.fn(async (nextState: Record<string, unknown>) => {
     sessionState = { ...sessionState, ...nextState };
   });
-  return {
+  const result = {
     ctx: {
       state: {
         controller: {
@@ -97,6 +97,9 @@ function makeContext(modelId = 'provider/old') {
     modelSwitch,
     modeSwitch,
   };
+  const { state } = result.ctx;
+  state.local = { controller: state.controller, session: state.session };
+  return result;
 }
 
 describe('model pack application', () => {
@@ -116,12 +119,9 @@ describe('model pack application', () => {
       [{ modelId: 'provider/plan-primary', agentType: 'plan' }],
       [{ modelId: 'provider/build-primary', agentType: 'execute' }],
     ]);
-    expect(ctx.state.session.om.observer.switchModel).toHaveBeenCalledExactlyOnceWith({
-      modelId: 'provider/memory-primary',
-    });
-    expect(ctx.state.session.om.reflector.switchModel).toHaveBeenCalledExactlyOnceWith({
-      modelId: 'provider/memory-primary',
-    });
+    // Memory rides on the route; `/om` role choices are never overwritten.
+    expect(ctx.state.session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(ctx.state.session.om.reflector.switchModel).not.toHaveBeenCalled();
     expect(ctx.state.session.state.set).toHaveBeenCalledExactlyOnceWith({
       modelRoute: {
         entries: [

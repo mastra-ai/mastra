@@ -11,7 +11,7 @@ export default defineConfig({
   sourcemap: true,
   // vitest must be external so hooks use the consumer's test runner instance
   deps: {
-    neverBundle: ['lightningcss', 'postcss', 'vite', 'vitest'],
+    neverBundle: [/^@internal\/ai-sdk-v5/, 'lightningcss', 'postcss', 'vite', 'vitest'],
     alwaysBundle: ['@internal/llm-recorder'],
   },
 });

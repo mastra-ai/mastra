@@ -63,6 +63,20 @@ function startWorker(): Promise<ChildProcess> {
   });
 }
 
+async function stopWorker(): Promise<void> {
+  const proc = worker;
+  worker = undefined;
+  if (!proc || proc.exitCode !== null) return;
+
+  const exited = new Promise<void>(resolve => proc.once('exit', () => resolve()));
+  proc.kill('SIGTERM');
+  await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 500))]);
+  if (proc.exitCode === null) {
+    proc.kill('SIGKILL');
+    await exited;
+  }
+}
+
 describe('durable agent resume restores requestContext + tracingContext (cross-process worker)', () => {
   beforeAll(async () => {
     devServer = await startConnectInngestDevServer();
@@ -71,9 +85,7 @@ describe('durable agent resume restores requestContext + tracingContext (cross-p
   });
 
   afterAll(async () => {
-    worker?.kill('SIGTERM');
-    await new Promise(r => setTimeout(r, 500));
-    if (worker && !worker.killed) worker.kill('SIGKILL');
+    await stopWorker();
     await stopInngestDevServer(devServer);
     devServer = null;
     rmSync(OUT_DIR, { recursive: true, force: true });
@@ -123,13 +135,20 @@ describe('durable agent resume restores requestContext + tracingContext (cross-p
     const suspendTraceId = suspendSnapshot?.tracingContext?.traceId;
     expect(suspendTraceId, 'suspend snapshot must persist tracingContext.traceId').toBeTruthy();
 
+    // Restart the worker so the resume runs with an empty process-local registry, matching a deploy,
+    // crash recovery, or a resume after cleanup().
+    await stopWorker();
+    worker = await startWorker();
+    await new Promise(r => setTimeout(r, 3000));
+
     // Resume with approval — the exact HITL approve. Pass only threadId/resourceId, so requestContext
     // must come from the snapshot (the contract the app relies on).
     const r2 = await durableAgent.resume(runId, { approved: true }, { threadId, resourceId });
+    const resumedChunkTypes: string[] = [];
     void (async () => {
       try {
-        for await (const _ of r2.output.fullStream) {
-          /* consume until the resumed run finishes */
+        for await (const chunk of r2.output.fullStream) {
+          resumedChunkTypes.push(chunk.type);
         }
       } catch {
         /* stream may tear down after completion */
@@ -137,6 +156,9 @@ describe('durable agent resume restores requestContext + tracingContext (cross-p
         r2.cleanup?.();
       }
     })();
+
+    await vi.waitFor(() => expect(resumedChunkTypes).toContain('tool-result'), { timeout: 30_000, interval: 500 });
+    expect(resumedChunkTypes.slice(0, 2)).toEqual(['tool-call-resumed', 'tool-result']);
 
     // Assertion 1 (requestContext): the resumed tool must have written under team-42, not anon.
     await vi.waitFor(

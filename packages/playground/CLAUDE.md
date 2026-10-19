@@ -36,7 +36,7 @@ Rules:
 - `pnpm build`: Build the playground with Vite
 - `pnpm build:watch`: Build in watch mode
 - `pnpm preview`: Preview the production build
-- `pnpm lint`: Run ESLint
+- `pnpm lint`: Run oxlint
 
 ### Root Commands (run from monorepo root)
 

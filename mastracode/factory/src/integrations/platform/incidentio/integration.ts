@@ -39,7 +39,8 @@ import {
 import { buildIncidentioRoutes } from '../../incidentio/routes.js';
 import { attachIncidentioRules } from '../../incidentio/rules.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
-import { PlatformApiClient, platformApiClientConfigFromEnv, type PlatformApiClientConfig } from '../api-client.js';
+import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
+import type { PlatformApiClientConfig } from '../api-client.js';
 
 export interface PlatformIncidentioIntegrationConfig {
   clientConfig?: PlatformApiClientConfig;
@@ -281,6 +282,7 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
       api: new IncidentioApiClient({
         baseUrl: proxyBaseUrl,
         accessToken: this.#clientConfig.accessToken,
+        ...(this.#clientConfig.projectId ? { projectId: this.#clientConfig.projectId } : {}),
         ...(this.#clientConfig.fetchImpl ? { fetchImpl: this.#clientConfig.fetchImpl } : {}),
       }),
       connection: incidentioConnection(connectionId),

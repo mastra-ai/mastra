@@ -72,7 +72,7 @@ To migrate, replace property access with the corresponding getter methods.
 - const tools = agent.tools;
 - const instructions = agent.instructions;
 + const llm = agent.getLLM();
-+ const tools = agent.getTools();
++ const tools = await agent.listTools();
 + const instructions = agent.getInstructions();
 ```
 

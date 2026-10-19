@@ -7,6 +7,7 @@ import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { Trash2 } from 'lucide-react';
 import type { MouseEvent, ReactNode, SyntheticEvent } from 'react';
 import { useMemo, useRef, useState } from 'react';
+import { columnLabel, sideVariant } from './comparison/constants';
 import { DeleteExperimentDialog } from './delete-experiment-dialog';
 import {
   EXPERIMENT_DATASET_COLUMN,
@@ -25,7 +26,7 @@ export interface ExperimentsListProps {
   search?: string;
   statusFilter?: string;
   datasetFilter?: string;
-  /** When provided, rows toggle selection (for comparison) instead of navigating. */
+  /** When provided, rows get a leading checkbox (for comparison) and the header a select-all checkbox. */
   selection?: ExperimentsListSelection;
   /** When provided, rows call this instead of navigating (e.g. to open a side panel). */
   onSelectExperiment?: (experiment: DatasetExperiment) => void;
@@ -49,6 +50,10 @@ export type ExperimentsSortKey = 'createdAt' | 'status';
 export interface ExperimentsListSelection {
   selectedExperimentIds: string[];
   onToggleSelection: (experimentId: string) => void;
+  /** Receives the ids currently listed (after filtering), in display order. */
+  onToggleAll: (visibleExperimentIds: string[]) => void;
+  /** Only experiments of this dataset can join the selection; the others get a disabled checkbox. */
+  comparableDatasetId?: string;
 }
 
 const BASE_COLUMNS = `${EXPERIMENT_NAME_COLUMN} ${EXPERIMENT_DESCRIPTION_COLUMN} ${EXPERIMENT_DATASET_COLUMN} ${EXPERIMENT_DETAIL_COLUMNS}`;
@@ -81,6 +86,7 @@ function ExperimentRow({
   onSelect,
   featured,
   onDelete,
+  leadingCell,
   children,
 }: {
   experiment: DatasetExperiment;
@@ -88,15 +94,20 @@ function ExperimentRow({
   onSelect?: () => void;
   featured?: boolean;
   onDelete: () => void;
+  /** Rendered in the first column (e.g. a selection checkbox); shifts the row content one column right. */
+  leadingCell?: ReactNode;
   children: ReactNode;
 }) {
+  const colStart = leadingCell ? 2 : undefined;
   const { paths, Link } = useLinkComponent();
   const linkRef = useRef<HTMLAnchorElement>(null);
 
   return (
     <DataList.RowWrapper {...rowProps} onSelectRow={onSelect ?? (() => linkRef.current?.click())}>
+      {leadingCell}
       {onSelect ? (
         <DataList.RowButton
+          colStart={colStart}
           colEnd={-2}
           featured={featured}
           tabIndex={-1}
@@ -110,7 +121,9 @@ function ExperimentRow({
       ) : (
         <DataList.RowLink
           ref={linkRef}
+          colStart={colStart}
           colEnd={-2}
+          featured={featured}
           to={paths.experimentLink(exp.id)}
           LinkComponent={Link}
           tabIndex={-1}
@@ -156,7 +169,6 @@ export function ExperimentsList({
   sort,
   onSortChange,
 }: ExperimentsListProps) {
-  const isSelectionActive = selection !== undefined;
   const datasetMap = useMemo(() => {
     const map = new Map<string, string>();
     datasets?.forEach(ds => map.set(ds.id, ds.name));
@@ -196,7 +208,14 @@ export function ExperimentsList({
     return <DataListSkeleton columns={COLUMNS} />;
   }
 
-  const gridColumns = isSelectionActive ? `auto ${BASE_COLUMNS}` : COLUMNS;
+  const selectedCount = selection?.selectedExperimentIds.length ?? 0;
+  const selectAllState =
+    selectedCount === 0 || filteredData.length === 0
+      ? false
+      : filteredData.every(exp => selection?.selectedExperimentIds.includes(exp.id))
+        ? true
+        : ('indeterminate' as const);
+  const gridColumns = selection ? `auto ${COLUMNS}` : COLUMNS;
   const headerCells = columnHeaders.map(col =>
     col.sortKey && onSortChange ? (
       <DataList.SortableTopCell
@@ -217,11 +236,18 @@ export function ExperimentsList({
 
   return (
     <DataList columns={gridColumns} scrollRef={containerRef}>
-      <DataList.Top hasLeadingCell={isSelectionActive}>
-        {isSelectionActive ? (
+      <DataList.Top hasLeadingCell={selection !== undefined}>
+        {selection ? (
           <>
-            <DataList.TopCell>&nbsp;</DataList.TopCell>
-            <DataList.TopCells colStart={2}>{headerCells}</DataList.TopCells>
+            <DataList.TopSelectCell
+              checked={selectAllState}
+              onToggle={() => selection.onToggleAll(filteredData.map(exp => exp.id))}
+              aria-label="Select all experiments"
+            />
+            <DataList.TopCells colStart={2}>
+              {headerCells}
+              <DataList.TopCell aria-hidden>{null}</DataList.TopCell>
+            </DataList.TopCells>
           </>
         ) : (
           <>
@@ -231,39 +257,57 @@ export function ExperimentsList({
         )}
       </DataList.Top>
 
+      {filteredData.length === 0 && !hasNextPage ? (
+        <DataList.NoMatch message="No experiments match your filters" />
+      ) : null}
+
       {filteredData.map((exp, index) => {
         const dsName = exp.datasetId
           ? (datasetMap.get(exp.datasetId) ?? getShortId(exp.datasetId) ?? exp.datasetId)
           : '—';
+        const selectionIndex = selection?.selectedExperimentIds.indexOf(exp.id) ?? -1;
+        const isSelected = selectionIndex !== -1;
+        const isDisabled =
+          !isSelected &&
+          selection?.comparableDatasetId !== undefined &&
+          exp.datasetId !== selection.comparableDatasetId;
         const rowCells = (
-          <ExperimentRowCells experiment={exp} datasetName={dsName} review={reviewByExperiment?.get(exp.id)} />
+          <ExperimentRowCells
+            experiment={exp}
+            datasetName={dsName}
+            review={reviewByExperiment?.get(exp.id)}
+            selectionRole={
+              isSelected
+                ? {
+                    label: columnLabel(selectionIndex),
+                    variant: selectionIndex === 0 ? sideVariant.baseline : sideVariant.contender,
+                  }
+                : undefined
+            }
+          />
         );
 
-        if (!selection) {
-          return (
-            <ExperimentRow
-              key={exp.id}
-              experiment={exp}
-              rowProps={getRowProps(index)}
-              onSelect={onSelectExperiment ? () => onSelectExperiment(exp) : undefined}
-              featured={selectedExperimentId === exp.id}
-              onDelete={() => setExperimentToDelete(exp)}
-            >
-              {rowCells}
-            </ExperimentRow>
-          );
-        }
-
-        const isSelected = selection.selectedExperimentIds.includes(exp.id);
-        const toggle = () => selection.onToggleSelection(exp.id);
-
         return (
-          <DataList.RowWrapper key={exp.id} {...getRowProps(index)} onSelectRow={toggle}>
-            <DataList.SelectCell checked={isSelected} onToggle={toggle} aria-label={`Select experiment ${exp.id}`} />
-            <DataList.RowButton colStart={2} featured={isSelected} tabIndex={-1} onClick={stopPropagation}>
-              {rowCells}
-            </DataList.RowButton>
-          </DataList.RowWrapper>
+          <ExperimentRow
+            key={exp.id}
+            experiment={exp}
+            rowProps={getRowProps(index)}
+            onSelect={onSelectExperiment ? () => onSelectExperiment(exp) : undefined}
+            featured={isSelected || selectedExperimentId === exp.id}
+            onDelete={() => setExperimentToDelete(exp)}
+            leadingCell={
+              selection && (
+                <DataList.SelectCell
+                  checked={isSelected}
+                  disabled={isDisabled}
+                  onToggle={() => selection.onToggleSelection(exp.id)}
+                  aria-label={`Select experiment ${exp.id}`}
+                />
+              )
+            }
+          >
+            {rowCells}
+          </ExperimentRow>
         );
       })}
 

@@ -4,7 +4,8 @@ import { InMemoryStore } from '../storage/mock';
 import { MastraLanguageModelV2Mock } from '../test-utils/llm-mock';
 import { submitPlanTool } from '../tools/builtin/submit-plan';
 import { AgentController } from './agent-controller';
-import { migratePersistedModelSelection, type Session } from './session';
+import { migratePersistedModelSelection } from './session';
+import type { Session } from './session';
 import { createMockWorkspace } from './test-utils';
 
 type AgentControllerTestState = { currentModelId?: string };
@@ -302,10 +303,12 @@ describe('AgentController single-model persistence across restarts', () => {
       events.length = 0;
       await session.respondToToolSuspension({ toolCallId: resuspended.toolCallId, resumeData: { action: 'approved' } });
 
-      expect(planCalls).toBe(2);
+      await vi.waitFor(() => expect(planCalls).toBe(3));
       expect(planResume).toHaveBeenCalledTimes(2);
       expect(buildResume).not.toHaveBeenCalled();
       expect(events.some(event => event.type === 'error')).toBe(false);
+      expect(events.some(event => event.type === 'agent_end' && event.reason === 'complete')).toBe(true);
+      expect(events.some(event => event.type === 'agent_end' && event.reason === 'aborted')).toBe(false);
     },
   );
 });

@@ -10,8 +10,11 @@ import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-rel
 import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
+import { seedSessionOrg } from '../session/org-seed.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
+import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
   SourceControlSession,
@@ -26,7 +29,7 @@ function loose(c: unknown): RouteContext {
   return c as RouteContext;
 }
 
-const USER_SESSION_BRANCH_PREFIX = 'user/session-';
+export const USER_SESSION_BRANCH_PREFIX = 'user/session-';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const MAX_SESSION_OWNER_PROFILES = 100;
 const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
@@ -43,16 +46,80 @@ type SessionOwnerUserProvider = Pick<IUserProvider, 'getUser'> & Partial<Pick<IU
 export interface SourceControlSessionRoutesOptions {
   auth: RouteAuth;
   sourceControls: readonly SourceControlStorageHandle[];
+  projects: Pick<FactoryProjectsStorage, 'get'>;
   users?: SessionOwnerUserProvider;
   controller?: MountedMastraCode['controller'];
   memorySettings: Pick<MemorySettingsStorage, 'get'>;
   sessionRetirement?: SessionRetirementCoordinator;
+  /** Whether the host sandbox can recreate a session's sandbox (false for local). */
+  sandboxRecreateSupported?: boolean;
+  /** Turn-end file listings, cleared on recreate so the panel stops showing the old sandbox's files. */
+  filesystem?: Pick<FilesystemStorage, 'deleteResourceFiles'>;
+  /** How long recreate waits for an aborted run to settle before destroying. */
+  abortSettleTimeoutMs?: number;
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
+}
+
+const ABORT_SETTLE_TIMEOUT_MS = 5_000;
+const ABORT_SETTLE_POLL_MS = 50;
+
+type SessionManagePermission = 'allowed' | 'forbidden' | 'not-found';
+
+/**
+ * Who may manage a session's sandbox: its owner, or an org admin. Private
+ * sessions stay owner-only and look missing to everyone else, matching the
+ * session GET. The admin check is a provider call, so owners skip it.
+ */
+async function sessionManagePermission(
+  c: RouteContext,
+  auth: RouteAuth,
+  tenant: { orgId: string; userId: string },
+  session: SourceControlSession,
+): Promise<SessionManagePermission> {
+  if (session.orgId !== tenant.orgId) return 'not-found';
+  const isOwner = session.userId === tenant.userId;
+  if (session.visibility === 'private' && !isOwner) return 'not-found';
+  if (isOwner) return 'allowed';
+  return (await auth.isOrganizationAdmin(c, session.orgId)) ? 'allowed' : 'forbidden';
+}
+
+function canRecreateSandbox(options: SourceControlSessionRoutesOptions): boolean {
+  return Boolean(options.sessionRetirement) && options.sandboxRecreateSupported === true;
+}
+
+function withCapabilities<T extends object>(session: T, recreateSandbox: boolean) {
+  return { ...session, capabilities: { recreateSandbox } };
+}
+
+/** Abort the session's active run and wait (bounded) for it to stop. Returns whether a run was aborted. */
+async function abortActiveRun(
+  controller: MountedMastraCode['controller'] | undefined,
+  sessionId: string,
+  settleTimeoutMs: number,
+): Promise<boolean> {
+  if (!controller) return false;
+  try {
+    const live = await controller.getSessionByResource(sessionId);
+    if (!live?.stream.isActive()) return false;
+    live.abort();
+    const deadline = Date.now() + settleTimeoutMs;
+    while (live.stream.isActive() && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, ABORT_SETTLE_POLL_MS));
+    }
+    if (live.stream.isActive()) {
+      console.warn('[Factory Sessions] Aborted run did not settle before sandbox recreate', { sessionId });
+    }
+    return true;
+  } catch (error) {
+    console.warn('[Factory Sessions] Failed to abort the active run before sandbox recreate', { sessionId, error });
+    return false;
+  }
 }
 
 interface ResolvedProjectRepository {
   sourceControl: SourceControlStorageHandle;
   project: ProjectRepository;
+  factoryProjectId: string;
   defaultBranch: string;
 }
 
@@ -89,9 +156,12 @@ async function resolveProjectRepository(
         if (!project) return null;
         const repository = await sourceControl.repositories.get({ orgId, id: project.repositoryId });
         if (!repository) return null;
+        const connection = await sourceControl.connections.get({ orgId, id: project.connectionId });
+        if (!connection) return null;
         return {
           sourceControl,
           project,
+          factoryProjectId: connection.factoryProjectId,
           defaultBranch: project.branch ?? repository.defaultBranch,
         };
       }),
@@ -120,6 +190,37 @@ async function resolveSession(
   );
   if (matches.length > 1) throw new Error('Factory session exists in multiple source-control providers.');
   return matches[0] ?? null;
+}
+
+/**
+ * Start the live conversation for a user session on its own thread (thread id === session id). Agent-controller
+ * routes only act on started sessions, so the first prompt the page sends right after creation always lands on the
+ * thread the page reads, with the org and Factory address already in state. Get-or-create, so retried or repeated
+ * creates are safe.
+ */
+async function startUserSessionConversation(
+  controller: SourceControlSessionRoutesOptions['controller'],
+  session: SourceControlSession,
+): Promise<void> {
+  if (!controller) return;
+  const requestContext = new RequestContext();
+  requestContext.set('user', { workosId: session.userId, organizationId: session.orgId });
+  const live = await controller.createSession({
+    id: session.sessionId,
+    resourceId: session.sessionId,
+    threadId: session.sessionId,
+    ownerId: session.userId,
+    requestContext,
+  });
+  await seedSessionOrg(live, session.orgId);
+  // Server-side gates (the transition tool, factory-phase processor) resolve the session address from state, so
+  // seed it here rather than waiting for the page to connect.
+  if (session.factoryProjectId) {
+    await live.state.set({
+      factoryProjectId: session.factoryProjectId,
+      ...(session.projectRepositoryId ? { projectRepositoryId: session.projectRepositoryId } : {}),
+    });
+  }
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
@@ -205,6 +306,11 @@ function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | und
   };
 }
 
+function withOwnerProfile(session: SourceControlSession, owners: Map<string, SessionOwnerProfile>) {
+  const owner = owners.get(session.userId);
+  return owner ? { ...session, owner } : session;
+}
+
 function projectSessionRoutes(
   path: '/web/source-control/projects/:id/sessions' | '/web/github/projects/:id/sessions',
   options: SourceControlSessionRoutesOptions,
@@ -228,12 +334,7 @@ function projectSessionRoutes(
           viewerUserId: userId,
         });
         const owners = await resolveOwnerProfiles(sessions.map(session => session.userId));
-        return c.json({
-          sessions: sessions.map(session => {
-            const owner = owners.get(session.userId);
-            return { ...session, ...(owner ? { owner } : {}) };
-          }),
-        });
+        return c.json({ sessions: sessions.map(session => withOwnerProfile(session, owners)) });
       },
     }),
     registerApiRoute(path, {
@@ -266,12 +367,12 @@ function projectSessionRoutes(
         ) {
           return c.json({ error: 'Invalid sessionId' }, 400);
         }
-        const requestedSessionId = body.sessionId as string | undefined;
+        const requestedSessionId = body.sessionId;
         const sessionId = requestedSessionId ?? globalThis.crypto.randomUUID();
         if (body.title !== undefined && typeof body.title !== 'string') {
           return c.json({ error: 'Invalid title' }, 400);
         }
-        const normalizedTitle = body.title === undefined ? null : normalizeSessionTitle(body.title as string);
+        const normalizedTitle = body.title === undefined ? null : normalizeSessionTitle(body.title);
         let branch: string;
         if (body.branch === undefined) branch = `${USER_SESSION_BRANCH_PREFIX}${sessionId}`;
         else if (isValidGitRef(body.branch)) branch = body.branch;
@@ -288,7 +389,8 @@ function projectSessionRoutes(
             ) {
               return c.json({ error: 'Session ID conflict' }, 409);
             }
-            return c.json({ session: existing });
+            await startUserSessionConversation(options.controller, existing);
+            return c.json({ session: withCapabilities(existing, canRecreateSandbox(options)) });
           }
         }
 
@@ -296,6 +398,7 @@ function projectSessionRoutes(
           .create({
             sessionId,
             projectRepositoryId: project.project.id,
+            factoryProjectId: project.factoryProjectId,
             orgId,
             userId,
             branch,
@@ -319,7 +422,9 @@ function projectSessionRoutes(
         ) {
           return c.json({ error: 'Session ID conflict' }, 409);
         }
-        return c.json({ session });
+        await startUserSessionConversation(options.controller, session);
+        // The creator owns the session, so no admin check is needed.
+        return c.json({ session: withCapabilities(session, canRecreateSandbox(options)) });
       },
     }),
   ];
@@ -329,6 +434,28 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
   const nameSession = createSessionNaming();
   const resolveOwnerProfiles = createSessionOwnerProfileResolver(options.users);
   return [
+    registerApiRoute('/web/factory/projects/:id/sessions', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const { orgId, userId } = resolved.tenant;
+        const factoryProjectId = c.req.param('id');
+        const project = factoryProjectId ? await options.projects.get({ orgId, id: factoryProjectId }) : null;
+        if (!project) return c.json({ error: 'Factory not found' }, 404);
+        // Storage is partitioned per provider; a Factory's sessions can live in any of them.
+        const sessions = (
+          await Promise.all(
+            options.sourceControls.map(sourceControl =>
+              sourceControl.sessions.listByProject({ orgId, factoryProjectId: project.id, viewerUserId: userId }),
+            ),
+          )
+        ).flat();
+        const owners = await resolveOwnerProfiles(sessions.map(session => session.userId));
+        return c.json({ sessions: sessions.map(session => withOwnerProfile(session, owners)) });
+      },
+    }),
     ...projectSessionRoutes('/web/source-control/projects/:id/sessions', options, resolveOwnerProfiles),
     // Compatibility for existing clients; new code uses the provider-neutral path.
     ...projectSessionRoutes('/web/github/projects/:id/sessions', options, resolveOwnerProfiles),
@@ -347,7 +474,65 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         ) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        return c.json({ session });
+        const owners = await resolveOwnerProfiles([session.userId]);
+        const recreateSandbox =
+          canRecreateSandbox(options) &&
+          (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
+        return c.json({ session: withCapabilities(withOwnerProfile(session, owners), recreateSandbox) });
+      },
+    }),
+    registerApiRoute('/web/user-sessions/:sessionId/sandbox/recreate', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const match = await resolveSession(options.sourceControls, c.req.param('sessionId'));
+        const session = match?.session;
+        if (!match || !session) return c.json({ error: 'Session not found' }, 404);
+        const permission = await sessionManagePermission(loose(c), options.auth, resolved.tenant, session);
+        if (permission === 'not-found') return c.json({ error: 'Session not found' }, 404);
+        if (permission === 'forbidden') {
+          return c.json({ error: "Only the session's owner or an organization admin can recreate its sandbox." }, 403);
+        }
+        const sessionRetirement = options.sessionRetirement;
+        if (!sessionRetirement || !canRecreateSandbox(options)) {
+          return c.json({ error: 'Recreating sandboxes is not available on this server.' }, 503);
+        }
+
+        const aborted = await abortActiveRun(
+          options.controller,
+          session.sessionId,
+          options.abortSettleTimeoutMs ?? ABORT_SETTLE_TIMEOUT_MS,
+        );
+        await waitForPendingFilesystemCapture(session.sessionId).catch(error => {
+          console.warn('[Factory Sessions] Failed to drain filesystem capture before sandbox recreate', {
+            sessionId: session.sessionId,
+            error,
+          });
+        });
+        try {
+          const outcome = await sessionRetirement.recreateSessionSandbox({
+            sourceControl: match.sourceControl,
+            orgId: session.orgId,
+            sessionId: session.sessionId,
+          });
+          if (outcome === 'not-found') return c.json({ error: 'Session not found' }, 404);
+          // The captured listings describe the destroyed sandbox; the next turn re-captures.
+          await options.filesystem?.deleteResourceFiles({ resourceId: session.sessionId }).catch(error => {
+            console.warn('[Factory Sessions] Failed to clear file listings after sandbox recreate', {
+              sessionId: session.sessionId,
+              error,
+            });
+          });
+          return c.json({ recreated: true, aborted });
+        } catch (error) {
+          console.error('[Factory Sessions] Failed to recreate session sandbox', {
+            sessionId: session.sessionId,
+            error,
+          });
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {

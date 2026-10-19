@@ -1,4 +1,5 @@
 import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
@@ -8,7 +9,7 @@ import { useEffect, useImperativeHandle } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { emptyPlatforms, slackPlatform } from '../../__tests__/fixtures/channels';
-import { memoryDisabled, v2Agent } from '../../__tests__/fixtures/composer-model-settings';
+import { dynamicFallbackAgent, memoryDisabled, v2Agent } from '../../__tests__/fixtures/composer-model-settings';
 import { semanticRecallConfig } from '../../memory-sidebar/__tests__/fixtures/memory';
 import { AgentOverviewPanel } from '../agent-overview-panel';
 import { RouteSidePanel, RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
@@ -34,6 +35,8 @@ function installHandlers({ agent = v2Agent, platforms = emptyPlatforms } = {}) {
     http.get(`${TEST_BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })),
     http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json({ packages: [] })),
     http.get(`${TEST_BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
+    http.get(`${TEST_BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json({ scorers: [] })),
     http.get(`${TEST_BASE_URL}/api/channels/platforms`, () => HttpResponse.json(platforms)),
     http.get(`${TEST_BASE_URL}/api/channels/slack/installations`, () => HttpResponse.json([])),
@@ -62,6 +65,7 @@ function renderPanel() {
               <AgentOverviewPanel agentId={AGENT_ID} />
             </ActivatedSkillsProvider>
           </RouteSidePanel>
+          <Toaster />
         </RouteSidePanelProvider>
       </TooltipProvider>
     </TestLinkProvider>,
@@ -71,7 +75,7 @@ function renderPanel() {
 
 afterEach(() => {
   vi.clearAllMocks();
-  localStorage.clear();
+  globalThis.localStorage?.clear();
 });
 
 describe('AgentOverviewPanel', () => {
@@ -134,5 +138,52 @@ describe('AgentOverviewPanel', () => {
     renderPanel();
 
     expect(await screen.findByText('Agent not found')).not.toBeNull();
+  });
+
+  describe('model list editability', () => {
+    const READ_ONLY_NOTE = 'This model list is dynamically set and cannot be edited in Studio.';
+
+    it('shows a function-valued model list without edit controls', async () => {
+      installHandlers({ agent: { ...dynamicFallbackAgent, modelListEditable: false } });
+      renderPanel();
+
+      expect(await screen.findByText(READ_ONLY_NOTE)).not.toBeNull();
+      expect(screen.getByText('openai/gpt-5.4-mini')).not.toBeNull();
+      expect(screen.getByText('openai/gpt-5.5')).not.toBeNull();
+      expect(screen.queryAllByRole('switch')).toHaveLength(0);
+    });
+
+    it('keeps the edit controls for a static model list', async () => {
+      installHandlers({ agent: { ...dynamicFallbackAgent, modelListEditable: true } });
+      renderPanel();
+
+      expect(await screen.findAllByRole('switch')).toHaveLength(2);
+      expect(screen.queryByText(READ_ONLY_NOTE)).toBeNull();
+    });
+  });
+
+  describe('when a model-list update is rejected', () => {
+    it('restores the previous enabled state', async () => {
+      installHandlers({ agent: dynamicFallbackAgent });
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/agents/${AGENT_ID}/models/fallback`, () =>
+          HttpResponse.json(
+            { error: 'Agent model list is dynamic (model is a function) and cannot be edited' },
+            { status: 409 },
+          ),
+        ),
+      );
+      renderPanel();
+
+      const switches = await screen.findAllByRole('switch');
+      expect(switches[1].getAttribute('aria-checked')).toBe('true');
+
+      fireEvent.click(switches[1]);
+
+      await waitFor(() => expect(switches[1].getAttribute('aria-checked')).toBe('true'));
+      expect(
+        await screen.findByText('Agent model list is dynamic (model is a function) and cannot be edited'),
+      ).not.toBeNull();
+    });
   });
 });

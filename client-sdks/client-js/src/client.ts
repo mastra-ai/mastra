@@ -51,6 +51,8 @@ import type {
   TraceQueryGroupResponse,
   TraceQueryKeysetTraceResponse,
   TraceQueryResponse,
+  AggregateTracesArgs,
+  AggregateTracesResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,
@@ -1142,6 +1144,14 @@ export class MastraClient extends BaseResource {
     return this.observability.queryTraces(params);
   }
 
+  /**
+   * Groups and measures the traces selected by a time range and optional trace-query predicate.
+   * Check `capabilities.traceAggregate` from `getObservabilityCapabilities()` first; servers without it return 404 or 501.
+   */
+  aggregateTraces(params: AggregateTracesArgs): Promise<AggregateTracesResponse> {
+    return this.observability.aggregateTraces(params);
+  }
+
   /** Returns canonical and observed fields available to the advanced trace-query grammar. */
   getTraceQueryFields(
     params: GetTraceQueryFieldsArgs,
@@ -1158,8 +1168,8 @@ export class MastraClient extends BaseResource {
     return this.observability.getTraceQueryValues(params, options);
   }
 
-  /** Queries thread identities using eligible-trace and cross-trace predicates. */
-  queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
+  /** Queries full-history thread rows using a trace or thread activity window. */
+  queryTraceThreads<T extends QueryTraceThreadsInput>(params: T): Promise<QueryTraceThreadsResult<T>> {
     return this.observability.queryTraceThreads(params);
   }
 
@@ -1990,11 +2000,16 @@ export class MastraClient extends BaseResource {
    * Lists all datasets with optional pagination
    */
   public listDatasets(params?: ListDatasetsParams): Promise<SerializedRouteResponse<'GET /datasets'>> {
+    // An empty ID list matches no datasets, and repeated query params cannot carry an empty list.
+    if (params?.datasetIds?.length === 0) {
+      return Promise.resolve({ datasets: [], pagination: { total: 0, page: 0, perPage: false, hasMore: false } });
+    }
     const searchParams = new URLSearchParams();
     if (params?.page !== undefined) searchParams.set('page', String(params.page));
     if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
     if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
     for (const id of params?.targetIds ?? []) searchParams.append('targetIds', id);
+    for (const id of params?.datasetIds ?? []) searchParams.append('datasetIds', id);
     if (params?.orderBy) {
       searchParams.set('orderBy[field]', params.orderBy.field);
       searchParams.set('orderBy[direction]', params.orderBy.direction);
@@ -2303,6 +2318,19 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Gets an experiment by ID regardless of dataset association, including its
+   * `datasetId` (null for experiments orphaned by dataset deletion). When tenancy
+   * fields are supplied, experiments outside the tenant are reported as not found.
+   */
+  public getExperiment(
+    experimentId: PathParams<'GET /experiments/:experimentId'>['experimentId'],
+    options?: QueryParams<'GET /experiments/:experimentId'>,
+  ): Promise<SerializedRouteResponse<'GET /experiments/:experimentId'>> {
+    const qs = buildTenancyQuery(options);
+    return this.request(`/experiments/${encodeURIComponent(experimentId)}${qs}`);
+  }
+
+  /**
    * Deletes a dataset experiment and its results. Tenancy fields, when provided,
    * scope the dataset lookup on the server side.
    *
@@ -2487,7 +2515,8 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Compares two dataset experiments for regression detection
+   * Compares two to ten dataset experiments item by item against a baseline.
+   * Every experiment in `experimentIds` gets a result entry per item (`null` when it did not run that item).
    */
   public compareExperiments(params: CompareExperimentsParams): Promise<CompareExperimentsResponse> {
     const { datasetId, ...body } = params;

@@ -3,19 +3,21 @@
  */
 import { execFileSync } from 'node:child_process';
 
-import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
+import { CombinedAutocompleteProvider, Spacer, Text, visibleWidth } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
 import { THINK_COMMAND_DESCRIPTOR } from '@mastra/code-sdk/thinking';
 import { loadCustomCommands } from '@mastra/code-sdk/utils/slash-command-loader';
 import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
 import { reconcileChatBoundarySpacers } from './chat-boundary-reconciliation.js';
 import { isUserInvocable } from './commands/skill-filters.js';
-import { renderBanner } from './components/banner.js';
+import { HeaderComponent } from './components/banner.js';
 import { IdleCounterComponent } from './components/idle-counter.js';
+import { keyHint } from './components/surface.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { notifyForInputRequest, runPermissionHooksForEvent, showError, showInfo } from './display.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import { switchModeWithPack } from './model-packs/apply.js';
+import { isLocalOnlyCommand } from './runtime.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
@@ -143,7 +145,7 @@ export function setupKeyboardShortcuts(
     for (const shell of state.allShellComponents) {
       shell.setExpanded(state.toolOutputExpanded);
     }
-    // Expanded quiet shell calls leave their shared box, so re-measure chat spacing.
+    // Expanded compact shell calls leave their shared box, so re-measure chat spacing.
     reconcileChatBoundarySpacers(state.chatContainer);
     state.ui.requestRender();
   });
@@ -229,7 +231,8 @@ async function pauseStoredGoal(state: TUIState, pausedReason: string): Promise<v
   const threadId = state.session.thread.getId();
   if (!threadId) return;
   try {
-    const agent = state.controller.getCurrentAgent(state.session);
+    if (!state.local) return;
+    const agent = state.local.controller.getCurrentAgent(state.local.session);
     // Only an active goal is being judged; never overwrite a finished or already-paused goal.
     const record = await agent.getObjective({ threadId });
     if (record?.status !== 'active') return;
@@ -259,7 +262,7 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   const pausedReason = 'Judge evaluation was interrupted.';
   if (state.goalManager.getGoal()) {
     state.goalManager.pause(pausedReason);
-    void state.goalManager.saveToThread(state);
+    if (state.local) void state.goalManager.saveToThread(state.local);
   } else {
     // Nothing is loaded in memory (e.g. another client wrote the goal), so an
     // empty save would not persist the pause. Pause the stored record directly;
@@ -280,39 +283,50 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   const appName = state.options.appName || 'Mastra Code';
   const version = state.options.version || '0.1.0';
 
-  const banner = renderBanner(version, appName);
-
-  // Project frontmatter
-  const frontmatter = [
-    `Project: ${state.projectInfo.name}`,
-    `Resource ID: ${state.projectInfo.resourceId}`,
-    state.projectInfo.gitBranch ? `Branch: ${state.projectInfo.gitBranch}` : null,
-    state.projectInfo.isWorktree ? `Worktree of: ${state.projectInfo.mainRepoPath}` : null,
-  ]
-    .filter(Boolean)
-    .map(line => theme.fg('muted', line as string))
-    .join('\n');
+  // Project info shown beside the logo
+  const info = state.factory
+    ? [
+        `Factory: ${state.factory.projectName}`,
+        `Repository: ${state.factory.repositorySlug}`,
+        `Branch: ${state.factory.branch}`,
+        `URL: ${state.factory.url}`,
+      ]
+    : [
+        `Project: ${state.projectInfo.name}`,
+        `Resource ID: ${state.projectInfo.resourceId}`,
+        state.projectInfo.gitBranch ? `Branch: ${state.projectInfo.gitBranch}` : null,
+        state.projectInfo.isWorktree ? `Worktree of: ${state.projectInfo.mainRepoPath}` : null,
+      ].filter((line): line is string => Boolean(line));
 
   const sep = theme.fg('dim', ' · ');
   const hintParts: string[] = [];
   if (state.controller.listModes().length > 1) {
-    hintParts.push(`${theme.fg('accent', '⇧+Tab')} ${theme.fg('muted', 'cycle modes')}`);
+    hintParts.push(keyHint('shift+tab', 'cycle modes'));
   }
-  hintParts.push(`${theme.fg('accent', '/help')} ${theme.fg('muted', 'info & shortcuts')}`);
-  const instructions = `  ${hintParts.join(sep)}`;
+  hintParts.push(keyHint('/help', 'info & shortcuts'));
+  // As many hints as fit on one row; narrow terminals drop the later ones instead of wrapping.
+  const renderHints = (width: number): string[] => {
+    for (let count = hintParts.length; count > 0; count--) {
+      const row = `  ${hintParts.slice(0, count).join(sep)}`;
+      if (visibleWidth(row) <= width) return [row];
+    }
+    return [];
+  };
 
   state.ui.addChild(new Spacer(1));
-  state.ui.addChild(new Text(banner, 1, 0));
-  state.ui.addChild(new Text(frontmatter, 1, 0));
+  state.ui.addChild(new HeaderComponent({ version, appName, info }));
   state.ui.addChild(new Spacer(1));
-  state.ui.addChild(new Text(instructions, 0, 0));
-  state.ui.addChild(new Spacer(1));
+  state.ui.addChild({ render: renderHints, invalidate: () => {} });
+  // A gap under the hints once the chat has content; before that, the idle row above the prompt is the gap.
+  state.ui.addChild({
+    render: () => (state.chatContainer.children.length > 0 ? [''] : []),
+    invalidate: () => {},
+  });
 
   // Add main containers
   state.ui.addChild(state.chatContainer);
   // Task progress (between chat and editor, visible only when tasks exist)
   state.taskProgress = new TaskProgressComponent();
-  state.taskProgress.setQuietMode(state.quietMode);
   state.ui.addChild(state.taskProgress);
   if (state.options.backgroundToolsEnabled) {
     state.ui.addChild(state.globalBackgroundNoticeContainer);
@@ -329,6 +343,16 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   state.footer.addChild(state.memoryStatusLine);
   state.ui.addChild(state.footer);
   updateStatusLine(state);
+  // The status rows are laid out for one width; lay them out again when the terminal is resized.
+  let statusWidth = 0;
+  const renderFooter = state.footer.render.bind(state.footer);
+  state.footer.render = (width: number) => {
+    if (width !== statusWidth) {
+      statusWidth = width;
+      updateStatusLine(state);
+    }
+    return renderFooter(width);
+  };
   refreshModelAuthStatus();
 
   // Set focus to editor
@@ -410,6 +434,11 @@ export function setupAutocomplete(state: TUIState): void {
     THINK_COMMAND_DESCRIPTOR,
     { name: 'connect', description: 'Connect a provider account or API key' },
     { name: 'login', description: 'Sign in with a provider account' },
+    {
+      name: 'factory',
+      description: 'Switch to Factory mode, connecting first if needed (connect|status|local|disconnect)',
+    },
+    { name: 'local', description: 'Switch from Factory mode back to local mode' },
     { name: 'skills', description: 'List available skills' },
     { name: 'skill/', description: 'Activate a skill by name' },
     { name: 'cost', description: 'Show token usage and estimated costs' },
@@ -475,7 +504,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
     { name: 'browser', description: 'Configure browser automation' },
-    { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
+    { name: 'theme', description: 'Switch color theme (picker, list, or name)' },
     { name: 'update', description: 'Check for and install updates' },
     { name: 'api-keys', description: 'Manage API keys for model providers' },
     { name: 'plugins', description: 'Manage Mastra Code plugins' },
@@ -566,8 +595,9 @@ export function setupAutocomplete(state: TUIState): void {
     });
   }
 
+  const available = state.local ? slashCommands : slashCommands.filter(cmd => !isLocalOnlyCommand(cmd.name));
   const fdPath = detectFdPath();
-  state.autocompleteProvider = new CombinedAutocompleteProvider(slashCommands, process.cwd(), fdPath);
+  state.autocompleteProvider = new CombinedAutocompleteProvider(available, process.cwd(), fdPath);
   state.editor.setAutocompleteProvider(state.autocompleteProvider);
 }
 
@@ -610,9 +640,10 @@ export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
  */
 export async function loadSkillCommands(state: TUIState): Promise<void> {
   try {
-    let workspace = state.controller.getWorkspace() ?? state.workspace;
-    if (!workspace && state.controller.hasWorkspace()) {
-      workspace = await state.controller.resolveWorkspace({ session: state.session });
+    const local = state.local;
+    let workspace = local?.controller.getWorkspace() ?? state.workspace;
+    if (!workspace && local?.controller.hasWorkspace()) {
+      workspace = await local.controller.resolveWorkspace({ session: local.session });
     }
     if (!workspace?.skills) {
       state.skillCommands = [];

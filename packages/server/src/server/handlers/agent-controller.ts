@@ -17,6 +17,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 // value import.
 import { z } from 'zod/v4';
 
+import { MASTRA_USER_KEY } from '../constants';
+import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -31,8 +33,9 @@ import { enforceThreadAccess } from './utils';
  * non-terminal clients — e.g. a browser-based MastraCode — can create sessions,
  * send messages, stream events, and drive run-control. Each route resolves its
  * target AgentController by id, then operates on a session bound to a
- * `resourceId` (get-or-create, so reconnects resume rather than fork the
- * conversation).
+ * `resourceId`. Mutating routes use get-or-create resolution so reconnects
+ * resume rather than fork the conversation; read routes only inspect existing
+ * live sessions.
  */
 
 /**
@@ -50,15 +53,26 @@ const RESERVED_THREAD_METADATA_KEYS = {
   currentModeId: true,
   observerModelId: true,
   reflectorModelId: true,
+  observerModelSelection: true,
+  reflectorModelSelection: true,
   observationThreshold: true,
   reflectionThreshold: true,
   tokenUsage: true,
+  ownerId: true,
+  createdBy: true,
   thinkingLevel: true,
   notifications: true,
 } satisfies Record<ReservedThreadMetadataKey, true>;
 
 function isReservedThreadMetadataKey(key: string): boolean {
   return Object.hasOwn(RESERVED_THREAD_METADATA_KEYS, key) || key.startsWith('modeModelId_');
+}
+
+function getRequestMessageAuthor(requestContext?: RequestContext): { id: string } | undefined {
+  const user = requestContext?.get(MASTRA_USER_KEY);
+  if (!user || typeof user !== 'object' || Array.isArray(user)) return undefined;
+  const id = (user as Record<string, unknown>).id;
+  return typeof id === 'string' && id ? { id } : undefined;
 }
 
 /**
@@ -78,7 +92,11 @@ function getAgentControllerOrThrow(
   return controller;
 }
 
-async function getSession(
+/**
+ * Get-or-create a session. Only the create-session route calls this: it is the one request that carries the
+ * tags and exact thread a conversation starts on.
+ */
+async function startSession(
   controller: AgentController<any>,
   resourceId: string,
   options?: { tags?: Record<string, string>; scope?: string; threadId?: string },
@@ -92,6 +110,57 @@ async function getSession(
   // stable session id when supplied.
   const id = threadId ?? (scope ? `${resourceId}::${scope}` : resourceId);
   return controller.createSession({ resourceId, id, ownerId: controller.id, tags, scope, threadId, requestContext });
+}
+
+/**
+ * Resolve the session every other route acts on: the live one, or a lost one (e.g. after a restart) rebuilt on
+ * its most recent stored thread. Never starts a conversation, so a write that arrives before the session was
+ * started fails instead of landing on a thread nobody reads.
+ */
+async function getSession(
+  controller: AgentController<any>,
+  resourceId: string,
+  options?: { scope?: string },
+  requestContext?: RequestContext,
+): Promise<Session<any>> {
+  await controller.init();
+  const scope = options?.scope;
+  const id = scope ? `${resourceId}::${scope}` : resourceId;
+  try {
+    return await controller.createSession({
+      resourceId,
+      id,
+      ownerId: controller.id,
+      scope,
+      resumeOnly: true,
+      requestContext,
+    });
+  } catch (error) {
+    // Matched by code, not class: this module may only import types from @mastra/core/agent-controller.
+    if (error instanceof Error && (error as { code?: unknown }).code === 'SESSION_NOT_STARTED') {
+      throw new HTTPException(404, {
+        message: `No session has been started for resource "${resourceId}". Create it with POST /agent-controller/:controllerId/sessions first.`,
+        cause: error,
+      });
+    }
+    throw error;
+  }
+}
+
+async function getExistingSession(
+  controller: AgentController<any>,
+  resourceId: string,
+  scope?: string,
+  requestContext?: RequestContext,
+): Promise<Session<any>> {
+  await controller.init();
+  const session = await controller.getSessionByResource(resourceId, scope, requestContext);
+  if (session) return session;
+
+  // Read routes inspect an existing session with read permission. If the
+  // in-memory session was lost after a restart, recover it from its stored
+  // thread through the execute-authorized path.
+  return getSession(controller, resourceId, { scope }, requestContext);
 }
 
 /**
@@ -170,32 +239,50 @@ const MAX_TOTAL_FILE_DATA_LENGTH = 28 * 1024 * 1024;
  */
 const bodyRequestContextSchema = z.record(z.string(), z.unknown()).optional();
 
+// Optional attachments (e.g. pasted images). `data` is base64-encoded.
+const messageFilesSchema = z
+  .array(
+    z.object({
+      data: z.string().max(MAX_FILE_DATA_LENGTH),
+      mediaType: z.string(),
+      filename: z.string().optional(),
+    }),
+  )
+  .max(20)
+  .refine(files => files.reduce((total, file) => total + file.data.length, 0) <= MAX_TOTAL_FILE_DATA_LENGTH, {
+    message: 'Total attachment size exceeds limit',
+  })
+  .optional();
+
 const sendMessageBodySchema = z.object({
   message: z.string(),
   requestContext: bodyRequestContextSchema,
-  // Optional attachments (e.g. pasted images). `data` is base64-encoded.
-  files: z
-    .array(
-      z.object({
-        data: z.string().max(MAX_FILE_DATA_LENGTH),
-        mediaType: z.string(),
-        filename: z.string().optional(),
-      }),
-    )
-    .max(20)
-    .refine(files => files.reduce((total, file) => total + file.data.length, 0) <= MAX_TOTAL_FILE_DATA_LENGTH, {
-      message: 'Total attachment size exceeds limit',
-    })
-    .optional(),
+  files: messageFilesSchema,
 });
-const steerBodySchema = z.object({ message: z.string(), requestContext: bodyRequestContextSchema });
-const toolApprovalBodySchema = z.object({
-  toolCallId: z.string(),
-  approved: z.boolean(),
+const steerBodySchema = z.object({
+  message: z.string(),
   requestContext: bodyRequestContextSchema,
+  files: messageFilesSchema,
 });
+const toolApprovalBodySchema = z
+  .object({
+    toolCallId: z.string(),
+    approved: z.boolean(),
+    /**
+     * Grants the gated tool's category to the thread that owns the call, then
+     * approves — the same "always allow" the in-process TUI offers. Requires
+     * `approved: true`.
+     */
+    alwaysAllowCategory: z.boolean().optional(),
+    requestContext: bodyRequestContextSchema,
+  })
+  .refine(body => !body.alwaysAllowCategory || body.approved, {
+    message: 'alwaysAllowCategory requires approved: true',
+    path: ['alwaysAllowCategory'],
+  });
 const toolSuspensionBodySchema = z.object({
   toolCallId: z.string().min(1),
+  runId: z.string().min(1).optional(),
   // Free-form resume payload. For ask_user this is a string (or string[] for
   // multi-select); for submit_plan it's `{ action, feedback? }`; for
   // request_access it's "Yes"/"No".
@@ -262,7 +349,11 @@ const listThreadsQuerySchema = z.object({
     }, z.record(z.string(), z.string()).optional())
     .optional(),
 });
-const followUpBodySchema = z.object({ message: z.string(), requestContext: bodyRequestContextSchema });
+const followUpBodySchema = z.object({
+  message: z.string(),
+  requestContext: bodyRequestContextSchema,
+  files: messageFilesSchema,
+});
 
 const sendNotificationBodySchema = z.object({
   source: z.string(),
@@ -288,6 +379,7 @@ const createSessionResponseSchema = z.object({
 const ackResponseSchema = z.object({
   ok: z.boolean(),
 });
+const transferOwnershipResponseSchema = ackResponseSchema.extend({ ownerId: z.string() });
 
 const toolCommandAckResponseSchema = z.object({
   ok: z.boolean(),
@@ -472,14 +564,19 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   responseSchema: createSessionResponseSchema,
   summary: 'Create or resume a controller session',
   description:
-    'Creates a session for the given resourceId, or returns the existing one (get-or-create), so reconnects resume the conversation.',
+    'Creates a session for the given resourceId, or returns the existing one (get-or-create), so reconnects resume the conversation. Every other session route requires a started session and returns 404 until one exists or can be recovered from a stored thread.',
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, controllerId, resourceId, sessionScope, tags, threadId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { tags, scope: sessionScope, threadId }, requestContext);
+      const session = await startSession(
+        controller,
+        resourceId,
+        { tags, scope: sessionScope, threadId },
+        requestContext,
+      );
       return {
         controllerId,
         resourceId,
@@ -543,7 +640,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, abortSignal, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
 
       let cleanedUp = false;
       let heartbeat: ReturnType<typeof setTimeout> | undefined;
@@ -586,6 +683,19 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
               scheduleHeartbeat();
             }, 25_000);
           };
+
+          // Live events are not replayed, so seed a late subscriber with the
+          // current display state (including the message in flight). This runs
+          // before subscribe() so it precedes the buffered workspace events
+          // subscribe() replays; both are synchronous, so no event slips between.
+          try {
+            controller.enqueue(
+              toWireEvent({ type: 'display_state_changed', displayState: session.displayState.get() }),
+            );
+          } catch {
+            cleanup(controller);
+            return;
+          }
 
           unsubscribe = session.subscribe(event => {
             if (cleanedUp) return;
@@ -634,8 +744,14 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
       // Forward the server middleware's requestContext so identity injected in
       // `server.middleware` reaches dynamic instructions and tools (same as the
       // plain agent message route).
+      const author = getRequestMessageAuthor(requestContext);
       ackBackgroundSessionWork({
-        work: session.sendMessage({ content: message, files, requestContext }),
+        work: session.sendMessage({
+          content: message,
+          files,
+          requestContext,
+          ...(author ? { author } : {}),
+        }),
         session,
         mastra,
         operation: 'sendMessage',
@@ -684,7 +800,16 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, toolCallId, approved, requestContext }) => {
+  handler: async ({
+    mastra,
+    controllerId,
+    resourceId,
+    sessionScope,
+    toolCallId,
+    approved,
+    alwaysAllowCategory,
+    requestContext,
+  }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
@@ -697,7 +822,7 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
       if (gated || !toolCallId) {
         const result = session.respondToToolApproval({
           toolCallId,
-          decision: approved ? 'approve' : 'decline',
+          decision: !approved ? 'decline' : alwaysAllowCategory ? 'always_allow_category' : 'approve',
           requestContext,
         });
         if (!result.accepted) return { ok: false, reason: result.reason };
@@ -715,7 +840,7 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
         if (!session.claimToolResponse(toolCallId)) return { ok: false, reason: 'not_pending' as const };
         ackBackgroundSessionWork({
           work: session
-            .respondToPersistedToolApproval({ toolCallId, approved, requestContext })
+            .respondToPersistedToolApproval({ toolCallId, approved, alwaysAllowCategory, requestContext })
             .finally(() => session.releaseToolResponse(toolCallId)),
           session,
           mastra,
@@ -743,7 +868,16 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, toolCallId, resumeData, requestContext }) => {
+  handler: async ({
+    mastra,
+    controllerId,
+    resourceId,
+    sessionScope,
+    toolCallId,
+    runId,
+    resumeData,
+    requestContext,
+  }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
@@ -752,13 +886,12 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
       // can trip the request timeout and leave CORS mutating an already-sent response.
       // Claim the parked suspension before acking so a concurrent duplicate answer
       // (e.g. while an approved submit_plan awaits its mode switch) is rejected.
-      const claim = session.claimToolSuspension(toolCallId);
+      const claim = session.claimToolSuspension(toolCallId, runId);
       if (!claim.accepted) return { ok: false, reason: claim.reason };
-      const claimedToolCallId = claim.toolCallId;
       ackBackgroundSessionWork({
         work: session
-          .respondToToolSuspension({ toolCallId, resumeData, requestContext })
-          .finally(() => session.releaseToolResponse(claimedToolCallId)),
+          .respondToToolSuspension({ address: claim.address, resumeData, requestContext })
+          .finally(() => session.releaseToolResponse(claim.claimKey)),
         session,
         mastra,
         operation: 'respondToToolSuspension',
@@ -783,12 +916,13 @@ export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const author = getRequestMessageAuthor(requestContext);
       ackBackgroundSessionWork({
-        work: session.steer({ content: message, requestContext }),
+        work: session.steer({ content: message, files, requestContext, ...(author ? { author } : {}) }),
         session,
         mastra,
         operation: 'steer',
@@ -878,6 +1012,48 @@ export const SWITCH_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
   },
 });
 
+export const TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner',
+  responseType: 'json' as const,
+  pathParamSchema: threadPathParams,
+  queryParamSchema: sessionScopeQuerySchema,
+  responseSchema: transferOwnershipResponseSchema,
+  summary: 'Take ownership of a thread',
+  description:
+    "Transfers ownership of the specified thread to the authenticated user from the request context. The thread must belong to the session's resource, and the caller needs memory write access to it. The session's active thread does not change.",
+  tags: ['AgentController', 'Threads'],
+  requiresAuth: true,
+  requiresPermission: 'agent-controller:execute',
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, threadId, requestContext }) => {
+    try {
+      const ownerId = getRequestMessageAuthor(requestContext)?.id;
+      if (!ownerId) {
+        throw new HTTPException(401, { message: 'An authenticated user is required to transfer thread ownership' });
+      }
+      const controller = getAgentControllerOrThrow(mastra, controllerId);
+      await controller.init();
+      const thread = await controller.queryThreadById({ threadId });
+      if (!thread || thread.resourceId !== resourceId) {
+        throw new HTTPException(404, { message: 'Thread not found' });
+      }
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId,
+        thread,
+        effectiveResourceId: resourceId,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
+      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      await session.thread.transferOwnership({ toOwnerId: ownerId, threadId });
+      return { ok: true, ownerId };
+    } catch (error) {
+      return handleError(error, 'error transferring controller thread ownership');
+    }
+  },
+});
+
 export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
   method: 'GET',
   path: '/agent-controller/:controllerId/sessions/:resourceId',
@@ -893,7 +1069,7 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, threadId: requestedThreadId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
       const ds = session.displayState.get();
       const threadId = requestedThreadId ?? session.thread.getId() ?? undefined;
       const storage = mastra.getStorage();
@@ -1381,12 +1557,12 @@ export const FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
       ackBackgroundSessionWork({
-        work: session.followUp({ content: message, requestContext }),
+        work: session.followUp({ content: message, files, requestContext }),
         session,
         mastra,
         operation: 'followUp',
@@ -1481,7 +1657,7 @@ export const GET_AGENT_CONTROLLER_OM_RECORD_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
       const record = await controller.getObservationalMemoryRecord(session);
       return { record: record ?? undefined };
     } catch (error) {
@@ -1534,7 +1710,7 @@ export const GET_AGENT_CONTROLLER_RESOURCE_IDS_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
       const resourceIds = await controller.getKnownResourceIds(session);
       return { resourceIds };
     } catch (error) {
@@ -1589,7 +1765,7 @@ export const GET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
       const threadId = session.thread.getId();
       if (!threadId) return { goal: undefined };
       const agent = getAgentForSession(controller, session);
@@ -1732,7 +1908,7 @@ export const GET_AGENT_CONTROLLER_PERMISSIONS_ROUTE = createRoute({
   handler: async ({ mastra, controllerId, resourceId, sessionScope, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { scope: sessionScope }, requestContext);
+      const session = await getExistingSession(controller, resourceId, sessionScope, requestContext);
       const rules = session.permissions.getRules();
       return {
         categories: rules.categories as Record<string, 'allow' | 'ask' | 'deny'> | undefined,

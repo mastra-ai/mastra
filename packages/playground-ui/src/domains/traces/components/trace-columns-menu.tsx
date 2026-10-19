@@ -1,5 +1,6 @@
 import { Columns3Icon, PlusIcon } from 'lucide-react';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 import { TRACE_CUSTOM_COLUMN_FIELDS, TRACE_CUSTOM_COLUMN_LABELS, TRACE_USAGE_COLUMNS } from '../trace-list-columns';
 import type { TraceColumnPreferences, TraceCustomColumn, TraceOptionalColumn } from '../trace-list-columns';
 import { Button } from '@/ds/components/Button';
@@ -22,11 +23,19 @@ import { Txt } from '@/ds/components/Txt';
 
 const EMPTY_KEYS: readonly string[] = [];
 
-const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = ['type', 'input', 'duration', 'endTime', 'environment'];
+const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = [
+  'type',
+  'input',
+  'output',
+  'duration',
+  'endTime',
+  'environment',
+];
 
 const COLUMN_LABELS: Record<TraceOptionalColumn, string> = {
   type: 'Primitive type',
   input: 'Input',
+  output: 'Output',
   duration: 'Duration',
   endTime: 'End',
   environment: 'Environment',

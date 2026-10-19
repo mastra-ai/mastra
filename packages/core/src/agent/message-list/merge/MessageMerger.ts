@@ -46,7 +46,12 @@ export class MessageMerger {
     // Don't merge into sealed messages (e.g., messages that have been observed)
     if (MessageMerger.isSealed(latestMessage)) return false;
 
+    // A boundary keeps the next response out of this message. Parts that still
+    // carry this message's own id (a tool that was running when the boundary
+    // landed, reporting its data parts and result) belong to it and must merge;
+    // otherwise the add falls through to replace-by-id and drops its tool call.
     if (
+      latestMessage.id !== incomingMessage.id &&
       (latestMessage.content?.metadata as { mastra?: { responseBoundary?: boolean } } | undefined)?.mastra
         ?.responseBoundary
     ) {
@@ -166,6 +171,9 @@ export class MessageMerger {
               state: part.toolInvocation.state,
               approval: part.toolInvocation.approval,
               errorText: part.toolInvocation.errorText,
+              ...(part.toolInvocation.state === 'output-error' && part.toolInvocation.result !== undefined
+                ? { result: part.toolInvocation.result }
+                : {}),
               rawInput: part.toolInvocation.rawInput,
               args: {
                 ...existingCallPart.toolInvocation.args,
@@ -326,15 +334,19 @@ export class MessageMerger {
     const newPartCount = newMessage.content.parts.filter(p => CacheKeyGenerator.fromDBParts([p]) === partKey).length;
     // If the number of parts in the latest message is less than the number of parts in the new message, insert the part
     if (latestPartCount < newPartCount) {
-      // Check if we need to add a step-start before text parts when merging assistant messages
-      // Only add after tool invocations, and only if the incoming message doesn't already have step-start
+      // Check if we need to add a step-start when merging assistant messages: before text parts the
+      // incoming message doesn't already precede with a step-start, and before a tool call that opens
+      // the incoming step. Only add after tool invocations. Later tool calls in the same incoming
+      // message are parallel calls of that step and stay together.
       const partIndex = newMessage.content.parts.indexOf(part);
       const hasStepStartBefore = partIndex > 0 && newMessage.content.parts[partIndex - 1]?.type === 'step-start';
+      // An incoming step-start can be deduplicated against one already stored, so a tool call
+      // preceded only by step-starts still opens a new step.
+      const opensStep = newMessage.content.parts.slice(0, partIndex).every(p => p.type === 'step-start');
 
       const needsStepStart =
         latestMessage.role === 'assistant' &&
-        part.type === 'text' &&
-        !hasStepStartBefore &&
+        ((part.type === 'text' && !hasStepStartBefore) || (part.type === 'tool-invocation' && opensStep)) &&
         latestMessage.content.parts.length > 0 &&
         latestMessage.content.parts.at(-1)?.type === 'tool-invocation';
 

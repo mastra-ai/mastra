@@ -1,3 +1,5 @@
+import { assertActiveObservationsApplied } from '@internal/core/memory';
+import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -11,9 +13,14 @@ import {
   calculatePagination,
   createStorageErrorId,
   normalizePerPage,
+  resolveRunFence,
   safelyParseJSON,
   storageMessageMatchesMetadataFilter,
+  TABLE_MEMORY_RUN_FENCES,
   validateStorageMetadataFilter,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
 import type {
   BufferedObservationChunk,
@@ -21,6 +28,7 @@ import type {
   CreateReflectionGenerationInput,
   ObservationalMemoryHistoryOptions,
   ObservationalMemoryRecord,
+  RunFence,
   StorageListMessagesByResourceIdInput,
   StorageListMessagesInput,
   StorageListMessagesOutput,
@@ -34,10 +42,17 @@ import type {
   UpdateBufferedObservationsInput,
   UpdateBufferedReflectionInput,
   UpdateObservationalMemoryConfigInput,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 
+import type { ConvexAdminClient } from '../../client';
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';
+import { assertRunFence, raiseRunFence, retireRunFence, pruneRunClaims } from '../../run-fencing';
+import type { RunFenceCheck } from '../../run-fencing';
 import { TABLE_OBSERVATIONAL_MEMORY } from '../../types';
 import type { SerializedOMChunk, SerializedOMCurrentRecord } from '../../types';
 
@@ -120,6 +135,7 @@ type StoredOMRecord = {
   lastBufferedAtTokens: number;
   lastBufferedAtTime?: string | null;
   metadata?: string | null;
+  supersededBy?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -191,23 +207,72 @@ function parseStoredOMRecord(doc: StoredOMRecord): ObservationalMemoryRecord {
     metadata: (metadata as Record<string, unknown>) ?? undefined,
     observedMessageIds: doc.observedMessageIds || undefined,
     observedTimezone: doc.observedTimezone || undefined,
+    supersededBy: doc.supersededBy ?? null,
   };
 }
 
 export class MemoryConvex extends MemoryStorage {
+  /**
+   * Tables `prune()` can clean up. Run fences anchor on `retiredAt` (epoch ms), which stays unset until the
+   * execution holding the fence settles, so a running execution's fence is
+   * never pruned.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runFences: { table: TABLE_MEMORY_RUN_FENCES, column: 'retiredAt', indexed: false, anchorType: 'epoch-ms' },
+  };
+
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
   readonly supportsObservationalMemoryHistorySearch = true;
 
   #db: ConvexDB;
+  #client: ConvexAdminClient;
   constructor(config: ConvexDomainConfig) {
     super();
-    const client = resolveConvexConfig(config);
-    this.#db = new ConvexDB(client);
+    this.#client = resolveConvexConfig(config);
+    this.#db = new ConvexDB(this.#client);
+  }
+
+  override supportsRunFencing(): boolean {
+    return true;
+  }
+
+  override async raiseRunFence(fence: RunFence): Promise<boolean> {
+    return raiseRunFence(this.#client, fence);
+  }
+
+  override async retireRunFence(fence: RunFence): Promise<boolean> {
+    return retireRunFence(this.#client, fence);
+  }
+
+  #runFenceCheck(fence: RunFence | undefined, operation: string): RunFenceCheck | undefined {
+    const resolved = resolveRunFence(this, fence);
+    return resolved && { claims: TABLE_MEMORY_RUN_FENCES, fence: resolved, operation };
+  }
+
+  /** The store to write through: fenced when the write carries or inherits a fence. */
+  #dbFor(fence: RunFence | undefined, operation: string): ConvexDB {
+    return this.#db.fenced(this.#runFenceCheck(fence, operation));
   }
 
   async init(): Promise<void> {
     // No-op for Convex; schema is managed server-side.
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: MemoryConvex.retentionTables,
+      order: ['runFences'],
+    });
+    return executeRetentionPrune({
+      domain: 'memory',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (_target, cutoff, limit) =>
+        pruneRunClaims(this.#client, TABLE_MEMORY_RUN_FENCES, 'retiredAt', Number(cutoff), limit),
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -215,6 +280,7 @@ export class MemoryConvex extends MemoryStorage {
     await this.#db.clearTable({ tableName: TABLE_MESSAGES });
     await this.#db.clearTable({ tableName: TABLE_RESOURCES });
     await this.#db.clearTable({ tableName: TABLE_OBSERVATIONAL_MEMORY });
+    await this.#db.clearTable({ tableName: TABLE_MEMORY_RUN_FENCES });
   }
 
   async getThreadById({
@@ -234,8 +300,8 @@ export class MemoryConvex extends MemoryStorage {
     return parseStoredThread(row);
   }
 
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    await this.#db.insert({
+  async saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType> {
+    await this.#dbFor(fence, 'saveThread').insert({
       tableName: TABLE_THREADS,
       record: {
         ...thread,
@@ -249,12 +315,14 @@ export class MemoryConvex extends MemoryStorage {
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType> {
-    const updated = await this.#db.updateThread({
+    const updated = await this.#dbFor(fence, 'updateThread').updateThread({
       id,
       title,
       metadata,
@@ -554,8 +622,15 @@ export class MemoryConvex extends MemoryStorage {
     return { messages: list.get.all.db() };
   }
 
-  async saveMessages({ messages }: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages({
+    messages,
+    fence,
+  }: {
+    messages: MastraDBMessage[];
+    fence?: RunFence;
+  }): Promise<{ messages: MastraDBMessage[] }> {
     if (messages.length === 0) return { messages: [] };
+    const db = this.#dbFor(fence, 'saveMessages');
 
     const normalized = messages.map(message => {
       if (!message.threadId) {
@@ -576,7 +651,7 @@ export class MemoryConvex extends MemoryStorage {
       };
     });
 
-    await this.#db.batchInsert({
+    await db.batchInsert({
       tableName: TABLE_MESSAGES,
       records: normalized,
     });
@@ -585,7 +660,7 @@ export class MemoryConvex extends MemoryStorage {
     const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean) as string[])];
     const now = new Date();
     for (const threadId of threadIds) {
-      await this.#db.patch({
+      await db.patch({
         tableName: TABLE_THREADS,
         id: threadId,
         record: { updatedAt: now.toISOString() },
@@ -598,13 +673,17 @@ export class MemoryConvex extends MemoryStorage {
 
   async updateMessages({
     messages,
+    fence,
   }: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
     })[];
+    fence?: RunFence;
   }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) return [];
+    const check = this.#runFenceCheck(fence, 'updateMessages');
+    const db = this.#db.fenced(check);
 
     const existingRows = await this.#db.loadMany<StoredMessage>(
       TABLE_MESSAGES,
@@ -647,17 +726,22 @@ export class MemoryConvex extends MemoryStorage {
         current.content = JSON.stringify(mergedContent);
       }
 
-      await this.#db.insert({
+      await db.insert({
         tableName: TABLE_MESSAGES,
         record: current,
       });
       updated.push(this.parseStoredMessage(current));
     }
 
+    if (updated.length === 0) {
+      await assertRunFence(this.#client, check);
+      return updated;
+    }
+
     // Update thread updatedAt timestamps for all affected threads
     const now = new Date();
     for (const threadId of affectedThreadIds) {
-      await this.#db.patch({
+      await db.patch({
         tableName: TABLE_THREADS,
         id: threadId,
         record: { updatedAt: now.toISOString() },
@@ -667,8 +751,8 @@ export class MemoryConvex extends MemoryStorage {
     return updated;
   }
 
-  async deleteMessages(messageIds: string[]): Promise<void> {
-    await this.#db.deleteMany(TABLE_MESSAGES, messageIds);
+  async deleteMessages(messageIds: string[], options?: { fence?: RunFence }): Promise<void> {
+    await this.#dbFor(options?.fence, 'deleteMessages').deleteMany(TABLE_MESSAGES, messageIds);
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
@@ -702,13 +786,15 @@ export class MemoryConvex extends MemoryStorage {
     resourceId,
     workingMemory,
     metadata,
+    fence,
   }: {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageResourceType> {
     const now = new Date();
-    const updated = await this.#db.updateResource({
+    const updated = await this.#dbFor(fence, 'updateResource').updateResource({
       resourceId,
       workingMemory,
       metadata,
@@ -937,9 +1023,11 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
-    const id = crypto.randomUUID();
     const now = new Date();
     const lookupKey = this.getOMKey(input.threadId, input.resourceId);
+    // Never reused: a write addressed to a cleared record must not land on its successor. The
+    // server inserts the record only when the key has no live record, else returns that one.
+    const id = crypto.randomUUID();
 
     const record: ObservationalMemoryRecord = {
       id,
@@ -964,39 +1052,37 @@ export class MemoryConvex extends MemoryStorage {
       lastBufferedAtTime: null,
       config: input.config,
       observedTimezone: input.observedTimezone,
+      supersededBy: null,
     };
 
-    await this.#db.insert({
-      tableName: TABLE_OBSERVATIONAL_MEMORY,
-      record: {
-        id,
-        lookupKey,
-        scope: input.scope,
-        resourceId: input.resourceId,
-        threadId: input.threadId || null,
-        activeObservations: '',
-        activeObservationsPendingUpdate: null,
-        originType: 'initial',
-        config: JSON.stringify(input.config ?? {}),
-        generationCount: 0,
-        lastObservedAt: null,
-        lastReflectionAt: null,
-        pendingMessageTokens: 0,
-        totalTokensObserved: 0,
-        observationTokenCount: 0,
-        isObserving: false,
-        isReflecting: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        observedTimezone: input.observedTimezone || null,
-        createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-      },
+    const doc = await this.#db.omInitialize<StoredOMRecord>({
+      id,
+      lookupKey,
+      scope: input.scope,
+      resourceId: input.resourceId,
+      threadId: input.threadId || null,
+      activeObservations: '',
+      activeObservationsPendingUpdate: null,
+      originType: 'initial',
+      config: JSON.stringify(input.config ?? {}),
+      generationCount: 0,
+      lastObservedAt: null,
+      lastReflectionAt: null,
+      pendingMessageTokens: 0,
+      totalTokensObserved: 0,
+      observationTokenCount: 0,
+      isObserving: false,
+      isReflecting: false,
+      isBufferingObservation: false,
+      isBufferingReflection: false,
+      lastBufferedAtTokens: 0,
+      lastBufferedAtTime: null,
+      observedTimezone: input.observedTimezone || null,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
     });
 
-    return record;
+    return doc ? parseStoredOMRecord(doc) : record;
   }
 
   async insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
@@ -1037,6 +1123,7 @@ export class MemoryConvex extends MemoryStorage {
         lastBufferedAtTime: record.lastBufferedAtTime ? toISO(record.lastBufferedAtTime) : null,
         observedTimezone: record.observedTimezone || null,
         metadata: record.metadata ? JSON.stringify(record.metadata) : null,
+        supersededBy: record.supersededBy ?? null,
         createdAt: toISO(record.createdAt),
         updatedAt: toISO(record.updatedAt),
       },
@@ -1044,17 +1131,32 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
-    await this.#db.omUpdateActive({
+    assertActiveObservationsApplied(await this.commitActiveObservations(input), input.id);
+  }
+
+  async commitActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
+    // A server deployed before commit results existed returns nothing for a completed write.
+    const result = await this.#dbFor(undefined, 'commitActiveObservations').omUpdateActive<
+      UpdateActiveObservationsResult | undefined
+    >({
       id: input.id,
       observations: input.observations,
       tokenCount: input.tokenCount,
       lastObservedAt: toISO(input.lastObservedAt),
       observedMessageIds: input.observedMessageIds ?? null,
       updatedAt: new Date().toISOString(),
+      ...(input.expectedActiveObservations !== undefined
+        ? { expectedActiveObservations: input.expectedActiveObservations }
+        : {}),
     });
+    return result ?? { applied: true };
   }
 
   async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    await this.appendBufferedObservations(input);
+  }
+
+  async appendBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
     const chunk: SerializedOMChunk = {
       id: `ombuf-${crypto.randomUUID()}`,
       cycleId: input.chunk.cycleId,
@@ -1071,16 +1173,19 @@ export class MemoryConvex extends MemoryStorage {
       extractionFailures: input.chunk.extractionFailures,
     };
 
-    await this.#db.omAppendBufferedChunk({
+    const result = await this.#dbFor(undefined, 'appendBufferedObservations').omAppendBufferedChunk<
+      UpdateBufferedObservationsResult | undefined
+    >({
       id: input.id,
       chunk,
       lastBufferedAtTime: input.lastBufferedAtTime ? toISO(input.lastBufferedAtTime) : undefined,
       updatedAt: new Date().toISOString(),
     });
+    return result ?? { persisted: true, recordId: input.id };
   }
 
   async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
-    return this.#db.omSwapBuffered<SwapBufferedToActiveResult>({
+    return this.#dbFor(undefined, 'swapBufferedToActive').omSwapBuffered<SwapBufferedToActiveResult>({
       id: input.id,
       activationRatio: input.activationRatio,
       messageTokensThreshold: input.messageTokensThreshold,
@@ -1094,84 +1199,9 @@ export class MemoryConvex extends MemoryStorage {
     });
   }
 
-  async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
-    const id = crypto.randomUUID();
-    const now = new Date();
-    const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
-
-    const record: ObservationalMemoryRecord = {
-      id,
-      scope: input.currentRecord.scope,
-      threadId: input.currentRecord.threadId,
-      resourceId: input.currentRecord.resourceId,
-      createdAt: now,
-      updatedAt: now,
-      lastObservedAt: input.currentRecord.lastObservedAt,
-      originType: 'reflection',
-      generationCount: input.currentRecord.generationCount + 1,
-      activeObservations: input.reflection,
-      totalTokensObserved: input.currentRecord.totalTokensObserved,
-      observationTokenCount: input.tokenCount,
-      pendingMessageTokens: 0,
-      isReflecting: false,
-      isObserving: false,
-      isBufferingObservation: false,
-      isBufferingReflection: false,
-      lastBufferedAtTokens: 0,
-      lastBufferedAtTime: null,
-      config: input.currentRecord.config,
-      metadata: input.currentRecord.metadata,
-      observedTimezone: input.currentRecord.observedTimezone,
-    };
-
-    await this.#db.insert({
-      tableName: TABLE_OBSERVATIONAL_MEMORY,
-      record: {
-        id,
-        lookupKey,
-        scope: record.scope,
-        resourceId: record.resourceId,
-        threadId: record.threadId || null,
-        activeObservations: input.reflection,
-        activeObservationsPendingUpdate: null,
-        originType: 'reflection',
-        config: JSON.stringify(record.config ?? {}),
-        generationCount: record.generationCount,
-        lastObservedAt: record.lastObservedAt ? toISO(record.lastObservedAt) : null,
-        lastReflectionAt: now.toISOString(),
-        pendingMessageTokens: 0,
-        totalTokensObserved: record.totalTokensObserved,
-        observationTokenCount: record.observationTokenCount,
-        isObserving: false,
-        isReflecting: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        observedTimezone: record.observedTimezone || null,
-        metadata: record.metadata ? JSON.stringify(record.metadata) : null,
-        createdAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-      },
-    });
-
-    return record;
-  }
-
-  async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
-    await this.#db.omUpdateBufferedReflection({
-      id: input.id,
-      reflection: input.reflection,
-      tokenCount: input.tokenCount,
-      inputTokenCount: input.inputTokenCount,
-      reflectedObservationLineCount: input.reflectedObservationLineCount,
-      updatedAt: new Date().toISOString(),
-    });
-  }
-
-  async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
-    const { currentRecord } = input;
-    const serializedCurrentRecord: SerializedOMCurrentRecord = {
+  /** The caller's snapshot as the server's rollover ops expect it. */
+  #serializeCurrentRecord(currentRecord: ObservationalMemoryRecord): SerializedOMCurrentRecord {
+    return {
       id: currentRecord.id,
       lookupKey: this.getOMKey(currentRecord.threadId, currentRecord.resourceId),
       scope: currentRecord.scope,
@@ -1183,16 +1213,48 @@ export class MemoryConvex extends MemoryStorage {
       lastObservedAt: currentRecord.lastObservedAt ? toISO(currentRecord.lastObservedAt) : null,
       totalTokensObserved: currentRecord.totalTokensObserved,
       generationCount: currentRecord.generationCount,
+      activeObservations: currentRecord.activeObservations ?? '',
+      observationTokenCount: currentRecord.observationTokenCount ?? 0,
     };
+  }
 
-    const doc = await this.#db.omSwapBufferedReflection<StoredOMRecord>({
-      currentRecord: serializedCurrentRecord,
-      newId: crypto.randomUUID(),
+  async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
+    // The server builds the next generation from the stored record and retires it in one mutation.
+    const doc = await this.#dbFor(undefined, 'createReflectionGeneration').omCreateReflectionGeneration<StoredOMRecord>(
+      {
+        currentRecord: this.#serializeCurrentRecord(input.currentRecord),
+        newId: input.newRecordId ?? crypto.randomUUID(),
+        reflection: input.reflection,
+        tokenCount: input.tokenCount,
+        now: new Date().toISOString(),
+      },
+    );
+    // No stored record: nothing was created.
+    return doc ? parseStoredOMRecord(doc) : input.currentRecord;
+  }
+
+  async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
+    await this.#dbFor(undefined, 'updateBufferedReflection').omUpdateBufferedReflection({
+      id: input.id,
+      reflection: input.reflection,
       tokenCount: input.tokenCount,
-      now: new Date().toISOString(),
+      inputTokenCount: input.inputTokenCount,
+      reflectedObservationLineCount: input.reflectedObservationLineCount,
+      updatedAt: new Date().toISOString(),
     });
+  }
 
-    return parseStoredOMRecord(doc);
+  async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
+    const doc = await this.#dbFor(undefined, 'swapBufferedReflectionToActive').omSwapBufferedReflection<StoredOMRecord>(
+      {
+        currentRecord: this.#serializeCurrentRecord(input.currentRecord),
+        newId: input.newRecordId ?? crypto.randomUUID(),
+        tokenCount: input.tokenCount,
+        now: new Date().toISOString(),
+      },
+    );
+    // No stored record: nothing was created.
+    return doc ? parseStoredOMRecord(doc) : input.currentRecord;
   }
 
   async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
@@ -1218,18 +1280,13 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
-    const found = await this.#db.patch({
-      tableName: TABLE_OBSERVATIONAL_MEMORY,
+    // The server redirects a retired id to the head.
+    await this.#db.omSetBufferingObservationFlag({
       id,
-      record: {
-        isBufferingObservation: isBuffering,
-        ...(lastBufferedAtTokens !== undefined ? { lastBufferedAtTokens } : {}),
-        updatedAt: new Date(),
-      },
+      isBuffering,
+      ...(lastBufferedAtTokens !== undefined ? { lastBufferedAtTokens } : {}),
+      updatedAt: new Date().toISOString(),
     });
-    if (!found) {
-      throw this.omRecordNotFound('SET_BUFFERING_OBSERVATION_FLAG', id);
-    }
   }
 
   async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
@@ -1254,14 +1311,8 @@ export class MemoryConvex extends MemoryStorage {
       });
     }
 
-    const found = await this.#db.patch({
-      tableName: TABLE_OBSERVATIONAL_MEMORY,
-      id,
-      record: { pendingMessageTokens: tokenCount, updatedAt: new Date() },
-    });
-    if (!found) {
-      throw this.omRecordNotFound('SET_PENDING_MESSAGE_TOKENS', id);
-    }
+    // The server redirects a retired id to the head.
+    await this.#db.omSetPendingMessageTokens({ id, tokenCount, updatedAt: new Date().toISOString() });
   }
 
   async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {

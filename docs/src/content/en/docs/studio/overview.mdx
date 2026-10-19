@@ -54,6 +54,14 @@ Use [Editor](/docs/studio/editor) to let non-technical team members iterate on a
 
 Use [Agent Builder](https://agent-builder.mastra.ai) to create and manage fully stored agents through a separate browser-based interface.
 
+#### Models panel
+
+Open an agent's **Models** panel to view its primary model and fallback models in priority order. For static model lists, you can reorder models, enable or disable fallbacks, and change the provider or model. The panel stays synchronized when Studio refetches the agent.
+
+These edits change the running server's in-memory agent and are lost when the server restarts. Persistent model-list editing is tracked in [GitHub issue #27089](https://github.com/mastra-ai/mastra/issues/27089).
+
+Function-valued model lists can vary by request context, so Studio displays them as read-only. Change a dynamic model list in code instead.
+
 ### Workflows
 
 Visualize your workflow as a graph and run it step by step with a custom input. During execution, the interface updates in real time to show the active step and the path taken.
@@ -104,7 +112,7 @@ See [datasets overview](/docs/evals/datasets) for the full API and versioning de
 
 ### Experiments
 
-Run all items in a dataset against an agent, workflow, or scorer and collect the results in one place. Select a target, optionally attach scorers, and trigger the experiment. The results view shows each item's input, output, status, and individual score breakdowns. Compare two experiments side by side to measure the impact of prompt, model, or code changes.
+Run all items in a dataset against an agent, workflow, or scorer and collect the results in one place. Select a target, optionally attach scorers, and trigger the experiment. The results view shows each item's input, output, status, and individual score breakdowns. Compare two to ten experiments side by side against a baseline to measure the impact of prompt, model, or code changes.
 
 See [datasets overview](/docs/evals/datasets) for setup details.
 

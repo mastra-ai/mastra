@@ -338,3 +338,44 @@ describe('defineBoard tool-result rules', () => {
     expect(Object.keys(reviewBoard.tools)).toEqual([]);
   });
 });
+
+describe('defineBoard sourceClosed', () => {
+  const phases = {
+    queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipped', drop: 'dropped' } },
+    building: { title: 'Building', kind: 'working', role: 'work', next: 'shipped' },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+    dropped: { title: 'Dropped', kind: 'terminal' },
+  } as const;
+  const define = (sourceClosed: unknown) =>
+    defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases,
+      sourceClosed: sourceClosed as never,
+    });
+
+  it('exposes a frozen terminal-phase mapping and omits it when undeclared', () => {
+    const board = define({ completed: 'shipped', canceled: 'dropped' });
+    expect(board.sourceClosed).toEqual({ completed: 'shipped', canceled: 'dropped' });
+    expect(Object.isFrozen(board.sourceClosed)).toBe(true);
+    expect(define(undefined).sourceClosed).toBeUndefined();
+    expect('sourceClosed' in define(undefined)).toBe(false);
+  });
+
+  it('rejects mappings to undefined or non-terminal phases and malformed shapes', () => {
+    expect(() => define({ completed: 'missing', canceled: 'dropped' })).toThrow(/sourceClosed.completed "missing"/);
+    expect(() => define({ completed: 'shipped', canceled: 'building' })).toThrow(/sourceClosed.canceled "building"/);
+    expect(() => define({ completed: 'shipped', canceled: 'toString' })).toThrow(BoardDefinitionError);
+    expect(() => define({ completed: 'shipped' })).toThrow(/exactly completed and canceled/);
+    expect(() => define({ completed: 'shipped', canceled: 'dropped', extra: 'x' })).toThrow(
+      /exactly completed and canceled/,
+    );
+    expect(() => define('shipped')).toThrow(/plain object/);
+  });
+
+  it('maps Work closures to its Done and Canceled phases and leaves Review undeclared', () => {
+    expect(workBoard.sourceClosed).toEqual({ completed: 'done', canceled: 'canceled' });
+    expect(reviewBoard.sourceClosed).toBeUndefined();
+  });
+});

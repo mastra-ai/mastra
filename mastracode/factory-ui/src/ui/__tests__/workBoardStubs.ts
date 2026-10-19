@@ -7,7 +7,13 @@ export const FACTORY_ID = 'fp-1';
 export const REPO_ID = 'repo-1';
 export const OTHER_FACTORY_ID = 'fp-2';
 
-function workItem(id: string, title: string, createdAt: string, enteredAt: string, factoryProjectId = FACTORY_ID) {
+export function workItem(
+  id: string,
+  title: string,
+  createdAt: string,
+  enteredAt: string,
+  factoryProjectId = FACTORY_ID,
+) {
   return {
     id,
     orgId: 'org-1',
@@ -74,16 +80,22 @@ export function stubWorkBoard() {
                   '2026-08-02T00:00:00.000Z',
                   OTHER_FACTORY_ID,
                 ),
-                workItem(
-                  'other-moved-card',
-                  'Other factory moved',
-                  '2026-07-01T00:00:00.000Z',
-                  '2026-08-04T00:00:00.000Z',
-                  OTHER_FACTORY_ID,
-                ),
+                {
+                  ...workItem(
+                    'other-moved-card',
+                    'Other factory moved',
+                    '2026-07-01T00:00:00.000Z',
+                    '2026-08-04T00:00:00.000Z',
+                    OTHER_FACTORY_ID,
+                  ),
+                  metadata: { labels: ['moved'] },
+                },
               ]
             : [
-                workItem('newer-card', 'Created later', '2026-08-02T00:00:00.000Z', '2026-08-03T00:00:00.000Z'),
+                {
+                  ...workItem('newer-card', 'Created later', '2026-08-02T00:00:00.000Z', '2026-08-03T00:00:00.000Z'),
+                  metadata: { labels: ['later'] },
+                },
                 workItem('recent-card', 'Moved recently', '2026-07-01T00:00:00.000Z', '2026-08-04T00:00:00.000Z'),
               ],
       }),
@@ -108,8 +120,6 @@ export function stubWorkBoard() {
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({ permissions: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions: [] })),
   );
 }

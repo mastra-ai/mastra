@@ -1,11 +1,13 @@
 /**
  * Browser-side helpers for factory user sessions — the conversations listed in
- * the sidebar. Project routes resolve the linked source-control provider;
- * individual-session routes resolve the provider from the durable session row.
+ * the sidebar. Listing is per Factory; creation goes through a repository link,
+ * which resolves its source-control provider; individual-session routes resolve
+ * the provider from the durable session row.
  */
 import { postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 
 export const USER_SESSION_BRANCH_PREFIX = 'user/';
+export const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
 
 export interface FactoryUserSessionOwner {
   id: string;
@@ -29,6 +31,8 @@ export interface FactoryUserSession {
   materializedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** What the viewer may do with this session, computed by the server. */
+  capabilities?: { recreateSandbox: boolean };
 }
 
 type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
@@ -37,19 +41,17 @@ function normalizeUserSession({ title, ...session }: FactoryUserSessionPayload):
   return { ...session, title: title ?? undefined };
 }
 
+/** Every session of the Factory the viewer can see, across all of its repositories and providers. */
 export async function listUserSessions(
   baseUrl: string,
-  projectRepositoryId: string,
+  factoryId: string,
   signal?: AbortSignal,
 ): Promise<FactoryUserSession[]> {
-  const res = await fetch(
-    `${baseUrl}/web/source-control/projects/${encodeURIComponent(projectRepositoryId)}/sessions`,
-    {
-      headers: { Accept: 'application/json' },
-      credentials: 'include',
-      signal,
-    },
-  );
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryId)}/sessions`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+    signal,
+  });
   const body = await readJsonOrThrow<{ sessions: FactoryUserSessionPayload[] }>(res, 'Failed to list sessions');
   return body.sessions.map(normalizeUserSession);
 }
@@ -87,6 +89,20 @@ export async function deleteUserSession(baseUrl: string, sessionId: string): Pro
     credentials: 'include',
   });
   if (!res.ok && res.status !== 404) throw new Error(`Failed to delete session (${res.status})`);
+}
+
+/** Destroy the session's sandbox (stopping any active run) so the next message boots a fresh one. */
+export async function recreateSessionSandbox(
+  baseUrl: string,
+  sessionId: string,
+): Promise<{ recreated: boolean; aborted: boolean }> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/sandbox/recreate`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  const body: { recreated?: boolean; aborted?: boolean; error?: string } = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Failed to recreate sandbox (${res.status})`);
+  return { recreated: body.recreated === true, aborted: body.aborted === true };
 }
 
 /** Ask the title model to re-name a session's conversation. Resolves to the new title. */

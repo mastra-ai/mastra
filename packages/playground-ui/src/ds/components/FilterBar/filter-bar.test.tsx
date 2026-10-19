@@ -50,6 +50,7 @@ function Harness({
   onChange,
   readOnlyIds = [],
   nonRemovableIds = [],
+  describeSuggestionsError,
 }: {
   initial?: FilterBarItem[];
   fields?: FilterBarField[];
@@ -57,12 +58,14 @@ function Harness({
   onChange?: (items: FilterBarItem[]) => void;
   readOnlyIds?: string[];
   nonRemovableIds?: string[];
+  describeSuggestionsError?: (error: unknown) => string | undefined;
 }) {
   const [items, setItems] = useState<FilterBarItem[]>(initial);
   return (
     <FilterBar
       fields={fields}
       operators={operators}
+      describeSuggestionsError={describeSuggestionsError}
       value={items}
       onValueChange={next => {
         setItems(next);
@@ -531,6 +534,134 @@ describe('FilterBar', () => {
         fieldId: 'tags',
         operatorId: 'in',
         value: ['prod', 'staging'],
+      });
+    });
+
+    describe('when "is any of" takes free text', () => {
+      const fields: FilterBarField[] = [{ id: 'threadId', label: 'Thread ID', operators: ['in'] }];
+
+      it('adds each value on Enter and keeps the draft open until Done', async () => {
+        const onChange = vi.fn();
+        render(<Harness fields={fields} onChange={onChange} />);
+        const input = getInput();
+        input.focus();
+        type('thread');
+        key('Enter');
+        await screen.findByText('Type a value');
+
+        type('thread-a');
+        key('Enter');
+        expect(onChange).not.toHaveBeenCalled();
+        expect(input.dataset.step).toBe('value');
+        expect(input.getAttribute('aria-expanded')).toBe('true');
+        expect(input.value).toBe('');
+        expect(screen.getByRole('option', { name: 'thread-a' })).toBeTruthy();
+
+        type('thread-b');
+        fireEvent.click(screen.getByRole('button', { name: /^Apply/ }));
+        expect(onChange).not.toHaveBeenCalled();
+        expect(screen.getByRole('option', { name: 'thread-b' })).toBeTruthy();
+
+        // A value still in the input is kept by Done rather than dropped.
+        type('thread-c');
+        fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
+        expect(argAt(onChange, 0, 0)[0]).toMatchObject({
+          fieldId: 'threadId',
+          operatorId: 'in',
+          value: ['thread-a', 'thread-b', 'thread-c'],
+        });
+      });
+
+      it('removes an added value when it is clicked', async () => {
+        const onChange = vi.fn();
+        render(<Harness fields={fields} onChange={onChange} />);
+        getInput().focus();
+        type('thread');
+        key('Enter');
+        await screen.findByText('Type a value');
+        type('thread-a');
+        key('Enter');
+        type('thread-b');
+        key('Enter');
+
+        fireEvent.click(screen.getByRole('option', { name: 'thread-a' }));
+        expect(screen.queryByRole('option', { name: 'thread-a' })).toBeNull();
+        key('Enter', { ctrlKey: true });
+        expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: ['thread-b'] });
+      });
+
+      it('adds typed text next to the suggestions when the field is not strict', async () => {
+        const onChange = vi.fn();
+        render(<Harness onChange={onChange} />);
+        getInput().focus();
+        type('status');
+        key('Enter');
+        fireEvent.click(await screen.findByRole('option', { name: 'in' }));
+        await screen.findByRole('option', { name: 'Running' });
+
+        type('custom');
+        await screen.findByText('No suggestions — press Enter to use your text.');
+        key('Enter');
+        expect(onChange).not.toHaveBeenCalled();
+        const custom = await screen.findByRole('option', { name: 'custom' });
+        expect(custom.dataset.selected).toBeDefined();
+        expect(screen.getByRole('option', { name: 'Running' })).toBeTruthy();
+
+        key('Enter', { ctrlKey: true });
+        expect(argAt(onChange, 0, 0)[0]).toMatchObject({ fieldId: 'status', operatorId: 'in', value: ['custom'] });
+      });
+
+      it('keeps typed text that matches no suggestion when Done commits a selection', async () => {
+        const onChange = vi.fn();
+        render(<Harness onChange={onChange} />);
+        getInput().focus();
+        type('status');
+        key('Enter');
+        fireEvent.click(await screen.findByRole('option', { name: 'in' }));
+        fireEvent.click(await screen.findByRole('option', { name: 'Running' }));
+
+        type('custom');
+        await screen.findByText('No suggestions — press Enter to use your text.');
+        fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
+        expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: ['running', 'custom'] });
+      });
+
+      it('treats typed text that matches a suggestion as a search when Done commits', async () => {
+        const onChange = vi.fn();
+        render(<Harness onChange={onChange} />);
+        getInput().focus();
+        type('status');
+        key('Enter');
+        fireEvent.click(await screen.findByRole('option', { name: 'in' }));
+        fireEvent.click(await screen.findByRole('option', { name: 'Running' }));
+
+        type('err');
+        await screen.findByRole('option', { name: 'Error' });
+        fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
+        expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: ['running'] });
+      });
+
+      it('adds a value on Enter in the chip editor without closing it', async () => {
+        const onChange = vi.fn();
+        render(
+          <Harness
+            fields={fields}
+            initial={[{ id: 't', fieldId: 'threadId', operatorId: 'in', value: ['thread-a'] }]}
+            onChange={onChange}
+          />,
+        );
+        fireEvent.click(screen.getByRole('combobox', { name: 'Value: thread-a' }));
+        const search = await screen.findByPlaceholderText<HTMLInputElement>('Type a value…');
+        expect(screen.getByRole('option', { name: 'thread-a' })).toBeTruthy();
+
+        fireEvent.change(search, { target: { value: 'thread-b' } });
+        fireEvent.keyDown(search, { key: 'Enter' });
+        expect(onChange).not.toHaveBeenCalled();
+        expect(search.value).toBe('');
+        expect(screen.getByRole('option', { name: 'thread-b' })).toBeTruthy();
+
+        fireEvent.keyDown(search, { key: 'Enter', metaKey: true });
+        expect(argAt(onChange, 0, 0)[0]).toMatchObject({ id: 't', value: ['thread-a', 'thread-b'] });
       });
     });
 
@@ -1091,6 +1222,36 @@ describe('FilterBar', () => {
       expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: 'manual' });
     });
 
+    it('describes a failed resolver with the consumer text', async () => {
+      const failure = new Error('too expensive');
+      const resolver = vi.fn(async () => {
+        throw failure;
+      });
+      const describe = vi.fn((error: unknown) => (error === failure ? 'Narrow the time range.' : undefined));
+      const fields: FilterBarField[] = [{ id: 'name', label: 'Name', operators: ['is'], suggestions: resolver }];
+      render(<Harness fields={fields} describeSuggestionsError={describe} />);
+      getInput().focus();
+      type('name');
+      key('Enter');
+      key('Enter');
+      await screen.findByText('Narrow the time range.');
+      expect(screen.queryByText(/Couldn't load values./)).toBeNull();
+      expect(describe).toHaveBeenCalledWith(failure);
+    });
+
+    it("keeps the default error text when the consumer doesn't describe the failure", async () => {
+      const resolver = vi.fn(async () => {
+        throw new Error('boom');
+      });
+      const fields: FilterBarField[] = [{ id: 'name', label: 'Name', operators: ['is'], suggestions: resolver }];
+      render(<Harness fields={fields} describeSuggestionsError={() => undefined} />);
+      getInput().focus();
+      type('name');
+      key('Enter');
+      key('Enter');
+      await screen.findByText(/Couldn't load values./);
+    });
+
     it('tolerates an inline resolver whose identity changes on every render', async () => {
       const calls: string[] = [];
       function Inline() {
@@ -1136,7 +1297,7 @@ describe('FilterBar', () => {
       render(
         <Harness fields={fields} initial={[{ id: 'scope', fieldId: 'scope', operatorId: 'is', value: 'agent-1' }]} />,
       );
-      expect(within(getChips()[0] as HTMLElement).getByText('Scope')).toBeTruthy();
+      expect(within(getChips()[0]).getByText('Scope')).toBeTruthy();
     });
   });
 
@@ -1311,7 +1472,7 @@ describe('FilterBar', () => {
         const onChange = vi.fn();
         render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
         const editor = await openPopover();
-        fireEvent.click(within(editor).getAllByRole('button', { name: 'Remove Tags filter' })[0] as HTMLElement);
+        fireEvent.click(within(editor).getAllByRole('button', { name: 'Remove Tags filter' })[0]);
         fireEvent.click(within(editor).getByRole('button', { name: 'Remove Tags filter' }));
         // Empty group persists while editing…
         expect(argAt(onChange, 1, 0).nodes[1]).toMatchObject({ id: 'g', nodes: [] });
@@ -1349,7 +1510,7 @@ describe('FilterBar', () => {
         pressActive({ key: 'ArrowLeft' });
         pressActive({ key: 'ArrowLeft' });
         pressActive({ key: 'ArrowLeft' });
-        const advanced = getAdvancedChips()[0] as HTMLElement;
+        const advanced = getAdvancedChips()[0];
         expect(advanced.contains(document.activeElement)).toBe(true);
         expect((document.activeElement as HTMLElement).dataset.filterBarSegment).toBe('remove');
         pressActive({ key: 'ArrowLeft' });
@@ -1386,6 +1547,109 @@ describe('FilterBar', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
         expect(argAt(onChange, 0, 0)).toEqual({ logic: 'and', nodes: [] });
       });
+    });
+  });
+
+  describe('when the consumer keeps one filter per field', () => {
+    // URL-backed pages store one filter per field and rebuild items with `id: fieldId`, so a
+    // second chip on the same field could never be represented: picking that field again
+    // must update its chip instead.
+    function FieldKeyed({ initial = [] }: { initial?: FilterBarItem[] }) {
+      const [byField, setByField] = useState(() => new Map(initial.map(item => [item.fieldId, item])));
+      const items = [...byField.values()].map(item => ({ ...item, id: item.fieldId }));
+      return (
+        <FilterBar
+          fields={FIELDS}
+          operators={OPERATORS}
+          value={items}
+          onValueChange={next => setByField(new Map(next.map(item => [item.fieldId, item])))}
+          createItemId={fieldId => fieldId}
+        >
+          <FilterBar.Chips />
+          <FilterBar.Input placeholder="Filter…" />
+        </FilterBar>
+      );
+    }
+
+    const chipLabels = () => [...getChips()].map(chip => chip.getAttribute('aria-label'));
+
+    const addStatus = async (operatorSteps: number, valueQuery: string) => {
+      getInput().focus();
+      type('status');
+      key('Enter');
+      await screen.findByRole('option', { name: 'is' });
+      for (let i = 0; i < operatorSteps; i++) key('ArrowDown');
+      key('Enter');
+      type(valueQuery);
+      key('Enter');
+    };
+
+    it('adds a second value to the same field as "is any of" on the existing chip', async () => {
+      render(<FieldKeyed initial={[{ id: 'status', fieldId: 'status', operatorId: 'is', value: 'running' }]} />);
+
+      await addStatus(0, 'err');
+
+      expect(chipLabels()).toEqual(['Status in Running, Error']);
+    });
+
+    it('adds to an existing "is any of" chip without repeating values', async () => {
+      render(<FieldKeyed initial={[{ id: 'tags', fieldId: 'tags', operatorId: 'in', value: ['prod'] }]} />);
+
+      getInput().focus();
+      type('tags');
+      key('Enter');
+      await screen.findByRole('option', { name: 'prod' });
+      key('Enter'); // toggle prod, already on the chip
+      key('ArrowDown');
+      key('Enter'); // toggle staging
+      key('Enter', { ctrlKey: true });
+
+      expect(chipLabels()).toEqual(['Tags prod, staging']);
+    });
+
+    it('replaces the value when the operators cannot be combined', async () => {
+      render(<FieldKeyed initial={[{ id: 'status', fieldId: 'status', operatorId: 'is-not', value: 'running' }]} />);
+
+      await addStatus(0, 'err');
+
+      expect(chipLabels()).toEqual(['Status is Error']);
+    });
+
+    it('replaces the value when the field takes a single value', async () => {
+      render(<FieldKeyed initial={[{ id: 'duration', fieldId: 'duration', operatorId: 'gt', value: 5 }]} />);
+
+      getInput().focus();
+      type('duration');
+      key('Enter');
+      type('10');
+      key('Enter');
+
+      expect(chipLabels()).toEqual(['Duration 10']);
+    });
+
+    it('never renders two chips with the same key while the second filter is drafted', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      render(<FieldKeyed initial={[{ id: 'status', fieldId: 'status', operatorId: 'is', value: 'running' }]} />);
+
+      getInput().focus();
+      type('status');
+      key('Enter');
+      await screen.findByRole('option', { name: 'is' });
+
+      expect(getChips()).toHaveLength(2);
+      expect(consoleError.mock.calls.flat().join(' ')).not.toMatch(/same key/);
+    });
+
+    it('still allows several filters on one field when items get their own ids', async () => {
+      const onChange = vi.fn();
+      render(
+        <Harness initial={[{ id: 'a', fieldId: 'status', operatorId: 'is', value: 'running' }]} onChange={onChange} />,
+      );
+
+      await addStatus(0, 'err');
+
+      expect(getChips()).toHaveLength(2);
+      expect(argAt(onChange, 0, 0)).toHaveLength(2);
     });
   });
 });

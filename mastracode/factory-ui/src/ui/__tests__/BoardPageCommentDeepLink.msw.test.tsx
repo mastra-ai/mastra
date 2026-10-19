@@ -93,9 +93,7 @@ function stubBoardEndpoints() {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
   );
 }
@@ -148,14 +146,13 @@ describe('Board comment deep link', () => {
     const { router } = renderBoard(`?item=${ITEM_ID}&comment=c1`);
 
     await screen.findByRole('dialog', { name: 'Fix login bug' });
-    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
-    await user.type(screen.getByRole('combobox', { name: 'Add filter' }), 'login{Enter}');
+    await user.type(screen.getByRole('searchbox', { name: 'Search cards' }), 'login');
 
     await waitFor(() => {
       const params = new URLSearchParams(router.state.location.search);
       expect(params.get('item')).toBeNull();
       expect(params.get('comment')).toBeNull();
-      expect(params.get('q')).toBe('login');
+      expect(params.get('search')).toBe('login');
     });
   });
 });

@@ -107,9 +107,10 @@ export const goalMaxRunsEndsGoalScenario: McE2eScenario = {
         `Expected the stored goal paused with ${JSON.stringify(PAUSED_REASON)} before restart, found ${JSON.stringify(stored)}`,
       );
     }
-    // The status line wraps, so collapse whitespace before counting the cause.
+    // The status line wraps, so collapse whitespace before counting the cause. Count over the whole
+    // scrollback: the pre-restart copy can still be on screen, and only a new copy proves the reload.
     const pauseLines = () =>
-      stripAnsi(terminal.serialize().view)
+      stripAnsi(terminal.serializeHistory?.().output ?? terminal.serialize().view)
         .replace(/\s+/g, ' ')
         .split('— paused: ' + PAUSED_REASON).length - 1;
     await restartApp?.();

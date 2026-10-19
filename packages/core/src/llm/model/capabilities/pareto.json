@@ -1,5 +1,13 @@
 {
   "attachment": ["z-ai/glm-5.3-flash"],
   "temperature": ["z-ai/glm-5.3-flash"],
-  "structuredOutput": ["z-ai/glm-5.3-flash"]
+  "structuredOutput": ["z-ai/glm-5.3-flash"],
+  "reasoning": {
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ]
+  }
 }

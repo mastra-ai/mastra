@@ -1,5 +1,5 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -135,18 +135,19 @@ describe('Subconscious remind', () => {
     });
     const context = createContext('Project Atlas launches January 15.');
     const store = await context.memory.storage.getStore('knowledge');
+    const scope = ['org:acme', 'resource:user-42'];
     const node = await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
-      scope: ['org:acme', 'resource:user-42'],
+      scope: scope,
     });
     const record = await store.appendKnowledge({
       node,
       text: 'Project Atlas launches January 15.',
-      scope: ['org:acme', 'resource:user-42'],
+      scope: scope,
       sourceThreadId: 'beta',
       resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
-      defaultScope: ['org:acme', 'resource:user-42'],
+      defaultScope: scope,
     });
     context.mainAgent.getModel = vi.fn(async () =>
       createModel(`Project Atlas launches January 15. Source: ${record.id}`, undefined, true),
@@ -429,6 +430,45 @@ describe('Subconscious remind', () => {
 
     expect(result.failures).toBeUndefined();
     expect(context.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it("runs the passive check on the reminder's own thread when the parent's request context names the parent's thread", async () => {
+    const storage = new InMemoryStore();
+    const context = createContext('unused', storage);
+    // An agent run under an AgentController carries its thread and resource ids in the request context.
+    context.requestContext.set(MASTRA_THREAD_ID_KEY, 'alpha');
+    context.requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-42');
+    const knowledge = await storage.getStore('knowledge');
+    const node = await knowledge.createNode({
+      name: 'Project Atlas',
+      kind: 'project',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    const record = await knowledge.appendKnowledge({
+      node,
+      text: 'Project Atlas launches January 15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'beta',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
+      defaultScope: ['org:acme', 'resource:user-42'],
+    });
+    context.mainAgent.getModel = vi.fn(async () =>
+      createModel(`Project Atlas launches January 15. Source: ${record.id}`),
+    );
+    const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
+
+    await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling Project Atlas.',
+      ...context,
+    });
+
+    expect(context.sendSignal).toHaveBeenCalledOnce();
+    const memoryStore = await storage.getStore('memory');
+    const { threads } = await memoryStore.listThreads({ filter: { resourceId: 'user-42' }, perPage: false });
+    expect(threads.map(thread => thread.id)).toEqual([getRemindThreadId('alpha')]);
+    expect(context.requestContext.get(MASTRA_THREAD_ID_KEY)).toBe('alpha');
   });
 
   it('reuses durable sidekick history across reconstructed Memory instances', async () => {

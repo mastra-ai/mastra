@@ -13,7 +13,9 @@ import { safeClose, safeEnqueue } from '../../stream/base';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom, isDataChunk } from '../../stream/types';
+import { rebindProcessorTools } from '../../utils';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
+import { REQUEST_TOOLS_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '../timeout';
 import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
@@ -328,6 +330,30 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // refcount is owned by the internal-workflow registration above —
         // no separate release needed here.
         hydrateRunScopeFromInternal(rest.mastra, runId, _internal);
+        // A scope kept alive across suspension still holds the previous request's step tools,
+        // which close over that request's requestContext. Let the tools built for this call
+        // replace the ones the previous request configured, but keep the ones a processor added
+        // or swapped in, since the suspended call may be one of them and the processors do not
+        // run again before it resumes. Processor-added tools are rebuilt for this call's
+        // requestContext instead, so an approved one runs with the approver's context (#27544).
+        const runScope = rest.mastra.__getRunScope(runId);
+        const previousStepTools = resumeContext ? runScope?.get(STEP_TOOLS_KEY) : undefined;
+        if (previousStepTools) {
+          const previousRequestTools = runScope!.get(REQUEST_TOOLS_KEY);
+          const stepTools = rebindProcessorTools({ ...previousStepTools }, requestContext);
+          for (const [name, tool] of Object.entries(rest.tools ?? {})) {
+            // A name the previous request configured but the step tools lack was withheld by a processor.
+            const refresh =
+              name in previousStepTools
+                ? previousStepTools[name] === previousRequestTools?.[name]
+                : !previousRequestTools || !(name in previousRequestTools);
+            if (refresh) {
+              stepTools[name] = tool;
+            }
+          }
+          runScope!.set(STEP_TOOLS_KEY, stepTools);
+        }
+        if (rest.tools) runScope?.set(REQUEST_TOOLS_KEY, rest.tools);
       }
 
       // Once the run reaches a terminal state its snapshot rows are no longer
@@ -415,20 +441,32 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           });
         }
 
-        const executionPromise = resumeContext
-          ? run.resume({
+        await resumeContext?.claim?.start?.();
+
+        const executionPromise = resumeContext?.claim?.snapshot
+          ? run.resumeClaimed({
               resumeData: resumeContext.resumeData,
               ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
               requestContext,
               actor: rest.actor,
               label: toolCallId,
+              claimedSnapshot: resumeContext.claim.snapshot,
+              onExecutionStarted: resumeContext.claim.onExecutionStarted,
             })
-          : run.start({
-              inputData: initialData,
-              ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
-              requestContext,
-              actor: rest.actor,
-            });
+          : resumeContext
+            ? run.resume({
+                resumeData: resumeContext.resumeData,
+                ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
+                requestContext,
+                actor: rest.actor,
+                label: toolCallId,
+              })
+            : run.start({
+                inputData: initialData,
+                ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
+                requestContext,
+                actor: rest.actor,
+              });
 
         let executionResult: Awaited<typeof executionPromise>;
         try {
@@ -509,9 +547,13 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         safeClose(controller);
       } finally {
+        // The run is over, so close any output stream processor span still open, e.g. one
+        // opened by a tool result resumed after approval when no step follows it.
+        dataChunkProcessorRunner?.endStreamProcessorSpans(dataChunkProcessorStates!);
         upstreamAbortSignal?.removeEventListener('abort', onUpstreamAbort);
         cleanupTotalTimeout();
         await stopGoalActivity({ agentId, runId, now: _internal?.now });
+        await resumeContext?.claim?.release();
         if (!keepRegisteredForResume) {
           rest.mastra?.__unregisterInternalWorkflow(agenticLoopWorkflow.id, runId);
         }

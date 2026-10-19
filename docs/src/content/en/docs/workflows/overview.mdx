@@ -506,7 +506,11 @@ Use `restartAllActiveWorkflowRuns()` to restart all active workflow runs of a wo
 workflow.restartAllActiveWorkflowRuns()
 ```
 
+Runs restart concurrently, up to `recovery.workflowConcurrency` at a time (default `5`). Set it to `1` in the Mastra config if your runs share side effects that must not run in parallel.
+
 To exclude a workflow from automatic boot-time restarts triggered by `Mastra.restartAllActiveWorkflowRuns()`, set `autoRestartActiveRuns: false` in the workflow's `options`. This is useful for workflows with side effects that must not be re-driven by a blanket restart. Durable agent workflows set this automatically because their recovery is owned by the opt-in `recovery.durableAgents: 'auto'` path.
+
+While a run executes, Mastra holds a storage lease on it and renews it in the background. `restart()` refuses to take over a run whose lease hasn't expired: it throws a `WORKFLOW_RESTART_RUN_OWNED` error and the sweep skips the run. The lease is advisory and doesn't fence writes. If a process stops renewing its lease but keeps executing a step, for example because its event loop is blocked for longer than the lease TTL, recovery can run that step a second time. The boot-time sweep, `mastra.restartAllActiveWorkflowRuns()`, rechecks a skipped run once its lease could have expired, so a run whose process crashed is still recovered. `workflow.restartAllActiveWorkflowRuns()` skips the run without a recheck, so call it after the lease expires if you need to recover that run. Storage adapters without run-ownership support keep the previous behavior and restart every active run.
 
 ### Restarting an active workflow run with `restart()`
 

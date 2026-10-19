@@ -10,14 +10,19 @@ import type {
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
 import { TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
-import { compileSpanQueryPredicate, runWithClickHouseTraceQueryTimeout } from './trace-query';
+import { buildSpanQueryResponse } from './preview-compat';
+import { needsPreviewPayloads, PREVIEW_COLUMNS, resolveStoredPreviews } from './previews';
+import {
+  compileSpanQueryPredicate,
+  runWithClickHouseTraceQueryTimeout,
+  timeToFirstChunkSupported,
+} from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
 const identities = identityFields.join(', ');
-// Preserve NULL versus empty scope IDs when matching candidate identities.
+// Preserve NULL versus empty scope IDs when hydrating page identities.
 const identitySetColumns =
   "isNull(organizationId), ifNull(organizationId, ''), isNull(resourceId), ifNull(resourceId, ''), traceId, spanId";
-const identitySetKey = `tuple(${identitySetColumns})`;
 const displayFields = [
   'parentSpanId',
   'name',
@@ -25,11 +30,30 @@ const displayFields = [
   'entityType',
   'entityId',
   'entityName',
+  'entityVersionId',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'parentEntityVersionId',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
+  'rootEntityVersionId',
+  'threadId',
+  'runId',
+  'sessionId',
+  'userId',
+  'requestId',
+  'serviceName',
+  'experimentId',
+  'environment',
+  'executionSource',
   'startedAt',
   'endedAt',
   'model',
   'provider',
   'durationMs',
+  'timeToFirstChunkMs',
   'status',
 ];
 
@@ -107,17 +131,14 @@ export function compileClickHouseSpanQuery(plan: TrustedSpanQueryPlan) {
   );
   const expressions = selectionFields.map(fieldExpression);
   // Completed insert-only records: latest endedAt wins. Equal-version retries must be identical.
+  // Copies of a span share startedAt, so the time range can be applied before selecting the latest copy.
   // Read only filter/sort fields before pagination; mutable predicates follow current-record selection.
   const after = afterCursor(plan, parameters);
-  const query = `WITH candidate_ids AS (
-    SELECT ${identitySetKey} AS identity FROM ${TABLE_SPAN_EVENTS}
-    PREWHERE endedAt >= ${from}
-    WHERE startedAt >= ${from} AND startedAt < ${to} ${scope.length ? `AND ${scope.join(' AND ')}` : ''}
-  ), candidates AS (
+  const query = `WITH candidates AS (
     SELECT ${identities}, ${selectionFields.map((field, index) => `${expressions[index]} AS ${field}`).join(', ')}
     FROM ${TABLE_SPAN_EVENTS} e
     PREWHERE e.endedAt >= ${from}
-    WHERE ${identitySetKey} IN (SELECT identity FROM candidate_ids) ${scope.length ? `AND ${scope.join(' AND ')}` : ''}
+    WHERE e.startedAt >= ${from} AND e.startedAt < ${to} ${scope.length ? `AND ${scope.join(' AND ')}` : ''}
     ORDER BY ${identities}, e.endedAt DESC
     LIMIT 1 BY ${identities}
   )
@@ -127,6 +148,12 @@ export function compileClickHouseSpanQuery(plan: TrustedSpanQueryPlan) {
   LIMIT ${parameters.add(plan.limit + 1)}`;
   return { query, query_params: { ...parameters.values, ...predicate.params } };
 }
+
+type StoredPreviewRow = Record<(typeof PREVIEW_COLUMNS)[number], string | null>;
+
+// Match Platform's fallback batch size. OSS payloads have no assumed byte limit;
+// reduce each batch to previews before reading the next rather than retaining a full page of payloads.
+const LEGACY_PAYLOAD_BATCH_ROWS = 32;
 
 function iso(value: string): string {
   return new Date(value.includes('T') ? value : `${value.replace(' ', 'T')}Z`).toISOString();
@@ -153,36 +180,67 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
   if (!page.length) return { spans: [], page: { next: null } };
   // One typed array parameter avoids ClickHouse's HTTP form-field limit at large page sizes.
   const payloadWhere = `tuple(${identitySetColumns}, endedAt) IN {page:Array(Tuple(UInt8, String, UInt8, String, String, String, DateTime64(3, 'UTC')))}`;
-  const payloads = await run<SpanQuerySelectedRow & SpanQueryPayload>({
-    query: `SELECT ${identities}, ${displayFields.map((field, index) => `data.${index + 1} AS ${field}`).join(', ')},
-      data.${displayFields.length + 1} AS inputPreview, data.${displayFields.length + 2} AS outputPreview
-    FROM (SELECT ${identities}, any(tuple(${displayFields.map(fieldExpression).join(', ')}, substringUTF8(input, 1, ${coreStorage.SPAN_QUERY_MAX_PREVIEW_CHARACTERS + 1}), substringUTF8(output, 1, ${coreStorage.SPAN_QUERY_MAX_PREVIEW_CHARACTERS + 1}))) AS data
+  const pageParameter = (rows: Array<SpanQueryIdentity & { endedAt: string }>) =>
+    rows.map(row => new TupleParam([...identityValues(row), row.endedAt.replace('T', ' ').replace(/Z$/, '')]));
+  const rowsWithPreviews = await run<SpanQuerySelectedRow & StoredPreviewRow>({
+    query: `SELECT ${identities}, ${[...displayFields, ...PREVIEW_COLUMNS].map((field, index) => `data.${index + 1} AS ${field}`).join(', ')}
+    FROM (SELECT ${identities}, any(tuple(${[...displayFields.map(fieldExpression), ...PREVIEW_COLUMNS].join(', ')})) AS data
       FROM ${TABLE_SPAN_EVENTS} e WHERE ${payloadWhere} GROUP BY ${identities})`,
-    query_params: {
-      page: page.map(row => new TupleParam([...identityValues(row), row.endedAt.replace('T', ' ').replace(/Z$/, '')])),
-    },
+    query_params: { page: pageParameter(page) },
   });
-  // Metrics can be emitted after the span search window; hydrate costs by selected identity, not that time range.
-  const metricWhere = `${identitySetKey} IN {page:Array(Tuple(UInt8, String, UInt8, String, String, String))}`;
-  const metrics = await run<SpanQueryCostMetric>({
-    query: `SELECT ${identities}, data.1 AS name, data.2 AS estimatedCost,
-      data.3 AS costUnit, data.4 AS allocation, data.5 AS costError
-    FROM (SELECT ${identities}, metricId, argMax(tuple(name, estimatedCost, costUnit,
-        JSONExtractString(costMetadata, 'allocation'), JSONHas(costMetadata, 'error')), timestamp) AS data
-      FROM ${TABLE_METRIC_EVENTS} WHERE (${metricWhere}) AND name LIKE 'mastra_model_%'
-      GROUP BY ${identities}, metricId)
-    LIMIT ${coreStorage.SPAN_QUERY_MAX_COST_METRICS + 1}`,
-    query_params: { page: page.map(row => new TupleParam(identityValues(row))) },
-  });
-  if (metrics.length > coreStorage.SPAN_QUERY_MAX_COST_METRICS) throw new coreStorage.TraceQueryResourceLimitError();
+  // Rows written before the previews were stored: read the payloads of just those rows.
+  const missingKeys = new Set(rowsWithPreviews.filter(needsPreviewPayloads).map(coreStorage.spanQueryIdentityKey));
+  const missing = page.filter(row => missingKeys.has(coreStorage.spanQueryIdentityKey(row)));
+  const storedByIdentity = new Map(rowsWithPreviews.map(row => [coreStorage.spanQueryIdentityKey(row), row]));
+  for (let start = 0; start < missing.length; start += LEGACY_PAYLOAD_BATCH_ROWS) {
+    const rows = await run<SpanQueryIdentity & { input: string | null; output: string | null; error: string | null }>({
+      query: `SELECT ${identities}, data.1 AS input, data.2 AS output, data.3 AS error
+      FROM (SELECT ${identities}, any(tuple(input, output, error)) AS data
+        FROM ${TABLE_SPAN_EVENTS} e WHERE ${payloadWhere} GROUP BY ${identities})`,
+      query_params: { page: pageParameter(missing.slice(start, start + LEGACY_PAYLOAD_BATCH_ROWS)) },
+    });
+    for (const row of rows) {
+      const stored = storedByIdentity.get(coreStorage.spanQueryIdentityKey(row));
+      if (stored) Object.assign(stored, resolveStoredPreviews(stored, row));
+    }
+  }
+  const payloads: Array<SpanQuerySelectedRow & SpanQueryPayload> = rowsWithPreviews.map(row => ({
+    ...row,
+    ...resolveStoredPreviews(row),
+  }));
   const byIdentity = new Map(payloads.map(row => [coreStorage.spanQueryIdentityKey(row), row]));
   const hydrated = page.flatMap(identity => {
     const row = byIdentity.get(coreStorage.spanQueryIdentityKey(identity));
     if (!row) return []; // The selected record can be deleted between reads.
-    const { inputPreview: _input, outputPreview: _output, ...metadata } = row;
-    return [{ ...metadata, ...identity, durationMs: Number(row.durationMs) }];
+    const { inputPreview: _input, outputPreview: _output, errorPreview: _error, timeToFirstChunkMs, ...metadata } = row;
+    return [
+      {
+        ...metadata,
+        ...identity,
+        durationMs: Number(row.durationMs),
+        ...(timeToFirstChunkSupported && {
+          timeToFirstChunkMs: timeToFirstChunkMs == null ? null : Number(timeToFirstChunkMs),
+        }),
+      },
+    ];
   });
-  const result = coreStorage.buildSpanQueryResponse(plan, hydrated, payloads, metrics);
+  // Preserve costs only for older core contracts that still return them.
+  let metrics: SpanQueryCostMetric[] = [];
+  if (!coreStorage.SPAN_QUERY_FIELD_REGISTRY) {
+    const metricWhere = `tuple(${identitySetColumns}) IN {page:Array(Tuple(UInt8, String, UInt8, String, String, String))}`;
+    metrics = await run<SpanQueryCostMetric>({
+      query: `SELECT ${identities}, data.1 AS name, data.2 AS estimatedCost,
+        data.3 AS costUnit, data.4 AS allocation, data.5 AS costError
+      FROM (SELECT ${identities}, metricId, argMax(tuple(name, estimatedCost, costUnit,
+          JSONExtractString(costMetadata, 'allocation'), JSONHas(costMetadata, 'error')), timestamp) AS data
+        FROM ${TABLE_METRIC_EVENTS} WHERE (${metricWhere}) AND name LIKE 'mastra_model_%'
+        GROUP BY ${identities}, metricId)
+      LIMIT ${coreStorage.SPAN_QUERY_MAX_COST_METRICS + 1}`,
+      query_params: { page: page.map(row => new TupleParam(identityValues(row))) },
+    });
+    if (metrics.length > coreStorage.SPAN_QUERY_MAX_COST_METRICS) throw new coreStorage.TraceQueryResourceLimitError();
+  }
+  const result = buildSpanQueryResponse(plan, hydrated, payloads, metrics);
   const last = page.at(-1)!;
   // Cursor follows the selected page even if a concurrent deletion removed a hydrated row.
   result.page.next =

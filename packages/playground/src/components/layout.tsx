@@ -97,7 +97,8 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
         </Panel>
         {hasPanel && !isMobile && (
           <>
-            <PanelSeparator />
+            {/* The separator is the gap between the two cards, so its handle sits between them. */}
+            <PanelSeparator className="w-2" />
             <CollapsiblePanel
               id="route-side-panel"
               ref={panelHandle}

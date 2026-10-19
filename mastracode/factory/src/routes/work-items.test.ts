@@ -12,9 +12,8 @@ import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domai
 import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   FACTORY_RULE_MATERIALIZATION_KEY,
-  WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
-import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-items/base.js';
+import type { FactoryDeferredDecisionRecord, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
@@ -874,6 +873,7 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
         orgId: 'org1',
         userId: 'u1',
         factoryProjectId: PROJECT_ID,
+        modelScope: 'factory',
         defaultModelId: 'anthropic/claude-fable-5',
         requestContext,
       }),
@@ -1118,6 +1118,66 @@ describe('GET /web/factory/projects/:id/decisions', () => {
         expect.objectContaining({ type: 'sendMessage', source: null }),
       ]),
     );
+  });
+});
+
+describe('GET /web/factory/projects/:id/decisions retry eligibility', () => {
+  it('reports decisions that have not failed as not retryable, matching the retry route', async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const workItem = (await seed.workItems.update({
+      orgId: 'org1',
+      id: (await created.json()).workItem.id,
+      userId: 'u1',
+      patch: { stages: ['triage'] },
+    }))!.item;
+    const now = new Date();
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: workItem.id,
+      ingress: { identity: 'not-failed', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: workItem.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: ['succeeded', 'superseded', 'proposed'].map(key => ({
+        type: 'invokeSkill' as const,
+        role: 'triage',
+        skillName: 'factory-triage',
+        idempotencyKey: key,
+      })),
+      causalChain: [],
+      now,
+    });
+    const claimed = await seed.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 3,
+    });
+    expect(claimed).toHaveLength(3);
+    const [succeeded, superseded, proposed] = claimed.map(decision => ({
+      id: decision.id,
+      orgId: decision.orgId,
+      factoryProjectId: decision.factoryProjectId,
+      ownerId: 'worker-1',
+    }));
+    await seed.workItems.completeDeferredDecision(succeeded!, now);
+    await seed.workItems.supersedeLeasedDecision(superseded!, now);
+    await seed.workItems.proposeDeferredDecision(proposed!, now);
+
+    const body = await (await json('GET', `/web/factory/projects/${PROJECT_ID}/decisions`)).json();
+    expect(body.decisions.map((decision: { status: string }) => decision.status).sort()).toEqual([
+      'proposed',
+      'succeeded',
+      'superseded',
+    ]);
+    for (const decision of body.decisions) {
+      expect(decision).toMatchObject({ failureCode: null, canRetry: false });
+      const retry = await json('POST', `/web/factory/projects/${PROJECT_ID}/decisions/${decision.id}/retry`);
+      expect(retry.status).toBe(409);
+      expect((await seed.workItems.getDeferredDecision('org1', PROJECT_ID, decision.id))?.status).toBe(decision.status);
+    }
   });
 });
 

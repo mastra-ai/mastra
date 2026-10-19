@@ -5,7 +5,12 @@ import type { MastraVoice } from '@mastra/core/voice';
 import { CompositeVoice } from '@mastra/core/voice';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createTestServerContext } from './test-utils';
-import { GET_SPEAKERS_ROUTE, GENERATE_SPEECH_ROUTE, TRANSCRIBE_SPEECH_ROUTE } from './voice';
+import {
+  GET_SPEAKERS_ROUTE,
+  GENERATE_SPEECH_DEPRECATED_ROUTE,
+  GENERATE_SPEECH_ROUTE,
+  TRANSCRIBE_SPEECH_ROUTE,
+} from './voice';
 
 vi.mock('@mastra/core/voice');
 
@@ -170,6 +175,55 @@ describe('Voice Handlers', () => {
       const response = result as unknown as Response;
       expect(response).toBeInstanceOf(Response);
       expect(response.headers.get('Content-Type')).toBe('audio/mpeg');
+    });
+
+    describe('speaker and options forwarding', () => {
+      async function callSpeak(route: typeof GENERATE_SPEECH_ROUTE, body: Record<string, unknown>) {
+        const agent = createAgentWithVoice({ voice: new CompositeVoice({}) });
+        const speak = vi.fn().mockResolvedValue(Readable.from(Buffer.from('audio')));
+        vi.spyOn(agent, 'getVoice').mockReturnValue({ speak } as any);
+        await route.handler({
+          ...createTestServerContext({ mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }) }),
+          agentId: 'test-agent',
+          text: 'hello',
+          ...body,
+        } as any);
+        return speak;
+      }
+
+      it('forwards options.speaker and other provider options', async () => {
+        const speak = await callSpeak(GENERATE_SPEECH_ROUTE, { options: { speaker: 'nova', speed: 1.2 } });
+        expect(speak).toHaveBeenCalledWith('hello', { speaker: 'nova', speed: 1.2 });
+      });
+
+      it('still supports the legacy top-level speakerId', async () => {
+        const speak = await callSpeak(GENERATE_SPEECH_ROUTE, { speakerId: 'alloy' });
+        expect(speak).toHaveBeenCalledWith('hello', { speaker: 'alloy' });
+      });
+
+      it('prefers options.speaker over speakerId', async () => {
+        const speak = await callSpeak(GENERATE_SPEECH_ROUTE, { speakerId: 'alloy', options: { speaker: 'nova' } });
+        expect(speak).toHaveBeenCalledWith('hello', { speaker: 'nova' });
+      });
+
+      it('forwards options on the deprecated speak route', async () => {
+        const speak = await callSpeak(GENERATE_SPEECH_DEPRECATED_ROUTE, { options: { speaker: 'nova' } });
+        expect(speak).toHaveBeenCalledWith('hello', { speaker: 'nova' });
+      });
+
+      it('accepts options in the request body schema', () => {
+        const parsed = GENERATE_SPEECH_ROUTE.bodySchema!.parse({ text: 'hi', options: { speaker: 'nova' } });
+        expect(parsed).toEqual({ text: 'hi', options: { speaker: 'nova' } });
+      });
+
+      it('keeps provider-specific options and rejects a non-string options.speaker', () => {
+        const schema = GENERATE_SPEECH_ROUTE.bodySchema!;
+        expect(schema.parse({ text: 'hi', options: { speaker: 'nova', speed: 1.2 } })).toEqual({
+          text: 'hi',
+          options: { speaker: 'nova', speed: 1.2 },
+        });
+        expect(schema.safeParse({ text: 'hi', speakerId: 'alloy', options: { speaker: 42 } }).success).toBe(false);
+      });
     });
 
     it('should generate speech successfully with dynamic instructions', async () => {

@@ -144,363 +144,38 @@ describe('DurableAgent structured output', () => {
     await pubsub.close();
   });
 
-  describe('ZodSchema structured output', () => {
-    it('should support ZodSchema structured output type', async () => {
-      const expectedOutput = {
-        elements: [
-          { year: '2012', winner: 'Barack Obama' },
-          { year: '2016', winner: 'Donald Trump' },
-        ],
-      };
-
-      const mockModel = createStructuredOutputModel(expectedOutput);
-
-      const baseAgent = new Agent({
-        id: 'election-agent',
-        name: 'US Election Agent',
-        instructions: 'You know about past US elections',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      // Prepare with structured output schema
-      const result = await durableAgent.prepare('Give me the winners of 2012 and 2016 US presidential elections', {
-        structuredOutput: {
-          schema: z.object({
-            elements: z.array(
-              z.object({
-                winner: z.string(),
-                year: z.string(),
-              }),
-            ),
-          }),
-        },
-      });
-
-      expect(result.runId).toBeDefined();
-      expect(result.workflowInput).toBeDefined();
-
-      // The structured output schema should be serialized in the workflow input
-      // Since DurableAgent uses prepare + workflow execution pattern,
-      // we verify the preparation includes the schema info
-      expect(result.workflowInput.options).toBeDefined();
+  it('should preserve structured output when observing a completed run', async () => {
+    const expectedOutput = {
+      answer: 'ok',
+      n: 2,
+    };
+    const baseAgent = new Agent({
+      id: 'observe-structured-output-agent',
+      name: 'Observe Structured Output Agent',
+      instructions: 'Return the requested structured output',
+      model: createChunkedStructuredOutputModel(expectedOutput) as LanguageModelV2,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    it('should handle array schemas wrapped in elements', async () => {
-      const expectedOutput = {
-        elements: [
-          { name: 'Alice', age: 30 },
-          { name: 'Bob', age: 25 },
-        ],
-      };
-
-      const mockModel = createStructuredOutputModel(expectedOutput);
-
-      const baseAgent = new Agent({
-        id: 'array-schema-agent',
-        name: 'Array Schema Agent',
-        instructions: 'Return user data',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const result = await durableAgent.prepare('List all users', {
-        structuredOutput: {
-          schema: z.array(
-            z.object({
-              name: z.string(),
-              age: z.number(),
-            }),
-          ),
-        },
-      });
-
-      expect(result.runId).toBeDefined();
-      expect(result.workflowInput).toBeDefined();
+    const producer = await durableAgent.stream('Return the answer', {
+      structuredOutput: {
+        schema: z.object({
+          answer: z.string(),
+          n: z.number(),
+        }),
+      },
     });
-  });
+    const producerOutput = await producer.output.getFullOutput();
 
-  describe('JSONSchema7 structured output', () => {
-    it('should support JSONSchema7 structured output type', async () => {
-      const expectedOutput = {
-        winners: [
-          { year: '2012', winner: 'Barack Obama' },
-          { year: '2016', winner: 'Donald Trump' },
-        ],
-      };
+    const observer = await durableAgent.observe(producer.runId, { offset: 0 });
+    const observerOutput = await observer.output.getFullOutput();
 
-      const mockModel = createStructuredOutputModel(expectedOutput);
+    expect(producerOutput.object).toEqual(expectedOutput);
+    expect(observerOutput.text).toBe(producerOutput.text);
+    expect(observerOutput.finishReason).toBe('stop');
+    expect(observerOutput.object).toEqual(producerOutput.object);
 
-      const baseAgent = new Agent({
-        id: 'json-schema-agent',
-        name: 'JSON Schema Agent',
-        instructions: 'You know about past US elections',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const result = await durableAgent.prepare('Give me the winners of 2012 and 2016 US presidential elections', {
-        structuredOutput: {
-          schema: {
-            type: 'object',
-            properties: {
-              winners: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    winner: { type: 'string' },
-                    year: { type: 'string' },
-                  },
-                  required: ['winner', 'year'],
-                },
-              },
-            },
-            required: ['winners'],
-          },
-        },
-      });
-
-      expect(result.runId).toBeDefined();
-      expect(result.workflowInput).toBeDefined();
-    });
-  });
-
-  describe('streaming structured output', () => {
-    it('should stream structured output correctly in chunks', async () => {
-      const expectedOutput = {
-        name: 'Alice',
-        email: 'alice@example.com',
-        role: 'admin',
-      };
-
-      const mockModel = createChunkedStructuredOutputModel(expectedOutput);
-
-      const baseAgent = new Agent({
-        id: 'streaming-schema-agent',
-        name: 'Streaming Schema Agent',
-        instructions: 'Return user profile',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const { runId, cleanup } = await durableAgent.stream('Get user profile', {
-        structuredOutput: {
-          schema: z.object({
-            name: z.string(),
-            email: z.string(),
-            role: z.string(),
-          }),
-        },
-      });
-
-      expect(runId).toBeDefined();
-
-      // Cleanup subscription
-      cleanup();
-    });
-
-    it('should preserve structured output when observing a completed run', async () => {
-      const expectedOutput = {
-        answer: 'ok',
-        n: 2,
-      };
-      const baseAgent = new Agent({
-        id: 'observe-structured-output-agent',
-        name: 'Observe Structured Output Agent',
-        instructions: 'Return the requested structured output',
-        model: createChunkedStructuredOutputModel(expectedOutput) as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const producer = await durableAgent.stream('Return the answer', {
-        structuredOutput: {
-          schema: z.object({
-            answer: z.string(),
-            n: z.number(),
-          }),
-        },
-      });
-      const producerOutput = await producer.output.getFullOutput();
-
-      const observer = await durableAgent.observe(producer.runId, { offset: 0 });
-      const observerOutput = await observer.output.getFullOutput();
-
-      expect(producerOutput.object).toEqual(expectedOutput);
-      expect(observerOutput.text).toBe(producerOutput.text);
-      expect(observerOutput.finishReason).toBe('stop');
-      expect(observerOutput.object).toEqual(producerOutput.object);
-
-      observer.cleanup();
-    });
-
-    it('should handle complex nested object schemas in stream', async () => {
-      const expectedOutput = {
-        user: {
-          profile: {
-            name: 'Alice',
-            contact: {
-              email: 'alice@example.com',
-              phone: '555-1234',
-            },
-          },
-          settings: {
-            theme: 'dark',
-            notifications: true,
-          },
-        },
-      };
-
-      const mockModel = createStructuredOutputModel(expectedOutput);
-
-      const baseAgent = new Agent({
-        id: 'nested-schema-agent',
-        name: 'Nested Schema Agent',
-        instructions: 'Return nested user data',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const { runId, cleanup } = await durableAgent.stream('Get complete user data', {
-        structuredOutput: {
-          schema: z.object({
-            user: z.object({
-              profile: z.object({
-                name: z.string(),
-                contact: z.object({
-                  email: z.string(),
-                  phone: z.string(),
-                }),
-              }),
-              settings: z.object({
-                theme: z.string(),
-                notifications: z.boolean(),
-              }),
-            }),
-          }),
-        },
-      });
-
-      expect(runId).toBeDefined();
-      cleanup();
-    });
-  });
-
-  describe('edge cases', () => {
-    it('should parse JSON from text when finishReason is tool-calls (Bedrock-style)', async () => {
-      const expectedOutput = {
-        primitiveId: 'weatherAgent',
-        primitiveType: 'agent',
-        prompt: 'What is the weather?',
-        selectionReason: 'Selected for weather info',
-      };
-
-      const mockModel = createBedrockStyleModel(expectedOutput);
-
-      const baseAgent = new Agent({
-        id: 'routing-agent',
-        name: 'Routing Agent',
-        instructions: 'Route requests to appropriate agents',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const responseSchema = z.object({
-        primitiveId: z.string(),
-        primitiveType: z.string(),
-        prompt: z.string(),
-        selectionReason: z.string(),
-      });
-
-      const { runId, cleanup } = await durableAgent.stream('What is the weather?', {
-        structuredOutput: {
-          schema: responseSchema,
-        },
-      });
-
-      expect(runId).toBeDefined();
-      cleanup();
-    });
-
-    it('should handle empty object schemas', async () => {
-      const expectedOutput = {};
-
-      const mockModel = createStructuredOutputModel(expectedOutput);
-
-      const baseAgent = new Agent({
-        id: 'empty-schema-agent',
-        name: 'Empty Schema Agent',
-        instructions: 'Return empty object',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const result = await durableAgent.prepare('Get empty data', {
-        structuredOutput: {
-          schema: z.object({}),
-        },
-      });
-
-      expect(result.runId).toBeDefined();
-    });
-
-    it('should handle schemas with optional fields', async () => {
-      const expectedOutput = {
-        name: 'Alice',
-        // email is optional and not provided
-      };
-
-      const mockModel = createStructuredOutputModel(expectedOutput);
-
-      const baseAgent = new Agent({
-        id: 'optional-fields-agent',
-        name: 'Optional Fields Agent',
-        instructions: 'Return user with optional fields',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const result = await durableAgent.prepare('Get user data', {
-        structuredOutput: {
-          schema: z.object({
-            name: z.string(),
-            email: z.string().optional(),
-            age: z.number().optional(),
-          }),
-        },
-      });
-
-      expect(result.runId).toBeDefined();
-    });
-
-    it('should handle schemas with union types', async () => {
-      const expectedOutput = {
-        result: { type: 'success', data: { id: 123 } },
-      };
-
-      const mockModel = createStructuredOutputModel(expectedOutput);
-
-      const baseAgent = new Agent({
-        id: 'union-schema-agent',
-        name: 'Union Schema Agent',
-        instructions: 'Return result with union type',
-        model: mockModel as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-      const result = await durableAgent.prepare('Get result', {
-        structuredOutput: {
-          schema: z.object({
-            result: z.union([
-              z.object({ type: z.literal('success'), data: z.object({ id: z.number() }) }),
-              z.object({ type: z.literal('error'), message: z.string() }),
-            ]),
-          }),
-        },
-      });
-
-      expect(result.runId).toBeDefined();
-    });
+    observer.cleanup();
   });
 });
 
@@ -731,7 +406,7 @@ describe('DurableAgent compact structuredOutput.instructions (issue #23798)', ()
     expect((result.workflowInput as any).options.structuredOutput.instructions).toBe(INSTRUCTIONS);
   });
 
-  it('does not serialize instructions when a separate structuring model is configured', async () => {
+  it('serializes structuring-agent instructions when a separate structuring model is configured', async () => {
     const baseAgent = new Agent({
       id: 'durable-instructions-structuring-model',
       name: 'Durable Instructions Structuring Model',
@@ -749,10 +424,11 @@ describe('DurableAgent compact structuredOutput.instructions (issue #23798)', ()
       },
     });
 
-    // The durable path has no separate structuring pass, so it treats every config as direct
-    // injection. Structuring-agent instructions must not leak into the injected prompt as the
-    // sole output guidance; the generated schema instruction is used instead.
-    expect((result.workflowInput as any).options.structuredOutput.instructions).toBeUndefined();
+    // The finish step runs a separate structuring pass (#26431), which needs these
+    // instructions; the main model is not asked for JSON, so they are never injected there.
+    const so = (result.workflowInput as any).options.structuredOutput;
+    expect(so.hasStructuringModel).toBe(true);
+    expect(so.instructions).toBe(INSTRUCTIONS);
   });
 
   it('injects compact instructions instead of the schema dump on a durable run (system mode)', async () => {

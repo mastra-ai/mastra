@@ -58,7 +58,7 @@ function mockResult(answer: any) {
 describe('createClassifierScorer', () => {
   it('projects choice answers with explicit scores and retains safe evidence', async () => {
     const classifier = createClassifier();
-    vi.spyOn(classifier, 'evaluate').mockResolvedValue(
+    vi.spyOn(classifier, 'decide').mockResolvedValue(
       mockResult({
         type: 'choice',
         choice: 'partial',
@@ -96,7 +96,7 @@ describe('createClassifierScorer', () => {
 
   it('normalizes score answers to 0-1 and projects boolean probabilities directly', async () => {
     const scoreClassifier = createClassifier();
-    vi.spyOn(scoreClassifier, 'evaluate').mockResolvedValue(mockResult({ type: 'score', score: 1.5 }) as any);
+    vi.spyOn(scoreClassifier, 'decide').mockResolvedValue(mockResult({ type: 'score', score: 1.5 }) as any);
     const scoreScorer = createClassifierScorer({
       id: 'quality-score',
       classifier: scoreClassifier,
@@ -105,9 +105,7 @@ describe('createClassifierScorer', () => {
     });
 
     const booleanClassifier = createClassifier();
-    vi.spyOn(booleanClassifier, 'evaluate').mockResolvedValue(
-      mockResult({ type: 'boolean', probability: 0.37 }) as any,
-    );
+    vi.spyOn(booleanClassifier, 'decide').mockResolvedValue(mockResult({ type: 'boolean', probability: 0.37 }) as any);
     const booleanScorer = createClassifierScorer({
       id: 'factual-score',
       classifier: booleanClassifier,
@@ -119,10 +117,28 @@ describe('createClassifierScorer', () => {
     await expect(booleanScorer.run({ output: 'answer' })).resolves.toMatchObject({ score: 0.37 });
   });
 
+  it('fails with a question-specific error when the classifier refuses the question', async () => {
+    const classifier = createClassifier();
+    vi.spyOn(classifier, 'decide').mockResolvedValue(mockResult({ type: 'refusal' }) as any);
+    const scorer = createClassifierScorer({
+      id: 'quality-score',
+      classifier,
+      question: 'quality',
+      state: ({ run }) => run.output,
+    });
+
+    const error = await scorer.run({ output: 'answer' }).catch(err => err);
+    expect(error).toBeInstanceOf(ScorerRunError);
+    expect(error).toMatchObject({ failedStep: 'analyze' });
+    await expect(scorer.run({ output: 'answer' })).rejects.toThrow(
+      /Classifier '.*' refused question 'quality' for scorer 'quality-score'/,
+    );
+  });
+
   it('forwards the selected state and classifier options', async () => {
     const classifier = createClassifier();
     const evaluate = vi
-      .spyOn(classifier, 'evaluate')
+      .spyOn(classifier, 'decide')
       .mockResolvedValue(mockResult({ type: 'boolean', probability: 0.8 }) as any);
     const scorer = createClassifierScorer({
       id: 'factual-score',
@@ -145,7 +161,7 @@ describe('createClassifierScorer', () => {
   it('passes the run request context to the state selector', async () => {
     const classifier = createClassifier();
     const evaluate = vi
-      .spyOn(classifier, 'evaluate')
+      .spyOn(classifier, 'decide')
       .mockResolvedValue(mockResult({ type: 'boolean', probability: 0.8 }) as any);
     const scorer = createClassifierScorer({
       id: 'policy-factual',
@@ -161,7 +177,7 @@ describe('createClassifierScorer', () => {
 
   it('resolves registered classifier IDs at run time', async () => {
     const classifier = createClassifier();
-    vi.spyOn(classifier, 'evaluate').mockResolvedValue(mockResult({ type: 'score', score: 1 }) as any);
+    vi.spyOn(classifier, 'decide').mockResolvedValue(mockResult({ type: 'score', score: 1 }) as any);
     const scorer = createClassifierScorer<typeof classifier, 'quality'>({
       id: 'registered-score',
       classifier: 'response-judge',
@@ -269,7 +285,7 @@ describe('createClassifierScorer', () => {
 
     expect(result.score).toBe(0.9);
     expect(doEvaluate).toHaveBeenCalledWith(
-      expect.objectContaining({ state: { output: ['Paris is the capital of France.'] } }),
+      expect.objectContaining({ state: [{ type: 'json', value: { output: ['Paris is the capital of France.'] } }] }),
     );
   });
 
@@ -305,6 +321,8 @@ describe('createClassifierScorer', () => {
     const result = await scorer.run({ output: 'answer', requestContext });
 
     expect(result.score).toBe(0.9);
-    expect(doEvaluate).toHaveBeenCalledWith(expect.objectContaining({ state: { policy, output: 'answer' } }));
+    expect(doEvaluate).toHaveBeenCalledWith(
+      expect.objectContaining({ state: [{ type: 'json', value: { policy, output: 'answer' } }] }),
+    );
   });
 });

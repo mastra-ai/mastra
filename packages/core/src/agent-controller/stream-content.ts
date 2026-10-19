@@ -32,7 +32,7 @@ function getAnthropicStopDetails(providerMetadata: unknown): Record<string, unkn
 }
 
 /**
- * Map a non-success terminal finish reason (content-filter, error, length) to a
+ * Map a non-success terminal finish reason (content-filter, error, length, or a missing reason when the stream closed early) to a
  * user-facing message, or `undefined` for success reasons. A non-success finish
  * must become an explicit terminal error rather than a silent `complete`.
  */
@@ -50,6 +50,9 @@ export function describeNonSuccessFinishReason(reason: string, providerMetadata:
       return 'The model stream ended with an error before producing a final response.';
     case 'length':
       return 'The model stopped because it reached its maximum output length before finishing.';
+    // The model stream closed without ever sending a finish reason, so the run stopped mid-work.
+    case '':
+      return 'The model stream ended without a finish reason before producing a final response.';
     default:
       return undefined;
   }
@@ -84,6 +87,50 @@ export function getUsageNumber(usage: Record<string, unknown>, key: string): num
   }
   return undefined;
 }
+
+/**
+ * Normalize a step's usage payload. Returns undefined when no primary count is
+ * present so an absent measurement is never reported as a measured zero.
+ */
+export function toStepTokenUsage(usage: unknown): TokenUsage | undefined {
+  if (typeof usage !== 'object' || usage === null || Array.isArray(usage)) return undefined;
+  const record = usage as Record<string, unknown>;
+  const rawPrompt = getUsageNumber(record, 'promptTokens') ?? getUsageNumber(record, 'inputTokens');
+  const rawCompletion = getUsageNumber(record, 'completionTokens') ?? getUsageNumber(record, 'outputTokens');
+  const rawTotal = getUsageNumber(record, 'totalTokens');
+  if (rawPrompt === undefined && rawCompletion === undefined && rawTotal === undefined) return undefined;
+  const promptTokens = rawPrompt ?? 0;
+  const completionTokens = rawCompletion ?? 0;
+  const stepUsage: TokenUsage = {
+    promptTokens,
+    completionTokens,
+    totalTokens: rawTotal ?? promptTokens + completionTokens,
+  };
+  for (const key of OPTIONAL_USAGE_FIELDS) addOptionalUsageField(stepUsage, key, getUsageNumber(record, key));
+  if (record.raw !== undefined) stepUsage.raw = record.raw;
+  return stepUsage;
+}
+
+/** Return a new tally with one step's usage folded in. */
+export function addTokenUsage(total: TokenUsage, step: TokenUsage): TokenUsage {
+  const next: TokenUsage = {
+    ...total,
+    promptTokens: total.promptTokens + step.promptTokens,
+    completionTokens: total.completionTokens + step.completionTokens,
+    totalTokens: total.totalTokens + step.totalTokens,
+  };
+  for (const key of OPTIONAL_USAGE_FIELDS) addOptionalUsageField(next, key, step[key]);
+  if (step.raw !== undefined) next.raw = step.raw;
+  return next;
+}
+
+const OPTIONAL_USAGE_FIELDS = [
+  'reasoningTokens',
+  'cachedInputTokens',
+  'cacheCreationInputTokens',
+  'cacheCreationInputTokens5m',
+  'cacheCreationInputTokens1h',
+] as const;
 
 /** Fold an optional usage field into a tally when present. */
 export function addOptionalUsageField(

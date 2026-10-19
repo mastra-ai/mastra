@@ -111,7 +111,7 @@ export type DeprecatedFilledVariant = 'filled';
 export function resolveFieldVariant<TVariant extends string>(
   variant: TVariant | DeprecatedFilledVariant | null | undefined,
 ): TVariant | 'default' | null | undefined {
-  return variant === 'filled' ? 'default' : (variant as TVariant | null | undefined);
+  return variant === 'filled' ? 'default' : variant;
 }
 
 // Unstyled variant baseline — strips all chrome but still suppresses the

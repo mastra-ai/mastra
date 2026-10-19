@@ -207,7 +207,7 @@ describe('TraceDataPanelView — header actions', () => {
 
     expect(screen.getByRole('button', { name: /previous trace/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /next trace/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /close panel/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /close trace/i })).toBeTruthy();
     expect(screen.queryByRole('menuitem', { name: /evaluate trace/i })).toBeNull();
 
     openTraceActions();
@@ -265,6 +265,34 @@ describe('TraceDataPanelView — trace summary description', () => {
     expect(screen.queryByText('Ended at')).toBeNull();
     expect(screen.queryByText('Trace input tokens')).toBeNull();
     expect(screen.queryByText('Trace est. cost')).toBeNull();
+  });
+});
+
+describe('TraceDataPanelView — trace error', () => {
+  const failedSpans = [
+    { ...rootSpanFixture[0], error: { name: 'AI_APICallError', message: 'Invalid reasoning effort' } },
+  ];
+
+  it("shows the root span's error without opening the span", () => {
+    render(<TraceDataPanelView {...baseProps} spans={failedSpans} />);
+
+    expect(screen.getByText('AI_APICallError')).toBeTruthy();
+    expect(screen.getByText('Invalid reasoning effort')).toBeTruthy();
+  });
+
+  it('opens the failed span from the error', () => {
+    const onSpanSelect = vi.fn();
+    render(<TraceDataPanelView {...baseProps} spans={failedSpans} onSpanSelect={onSpanSelect} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'View details' }));
+
+    expect(onSpanSelect).toHaveBeenLastCalledWith('root');
+  });
+
+  it('shows no error when the trace succeeded', () => {
+    render(<TraceDataPanelView {...baseProps} />);
+
+    expect(screen.queryByRole('button', { name: 'View details' })).toBeNull();
   });
 });
 
@@ -722,7 +750,7 @@ describe('TraceDataPanelView — following the spans it is given', () => {
       <TraceDataPanelView {...baseProps} spans={rootSpanFixture} onSaveAsDatasetItem={onSaveAsDatasetItem} />,
     );
 
-    const otherRoot = [{ ...(rootSpanFixture[0] as (typeof rootSpanFixture)[number]), spanId: 'other-root' }];
+    const otherRoot = [{ ...rootSpanFixture[0], spanId: 'other-root' }];
     rerender(<TraceDataPanelView {...baseProps} spans={otherRoot} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
     openTraceActions();

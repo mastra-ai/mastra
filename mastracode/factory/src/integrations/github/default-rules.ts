@@ -1,5 +1,6 @@
 import { hasRecordedVerdict } from '../../boards/review.js';
-import { normalizedVerdictLine } from '../../review-verdict.js';
+import { requestsChangesVerdict } from '../../review-verdict.js';
+import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 import { isFactoryApproveVerdict } from './stale-reviews.js';
@@ -22,6 +23,8 @@ function githubActorLogin(context: Pick<FactoryGithubRuleContext, 'actor'>): str
 function retriageGithubIssue(context: FactoryGithubRuleContext) {
   if (!context.item || context.item.source !== 'github-issue' || !context.item.url) return;
   if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
+  // The stage checks below use Work lane names; other boards opt in with their own rules.
+  if (context.board !== 'work') return;
   // Re-triage would take over a card that is being built or reviewed.
   const stage = context.item.stages?.length === 1 ? context.item.stages[0] : undefined;
   if (stage === 'execute' || stage === 'review') return;
@@ -102,23 +105,25 @@ function issueOpened(context: FactoryGithubRuleContext) {
 
 function issueClosed(context: FactoryGithubRuleContext) {
   if (!context.item || context.item.source !== 'github-issue' || !context.issue) return;
-  if (context.board !== 'work') return;
-  // Already off the board: nothing to reconcile.
-  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
+  // The card's board decides where a closed source sends it; boards that declare no
+  // `sourceClosed` mapping keep the card where it is, as do cards already finished.
+  const closure = context.boardClosure;
+  if (!context.board || !closure || closure.itemTerminal) return;
   // Issue closure is a repository fact, not third-party input — no actor trust
   // gate. `not_planned` (and `duplicate`) means abandoned, everything else is
   // completed work.
   const canceled = context.issue.stateReason === 'not_planned' || context.issue.stateReason === 'duplicate';
+  const target = canceled ? closure.canceled : closure.completed;
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:issue-closed`,
-    board: 'work',
-    stage: canceled ? 'canceled' : 'done',
+    board: context.board,
+    stage: target.phase,
     message: {
       text:
         `GitHub issue #${context.issue.number} was closed` +
         `${context.issue.stateReason ? ` (${context.issue.stateReason})` : ''}; ` +
-        `this Work card was moved to ${canceled ? 'Canceled' : 'Done'}.`,
+        `this ${closure.boardTitle} card was moved to ${target.title}.`,
     },
   } as const;
 }
@@ -212,6 +217,9 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
       },
     } as const;
   }
+  // Custom boards define their own lifecycle and cannot accept a transition
+  // targeting the built-in Work board. Let their custom rules handle the merge.
+  if (context.board !== 'work') return;
   // Provenance bound the event to the originating Work item instead: the merge
   // is what finishes the work, so it closes the Work card alongside its Review card —
   // unless the card has since opened another pull request, which is still out.
@@ -286,25 +294,6 @@ function dismissStaleFactoryReviews(context: FactoryGithubRuleContext) {
 
 function pullRequestReviewSubmitted(context: FactoryGithubRuleContext) {
   return addressReviewFeedback(context) ?? dismissStaleFactoryReviews(context);
-}
-
-/**
- * Detects the `factory-review` handoff verdict in a comment body.
- *
- * GitHub forbids an app from reviewing a pull request it authored, so on
- * Factory-authored PRs the review skill falls back to posting its verdict as a
- * plain comment. That comment is the only signal the authoring agent gets, so
- * it has to be readable back out. The skill's handoff contract puts the verdict
- * on the first line (`Verdict: request changes`), so only that line is
- * inspected — a verdict quoted later in the findings must not count.
- */
-function requestsChangesVerdict(body: string | undefined): boolean {
-  // Tolerate the markdown the skill wraps the line in (`**Verdict: ...**`).
-  const normalized = normalizedVerdictLine(body);
-  if (!normalized) return false;
-  // Match the verdict exactly so negated phrasings ("Verdict: do not request
-  // changes") cannot wake the author.
-  return /^verdict: ?(request changes|changes requested)$/.test(normalized);
 }
 
 function addressPullRequestComment(context: FactoryGithubRuleContext) {
@@ -452,5 +441,5 @@ export function resolveGithubRules(overrides?: GithubRuleOverrides): GithubEvent
     }
     if (handler !== undefined) rules[key] = handler;
   }
-  return Object.freeze(rules) as GithubEventRules;
+  return recordExplicitRuleOverrides(Object.freeze(rules) as GithubEventRules, overrides);
 }

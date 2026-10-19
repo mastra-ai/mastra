@@ -38,12 +38,14 @@ overrides:
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21
   jose@>=4.14.0 <6.2.12: 6.2.12
   hono@<4.13.11: 4.13.11
-  better-auth: ^1.6.26
+  better-auth: ^1.7.7
+  '@better-auth/drizzle-adapter@<1.7.7': 1.7.7
+  '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.38
   es-toolkit@<1.52.0: 1.52.0
   fast-copy@<4.1.1: 4.1.1
   ioredis@>=5.0.0 <6.0.0: 6.0.0
-  zod@>=4.0.0 <4.6.5: 4.6.5
+  zod@>=4.0.0 <4.6.7: 4.6.7
   uuid@>=8.0.0 <11.1.1: 11.1.1
   minimatch@>=9.0.0 <9.0.7: 9.0.7
   '@tootallnate/once@<3.0.1': 3.0.1
@@ -198,8 +200,8 @@ importers:
         specifier: 4.13.11
         version: 4.13.11
       zod:
-        specifier: 4.6.5
-        version: 4.6.5
+        specifier: 4.6.7
+        version: 4.6.7
     devDependencies:
       '@types/node':
         specifier: ^20.19.30
@@ -1746,8 +1748,8 @@ packages:
     resolution: {integrity: sha512-Ux4ygGWsu2c7isFWe8Yu1YluJmqVhxqK2cLXNQA5AcC3QfbGNpM7fu0Y8b/z16pXLnFxZYvWhd3fhBY9DLmC6Q==}
     engines: {node: '>=6'}
 
-  zod@4.6.5:
-    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
@@ -3131,4 +3133,4 @@ snapshots:
 
   yn@3.1.1: {}
 
-  zod@4.6.5: {}
+  zod@4.6.7: {}

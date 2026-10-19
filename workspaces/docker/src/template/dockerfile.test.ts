@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { type DockerTemplateDefinition, synthesizeDockerfile, templateIdentity, templateImageTag } from './dockerfile';
+import { synthesizeDockerfile, templateIdentity, templateImageTag } from './dockerfile';
+import type { DockerTemplateDefinition } from './dockerfile';
 
 function def(overrides: Partial<DockerTemplateDefinition> = {}): DockerTemplateDefinition {
   return {
@@ -11,6 +12,19 @@ function def(overrides: Partial<DockerTemplateDefinition> = {}): DockerTemplateD
 }
 
 describe('synthesizeDockerfile', () => {
+  it('validates runWithSecrets owner at the synthesis boundary', () => {
+    const withOwner = (owner: string | undefined) =>
+      synthesizeDockerfile(
+        def({ operations: [{ method: 'runWithSecrets', args: ['fetch', { secrets: [], output: '/out', owner }] }] }),
+      );
+    expect(withOwner('1000:1000')).toContain('COPY --chown=1000:1000 --from=mastra-secret-0 /out /out');
+    expect(withOwner('node')).toContain('COPY --chown=node --from=mastra-secret-0 /out /out');
+    expect(withOwner(undefined)).toContain('COPY --from=mastra-secret-0 /out /out');
+    for (const bad of ['', 'node --chmod=0777', 'a:b:c', 'node\nRUN x', 'node\n']) {
+      expect(() => withOwner(bad)).toThrow(TypeError);
+    }
+  });
+
   it('emits FROM for the base image', () => {
     expect(synthesizeDockerfile(def())).toBe('FROM node:22-slim AS mastra-main-0\n');
   });

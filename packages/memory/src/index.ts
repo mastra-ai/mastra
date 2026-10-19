@@ -7,6 +7,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 import { coreFeatures } from '@mastra/core/features';
+import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
 import {
   MastraMemory,
@@ -29,6 +30,8 @@ import { SpanType, EntityType } from '@mastra/core/observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/core/observability';
 import { TokenLimiterProcessor } from '@mastra/core/processors';
 import type {
+  ErrorProcessor,
+  ErrorProcessorOrWorkflow,
   InputProcessor,
   InputProcessorOrWorkflow,
   OutputProcessor,
@@ -89,6 +92,11 @@ export {
 } from './processors/observational-memory';
 export { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
 export {
+  AUTO_MODEL_BY_PROVIDER,
+  resolveAutoModelId,
+  type ResolveAutoModelIdOptions,
+} from './processors/observational-memory/auto-model';
+export {
   KnowledgeSemanticIndexCoordinator,
   StaleKnowledgeSemanticIndexError,
   Subconscious,
@@ -126,6 +134,9 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   temporalMarkers?: boolean;
   onDebugEvent?: ObservationalMemoryConfig['onDebugEvent'];
   hooks?: ObservationalMemoryConfig['hooks'];
+  autoModels?: ObservationalMemoryConfig['autoModels'];
+  canUseProvider?: ObservationalMemoryConfig['canUseProvider'];
+  resolveModel?: ObservationalMemoryConfig['resolveModel'];
 };
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
@@ -134,6 +145,12 @@ type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
 
 type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
   options?: MemoryOptions;
+  /**
+   * Selects the experimental Knowledge runtime used by Subconscious observation ingestion, tools, pinning,
+   * curation, and semantic indexing. A string resolves a keyed instance from the owning Mastra;
+   * a Knowledge instance supports standalone wiring. Omit to use the `knowledge` domain of this Memory's own storage.
+   */
+  knowledge?: string | Knowledge | false;
 };
 
 type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
@@ -347,7 +364,7 @@ function isTransientSignalMessage(message: MastraDBMessage): boolean {
 function normalizeObservationalMemoryConfig(
   config: boolean | MemoryObservationalMemoryOptions | undefined,
 ): NormalizedObservationalMemoryConfig | undefined {
-  if (config === true) return { model: 'google/gemini-2.5-flash' };
+  if (config === true) return { model: 'auto' };
   if (config === false || config === undefined) return undefined;
   if (typeof config === 'object' && config.enabled === false) return undefined;
   return config as NormalizedObservationalMemoryConfig;
@@ -442,6 +459,8 @@ export class Memory extends MastraMemory {
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
   private _omEngineInstance: ObservationalMemory | null | undefined;
   private _mastraInstance: Mastra | undefined;
+  private readonly _knowledge: MemoryConstructorConfig['knowledge'];
+  private _knowledgeStore?: Promise<KnowledgeStorage>;
   private _knowledgeSemanticIndex?: Promise<KnowledgeSemanticIndexCoordinator>;
 
   /**
@@ -472,11 +491,11 @@ export class Memory extends MastraMemory {
    * await store.close();
    * ```
    */
-  override async settled(): Promise<void> {
+  override async settled(scope?: { threadId?: string | null; resourceId?: string | null }): Promise<void> {
     await this.pendingVectorCleanup;
     // Only join an engine that already exists — never instantiate one just to drain it.
     const engine = this._omEngine ? await this._omEngine : this._omEngineInstance;
-    await engine?.settled();
+    await engine?.settled(scope);
     // Observational-memory cycles can start further vector cleanup; drain once more.
     await this.pendingVectorCleanup;
   }
@@ -498,6 +517,8 @@ export class Memory extends MastraMemory {
   __registerMastra(mastra: Mastra): void {
     super.__registerMastra(mastra);
     this._mastraInstance = mastra;
+    this._knowledgeStore = undefined;
+    this._knowledgeSemanticIndex = undefined;
     if (this._omEngineInstance) {
       this._omEngineInstance.__registerMastra(mastra);
     } else {
@@ -509,6 +530,7 @@ export class Memory extends MastraMemory {
   createSubconsciousMemory(): Memory {
     const memory = new Memory({
       storage: this.storage,
+      knowledge: this.getKnowledgeInstance() ?? this._knowledge,
       vector: this.vector,
       embedder: this.embedder,
       embedderOptions: this.embedderOptions,
@@ -539,7 +561,7 @@ export class Memory extends MastraMemory {
     const subconsciousExtractors = omConfig.experimental_subconscious
       .createObservationExtractors(
         selectObserverModel(omConfig),
-        () => (curatorMemory ??= new Memory({ storage: this.storage, options: { observationalMemory: false } })),
+        () => (curatorMemory ??= this.createSubconsciousMemory()),
       )
       .filter(extractor => !existingSlugs.has(extractor.slug));
 
@@ -586,7 +608,9 @@ export class Memory extends MastraMemory {
   }
 
   constructor(config: MemoryConstructorConfig = {}) {
-    super({ name: 'Memory', ...config } as { name: string } & SharedMemoryConfig);
+    const { knowledge, ...memoryConfig } = config;
+    super({ name: 'Memory', ...memoryConfig } as { name: string } & SharedMemoryConfig);
+    this._knowledge = knowledge;
 
     const mergedConfig = this.getMergedThreadConfig({
       workingMemory: config.options?.workingMemory || {
@@ -615,6 +639,7 @@ export class Memory extends MastraMemory {
         );
       }
     }
+    // Every Knowledge write queues semantic-index work; only a vector store and embedder drain it.
     if (omConfig?.experimental_subconscious) {
       if (!this.vector) {
         throw new Error('Subconscious semantic knowledge requires a vector store. Pass a `vector` option to Memory.');
@@ -625,7 +650,38 @@ export class Memory extends MastraMemory {
     }
   }
 
-  private async getKnowledgeStore(): Promise<KnowledgeStorage> {
+  /** Returns the configured Knowledge v2 instance, or undefined when Knowledge comes from this Memory's own storage. */
+  public getKnowledgeInstance(): Knowledge | undefined {
+    if (this._knowledge === false || this._knowledge === undefined) return undefined;
+    if (typeof this._knowledge !== 'string') return this._knowledge;
+    if (!this._mastraInstance) {
+      throw new Error(
+        `Memory cannot resolve Knowledge instance "${this._knowledge}" before it is registered with Mastra.`,
+      );
+    }
+    return this._mastraInstance.getKnowledge(this._knowledge);
+  }
+
+  /**
+   * Resolves the one Knowledge storage domain used by every Subconscious path on this Memory.
+   * Configured v2 runtimes never fall back to Memory storage, preventing split-brain state.
+   */
+  public async getKnowledgeStore(): Promise<KnowledgeStorage> {
+    if (this._knowledge === undefined) return this.resolveStorageKnowledgeStore();
+    if (this._knowledge === false) throw new Error('Knowledge is disabled for this Memory instance.');
+    if (!this._knowledgeStore) {
+      const promise = this.getKnowledgeInstance()!
+        .getStorage()
+        .catch(error => {
+          if (this._knowledgeStore === promise) this._knowledgeStore = undefined;
+          throw error;
+        });
+      this._knowledgeStore = promise;
+    }
+    return this._knowledgeStore;
+  }
+
+  private async resolveStorageKnowledgeStore(): Promise<KnowledgeStorage> {
     const store = await this.storage.getStore('knowledge');
     if (!store) {
       throw new Error(`Knowledge storage domain is not available on ${this.storage.constructor.name}`);
@@ -633,24 +689,30 @@ export class Memory extends MastraMemory {
     return store;
   }
 
-  public async getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator> {
-    if (!this.vector || !this.embedder) {
-      throw new Error('Subconscious semantic knowledge requires both a vector store and an embedder.');
+  public async getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator | undefined> {
+    if (!this.vector || !this.embedder) return undefined;
+    if (!this._knowledgeSemanticIndex) {
+      const promise = this.getKnowledgeStore()
+        .then(
+          knowledge =>
+            new KnowledgeSemanticIndexCoordinator({
+              knowledge,
+              vector: this.vector!,
+              embedder: this.embedder!,
+              embedderOptions: this.embedderOptions,
+            }),
+        )
+        .catch(error => {
+          if (this._knowledgeSemanticIndex === promise) this._knowledgeSemanticIndex = undefined;
+          throw error;
+        });
+      this._knowledgeSemanticIndex = promise;
     }
-    this._knowledgeSemanticIndex ??= this.getKnowledgeStore().then(
-      knowledge =>
-        new KnowledgeSemanticIndexCoordinator({
-          knowledge,
-          vector: this.vector!,
-          embedder: this.embedder!,
-          embedderOptions: this.embedderOptions,
-        }),
-    );
     return this._knowledgeSemanticIndex;
   }
 
   public async drainKnowledgeSemanticIndex(scope?: KnowledgeScope): Promise<number> {
-    return (await this.getKnowledgeSemanticIndex()).drain(scope);
+    return (await this.getKnowledgeSemanticIndex())?.drain(scope) ?? 0;
   }
 
   /**
@@ -2309,6 +2371,9 @@ ${workingMemory}`;
       activateOnProviderChange: omConfig.activateOnProviderChange,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
+      autoModels: omConfig.autoModels,
+      canUseProvider: omConfig.canUseProvider,
+      resolveModel: omConfig.resolveModel,
       mastra: this._mastraInstance,
       onIndexObservations,
       onDebugEvent: omConfig.onDebugEvent,
@@ -2322,6 +2387,7 @@ ${workingMemory}`;
             providerOptions: omConfig.observation.providerOptions,
             bufferTokens: omConfig.observation.bufferTokens,
             bufferOnIdle: omConfig.observation.bufferOnIdle,
+            observeOnContextOverflow: omConfig.observation.observeOnContextOverflow,
             bufferActivation: omConfig.observation.bufferActivation,
             blockAfter: omConfig.observation.blockAfter,
             previousObserverTokens: omConfig.observation.previousObserverTokens,
@@ -3626,6 +3692,9 @@ Notes:
     cloned.id = crypto.randomUUID();
     cloned.createdAt = now;
     cloned.updatedAt = now;
+    // The clone starts live even if the source generation it was read from has since been
+    // replaced by a reflection; that source's `supersededBy` must not carry over.
+    cloned.supersededBy = null;
     await memoryStore.insertObservationalMemoryRecord(cloned);
   }
 
@@ -4012,12 +4081,31 @@ Notes:
   }
 
   /**
+   * Extends the base implementation to add ObservationalMemory as an error processor.
+   * OM uses processAPIError to observe pending messages and retry when the provider
+   * rejects a request for exceeding the model's context window.
+   */
+  async getErrorProcessors(
+    configuredProcessors: ErrorProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<ErrorProcessor[]> {
+    const processors = await super.getErrorProcessors(configuredProcessors, context);
+
+    const om = await this.createOMProcessor(configuredProcessors, context);
+    if (om) {
+      processors.push(om as unknown as ErrorProcessor);
+    }
+
+    return processors;
+  }
+
+  /**
    * Creates an ObservationalMemory processor wrapping the shared engine.
    * Returns null if OM is not configured, not supported, or already present
    * in the user's configured processors.
    */
   private async createOMProcessor(
-    configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow)[] = [],
+    configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow | ErrorProcessorOrWorkflow)[] = [],
     context?: RequestContext,
   ): Promise<InputProcessor | null> {
     const hasObservationalMemory = configuredProcessors.some(
@@ -4105,7 +4193,7 @@ Notes:
     const alreadyConfigured = configuredProcessors.some(p => !('workflow' in p) && p.id === SUBCONSCIOUS_PINS_STATE_ID);
     if (alreadyConfigured) return null;
 
-    return new PinnedStateProcessor({ getKnowledgeStore: () => this.storage.getStore('knowledge') });
+    return new PinnedStateProcessor({ getKnowledgeStore: () => this.getKnowledgeStore() });
   }
 }
 
