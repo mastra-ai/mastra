@@ -749,6 +749,34 @@ export const mastra = new Mastra({
 })
 ```
 
+### bundler.pnpmWorkspaceSettings
+
+**Type:** `Record<string, JSONValue>`\
+**Default:** `{}`
+
+Explicit settings to write to the generated `pnpm-workspace.yaml` when installing deployment dependencies with pnpm. Values can be strings, numbers, booleans, null, arrays, or nested objects. Other package managers ignore this option.
+
+Use this option for install-policy and dependency-resolution settings that aren't copied from your source workspace automatically:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  bundler: {
+    pnpmWorkspaceSettings: {
+      blockExoticSubdeps: false,
+      minimumReleaseAge: 0,
+    },
+  },
+})
+```
+
+Explicit values override copied source settings. Omitting this option preserves the existing workspace-copy behavior; it doesn't copy all settings from the source workspace.
+
+Keys must be camelCase names. Credential, registry, proxy, script, shell, executable, pnpmfile, configuration-file, global, directory, path, Node-version, and package-manager-management settings are rejected. This option doesn't accept command-line flags and isn't a place for secrets.
+
+Mastra reserves `packages`, `overrides`, `patchedDependencies`, `allowUnusedPatches`, `supportedArchitectures`, and `nodeLinker` for deployment output generation. Supplying these keys throws an error rather than replacing generated configuration. Explicit `allowBuilds` and `onlyBuiltDependencies` values use the same validation as copied source build approvals.
+
 ## Server options
 
 ### server.apiRoutes

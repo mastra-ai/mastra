@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MastraError } from '@mastra/core/error';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { parse } from 'yaml';
 import { copyPnpmWorkspaceSettings, DepsService, getPnpmIgnoredBuildPackages, withPlaceholderVersions } from './deps';
 
 const { runChildProcess } = vi.hoisted(() => ({
@@ -132,6 +133,125 @@ describe('copyPnpmWorkspaceSettings', () => {
 
   it('omits patch configuration when no patches were resolved', () => {
     expect(copyPnpmWorkspaceSettings('', { patchedDependencies: {} })).toBe(`packages:\n  - '.'\n`);
+  });
+});
+
+describe('DepsService custom pnpm workspace settings', () => {
+  let sourceRoot: string;
+  let outputDir: string;
+
+  beforeEach(async () => {
+    sourceRoot = await mkdtemp(join(tmpdir(), 'mastra-pnpm-settings-'));
+    tempDirs.push(sourceRoot);
+    outputDir = join(sourceRoot, 'output');
+    await mkdir(outputDir);
+    await writeFile(join(sourceRoot, 'package.json'), '{"name":"source"}');
+    await writeFile(join(outputDir, 'package.json'), '{"name":"output"}');
+    await writeFile(join(sourceRoot, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n');
+    await writeFile(
+      join(sourceRoot, 'pnpm-workspace.yaml'),
+      'packages: ["apps/*"]\nminimumReleaseAge: 1440\nblockExoticSubdeps: true\n//registry.example/:_authToken: secret\n',
+    );
+  });
+
+  it('writes explicitly supplied settings into the install workspace without copying unrelated source settings', async () => {
+    await new DepsService(sourceRoot).install({
+      dir: outputDir,
+      pnpmWorkspaceSettings: {
+        blockExoticSubdeps: false,
+        minimumReleaseAge: 0,
+        minimumReleaseAgeExclude: ['@internal/*'],
+        peerDependencyRules: { allowedVersions: { react: '19' } },
+      },
+      pnpmOverrides: { '@internal/package': 'file:./workspace-module/package.tgz' },
+      pnpmNodeLinker: 'hoisted',
+    });
+
+    const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
+    expect(workspace).toEqual({
+      packages: ['.'],
+      blockExoticSubdeps: false,
+      minimumReleaseAge: 0,
+      minimumReleaseAgeExclude: ['@internal/*'],
+      peerDependencyRules: { allowedVersions: { react: '19' } },
+      overrides: { '@internal/package': 'file:./workspace-module/package.tgz' },
+      nodeLinker: 'hoisted',
+    });
+  });
+
+  it('writes explicit settings even when the source has no workspace file', async () => {
+    await rm(join(sourceRoot, 'pnpm-workspace.yaml'));
+    await new DepsService(sourceRoot).install({
+      dir: outputDir,
+      pnpmWorkspaceSettings: { blockExoticSubdeps: false },
+    });
+    expect(parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'))).toEqual({
+      packages: ['.'],
+      blockExoticSubdeps: false,
+    });
+  });
+
+  it('preserves existing behavior when custom settings are omitted', async () => {
+    await new DepsService(sourceRoot).install({ dir: outputDir });
+    expect(parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'))).toEqual({
+      packages: ['.'],
+      minimumReleaseAge: 1440,
+    });
+  });
+
+  it.each([
+    'packages',
+    'overrides',
+    'patchedDependencies',
+    'allowUnusedPatches',
+    'supportedArchitectures',
+    'nodeLinker',
+    '//registry.example/:_authToken',
+    'authToken',
+    'registry',
+    'httpsProxy',
+    'scriptShell',
+    'ignoreScripts',
+    'pnpmfile',
+    'configDependencies',
+    'useNodeVersion',
+    'managePackageManagerVersions',
+    '--offline',
+    'registries',
+    'onlyBuiltDependenciesFile',
+    'nodeOptions',
+    'unsafePerm',
+    'dangerouslyAllowAllBuilds',
+    'blockExoticSubdeps:\npackages',
+  ])('rejects reserved or unsafe setting %s before running pnpm', async key => {
+    await expect(
+      new DepsService(sourceRoot).install({
+        dir: outputDir,
+        pnpmWorkspaceSettings: { [key]: 'unsupported' },
+      }),
+    ).rejects.toMatchObject({ id: 'DEPLOYER_INVALID_PNPM_WORKSPACE_SETTING' });
+    expect(runChildProcess).not.toHaveBeenCalled();
+    expect(fs.existsSync(join(outputDir, 'pnpm-workspace.yaml'))).toBe(false);
+  });
+
+  it('validates explicitly supplied build approvals', async () => {
+    await expect(
+      new DepsService(sourceRoot).install({
+        dir: outputDir,
+        pnpmWorkspaceSettings: { allowBuilds: { bcrypt: 'yes' } },
+      }),
+    ).rejects.toMatchObject({ id: 'DEPLOYER_INVALID_PNPM_BUILD_APPROVAL_CONFIG' });
+    expect(runChildProcess).not.toHaveBeenCalled();
+  });
+
+  it('quotes multiline values without creating additional workspace keys', async () => {
+    await new DepsService(sourceRoot).install({
+      dir: outputDir,
+      pnpmWorkspaceSettings: { resolutionMode: 'lowest-direct\npackages: ["../outside"]' },
+    });
+    const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
+    expect(workspace.packages).toEqual(['.']);
+    expect(workspace.resolutionMode).toBe('lowest-direct\npackages: ["../outside"]');
   });
 });
 

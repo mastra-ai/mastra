@@ -3,10 +3,11 @@ import fsPromises from 'node:fs/promises';
 import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MastraBase } from '@mastra/core/base';
+import type { BundlerConfig } from '@mastra/core/bundler';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { readJSON, writeJSON, ensureFile } from 'fs-extra/esm';
 import type { PackageJson } from 'type-fest';
-import { parse } from 'yaml';
+import { parse, stringify } from 'yaml';
 
 import { createChildProcessLogger } from '../deploy/log.js';
 
@@ -168,6 +169,7 @@ interface ArchitectureOptions {
 }
 
 interface InstallOptions extends ArchitectureOptions {
+  pnpmWorkspaceSettings?: BundlerConfig['pnpmWorkspaceSettings'];
   pnpmOverrides?: Record<string, string>;
   pnpmNodeLinker?: 'hoisted';
   /** Patch key -> path relative to the output directory. */
@@ -189,6 +191,37 @@ const PNPM_CONFIG_KEYS_TO_COPY = new Set([
   'trustPolicyIgnoreAfter',
   'supportedArchitectures',
 ]);
+
+const PNPM_MANAGED_KEYS = new Set([
+  'packages',
+  'overrides',
+  'patchedDependencies',
+  'allowUnusedPatches',
+  'supportedArchitectures',
+  'nodeLinker',
+]);
+
+function serializePnpmWorkspaceSettings(settings: BundlerConfig['pnpmWorkspaceSettings']) {
+  return Object.entries(settings ?? {}).map(([key, value]) => {
+    if (
+      !/^[a-z][a-zA-Z0-9]*$/.test(key) ||
+      PNPM_MANAGED_KEYS.has(key) ||
+      /auth|token|password|secret|registr|proxy|cert|key|script|shell|exec|hook|file|config|global|dir|path|node|packageManager|unsafePerm|dangerously/i.test(
+        key,
+      )
+    ) {
+      throw new MastraError({
+        id: 'DEPLOYER_INVALID_PNPM_WORKSPACE_SETTING',
+        domain: ErrorDomain.DEPLOYER,
+        category: ErrorCategory.USER,
+        text: `pnpm workspace setting "${key}" is reserved or unsupported. Use install-policy and dependency-resolution settings only.`,
+      });
+    }
+    const block = stringify({ [key]: value }).trimEnd();
+    validatePnpmBuildApprovals(key, block);
+    return block;
+  });
+}
 
 function getTopLevelYamlKey(line: string) {
   const match = /^(?!\s)([\w-]+):/.exec(line);
@@ -289,6 +322,7 @@ export function parsePnpmPatchedDependencies(source: string): Record<string, str
 export function copyPnpmWorkspaceSettings(source: string, options: InstallOptions = {}) {
   const hasArchitecture = Boolean(options.os?.length || options.cpu?.length || options.libc?.length);
   const lines = source.split(/\r?\n/);
+  const customBlocks = serializePnpmWorkspaceSettings(options.pnpmWorkspaceSettings);
   const blocks: string[] = [];
 
   for (let index = 0; index < lines.length;) {
@@ -304,7 +338,11 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
       index += 1;
     }
 
-    if (!PNPM_CONFIG_KEYS_TO_COPY.has(key) || (key === 'supportedArchitectures' && hasArchitecture)) {
+    if (
+      !PNPM_CONFIG_KEYS_TO_COPY.has(key) ||
+      Object.hasOwn(options.pnpmWorkspaceSettings ?? {}, key) ||
+      (key === 'supportedArchitectures' && hasArchitecture)
+    ) {
       continue;
     }
 
@@ -358,7 +396,7 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
     blocks.push(`nodeLinker: ${options.pnpmNodeLinker}`);
   }
 
-  return ["packages:\n  - '.'", ...blocks].join('\n\n') + '\n';
+  return ["packages:\n  - '.'", ...blocks, ...customBlocks].join('\n\n') + '\n';
 }
 
 // Semver characters only; versions are interpolated into a shell command.
@@ -708,11 +746,13 @@ export class Deps extends MastraBase {
     architecture,
     pnpmOverrides,
     pnpmNodeLinker,
+    pnpmWorkspaceSettings,
   }: {
     dir?: string;
     architecture?: ArchitectureOptions;
     pnpmOverrides?: Record<string, string>;
     pnpmNodeLinker?: 'hoisted';
+    pnpmWorkspaceSettings?: BundlerConfig['pnpmWorkspaceSettings'];
   } = {}) {
     const pm = this.packageManager;
     let yarnClassic = false;
@@ -746,7 +786,7 @@ export class Deps extends MastraBase {
 
     switch (pm) {
       case 'pnpm':
-        await this.writePnpmConfig(dir, { ...architecture, pnpmOverrides, pnpmNodeLinker });
+        await this.writePnpmConfig(dir, { ...architecture, pnpmOverrides, pnpmNodeLinker, pnpmWorkspaceSettings });
         break;
       case 'yarn':
         // similar to --ignore-workspace but for yarn
