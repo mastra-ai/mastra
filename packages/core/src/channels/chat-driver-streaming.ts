@@ -456,17 +456,6 @@ export async function runStreamingDriver({
       continue;
     }
 
-    if (chunk.type === 'text-end') {
-      // In `hidden` mode the text body is the only thing rendered, so close
-      // the session here. That way any subsequent typing-status / approval
-      // card lands cleanly after the text instead of getting swallowed into
-      // the streaming post.
-      if (toolDisplay === 'hidden') {
-        await closeSession();
-      }
-      continue;
-    }
-
     if (chunk.type === 'step-finish') {
       // Each step posts as its own StreamingPlan in timeline/hidden so the
       // user sees discrete messages per step. `grouped` keeps the session

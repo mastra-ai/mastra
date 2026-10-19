@@ -194,6 +194,31 @@ describe('ChatChannelOutputProcessor', () => {
       );
       expect(calls.filter(c => c.kind === 'post')).toEqual([]);
     });
+
+    it('joins consecutive text blocks in one step into a single post', async () => {
+      // Providers like Anthropic web_search emit one text block per citation.
+      const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      await drive(
+        channels,
+        [
+          { type: 'text-start', payload: { id: 't-1' } },
+          { type: 'text-delta', payload: { id: 't-1', text: 'Mastra is ' } },
+          { type: 'text-end', payload: { id: 't-1' } },
+          { type: 'text-start', payload: { id: 't-2' } },
+          { type: 'text-delta', payload: { id: 't-2', text: 'a TypeScript framework' } },
+          { type: 'text-end', payload: { id: 't-2' } },
+          { type: 'text-start', payload: { id: 't-3' } },
+          { type: 'text-delta', payload: { id: 't-3', text: ' for agents.' } },
+          { type: 'text-end', payload: { id: 't-3' } },
+          { type: 'step-finish', payload: {} },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+      expect(calls.filter(c => c.kind === 'post')).toEqual([
+        { kind: 'post', arg: { markdown: 'Mastra is a TypeScript framework for agents.' } },
+      ]);
+    });
   });
 
   describe('textFormat reply dialect', () => {
@@ -922,6 +947,33 @@ describe('ChatChannelOutputProcessor', () => {
       const text = allDrained.filter((p): p is string => typeof p === 'string').join('');
       expect(text).toContain('thinking');
       expect(text).toContain('done');
+    });
+
+    it("'hidden': joins consecutive text blocks in one step into a single post", async () => {
+      // Providers like Anthropic web_search emit one text block per citation.
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, toolDisplay: 'hidden' });
+      await drive(
+        channels,
+        [
+          { type: 'text-start', payload: { id: 't-1' } },
+          { type: 'text-delta', payload: { id: 't-1', text: 'Mastra is ' } },
+          { type: 'text-end', payload: { id: 't-1' } },
+          { type: 'text-start', payload: { id: 't-2' } },
+          { type: 'text-delta', payload: { id: 't-2', text: 'a TypeScript framework' } },
+          { type: 'text-end', payload: { id: 't-2' } },
+          { type: 'text-start', payload: { id: 't-3' } },
+          { type: 'text-delta', payload: { id: 't-3', text: ' for agents.' } },
+          { type: 'text-end', payload: { id: 't-3' } },
+          { type: 'finish', payload: {} },
+        ],
+        chatThread,
+      );
+
+      const posts = calls.filter(c => c.kind === 'post');
+      expect(posts).toHaveLength(1);
+      const drained = await drainStreamingPlan((posts[0] as Extract<Call, { kind: 'post' }>).arg);
+      const text = drained.filter((p): p is string => typeof p === 'string').join('');
+      expect(text).toBe('Mastra is a TypeScript framework for agents.');
     });
 
     it("'timeline' without streaming: warns once and falls back to cards", async () => {
