@@ -170,9 +170,10 @@ export async function runStaticDriver({
     }
 
     if (chunk.type === 'text-end') {
-      // Flush as soon as the model finishes a text block so the message
-      // posts before any subsequent tool-call card.
-      await flushText();
+      // Not a post boundary: a cited reply is several text blocks
+      // (`text … source … text`) that belong in one message. Anything that
+      // must land after the text (tool card, step-finish, file, error)
+      // flushes it itself.
       continue;
     }
 

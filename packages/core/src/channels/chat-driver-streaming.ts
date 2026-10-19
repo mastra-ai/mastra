@@ -491,13 +491,10 @@ export async function runStreamingDriver({
     }
 
     if (chunk.type === 'text-end') {
-      // In `hidden` mode the text body is the only thing rendered, so close
-      // the session here. That way any subsequent typing-status / approval
-      // card lands cleanly after the text instead of getting swallowed into
-      // the streaming post.
-      if (toolDisplay === 'hidden') {
-        await closeSession();
-      }
+      // Not a post boundary. A reply with citations is several text blocks
+      // (`text … source … text`) and must stay one message; everything that
+      // has to land after the text — tool-call, approval card, step-finish,
+      // file, error — closes the session itself.
       continue;
     }
 
