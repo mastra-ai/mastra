@@ -464,6 +464,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       // that persisted row — see the guard in the predicate below (issue #19445).
       resumeContinuationPending: !!rest.resumeContext,
     };
+    let stepsSeen = 0;
 
     return async (predicateParams: any) => {
       const rt = this.resolveRuntime(predicateParams);
@@ -535,8 +536,13 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       // Only include new content in this step (content added since the previous iteration)
       // Observational Memory drains the response bucket between steps, which shifts
       // offsets into the flattened response (#24224). Read this step's parts from where
-      // the execution step recorded them instead.
-      const transcriptStep = this.#transcriptSteps[typedInputData.output.steps.length - 1];
+      // the execution step recorded them instead. Only an iteration that pushed a step
+      // owns the last entry; a retried attempt pushes nothing, so the entry is the
+      // previous step's and the offset slice below applies.
+      const stepCount = typedInputData.output.steps.length;
+      const pushedStep = stepCount > stepsSeen;
+      stepsSeen = stepCount;
+      const transcriptStep = pushedStep ? this.#transcriptSteps[stepCount - 1] : undefined;
       const currentContent = transcriptStep
         ? (getTranscriptStepContent(messageList, transcriptStep) as StepResult<Tools>['content'])
         : allContent.slice(state.previousContentLength);

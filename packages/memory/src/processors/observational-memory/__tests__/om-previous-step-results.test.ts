@@ -8,6 +8,7 @@
  */
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
+import { hasToolCall, stepCountIs } from '@internal/ai-sdk-v5';
 import { Agent } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -61,20 +62,27 @@ function scriptAgentTurns(turns: number) {
   llm.on({ endpoint: 'chat', model: OBSERVER_MODEL }, { content: OBSERVATIONS });
 }
 
-function createSupportAgent(withObservationalMemory: boolean) {
+type OmMode = 'off' | 'sync' | 'buffered';
+
+function createSupportAgent(om: OmMode) {
   const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
 
   const memory = new Memory({
     storage: new InMemoryStore(),
-    options: withObservationalMemory
-      ? {
-          observationalMemory: {
-            enabled: true,
-            observation: { model: openai(OBSERVER_MODEL), messageTokens: 20, bufferTokens: false },
-            reflection: { model: openai(OBSERVER_MODEL), observationTokens: 50_000 },
-          },
-        }
-      : {},
+    options:
+      om !== 'off'
+        ? {
+            observationalMemory: {
+              enabled: true,
+              observation: {
+                model: openai(OBSERVER_MODEL),
+                messageTokens: om === 'buffered' ? 60 : 20,
+                bufferTokens: om === 'buffered' ? 10 : false,
+              },
+              reflection: { model: openai(OBSERVER_MODEL), observationTokens: 50_000 },
+            },
+          }
+        : {},
   });
 
   return new Agent({
@@ -108,28 +116,43 @@ function describeStep(step: any): SeenStep {
   };
 }
 
-async function runThreeSteps(withObservationalMemory: boolean) {
+async function runThreeSteps(om: OmMode, call: 'stream' | 'generate' = 'stream') {
   scriptAgentTurns(3);
-  const agent = createSupportAgent(withObservationalMemory);
+  const agent = createSupportAgent(om);
 
   const prepareStepSaw: SeenStep[][] = [];
   const stopWhenSaw: SeenStep[] = [];
 
-  const output = await agent.stream('Let me know when my order ships.', {
-    memory: { thread: `thread-${withObservationalMemory}`, resource: 'customer-1' },
-    prepareStep: ({ steps }) => {
+  const options = {
+    memory: { thread: `thread-${om}-${call}`, resource: 'customer-1' },
+    prepareStep: ({ steps }: { steps: any[] }) => {
       prepareStepSaw.push(steps.map(describeStep));
       return undefined;
     },
-    stopWhen: ({ steps }) => {
+    stopWhen: ({ steps }: { steps: any[] }) => {
       stopWhenSaw.push(describeStep(steps[steps.length - 1]));
       return steps.length >= 3;
     },
-  });
-  await output.consumeStream();
-  const finalSteps = (await output.steps).map(describeStep);
+  };
+  const prompt = 'Let me know when my order ships.';
+  let finalSteps: SeenStep[];
+  if (call === 'generate') {
+    finalSteps = (await agent.generate(prompt, options)).steps.map(describeStep);
+  } else {
+    const output = await agent.stream(prompt, options);
+    await output.consumeStream();
+    finalSteps = (await output.steps).map(describeStep);
+  }
 
   return { prepareStepSaw, stopWhenSaw, finalSteps };
+}
+
+function agentRequestCount() {
+  return llm.getRequests().filter(r => r.body?.model === AGENT_MODEL).length;
+}
+
+function observerRequestCount() {
+  return llm.getRequests().filter(r => r.body?.model === OBSERVER_MODEL).length;
 }
 
 const EXPECTED_STEPS: SeenStep[] = [1, 2, 3].map(turn => ({
@@ -138,25 +161,57 @@ const EXPECTED_STEPS: SeenStep[] = [1, 2, 3].map(turn => ({
 
 describe('step results with Observational Memory (#24224)', () => {
   it('without OM, prepareStep and stopWhen see each previous step’s tool results', async () => {
-    const { prepareStepSaw, stopWhenSaw, finalSteps } = await runThreeSteps(false);
+    const { prepareStepSaw, stopWhenSaw, finalSteps } = await runThreeSteps('off');
     expect(prepareStepSaw).toEqual([[], EXPECTED_STEPS.slice(0, 1), EXPECTED_STEPS.slice(0, 2)]);
     expect(stopWhenSaw).toEqual(EXPECTED_STEPS);
     expect(finalSteps).toEqual(EXPECTED_STEPS);
   });
 
-  it('with OM observing mid-loop, prepareStep and stopWhen still see each previous step’s tool results', async () => {
-    const { prepareStepSaw, stopWhenSaw, finalSteps } = await runThreeSteps(true);
-    const observerCalls = llm.getRequests().filter(r => r.body?.model === OBSERVER_MODEL);
-    expect(observerCalls.length, 'OM must observe during the loop for this scenario to mean anything').toBeGreaterThan(
-      0,
-    );
+  for (const [om, call] of [
+    ['sync', 'stream'],
+    ['sync', 'generate'],
+    ['buffered', 'stream'],
+  ] as const) {
+    it(`with OM (${om}) observing mid-loop, ${call}() hands prepareStep and stopWhen each previous step’s tool results`, async () => {
+      const { prepareStepSaw, stopWhenSaw, finalSteps } = await runThreeSteps(om, call);
+      expect(
+        observerRequestCount(),
+        'OM must observe during the loop for this scenario to mean anything',
+      ).toBeGreaterThan(0);
 
-    expect(prepareStepSaw, 'prepareStep lost previous-step tool results under OM').toEqual([
-      [],
-      EXPECTED_STEPS.slice(0, 1),
-      EXPECTED_STEPS.slice(0, 2),
-    ]);
-    expect(stopWhenSaw, 'stopWhen saw an empty last step under OM').toEqual(EXPECTED_STEPS);
-    expect(finalSteps).toEqual(EXPECTED_STEPS);
-  });
+      expect(prepareStepSaw, 'prepareStep lost previous-step tool results under OM').toEqual([
+        [],
+        EXPECTED_STEPS.slice(0, 1),
+        EXPECTED_STEPS.slice(0, 2),
+      ]);
+      expect(stopWhenSaw, 'stopWhen saw an empty last step under OM').toEqual(EXPECTED_STEPS);
+      expect(finalSteps).toEqual(EXPECTED_STEPS);
+    });
+  }
+
+  // hasToolCall and stepCountIs read tool calls and step counts, not tool results, so they
+  // stop at the same step with or without OM.
+  for (const om of ['off', 'sync'] as const) {
+    it(`built-in stop conditions stop at the same step with OM ${om}`, async () => {
+      const agent = createSupportAgent(om);
+
+      scriptAgentTurns(3);
+      await agent.generate('Let me know when my order ships.', {
+        memory: { thread: `thread-has-tool-call-${om}`, resource: 'customer-1' },
+        stopWhen: hasToolCall('endTurn'),
+      });
+      expect(agentRequestCount()).toBe(1);
+
+      llm.clearFixtures();
+      llm.clearRequests();
+      llm.resetMatchCounts();
+      scriptAgentTurns(3);
+      await agent.generate('Let me know when my order ships.', {
+        memory: { thread: `thread-step-count-${om}`, resource: 'customer-1' },
+        stopWhen: stepCountIs(2),
+      });
+      expect(agentRequestCount()).toBe(2);
+      if (om !== 'off') expect(observerRequestCount()).toBeGreaterThan(0);
+    });
+  }
 });
