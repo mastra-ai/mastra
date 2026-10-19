@@ -120,6 +120,59 @@ function renderPanel() {
   return { client, listRequests };
 }
 
+describe('WorkspaceFiles on a user session route', () => {
+  it('offers Recreate sandbox when the session at user/threads/:threadId allows it', async () => {
+    stubContainerWidth(1200);
+    const sessionId = 'user-session-1';
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/user-sessions/${sessionId}`, () =>
+        HttpResponse.json({
+          session: {
+            id: 'row-1',
+            sessionId,
+            projectRepositoryId: 'link-1',
+            orgId: 'org-1',
+            userId: 'user-1',
+            visibility: 'org',
+            branch: `user/session-${sessionId}`,
+            baseBranch: 'main',
+            sandboxId: 'vm-1',
+            sandboxWorkdir: '/home/user/repo',
+            materializedAt: null,
+            createdAt: '2026-10-15T00:00:00.000Z',
+            updatedAt: '2026-10-15T00:00:00.000Z',
+            capabilities: { recreateSandbox: true },
+          },
+        }),
+      ),
+      http.get(LIST_URL, () => HttpResponse.json({ workspacePath: sessionId, threadId: sessionId, files: [] })),
+      http.get(CHANGES_URL, () =>
+        HttpResponse.json({ workspacePath: sessionId, available: true, additions: 0, deletions: 0, changes: [] }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MemoryRouter initialEntries={[`/factories/factory-1/user/threads/${sessionId}`]}>
+        <Routes>
+          <Route
+            path="/factories/:factoryId/user/threads/:threadId"
+            element={
+              <WorkspaceFilesProvider>
+                <WorkspaceFilesToggle />
+                <WorkspaceFilesSurface />
+              </WorkspaceFilesProvider>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Workspace files' }));
+
+    expect(await screen.findByRole('button', { name: /Recreate sandbox/ })).toBeInTheDocument();
+  });
+});
+
 describe('WorkspaceFiles', () => {
   describe('given a chat wide enough for the card beside the transcript', () => {
     it('leaves the card closed and off the network until the header toggle asks for it', async () => {

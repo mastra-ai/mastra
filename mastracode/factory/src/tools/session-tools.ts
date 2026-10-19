@@ -7,11 +7,8 @@ import type { BoardRegistry } from '../boards/registry.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { USER_SESSION_BRANCH_PREFIX } from '../routes/source-control-sessions.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
-import {
-  FactoryStartTransitionError,
-  WorkItemRepositoryError,
-  type FactoryStartCoordinator,
-} from '../rules/start-coordinator.js';
+import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
+import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import {
   ensureFactorySourceSession,

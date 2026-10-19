@@ -107,4 +107,10 @@ export class FilesystemStorage extends FactoryStorageDomain {
     assertScope(args);
     return this.ops.deleteMany(SNAPSHOTS, { resource_id: args.resourceId, thread_id: args.threadId });
   }
+
+  /** Drop every thread's captured listing for a resource (e.g. its sandbox was recreated). */
+  async deleteResourceFiles(args: { resourceId: string }): Promise<number> {
+    assertIdentifier(args.resourceId, 'resourceId');
+    return this.ops.deleteMany(SNAPSHOTS, { resource_id: args.resourceId });
+  }
 }

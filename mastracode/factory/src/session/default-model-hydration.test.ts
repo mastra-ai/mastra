@@ -2,11 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { ModelDefaultRecord } from '../storage/domains/model-defaults/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
-import {
-  hydrateSessionDefaultModel,
-  type DefaultModelHydrationDependencies,
-  type DefaultModelHydrationSession,
-} from './default-model-hydration.js';
+import { hydrateSessionDefaultModel } from './default-model-hydration.js';
+import type { DefaultModelHydrationDependencies, DefaultModelHydrationSession } from './default-model-hydration.js';
 
 const { primeTenant, providerDefault } = vi.hoisted(() => ({
   primeTenant: vi.fn(async (_tenant: unknown) => undefined),

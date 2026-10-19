@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MIN_PRICED_MODELS, modelsDevToPricingModels, pickModelsDevCosts } from './models-dev';
-import { PricingRegistry } from './pricing-registry';
+import type { PricingRegistry } from './pricing-registry';
 
 const NEW_MODEL = { provider: 'openai', model: 'brand-new-model' };
 

@@ -293,9 +293,11 @@ export type BaseServerOptions = {
    * - `'throw'` (default): surface the failure on Mastra's failed-tool-call path
    *   by throwing a `MastraError` that carries the server's `content` text. Tool
    *   spans, stream chunks, scorers, and persisted message parts then reflect the
-   *   failure, and the model sees the error text so it can self-correct.
-   * - `'return'`: resolve successfully with the raw result (or `structuredContent`),
-   *   ignoring `isError`.
+   *   failure, and the model sees the error text so it can self-correct. Any
+   *   `structuredContent` is kept on `error.details.structuredContent` as a JSON string.
+   * - `'return'`: resolve successfully with the full `CallToolResult` envelope
+   *   (`isError`, `content`, and `structuredContent`), so callers can still tell the
+   *   call failed.
    *
    * @default 'throw'
    */

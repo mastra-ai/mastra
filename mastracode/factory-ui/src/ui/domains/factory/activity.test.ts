@@ -10,7 +10,7 @@ import {
   groupByDay,
   startOfLocalDay,
 } from './activity';
-import type { ActivityCard, ActivityEntry } from './activity';
+import type { ActivityCard } from './activity';
 import type { AuditEvent } from './services/audit';
 import type { WorkItem, WorkItemStageEntry } from './services/workItems';
 
@@ -154,8 +154,8 @@ describe('factoryDeeds', () => {
     const events = [makeEvent('factory.run.started', 1), makeEvent('factory.git.push', 2)];
     const cards = new Map<string, ActivityCard>([['item-1', { title: 'A card', board: 'work' }]]);
 
-    const onBoard = factoryDeeds([events[0]!], cards)[0];
-    const offBoard = factoryDeeds([events[1]!], new Map())[0];
+    const onBoard = factoryDeeds([events[0]], cards)[0];
+    const offBoard = factoryDeeds([events[1]], new Map())[0];
 
     expect(onBoard?.item).toEqual({ id: 'item-1', board: 'work' });
     expect(offBoard?.item).toBeUndefined();

@@ -16,6 +16,7 @@ import {
 import { storageWithoutMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import { buildDataset } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { buildListExperimentsResponse } from '@/domains/experiments/components/__tests__/fixtures/experiments';
+import { noScorers } from '@/domains/experiments/components/__tests__/fixtures/target-registries';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
@@ -42,6 +43,8 @@ beforeEach(() => {
       HttpResponse.json(emptyResults),
     ),
     http.get(`${TEST_BASE_URL}/api/scores/run/:experimentId`, () => HttpResponse.json(emptyScores)),
+    // The comparison's trace drawer stays mounted (closed) and loads the scorer registry.
+    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
     // Metrics off: per-item usage is covered by the comparison layout test.
     http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(storageWithoutMetrics)),
   );
@@ -84,6 +87,14 @@ describe('CompareExperimentsPage', () => {
 
       const link = await screen.findByRole('link', { name: 'Open dataset Support tickets' });
       expect(link.getAttribute('href')).toBe('/datasets/dataset-1');
+    });
+
+    it('offers a metrics picker in the header', async () => {
+      renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b');
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Metrics' }));
+
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'Duration' })).toBeTruthy();
     });
 
     it('keeps the dataset out of the breadcrumb', async () => {
@@ -218,6 +229,13 @@ describe('CompareExperimentsPage', () => {
     it('asks for two to ten experiments when a parameter is missing', async () => {
       renderPage('?dataset=dataset-1&baseline=exp-a');
       expect(await screen.findByText(/select two to ten experiments to compare/i)).toBeDefined();
+    });
+
+    it('offers no metrics picker', async () => {
+      renderPage('?dataset=dataset-1&baseline=exp-a');
+
+      await screen.findByText(/select two to ten experiments to compare/i);
+      expect(screen.queryByRole('button', { name: 'Metrics' })).toBeNull();
     });
 
     it('waits for complete parameters before requesting experiment metadata', async () => {

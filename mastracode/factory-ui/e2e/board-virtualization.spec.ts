@@ -195,7 +195,7 @@ test.describe('Factory board virtualization', () => {
             }),
           );
           for (let index = 1; index < bounds.length; index++) {
-            expect(bounds[index]!.top).toBeGreaterThanOrEqual(bounds[index - 1]!.bottom);
+            expect(bounds[index].top).toBeGreaterThanOrEqual(bounds[index - 1].bottom);
           }
           await scroll.evaluate(element => {
             element.scrollTop = 0;
@@ -255,7 +255,7 @@ test.describe('Factory board virtualization', () => {
   }
 
   test.describe('when a card with open details is sorted out of the rendered range', () => {
-    test.use(viewports[0]!.use);
+    test.use(viewports[0].use);
     test('keeps the card mounted so its draft is there when the user scrolls back', async ({ page }) => {
       await page.goto('/factories/fp-1/work');
       await page

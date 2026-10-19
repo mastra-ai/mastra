@@ -282,6 +282,16 @@ describe('formatToolApproved (plain text)', () => {
     expect(result).toContain('*run_code*');
     expect(result).toContain('✓ Approved');
   });
+
+  it('includes the user who approved when provided', () => {
+    const result = formatToolApproved('run_code', 'print()', false, 'alice');
+    expect(result).toContain('✓ Approved by alice');
+  });
+
+  it('omits the "by …" suffix when byUser is undefined', () => {
+    const result = formatToolApproved('run_code', '', false);
+    expect(result).not.toContain('by');
+  });
 });
 
 // ---------------------------------------------------------------------------

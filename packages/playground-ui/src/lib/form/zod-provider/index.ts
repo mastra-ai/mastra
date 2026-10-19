@@ -32,7 +32,7 @@ function getFieldConfigInZodStack(schema: AnySchema): FieldConfig | undefined {
     if (fn) {
       const symbols = Object.getOwnPropertySymbols(fn);
       for (const sym of symbols) {
-        const val = (fn as any)[sym];
+        const val = fn[sym];
         if (val && typeof val === 'object') return val as FieldConfig;
       }
     }
@@ -68,7 +68,7 @@ function parseField(key: string, schema: AnySchema): ParsedField {
   const shape = getShape(baseSchema);
   if (shape && !getIntersection(baseSchema)) {
     // ZodObject
-    subSchema = Object.entries(shape).map(([k, field]) => parseField(k, field as AnySchema));
+    subSchema = Object.entries(shape).map(([k, field]) => parseField(k, field));
   }
 
   const unionOptions = getUnionOptions(baseSchema);
@@ -94,7 +94,7 @@ function parseField(key: string, schema: AnySchema): ParsedField {
 
     const leftShape = getShape(leftSchema);
     if (leftShape) {
-      subSchemaLeft = Object.entries(leftShape).map(([k, field]) => parseField(k, field as AnySchema));
+      subSchemaLeft = Object.entries(leftShape).map(([k, field]) => parseField(k, field));
     } else {
       const leftChild = parseField(key, leftSchema);
       subSchemaLeft = leftChild.schema ?? [leftChild];
@@ -103,7 +103,7 @@ function parseField(key: string, schema: AnySchema): ParsedField {
 
     const rightShape = getShape(rightSchema);
     if (rightShape) {
-      subSchemaRight = Object.entries(rightShape).map(([k, field]) => parseField(k, field as AnySchema));
+      subSchemaRight = Object.entries(rightShape).map(([k, field]) => parseField(k, field));
     } else {
       const rightChild = parseField(key, rightSchema);
       subSchemaRight = rightChild.schema ?? [rightChild];
@@ -148,7 +148,7 @@ export function parseSchema(schema: AnySchema): ParsedSchema {
   const shape = getShape(schema);
   if (!shape) return { fields: [] };
 
-  const fields: ParsedField[] = Object.entries(shape).map(([key, field]) => parseField(key, field as AnySchema));
+  const fields: ParsedField[] = Object.entries(shape).map(([key, field]) => parseField(key, field));
 
   return { fields };
 }

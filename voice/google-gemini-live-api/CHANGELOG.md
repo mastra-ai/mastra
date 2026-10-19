@@ -1,5 +1,20 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.17-alpha.1
+
+### Patch Changes
+
+- Added `inputAudioTranscription` and `outputAudioTranscription` options to `GeminiLiveVoice` so you can pass BCP-47 language hints to Gemini Live transcription. Without hints, the server auto-detects the language and can transcribe short or accented speech in the wrong language. ([#27583](https://github.com/mastra-ai/mastra/pull/27583))
+
+  ```ts
+  const voice = new GeminiLiveVoice({
+    apiKey: process.env.GOOGLE_API_KEY,
+    inputAudioTranscription: { languageCodes: ['es-ES'] },
+  });
+  ```
+
+  Leaving the options out keeps the current behavior.
+
 ## 0.14.17-alpha.0
 
 ### Patch Changes
