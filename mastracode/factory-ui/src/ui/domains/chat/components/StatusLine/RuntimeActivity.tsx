@@ -4,8 +4,7 @@ import { Brain } from 'lucide-react';
 import { useChatRuntime } from '../../context/useChatRuntime';
 import type { OMWorkByBudget } from '../../services/om';
 import { omWork } from '../../services/om';
-
-const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-placeholder';
+import { statusItem } from './statusItem';
 
 function holdingLabel({ messages, observations }: OMWorkByBudget): string | undefined {
   if (messages === 'blocking') return 'saving memory';
