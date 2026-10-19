@@ -1156,7 +1156,7 @@ If the subscription ends, for example because the server terminates it, each sub
     isOptional: true,
     defaultValue: 'false',
     description:
-      'Gives the agent the `mcp_events_list`, `mcp_events_subscribe` and `mcp_events_unsubscribe` tools, which act on the current thread and require memory. Pass `servers` to limit them to those servers.',
+      'Gives the agent the `mcp_events_list`, `mcp_events_subscribe` and `mcp_events_unsubscribe` tools, which act on the current thread and require memory. Event descriptions and error messages from the server reach the model inside the same untrusted-data block as event data. Pass `servers` to limit them to those servers.',
   },
   {
     name: 'onError',

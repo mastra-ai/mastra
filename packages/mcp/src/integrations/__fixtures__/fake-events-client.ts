@@ -95,11 +95,12 @@ export function createFakeEventsClient() {
   const subscriptions: FakeSubscription[] = [];
   const listCalls: string[] = [];
   let nextError: Error | undefined;
+  let descriptors = DESCRIPTORS;
   const client: Pick<MCPClient, 'events'> = {
     events: {
       list: async server => {
         listCalls.push(server);
-        return DESCRIPTORS;
+        return descriptors;
       },
       subscribe: async (server, event, args, options) => {
         // Let concurrent callers interleave before the subscription is established.
@@ -121,6 +122,9 @@ export function createFakeEventsClient() {
     listCalls,
     rejectNextSubscribe(error: Error) {
       nextError = error;
+    },
+    setDescriptors(next: typeof DESCRIPTORS) {
+      descriptors = next;
     },
   };
 }
