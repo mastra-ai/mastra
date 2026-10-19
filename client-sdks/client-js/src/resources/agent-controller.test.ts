@@ -105,6 +105,16 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ message: 'hello', threadId: 'factory-session-1' });
   });
 
+  it('forwards an empty thread id so the server rejects it instead of picking a thread', async () => {
+    const session = client.getAgentController('code').session('user-1');
+    mockJson({ ok: true });
+    await session.sendMessage('hello', { threadId: '' });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'hello', threadId: '' });
+    mockJson({ ok: true });
+    await session.switchModel('openai/gpt-5.5', { threadId: '' });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ modelId: 'openai/gpt-5.5', threadId: '' });
+  });
+
   it('steers and follows up with file attachments', async () => {
     const session = client.getAgentController('code').session('user-1');
     const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];

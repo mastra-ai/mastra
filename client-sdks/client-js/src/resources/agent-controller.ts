@@ -716,7 +716,7 @@ export class AgentControllerSession extends BaseResource {
         message: content,
         ...(files?.length ? { files } : {}),
         ...(requestContext ? { requestContext } : {}),
-        ...(options?.threadId ? { threadId: options.threadId } : {}),
+        ...(options?.threadId !== undefined ? { threadId: options.threadId } : {}),
       },
     });
   }
@@ -824,7 +824,7 @@ export class AgentControllerSession extends BaseResource {
       body: {
         modelId,
         ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
-        ...(threadId ? { threadId } : {}),
+        ...(threadId !== undefined ? { threadId } : {}),
       },
     });
   }
