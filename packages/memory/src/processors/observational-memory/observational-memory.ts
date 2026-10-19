@@ -541,7 +541,8 @@ export class ObservationalMemory {
    * until nothing is left rather than joining a single snapshot.
    */
   async settled(scope?: { threadId?: string | null; resourceId?: string | null }): Promise<void> {
-    const lockKey = scope ? this.buffering.getLockKey(scope.threadId, scope.resourceId) : undefined;
+    const lockKey =
+      scope?.threadId || scope?.resourceId ? this.buffering.getLockKey(scope.threadId, scope.resourceId) : undefined;
     const pending = () =>
       [...this.pendingBackgroundWork].filter(([, key]) => lockKey === undefined || key === lockKey).map(([w]) => w);
     // Bounded so a pathologically self-retriggering cycle degrades to a warning
@@ -2465,7 +2466,7 @@ ${formattedMessages}
     contextWindowTokens?: number,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
-  ): Promise<void> {
+  ): Promise<{ op: Promise<unknown> }> {
     const bufferKey = this.buffering.getObservationBufferKey(lockKey);
 
     // Update the last buffered boundary (in-memory for current instance).
@@ -2502,12 +2503,13 @@ ${formattedMessages}
         }
         // Clear persistent flag
         unregisterOp(record.id, 'bufferingObservation');
-        runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false)).catch(err => {
+        return runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false)).catch(err => {
           omError('[OM] Failed to clear buffering observation flag', err);
         });
       });
 
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, asyncOp);
+    return { op: asyncOp };
   }
 
   /**
@@ -2727,7 +2729,7 @@ ${formattedMessages}
           opts.unbufferedPendingTokens,
           opts.requestContext,
           opts.observabilityContext,
-        ),
+        ).then(({ op }) => op),
         lockKey,
       );
     }

@@ -225,4 +225,56 @@ describe('ObservationalMemory.settled', () => {
     await settled;
     expect((await om.getRecord(`flag-${value}`, 'r1'))?.isBufferingReflection).toBe(false);
   });
+
+  it('scoped to a thread, waits for a buffered observation through its flag-clear write', async () => {
+    const storage = createInMemoryStorage();
+    const clearGate = deferred();
+    const setFlag = storage.setBufferingObservationFlag.bind(storage);
+    storage.setBufferingObservationFlag = async (id, value, ...rest) => {
+      if (value === false) await clearGate.promise;
+      return setFlag(id, value, ...rest);
+    };
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: createNoopModel('mock-observer'), messageTokens: 1000, bufferTokens: 100 },
+      reflection: { model: createNoopModel('mock-reflector'), observationTokens: 40000 },
+    });
+    const record = await om.getOrCreateRecord('obs', 'r1');
+    const message = {
+      id: 'm1',
+      role: 'user' as const,
+      threadId: 'obs',
+      resourceId: 'r1',
+      createdAt: new Date(),
+      content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'hello '.repeat(200) }] },
+    };
+    const triggered = await om.triggerAsyncBuffering({
+      threadId: 'obs',
+      resourceId: 'r1',
+      record,
+      pendingTokens: 500,
+      unbufferedPendingTokens: 500,
+      unobservedMessages: [message],
+      threshold: 1000,
+    });
+    expect(triggered).toBe(true);
+
+    const settled = om.settled({ threadId: 'obs', resourceId: 'r1' });
+    expect(await isPending(settled)).toBe(true);
+    clearGate.resolve();
+    await settled;
+    expect((await om.getRecord('obs', 'r1'))?.isBufferingObservation).toBe(false);
+  });
+
+  it('treats a scope with no ids as unscoped', async () => {
+    const om = createOm();
+    const gate = deferred();
+    void om.trackBackgroundWork(gate.promise, om.buffering.getLockKey('t', 'r'));
+
+    const settled = om.settled({});
+    expect(await isPending(settled)).toBe(true);
+    gate.resolve();
+    await settled;
+  });
 });
