@@ -96,6 +96,7 @@ function createProject(
     identity: { getResourceId: () => resourceId },
     getThreadScope: () => (projectPath ? { projectPath } : {}),
     thread: {
+      getId: () => null,
       getById: async ({ threadId }: { threadId: string }) =>
         threadProjects[threadId]
           ? { id: threadId, resourceId, metadata: { projectPath: threadProjects[threadId] } }

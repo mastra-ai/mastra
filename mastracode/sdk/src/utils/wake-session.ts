@@ -30,7 +30,8 @@ export function threadScopeKey(scope: Record<string, string>): string | undefine
  * with that process's workspace, tools and cwd. The thread's scope tags (the
  * ones `thread.create()` stamps, such as `projectPath`) say which session it
  * belongs to. A thread with no scope tags, or with tags no session here
- * contradicts, keeps going to the resource's session.
+ * contradicts, keeps going to the resource's session. A session that has the
+ * thread open always owns it.
  */
 export async function findWakeSession<TState>(
   controller: Pick<AgentController<TState>, 'getSessionByResource'>,
@@ -43,6 +44,7 @@ export async function findWakeSession<TState>(
   if (!thread || thread.resourceId !== resourceId) return { session: first };
   const metadata = (thread.metadata as Record<string, unknown> | undefined) ?? {};
   const owns = (session: Session<TState>) =>
+    session.thread.getId() === threadId ||
     Object.entries(session.getThreadScope()).every(
       ([key, value]) => metadata[key] === undefined || metadata[key] === value,
     );

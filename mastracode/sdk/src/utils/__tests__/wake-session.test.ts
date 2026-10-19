@@ -5,11 +5,19 @@ import { FOREIGN_THREAD, findWakeSession, threadScopeKey } from '../wake-session
 
 type Thread = { id: string; resourceId: string; metadata?: Record<string, unknown> };
 
-function session(resourceId: string, scope: Record<string, string>, threads: Thread[]): Session<unknown> {
+function session(
+  resourceId: string,
+  scope: Record<string, string>,
+  threads: Thread[],
+  openThreadId: string | null = null,
+): Session<unknown> {
   return {
     identity: { getResourceId: () => resourceId },
     getThreadScope: () => scope,
-    thread: { getById: async ({ threadId }: { threadId: string }) => threads.find(t => t.id === threadId) ?? null },
+    thread: {
+      getId: () => openThreadId,
+      getById: async ({ threadId }: { threadId: string }) => threads.find(t => t.id === threadId) ?? null,
+    },
   } as unknown as Session<unknown>;
 }
 
@@ -34,6 +42,14 @@ describe('findWakeSession', () => {
   it("refuses a thread from another project that shares this session's resource", async () => {
     // Two processes in different directories share the `team` resource; this one must not run b's thread.
     expect(await findWakeSession(controller(a), [a], { resourceId: 'team', threadId: 'th-b' })).toBe(FOREIGN_THREAD);
+  });
+
+  it('runs a thread in the session that has it open, even when its project tag names another checkout', async () => {
+    const openOnB = session('team', { projectPath: '/homes/a' }, threads, 'th-b');
+    expect(await findWakeSession(controller(openOnB), [openOnB], { resourceId: 'team', threadId: 'th-b' })).toEqual({
+      session: openOnB,
+      scope: scopeA,
+    });
   });
 
   it('picks the matching session when this process has several for the resource', async () => {
