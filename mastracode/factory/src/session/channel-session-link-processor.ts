@@ -1,5 +1,5 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
+import type { Processor, ProcessOutputStepArgs, ProcessOutputStreamArgs } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType } from '@mastra/core/stream';
 
@@ -36,6 +36,12 @@ const REPROCESS_PART_KEY = '__mastraReprocessPart';
  * before the end marker and downstream processors see both. Factory-emitted
  * rather than left to the model so a skipped opener can't drop it. No-op
  * without the new-session marker or a public origin.
+ *
+ * The streamed text is also what gets persisted, and the link is a Slack
+ * display detail: in memory it would show the model its own `[↗](…)` on
+ * later turns (inviting it to fabricate links) and render a self-link in
+ * the web transcript. So `processOutputStep` trims the same suffix back off
+ * the assistant message before `MessageHistory` saves it.
  */
 export class FactoryChannelSessionLinkProcessor implements Processor {
   readonly id = 'factory-channel-session-link';
@@ -55,9 +61,32 @@ export class FactoryChannelSessionLinkProcessor implements Processor {
       type: 'text-delta',
       runId: part.runId,
       from: part.from,
-      payload: { id: part.payload.id, text: ` [${SESSION_LINK_LABEL}](${link})` },
+      payload: { id: part.payload.id, text: linkSuffix(link) },
     };
   }
+
+  processOutputStep({ messageList, requestContext }: ProcessOutputStepArgs) {
+    if (!requestContext?.get(NEW_CHANNEL_SESSION_KEY)) return messageList;
+    const link = sessionLinkFromRequest(requestContext);
+    if (!link) return messageList;
+    const suffix = linkSuffix(link);
+    for (const message of messageList.get.response.db()) {
+      if (message.role !== 'assistant') continue;
+      for (const part of message.content.parts) {
+        if (part.type !== 'text' || !part.text.endsWith(suffix)) continue;
+        part.text = part.text.slice(0, -suffix.length);
+        if (typeof message.content.content === 'string' && message.content.content.endsWith(suffix)) {
+          message.content.content = message.content.content.slice(0, -suffix.length);
+        }
+        return messageList;
+      }
+    }
+    return messageList;
+  }
+}
+
+function linkSuffix(link: string): string {
+  return ` [${SESSION_LINK_LABEL}](${link})`;
 }
 
 function sessionLinkFromRequest(requestContext: RequestContext): string | undefined {

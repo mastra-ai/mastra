@@ -1,7 +1,10 @@
+import { Agent } from '@mastra/core/agent';
+import { MockMemory } from '@mastra/core/memory';
 import { ProcessorRunner } from '@mastra/core/processors';
 import type { Processor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType } from '@mastra/core/stream';
+import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -150,5 +153,50 @@ describe('FactoryChannelSessionLinkProcessor', () => {
     const out = await render(newSessionContext(), [toolCall, ...textBlock('Done')]);
     expect(out[0]).toBe(toolCall);
     expect(texts(out)).toEqual([`Done [↗](${LINK})`]);
+  });
+
+  describe('through a real agent run', () => {
+    async function runNewSession(requestContext: RequestContext) {
+      const memory = new MockMemory();
+      const agent = new Agent({
+        id: 'factory',
+        name: 'factory',
+        instructions: 'reply',
+        model: createMockModel({ mockText: 'On it.' }),
+        memory,
+        outputProcessors: [new FactoryChannelSessionLinkProcessor()],
+      });
+      const stream = await agent.stream('go', {
+        memory: { thread: 'uuid-thread-1', resource: 'us-42' },
+        requestContext,
+      });
+      // What a channel renders: the text-delta chunks, in order.
+      let streamed = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'text-delta') streamed += chunk.payload.text;
+      }
+      const { messages } = await memory.recall({ threadId: 'uuid-thread-1', resourceId: 'us-42' });
+      const saved = messages.filter(m => m.role === 'assistant');
+      return { streamed, saved };
+    }
+
+    it('streams the link to the channel but keeps it out of the saved message', async () => {
+      const { streamed, saved } = await runNewSession(newSessionContext());
+      expect(streamed).toBe(`On it. [↗](${LINK})`);
+      // The link is a Slack display detail. Persisted, the model would see
+      // its own `[↗](…)` on every later turn and the web transcript would
+      // show a self-link — so it must be gone before memory saves the reply.
+      expect(saved).toHaveLength(1);
+      const text = saved[0]!.content.parts.filter(p => p.type === 'text').map(p => p.text);
+      expect(text).toEqual(['On it.']);
+      expect(JSON.stringify(saved[0])).not.toContain('↗');
+    });
+
+    it('saves the reply untouched when no link was added', async () => {
+      delete process.env.MASTRACODE_PUBLIC_URL;
+      const { streamed, saved } = await runNewSession(newSessionContext());
+      expect(streamed).toBe('On it.');
+      expect(saved[0]!.content.parts.filter(p => p.type === 'text').map(p => p.text)).toEqual(['On it.']);
+    });
   });
 });
