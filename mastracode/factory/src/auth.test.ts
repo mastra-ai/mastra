@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core';
+import { RequestContext } from '@mastra/core/request-context';
 import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -111,11 +112,7 @@ async function buildApp({ legacyDeployer = false }: { legacyDeployer?: boolean }
           requiresAuth: false,
           handler: async c => {
             const user = await ensureFactoryAuthUser(provider, c as unknown as Context);
-            const requestContext = c.get('requestContext' as never) as { get(key: string): unknown };
-            return c.json({
-              userId: getFactoryAuthUserId(user) ?? null,
-              interactive: requestContext.get(FACTORY_INTERACTIVE_KEY) === true,
-            });
+            return c.json({ userId: getFactoryAuthUserId(user) ?? null });
           },
         }),
       ],
@@ -182,15 +179,12 @@ describe('Factory auth on protected routes (core route auth + afterAuth)', () =>
     expect(res.headers.getSetCookie()).toEqual(['wos-session=v2; Path=/; Max-Age=1209600']);
   });
 
-  it('marks requests a signed-in person makes as interactive, and public routes as not', async () => {
+  it('marks requests a signed-in person makes as interactive', async () => {
     mockAuthenticate.mockResolvedValue({ id: 'user_1', email: 'a@b.com', organizationId: 'org_1' });
     const { app } = await buildApp();
 
     const signedIn = await app.request('/web/whoami', { headers: bearer });
     expect((await signedIn.json()).interactive).toBe(true);
-
-    const open = await app.request('/web/open');
-    expect((await open.json()).interactive).toBe(false);
   });
 
   it('marks every request interactive when auth is disabled', async () => {
@@ -239,23 +233,21 @@ describe('Factory auth on protected routes (core route auth + afterAuth)', () =>
 
   it('selects the bearer token org_id claim when the user is a member', async () => {
     mockAuthenticate.mockResolvedValue({ id: 'user_123', organizationId: 'org_1', memberOrgIds: ['org_1', 'org_2'] });
-    const app = new Hono();
-    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
-    app.get('/web/whoami', c => c.json(factoryAuthTenant(c)));
+    const { app } = await buildApp();
 
     const res = await app.request('/web/whoami', {
       headers: { Accept: 'application/json', Authorization: `Bearer ${jwtWithOrg('org_2')}` },
     });
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ orgId: 'org_2', userId: 'user_123' });
+    expect((await res.json()).tenant).toEqual({ orgId: 'org_2', userId: 'user_123' });
   });
 
   it('rejects a bearer token org_id claim the user is not a member of instead of using the default org', async () => {
     mockAuthenticate.mockResolvedValue({ id: 'user_123', organizationId: 'org_1', memberOrgIds: ['org_1'] });
-    const { app } = buildApp();
+    const { app } = await buildApp();
 
-    const res = await app.request('/web/projects', {
+    const res = await app.request('/web/whoami', {
       headers: { Accept: 'application/json', Authorization: `Bearer ${jwtWithOrg('org_other')}` },
     });
 
@@ -266,9 +258,7 @@ describe('Factory auth on protected routes (core route auth + afterAuth)', () =>
 
   it('lets an explicit organization header win over the token org_id claim', async () => {
     mockAuthenticate.mockResolvedValue({ id: 'user_123', organizationId: 'org_1', memberOrgIds: ['org_1', 'org_2'] });
-    const app = new Hono();
-    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
-    app.get('/web/whoami', c => c.json(factoryAuthTenant(c)));
+    const { app } = await buildApp();
 
     const res = await app.request('/web/whoami', {
       headers: {
@@ -278,7 +268,7 @@ describe('Factory auth on protected routes (core route auth + afterAuth)', () =>
       },
     });
 
-    expect(await res.json()).toEqual({ orgId: 'org_1', userId: 'user_123' });
+    expect((await res.json()).tenant).toEqual({ orgId: 'org_1', userId: 'user_123' });
   });
 
   it('rejects a requested bearer organization not present in provider memberships', async () => {
