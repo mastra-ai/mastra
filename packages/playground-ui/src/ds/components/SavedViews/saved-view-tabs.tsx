@@ -1,12 +1,4 @@
-import {
-  ChevronDownIcon,
-  CopyIcon,
-  LayersIcon,
-  LayersPlusIcon,
-  PencilIcon,
-  TextCursorInputIcon,
-  Trash2Icon,
-} from 'lucide-react';
+import { CopyIcon, LayersIcon, LayersPlusIcon, PencilIcon, TextCursorInputIcon, Trash2Icon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import type { ReactNode } from 'react';
 import { SavedViewNameInput } from './saved-view-name-input';
@@ -27,7 +19,7 @@ import { cn } from '@/lib/utils';
 const restingTabClass = buttonVariants({ variant: 'default', size: 'sm' });
 const selectedTabClass = cn(
   buttonVariants({ variant: 'ghost', size: 'sm' }),
-  'bg-fill-hover text-foreground not-disabled:hover:bg-fill-hover',
+  'border-0 bg-fill-hover text-foreground not-disabled:hover:bg-fill-hover',
 );
 const editingTabClass = cn(
   controlHeight.sm,
@@ -255,7 +247,6 @@ function SavedViewTab<TSettings>({
             <SavedViewTabIcon />
             <span className="max-w-48 truncate">{view.name}</span>
             {unsaved && <span className="size-1.5 shrink-0 rounded-full bg-warning-indicator" aria-hidden />}
-            {selected && <ChevronDownIcon aria-hidden className="size-3" />}
           </ContextMenu.Trigger>
           <HoverCardContent side="bottom" align="start" showArrow={false}>
             <SavedViewSummary filters={view.filters} fields={fields} operators={operators} settings={settings} />
