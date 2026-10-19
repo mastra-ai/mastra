@@ -14,15 +14,12 @@ import {
 import { controlStateColorTransition, focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-// Text-mode buttons are pills. An adornment takes back some of the label's side padding, so
-// the icon sits as far from the edge as from the label (measured against shadcn's Button,
-// which pads `pl-2` beside a 6px gap). Padding, not negative margins, so the gap stays the
-// one gap token.
-// - `[data-slot=button-icon]` / `[data-slot=button-icon-end]` are the `<Icon>` wrappers the
-//   `icon` and `iconEnd` props render.
-// - `>svg` covers callers that pass a bare SVG as a leading child. A label-less one (e.g.
-//   CopyButton) also gets the right side via `LABELLESS_SVG`.
-// Excluded from icon-mode, which is a fixed square with its own `rounded-full` (circle).
+// Text-mode buttons are pills. The icon side gets less padding than the label side, so an
+// icon sits about as far from the edge as from the label (as shadcn's Button does).
+// - `[data-slot=button-icon(-end)]`: the `<Icon>` wrappers the `icon` / `iconEnd` props render.
+// - `>svg`: a bare SVG passed as a leading child. A label-less one (e.g. CopyButton) also gets
+//   the right side from `LABELLESS_SVG`.
+// Icon-mode sizes skip this: they are fixed squares with their own `rounded-full`.
 const TEXT_MODE_ADORNMENTS = cn(
   'rounded-full',
   'has-[>[data-slot=button-icon-end]]:pr-2 has-[>[data-slot=button-icon]]:pl-2 has-[>svg]:pl-2',
