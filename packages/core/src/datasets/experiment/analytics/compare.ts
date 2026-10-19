@@ -219,16 +219,31 @@ export async function compareExperiments(mastra: Mastra, config: CompareExperime
  * Group scores by scorer ID, then by item ID.
  */
 function groupScoresByScorerAndItem(scores: ScoreRowData[]): Record<string, Record<string, ScoreRowData>> {
-  const result: Record<string, Record<string, ScoreRowData>> = {};
+  const grouped: Record<string, Record<string, ScoreRowData[]>> = {};
 
   for (const score of scores) {
     const scorerId = score.scorerId;
     const itemId = score.entityId; // entityId is the item ID for experiment scores
+    grouped[scorerId] ??= {};
+    grouped[scorerId][itemId] ??= [];
+    grouped[scorerId][itemId].push(score);
+  }
 
-    if (!result[scorerId]) {
-      result[scorerId] = {};
+  const result: Record<string, Record<string, ScoreRowData>> = {};
+  for (const [scorerId, items] of Object.entries(grouped)) {
+    result[scorerId] = {};
+    for (const [itemId, attempts] of Object.entries(items)) {
+      // Average trials per item so items with more attempts do not get extra weight.
+      const first = attempts[0]!;
+      const validScores = attempts.map(attempt => attempt.score).filter(score => score !== null && score !== undefined);
+      result[scorerId][itemId] = {
+        ...first,
+        score:
+          validScores.length > 0
+            ? validScores.reduce((sum, score) => sum + score, 0) / validScores.length
+            : first.score,
+      };
     }
-    result[scorerId][itemId] = score;
   }
 
   return result;
