@@ -217,7 +217,7 @@ Before implementation, confirm the supported first-release Memory configurations
 
 The package suite passes 337 tests. Source and focused test type checks, package lint, ESM/CommonJS builds with declarations, and documentation checks pass. Storage-backed tests use real Memory with LibSQL; remote tests use the actual authenticated Mastra Hono routes through an in-process HTTP transport. A native LiveKit text session verifies committed events without provider credentials.
 
-The installed versions used for verification are `@livekit/agents` 1.7.1, `@mastra/memory` 1.37.1-alpha.2, `@mastra/libsql` 1.26.1-alpha.0, and `@mastra/client-js` 1.54.0-alpha.2.
+Initial implementation verification used `@livekit/agents` 1.7.1, `@mastra/memory` 1.37.1-alpha.2, `@mastra/libsql` 1.26.1-alpha.0, and `@mastra/client-js` 1.54.0-alpha.2. The release now requires Agents and installed LiveKit/Silero plugins `^1.9.3`, with RTC `^1.1.0` required by LiveKit. See the stable dependency audit in `TODO.md` for the subsequent verification results.
 
 A local 1,000-message benchmark measured event-enqueue overhead at approximately 0.016 ms at the 99th percentile and the next-generation check after all writes finished at under 0.002 ms. These figures exclude network, storage, embedding, and real audio latency. Tests independently verify that blocked writes don't block the current reply and that the next generation waits for preceding writes.
 
