@@ -14,6 +14,7 @@ import type {
   ToolExecuteFunction,
   ToolExecutionContext,
   ToolPayloadTransform,
+  ToolUIConfig,
 } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
 
@@ -342,6 +343,9 @@ export class Tool<
    */
   mcp?: MCPToolProperties;
 
+  /** UI configuration used by Mastra Studio, such as a custom component for rendering tool calls. */
+  ui?: ToolUIConfig<TSchemaIn, TSchemaOut>;
+
   onInputStart?: NonNullable<
     ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['onInputStart']
   >;
@@ -413,6 +417,7 @@ export class Tool<
     this.transform = opts.transform;
     this.inputExamples = opts.inputExamples;
     this.mcp = opts.mcp;
+    this.ui = opts.ui;
     this.mcpMetadata = opts.mcpMetadata;
     this.background = opts.background;
     this.onInputStart = opts.onInputStart;

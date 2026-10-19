@@ -6,6 +6,7 @@ import { watch } from 'rollup';
 import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
 import { analyzeBundle } from './analyze';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
+import type { ToolUIRegistry } from './plugins/extract-tool-ui';
 import { aliasHono } from './plugins/hono-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
@@ -28,7 +29,15 @@ export async function getInputOptions(
       externals: true,
     },
     analysisEntries = [entryFile],
-  }: { sourcemap?: boolean; bundlerOptions?: BundlerOptions; analysisEntries?: string[] } = {},
+    toolUIRegistry,
+    onToolUIWarning,
+  }: {
+    sourcemap?: boolean;
+    bundlerOptions?: BundlerOptions;
+    analysisEntries?: string[];
+    toolUIRegistry?: ToolUIRegistry;
+    onToolUIWarning?: (message: string) => void;
+  } = {},
 ) {
   const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
   const projectRoot = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
@@ -67,7 +76,15 @@ export async function getInputOptions(
     },
     platform,
     env,
-    { sourcemap, isDev: true, workspaceRoot, projectRoot, externalsPreset: bundlerOptions?.externals === true },
+    {
+      sourcemap,
+      isDev: true,
+      workspaceRoot,
+      projectRoot,
+      externalsPreset: bundlerOptions?.externals === true,
+      toolUIRegistry,
+      onToolUIWarning,
+    },
   );
 
   if (Array.isArray(inputOptions.plugins)) {

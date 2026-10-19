@@ -86,6 +86,7 @@ import { toSlug } from '../utils';
 
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
+import { withSerializedToolUI } from './tool-ui';
 import {
   sanitizeBody,
   stripClientCredentialHeaders,
@@ -387,6 +388,7 @@ export interface SerializedTool {
   outputSchema?: string;
   requestContextSchema?: string;
   requireApproval?: boolean;
+  ui?: { studioComponent: string };
 }
 
 interface SerializedToolInput {
@@ -532,7 +534,7 @@ export async function getSerializedAgentTools(
     }
 
     acc[key] = {
-      ...tool,
+      ...withSerializedToolUI(tool),
       id: toolId,
       inputSchema: inputSchemaForReturn,
       outputSchema: outputSchemaForReturn,

@@ -371,6 +371,91 @@ describe('DevBundler', () => {
         await remove(tmpDir);
       }
     });
+
+    describe('tool UI', () => {
+      const component = { importer: '/project/tool.ts', source: './card', exportName: 'Card' };
+
+      async function watchWithToolUI(factory = false) {
+        const devBundler = new DevBundler(undefined, factory);
+        const context = { dispose: vi.fn().mockResolvedValue(undefined) };
+        const buildToolUI = vi.spyOn(devBundler as any, 'buildToolUI').mockResolvedValue(context);
+        const { createWatcher } = await import('@mastra/deployer/build');
+        const tmpDir = '.test-tmp';
+        try {
+          await devBundler.watch('test-entry.js', tmpDir, []);
+        } finally {
+          await remove(tmpDir);
+        }
+        const input = vi.mocked(createWatcher).mock.calls[0]![0] as any;
+        const plugin = input.plugins.find((candidate: any) => candidate?.name === 'tool-ui-watcher');
+        const registry = (devBundler as any).toolUIRegistry as Map<string, typeof component & { id: string }>;
+        return { devBundler, plugin, registry, buildToolUI, context, tmpDir };
+      }
+
+      it('passes the tool UI registry to the watcher input options', async () => {
+        const { devBundler } = await watchWithToolUI();
+        const { getWatcherInputOptions } = await import('@mastra/deployer/build');
+
+        expect(getWatcherInputOptions).toHaveBeenCalledWith(
+          'test-entry.js',
+          expect.anything(),
+          expect.anything(),
+          expect.objectContaining({ toolUIRegistry: (devBundler as any).toolUIRegistry }),
+        );
+      });
+
+      it('builds tool UI in watch mode once components are collected', async () => {
+        const { plugin, registry, buildToolUI, tmpDir } = await watchWithToolUI();
+
+        await plugin.buildEnd();
+        expect(buildToolUI).not.toHaveBeenCalled();
+
+        registry.set('aaaaaaaaaaaaaaaa', { id: 'aaaaaaaaaaaaaaaa', ...component });
+        await plugin.buildEnd();
+
+        expect(buildToolUI).toHaveBeenCalledTimes(1);
+        expect(buildToolUI).toHaveBeenCalledWith(tmpDir, { watch: true });
+      });
+
+      it('keeps the tool UI build when the components do not change', async () => {
+        const { plugin, registry, buildToolUI, context } = await watchWithToolUI();
+        registry.set('aaaaaaaaaaaaaaaa', { id: 'aaaaaaaaaaaaaaaa', ...component });
+
+        await plugin.buildEnd();
+        await plugin.buildEnd();
+
+        expect(buildToolUI).toHaveBeenCalledTimes(1);
+        expect(context.dispose).not.toHaveBeenCalled();
+      });
+
+      it('restarts the tool UI build when a new component is collected', async () => {
+        const { plugin, registry, buildToolUI, context } = await watchWithToolUI();
+        registry.set('aaaaaaaaaaaaaaaa', { id: 'aaaaaaaaaaaaaaaa', ...component });
+        await plugin.buildEnd();
+
+        registry.set('bbbbbbbbbbbbbbbb', { id: 'bbbbbbbbbbbbbbbb', ...component, exportName: 'Other' });
+        await plugin.buildEnd();
+
+        expect(context.dispose).toHaveBeenCalledTimes(1);
+        expect(buildToolUI).toHaveBeenCalledTimes(2);
+      });
+
+      it('keeps the dev server running when the tool UI build fails', async () => {
+        const { devBundler, plugin, registry, buildToolUI } = await watchWithToolUI();
+        const logError = vi.spyOn((devBundler as any).logger, 'error').mockImplementation(() => {});
+        buildToolUI.mockRejectedValueOnce(new Error('react not found'));
+        registry.set('aaaaaaaaaaaaaaaa', { id: 'aaaaaaaaaaaaaaaa', ...component });
+
+        await expect(plugin.buildEnd()).resolves.toBeUndefined();
+        expect(logError).toHaveBeenCalledWith('Failed to build Studio tool UI components', expect.anything());
+      });
+
+      it('does not build tool UI in Factory mode', async () => {
+        const { plugin } = await watchWithToolUI(true);
+
+        expect(plugin).toBeUndefined();
+      });
+    });
   });
 
   describe('entry templates', () => {

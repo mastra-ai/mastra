@@ -5,11 +5,14 @@ import '@/index.css';
 import { createRoot } from 'react-dom/client';
 
 import App from './App.tsx';
+import { exposeStudioSharedModules } from './lib/tool-studio-components';
 
 export function startStudio() {
   if (import.meta.env.DEV && import.meta.env.VITE_REACT_GRAB === 'true') {
     void import('react-grab');
   }
+
+  exposeStudioSharedModules();
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>

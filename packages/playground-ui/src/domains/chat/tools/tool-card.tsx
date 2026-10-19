@@ -5,6 +5,8 @@ import { FileTreeBadge } from './badges/file-tree-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
+import { ToolStudioComponent } from './studio-components/tool-studio-component';
+import { useToolStudioComponents } from './studio-components/use-tool-studio-components';
 import { SubmitPlanTool } from './submit-plan-tool';
 import { ToolResultMedia } from './tool-result-media';
 import type { MessageMetadata } from '@/domains/chat';
@@ -73,6 +75,7 @@ export const ToolCardInner = ({
   readOnly = false,
 }: ToolCardProps) => {
   const { data: mcpAppTools } = useMcpAppTools();
+  const studioComponents = useToolStudioComponents();
   const send = useChatSend();
   const chatAgent = useContext(ChatAgentContext);
   const { isRunning } = useChatRunning();
@@ -84,7 +87,10 @@ export const ToolCardInner = ({
   );
   useWorkflowStream(output);
 
-  const kind = toolCardKind({ toolName, toolCallId, input, output, state }, { metadata, mcpAppTools });
+  const kind = toolCardKind(
+    { toolName, toolCallId, input, output, state },
+    { metadata, mcpAppTools, studioComponents },
+  );
   const { approval: toolApprovalMetadata, suspended: suspendedToolMetadata } = toolInteraction(
     metadata,
     toolName,
@@ -218,28 +224,46 @@ export const ToolCardInner = ({
       }
       break;
     }
+    case 'studio_component':
     case 'mcp_app':
     case 'plain':
       break;
   }
 
   const mcpAppInfo = mcpAppTools?.[toolName];
+  const studioComponentId = kind === 'studio_component' ? studioComponents?.[toolName] : undefined;
+  const toolBadge = (
+    <ToolBadge
+      toolName={toolName}
+      args={input}
+      result={output ?? errorText}
+      toolOutput={output?.toolOutput || []}
+      metadata={metadata}
+      toolCallId={toolCallId}
+      toolApprovalMetadata={toolApprovalMetadata}
+      suspendPayload={suspendedToolMetadata?.suspendPayload}
+      isNetwork={isNetwork}
+      toolCalled={toolCalled}
+      status={status}
+    />
+  );
 
   return (
     <>
-      <ToolBadge
-        toolName={toolName}
-        args={input}
-        result={output ?? errorText}
-        toolOutput={output?.toolOutput || []}
-        metadata={metadata}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        suspendPayload={suspendedToolMetadata?.suspendPayload}
-        isNetwork={isNetwork}
-        toolCalled={toolCalled}
-        status={status}
-      />
+      {studioComponentId ? (
+        <ToolStudioComponent
+          id={studioComponentId}
+          fallback={toolBadge}
+          toolName={toolName}
+          toolCallId={toolCallId}
+          input={input}
+          output={output}
+          state={state ?? (output === undefined ? 'input-available' : 'output-available')}
+          errorText={errorText}
+        />
+      ) : (
+        toolBadge
+      )}
       <ToolResultMedia modelOutput={modelOutput} />
       {mcpAppInfo && output !== undefined && (
         <McpAppToolResult

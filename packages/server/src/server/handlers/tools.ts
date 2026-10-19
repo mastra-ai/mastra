@@ -19,6 +19,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
+import { withSerializedToolUI } from './tool-ui';
 import { validateBody } from './utils';
 
 /**
@@ -87,7 +88,7 @@ function serializeTool(tool: any): any {
     const resolvedInput = resolveLazySchema(tool.inputSchema);
     const resolvedOutput = resolveLazySchema(tool.outputSchema);
     return {
-      ...tool,
+      ...withSerializedToolUI(tool),
       inputSchema:
         resolvedInput && typeof resolvedInput === 'object' && 'jsonSchema' in resolvedInput
           ? stringify(resolvedInput.jsonSchema)
@@ -100,7 +101,7 @@ function serializeTool(tool: any): any {
   }
 
   return {
-    ...tool,
+    ...withSerializedToolUI(tool),
     inputSchema: serializeSchema(tool.inputSchema, { stripInjectedOverrides: true }),
     outputSchema: serializeSchema(tool.outputSchema),
     requestContextSchema: serializeSchema(tool.requestContextSchema),

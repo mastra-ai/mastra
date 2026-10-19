@@ -42,6 +42,8 @@ Chat with your agent directly, switch [models](/models), and tweak settings like
 
 When you interact with your agent, you can follow its reasoning and view tool call outputs. You can also [observe](#observability) traces and logs to see how responses are generated.
 
+To change how calls to a tool are displayed in the chat, pass a React component as the tool's `ui.studioComponent`. Studio renders it with the call's input and output in place of the default tool card. See [custom Studio component](/reference/tools/create-tool#custom-studio-component) for setup and requirements.
+
 For a markdown table in a response, select **Copy table as markdown** above the table to copy it without the surrounding message. The copied table preserves markdown formatting and includes any link and footnote definitions it uses. To download the table as CSV, open the arrow beside the copy button and select **Download CSV**. Both actions become available once the text segment containing the table finishes streaming and displaying. The agent may still be running tools or writing later segments.
 
 CSV exports contain plain cell text, including link labels rather than URLs. Footnote markers are preserved, but their definitions aren't included in the CSV. Values that could be interpreted as spreadsheet formulas receive a leading apostrophe so spreadsheet apps treat them as text. Ordinary signed numbers are preserved.

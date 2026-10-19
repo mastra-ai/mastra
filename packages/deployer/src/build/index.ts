@@ -15,3 +15,11 @@ export { generateFsAgentsModule, generateFsWorkflowsCodegen } from './fs-routing
 export { prepareFsAgentsEntry, writeFsAgentsEntry } from './fs-routing/prepare';
 export type { PrepareFsAgentsEntryResult } from './fs-routing/prepare';
 export { mirrorFsAgentWorkspaces } from './fs-routing/mirror';
+export {
+  buildToolUI,
+  getToolUIOutputDir,
+  STUDIO_SHARED_MODULES,
+  STUDIO_SHARED_MODULES_GLOBAL,
+} from './tool-ui/build-tool-ui';
+export type { BuildToolUIOptions } from './tool-ui/build-tool-ui';
+export type { ToolUIRegistry } from './plugins/extract-tool-ui';
