@@ -7,6 +7,7 @@ const output = process.env.KNOWLEDGE_PROOF_OUTPUT
 
 export default defineConfig({
   testDir: '.',
+  testIgnore: ['**/hmr/**'],
   outputDir: path.join(output, 'artifacts'),
   globalTeardown: './knowledge/proof-teardown.ts',
   fullyParallel: false,

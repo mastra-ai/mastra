@@ -11,17 +11,13 @@
     "theme.css",
     "components.css",
     "sources.css",
-    "sources.dev.css",
     "theme"
   ],
   "exports": {
     "./style.css": "./dist/style.css",
     "./theme.css": "./theme.css",
     "./components.css": "./components.css",
-    "./sources.css": {
-      "development": "./sources.dev.css",
-      "default": "./sources.css"
-    },
+    "./sources.css": "./sources.css",
     "./tokens": {
       "import": {
         "types": "./dist/tokens.d.ts",

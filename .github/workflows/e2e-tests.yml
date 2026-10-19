@@ -539,6 +539,10 @@ jobs:
         working-directory: ./packages/playground
         run: pnpm exec playwright test -c e2e/playwright.config.ts --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
+      - name: Test shared UI hot reload
+        if: matrix.shard == 1
+        run: pnpm --filter @internal/factory-ui test:hmr
+
   e2e-client-js:
     name: E2E client-js (optional)
     runs-on: starsling-ubuntu-26.04

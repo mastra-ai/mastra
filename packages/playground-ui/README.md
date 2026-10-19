@@ -29,8 +29,6 @@ With a Tailwind build of your own, compile one sheet instead of `style.css`: imp
 @import '@mastra/playground-ui/sources.css';
 ```
 
-The package's `development` export also scans workspace TypeScript source, so utility edits regenerate CSS without waiting for a library rebuild. Production builds scan compiled JavaScript. Installed packages use compiled output in either mode.
-
 ### Subtle buttons
 
 Use `variant="subtle"` for a persistent neutral fill, such as a selected view. It keeps the same dimensions as `default`, so switching between the two does not move surrounding controls. Set `aria-pressed` on toggle buttons to expose selection to assistive technology.
