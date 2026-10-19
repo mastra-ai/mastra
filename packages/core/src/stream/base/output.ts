@@ -2830,7 +2830,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    */
   serializeState(pendingSuspension?: { usage?: LanguageModelUsage }) {
     const { steps, requests } = dedupeStepRequests(packStepMessageMirrors(this.#bufferedSteps));
-    const recordSuspension = pendingSuspension !== undefined && this.#status !== 'suspended';
+    // A restored run keeps status 'suspended' until it finishes, and its resumed step-finish clears
+    // the suspended step usage, so either one missing means the pending suspension is new.
+    const recordSuspension =
+      pendingSuspension !== undefined && (this.#status !== 'suspended' || this.#suspendedStepUsage === undefined);
     const suspendedStepUsage = recordSuspension
       ? (this.#suspendedStepUsage ?? pendingSuspension.usage)
       : this.#suspendedStepUsage;
