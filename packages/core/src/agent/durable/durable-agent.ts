@@ -5500,6 +5500,8 @@ export class DurableAgent<
       requestContext: options?.requestContext,
       scopesResolved: !!(options as { [SCOPES_ALREADY_APPLIED]?: boolean } | undefined)?.[SCOPES_ALREADY_APPLIED],
       mastra: this.#mastra,
+      durableAgentId: this.id,
+      durableAgentName: this.name,
     });
 
     preparation.registryEntry.agentId = this.id;

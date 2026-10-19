@@ -1378,7 +1378,7 @@ describe('Observe API', () => {
         const mastra = new Mastra({ agents: { producer }, storage: store, logger: false });
         observer.__setMastra(mastra);
         const requestContext = new RequestContext([['tenantId', 'live-tenant']]);
-        const { runId } = await producer.prepare('Live observer prompt', {
+        const { runId, workflowInput } = await producer.prepare('Live observer prompt', {
           requestContext,
           outputProcessors: [processor],
           returnScorerData: true,
@@ -1388,10 +1388,7 @@ describe('Observe API', () => {
         expect(producer.runRegistry.get(runId)?.agentId).toBe(producer.id);
         if (identity === 'legacy') delete entry.agentId;
         entry.messageList!.add({ role: 'assistant', content: 'Live observer answer' }, 'response');
-        await seedSuspendedRun(store, runId, producer.id, {
-          threadId: 'persisted-thread',
-          resourceId: 'persisted-resource',
-        });
+        expect(workflowInput.agentId).toBe(producer.id);
         const resolveProcessors = vi.spyOn(baseAgent, 'listOutputProcessors');
         expect(observer.runRegistry.has(runId)).toBe(false);
         const result = await observer.observe(runId);
@@ -1426,6 +1423,71 @@ describe('Observe API', () => {
         }
       },
     );
+  });
+
+  describe.each([DurableAgent, EventedAgent])('prepared observer wrapper %#', AgentClass => {
+    it('retains effective ownership when observing a prepared run without live state', async () => {
+      const store = new InMemoryStore();
+      const baseAgent = new Agent({
+        id: 'wrapped-prepared-agent',
+        name: 'Wrapped Prepared Agent',
+        instructions: 'Test prepared ownership',
+        model: createTextModel('unused') as LanguageModelV2,
+      });
+      const producer = new AgentClass({
+        id: 'public-prepared-agent',
+        name: 'Public Prepared Agent',
+        agent: baseAgent,
+        pubsub: cachingPubsub,
+      });
+      new Mastra({ agents: { producer }, storage: store, logger: false });
+      const { runId, workflowInput } = await producer.prepare('Private prepared prompt');
+      const workflows = (await store.getStore('workflows'))!;
+      await workflows.persistWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+        snapshot: {
+          runId,
+          status: 'suspended',
+          value: {},
+          context: { input: workflowInput },
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          waitingPaths: {},
+          timestamp: Date.now(),
+        } as WorkflowRunState,
+      });
+      producer.runRegistry.cleanup(runId);
+      globalRunRegistry.delete(runId);
+
+      const owner = new AgentClass({ id: producer.id, agent: baseAgent, pubsub: cachingPubsub });
+      const foreign = new AgentClass({ agent: baseAgent, pubsub: cachingPubsub });
+      new Mastra({ agents: { owner, foreign }, storage: store, logger: false });
+      let result: Awaited<ReturnType<typeof owner.observe>> | undefined;
+      try {
+        await expect(foreign.observe(runId)).rejects.toMatchObject({
+          id: 'DURABLE_AGENT_OBSERVE_AGENT_MISMATCH',
+          details: { runId, ownerAgentId: producer.id },
+        });
+        result = await owner.observe(runId);
+        const fullOutput = result.output.getFullOutput();
+        await emitFinishEvent(cachingPubsub, runId, {
+          output: { text: '', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, steps: [] },
+          stepResult: { reason: 'stop', warnings: [], isContinued: false },
+        });
+        expect(JSON.stringify((await fullOutput).messages)).toContain('Private prepared prompt');
+        const snapshot = await workflows.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId });
+        expect(snapshot?.context?.input).toMatchObject({ agentId: producer.id, agentName: producer.name });
+      } finally {
+        result?.detach();
+        owner.runRegistry.cleanup(runId);
+        foreign.runRegistry.cleanup(runId);
+        globalRunRegistry.delete(runId);
+      }
+    });
   });
 
   describe.each(['placeholder', 'rebuilt', 'absent'] as const)('with a %s worker registry entry', entryKind => {
