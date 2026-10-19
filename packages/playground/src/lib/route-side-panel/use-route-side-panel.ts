@@ -16,21 +16,16 @@ export function useRouteSidePanel() {
       isCollapsed: true,
       isOpen: false,
       onPanelResize: noop,
-      isDrawerOpen: false,
-      onDrawerOpenChange: noop,
       panelHandle: detachedHandle,
       toggle: noop,
     };
   }
-  const { activeOwner, isCollapsed, isOpen, onPanelResize, isDrawerOpen, onDrawerOpenChange, panelHandle, toggle } =
-    ctx;
+  const { activeOwner, isCollapsed, isOpen, onPanelResize, panelHandle, toggle } = ctx;
   return {
     hasPanel: activeOwner !== null,
     isCollapsed,
     isOpen,
     onPanelResize,
-    isDrawerOpen,
-    onDrawerOpenChange,
     panelHandle,
     toggle,
   };

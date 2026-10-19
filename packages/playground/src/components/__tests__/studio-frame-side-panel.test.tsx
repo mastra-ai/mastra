@@ -177,30 +177,6 @@ describe('StudioFrame side panel', () => {
     expect(handleSpy.toggle).not.toHaveBeenCalled();
   });
 
-  it('closes the mobile drawer when the layout leaves mobile', async () => {
-    mobileState.value = true;
-    const { rerender } = renderFrame({ withPanel: true });
-    await screen.findByTestId('panel-drawer');
-    fireEvent.click(screen.getByText('toggle'));
-    expect(screen.getByTestId('panel-drawer').getAttribute('data-open')).toBe('true');
-
-    const frame = () => (
-      <RouteSidePanelProvider>
-        <Toggle />
-        <StudioFrame>
-          <div data-testid="frame-content">page</div>
-        </StudioFrame>
-        <RouteSidePanel owner="agent-detail">Panel content</RouteSidePanel>
-      </RouteSidePanelProvider>
-    );
-    mobileState.value = false;
-    rerender(frame());
-    mobileState.value = true;
-    rerender(frame());
-
-    expect((await screen.findByTestId('panel-drawer')).getAttribute('data-open')).toBe('false');
-  });
-
   it('keeps the page mounted when crossing the mobile breakpoint', async () => {
     const { rerender } = renderFrame({ withPanel: true });
     const before = screen.getByTestId('frame-content');

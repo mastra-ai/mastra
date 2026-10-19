@@ -14,7 +14,7 @@ export interface SidePanelState {
   /** Whether the panel is showing: the resizable panel on desktop, the drawer on mobile. */
   isOpen: boolean;
   onPanelResize: (sizeInPixels: number) => void;
-  /** Mobile drawer open state; the layout's drawer has no trigger of its own, pages open it through `toggle()`. */
+  /** Mobile drawer open state, read by `RouteSidePanelDrawer`; pages open it through `toggle()`. */
   isDrawerOpen: boolean;
   onDrawerOpenChange: (open: boolean) => void;
   toggle: () => void;

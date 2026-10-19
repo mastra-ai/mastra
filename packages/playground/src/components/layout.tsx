@@ -10,7 +10,6 @@ import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
 import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
-import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
@@ -25,7 +24,12 @@ import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
 import { SidebarShortcuts } from '@/domains/navigation/components/sidebar-shortcuts';
 import { NavigationCommand, useNavigationCommand } from '@/lib/command';
-import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
+import {
+  RouteSidePanelDrawer,
+  RouteSidePanelProvider,
+  RouteSidePanelSlot,
+  useRouteSidePanel,
+} from '@/lib/route-side-panel';
 import { cn } from '@/lib/utils';
 
 function MobileNavbar() {
@@ -77,7 +81,7 @@ const UNCLIPPED: CSSProperties = { overflow: 'visible' };
  */
 export function StudioFrame({ children, className }: { children: React.ReactNode; className?: string }) {
   const isMobile = useIsMobile();
-  const { hasPanel, panelHandle, onPanelResize, isDrawerOpen, onDrawerOpenChange } = useRouteSidePanel();
+  const { hasPanel, panelHandle, onPanelResize } = useRouteSidePanel();
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: 'studio-frame-layout-v1',
     storage: localStorage,
@@ -117,18 +121,7 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
           </>
         )}
       </PanelGroup>
-      {hasPanel &&
-        isMobile && (
-          // Opened from the page's own header toggle; a floating edge trigger would sit on the header's actions.
-          <PanelDrawer
-            direction="right"
-            label="Open details panel"
-            open={isDrawerOpen}
-            onOpenChange={onDrawerOpenChange}
-          >
-            <RouteSidePanelSlot className="h-full min-h-0" />
-          </PanelDrawer>
-        )}
+      {hasPanel && isMobile && <RouteSidePanelDrawer label="Open details panel" />}
     </div>
   );
 }

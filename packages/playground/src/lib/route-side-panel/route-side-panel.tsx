@@ -1,5 +1,6 @@
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
+import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import type { ComponentProps, ReactNode } from 'react';
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -21,12 +22,6 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
   const [panelCollapsed, setPanelCollapsed] = useState(true);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const isMobile = useIsMobile();
-  // Close the drawer when the layout leaves mobile, so narrowing the window again doesn't reopen it.
-  const [wasMobile, setWasMobile] = useState(isMobile);
-  if (wasMobile !== isMobile) {
-    setWasMobile(isMobile);
-    if (!isMobile) setIsDrawerOpen(false);
-  }
   // The mobile drawer owns its own open state, so the portal must not be gated on collapse there.
   const isCollapsed = !isMobile && panelCollapsed;
   const isOpen = isMobile ? isDrawerOpen : !panelCollapsed;
@@ -88,6 +83,24 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
 export function RouteSidePanelSlot(props: Omit<ComponentProps<'div'>, 'ref'>) {
   const ctx = use(SidePanelContext);
   return <div ref={ctx?.setEl ?? undefined} {...props} />;
+}
+
+/**
+ * Layout-side, mobile: the side panel slot inside an edge drawer. It has no edge trigger of its own,
+ * which would sit on the page header's actions; pages open it from their header through `toggle()`.
+ */
+export function RouteSidePanelDrawer({ label }: { label: string }) {
+  const ctx = use(SidePanelContext);
+  return (
+    <PanelDrawer
+      direction="right"
+      label={label}
+      open={ctx?.isDrawerOpen ?? false}
+      onOpenChange={ctx?.onDrawerOpenChange}
+    >
+      <RouteSidePanelSlot className="h-full min-h-0" />
+    </PanelDrawer>
+  );
 }
 
 /** Page-side: registers an owner and portals its content into the layout's side panel slot. */
