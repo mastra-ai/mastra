@@ -11,8 +11,8 @@ export const SESSION_LINK_LABEL = '↗';
  * a task-specific first message rather than a silent typing status until the
  * first tool finishes. The channel driver posts that opener on its own before
  * the tool widget, so the instruction and the rendering agree. The session
- * link is not the model's job: `FactoryChannelSessionLinkProcessor` folds it
- * into the first text of a new session, so it is there whether or not the
+ * link is not the model's job: `FactoryChannelSessionLinkProcessor` appends it
+ * to the first text of a new session, so it is there whether or not the
  * model judged the request worth an opener. No-op for runs without channel
  * context (Studio, API, boards).
  */

@@ -1216,7 +1216,7 @@ describe('new session link', () => {
     return thread;
   }
 
-  it('marks the run that opens a thread so the link processor folds ↗ into the first reply', async () => {
+  it('marks the run that opens a thread so the link processor ends the first reply with ↗', async () => {
     const deps = makeLinkDeps();
     const thread = makeLinkThread();
     const ctx = handlerCtx();

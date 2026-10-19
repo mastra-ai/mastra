@@ -21,3 +21,5 @@ export const mastra = new Mastra({
   },
 });
 ```
+
+`@mastra/core/processors` now exports `REPROCESS_PART_KEY` and `FLUSH_HELD_PARTS_KEY`, so output processors outside core can emit a second part for one input (return one, stash the other for the runner to re-drive) the same way `BatchPartsProcessor` does.

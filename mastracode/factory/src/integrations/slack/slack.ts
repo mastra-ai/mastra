@@ -856,7 +856,7 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
       // A mention on a not-yet-subscribed thread is a NEW session. The default
       // handler auto-subscribes, so once subscribed this is a follow-up — the
       // thread already carries its link. Factory posts nothing of its own:
-      // FactoryChannelSessionLinkProcessor folds the `↗` into the agent's
+      // FactoryChannelSessionLinkProcessor appends the `↗` to the agent's
       // first message so link and reply land as one.
       if (!(await thread.isSubscribed())) markNewChannelSession(ctx.requestContext);
       acknowledgeReceipt(thread, deps);
