@@ -41,7 +41,7 @@ export function WorkspaceViewerPanel({
   sessionId,
 }: WorkspaceViewerPanelProps) {
   const session = useUserSessionQuery(sessionId);
-  const canRecreateSandbox = Boolean(sessionId) && session.data?.capabilities?.recreateSandbox === true;
+  const canRecreateSandbox = session.data?.capabilities?.recreateSandbox === true;
   const [view, setView] = useState<WorkspacePanelView>({ type: 'overview' });
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const selectedFilePath = view.type === 'file' ? view.path : undefined;

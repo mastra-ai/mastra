@@ -6,13 +6,9 @@ import { useState } from 'react';
 
 import type { WorkspaceChanges } from '../../../../api/types';
 import { useRecreateSessionSandbox } from '../../workspaces/hooks/useRecreateSessionSandbox';
+import type { RecreateSandboxTarget } from '../../workspaces/hooks/useRecreateSessionSandbox';
 
-export interface RecreateSandboxTarget {
-  sessionId: string;
-  factoryId: string | undefined;
-  workspacePath: string;
-  threadId: string;
-}
+export type { RecreateSandboxTarget };
 
 interface RecreateSandboxActionProps {
   target: RecreateSandboxTarget;

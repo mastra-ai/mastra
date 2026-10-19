@@ -317,7 +317,9 @@ export class SessionRetirementCoordinator {
         }),
       );
       if (!this.#sandbox) {
-        throw new Error('Timed out destroying the session sandbox, and no detached sandbox could be built to retry.');
+        throw new Error(
+          'Timed out destroying the session sandbox, and no sandbox provider is configured to retry by identity.',
+        );
       }
       await this.#destroyDetachedForRecreate(this.#sandbox, session);
       memo.status = 'destroyed';
@@ -332,6 +334,8 @@ export class SessionRetirementCoordinator {
 
     // No instance in this process (restart, or another replica opened it):
     // destroy through a never-started instance carrying the persisted id.
+    // Unlike retirement, this runs without a `sandboxId` too: E2B and Docker
+    // find the VM by session identity, and Platform's destroy no-ops safely.
     if (this.#sandbox) await this.#destroyDetachedForRecreate(this.#sandbox, session);
   }
 

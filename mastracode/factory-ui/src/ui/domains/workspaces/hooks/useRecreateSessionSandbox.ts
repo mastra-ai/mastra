@@ -5,7 +5,7 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { recreateSessionSandbox } from '../services/user-sessions';
 
-interface RecreateSessionSandboxTarget {
+export interface RecreateSandboxTarget {
   sessionId: string;
   factoryId: string | undefined;
   workspacePath: string;
@@ -13,7 +13,7 @@ interface RecreateSessionSandboxTarget {
 }
 
 export function useRecreateSessionSandbox(
-  { sessionId, factoryId, workspacePath, threadId }: RecreateSessionSandboxTarget,
+  { sessionId, factoryId, workspacePath, threadId }: RecreateSandboxTarget,
   { onSuccess }: { onSuccess?: () => void } = {},
 ) {
   const { baseUrl } = useApiConfig();

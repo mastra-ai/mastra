@@ -658,6 +658,29 @@ describe('session sandbox recreate', () => {
     });
   });
 
+  it('still recreates when aborting the run throws', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession();
+    const controller = {
+      getSessionByResource: vi.fn(async () => {
+        throw new Error('controller unavailable');
+      }),
+    } as unknown as NonNullable<RouteOptions['controller']>;
+    const sessionRetirement = fakeCoordinator();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, controller });
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ recreated: true, aborted: false });
+    expect(sessionRetirement.recreateSessionSandbox).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      '[Factory Sessions] Failed to abort the active run before sandbox recreate',
+      expect.anything(),
+    );
+  });
+
   it('drains a pending filesystem capture before recreating', async () => {
     const { seed, sourceControl, session } = await seedRecreateSession();
     const order: string[] = [];
