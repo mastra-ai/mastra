@@ -86,6 +86,33 @@ describe('AgentController ↔ Mastra registration', () => {
     expect(agent.getPubSub()).toBe(app.pubsub);
   });
 
+  it('keeps every backing agent on the application pubsub when one of them belongs to the application', async () => {
+    const appAgent = createTestAgent({ id: 'app-agent', name: 'app-agent' });
+    const freshAgent = createTestAgent({ id: 'fresh-agent', name: 'fresh-agent' });
+    const app = new Mastra({ logger: false, agents: { appAgent }, pubsub: new EventEmitterPubSub() });
+    const controller = createTestController({
+      modes: [
+        { id: 'fresh', name: 'Fresh', default: true, agent: freshAgent },
+        { id: 'app', name: 'App', agent: appAgent },
+      ],
+    });
+    await controller.init();
+
+    expect(freshAgent.getMastraInstance()).toBe(controller.getMastra());
+    expect(freshAgent.getPubSub()).toBe(app.pubsub);
+    expect(appAgent.getPubSub()).toBe(app.pubsub);
+  });
+
+  it("keeps the controller's own pubsub on an application's agent it takes", async () => {
+    const agent = createTestAgent();
+    new Mastra({ logger: false, agents: { agent }, pubsub: new EventEmitterPubSub() });
+    const pubsub = new EventEmitterPubSub();
+    const controller = createTestController({ agent, pubsub });
+    await controller.init();
+
+    expect(agent.getPubSub()).toBe(pubsub);
+  });
+
   it("moves its agent to the parent's pubsub when registered on a parent after a standalone init", async () => {
     const storage = new InMemoryStore();
     const agent = createTestAgent();
