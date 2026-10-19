@@ -1,6 +1,5 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { Knowledge } from '@mastra/core/knowledge';
-import type { GatewayLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
@@ -13,10 +12,10 @@ import { loadSettings } from '../onboarding/settings.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
-import { getActiveMemoryRoute, resolveModel } from './model.js';
+import { canUseProvider, getActiveMemoryRoute, resolveModel } from './model.js';
 
 /** Route-backed OM fallback entry. */
-type MemoryModelRouteEntry = { id: string; model: GatewayLanguageModel };
+type MemoryModelRouteEntry = { id: string; model: ReturnType<typeof resolveModel> };
 
 /**
  * Resolve the active model route's memory models, starting at a same-thread
@@ -26,7 +25,7 @@ type MemoryModelRouteEntry = { id: string; model: GatewayLanguageModel };
 function resolveRouteMemoryModels(
   state: MastraCodeState | undefined,
   threadId: string | null | undefined,
-  resolve: (modelId: string) => GatewayLanguageModel,
+  resolve: (modelId: string) => ReturnType<typeof resolveModel>,
 ): MemoryModelRouteEntry[] | 'auto' | undefined {
   const memoryRoute = getActiveMemoryRoute(state, threadId);
   if (memoryRoute[0]?.memoryModelId === 'auto') return 'auto';
@@ -98,7 +97,7 @@ function resolveOmRoleModelForRequest(
   requestContext: RequestContext,
   settingsPath?: string,
   options?: { disableSettingsOmSeed?: boolean },
-): 'auto' | GatewayLanguageModel | MemoryModelRouteEntry[] {
+): 'auto' | ReturnType<typeof resolveModel> | MemoryModelRouteEntry[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = controller?.getState() as MastraCodeState | undefined;
   const resolveOptions = { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' } as const;
@@ -115,7 +114,12 @@ function resolveOmRoleModelForRequest(
     // These two keys are declared in the span-context allowlist
     // (`mastracode/sdk/src/index.ts`), so traces can report intent separately from
     // the effective concrete model without either being mistaken for a model ID.
-    requestContext.set(`om.${role}.effectiveModelId`, resolveAutoOMModelId(getMainModelId(requestContext)));
+    requestContext.set(
+      `om.${role}.effectiveModelId`,
+      resolveAutoOMModelId(getMainModelId(requestContext), providerId =>
+        canUseProvider(providerId, { requestContext }),
+      ),
+    );
     return 'auto' as const;
   };
 
@@ -370,7 +374,12 @@ export function getDynamicMemory(
                 model: ({ requestContext }) => {
                   const resolved = getObserverModel({ requestContext });
                   if (resolved === 'auto') {
-                    return resolveMemoryModel(resolveAutoOMModelId(getMainModelId(requestContext)), { requestContext });
+                    return resolveMemoryModel(
+                      resolveAutoOMModelId(getMainModelId(requestContext), providerId =>
+                        canUseProvider(providerId, { requestContext }),
+                      ),
+                      { requestContext },
+                    );
                   }
                   return Array.isArray(resolved) ? resolved[0]!.model : resolved;
                 },
@@ -381,6 +390,7 @@ export function getDynamicMemory(
             : {
                 enabled: true,
                 autoModels: MASTRACODE_AUTO_OM_MODELS,
+                canUseProvider,
                 resolveModel: resolveMemoryModel,
                 temporalMarkers: true,
                 retrieval: vector ? { vector: true } : true,

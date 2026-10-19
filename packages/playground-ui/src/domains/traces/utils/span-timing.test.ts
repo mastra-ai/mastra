@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { UISpan } from '../types';
-import { getSpanTimingLayout } from './span-timing';
+import { getOverallLatency, getSpanTimingLayout } from './span-timing';
 
 const start = '2026-06-01T10:00:00.000Z';
 
@@ -51,5 +51,23 @@ describe('getSpanTimingLayout', () => {
       leftPercent: 100,
       widthPercent: 0,
     });
+  });
+});
+
+describe('getOverallLatency', () => {
+  it('uses the root span latency for a single root', () => {
+    expect(getOverallLatency([span(1000)])).toBe(1000);
+  });
+
+  it('covers every root when a later root ends last', () => {
+    expect(getOverallLatency([span(4000), span(2995, 4005)])).toBe(7000);
+  });
+
+  it('keeps the latest end when a later root ends first', () => {
+    expect(getOverallLatency([span(4000), span(500, 1000)])).toBe(4000);
+  });
+
+  it('collapses to zero without spans', () => {
+    expect(getOverallLatency([])).toBe(0);
   });
 });

@@ -22,7 +22,8 @@ export interface T80PeerResult {
 
 runPeer<T80PeerArgs>(async peer => {
   const { engine, agentId, runId, finalText } = peer.args;
-  const { agent } = createStepAgent({ id: `${agentId}-observer`, steps: 2, finalText });
+  // Observing from another process still requires the persisted run's owning agent ID.
+  const { agent } = createStepAgent({ id: agentId, steps: 2, finalText });
   const runner = engine === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
   const storage = new LibSQLStore({ id: `t80-peer-${process.pid}`, url: peer.dbUrl });
   const mastra = new Mastra({

@@ -101,6 +101,7 @@ import type {
   ListScoresArgs,
   ListScoresResponse,
   ListTracesArgs,
+  ListTracesLightResponse,
   ListTracesResponse,
   GetTraceQueryValuesResponse,
   ObservabilityStorageStrategy,
@@ -155,7 +156,10 @@ import * as traceQueryOps from './trace-query';
 import * as tracesOps from './traces';
 import * as tracingOps from './tracing';
 
-const spanQueryFeatures = typeof coreStorage.planSpanQuery === 'function' ? (['span-query'] as const) : ([] as const);
+const spanQueryFeatures =
+  typeof coreStorage.planSpanQuery === 'function'
+    ? (['span-query', 'span-query-context-fields'] as const)
+    : ([] as const);
 
 export type { PartitionMode, PartitioningOptions } from './partitioning';
 export type { DiscoveryConfig } from './discovery';
@@ -474,6 +478,9 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
   override async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return this.#run('LIST_TRACES', () => tracesOps.listTraces(this.#readClient, this.#schema, args));
+  }
+  override async listTracesLight(args: ListTracesArgs): Promise<ListTracesLightResponse> {
+    return this.#run('LIST_TRACES_LIGHT', () => tracesOps.listTracesLight(this.#readClient, this.#schema, args));
   }
 
   override async querySpans(plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {

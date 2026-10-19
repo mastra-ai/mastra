@@ -72,6 +72,7 @@ import {
   resolveNotificationDeliveryDecision,
   type NotificationDeliveryPolicyInput,
 } from '../notifications/delivery-policy';
+import { applyNotificationRoutingRequirement } from '../notifications/routing';
 import {
   createNotificationSignal,
   createNotificationSummarySignal,
@@ -109,6 +110,8 @@ import { WorkspaceInstructionsProcessor } from '../processors/processors/workspa
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { defaultStabilityErrorProcessors, STABILITY_ERROR_PROCESSOR_IDS } from '../processors/stability-defaults';
+import type { ProcessorStepOutput } from '../processors/step-schema';
+import { takeHeldParts } from '../processors/stream-reprocess';
 import {
   RequestContext,
   MASTRA_INHERITED_MEMORY_KEY,
@@ -135,7 +138,7 @@ import { createTool } from '../tools';
 import { createWebSearchProviderTool, isWebSearchTool, normalizeWebSearchProvider } from '../tools/builtin/web-search';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
-import { isMastraTool, isProviderTool } from '../tools/toolchecks';
+import { isMastraTool, isProviderTool, isApprovalExempt, markApprovalExempt } from '../tools/toolchecks';
 import type {
   CoreTool,
   MastraToolInvocationOptions,
@@ -143,6 +146,7 @@ import type {
   ToolHooks,
   ToolPayloadTransformPolicy,
 } from '../tools/types';
+import { validateToolInput } from '../tools/validation';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
@@ -212,6 +216,7 @@ import {
 } from './scopes';
 import type { AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
 import type { CreatedAgentSignal } from './signals';
+import { signalSpanAttributes } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
@@ -252,6 +257,8 @@ import type {
   PublicStructuredOutputOptions,
   QueueAgentMessageOptions,
   QueueAgentMessageResult,
+  QueueAgentSignalOptions,
+  QueueAgentSignalResult,
   SendAgentMessageOptions,
   SendAgentMessageResult,
   SendAgentNotificationSignalOptions,
@@ -2029,11 +2036,33 @@ export class Agent<
     overrides?: ErrorProcessorOrWorkflow[];
     includeDefaults?: boolean;
   }): Promise<ErrorProcessorOrWorkflow[]> {
-    if (overrides) return overrides;
+    if (overrides) return this.#withMemoryErrorProcessors(overrides, requestContext);
 
     const configured = await this.#resolveConfiguredErrorProcessors(requestContext);
     if (!includeDefaults) return configured ?? [];
-    return this.#withErrorProcessorDefaults(configured);
+    return this.#withMemoryErrorProcessors(this.#withErrorProcessorDefaults(configured), requestContext);
+  }
+
+  /**
+   * Appends the memory's error processors, like memory input and output processors are added
+   * ahead of configured ones. They go last so configured and default error processors get the
+   * first chance to handle an error, and they are kept when a call overrides `errorProcessors`.
+   */
+  async #withMemoryErrorProcessors(
+    resolved: ErrorProcessorOrWorkflow[],
+    requestContext: RequestContext,
+  ): Promise<ErrorProcessorOrWorkflow[]> {
+    const memory = await this.getMemory({ requestContext });
+    if (!memory) return resolved;
+
+    const resolvedIds = new Set(resolved.map(processor => processor.id));
+    // Optional so memory objects that predate this hook (or don't extend MastraMemory) still work.
+    const memoryProcessors = ((await memory.getErrorProcessors?.(resolved, requestContext)) ?? []).filter(
+      processor =>
+        !resolvedIds.has(processor.id) &&
+        !(this.#inheritedMemory(requestContext) && processor.id === 'observational-memory'),
+    );
+    return memoryProcessors.length > 0 ? [...resolved, ...memoryProcessors] : resolved;
   }
 
   async #resolveConfiguredErrorProcessors(
@@ -2079,8 +2108,9 @@ export class Agent<
   }
 
   /**
-   * Resolves a run's error processors once: the list the error lane runs (call-time `overrides`
-   * verbatim, otherwise the configured list merged with the defaults) and whether the caller
+   * Resolves a run's error processors once: the list the error lane runs (call-time `overrides`,
+   * otherwise the configured list merged with the defaults, plus the memory's error processors
+   * either way) and whether the caller
    * configured any themselves. A dynamic `errorProcessors` function is invoked at most once, so
    * the request lane, the error lane and the retry-cap warning all see the same instances.
    * @internal
@@ -2089,11 +2119,19 @@ export class Agent<
     requestContext: RequestContext,
     overrides?: ErrorProcessorOrWorkflow[],
   ): Promise<{ errorProcessors: ErrorProcessorOrWorkflow[]; hasConfiguredErrorProcessors: boolean }> {
-    if (overrides) return { errorProcessors: overrides, hasConfiguredErrorProcessors: overrides.length > 0 };
+    if (overrides) {
+      return {
+        errorProcessors: await this.#withMemoryErrorProcessors(overrides, requestContext),
+        hasConfiguredErrorProcessors: overrides.length > 0,
+      };
+    }
 
     const configured = await this.#resolveConfiguredErrorProcessors(requestContext);
     return {
-      errorProcessors: this.#withErrorProcessorDefaults(configured),
+      errorProcessors: await this.#withMemoryErrorProcessors(
+        this.#withErrorProcessorDefaults(configured),
+        requestContext,
+      ),
       hasConfiguredErrorProcessors: Boolean(configured?.some(processor => processor.id)),
     };
   }
@@ -2203,6 +2241,7 @@ export class Agent<
 
     const stateSignalProcessors: Processor[] = [];
     const streamSteps: ReturnType<typeof createStepFromProcessor>[] = [];
+    const streamProcessorIds: string[] = [];
 
     for (const [index, processorOrWorkflow] of validProcessors.entries()) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
@@ -2218,6 +2257,7 @@ export class Agent<
         step = processorStep;
         if (processor.processOutputStream) {
           streamSteps.push(processorStep);
+          streamProcessorIds.push(processor.id);
         }
         const toolProvider = processor as ProcessorLoadedToolsProvider;
         if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
@@ -2250,6 +2290,22 @@ export class Agent<
             result = await step.execute({ inputData: result, ...context });
           }
           return result;
+        };
+        committedWorkflow.__flushOutputStream = async ({ inputData, ...context }) => {
+          const released: ChunkType[] = [];
+          const { processorStates } = inputData as { processorStates?: Map<string, ProcessorState> };
+          for (const index of streamSteps.keys()) {
+            const held = await takeHeldParts(processorStates?.get(streamProcessorIds[index]!)?.customState);
+            for (const part of held) {
+              let result: ProcessorStepOutput = { ...inputData, part };
+              for (const next of streamSteps.slice(index + 1)) {
+                if (result.part == null) break;
+                result = await next.execute({ inputData: result, ...context });
+              }
+              if (result.part != null) released.push(result.part as ChunkType);
+            }
+          }
+          return released;
         };
       }
     }
@@ -4642,6 +4698,8 @@ export class Agent<
           autoResumeSuspendedTools,
           backgroundTaskEnabled,
         );
+        // Exempt from a global `requireToolApproval` too, not just tool-level approval.
+        markApprovalExempt(convertedToCoreTool);
         convertedSkillTools[toolName] = convertedToCoreTool;
       }
     }
@@ -4781,6 +4839,8 @@ export class Agent<
         vectorMessageSearch: '',
         memoryConfig,
         requestContext,
+        returnEmptyIfThreadMissing: true,
+        runId,
       }).then(result => {
         if (!runMessages?.length) return result.messages;
         const seen = new Set(result.messages.map(m => m.id));
@@ -5171,12 +5231,16 @@ export class Agent<
     vectorMessageSearch,
     memoryConfig,
     requestContext,
+    returnEmptyIfThreadMissing,
+    runId,
   }: {
     resourceId?: string;
     threadId: string;
     vectorMessageSearch: string;
     memoryConfig?: MemoryConfigInternal;
     requestContext: RequestContext;
+    returnEmptyIfThreadMissing?: boolean;
+    runId?: string;
   }): Promise<{ messages: MastraDBMessage[] }> {
     const memory = await this.getMemory({ requestContext });
     if (!memory) {
@@ -5186,6 +5250,15 @@ export class Agent<
     const threadConfig = memory.getMergedThreadConfig(memoryConfig || {});
     const history = normalizeMessageHistoryConfig(threadConfig.lastMessages, threadConfig.messageHistory);
     if (!history.enabled && !threadConfig.semanticRecall) {
+      return { messages: [] };
+    }
+
+    if (returnEmptyIfThreadMissing && !(await memory.getThreadById({ threadId }))) {
+      this.logger.debug('Skipping processor-loaded tool history (thread does not exist yet)', {
+        agent: this.name,
+        runId,
+        threadId,
+      });
       return { messages: [] };
     }
 
@@ -7291,7 +7364,7 @@ export class Agent<
   private wrapToolWithHooks(toolName: string, tool: CoreTool, hooks: ToolHooks): CoreTool {
     if (typeof tool.execute !== 'function') return tool;
 
-    return {
+    const wrapped: CoreTool = {
       ...tool,
       execute: async (input: unknown, context: MastraToolInvocationOptions) => {
         const hookContext = {
@@ -7320,6 +7393,9 @@ export class Agent<
         return output;
       },
     };
+    // The spread drops the non-enumerable exemption marker.
+    if (isApprovalExempt(tool)) markApprovalExempt(wrapped);
+    return wrapped;
   }
 
   /**
@@ -7859,6 +7935,65 @@ export class Agent<
     }
 
     return throwNotSuspended();
+  }
+
+  /**
+   * Rejects resume data that fails the suspended tool's `resumeSchema` while the run is
+   * still suspended. Otherwise the tool-call step hands the validation error to the model,
+   * the run finishes and the caller can never resume it with corrected data.
+   */
+  async #validateToolResumeData({
+    snapshot,
+    toolCallId,
+    resumeData,
+    requestContext,
+    toolsets,
+    clientTools,
+    runId,
+    method,
+  }: {
+    snapshot: WorkflowRunState;
+    toolCallId: string | undefined;
+    resumeData: unknown;
+    requestContext: RequestContext | undefined;
+    toolsets?: Record<string, Record<string, unknown>>;
+    clientTools?: Record<string, unknown>;
+    runId: string;
+    method: string;
+  }): Promise<void> {
+    // A run pinned to a stored version resolves that version's tools later; the current
+    // agent's schema may differ, so leave validation to the tool-call step.
+    if (this.#getSnapshotAgentVersionId(snapshot)) return;
+
+    // Without a toolCallId the target is only certain when exactly one call is suspended.
+    const suspended = this.#getSuspendedToolCalls(snapshot);
+    const target =
+      toolCallId !== undefined
+        ? suspended.find(call => call.toolCallId === toolCallId)
+        : suspended.length === 1
+          ? suspended[0]
+          : undefined;
+    if (!target?.toolName || target.requiresApproval) return;
+
+    const assigned = (await this.listTools({ requestContext, resolveWebSearch: false })) as Record<string, any>;
+    const tools: Record<string, any> = {
+      ...assigned,
+      ...Object.assign({}, ...Object.values(toolsets ?? {})),
+      ...clientTools,
+    };
+    const tool = tools[target.toolName] ?? Object.values(tools).find(t => t?.id === target.toolName);
+    // Tools resolved elsewhere (workspace, processors) keep the tool-call step's validation.
+    if (!tool?.resumeSchema) return;
+    const validation = validateToolInput(tool.resumeSchema, resumeData, target.toolName);
+    if (!validation.error) return;
+
+    throw new MastraError({
+      id: 'AGENT_RESUME_INVALID_DATA',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: `Agent "${this.name}" ${method}() received resume data that does not match the resumeSchema of tool "${target.toolName}". The run is still suspended. ${validation.error.message}`,
+      details: { agentName: this.name, method, runId, toolName: target.toolName, toolCallId: target.toolCallId ?? '' },
+    });
   }
 
   /**
@@ -8503,6 +8638,7 @@ export class Agent<
         : undefined;
 
     const spanInput = isResume ? buildResumeSpanInput(resumeContext.resumeData, suspendedToolInfo) : options.messages;
+    const startingSignal = isResume ? undefined : signalSpanAttributes(options.messages);
 
     const agentSpan = getOrCreateSpan({
       type: SpanType.AGENT_RUN,
@@ -8514,6 +8650,7 @@ export class Agent<
       attributes: {
         conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
+        ...(startingSignal ? { signal: startingSignal } : {}),
         // @deprecated — use entityVersionId (top-level span context field) instead.
         // Kept for backward compatibility during migration.
         ...(this.toRawConfig()?.resolvedVersionId
@@ -9308,7 +9445,7 @@ export class Agent<
         text:
           specVersion === 'v1'
             ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
-            : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
+            : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6), v4 (AI SDK v7). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
         details: {
           agentName: this.name,
           modelId,
@@ -9670,6 +9807,22 @@ export class Agent<
     );
   }
 
+  /**
+   * Queues a typed signal to start a new run after the active thread run completes, or wakes
+   * the thread immediately when it is idle. Shares the queue used by `queueMessage()`.
+   */
+  queueSignal<OUTPUT = TOutput>(
+    signal: AgentSignal,
+    target: QueueAgentSignalOptions<OUTPUT>,
+  ): QueueAgentSignalResult<OUTPUT> {
+    return agentThreadStreamRuntime.queueSignal<OUTPUT>(
+      this.#getThreadRuntimeAgent(),
+      signal,
+      target,
+      this.getPubSub(),
+    );
+  }
+
   cancelQueuedMessages(target: CancelQueuedAgentMessagesOptions): CancelQueuedAgentMessagesResult {
     return agentThreadStreamRuntime.cancelQueuedMessages(this as Agent<any, any, any, any>, target, this.getPubSub());
   }
@@ -9737,6 +9890,11 @@ export class Agent<
     }
 
     const records = [];
+    // A delayed delivery rebuilds its target from the record, so the routing
+    // requirement the caller asked for has to travel with it. Without it the
+    // retry would fall back to running the thread wherever the dispatch happens
+    // rather than on the process that claims it.
+    const routingRequirement = { requireClaimedOwner: target.ifIdle?.requireClaimedOwner === true };
     for (const notification of inputs) {
       records.push(
         await notifications.createNotification({
@@ -9744,6 +9902,7 @@ export class Agent<
           agentId: this.id,
           resourceId: target.resourceId,
           threadId: target.threadId,
+          metadata: applyNotificationRoutingRequirement(notification.metadata, routingRequirement),
         }),
       );
     }
@@ -9902,14 +10061,23 @@ export class Agent<
       try {
         delivered = await result.accepted;
       } catch (error) {
+        // An immediate `deliver` record carries no schedule: without one a
+        // failed attempt leaves it pending forever, because no dispatch pass
+        // considers it due. That also makes the `pending` -> `failed`
+        // transition unreachable for these records, so a sender that queued a
+        // signal could never learn it terminally failed. Give it a due time so
+        // the dispatcher retries it up to MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
+        // and activate the dispatcher schedule for it.
         const failed = await notifications.updateNotification({
           id: record.id,
           threadId: record.threadId,
+          deliverAt: now,
           ...resolveDeliveryFailureUpdate(record),
           lastDeliveryAttemptAt: new Date(),
           lastDeliveryError: error instanceof Error ? error.message : 'Notification signal was rejected',
           deliveryReason: decision.reason,
         });
+        needsDispatcher = true;
         results.push({ record: failed, decision });
         continue;
       }
@@ -10067,7 +10235,7 @@ export class Agent<
         text:
           specVersion === 'v1'
             ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with stream(). Please use AI SDK v5+ models or call the streamLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
-            : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
+            : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6), v4 (AI SDK v7). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
         details: {
           agentName: this.name,
           modelId,
@@ -10433,6 +10601,16 @@ export class Agent<
       runId,
       method: 'resumeStream',
     });
+    await this.#validateToolResumeData({
+      snapshot: resumeSnapshot,
+      toolCallId: streamOptions?.toolCallId,
+      resumeData,
+      requestContext: mergedStreamOptions.requestContext,
+      toolsets: mergedStreamOptions.toolsets,
+      clientTools: mergedStreamOptions.clientTools,
+      runId,
+      method: 'resumeStream',
+    });
     const resumeClaim = await this.#claimSuspendedAgenticLoopRun({
       snapshot: resumeSnapshot,
       runId,
@@ -10458,7 +10636,7 @@ export class Agent<
           text:
             specVersion === 'v1'
               ? 'V1 models are not supported for resumeStream. Please use streamLegacy instead.'
-              : `Model has unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
+              : `Model has unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6), v4 (AI SDK v7). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
           details: {
             modelId: modelInfo.modelId,
             provider: modelInfo.provider,
@@ -10629,6 +10807,16 @@ export class Agent<
       runId,
       method: 'resumeGenerate',
     });
+    await this.#validateToolResumeData({
+      snapshot: resumeSnapshot,
+      toolCallId: options?.toolCallId,
+      resumeData,
+      requestContext: mergedOptions.requestContext,
+      toolsets: mergedOptions.toolsets,
+      clientTools: mergedOptions.clientTools,
+      runId,
+      method: 'resumeGenerate',
+    });
     const resumeClaim = await this.#claimSuspendedAgenticLoopRun({
       snapshot: resumeSnapshot,
       runId,
@@ -10656,7 +10844,7 @@ export class Agent<
           text:
             specVersion === 'v1'
               ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
-              : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
+              : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6), v4 (AI SDK v7). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
           details: {
             agentName: this.name,
             modelId,

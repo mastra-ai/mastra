@@ -1,13 +1,19 @@
+import { PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
 import { UniqueViolationError } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
+import {
+  invalidateTenantCredentialSnapshots,
+  registerTenantCredentialResolver,
+  resetTenantCredentialResolverForTests,
+} from '../routes/tenant-credentials.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
   hydrateFactorySession,
-  resolveFactoryDefaultModelId,
+  resolveFactorySessionModel,
   resolveFactorySourceControl,
   resolvePrimaryEnvironmentRepository,
 } from './factory-session.js';
@@ -53,6 +59,7 @@ function createSessionDouble() {
       reflector: { switchModel: vi.fn(async () => void calls.push('reflector')) },
     },
     state: { get: () => ({}), set: vi.fn(async () => void calls.push('state')) },
+    mode: { resolve: () => ({ defaultModelId: 'openai/gpt-5.5' }) },
     model: { switch: vi.fn(async () => void calls.push('model')) },
     subagents: { model: { set: vi.fn(async () => void calls.push('subagent')) } },
   };
@@ -154,6 +161,45 @@ describe('ensureFactorySourceSession', () => {
         visibility: 'org',
       }),
     );
+  });
+
+  it('passes a chosen session id, visibility and origin through to the row', async () => {
+    const { sourceControl, project } = await seedLinkedRepository();
+    const sessionId = '00000000-0000-4000-8000-0000000000a1';
+
+    const result = await ensureFactorySourceSession({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      sessionId,
+      branch: `user/session-${sessionId}`,
+      attributeToUserId: 'user-2',
+      visibility: 'private',
+      origin: { sessionId: 'parent-session', threadId: 'parent-thread' },
+    });
+
+    expect(result).toMatchObject({ sessionId, userId: 'user-2' });
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
+      userId: 'user-2',
+      visibility: 'private',
+      originSessionId: 'parent-session',
+      originThreadId: 'parent-thread',
+    });
+  });
+
+  it('leaves the default visibility and no origin when neither is passed', async () => {
+    const { sourceControl, project } = await seedLinkedRepository();
+    const result = await ensureFactorySourceSession({
+      sourceControl,
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      branch: 'factory/issue-50',
+    });
+    await expect(sourceControl.sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({
+      visibility: 'org',
+      originSessionId: null,
+      originThreadId: null,
+    });
   });
 
   it('files every session under the position-1 environment link and still rejects a cross-link branch collision', async () => {
@@ -356,6 +402,8 @@ describe('hydrateFactorySession', () => {
 
     await hydrateFactorySession(session, {
       orgId: 'org-1',
+      modelScope: 'factory',
+      ownerUserId: 'user-1',
       defaultModelId: 'anthropic/claude-opus-5',
     });
 
@@ -366,18 +414,24 @@ describe('hydrateFactorySession', () => {
     expect(double.om.observer.switchModel).not.toHaveBeenCalled();
     expect(double.om.reflector.switchModel).not.toHaveBeenCalled();
     expect(double.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+    expect(double.state.set).toHaveBeenCalledWith({
+      factoryModelScope: 'factory',
+      factoryOwnerUserId: 'user-1',
+    });
     expect(double.state.set).not.toHaveBeenCalledWith(
       expect.objectContaining({ observationThreshold: expect.any(Number) }),
     );
   });
 
-  it('leaves the session on its default model when the project has none', async () => {
+  it('applies the SDK mode default when the selected scope has no configured model', async () => {
     const { session, double } = createSessionDouble();
 
-    await hydrateFactorySession(session, { orgId: 'org-1' });
+    await hydrateFactorySession(session, { orgId: 'org-1', modelScope: 'factory', ownerUserId: 'user-1' });
 
-    expect(double.model.switch).not.toHaveBeenCalled();
-    expect(double.subagents.model.set).not.toHaveBeenCalled();
+    expect(double.model.switch).toHaveBeenCalledWith('openai/gpt-5.5');
+    for (const agentType of ['explore', 'plan', 'execute']) {
+      expect(double.subagents.model.set).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.5', agentType });
+    }
     // The org seed is the one state write that always happens: knowledge
     // capture scopes on it, and it must land even when nothing else does.
     expect(double.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
@@ -386,22 +440,51 @@ describe('hydrateFactorySession', () => {
   it('marks the session unresolved when the caller has no organization', async () => {
     const { session, double } = createSessionDouble();
 
-    await hydrateFactorySession(session, { orgId: '  ' });
+    await hydrateFactorySession(session, { orgId: '  ', modelScope: 'user', ownerUserId: 'user-1' });
 
     expect(double.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
     expect(double.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: expect.anything() }));
   });
 
-  it('keeps going when the default model is unknown', async () => {
+  it("runs on a connected provider's default model when no default was chosen and the mode default has no credential", async () => {
+    const seeded = await createFactoryStorageForTests();
+    registerTenantCredentialResolver(seeded.credentials);
+    try {
+      await seeded.credentials.setCredential({ orgId: 'org-1' }, 'anthropic', { type: 'api_key', key: 'org-key' });
+      const { session, double } = createSessionDouble();
+      const args = { orgId: 'org-1', modelScope: 'factory', ownerUserId: 'user-1' } as const;
+
+      await expect(hydrateFactorySession(session, args)).resolves.toBe(PROVIDER_DEFAULT_MODELS.anthropic);
+      expect(double.model.switch).toHaveBeenCalledExactlyOnceWith(PROVIDER_DEFAULT_MODELS.anthropic);
+
+      // Once the mode default's provider is connected too, the mode default stays.
+      await seeded.credentials.setCredential({ orgId: 'org-1' }, 'openai-codex', {
+        type: 'api_key',
+        key: 'org-openai',
+      });
+      invalidateTenantCredentialSnapshots({ orgId: 'org-1' });
+      const fresh = createSessionDouble();
+      await expect(hydrateFactorySession(fresh.session, args)).resolves.toBe('openai/gpt-5.5');
+    } finally {
+      resetTenantCredentialResolverForTests();
+    }
+  });
+
+  it('keeps going but reports no selected model when the default model is unknown', async () => {
     const { session, double } = createSessionDouble();
     double.model.switch.mockRejectedValueOnce(new Error('unknown model'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await expect(
-      hydrateFactorySession(session, { orgId: 'org-1', defaultModelId: 'openai/retired' }),
+      hydrateFactorySession(session, {
+        orgId: 'org-1',
+        modelScope: 'factory',
+        ownerUserId: 'user-1',
+        defaultModelId: 'openai/retired',
+      }),
     ).resolves.toBeUndefined();
 
-    expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply factory default model', {
+    expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply scoped default model', {
       modelId: 'openai/retired',
       error: 'unknown model',
     });
@@ -415,12 +498,14 @@ describe('hydrateFactorySession', () => {
 
     await hydrateFactorySession(session, {
       orgId: 'org-1',
+      modelScope: 'user',
+      ownerUserId: 'user-1',
       defaultModelId: 'openai/gpt-5.6',
     });
 
     expect(double.subagents.model.set).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.6', agentType: 'plan' });
     expect(double.subagents.model.set).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.6', agentType: 'execute' });
-    expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply factory default subagent model', {
+    expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply scoped default subagent model', {
       agentType: 'explore',
       modelId: 'openai/gpt-5.6',
       error: 'explore unavailable',
@@ -429,25 +514,163 @@ describe('hydrateFactorySession', () => {
   });
 });
 
-describe('resolveFactoryDefaultModelId', () => {
-  it("reads the project's default model", async () => {
+describe('resolveFactorySessionModel', () => {
+  it('resolves the Factory model for a run and the owner default for a session in hybrid scope', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Mastra', modelScope: 'hybrid', defaultModelId: 'anthropic/factory-model' },
+    });
+    await seeded.modelDefaults.set({ orgId: 'org-1', userId: 'owner-1', modelId: 'openai/owner-model' });
+    const resolve = (context: 'run' | 'session') =>
+      resolveFactorySessionModel({
+        projects: seeded.projects,
+        modelDefaults: seeded.modelDefaults,
+        factoryProjectId: project.id,
+        orgId: 'org-1',
+        ownerUserId: 'owner-1',
+        context,
+      });
+
+    await expect(resolve('run')).resolves.toEqual({ modelScope: 'factory', modelId: 'anthropic/factory-model' });
+    await expect(resolve('session')).resolves.toEqual({ modelScope: 'user', modelId: 'openai/owner-model' });
+  });
+
+  it('ignores the context outside hybrid scope', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const factory = await seeded.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Org', modelScope: 'factory', defaultModelId: 'anthropic/factory-model' },
+    });
+    const user = await seeded.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Mine', modelScope: 'user', defaultModelId: 'anthropic/factory-model' },
+    });
+    await seeded.modelDefaults.set({ orgId: 'org-1', userId: 'owner-1', modelId: 'openai/owner-model' });
+    const resolve = (factoryProjectId: string, context: 'run' | 'session') =>
+      resolveFactorySessionModel({
+        projects: seeded.projects,
+        modelDefaults: seeded.modelDefaults,
+        factoryProjectId,
+        orgId: 'org-1',
+        ownerUserId: 'owner-1',
+        context,
+      });
+
+    await expect(resolve(factory.id, 'session')).resolves.toEqual({
+      modelScope: 'factory',
+      modelId: 'anthropic/factory-model',
+    });
+    await expect(resolve(user.id, 'run')).resolves.toEqual({ modelScope: 'user', modelId: 'openai/owner-model' });
+  });
+
+  it("uses the project's model under factory scope", async () => {
     const seeded = await createFactoryStorageForTests();
     const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
     await seeded.projects.update({
       orgId: 'org-1',
       id: project.id,
-      input: { defaultModelId: 'anthropic/claude-opus-5' },
+      input: { modelScope: 'factory', defaultModelId: 'anthropic/claude-opus-5' },
     });
 
-    await expect(resolveFactoryDefaultModelId(seeded.projects, project.id)).resolves.toBe('anthropic/claude-opus-5');
+    await expect(
+      resolveFactorySessionModel({
+        projects: seeded.projects,
+        modelDefaults: seeded.modelDefaults,
+        factoryProjectId: project.id,
+        orgId: 'org-1',
+        ownerUserId: 'user-1',
+        context: 'session',
+      }),
+    ).resolves.toEqual({ modelScope: 'factory', modelId: 'anthropic/claude-opus-5' });
   });
 
-  it('returns undefined without a projects domain or a project id', async () => {
+  it("uses only the owner's default under user scope", async () => {
     const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+    await seeded.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { modelScope: 'user', defaultModelId: 'anthropic/factory-model' },
+    });
+    await seeded.modelDefaults.set({ orgId: 'org-1', userId: 'owner-1', modelId: 'openai/owner-model' });
 
-    await expect(resolveFactoryDefaultModelId(undefined, 'project-1')).resolves.toBeUndefined();
-    await expect(resolveFactoryDefaultModelId(seeded.projects, undefined)).resolves.toBeUndefined();
-    await expect(resolveFactoryDefaultModelId(seeded.projects, 'missing-project')).resolves.toBeUndefined();
+    await expect(
+      resolveFactorySessionModel({
+        projects: seeded.projects,
+        modelDefaults: seeded.modelDefaults,
+        factoryProjectId: project.id,
+        orgId: 'org-1',
+        ownerUserId: 'owner-1',
+        context: 'session',
+      }),
+    ).resolves.toEqual({ modelScope: 'user', modelId: 'openai/owner-model' });
+  });
+
+  it('does not fall back to the factory model when the owner has no default', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+    await seeded.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { modelScope: 'user', defaultModelId: 'anthropic/factory-model' },
+    });
+
+    await expect(
+      resolveFactorySessionModel({
+        projects: seeded.projects,
+        modelDefaults: seeded.modelDefaults,
+        factoryProjectId: project.id,
+        orgId: 'org-1',
+        ownerUserId: 'owner-1',
+        context: 'session',
+      }),
+    ).resolves.toEqual({ modelScope: 'user' });
+  });
+
+  it('keeps user scope when the owner default lookup fails', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+    await seeded.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'user' } });
+    vi.spyOn(seeded.modelDefaults, 'get').mockRejectedValueOnce(new Error('storage unavailable'));
+
+    await expect(
+      resolveFactorySessionModel({
+        projects: seeded.projects,
+        modelDefaults: seeded.modelDefaults,
+        factoryProjectId: project.id,
+        orgId: 'org-1',
+        ownerUserId: 'owner-1',
+        context: 'session',
+      }),
+    ).resolves.toEqual({ modelScope: 'user' });
+  });
+
+  it('refuses missing, unavailable, and cross-org project policy', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'owner-1', input: { name: 'Mastra' } });
+    await seeded.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'user' } });
+    const args = {
+      projects: seeded.projects,
+      modelDefaults: seeded.modelDefaults,
+      factoryProjectId: project.id,
+      orgId: 'org-1',
+      ownerUserId: 'owner-1',
+      context: 'session' as const,
+    };
+    await expect(resolveFactorySessionModel({ ...args, projects: undefined })).rejects.toThrow('policy is unavailable');
+    await expect(resolveFactorySessionModel({ ...args, factoryProjectId: undefined })).rejects.toThrow(
+      'policy is unavailable',
+    );
+    await expect(resolveFactorySessionModel({ ...args, factoryProjectId: 'missing' })).rejects.toThrow(
+      'policy is unavailable',
+    );
+    await expect(resolveFactorySessionModel({ ...args, orgId: 'other-org' })).rejects.toThrow('policy is unavailable');
+    vi.spyOn(seeded.projects, 'getById').mockRejectedValueOnce(new Error('storage unavailable'));
+    await expect(resolveFactorySessionModel(args)).rejects.toThrow('storage unavailable');
   });
 });
 

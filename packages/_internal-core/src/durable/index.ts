@@ -9,6 +9,9 @@ export interface DurableStepFinishState {
 export function buildDurableStepContent(state: DurableStepFinishState): unknown[] {
   const step = state.accumulatedSteps.at(-1) as any;
   if (!step) return [];
+  // Steps recorded since content was added to the step record carry the same
+  // content stopWhen sees; rebuild only for snapshots written before that.
+  if (Array.isArray(step.content)) return step.content;
 
   const content: unknown[] = [];
   if (step.text) {

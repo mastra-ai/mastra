@@ -1,5 +1,340 @@
 # @mastra/code-sdk
 
+## 1.15.0-alpha.3
+
+### Minor Changes
+
+- Added a Factory client for driving a remote Factory session. `RemoteSession` and `RemoteController` mirror a Factory session's state over its event stream and forward messages, approvals, and mode/model switches over HTTP. Platform helpers sign in to Mastra Platform and discover the organizations, projects, and environments to connect to. ([#27222](https://github.com/mastra-ai/mastra/pull/27222))
+
+  ```ts
+  import { createFactoryClient } from '@mastra/code-sdk/factory/client';
+  import { RemoteSession } from '@mastra/code-sdk/factory/remote-session';
+  import { getPlatformSession } from '@mastra/code-sdk/platform/index';
+
+  const session = await getPlatformSession();
+  const client = createFactoryClient({ url: 'https://my-factory.factory.mastra.cloud', session });
+  ```
+
+  Requests that fail with an expired Platform token refresh it once and retry.
+
+### Patch Changes
+
+- Fixed "build a workflow" requests never finishing in Mastra Code. The workflow builder no longer inherits the chat session's memory thread, so it stops waiting on the session run that is waiting on it. ([#27323](https://github.com/mastra-ai/mastra/pull/27323))
+
+- Fixed the cross-agent signal sender telling the model to resend a signal that failed direct delivery. The signal waits in the recipient's inbox and is retried automatically, so the sender now tells the model not to resend it. A resend while that signal is still pending merges into it; a resend after it is delivered sends the recipient a second copy. ([#27347](https://github.com/mastra-ai/mastra/pull/27347))
+
+- Updated dependencies [[`90dca88`](https://github.com/mastra-ai/mastra/commit/90dca88f44f31428a0e585584114b56f0bec477b), [`90dca88`](https://github.com/mastra-ai/mastra/commit/90dca88f44f31428a0e585584114b56f0bec477b), [`9cb6843`](https://github.com/mastra-ai/mastra/commit/9cb6843a8a39ab2e12498b0c08c9f4cdcefd9cea), [`9277d8e`](https://github.com/mastra-ai/mastra/commit/9277d8ef26ad2f08bfbae89d78d409fb91c95c8d), [`e41478c`](https://github.com/mastra-ai/mastra/commit/e41478cbb7ab108cf7f704a6f0f4092ec4374e21), [`e41478c`](https://github.com/mastra-ai/mastra/commit/e41478cbb7ab108cf7f704a6f0f4092ec4374e21), [`680d914`](https://github.com/mastra-ai/mastra/commit/680d9141c851e8eb6fcd2d3c3fbadf05a0f1011d), [`beb81d3`](https://github.com/mastra-ai/mastra/commit/beb81d355b4a8e472ac411f33aa0d4854cb8662b)]:
+  - @mastra/core@1.79.0-alpha.3
+  - @mastra/memory@1.39.0-alpha.1
+  - @mastra/client-js@1.56.0-alpha.3
+
+## 1.15.0-alpha.2
+
+### Minor Changes
+
+- Added an `outputProcessors` option to `createMastraCode`. Output processors you pass run after Mastra Code's built-in ones and before memory saves the reply, so changes they make to response messages are persisted. ([#27162](https://github.com/mastra-ai/mastra/pull/27162))
+
+  ```ts
+  const mastraCode = await createMastraCode({
+    outputProcessors: ({ requestContext }) => [new ReplyLabelProcessor(requestContext)],
+  });
+  ```
+
+### Patch Changes
+
+- Added `normalizeLegacyProviderId` to `@mastra/code-sdk/providers/model-ids`. It maps a provider id Mastra Code once defined itself to the catalog id models.dev uses, so a reply's provider can be matched against the catalog. ([#27162](https://github.com/mastra-ai/mastra/pull/27162))
+
+  ```ts
+  import { normalizeLegacyProviderId } from '@mastra/code-sdk/providers/model-ids';
+
+  normalizeLegacyProviderId('kimi-for-coding'); // 'kimi-code-plan-cn'
+  normalizeLegacyProviderId('anthropic'); // 'anthropic'
+  ```
+
+- Fixed headless `--output jsonl` runs writing gigabytes of repeated data. The stream included a `display_state_changed` event after almost every other event, and each one carried a full copy of the session's display state, including every large tool result and all shell output so far. Long runs could fill the disk. ([#26881](https://github.com/mastra-ai/mastra/pull/26881))
+
+  `--output jsonl` no longer writes `display_state_changed` events. Every other event, and the final `result` line, is written as before. The omitted snapshots only repeated what the other events already carry. Consumers that rebuilt UI state from these snapshots should fold the remaining events instead. `--output json`, `--output human`, and programmatic `runMC()` iteration are unchanged.
+
+- Fixed foreground commands in Mastra Code to stop after 30 seconds unless the command specifies a timeout. Set timeout to 0 to disable the limit. Background processes are unaffected. ([#26878](https://github.com/mastra-ai/mastra/pull/26878))
+
+- Fixed headless runs reporting success while a tool was still waiting for an answer. When a tool such as `request_access` paused the run, `runMC` stopped with `status: 'completed'` and exit code `0`, so the answer from the permission policy was never applied. Headless runs now wait for the paused run to stop, send the policy's answer, and keep running until the resumed run finishes. If a paused tool can't be resumed, the run ends with `status: 'error'` and exit code `1` instead of reporting success. ([#26883](https://github.com/mastra-ai/mastra/pull/26883))
+
+- Fixed headless runs cutting off their output when stdout is a pipe. The CLI exited before Node finished writing, so a large final result could reach the reader incomplete while the process still exited with code 0. Headless mode now waits for stdout and stderr to flush before exiting. If the output can't be delivered because the reader closed the pipe, a run that would otherwise succeed exits with code 1 instead of 0. A run that already failed keeps its exit code. ([#26880](https://github.com/mastra-ai/mastra/pull/26880))
+
+- Updated dependencies [[`871f3c8`](https://github.com/mastra-ai/mastra/commit/871f3c801640148cffa09474fc9f9032495ddccf), [`aaedaa6`](https://github.com/mastra-ai/mastra/commit/aaedaa634aa7394789952d4f9fe04b1aec8619a1), [`d8bfd3d`](https://github.com/mastra-ai/mastra/commit/d8bfd3d502dd9952db66f0c4f53cd04f5c8e71ef), [`0f337be`](https://github.com/mastra-ai/mastra/commit/0f337be51ebddbe1cf388e926155b737538de1db), [`6eeb344`](https://github.com/mastra-ai/mastra/commit/6eeb34446435ff7b446ced421ffae9951d4cc733), [`12991bd`](https://github.com/mastra-ai/mastra/commit/12991bd0945ca36e13b213ebcbfaf0880d04d44d), [`a74f28c`](https://github.com/mastra-ai/mastra/commit/a74f28cca56118bf5f7d3354a5e991508f927dbc), [`6889aa2`](https://github.com/mastra-ai/mastra/commit/6889aa29d661a8892f503e37bc3d8ffe18aa7e37), [`323b021`](https://github.com/mastra-ai/mastra/commit/323b0212bc57c2b9acaed2716812a873c0fa43ee), [`4e44e7f`](https://github.com/mastra-ai/mastra/commit/4e44e7f518debb3b0aebc5ad71ea3e4a3902d8c9), [`3c2c033`](https://github.com/mastra-ai/mastra/commit/3c2c033aa68cd8cd7e4c630abd7f1bfeb440f457), [`6889aa2`](https://github.com/mastra-ai/mastra/commit/6889aa29d661a8892f503e37bc3d8ffe18aa7e37), [`12407df`](https://github.com/mastra-ai/mastra/commit/12407df9e6bd2f82cd27533bd4a9aa8057b97f2e), [`6889aa2`](https://github.com/mastra-ai/mastra/commit/6889aa29d661a8892f503e37bc3d8ffe18aa7e37)]:
+  - @mastra/core@1.79.0-alpha.2
+  - @mastra/fastembed@1.3.4-alpha.1
+  - @mastra/libsql@1.27.0-alpha.2
+  - @mastra/pg@1.32.0-alpha.2
+  - @mastra/duckdb@1.15.0-alpha.2
+
+## 1.15.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`48bee02`](https://github.com/mastra-ai/mastra/commit/48bee02e1a5cef20f4da67720191d5e85cdca13c), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`5d8f8b7`](https://github.com/mastra-ai/mastra/commit/5d8f8b78460350d581e8a92412cdfe88b4ce76bc), [`1874bf2`](https://github.com/mastra-ai/mastra/commit/1874bf2a5ba304f22ffb93f9ec5a9afea000a5a1), [`8c2d516`](https://github.com/mastra-ai/mastra/commit/8c2d5164714a27e720d898da612da6054a88ef91), [`14b2a7c`](https://github.com/mastra-ai/mastra/commit/14b2a7c56da4329f7fd17738056a081663deed46), [`1874bf2`](https://github.com/mastra-ai/mastra/commit/1874bf2a5ba304f22ffb93f9ec5a9afea000a5a1), [`eb0b702`](https://github.com/mastra-ai/mastra/commit/eb0b702e9939f02073fb1c4dfd7eaa51fde59e0b), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`425d383`](https://github.com/mastra-ai/mastra/commit/425d383d4fb15e55e9491b6bdaebb57f2de7cdc8), [`5d8f8b7`](https://github.com/mastra-ai/mastra/commit/5d8f8b78460350d581e8a92412cdfe88b4ce76bc), [`8c90438`](https://github.com/mastra-ai/mastra/commit/8c90438b404d27593927eccc47616aab4a35006e), [`5d8f8b7`](https://github.com/mastra-ai/mastra/commit/5d8f8b78460350d581e8a92412cdfe88b4ce76bc), [`8c90438`](https://github.com/mastra-ai/mastra/commit/8c90438b404d27593927eccc47616aab4a35006e)]:
+  - @mastra/core@1.79.0-alpha.1
+  - @mastra/duckdb@1.15.0-alpha.1
+  - @mastra/pg@1.32.0-alpha.1
+  - @mastra/observability@1.21.0-alpha.1
+  - @mastra/libsql@1.27.0-alpha.1
+  - @mastra/mcp@2.4.2-alpha.0
+
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Added `resolveDefaultThinkingLevel` so a host can supply the thinking level for requests whose session has not picked one. When set, it replaces the settings.json defaults; a session's own level still wins. It runs on every model resolution, including account-rotation hops, so a changed default applies to the next request. ([#27216](https://github.com/mastra-ai/mastra/pull/27216))
+
+  ```ts
+  const { controller } = await createMastraCodeAgentController({
+    resolveDefaultThinkingLevel: async ({ requestContext }) => lookUpTeamThinkingLevel(requestContext),
+  });
+  ```
+
+### Patch Changes
+
+- Auto memory now picks Gemini only when Mastra Code can use a Google credential for the request: a stored key or sign-in, or locally a `GOOGLE_GENERATIVE_AI_API_KEY` or `GOOGLE_API_KEY` environment variable. Deployed Factory accounts never use the server's environment keys, so they get a model from a provider they connected. ([#26666](https://github.com/mastra-ai/mastra/pull/26666))
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`9b60f12`](https://github.com/mastra-ai/mastra/commit/9b60f12b13b28c9664a839aef435e6d10898644d), [`9b60f12`](https://github.com/mastra-ai/mastra/commit/9b60f12b13b28c9664a839aef435e6d10898644d), [`f885386`](https://github.com/mastra-ai/mastra/commit/f885386b79be0e4d784067b0e26608971e0cc788), [`f6a9762`](https://github.com/mastra-ai/mastra/commit/f6a9762b12ae9dad6a154f73ed3099a2ee472d0c), [`12a8a89`](https://github.com/mastra-ai/mastra/commit/12a8a89938ee5dbad91edb5b4da26cd68c95fabd), [`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/observability@1.20.2-alpha.0
+  - @mastra/core@1.78.1-alpha.0
+  - @mastra/memory@1.39.0-alpha.0
+  - @mastra/agent-browser@0.5.4-alpha.0
+  - @mastra/stagehand@0.3.6-alpha.0
+  - @mastra/parallel@0.1.3-alpha.0
+  - @mastra/tavily@1.1.3-alpha.0
+  - @mastra/fastembed@1.3.4-alpha.0
+  - @mastra/mcp@2.4.2-alpha.0
+  - @mastra/schema-compat@1.3.16-alpha.0
+  - @mastra/github-signals@0.5.2-alpha.0
+  - @mastra/duckdb@1.14.2-alpha.0
+  - @mastra/libsql@1.26.3-alpha.0
+  - @mastra/pg@1.31.3-alpha.0
+
+## 1.14.0
+
+### Minor Changes
+
+- `createMastraCodeAgentController` now accepts `modes: false` for hosts that don't offer modes. Every session runs as the single Build agent: a thread last used in another mode reopens in Build, and per-mode thinking defaults from settings never apply. Runs without a session override use the global thinking level. ([#26854](https://github.com/mastra-ai/mastra/pull/26854))
+
+  ```typescript
+  const controller = await createMastraCodeAgentController({ modes: false });
+  ```
+
+- You can now remove agent controller built-in tools such as `submit_plan` without reaching into the controller's private config. Set `disableBuiltinTools` on `createMastraCode()` / `prepareAgentControllerMount()`, or on `MastraFactory` to apply it to every Factory session. When `submit_plan` is unavailable, plan mode tells the model to write the plan file instead of calling it. ([#26967](https://github.com/mastra-ai/mastra/pull/26967))
+
+  ```ts
+  new MastraFactory({ storage, disableBuiltinTools: ['submit_plan'] });
+  ```
+
+- Removed cross-scope credential fallback in deployed sessions so each session uses only Factory or user credentials. ([#26934](https://github.com/mastra-ai/mastra/pull/26934))
+
+  Custom credential store providers must replace `orgFirst` with an explicit `credentialScope`:
+
+  ```ts
+  // Before
+  const tenant = { orgId, userId, orgFirst: true };
+
+  // After
+  const tenant = { orgId, userId, credentialScope: 'factory' as const };
+  ```
+
+  Use `"user"` to resolve only personal credentials. Hosts that select credentials for a session owner rather than the signed-in caller can register an asynchronous policy resolver as the second argument to `setCredentialStoreProvider`. Resolve that policy from authenticated identity and durable session records, not client-writable session state. Call `prepareCredentialTenant(requestContext)` before resolving a model; the SDK’s built-in model, memory, and goal-judge resolvers do this automatically and refresh the policy again before provider calls.
+
+### Patch Changes
+
+- Fixed revoked or invalid OAuth sign-ins showing a raw API error. When Anthropic, OpenAI Codex, GitHub Copilot, xAI, or Kimi For Coding rejects a stored sign-in with a 401, the error is now a `ProviderAuthRequiredError` that says the sign-in was rejected, the same as a missing sign-in. Hosts can match on the error name to prompt the user to sign in again. ([#27187](https://github.com/mastra-ai/mastra/pull/27187))
+
+  ```ts
+  if (error.name === 'ProviderAuthRequiredError') {
+    // e.g. "Anthropic rejected the stored sign-in: OAuth access token is invalid."
+    promptSignIn();
+  }
+  ```
+
+- Improved the "Tenant model credential policy could not be resolved" error. It now states why resolution failed: ([#27138](https://github.com/mastra-ai/mastra/pull/27138))
+
+  - The request has no authenticated user.
+  - No credential policy applies to the user.
+
+  Added a warning with non-secret diagnostics and a stack trace. Use it to locate where the request context was lost.
+
+- Fixed model selection for Kimi For Coding, GitHub Copilot and custom providers in `/models`, `/setup`, `/model` and `/om`. Picking a Kimi or Copilot model no longer saves an id that fails with "Could not find config for provider mastracode". ([#26692](https://github.com/mastra-ai/mastra/pull/26692))
+
+  These models are now listed under ids that resolve:
+
+  - Kimi: `kimi-code-plan-cn/<model>` (your Kimi login or `KIMI_API_KEY` authenticates it)
+  - GitHub Copilot: `github-copilot/<model>`
+  - Custom providers: `<custom-provider>/<model>`
+
+  Ids you already saved keep working: `kimi-for-coding/<model>`, `mastracode/kimi-for-coding/<model>` and `mastracode/github-copilot/<model>`.
+
+  A Kimi API key saved in `/api-keys` or Factory's provider settings is now used for Kimi models, and a Kimi login shows as connected in `/api-keys`.
+
+- Kept sandbox-backed file reads, listings and searches complete now that sandbox commands keep only the newest 1 MiB of output by default. ([#27106](https://github.com/mastra-ai/mastra/pull/27106))
+
+- Fixed the thinking level being ignored by more providers. It now reaches Groq, Mistral, xAI, OpenRouter, Together AI, DeepInfra, Cerebras, Perplexity and Alibaba models. ([#26411](https://github.com/mastra-ai/mastra/pull/26411))
+
+  The thinking picker lists only the levels a model's request can carry. For example, GLM-5.2 through Mistral tops out at High instead of failing the request on Max. Models whose requests cannot carry a level now offer only Off instead of levels that did nothing. That includes Z.ai, Kimi, GitHub Copilot and Amazon Bedrock models. Off still leaves each model on its own default.
+
+- Fixed the missing provider credential error to say which credentials the Factory uses. It now names the Factory's model scope (organization or personal credentials only), notes that the other set doesn't apply, and says what to add. ([#27077](https://github.com/mastra-ai/mastra/pull/27077))
+
+- Updated dependencies [[`0b1ea6c`](https://github.com/mastra-ai/mastra/commit/0b1ea6ca6266158316defb522feb3d2f9bf33174), [`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`c6230e3`](https://github.com/mastra-ai/mastra/commit/c6230e30f76b4b912bad68f426d730da1cb67d83), [`a9b85ba`](https://github.com/mastra-ai/mastra/commit/a9b85ba48a2542c568d91f3032464057227d55dc), [`6f50db8`](https://github.com/mastra-ai/mastra/commit/6f50db8a3e0a673c6e094229e3d18e2b8dbb99f7), [`f28c44e`](https://github.com/mastra-ai/mastra/commit/f28c44ed98a87c6078a3e3e9ef2b197d97f97956), [`3ddf32d`](https://github.com/mastra-ai/mastra/commit/3ddf32da0e6eaffd1e5da33105bf245b6e56a117), [`03646c5`](https://github.com/mastra-ai/mastra/commit/03646c587b915ced4c9fad3189391909a296f441), [`eb71f8c`](https://github.com/mastra-ai/mastra/commit/eb71f8c3abbe9aa40375f898fce60f555ef9ebf3), [`02e2eae`](https://github.com/mastra-ai/mastra/commit/02e2eae3aee1c5b5b9c807a6a3389b88eca1440c), [`7b08a87`](https://github.com/mastra-ai/mastra/commit/7b08a876b1060cf6842c61ed8af0eaa93e1310c4), [`5d82145`](https://github.com/mastra-ai/mastra/commit/5d82145ae3cc591eb5cdafd4af5977c36fec5c01), [`7e4b680`](https://github.com/mastra-ai/mastra/commit/7e4b68035c3e62a4fcf981afce9b02ecf65ddcf5), [`032a92d`](https://github.com/mastra-ai/mastra/commit/032a92d661696b3620ce45f4a0b1de60f0a6c068), [`1c9cb41`](https://github.com/mastra-ai/mastra/commit/1c9cb4151c3addfdf689ee1dd9d3a013c7342e25), [`460b600`](https://github.com/mastra-ai/mastra/commit/460b600abe3b7563537cfb8a676d649c638a9190), [`2362057`](https://github.com/mastra-ai/mastra/commit/2362057cedc6b90b9fd71c424df40eedf3a4ecf3), [`9daf547`](https://github.com/mastra-ai/mastra/commit/9daf547f810df721eaca9c9dafc18f8ce1727b77), [`d79c57b`](https://github.com/mastra-ai/mastra/commit/d79c57b6fcb4d61d50fb255724e3d9364a661601), [`5faebef`](https://github.com/mastra-ai/mastra/commit/5faebef77012b31d2062e266a27718ca35ac738d), [`2eefb56`](https://github.com/mastra-ai/mastra/commit/2eefb565fd524acbc5105ddecd9d4f2a0f1deb2f), [`f738a12`](https://github.com/mastra-ai/mastra/commit/f738a120225329f619211756d69f164a3f434c5d), [`eb71f8c`](https://github.com/mastra-ai/mastra/commit/eb71f8c3abbe9aa40375f898fce60f555ef9ebf3), [`4c29655`](https://github.com/mastra-ai/mastra/commit/4c296551a79bebc6a40fddcf2409824f601e6c43), [`843d441`](https://github.com/mastra-ai/mastra/commit/843d4411284c3b96953edebd2c22c3ac9556bac2), [`33eb344`](https://github.com/mastra-ai/mastra/commit/33eb344ebfe918d032e3ad1e410788d4c8bc6526), [`6155190`](https://github.com/mastra-ai/mastra/commit/6155190d2436d5e93e21f6a875d8c4306c8043ff), [`5d12fbf`](https://github.com/mastra-ai/mastra/commit/5d12fbfcd756e5f5b0cae53e45a486a64ad102f5), [`eb71f8c`](https://github.com/mastra-ai/mastra/commit/eb71f8c3abbe9aa40375f898fce60f555ef9ebf3), [`6ea5f80`](https://github.com/mastra-ai/mastra/commit/6ea5f80919ae4ebc3e3fbba29390da74f043c69a), [`2362057`](https://github.com/mastra-ai/mastra/commit/2362057cedc6b90b9fd71c424df40eedf3a4ecf3), [`35fbdce`](https://github.com/mastra-ai/mastra/commit/35fbdce6de71332246dd6d9b4a5ecba2d87fb6cc), [`e496762`](https://github.com/mastra-ai/mastra/commit/e49676258181017f50eb5739d4a97c0da7317dd9), [`d7bd3cd`](https://github.com/mastra-ai/mastra/commit/d7bd3cda0fb2e46c68d164af2e0cb1815be03572), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3), [`9cf0fe4`](https://github.com/mastra-ai/mastra/commit/9cf0fe4731d6186be20c890dba27ba3a2c134f5e), [`c09fb4b`](https://github.com/mastra-ai/mastra/commit/c09fb4b5758114c8c57d0af48cbe6dfdfe9dde90), [`b2dd0c6`](https://github.com/mastra-ai/mastra/commit/b2dd0c6333691467e61406ac920eb6f861db6bc0), [`ad16eae`](https://github.com/mastra-ai/mastra/commit/ad16eae7eec9af386c9eee81f4f30ef65d0df48b), [`d99fa30`](https://github.com/mastra-ai/mastra/commit/d99fa305e0baa00fb2064283658c10e00b95bf10), [`4fe06e4`](https://github.com/mastra-ai/mastra/commit/4fe06e46bee723d7505947827e85745b468b0ca8), [`f15bef1`](https://github.com/mastra-ai/mastra/commit/f15bef1e81cff6ca977d336f3bc325e47b6359b5)]:
+  - @mastra/core@1.78.0
+  - @mastra/observability@1.20.1
+  - @mastra/schema-compat@1.3.15
+  - @mastra/duckdb@1.14.1
+  - @mastra/pg@1.31.2
+  - @mastra/libsql@1.26.2
+  - @mastra/mcp@2.4.1
+  - @mastra/memory@1.38.0
+
+## 1.14.0-alpha.9
+
+### Patch Changes
+
+- Fixed revoked or invalid OAuth sign-ins showing a raw API error. When Anthropic, OpenAI Codex, GitHub Copilot, xAI, or Kimi For Coding rejects a stored sign-in with a 401, the error is now a `ProviderAuthRequiredError` that says the sign-in was rejected, the same as a missing sign-in. Hosts can match on the error name to prompt the user to sign in again. ([#27187](https://github.com/mastra-ai/mastra/pull/27187))
+
+  ```ts
+  if (error.name === 'ProviderAuthRequiredError') {
+    // e.g. "Anthropic rejected the stored sign-in: OAuth access token is invalid."
+    promptSignIn();
+  }
+  ```
+
+- Updated dependencies [[`a9b85ba`](https://github.com/mastra-ai/mastra/commit/a9b85ba48a2542c568d91f3032464057227d55dc), [`f28c44e`](https://github.com/mastra-ai/mastra/commit/f28c44ed98a87c6078a3e3e9ef2b197d97f97956)]:
+  - @mastra/core@1.78.0-alpha.9
+
+## 1.14.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`03646c5`](https://github.com/mastra-ai/mastra/commit/03646c587b915ced4c9fad3189391909a296f441), [`d7bd3cd`](https://github.com/mastra-ai/mastra/commit/d7bd3cda0fb2e46c68d164af2e0cb1815be03572)]:
+  - @mastra/core@1.78.0-alpha.8
+
+## 1.14.0-alpha.7
+
+### Patch Changes
+
+- Improved the "Tenant model credential policy could not be resolved" error. It now states why resolution failed: ([#27138](https://github.com/mastra-ai/mastra/pull/27138))
+
+  - The request has no authenticated user.
+  - No credential policy applies to the user.
+
+  Added a warning with non-secret diagnostics and a stack trace. Use it to locate where the request context was lost.
+
+- Updated dependencies [[`7e4b680`](https://github.com/mastra-ai/mastra/commit/7e4b68035c3e62a4fcf981afce9b02ecf65ddcf5), [`9cf0fe4`](https://github.com/mastra-ai/mastra/commit/9cf0fe4731d6186be20c890dba27ba3a2c134f5e)]:
+  - @mastra/core@1.78.0-alpha.7
+
+## 1.14.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`6f50db8`](https://github.com/mastra-ai/mastra/commit/6f50db8a3e0a673c6e094229e3d18e2b8dbb99f7), [`3ddf32d`](https://github.com/mastra-ai/mastra/commit/3ddf32da0e6eaffd1e5da33105bf245b6e56a117), [`032a92d`](https://github.com/mastra-ai/mastra/commit/032a92d661696b3620ce45f4a0b1de60f0a6c068), [`1c9cb41`](https://github.com/mastra-ai/mastra/commit/1c9cb4151c3addfdf689ee1dd9d3a013c7342e25), [`2eefb56`](https://github.com/mastra-ai/mastra/commit/2eefb565fd524acbc5105ddecd9d4f2a0f1deb2f)]:
+  - @mastra/core@1.78.0-alpha.6
+  - @mastra/mcp@2.4.1-alpha.1
+
+## 1.14.0-alpha.5
+
+### Patch Changes
+
+- Kept sandbox-backed file reads, listings and searches complete now that sandbox commands keep only the newest 1 MiB of output by default. ([#27106](https://github.com/mastra-ai/mastra/pull/27106))
+
+- Updated dependencies [[`f738a12`](https://github.com/mastra-ai/mastra/commit/f738a120225329f619211756d69f164a3f434c5d)]:
+  - @mastra/core@1.78.0-alpha.5
+
+## 1.14.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`843d441`](https://github.com/mastra-ai/mastra/commit/843d4411284c3b96953edebd2c22c3ac9556bac2), [`6ea5f80`](https://github.com/mastra-ai/mastra/commit/6ea5f80919ae4ebc3e3fbba29390da74f043c69a)]:
+  - @mastra/core@1.78.0-alpha.4
+
+## 1.14.0-alpha.3
+
+### Minor Changes
+
+- You can now remove agent controller built-in tools such as `submit_plan` without reaching into the controller's private config. Set `disableBuiltinTools` on `createMastraCode()` / `prepareAgentControllerMount()`, or on `MastraFactory` to apply it to every Factory session. When `submit_plan` is unavailable, plan mode tells the model to write the plan file instead of calling it. ([#26967](https://github.com/mastra-ai/mastra/pull/26967))
+
+  ```ts
+  new MastraFactory({ storage, disableBuiltinTools: ['submit_plan'] });
+  ```
+
+### Patch Changes
+
+- Fixed the missing provider credential error to say which credentials the Factory uses. It now names the Factory's model scope (organization or personal credentials only), notes that the other set doesn't apply, and says what to add. ([#27077](https://github.com/mastra-ai/mastra/pull/27077))
+
+- Updated dependencies [[`c6230e3`](https://github.com/mastra-ai/mastra/commit/c6230e30f76b4b912bad68f426d730da1cb67d83), [`eb71f8c`](https://github.com/mastra-ai/mastra/commit/eb71f8c3abbe9aa40375f898fce60f555ef9ebf3), [`7b08a87`](https://github.com/mastra-ai/mastra/commit/7b08a876b1060cf6842c61ed8af0eaa93e1310c4), [`5d82145`](https://github.com/mastra-ai/mastra/commit/5d82145ae3cc591eb5cdafd4af5977c36fec5c01), [`eb71f8c`](https://github.com/mastra-ai/mastra/commit/eb71f8c3abbe9aa40375f898fce60f555ef9ebf3), [`4c29655`](https://github.com/mastra-ai/mastra/commit/4c296551a79bebc6a40fddcf2409824f601e6c43), [`6155190`](https://github.com/mastra-ai/mastra/commit/6155190d2436d5e93e21f6a875d8c4306c8043ff), [`eb71f8c`](https://github.com/mastra-ai/mastra/commit/eb71f8c3abbe9aa40375f898fce60f555ef9ebf3), [`35fbdce`](https://github.com/mastra-ai/mastra/commit/35fbdce6de71332246dd6d9b4a5ecba2d87fb6cc), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3), [`d99fa30`](https://github.com/mastra-ai/mastra/commit/d99fa305e0baa00fb2064283658c10e00b95bf10), [`f15bef1`](https://github.com/mastra-ai/mastra/commit/f15bef1e81cff6ca977d336f3bc325e47b6359b5)]:
+  - @mastra/schema-compat@1.3.15-alpha.0
+  - @mastra/duckdb@1.14.1-alpha.0
+  - @mastra/core@1.78.0-alpha.3
+  - @mastra/pg@1.31.2-alpha.1
+  - @mastra/memory@1.38.0-alpha.0
+  - @mastra/mcp@2.4.1-alpha.0
+
+## 1.14.0-alpha.2
+
+### Minor Changes
+
+- Removed cross-scope credential fallback in deployed sessions so each session uses only Factory or user credentials. ([#26934](https://github.com/mastra-ai/mastra/pull/26934))
+
+  Custom credential store providers must replace `orgFirst` with an explicit `credentialScope`:
+
+  ```ts
+  // Before
+  const tenant = { orgId, userId, orgFirst: true };
+
+  // After
+  const tenant = { orgId, userId, credentialScope: 'factory' as const };
+  ```
+
+  Use `"user"` to resolve only personal credentials. Hosts that select credentials for a session owner rather than the signed-in caller can register an asynchronous policy resolver as the second argument to `setCredentialStoreProvider`. Resolve that policy from authenticated identity and durable session records, not client-writable session state. Call `prepareCredentialTenant(requestContext)` before resolving a model; the SDK’s built-in model, memory, and goal-judge resolvers do this automatically and refresh the policy again before provider calls.
+
+### Patch Changes
+
+- Updated dependencies [[`460b600`](https://github.com/mastra-ai/mastra/commit/460b600abe3b7563537cfb8a676d649c638a9190), [`2362057`](https://github.com/mastra-ai/mastra/commit/2362057cedc6b90b9fd71c424df40eedf3a4ecf3), [`9daf547`](https://github.com/mastra-ai/mastra/commit/9daf547f810df721eaca9c9dafc18f8ce1727b77), [`2362057`](https://github.com/mastra-ai/mastra/commit/2362057cedc6b90b9fd71c424df40eedf3a4ecf3), [`e496762`](https://github.com/mastra-ai/mastra/commit/e49676258181017f50eb5739d4a97c0da7317dd9)]:
+  - @mastra/core@1.78.0-alpha.2
+  - @mastra/observability@1.20.1-alpha.1
+  - @mastra/mcp@2.4.1-alpha.0
+
+## 1.14.0-alpha.1
+
+### Minor Changes
+
+- `createMastraCodeAgentController` now accepts `modes: false` for hosts that don't offer modes. Every session runs as the single Build agent: a thread last used in another mode reopens in Build, and per-mode thinking defaults from settings never apply. Runs without a session override use the global thinking level. ([#26854](https://github.com/mastra-ai/mastra/pull/26854))
+
+  ```typescript
+  const controller = await createMastraCodeAgentController({ modes: false });
+  ```
+
+### Patch Changes
+
+- Fixed model selection for Kimi For Coding, GitHub Copilot and custom providers in `/models`, `/setup`, `/model` and `/om`. Picking a Kimi or Copilot model no longer saves an id that fails with "Could not find config for provider mastracode". ([#26692](https://github.com/mastra-ai/mastra/pull/26692))
+
+  These models are now listed under ids that resolve:
+
+  - Kimi: `kimi-code-plan-cn/<model>` (your Kimi login or `KIMI_API_KEY` authenticates it)
+  - GitHub Copilot: `github-copilot/<model>`
+  - Custom providers: `<custom-provider>/<model>`
+
+  Ids you already saved keep working: `kimi-for-coding/<model>`, `mastracode/kimi-for-coding/<model>` and `mastracode/github-copilot/<model>`.
+
+  A Kimi API key saved in `/api-keys` or Factory's provider settings is now used for Kimi models, and a Kimi login shows as connected in `/api-keys`.
+
+- Fixed the thinking level being ignored by more providers. It now reaches Groq, Mistral, xAI, OpenRouter, Together AI, DeepInfra, Cerebras, Perplexity and Alibaba models. ([#26411](https://github.com/mastra-ai/mastra/pull/26411))
+
+  The thinking picker lists only the levels a model's request can carry. For example, GLM-5.2 through Mistral tops out at High instead of failing the request on Max. Models whose requests cannot carry a level now offer only Off instead of levels that did nothing. That includes Z.ai, Kimi, GitHub Copilot and Amazon Bedrock models. Off still leaves each model on its own default.
+
+- Updated dependencies [[`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`bed1ccc`](https://github.com/mastra-ai/mastra/commit/bed1cccea5817d68faa42a15fda3a0b329f70680), [`02e2eae`](https://github.com/mastra-ai/mastra/commit/02e2eae3aee1c5b5b9c807a6a3389b88eca1440c), [`d79c57b`](https://github.com/mastra-ai/mastra/commit/d79c57b6fcb4d61d50fb255724e3d9364a661601), [`5faebef`](https://github.com/mastra-ai/mastra/commit/5faebef77012b31d2062e266a27718ca35ac738d), [`b2dd0c6`](https://github.com/mastra-ai/mastra/commit/b2dd0c6333691467e61406ac920eb6f861db6bc0), [`ad16eae`](https://github.com/mastra-ai/mastra/commit/ad16eae7eec9af386c9eee81f4f30ef65d0df48b), [`4fe06e4`](https://github.com/mastra-ai/mastra/commit/4fe06e46bee723d7505947827e85745b468b0ca8)]:
+  - @mastra/observability@1.20.1-alpha.0
+  - @mastra/core@1.78.0-alpha.1
+  - @mastra/pg@1.31.2-alpha.0
+  - @mastra/libsql@1.26.2-alpha.0
+  - @mastra/mcp@2.4.1-alpha.0
+
 ## 1.13.1-alpha.0
 
 ### Patch Changes

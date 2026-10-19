@@ -258,13 +258,15 @@ function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGat
     return sanitizeRegistryDataForRuntime(staticRegistry, enabledGatewayIds);
   }
 
-  // Dynamic loading mode: sync global cache to local before loading
-  syncGlobalCacheToLocal();
-
-  // Dynamic loading mode: check in-memory cache first
+  // Dynamic loading mode: check in-memory cache first. The registry proxy calls this on every
+  // property access, so the disk sync below must only run when the data actually gets (re)loaded.
+  // In-process refreshes reset registryData, so they still sync and reload.
   if (registryData) {
     return registryData;
   }
+
+  // Dynamic loading mode: sync global cache to local before loading
+  syncGlobalCacheToLocal();
 
   // Dynamic loading mode: load from file system for live updates
   const packageRoot = getPackageRoot();
@@ -475,7 +477,7 @@ const PROVIDER_ALIASES: Record<string, string> = {
 };
 
 /** Bedrock model-id region prefixes (cross-region inference profiles). */
-const BEDROCK_REGION_PREFIX = /^(global|us-gov|us|eu|apac|jp|au)\./;
+const BEDROCK_REGION_PREFIX = /^(global|us-gov|us|eu|apac|jp|au|in)\./;
 
 /** Underlying vendor segment carried by fully-qualified Bedrock model ids. */
 const BEDROCK_VENDOR_SEGMENT =

@@ -5,6 +5,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import { AgentController } from '../../agent-controller/agent-controller';
 import { createMockWorkspace } from '../../agent-controller/test-utils';
+import type { AgentControllerEvent } from '../../agent-controller/types';
 import { FGADeniedError } from '../../auth/ee/fga-check';
 import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
 import { MockMemory } from '../../memory/mock';
@@ -133,7 +134,11 @@ async function createSetup({
   resolveSession,
   onStaleToolApproval,
   instructions,
+  storage = new InMemoryStore(),
+  platform = 'discord',
 }: {
+  storage?: InMemoryStore;
+  platform?: string;
   responseText?: string;
   instructions?: () => Promise<string>;
   model?: MockLanguageModelV2;
@@ -146,7 +151,7 @@ async function createSetup({
   resolveSession?: (ctx: any) => any;
   onStaleToolApproval?: (ctx: any) => void | Promise<void>;
 } = {}) {
-  const adapter = createMockAdapter('discord');
+  const adapter = createMockAdapter(platform);
   const agent = new Agent({
     id: 'mode-agent',
     name: 'mode-agent',
@@ -158,12 +163,12 @@ async function createSetup({
   const controller = new AgentController({
     workspace: createMockWorkspace(),
     id: 'ctrl-1',
-    storage: new InMemoryStore(),
+    storage,
     resourceId: 'ctrl-resource',
     modes: [{ id: 'build', agent, defaultModelId: 'anthropic/claude-opus-4-7' }],
     defaultModeId: 'build',
     channels: {
-      adapters: { discord: toolDisplay ? { adapter, toolDisplay } : adapter },
+      adapters: { [platform]: toolDisplay ? { adapter, toolDisplay } : adapter },
       ...(onSessionStart ? { onSessionStart } : {}),
       ...(resolveSession ? { resolveSession } : {}),
       ...(onStaleToolApproval ? { onStaleToolApproval } : {}),
@@ -1152,6 +1157,61 @@ describe('AgentControllerChannels thread history', () => {
       },
     } as any;
   }
+
+  it('names a new Slack session from its earlier thread context and emits the title for the sidebar', async () => {
+    const prompts: string[] = [];
+    const titleModel = new MockLanguageModelV2({
+      doGenerate: async options => {
+        prompts.push(JSON.stringify(options.prompt));
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: 'text', text: 'Fix checkout timeouts' }],
+        };
+      },
+    });
+    const storage = new InMemoryStore();
+    const agentMemory = new MockMemory({ storage, options: { generateTitle: { model: titleModel } } });
+    const events: AgentControllerEvent[] = [];
+    const { adapter, controller, mastra, channels } = await createSetup({
+      storage,
+      agentMemory,
+      platform: 'slack',
+      onSessionStart: ({ session }) => {
+        session.subscribe((event: AgentControllerEvent) => events.push(event));
+      },
+    });
+    const chatThread = createMentionThread(adapter, 'C123:456', [
+      { ...historyMessage(0), text: 'Checkout is timing out after the payments deployment' },
+    ]);
+    await channels['processChatMessage'](
+      chatThread,
+      createMessage('m-trigger', '@TestBot please investigate'),
+      mastra,
+      new RequestContext(),
+    );
+    const session = await controller.getSessionByResource('channel:C123:456');
+    const threadId = session!.thread.getId()!;
+    await vi.waitFor(async () =>
+      expect((await agentMemory.getThreadById({ threadId }))?.title).toBe('Fix checkout timeouts'),
+    );
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('Checkout is timing out after the payments deployment');
+    expect(prompts[0]).toContain('please investigate');
+    expect(events).toContainEqual({ type: 'thread_title_updated', threadId, title: 'Fix checkout timeouts' });
+
+    await waitFor(() => !session!.run.isRunning(), { what: 'first turn to finish' });
+    await channels['processChatMessage'](
+      chatThread,
+      createMessage('m-followup', 'Any updates?'),
+      mastra,
+      new RequestContext(),
+    );
+    await waitFor(() => !session!.run.isRunning(), { what: 'follow-up to finish' });
+    expect(prompts).toHaveLength(1);
+  });
 
   it('writes history rows to the session thread before dispatching the trigger', async () => {
     const agentMemory = new MockMemory();

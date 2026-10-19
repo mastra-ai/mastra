@@ -40,6 +40,7 @@ import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
 import { isReconnectableMCPError } from './error-utils';
+import { getInputSchemaError, loadInputSchemaMetaValidator } from './input-schema-meta-schema';
 import { MCP_CLIENT_PROTOCOL_VERSION } from './types';
 import type {
   FetchLike,
@@ -223,11 +224,16 @@ function extractToolErrorText(content: unknown): string {
  */
 function extractModelTextFromToolContent(content: unknown): string | undefined {
   if (!Array.isArray(content)) return undefined;
+  // Embedded resources are part of the model-facing channel too (e.g. GitHub's get_file_contents body).
   const text = content
-    .filter((part): part is { type: 'text'; text: string } => {
-      return !!part && typeof part === 'object' && (part as { type?: unknown }).type === 'text';
+    .map(part => {
+      if (!part || typeof part !== 'object') return undefined;
+      const p = part as { type?: unknown; text?: unknown; resource?: { text?: unknown } };
+      if (p.type === 'text' && typeof p.text === 'string') return p.text;
+      if (p.type === 'resource' && typeof p.resource?.text === 'string') return p.resource.text;
+      return undefined;
     })
-    .map(part => part.text)
+    .filter((t): t is string => t !== undefined)
     .join('\n')
     .trim();
   return text || undefined;
@@ -451,6 +457,8 @@ export class InternalMastraMCPClient extends MastraBase {
     timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
   }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
+    // Started early so the sync toolFromDefinition() normally has the input schema check ready.
+    void loadInputSchemaMetaValidator();
     this.name = name;
     this.timeout = timeout;
     this.logHandler = server.logger;
@@ -1153,9 +1161,21 @@ export class InternalMastraMCPClient extends MastraBase {
    * Opens a `subscriptions/listen` stream for the current interest set, then closes the
    * previous one so no notification is lost between filters. Resource subscriptions the
    * server declines are an error; declined list-changed bits only mean the server has
-   * nothing to announce.
+   * nothing to announce. Older revisions push list-changed notifications unprompted, so
+   * they need no stream unless resource subscriptions are requested.
    */
   private async replaceSubscriptionStream(): Promise<void> {
+    const negotiated = this.negotiatedProtocolVersion;
+    if (
+      negotiated !== undefined &&
+      negotiated !== MCP_CLIENT_PROTOCOL_VERSION &&
+      this.subscriptionInterest.resourceSubscriptions.size === 0
+    ) {
+      const previous = this.subscriptionStream;
+      this.subscriptionStream = undefined;
+      await previous?.close();
+      return;
+    }
     this.assertCurrentRevision('subscriptions/listen');
     const previous = this.subscriptionStream;
     const filter = this.subscriptionFilter();
@@ -1279,16 +1299,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
     const schema = withDefaultDialect(('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7);
-    const standardSchema = toStandardSchema(schema);
-    const complexityError = getJsonSchemaComplexityError(schema);
-    if (!complexityError) return standardSchema;
-
-    return {
-      '~standard': {
-        ...standardSchema['~standard'],
-        validate: () => ({ issues: [{ message: complexityError }] }),
-      },
-    };
+    return toStandardSchema(schema);
   }
 
   /**
@@ -1383,6 +1394,7 @@ export class InternalMastraMCPClient extends MastraBase {
   async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.log('debug', `Requesting tools from MCP server`);
     const { tools } = await this.client.listTools({ _meta: this.requestMeta() }, { timeout: this.timeout });
+    await loadInputSchemaMetaValidator();
     const toolsRes: Record<string, Tool<any, any, any, any>> = {};
     for (const tool of tools) {
       const mastraTool = this.buildToolFromListEntry(tool, {
@@ -1406,6 +1418,35 @@ export class InternalMastraMCPClient extends MastraBase {
     tool: MCPToolListEntry,
     serverMeta: { version?: string; instructions?: string; connectFirst?: boolean },
   ): Tool<any, any, any, any> | undefined {
+    // A malformed input schema makes strict providers reject the whole tools array, so the
+    // tool is dropped here instead of breaking every request that includes its siblings.
+    const rawInputSchema: unknown = tool.inputSchema;
+    const inputSchema =
+      rawInputSchema && typeof rawInputSchema === 'object' && 'jsonSchema' in rawInputSchema
+        ? rawInputSchema.jsonSchema
+        : rawInputSchema;
+    // Oversized schemas are dropped too: every call to them fails anyway, and the meta-schema
+    // validator cannot walk them safely.
+    const inputSchemaError = getJsonSchemaComplexityError(inputSchema) ?? getInputSchemaError(inputSchema);
+    if (inputSchemaError) {
+      const details = { serverName: this.name, toolName: tool.name, reason: inputSchemaError };
+      this.log(
+        'warning',
+        `Skipping MCP tool "${tool.name}" with an invalid input schema: ${inputSchemaError}`,
+        details,
+      );
+      if (serverMeta.connectFirst) {
+        throw new MastraError({
+          id: 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Invalid input schema for MCP tool "${tool.name}": ${inputSchemaError}`,
+          details,
+        });
+      }
+      return undefined;
+    }
+
     try {
       let requireApproval: boolean | undefined;
       let needsApprovalFn: NeedsApprovalFn | undefined;
@@ -1545,18 +1586,26 @@ export class InternalMastraMCPClient extends MastraBase {
                   domain: ErrorDomain.MCP,
                   category: ErrorCategory.THIRD_PARTY,
                   text: errorText,
-                  details: { toolName: tool.name, serverName: this.name },
+                  details: {
+                    toolName: tool.name,
+                    serverName: this.name,
+                    // details only holds scalars, so the structured reason travels as JSON.
+                    ...(res.structuredContent !== undefined
+                      ? { structuredContent: JSON.stringify(res.structuredContent) }
+                      : {}),
+                  },
                 });
               }
 
               this.log('debug', `Tool executed successfully: ${tool.name}`);
 
-              if (res.structuredContent !== undefined) {
+              // In-band errors keep the full envelope so `isError` reaches the caller and the model.
+              if (res.structuredContent !== undefined && !res.isError) {
                 // Enforce the server-advertised outputSchema before the result reaches the
                 // model. Covers hydrated tools too, which never populate the SDK's tools/list
                 // output-schema cache. On mismatch, return the structured ValidationError
                 // shape createTool produces so the model can self-correct.
-                if (!res.isError && outputSchema) {
+                if (outputSchema) {
                   const validationSchema = await getOutputValidationSchema();
                   const validation = validateToolOutput(validationSchema, res.structuredContent, tool.name);
                   if (validation.error) {

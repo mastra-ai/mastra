@@ -21,10 +21,13 @@
  */
 import { TripWire } from '@mastra/core/agent';
 import type { ProcessAPIErrorArgs, ProcessInputArgs, ProcessInputResult, Processor } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 
 import { resolveCredentialStore } from '../agents/credential-resolver.js';
 import { resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
 import { getCredentialProviderId, normalizeLegacyModelId } from '../providers/model-ids.js';
+import { isThinkingLevelSetting } from '../thinking.js';
+import type { ThinkingLevelSetting } from '../thinking.js';
 import {
   getRequestAccountSelection,
   isRequestAccountRoutingExhausted,
@@ -589,6 +592,12 @@ export class AccountRotationProcessor implements Processor {
       credentialStore: RotationCredentialStore;
       maxProcessorRetries: number;
       settingsPath?: string;
+      /** The host has no modes, so per-mode thinking defaults never apply. */
+      modeless?: boolean;
+      /** Same host thinking default `getDynamicModel` uses, so a hop resolves at the same level. */
+      resolveDefaultThinkingLevel?: (ctx: {
+        requestContext: RequestContext;
+      }) => ThinkingLevelSetting | Promise<ThinkingLevelSetting>;
     },
   ) {}
 
@@ -761,9 +770,14 @@ export class AccountRotationProcessor implements Processor {
     const thinkingLevel = resolveRequestThinkingLevel(
       {
         state: { thinkingLevel: state?.thinkingLevel },
-        session: { modeId: typeof controller?.session?.modeId === 'string' ? controller.session.modeId : 'build' },
+        ...(!this.options.modeless && {
+          session: { modeId: typeof controller?.session?.modeId === 'string' ? controller.session.modeId : 'build' },
+        }),
       },
       this.options.settingsPath,
+      args.requestContext && !isThinkingLevelSetting(state?.thinkingLevel)
+        ? await this.options.resolveDefaultThinkingLevel?.({ requestContext: args.requestContext })
+        : undefined,
     );
     const entries: ModelRouteCascade['entries'] = [];
     for (const entry of route.slice(startIndex)) {

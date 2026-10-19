@@ -162,6 +162,21 @@ describe('useReviewItems', () => {
     });
   });
 
+  describe('when the experiment result ran against an agent', () => {
+    it('keeps the target type and run timing so the result renders like on the experiment page', async () => {
+      setupHandlers();
+
+      const { result } = renderHook(() => useReviewItems({ experimentId: EXPERIMENT_ID }), { wrapper: makeWrapper() });
+
+      await waitFor(() => expect(result.current.data).toHaveLength(1));
+      expect(result.current.data![0]).toMatchObject({
+        targetType: 'agent',
+        startedAt: '2026-07-21T00:00:10.000Z',
+        completedAt: '2026-07-21T00:00:20.000Z',
+      });
+    });
+  });
+
   describe('when scoped to one experiment', () => {
     it('only fetches the selected experiment when scoped', async () => {
       setupHandlers();

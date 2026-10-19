@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "deepseek-v4.1-flash",
     "gemma-4-26b-a4b-it",
     "gpt-oss-120b",
     "llama-3.3-70b-instruct",
@@ -11,8 +12,10 @@
   ],
   "temperature": [
     "deepseek-v4-flash-0731",
+    "deepseek-v4.1-flash",
     "gemma-4-26b-a4b-it",
     "glm-5.2",
+    "glm-5.3",
     "gpt-oss-120b",
     "llama-3.3-70b-instruct",
     "mistral-medium-3.5-128b",
@@ -26,18 +29,20 @@
   ],
   "structuredOutput": [
     "deepseek-v4-flash-0731",
+    "deepseek-v4.1-flash",
     "gemma-4-26b-a4b-it",
     "glm-5.2",
+    "glm-5.3",
     "mistral-medium-3.5-128b",
     "qwen3.5-397b-a17b",
     "qwen3.6-35b-a3b",
     "qwen3.8-27b"
   ],
   "reasoning": {
-    "qwen3.8-27b": [
+    "deepseek-v4.1-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek-v4-flash-0731": [
@@ -46,10 +51,34 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
+    "mistral-medium-3.5-128b": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
     "gemma-4-26b-a4b-it": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "qwen3.6-35b-a3b": [
@@ -58,19 +87,7 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "mistral-medium-3.5-128b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "qwen3.5-397b-a17b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "glm-5.2": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
