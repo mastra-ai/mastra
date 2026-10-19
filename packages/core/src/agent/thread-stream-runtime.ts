@@ -4310,8 +4310,9 @@ export class AgentThreadStreamRuntime {
             (options.untilSuspended || activeRecord.agent.id === agent.id) &&
             !this.#isActivelyRunning(activeRecord)
           ) {
-            // Same-agent record that is suspended/suspending: waiting could block indefinitely
-            // on human input (resume/approval), so preserve the historical exemption.
+            // A suspended/suspending record waits on human input (resume/approval), so waiting
+            // could block indefinitely. Same-agent callers keep the historical exemption; with
+            // `untilSuspended`, any agent's parked run ends the wait.
             return;
           }
           await activeRecord.output._waitUntilFinished().catch(() => {});

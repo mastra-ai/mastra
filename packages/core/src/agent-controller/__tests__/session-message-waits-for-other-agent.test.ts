@@ -73,10 +73,13 @@ const settlesWithin = (promise: Promise<unknown>, ms: number) =>
 /**
  * A session on a thread, plus another agent whose model call waits for
  * `releaseOther()`. With `otherParks`, the other agent then parks on a prompt
- * of its own instead of replying.
+ * of its own instead of replying. With `sharedPubSub`, the other agent uses the
+ * session agent's own pubsub, so both share one thread runtime.
  */
-async function createHarness(id: string, durable: boolean, { otherParks = false } = {}) {
+async function createHarness(id: string, durable: boolean, { otherParks = false, sharedPubSub = false } = {}) {
   const storage = new InMemoryStore();
+  const cache = new InMemoryServerCache();
+  const pubsub = new EventEmitterPubSub();
   const memory = new MockMemory({ storage });
   // What each agent's model was asked, one entry per model call.
   const prompts: string[] = [];
@@ -102,6 +105,7 @@ async function createHarness(id: string, durable: boolean, { otherParks = false 
     id: `${id}-other`,
     name: `${id} other`,
     instructions: 'You check.',
+    ...(sharedPubSub ? { pubsub } : {}),
     memory,
     tools: { requestAccess },
     model: new MastraLanguageModelV2Mock({
@@ -113,8 +117,6 @@ async function createHarness(id: string, durable: boolean, { otherParks = false 
     }),
   });
 
-  const cache = new InMemoryServerCache();
-  const pubsub = new EventEmitterPubSub();
   const agent = durable ? createDurableAgent({ agent: baseAgent, cache, pubsub }) : baseAgent;
   const mastra = new Mastra({
     agents: { [`${id}-agent`]: agent as any, [`${id}-other`]: otherAgent },
@@ -192,6 +194,21 @@ describe.each([false, true])('a message sent while another agent runs on the thr
 
   it('says it was not sent when the other run is parked on a prompt of its own', async () => {
     const h = await createHarness('parked', durable, { otherParks: true });
+    const other = await h.startOther();
+    h.releaseOther();
+    await other.consumeStream();
+    expect(other.status).toBe('suspended');
+
+    expect(await settlesWithin(h.session.sendMessage({ content: 'Are you there?' }), 5_000)).toBe(true);
+
+    expect(h.prompts).toHaveLength(0);
+    expect(h.errors).toEqual([
+      "Your message wasn't sent: another agent's run on this thread is waiting for an answer to its own prompt.",
+    ]);
+  });
+
+  it("says it was not sent when the other run, on the session agent's pubsub, is parked on a prompt", async () => {
+    const h = await createHarness('parked-shared', durable, { otherParks: true, sharedPubSub: true });
     const other = await h.startOther();
     h.releaseOther();
     await other.consumeStream();
