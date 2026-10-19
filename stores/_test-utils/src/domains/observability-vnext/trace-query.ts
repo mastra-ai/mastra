@@ -2088,6 +2088,22 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }],
   },
   {
+    name: 'not eq includes traces whose nullable field is null',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'not', arg: { op: 'eq', left: { path: 'threadId' }, right: { literal: 'thread-1' } } },
+    },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }],
+  },
+  {
+    name: 'not ne excludes traces whose nullable field is null',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'not', arg: { op: 'ne', left: { path: 'threadId' }, right: { literal: 'thread-1' } } },
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
     name: 'in excludes traces whose nullable field is null',
     request: {
       timeRange: fullRange,
