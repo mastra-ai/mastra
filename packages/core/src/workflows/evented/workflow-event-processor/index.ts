@@ -803,6 +803,11 @@ export class WorkflowEventProcessor extends EventProcessor {
             status: 'running',
             payload: existing?.payload ?? parentWorkflow.input?.output ?? {},
             ...(existing ?? {}), // preserve anything else (suspendPayload, etc.)
+            // A child start does not own queued siblings from this potentially stale snapshot.
+            ...(parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!]?.type === 'foreach' &&
+            Array.isArray(existing?.output)
+              ? { output: existing.output.map((value: unknown) => (isQueuedForeachIteration(value) ? null : value)) }
+              : {}),
             metadata: {
               ...(existing?.metadata ?? {}),
               nestedRunId: runId,
@@ -2857,7 +2862,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowName: workflow.id,
         runId,
         stepId: getEntryId(step.step),
-        result: newResult,
+        result: {
+          ...newResult,
+          // Only the coordinator owns queued markers; null leaves persisted siblings unchanged.
+          ...('output' in newResult && Array.isArray(newResult.output)
+            ? { output: newResult.output.map(value => (isQueuedForeachIteration(value) ? null : value)) }
+            : {}),
+        },
         requestContext: withoutAuthToken(requestContext),
         state: currentState,
       });
