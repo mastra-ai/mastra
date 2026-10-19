@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -100,15 +100,9 @@ describe('PayingAccount', () => {
   });
 
   it('stays hidden on a local Factory without sign-in, where only your own credentials exist', async () => {
-    const authAnswered = new Promise<void>(resolve => {
-      server.events.on('response:mocked', ({ request }) => {
-        if (request.url.endsWith('/auth/me')) resolve();
-      });
-    });
-    renderPayingAccount({ draft: true, projectScope: 'factory', authEnabled: false });
+    const { client } = renderPayingAccount({ draft: true, projectScope: 'factory', authEnabled: false });
 
-    await authAnswered;
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(screen.queryByText(/account$/)).not.toBeInTheDocument();
   });
 });
