@@ -47,7 +47,7 @@ export interface DatasetItemsListProps {
 /**
  * Truncate a string to maxLength characters with ellipsis
  */
-function truncateValue(value: DatasetItem['input'] | DatasetItem['groundTruth'], maxLength = 100): string {
+function truncateValue(value: DatasetItem['input'], maxLength = 100): string {
   if (value === undefined || value === null) return '-';
   const parsedString = z.string().safeParse(value);
   const str = parsedString.success ? parsedString.data : JSON.stringify(value);

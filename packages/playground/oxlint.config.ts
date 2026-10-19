@@ -1,5 +1,6 @@
 import { defineConfig } from 'oxlint';
 import rootConfig from '../../oxlint.config.ts';
+import { uiSafetyOverrides } from '../_config/src/oxlint-ui.ts';
 
 // Typography must come from a DS text role (text-title, text-body, text-label…, or <Txt>).
 // Tailwind's own sizes stay defined as a safety net only; the roles live in playground-ui/theme/typography.css.
@@ -175,6 +176,7 @@ export default defineConfig({
     ],
   },
   overrides: [
+    ...uiSafetyOverrides,
     {
       files: ['**/*'],
       rules: { 'mastra/restricted-syntax': ['error', ...restrictedPlaygroundUiBroadImportSelectors] },

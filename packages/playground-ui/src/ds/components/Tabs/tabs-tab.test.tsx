@@ -199,7 +199,7 @@ describe('Tab', () => {
     vi.stubGlobal(
       'ResizeObserver',
       class {
-        constructor(private callback: () => void) {
+        constructor(private readonly callback: () => void) {
           callbacks.add(callback);
         }
         observe() {}
