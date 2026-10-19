@@ -30,6 +30,7 @@ import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
+import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
 
 function createTextModel(text: string) {
   return new MockLanguageModelV2({
@@ -172,6 +173,23 @@ describe('durable agent version pinning across suspend/resume', () => {
     result.cleanup();
   });
 
+  it('hands the tool-call resume marker to the pinned version (#27365)', async () => {
+    const { store, durableAgent, resolveSpy } = setup();
+    const runId = 'version-pin-tool-call-run';
+    await seedSuspendedRun(store, runId, durableAgent.id, { threadId: 't-1', resourceId: 'r-1' }, 'v1');
+
+    // Before, the pinned fork's resume() found the marker still held by this
+    // call, failed with AGENT_RESUME_ALREADY_CLAIMED, and the run fell back to
+    // the current definition.
+    const result = await durableAgent.resume(runId, { approved: true }, { toolCallId: 'call-1' });
+
+    expect(resolveSpy).toHaveBeenCalledTimes(1);
+    const fork = (await resolveSpy.mock.results[0]!.value) as DurableAgent;
+    expect(fork.runRegistry.has(runId)).toBe(true);
+    expect(durableAgent.runRegistry.has(runId)).toBe(false);
+    result.cleanup();
+  });
+
   it('does not resolve a version when the run recorded none', async () => {
     const { store, durableAgent, resolveSpy } = setup();
     const runId = 'no-version-cold-run';
@@ -242,6 +260,93 @@ describe('durable agent version pinning across suspend/resume', () => {
     expect(durableAgent.runRegistry.has(runId)).toBe(true);
     expect(result.runId).toBe(runId);
     result.cleanup();
+  });
+
+  it('resolves output processors from the version pinned to an observed run', async () => {
+    const { store, baseAgent, durableAgent, resolveSpy } = setup();
+    const currentProcessors = vi.spyOn(baseAgent, 'listOutputProcessors').mockResolvedValue([]);
+    const pinnedProcessors = vi.fn(async () => []);
+    resolveSpy.mockImplementationOnce(async (agent, selector) => {
+      const fork = agent.__fork();
+      if ('versionId' in selector && selector.versionId) {
+        fork.__setRawConfig({ resolvedVersionId: selector.versionId });
+      }
+      fork.__markStoredVersionApplied();
+      vi.spyOn(fork, 'listOutputProcessors').mockImplementation(pinnedProcessors);
+      return fork as typeof agent;
+    });
+    const runId = 'version-pin-observe-run';
+    await seedSuspendedRun(
+      store,
+      runId,
+      durableAgent.id,
+      { threadId: 't-observe', resourceId: 'r-observe' },
+      'v1',
+      'running',
+    );
+
+    const result = await durableAgent.observe(runId);
+
+    expect(resolveSpy).toHaveBeenCalledWith(expect.anything(), { versionId: 'v1' });
+    expect(pinnedProcessors).toHaveBeenCalledTimes(1);
+    expect(currentProcessors).not.toHaveBeenCalled();
+    result.detach();
+  });
+
+  it('finishes observation when the final transcript refresh stalls', async () => {
+    vi.useFakeTimers();
+    const { store, durableAgent, mastra } = setup();
+    const runId = 'stalled-observe-refresh-run';
+    await seedSuspendedRun(
+      store,
+      runId,
+      durableAgent.id,
+      { threadId: 't-stalled-observe', resourceId: 'r-stalled-observe' },
+      undefined,
+      'running',
+    );
+    const onFinish = vi.fn();
+    const onError = vi.fn();
+    const result = await durableAgent.observe(runId, { idleTimeoutMs: 20, onFinish, onError });
+    const workflows = (await store.getStore('workflows'))!;
+    let markRefreshStarted!: () => void;
+    const refreshStarted = new Promise<void>(resolve => {
+      markRefreshStarted = resolve;
+    });
+    vi.spyOn(workflows, 'getWorkflowRunById').mockImplementation(async () => {
+      markRefreshStarted();
+      return await new Promise<never>(() => {});
+    });
+    const warn = vi.fn();
+    vi.spyOn(mastra, 'getLogger').mockReturnValue({ warn } as any);
+    const fullOutput = result.output.getFullOutput();
+
+    try {
+      await emitChunkEvent(pubsub, runId, {
+        type: 'step-finish',
+        payload: {
+          stepResult: { reason: 'stop', warnings: [], isContinued: false },
+          output: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      } as any);
+      await refreshStarted;
+      await emitFinishEvent(pubsub, runId, {
+        output: { text: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, steps: [] },
+        stepResult: { reason: 'stop', warnings: [], isContinued: false },
+      });
+
+      await vi.advanceTimersByTimeAsync(20);
+      await fullOutput;
+
+      expect(onFinish).toHaveBeenCalledOnce();
+      expect(onError).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(`[DurableAgent] observe(${runId}) messageList refresh timed out after 20ms`);
+    } finally {
+      result.detach();
+      vi.useRealTimers();
+    }
   });
 });
 

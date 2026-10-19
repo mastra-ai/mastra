@@ -85,8 +85,8 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "keywords": [
     "mastra",
@@ -122,7 +122,6 @@
     "@vitest/ui": "catalog:",
     "ajv": "^8.20.0",
     "arktype": "^2.2.0",
-    "eslint": "^10.7.0",
     "json-schema-traverse": "^1.0.0",
     "tsdown": "0.22.9",
     "typescript": "catalog:",

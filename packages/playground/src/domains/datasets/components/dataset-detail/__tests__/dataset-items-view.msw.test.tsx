@@ -41,7 +41,7 @@ function renderView(initialEntry = `/datasets/${DATASET_ID}`) {
     <TestLinkProvider>
       <LocationProbe />
       <DatasetItemPanelProvider datasetId={DATASET_ID} items={items} isLoadingItems={false}>
-        <DatasetItemsView datasetId={DATASET_ID} belowToolbarSlot={<span>below toolbar slot</span>} />
+        <DatasetItemsView datasetId={DATASET_ID} toolbarActionsSlot={<span>toolbar actions slot</span>} />
       </DatasetItemPanelProvider>
     </TestLinkProvider>,
     { router: { initialEntries: [initialEntry] } },
@@ -93,15 +93,15 @@ describe('DatasetItemsView', () => {
     expect(screen.queryByText('Review')).toBeNull();
   });
 
-  it('renders the below-toolbar slot on its own row, after the toolbar and before the items', async () => {
+  it('renders the toolbar actions slot inside the toolbar, right before the "New item" action', async () => {
     renderView();
-    const firstItem = await screen.findByText('item-a');
+    await screen.findByText('item-a');
 
     const toolbar = screen.getByTestId('dataset-items-toolbar');
-    const below = screen.getByText('below toolbar slot');
-    expect(toolbar.contains(below)).toBe(false);
-    expect(toolbar.compareDocumentPosition(below) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(below.compareDocumentPosition(firstItem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const slot = screen.getByText('toolbar actions slot');
+    const newItem = screen.getByRole('button', { name: 'New item' });
+    expect(toolbar.contains(slot)).toBe(true);
+    expect(slot.compareDocumentPosition(newItem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('does not own the "Experiments" action (it lives in the page header)', async () => {

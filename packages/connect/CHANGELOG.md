@@ -1,5 +1,82 @@
 # @mastra/connect
 
+## 1.1.0-alpha.2
+
+### Minor Changes
+
+- Added a callback form to tools() for per-request options. Pass a function that reads the request context and returns ToolsOptions to vary tool filters and approval policies per request (for example by user role), without losing the snapshot cache: resolutions producing the same options share one cached snapshot with the usual TTL semantics. ([#27160](https://github.com/mastra-ai/mastra/pull/27160))
+
+  **Before** (per-request resolver, re-fetches every request):
+
+  ```ts
+  tools: async ctx => {
+    const role = ctx.requestContext?.get('role');
+    return tools({
+      providers: {
+        linear: role === 'viewer' ? { allowTools: ['linear_list_*'] } : { requireApproval: ['linear_delete_*'] },
+      },
+    })(ctx);
+  };
+  ```
+
+  **After** (one resolver, cache intact):
+
+  ```ts
+  tools: tools(ctx => ({
+    providers: {
+      linear:
+        ctx?.requestContext?.get('role') === 'viewer'
+          ? { allowTools: ['linear_list_*'] }
+          : { requireApproval: ['linear_delete_*'] },
+    },
+  }));
+  ```
+
+### Patch Changes
+
+- **Google Drive** ([#27156](https://github.com/mastra-ai/mastra/pull/27156))
+
+  - Fixed `google_drive_create_folder`, `google_drive_upload_document`, and `google_drive_move_file` failing with 404 errors on shared drives. Agents can now write to team shared drives.
+  - Added `google_drive_export_file` for exporting Docs, Sheets, and Slides to PDF and other formats.
+  - Added `google_drive_list_revisions` for listing a file's revision history.
+
+  ```ts
+  const toolset = await tools({ providers: ['google-drive'] })();
+
+  await toolset.google_drive_export_file.execute({
+    fileId: '1Kj3d86Z-Sfd56YP4dImQ-ggMRyP2QZ_BRO33zOO224c',
+    mimeType: 'application/pdf',
+  });
+  ```
+
+  **Fireflies**
+
+  - Fixed `fireflies_get_transcript` failing validation on every transcript. Fireflies returns numeric `speaker_id`, `start_time`, and `end_time` values that the schema only accepted as strings; the tool now accepts and normalizes them.
+
+- Updated dependencies [[`871f3c8`](https://github.com/mastra-ai/mastra/commit/871f3c801640148cffa09474fc9f9032495ddccf), [`aaedaa6`](https://github.com/mastra-ai/mastra/commit/aaedaa634aa7394789952d4f9fe04b1aec8619a1), [`d8bfd3d`](https://github.com/mastra-ai/mastra/commit/d8bfd3d502dd9952db66f0c4f53cd04f5c8e71ef), [`12991bd`](https://github.com/mastra-ai/mastra/commit/12991bd0945ca36e13b213ebcbfaf0880d04d44d), [`323b021`](https://github.com/mastra-ai/mastra/commit/323b0212bc57c2b9acaed2716812a873c0fa43ee), [`4e44e7f`](https://github.com/mastra-ai/mastra/commit/4e44e7f518debb3b0aebc5ad71ea3e4a3902d8c9), [`3c2c033`](https://github.com/mastra-ai/mastra/commit/3c2c033aa68cd8cd7e4c630abd7f1bfeb440f457), [`12407df`](https://github.com/mastra-ai/mastra/commit/12407df9e6bd2f82cd27533bd4a9aa8057b97f2e), [`6889aa2`](https://github.com/mastra-ai/mastra/commit/6889aa29d661a8892f503e37bc3d8ffe18aa7e37)]:
+  - @mastra/core@1.79.0-alpha.2
+
+## 1.1.0-alpha.1
+
+### Minor Changes
+
+- Added Microsoft Teams as a supported Connect channel. When MASTRA_ENCRYPTION_KEY is unset, the Teams install store is encrypted with a key derived from the platform access token and a warning is logged; projects without a Teams connection are unaffected. ([#27094](https://github.com/mastra-ai/mastra/pull/27094))
+
+### Patch Changes
+
+- Fixed project-level Connect activity showing empty on the Mastra platform. @mastra/connect now sends its configured project id (MASTRA_PROJECT_ID or the projectId option) with every proxied provider request, so the platform can attribute tool and channel activity to the right project. ([#26932](https://github.com/mastra-ai/mastra/pull/26932))
+
+  ```typescript
+  import { tools } from '@mastra/connect';
+
+  // Uses MASTRA_PROJECT_ID by default; pass projectId to override.
+  const agentTools = tools({ projectId: 'proj_123' });
+  ```
+
+- Updated dependencies [[`48bee02`](https://github.com/mastra-ai/mastra/commit/48bee02e1a5cef20f4da67720191d5e85cdca13c), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`1874bf2`](https://github.com/mastra-ai/mastra/commit/1874bf2a5ba304f22ffb93f9ec5a9afea000a5a1), [`8c2d516`](https://github.com/mastra-ai/mastra/commit/8c2d5164714a27e720d898da612da6054a88ef91), [`14b2a7c`](https://github.com/mastra-ai/mastra/commit/14b2a7c56da4329f7fd17738056a081663deed46), [`eb0b702`](https://github.com/mastra-ai/mastra/commit/eb0b702e9939f02073fb1c4dfd7eaa51fde59e0b), [`d93662b`](https://github.com/mastra-ai/mastra/commit/d93662bfee9313c376cff90e910e05ec9b0634ea), [`425d383`](https://github.com/mastra-ai/mastra/commit/425d383d4fb15e55e9491b6bdaebb57f2de7cdc8), [`5d8f8b7`](https://github.com/mastra-ai/mastra/commit/5d8f8b78460350d581e8a92412cdfe88b4ce76bc), [`8c90438`](https://github.com/mastra-ai/mastra/commit/8c90438b404d27593927eccc47616aab4a35006e), [`6dc66e6`](https://github.com/mastra-ai/mastra/commit/6dc66e6c69a5d26cd59349a4741fa58a15edf2b9)]:
+  - @mastra/core@1.79.0-alpha.1
+  - @mastra/teams@0.1.2-alpha.1
+
 ## 1.0.4-alpha.0
 
 ### Patch Changes

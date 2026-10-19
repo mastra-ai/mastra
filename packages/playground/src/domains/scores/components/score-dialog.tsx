@@ -235,7 +235,6 @@ export function ScoreDialog({
         score={score}
         isOpen={datasetDialogOpen && isOpen}
         onClose={() => setDatasetDialogOpen(false)}
-        level={(dialogLevel + 1) as SideDialogRootProps['level']}
       />
     </>
   );

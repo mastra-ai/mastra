@@ -227,6 +227,9 @@ async function emitAgentAudit(
   }
 }
 
+/** Fixed server-side so an agent cannot publish under, and impersonate, another required check. */
+export const FACTORY_TEST_CHECK_NAME = 'Factory Review / tests';
+
 const repositorySchema = z.object({ repository: z.string().trim().min(1).optional() });
 const changeRequestSchema = repositorySchema.extend({
   changeRequestId: z.union([z.string().trim().min(1), z.number().int().positive()]),
@@ -236,10 +239,26 @@ export async function createSourceControlTools({
   requestContext,
   providers,
   audit,
+  testChecksEnabled,
+  selfReviewApprovedHead,
+  boundChangeRequestId,
 }: {
   requestContext: RequestContext;
   providers: readonly SourceControlToolProvider[];
   audit: AuditAgentEmitter;
+  /** Per-project switch for `source_control_publish_test_check`. The host decides the default; Factory projects default to off. */
+  testChecksEnabled?: (input: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
+  /**
+   * Self-review gate for opening a change request. `undefined` means the session
+   * is not gated (no Work item, or its change request predates Self-review);
+   * `null` means Self-review has not approved; a SHA is the approved head.
+   */
+  selfReviewApprovedHead?: () => Promise<string | null | undefined>;
+  /**
+   * The change request a Review-bound session reviews; test checks may only target it.
+   * When provided, sessions that are not Review-bound (it resolves `undefined`) cannot publish.
+   */
+  boundChangeRequestId?: () => Promise<string | undefined>;
 }): Promise<IntegrationTools> {
   if (!requestContext || typeof (requestContext as { get?: unknown }).get !== 'function') return {};
   const controller = requestContext.get('controller') as
@@ -368,8 +387,14 @@ export async function createSourceControlTools({
         body: z.string().optional(),
         draft: z.boolean().optional(),
       }),
-      execute: async input => {
+      execute: async (input, execution) => {
         const target = await targetFor(input);
+        const approvedHead = target.ownRepository ? await selfReviewApprovedHead?.() : undefined;
+        if (approvedHead === null) {
+          throw new Error(
+            'Self-review has not approved this branch. Move the work item to Self-review; the change request opens after it approves.',
+          );
+        }
         const baseBranch = target.ownRepository
           ? target.session.baseBranch
           : (target.projectRepository.branch ?? target.repository.defaultBranch);
@@ -381,6 +406,15 @@ export async function createSourceControlTools({
           headBranch: target.session.branch,
           ...(input.draft !== undefined ? { draft: input.draft } : {}),
         });
+        if (approvedHead !== undefined && created.headSha.toLowerCase() !== approvedHead.toLowerCase()) {
+          await target.provider.versionControl.closePullRequest({
+            ...(await reference(target)),
+            pullRequestId: created.id,
+          });
+          throw new Error(
+            `Self-review approved ${approvedHead}, but the pushed branch is at ${created.headSha}; the change request was closed. Push the approved head, or move the work item back to Self-review to review the new commits.`,
+          );
+        }
         await target.provider.storage.sessionRepositories.upsert({
           sessionId: target.session.sessionId,
           projectRepositoryId: target.projectRepository.id,
@@ -663,6 +697,78 @@ export async function createSourceControlTools({
           });
         }
         return target.provider.versionControl.createReview({ ...base, event: input.event, body: input.body! });
+      },
+    }),
+    source_control_publish_test_check: createTool({
+      id: 'source_control_publish_test_check',
+      description: `Publish the Factory review test result as a "${FACTORY_TEST_CHECK_NAME}" commit check on the change request's current head. Publish "in-progress" before running the test plan and a final status after. Refused when headSha is not the current head. ${repositoryArgument}`,
+      inputSchema: changeRequestSchema.extend({
+        headSha: z
+          .string()
+          .trim()
+          .regex(/^([0-9a-f]{40}|[0-9a-f]{64})$/i, 'headSha must be a full 40- or 64-character commit SHA.'),
+        status: z.enum(['in-progress', 'success', 'failure', 'neutral', 'cancelled', 'skipped']),
+        title: z.string().trim().min(1),
+        summary: z.string().trim().min(1),
+        details: z.string().optional(),
+      }),
+      execute: async input => {
+        const target = await targetFor(input);
+        if (testChecksEnabled) {
+          const connection = await target.provider.storage.connections.get({
+            orgId: target.orgId,
+            id: target.projectRepository.connectionId,
+          });
+          if (
+            connection?.factoryProjectId &&
+            !(await testChecksEnabled({ orgId: target.orgId, factoryProjectId: connection.factoryProjectId }))
+          ) {
+            throw new Error(
+              'Test check publishing is turned off for this Factory project; nothing was published. Report the test results in the test report comment instead.',
+            );
+          }
+        }
+        const publishCommitCheck = target.provider.versionControl.publishCommitCheck;
+        if (!publishCommitCheck) {
+          throw new Error(`${target.provider.id} does not support publishing commit checks; nothing was published.`);
+        }
+        const bound = boundChangeRequestId ? await boundChangeRequestId() : undefined;
+        if (bound === undefined) {
+          throw new Error(
+            'Only a Review session bound to this change request can publish test checks; nothing was published.',
+          );
+        }
+        if (bound !== changeRequestId(input.changeRequestId)) {
+          throw new Error(
+            `This session reviews change request ${bound}, not ${input.changeRequestId}; nothing was published.`,
+          );
+        }
+        const ref = await reference(target);
+        const pullRequest = await target.provider.versionControl.getPullRequest({
+          ...ref,
+          pullRequestId: changeRequestId(input.changeRequestId),
+        });
+        if (!pullRequest || pullRequest.state !== 'open') {
+          throw new Error(`Change request ${input.changeRequestId} is not open; nothing was published.`);
+        }
+        const headSha = input.headSha.toLowerCase();
+        if (pullRequest.headSha.toLowerCase() !== headSha) {
+          throw new Error(
+            `headSha ${headSha} is not the current change-request head ${pullRequest.headSha}. Nothing was published. Re-run the test plan on the current head.`,
+          );
+        }
+        return publishCommitCheck({
+          connection: ref.connection,
+          sourceId: ref.sourceId,
+          actingUserId: ref.actingUserId,
+          headSha,
+          ref: pullRequest.headBranch,
+          name: FACTORY_TEST_CHECK_NAME,
+          status: input.status,
+          title: input.title,
+          summary: input.summary,
+          ...(input.details !== undefined ? { details: input.details } : {}),
+        });
       },
     }),
     source_control_request_reviewers: createTool({

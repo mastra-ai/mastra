@@ -1,4 +1,3 @@
-import { formatDataStreamPart, processDataStream } from '@ai-sdk/ui-utils';
 import { createTool } from '@mastra/core/tools';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v3';
@@ -16,6 +15,7 @@ import type {
   SubscribeAgentThreadParams,
 } from '../types';
 import { MastraClientError } from '../types';
+import { formatDataStreamPart, processDataStream } from '../utils/ai-sdk-v4';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';

@@ -11,7 +11,7 @@ import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
-import { USER_SESSION_BRANCH_PREFIX } from '../session/user-session-branch.js';
+import { userSessionBranch } from '../session/user-session-branch.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type {
@@ -27,6 +27,7 @@ type RouteContext = Context;
 function loose(c: unknown): RouteContext {
   return c as RouteContext;
 }
+
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const MAX_SESSION_OWNER_PROFILES = 100;
@@ -279,7 +280,7 @@ function projectSessionRoutes(
         }
         const normalizedTitle = body.title === undefined ? null : normalizeSessionTitle(body.title as string);
         let branch: string;
-        if (body.branch === undefined) branch = `${USER_SESSION_BRANCH_PREFIX}session-${sessionId}`;
+        if (body.branch === undefined) branch = userSessionBranch(sessionId);
         else if (isValidGitRef(body.branch)) branch = body.branch;
         else return c.json({ error: 'Invalid branch' }, 400);
 

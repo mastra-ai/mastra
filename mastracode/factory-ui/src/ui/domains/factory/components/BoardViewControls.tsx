@@ -90,22 +90,14 @@ export function BoardViewControls({
               </Button>
             )}
             <BoardSortControl value={view.sort} currentUserId={currentUserId} onChange={view.setSort} />
-            {savedViews.applied && (
-              <SegmentedControl
-                aria-label="Layout"
-                size="sm"
-                iconOnly
-                value={view.layout}
-                onValueChange={view.setLayout}
-              >
-                <SegmentedControlItem value="list" aria-label={LAYOUT_LABELS.list} title={LAYOUT_LABELS.list}>
-                  <List aria-hidden />
-                </SegmentedControlItem>
-                <SegmentedControlItem value="board" aria-label={LAYOUT_LABELS.board} title={LAYOUT_LABELS.board}>
-                  <Kanban aria-hidden />
-                </SegmentedControlItem>
-              </SegmentedControl>
-            )}
+            <SegmentedControl aria-label="Layout" size="sm" iconOnly value={view.layout} onValueChange={view.setLayout}>
+              <SegmentedControlItem value="list" aria-label={LAYOUT_LABELS.list} title={LAYOUT_LABELS.list}>
+                <List aria-hidden />
+              </SegmentedControlItem>
+              <SegmentedControlItem value="board" aria-label={LAYOUT_LABELS.board} title={LAYOUT_LABELS.board}>
+                <Kanban aria-hidden />
+              </SegmentedControlItem>
+            </SegmentedControl>
           </div>
         </>
       }

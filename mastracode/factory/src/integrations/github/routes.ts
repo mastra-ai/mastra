@@ -28,7 +28,7 @@ import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
 import { waitForPendingFilesystemCapture } from '../../session/filesystem-capture.js';
 import { normalizeSessionTitle } from '../../session/session-title.js';
-import { USER_SESSION_BRANCH_PREFIX } from '../../session/user-session-branch.js';
+import { userSessionBranch } from '../../session/user-session-branch.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { MemorySettingsStorage } from '../../storage/domains/memory-settings/base.js';
@@ -1396,7 +1396,7 @@ function buildProjectGitRoutes({
         const requestedBranch = body.branch;
         let branch: string;
         if (requestedBranch === undefined) {
-          branch = `${USER_SESSION_BRANCH_PREFIX}session-${sessionId}`;
+          branch = userSessionBranch(sessionId);
         } else if (typeof requestedBranch === 'string' && isValidGitRefSandbox(requestedBranch)) {
           branch = requestedBranch;
         } else {
