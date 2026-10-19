@@ -4,13 +4,26 @@ import { z } from 'zod/v4';
 import type { MCPClient } from '../client/configuration';
 import type { MCPEventsSignalProvider } from './events-signals';
 
+function decodeArguments(value: string): Record<string, unknown> | undefined {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+  } catch {}
+  return undefined;
+}
+
 const targetSchema = z.object({
   server: z.string().min(1).describe('Name of the MCP server, as configured on the client'),
   event: z.string().min(1).describe('Event type name, from mcp_events_list'),
+  // A JSON string rather than a record: OpenAI strict mode forces every object node to
+  // `additionalProperties: false`, which would only ever let the model send `{}`.
   arguments: z
-    .record(z.string(), z.unknown())
+    .string()
+    .refine(value => decodeArguments(value) !== undefined, 'arguments must be a JSON object')
     .optional()
-    .describe("Subscription arguments matching the event's inputSchema"),
+    .describe(
+      'Subscription arguments as a JSON-encoded object matching the event\'s inputSchema, for example {"project":"A"}. Omit if the event takes none.',
+    ),
 });
 
 type ToolError = { isError: true; content: string };
@@ -80,7 +93,11 @@ export function createMCPEventsTools({
         const thread = threadOf(context);
         if (!thread) return NO_MEMORY;
         try {
-          const subscription = await provider.subscribeThread(thread, { server, event, args });
+          const subscription = await provider.subscribeThread(thread, {
+            server,
+            event,
+            args: args === undefined ? undefined : decodeArguments(args),
+          });
           return { subscribed: true, key: subscription.externalResourceId };
         } catch (error) {
           return errorResult(error);
@@ -97,7 +114,13 @@ export function createMCPEventsTools({
         const thread = threadOf(context);
         if (!thread) return NO_MEMORY;
         try {
-          return { unsubscribed: await provider.unsubscribeThread(thread, { server, event, args }) };
+          return {
+            unsubscribed: await provider.unsubscribeThread(thread, {
+              server,
+              event,
+              args: args === undefined ? undefined : decodeArguments(args),
+            }),
+          };
         } catch (error) {
           return errorResult(error);
         }

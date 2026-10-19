@@ -3,13 +3,17 @@ import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { MockMemory } from '@mastra/core/memory';
 import type { ToolExecutionContext } from '@mastra/core/tools';
+import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
+import type { JSONSchema7 } from '@mastra/schema-compat';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { createFakeEventsClient } from './__fixtures__/fake-events-client';
 import { MCPEventsSignalProvider } from './events-signals';
 import type { MCPEventsSignalProviderOptions } from './events-signals';
 
 const thread = { resourceId: 'user-1', threadId: 'thread-1' };
-const target = { server: 'github', event: 'repo.push', arguments: { repo: 'a' } };
+const target = { server: 'github', event: 'repo.push', arguments: '{"repo":"a"}' };
+const targetArgs = { repo: 'a' };
 
 const providers: MCPEventsSignalProvider[] = [];
 
@@ -116,7 +120,7 @@ describe('MCP events tools', () => {
     const toolResults = await stream.toolResults;
 
     expect(toolResults.map(toolResult => toolResult.payload.result)).toEqual([
-      { subscribed: true, key: MCPEventsSignalProvider.key({ ...target, args: target.arguments }) },
+      { subscribed: true, key: MCPEventsSignalProvider.key({ ...target, args: targetArgs }) },
     ]);
     expect(fake.subscriptions).toHaveLength(1);
     expect(fake.subscriptions[0]!.arguments).toEqual({ repo: 'a' });
@@ -179,5 +183,32 @@ describe('MCP events tools', () => {
       content: 'Unknown event "repo.push"',
     });
     expect(provider.subscriptionCount).toBe(0);
+  });
+
+  it('keeps subscription arguments expressible under OpenAI strict mode', async () => {
+    const { tools, subscriptions } = setup(true);
+    for (const tool of [tools.mcp_events_subscribe!, tools.mcp_events_unsubscribe!]) {
+      const strict = prepareJsonSchemaForOpenAIStrictMode(
+        z.toJSONSchema(tool.inputSchema as z.ZodType, { io: 'input' }) as JSONSchema7,
+      );
+      const args = strict.properties!.arguments as JSONSchema7;
+      const types = [args.type, ...(args.anyOf ?? []).map(branch => (branch as JSONSchema7).type)];
+      // A free-form object would be forced to `additionalProperties: false`, leaving only `{}`.
+      expect(types).toContain('string');
+      expect(types).not.toContain('object');
+    }
+
+    await tools.mcp_events_subscribe!.execute!(target, agentContext(thread));
+    expect(subscriptions[0]!.arguments).toEqual(targetArgs);
+  });
+
+  it('rejects arguments that are not a JSON object', async () => {
+    const { tools, subscriptions } = setup(true);
+    for (const value of ['not json', '[1]', '"a"', 'null']) {
+      await expect(
+        tools.mcp_events_subscribe!.execute!({ ...target, arguments: value }, agentContext(thread)),
+      ).resolves.toMatchObject({ error: true, message: expect.stringContaining('arguments must be a JSON object') });
+    }
+    expect(subscriptions).toHaveLength(0);
   });
 });
