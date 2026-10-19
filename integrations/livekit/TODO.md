@@ -22,7 +22,9 @@ intake + service-area check, general callback).
 ## Stable dependency audit (2026-10-15)
 
 The shared-session and transcript work is recovered on `codex/livekit-stable-dependencies`.
-The dependency refresh does not select a 1.0 release or change the public integration API.
+**Release decision, 2026-10-19:** Require Agents and installed LiveKit/Silero plugins `^1.9.3`.
+Their native RTC peer requirement is `^1.1.0`. This raises the supported minimum and is recorded
+as a breaking change. The integration API is unchanged; versioning and publication remain pending.
 Only the LiveKit package's importer and new dependency graph change in the shared lockfile.
 
 | Dependency | Previous installed version | Updated stable version |
@@ -47,7 +49,8 @@ this task does not upgrade or edit core, server, memory, or storage packages.
 - **RTC peer range changes upstream.** Agents/Silero 1.9.3 require RTC `^1.1.0`.
   Update applications that explicitly pin RTC 0.13.x, keeping Agents and plugins on the same
   exact release. RTC's 1.0 release marks it stable; 1.1 adds the RPC interceptor required by Agents.
-  The integration's existing `^1.7.1` peer range remains supported with the matching older RTC.
+  The integration now requires `^1.9.3` for Agents and installed plugins. The previous
+  Agents 1.7.1 / RTC 0.13.x combination is no longer supported for this release.
 - **Token verification requires expiration.** Server SDK 2.19.1 rejects tokens without `exp`.
   The connection route already uses LiveKit's expiring `AccessToken`; a regression assertion
   verifies its signed token with the real `TokenVerifier`.
@@ -72,13 +75,18 @@ this task does not upgrade or edit core, server, memory, or storage packages.
 
 - [x] Latest stable SDK suite: 337 passed; PostgreSQL test skipped pending its release check.
 - [x] Zod 3 compatibility suite: 337 passed; PostgreSQL test skipped.
-- [x] Previous LiveKit 1.7.1 peer suite: 337 passed; PostgreSQL test skipped.
+- [x] Historical check before the minimum was raised: LiveKit 1.7.1 suite passed 337 tests.
+  This records the earlier audit only; it is not a supported dependency combination for this release.
 - [x] ESM, CommonJS, and declarations built; all four entry points imported in both module formats.
 - [x] Package lint and source TypeScript check passed.
 - [x] Packed consumer with published stable core 1.77.0, client-js 1.54.0, Memory 1.37.1,
   and LibSQL 1.26.1: all ESM/CommonJS exports loaded, and a native text session persisted its
   greeting, caller input, and reply through Memory. This does not replace the live audio check.
 - [x] Canonical guide formatting, Remark, and Vale passed; frozen install passed.
+- [x] Required-version check (2026-10-19): npm's strict peer resolver accepts the packed
+  integration with Agents/plugins 1.9.3 and RTC 1.1.0, including installation without the optional
+  plugins. The same older 1.7.1 combination accepted by the previous package is rejected by the
+  new package specifically because its Agents peer requirement is now `^1.9.3`.
 
 The isolated stable consumer reports the existing client-js dependency on older AI SDK utilities
 whose peer range declares Zod 3. The Zod 4 consumer check and both integration Zod suites pass;
