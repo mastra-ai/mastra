@@ -227,6 +227,21 @@ describe('TracesListView — failed row error', () => {
     expect(screen.getByText('AI_APICallError')).not.toBeNull();
   });
 
+  it('keeps the preview and says so when the full error fails to load', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () =>
+        HttpResponse.json({ error: 'Internal Server Error' }, { status: 500 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<TracesListView traces={[failedRow]} onTraceClick={vi.fn()} />);
+
+    await user.hover(screen.getByText(errorPreview));
+
+    expect(await screen.findByText("Couldn't load the full error.")).not.toBeNull();
+    expect(screen.getAllByText(errorPreview)).toHaveLength(2);
+  });
+
   it('copies the error from the card without opening the trace', async () => {
     const user = userEvent.setup();
     const onTraceClick = vi.fn();
