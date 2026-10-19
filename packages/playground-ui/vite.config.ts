@@ -108,6 +108,7 @@ const listFiles = (directory: string, files: string[] = []) => {
 const publishDevBuild = (): Plugin => {
   const emitted = new Map<string, boolean>();
   let outDir = devStagingDir;
+  let failed = false;
 
   return {
     name: 'publish-dev-build',
@@ -116,6 +117,13 @@ const publishDevBuild = (): Plugin => {
     },
     buildStart() {
       emitted.clear();
+      failed = false;
+    },
+    buildEnd(error) {
+      if (error) failed = true;
+    },
+    renderError() {
+      failed = true;
     },
     writeBundle(_options, bundle) {
       Object.values(bundle).forEach(output => {
@@ -125,8 +133,9 @@ const publishDevBuild = (): Plugin => {
       });
     },
     closeBundle() {
-      // Rollup also closes a failed build, which wrote nothing: keep the last good build in `dist`.
-      if (outDir === distDir || emitted.size === 0) return;
+      // Rollup also closes a failed build, even when one format was already written: keep the last good
+      // build in `dist`.
+      if (outDir === distDir || failed || emitted.size === 0) return;
 
       const changed = [...emitted]
         .sort(([, aIsEntry], [, bIsEntry]) => Number(aIsEntry) - Number(bIsEntry))
