@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface DataPanelHeaderProps {
@@ -8,13 +8,12 @@ export interface DataPanelHeaderProps {
 
 export function DataPanelHeader({ className, children }: DataPanelHeaderProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const wrapped = useWrapsMetadata(ref);
+  useWrapMetadataWhenCrowded(ref);
 
   return (
     <div
       ref={ref}
       data-slot="data-panel-header"
-      data-wrapped={wrapped ? '' : undefined}
       className={cn(
         'group/data-panel-header',
         // Same box as the app `Header`. Leading `CloseButton`, then the heading
@@ -24,7 +23,7 @@ export function DataPanelHeader({ className, children }: DataPanelHeaderProps) {
         // `py-1` keeps 28px controls + border within the 40px min height, so the divider
         // lines up with an adjacent app `Header` instead of sitting 1px lower.
         'flex min-h-header-default w-full flex-wrap items-center gap-0.5 px-2 py-1',
-        // Wrapped (see `useWrapsMetadata`): heading and actions share the first row, the metadata
+        // Wrapped (`data-wrapped`, see `useWrapMetadataWhenCrowded`): heading and actions share the first row, the metadata
         // takes a full-width row below them. `HeaderContent`, `Heading` and `Metadata` style themselves.
         'data-wrapped:gap-x-2 data-wrapped:gap-y-0',
         // Bottom border only when something follows the header (i.e. the panel is expanded).
@@ -44,20 +43,19 @@ const PROBE_CLASSES =
   'invisible pointer-events-none absolute top-0 left-0 flex w-max items-center gap-0.5 **:max-w-none! **:flex-none! **:overflow-visible!';
 
 /**
- * Whether the header's metadata should move to its own row: true when the heading, every
- * metadata pill and the actions don't fit side by side. Measured on a hidden copy of the header,
- * again whenever the header resizes or its content changes.
+ * Sets `data-wrapped` on the header while its heading, every metadata pill and the actions don't fit
+ * side by side, so CSS moves the metadata to its own row. Measured on a hidden copy of the header,
+ * again whenever the header resizes or its content changes. Only CSS reads the attribute, so it's
+ * set on the element directly instead of re-rendering the header.
  */
-function useWrapsMetadata(ref: React.RefObject<HTMLDivElement | null>) {
-  const [wrapped, setWrapped] = useState(false);
-
+function useWrapMetadataWhenCrowded(ref: React.RefObject<HTMLDivElement | null>) {
   useEffect(() => {
     const header = ref.current;
     if (!header || typeof ResizeObserver === 'undefined') return;
 
     const measure = () => {
       if (!header.querySelector('[data-slot="data-panel-metadata"]')) {
-        setWrapped(false);
+        header.removeAttribute('data-wrapped');
         return;
       }
       const probe = document.createElement('div');
@@ -70,7 +68,7 @@ function useWrapsMetadata(ref: React.RefObject<HTMLDivElement | null>) {
       const needed =
         probe.getBoundingClientRect().width + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
       probe.remove();
-      setWrapped(needed > header.clientWidth);
+      header.toggleAttribute('data-wrapped', needed > header.clientWidth);
     };
 
     // One check covers a burst of changes; re-queueing on every change could keep pushing it back.
@@ -95,6 +93,4 @@ function useWrapsMetadata(ref: React.RefObject<HTMLDivElement | null>) {
       content.disconnect();
     };
   }, [ref]);
-
-  return wrapped;
 }

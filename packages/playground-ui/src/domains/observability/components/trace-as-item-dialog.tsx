@@ -60,14 +60,11 @@ export function TraceAsItemDialog({
   const spanIdToLoad = spanId ?? rootSpanId;
 
   // Lazy-load the span details when dialog opens and no traceDetails provided
+  const shouldLoadSpan = !externalTraceDetails && isOpen;
   const { data: lazySpanDetail } = useSpanDetail({
-    traceId: !externalTraceDetails && isOpen ? traceId : null,
-    spanId: !externalTraceDetails && isOpen ? spanIdToLoad : null,
-    queryOptions: {
-      enabled:
-        !!(!externalTraceDetails && isOpen ? traceId : null) &&
-        !!(!externalTraceDetails && isOpen ? spanIdToLoad : null),
-    },
+    traceId: shouldLoadSpan ? traceId : undefined,
+    spanId: shouldLoadSpan ? spanIdToLoad : undefined,
+    queryOptions: { enabled: shouldLoadSpan && !!traceId && !!spanIdToLoad },
   });
 
   const traceDetails = externalTraceDetails ?? lazySpanDetail?.span;
