@@ -28,9 +28,9 @@ const REPROCESS_PART_KEY = '__mastraReprocessPart';
 const LINK_PART_ID = 'factory-session-link';
 
 /**
- * Appends a bare `↗` link to the end of the first reply of a new channel
- * session, so the link and the reply are one message and the link trails
- * the text rather than leading it.
+ * Appends an `Open session ↗` link, on its own line, to the end of the first
+ * reply of a new channel session, so the link and the reply are one message
+ * and the link closes the text rather than leading it.
  *
  * "End of the reply" is not `text-end`: a reply with citations is several
  * text blocks (`text … source … text`), each with its own `text-end`. The
@@ -92,7 +92,8 @@ export class FactoryChannelSessionLinkProcessor implements Processor {
 }
 
 function linkSuffix(link: string): string {
-  return ` [${SESSION_LINK_LABEL}](${link})`;
+  // Own paragraph: the link closes the message, it is not part of the last sentence.
+  return `\n\n[${SESSION_LINK_LABEL}](${link})`;
 }
 
 function sessionLinkFromRequest(requestContext: RequestContext): string | undefined {

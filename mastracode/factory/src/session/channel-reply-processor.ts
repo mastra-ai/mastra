@@ -2,7 +2,7 @@ import type { ProcessInputStepArgs, Processor } from '@mastra/core/processors';
 
 const ID = 'factory-channel-reply';
 
-export const SESSION_LINK_LABEL = '↗';
+export const SESSION_LINK_LABEL = 'Open session ↗';
 
 /**
  * Tells the agent how to open a reply when the run came in over a chat

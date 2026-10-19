@@ -14,6 +14,8 @@ import {
 } from './channel-session-link-processor.js';
 
 const LINK = 'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1';
+// Own paragraph, so it closes the message rather than tailing the last sentence.
+const LINK_SUFFIX = `\n\n[Open session ↗](${LINK})`;
 
 function newSessionContext({ factoryProjectId = 'fp-1' as string | null, resourceId = 'us-42' } = {}) {
   const requestContext = new RequestContext();
@@ -102,19 +104,19 @@ describe('FactoryChannelSessionLinkProcessor', () => {
     else process.env.MASTRACODE_PUBLIC_URL = originalPublicUrl;
   });
 
-  it('ends the opener of a new session with a bare ↗ link before the first tool runs, and only once', async () => {
+  it('ends the opener of a new session with an Open session ↗ link before the first tool runs, and only once', async () => {
     const out = await render(newSessionContext(), [
       ...textBlock('On it — ', 'checking.'),
       toolCall(),
       ...textBlock('Done.'),
       stepFinish(),
     ]);
-    expect(texts(out)).toEqual([`On it — checking. [↗](${LINK})`, 'Done.']);
+    expect(texts(out)).toEqual([`On it — checking.${LINK_SUFFIX}`, 'Done.']);
   });
 
   it('ends a reply with no tools with the link at step-finish', async () => {
     const out = await render(newSessionContext(), [...textBlock('All good.'), stepFinish()]);
-    expect(texts(out)).toEqual([`All good. [↗](${LINK})`]);
+    expect(texts(out)).toEqual([`All good.${LINK_SUFFIX}`]);
   });
 
   it('keeps a cited reply (text → source → text) as one post with the link at its end', async () => {
@@ -127,7 +129,7 @@ describe('FactoryChannelSessionLinkProcessor', () => {
       ...textBlock(', then sun.'),
       stepFinish(),
     ]);
-    expect(texts(out)).toEqual([`Expect low clouds, then sun. [↗](${LINK})`]);
+    expect(texts(out)).toEqual([`Expect low clouds, then sun.${LINK_SUFFIX}`]);
   });
 
   it('emits the link as its own text part ahead of the boundary, and downstream processors see both in order', async () => {
@@ -143,7 +145,7 @@ describe('FactoryChannelSessionLinkProcessor', () => {
     expect(out.map(c => c.type)).toEqual(['text-delta', 'text-end', 'text-delta', 'step-finish']);
     // Its own part id, so the saved message carries the link as a separate
     // text part that processOutputStep can drop whole.
-    expect((out[2] as any).payload).toEqual({ id: 'factory-session-link', text: ` [↗](${LINK})` });
+    expect((out[2] as any).payload).toEqual({ id: 'factory-session-link', text: LINK_SUFFIX });
     // The stashed boundary is re-driven through the whole chain, not just
     // emitted — guards the mirrored REPROCESS_PART_KEY against a core rename.
     expect(seen).toEqual(['text-delta', 'text-end', 'text-delta', 'step-finish']);
@@ -161,13 +163,15 @@ describe('FactoryChannelSessionLinkProcessor', () => {
       stepFinish(),
     ]);
     expect(texts(out)).toEqual([
-      `Hi [↗](https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')})`,
+      `Hi\n\n[Open session ↗](https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')})`,
     ]);
   });
 
   it('a session with no factory links to the factory-agnostic redirect', async () => {
     const out = await render(newSessionContext({ factoryProjectId: null }), [...textBlock('Hi'), stepFinish()]);
-    expect(texts(out)).toEqual(['Hi [↗](https://mc.example.com/threads/uuid-thread-1?resourceId=us-42)']);
+    expect(texts(out)).toEqual([
+      'Hi\n\n[Open session ↗](https://mc.example.com/threads/uuid-thread-1?resourceId=us-42)',
+    ]);
   });
 
   it('leaves follow-up runs and non-channel runs alone', async () => {
@@ -189,7 +193,7 @@ describe('FactoryChannelSessionLinkProcessor', () => {
     const first = toolCall();
     const out = await render(newSessionContext(), [first, stepFinish(), ...textBlock('Done'), stepFinish()]);
     expect(out[0]).toBe(first);
-    expect(texts(out)).toEqual([`Done [↗](${LINK})`]);
+    expect(texts(out)).toEqual([`Done${LINK_SUFFIX}`]);
   });
 
   describe('through a real agent run', () => {
@@ -219,7 +223,7 @@ describe('FactoryChannelSessionLinkProcessor', () => {
 
     it('streams the link to the channel but keeps it out of the saved message', async () => {
       const { streamed, saved } = await runNewSession(newSessionContext());
-      expect(streamed).toBe(`On it. [↗](${LINK})`);
+      expect(streamed).toBe(`On it.${LINK_SUFFIX}`);
       // The link is a Slack display detail. Persisted, the model would see
       // its own `[↗](…)` on every later turn and the web transcript would
       // show a self-link — so it must be gone before memory saves the reply.
