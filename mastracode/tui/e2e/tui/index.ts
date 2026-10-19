@@ -181,6 +181,7 @@ import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
 import { pruneCommandScenario } from './prune-command.js';
 import { pruneRenderStateScenario } from './prune-render-state.js';
+import { reloadCommandScenario } from './reload-command.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
 import { resourceidDriftPromptAcceptScenario } from './resourceid-drift-prompt-accept.js';
@@ -362,6 +363,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'mcp-oauth-authenticate': mcpOauthAuthenticateScenario,
   'mcp-oauth-cancel': mcpOauthCancelScenario,
   'mcp-reload-config': mcpReloadConfigScenario,
+  'reload-command': reloadCommandScenario,
   'mcp-selector-reconnect': mcpSelectorReconnectScenario,
   'mcp-server-config': mcpServerConfigScenario,
   'mcp-skipped-validation': mcpSkippedValidationScenario,

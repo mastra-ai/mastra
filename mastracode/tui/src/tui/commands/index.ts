@@ -11,6 +11,7 @@ export { handleNameCommand } from './name.js';
 export { handleExitCommand } from './exit.js';
 export { handleHooksCommand } from './hooks.js';
 export { handleMcpCommand } from './mcp.js';
+export { handleReloadCommand } from './reload.js';
 export { handleModeCommand } from './mode.js';
 export { handleSkillCommand, handleSkillsCommand } from './skills.js';
 export { handleNewCommand } from './new.js';
