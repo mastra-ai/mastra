@@ -700,7 +700,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
         throw new HTTPException(400, {
           message: `skillPath must be within the allowed directory: ${allowedBase}`,
           code: SERVER_ERROR_CODES.SKILL_PATH_OUTSIDE_ALLOWED_DIRECTORY,
-          metadata: { allowedBase },
+          metadata: { skillPath },
         });
       }
 
@@ -712,7 +712,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
           throw new HTTPException(400, {
             message: `skillPath is not a directory: ${resolvedPath}`,
             code: SERVER_ERROR_CODES.SKILL_PATH_NOT_DIRECTORY,
-            metadata: { skillPath: resolvedPath },
+            metadata: { skillPath },
           });
         }
       } catch (err) {
@@ -721,7 +721,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
           throw new HTTPException(400, {
             message: `skillPath does not exist on the server filesystem: ${resolvedPath}. Create the skill directory (with a SKILL.md) before publishing, or use a skill that was materialized to disk.`,
             code: SERVER_ERROR_CODES.SKILL_PATH_NOT_FOUND,
-            metadata: { skillPath: resolvedPath },
+            metadata: { skillPath },
           });
         }
         throw err;
@@ -733,7 +733,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
           throw new HTTPException(400, {
             message: `skillPath is missing SKILL.md: ${resolvedPath}`,
             code: SERVER_ERROR_CODES.SKILL_PATH_MISSING_SKILL_FILE,
-            metadata: { skillPath: resolvedPath },
+            metadata: { skillPath },
           });
         }
         throw err;

@@ -179,7 +179,7 @@ describe('onError hook integration tests', () => {
       expect(response.status).toBe(413);
       expect(await response.json()).toEqual({
         error: 'Request body too large',
-        problem: { code: 'REQUEST_BODY_TOO_LARGE', metadata: { maxBodySize: 10 } },
+        problem: { code: 'REQUEST_BODY_TOO_LARGE' },
       });
     });
 

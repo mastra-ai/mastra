@@ -213,7 +213,7 @@ function buildSkillInstallPath(filesystem: WorkspaceFilesystem, safeSkillId: str
         throw new HTTPException(400, {
           message: `Mount "${requestedMount}" not found. Available mounts: ${filesystem.mountPaths.join(', ')}`,
           code: SERVER_ERROR_CODES.WORKSPACE_MOUNT_NOT_FOUND,
-          metadata: { mount: requestedMount, availableMounts: filesystem.mountPaths },
+          metadata: { mount: requestedMount },
         });
       }
       if (mountFs.readOnly) {
@@ -1741,7 +1741,7 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
         throw new HTTPException(404, {
           message: `Skill "${skillName}" not found at ${skillPath}`,
           code: SERVER_ERROR_CODES.WORKSPACE_SKILL_NOT_FOUND,
-          metadata: { skillName, skillPath },
+          metadata: { skillName },
         });
       }
 

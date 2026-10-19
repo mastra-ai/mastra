@@ -748,7 +748,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             if (error.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
               return reply.status(413).send({
                 error: 'Request body too large',
-                problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE, metadata: { maxBodySize: maxSize } },
+                problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE },
               });
             }
             throw error;

@@ -117,11 +117,7 @@ export class MastraExceptionFilter implements ExceptionFilter {
 
     const bodyParserType = typeof exception === 'object' && exception !== null ? (exception as any).type : undefined;
     if (bodyParserType === 'entity.too.large') {
-      const limit = (exception as any).limit;
-      return {
-        code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
-        ...(typeof limit === 'number' ? { metadata: { maxBodySize: limit } } : {}),
-      };
+      return { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE };
     }
     if (bodyParserType === 'entity.parse.failed') {
       return { code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON };

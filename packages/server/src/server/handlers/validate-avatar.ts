@@ -51,7 +51,7 @@ export function validateMetadataAvatarUrl(metadata: Record<string, unknown> | un
     throw new HTTPException(413, {
       message: `metadata.avatarUrl exceeds ${AVATAR_MAX_BYTES}-byte limit (got ${byteLength})`,
       code: SERVER_ERROR_CODES.AVATAR_TOO_LARGE,
-      metadata: { maxBytes: AVATAR_MAX_BYTES, byteLength },
+      metadata: { byteLength },
     });
   }
 }

@@ -581,7 +581,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         if (exceedsDeclaredLimit || exceedsStreamedJsonLimit) {
           let errorResponse: unknown = {
             error: 'Request body too large',
-            problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE, metadata: { maxBodySize: maxSize } },
+            problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE },
           };
           if (route.maxBodySize === undefined && this.bodyLimitOptions) {
             try {

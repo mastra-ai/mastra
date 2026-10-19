@@ -321,7 +321,7 @@ describe('Hono Server Adapter', () => {
     expect(response.headers.get('content-type')).toContain('application/json');
     await expect(response.json()).resolves.toEqual({
       error: 'Request body too large',
-      problem: { code: 'REQUEST_BODY_TOO_LARGE', metadata: { maxBodySize: 256 * 1024 } },
+      problem: { code: 'REQUEST_BODY_TOO_LARGE' },
     });
     expect(getStorage).not.toHaveBeenCalled();
   });
@@ -368,7 +368,7 @@ describe('Hono Server Adapter', () => {
 
       expect(await expectDeclaredError(response, 413)).toEqual({
         error: 'Request body too large',
-        problem: { code: 'REQUEST_BODY_TOO_LARGE', metadata: { maxBodySize: 256 * 1024 } },
+        problem: { code: 'REQUEST_BODY_TOO_LARGE' },
       });
       expect(getStorage).not.toHaveBeenCalled();
     });

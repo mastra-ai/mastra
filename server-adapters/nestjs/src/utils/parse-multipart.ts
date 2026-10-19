@@ -59,7 +59,7 @@ export function parseMultipartFormData(
                 message: `Invalid file type: ${mimetype}. Allowed types: ${options.allowedMimeTypes.join(', ')}`,
                 problem: {
                   code: SERVER_ERROR_CODES.REQUEST_FILE_TYPE_NOT_ALLOWED,
-                  metadata: { mimetype, allowedMimeTypes: options.allowedMimeTypes },
+                  metadata: { mimetype },
                 },
               }),
             );
@@ -80,10 +80,7 @@ export function parseMultipartFormData(
           reject(
             new PayloadTooLargeException({
               message: `File size limit exceeded${maxSize ? ` (max: ${formatBytes(maxSize)})` : ''}`,
-              problem: {
-                code: SERVER_ERROR_CODES.REQUEST_FILE_TOO_LARGE,
-                ...(maxSize ? { metadata: { maxFileSize: maxSize } } : {}),
-              },
+              problem: { code: SERVER_ERROR_CODES.REQUEST_FILE_TOO_LARGE },
             }),
           );
         });
