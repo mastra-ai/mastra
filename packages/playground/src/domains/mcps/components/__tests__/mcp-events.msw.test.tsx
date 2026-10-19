@@ -234,9 +234,12 @@ describe('MCP event drawer', () => {
 
       const pollButton = await screen.findByRole('button', { name: 'Poll once' });
       expect(screen.queryByRole('button', { name: 'Start' })).toBeNull();
+      expect(screen.getByRole('status').textContent).toContain('Not polled yet');
       fireEvent.click(pollButton);
 
       await waitFor(() => expect(occurrenceIds()).toHaveLength(3));
+      expect(screen.getByRole('status').textContent).toContain('Polled');
+      expect(screen.getByRole('status').textContent).not.toContain('Not polled yet');
       expect(occurrenceIds()[0]).toContain('build-2');
       expect(occurrenceIds()[1]).toContain('build-1');
       expect(occurrenceIds()[2]).toBe(GAP);

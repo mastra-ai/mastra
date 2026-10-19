@@ -6,7 +6,7 @@ import { eventRequestErrorMessage } from './use-mcp-server-events';
 /** Occurrences kept on screen; older ones drop off the end. */
 export const MAX_FEED_ITEMS = 200;
 
-export type EventFeedStatus = 'idle' | 'connecting' | 'live' | 'polling' | 'stopped' | 'error';
+export type EventFeedStatus = 'idle' | 'connecting' | 'live' | 'polling' | 'polled' | 'stopped' | 'error';
 
 /** An occurrence, or a marker that events before it may have been skipped. Newest first. */
 export type EventFeedItem =
@@ -134,7 +134,7 @@ export function useMcpEventFeed(serverId: string, eventName: string) {
       if (result.truncated) dispatch({ type: 'gap' });
       dispatch({ type: 'occurrences', occurrences: result.events });
       setCursor(result.cursor);
-      dispatch({ type: 'status', status: 'idle' });
+      dispatch({ type: 'status', status: 'polled' });
     } catch (error) {
       dispatch({ type: 'error', message: eventRequestErrorMessage(error) });
     }

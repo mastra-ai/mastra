@@ -14,6 +14,7 @@ const STATUS_LABELS: Record<Exclude<EventFeedStatus, 'live'>, string> = {
   idle: 'Not listening',
   connecting: 'Connecting…',
   polling: 'Polling…',
+  polled: 'Polled',
   stopped: 'Stopped',
   error: 'Failed',
 };
