@@ -8,11 +8,6 @@
         "type": "toggle"
       }
     ],
-    "minimaxai/minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
     "zai-org/glm-5.2": [
       {
         "type": "toggle"
@@ -20,6 +15,11 @@
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "minimaxai/minimax-m3": [
+      {
+        "type": "toggle"
       }
     ],
     "moonshotai/kimi-k2.6": [

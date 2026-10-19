@@ -22,10 +22,10 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-flash-latest": [
+    "moonshotai/kimi-k3": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "deepseek/deepseek-v4-pro": [
@@ -40,10 +40,10 @@
         "values": ["high", "max"]
       }
     ],
-    "moonshotai/kimi-k3": [
+    "deepseek/deepseek-v4-flash-latest": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["high", "max"]
       }
     ]
   }
