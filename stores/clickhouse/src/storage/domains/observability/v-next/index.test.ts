@@ -22,6 +22,8 @@ import {
   TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
   TRACE_AGGREGATE_VERSION_CONFORMANCE_CASES,
   TRACE_AGGREGATE_VERSION_FIXTURE_DATA,
+  TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_YEAR_FIXTURE_DATA,
   traceAggregateResponseMismatch,
   writeTraceAggregateFixture,
   writeTraceQueryFixture,
@@ -7437,6 +7439,100 @@ describe('ObservabilityStorageClickhouseVNext root versions without background m
         expect(traceAggregateResponseMismatch(response, testCase), testCase.name).toBeNull();
       }
     });
+  });
+});
+
+describe('ObservabilityStorageClickhouseVNext aggregateTraces over a 365-day window', () => {
+  const connection = {
+    url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+    username: process.env.CLICKHOUSE_USERNAME || 'default',
+    password: process.env.CLICKHOUSE_PASSWORD || 'password',
+  };
+  let storage: ObservabilityStorageClickhouseVNext;
+
+  beforeAll(async () => {
+    storage = new ObservabilityStorageClickhouseVNext(connection);
+    await storage.init();
+  });
+
+  afterAll(async () => {
+    await storage.dangerouslyClearAll();
+  });
+
+  describe('written once', () => {
+    beforeAll(async () => {
+      await storage.dangerouslyClearAll();
+      await writeTraceQueryFixture(
+        storage as unknown as ObservabilityStorage,
+        TRACE_AGGREGATE_YEAR_FIXTURE_DATA,
+        'completion-only',
+      );
+    });
+
+    it.each(TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      'matches the reference evaluator: %s',
+      async (_name, testCase) => {
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await storage.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
+  });
+
+  // Every root lands twice in separate parts and merges are stopped, as after an exporter retry
+  // that background merges have not collapsed yet. Results must not depend on those merges.
+  describe('written twice with merges stopped', () => {
+    let client: ReturnType<typeof createClient>;
+
+    beforeAll(async () => {
+      await storage.dangerouslyClearAll();
+      client = createClient(connection);
+      await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+      // The completion-only writer keeps one version per root, so the superseded `beta-07`
+      // version is written on its own first, as an earlier export that a later one replaced.
+      const stale = TRACE_AGGREGATE_YEAR_FIXTURE_DATA.spans.filter(
+        span => span.traceId === 'beta-07' && span.entityName === 'gamma',
+      );
+      expect(stale).toHaveLength(1);
+      await writeTraceQueryFixture(
+        storage as unknown as ObservabilityStorage,
+        { spans: stale, scores: [], feedback: [] },
+        'completion-only',
+      );
+      for (let copy = 0; copy < 2; copy += 1) {
+        await writeTraceQueryFixture(
+          storage as unknown as ObservabilityStorage,
+          TRACE_AGGREGATE_YEAR_FIXTURE_DATA,
+          'completion-only',
+        );
+      }
+    });
+
+    afterAll(async () => {
+      await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+      await client.close();
+    });
+
+    it('keeps every physical copy, including the superseded version', async () => {
+      // 43 traces: the 41 in the window plus the two boundary decoys, each twice, plus the
+      // superseded `beta-07` version.
+      const [counts] = await (
+        await client.query({
+          query: `SELECT toUInt32(count()) AS rows, toUInt32(uniqExact(traceId)) AS traces FROM ${TABLE_TRACE_ROOTS}`,
+          format: 'JSONEachRow',
+        })
+      ).json<{ rows: number; traces: number }>();
+      expect(counts).toEqual({ rows: 87, traces: 43 });
+    });
+
+    it.each(TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      'matches the reference evaluator: %s',
+      async (_name, testCase) => {
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await storage.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
   });
 });
 

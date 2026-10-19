@@ -1069,7 +1069,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               output: {
                 text: finalText,
                 usage: state.accumulatedUsage,
-                steps,
+                // Saved with the run, so keep tool outputs compacted; the stream adapter expands them.
+                steps: state.accumulatedSteps,
               },
               state: state.state,
             };
