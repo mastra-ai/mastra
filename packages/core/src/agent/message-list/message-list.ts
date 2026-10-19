@@ -460,7 +460,6 @@ export class MessageList {
       metadata: signal.metadata,
       author: signal.author,
       providerOptions: signal.providerOptions,
-      escapeContents: signal.escapeContents,
       createdAt,
       acceptedAt,
     };

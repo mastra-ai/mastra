@@ -215,34 +215,9 @@ The model receives the signal as context like this:
 <notification source="github" pr="123">PR #123 has a new review comment from User X about the API surface.</notification>
 ```
 
+When Mastra wraps a signal in its tag, it XML-escapes the `contents` and attribute values, so `&`, `<` and `>` reach the model as `&amp;`, `&lt;` and `&gt;`. This stops signal text from opening or closing tags.
+
 Use XML-safe `tagName` and attribute names. They can contain letters, numbers, periods, hyphens, and the underscore character (`_`). They must start with a letter or underscore.
-
-#### Content escaping
-
-Mastra XML-escapes the contents of every signal it wraps in a tag, so `&`, `<`, and `>` reach the model as `&amp;`, `&lt;`, and `&gt;`. This stops signal contents from adding or closing tags.
-
-When your server builds the contents itself, for example skill instructions that contain shell commands or markup, set `escapeContents: false` to send them as written:
-
-```typescript title="src/mastra/signals.ts"
-agent.sendSignal(
-  {
-    type: 'reactive',
-    tagName: 'skill',
-    attributes: { name: 'release' },
-    contents: 'Run `pnpm build && pnpm test 2>&1`.',
-    escapeContents: false,
-  },
-  { resourceId: 'user_123', threadId: 'thread_456' },
-)
-```
-
-The model receives:
-
-```xml
-<skill name="release">Run `pnpm build && pnpm test 2>&1`.</skill>
-```
-
-Mastra still escapes a closing tag that matches the signal's own tag (here `</skill>`) and still escapes attributes. The setting is stored with the signal, so later turns render it the same way. Signals sent through the HTTP API or `@mastra/client-js` can't set `escapeContents` and are always escaped.
 
 #### Storage support
 

@@ -286,7 +286,6 @@ interface DispatcherSession extends SkillSession {
       type: 'user' | 'reactive';
       tagName: string;
       attributes?: { name: string };
-      escapeContents?: false;
       contents: string;
     },
     options: { requestContext: RequestContext; requireDelivery?: boolean },
@@ -991,8 +990,6 @@ export class FactoryDecisionDispatcher {
                   type: 'reactive' as const,
                   tagName: 'skill',
                   attributes: { name: resolved.skillName },
-                  // Factory builds these contents itself; send them as written, like TUI `/skill`.
-                  escapeContents: false,
                 }
               : { type: 'user' as const, tagName: 'user' };
           // The feed read is async storage I/O; the card can move while it runs.

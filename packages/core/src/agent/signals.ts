@@ -62,14 +62,6 @@ type AgentSignalInputBase = {
    * message (also visible to UI consumers via `useChat` message metadata).
    */
   providerOptions?: MastraProviderMetadata;
-  /**
-   * Whether `contents` is XML-escaped when the signal is wrapped in its tag for the model.
-   * Defaults to `true`. Set `false` only for trusted, server-built contents (for example skill
-   * instructions) that should reach the model as written. A literal closing tag for the signal
-   * (such as `</skill>`) is still escaped so contents cannot end the tag early.
-   * Signals sent over HTTP or the client SDK cannot set this.
-   */
-  escapeContents?: boolean;
 };
 
 export type AgentSignalInput =
@@ -113,7 +105,6 @@ export type AgentSignalDataPart = {
     author?: MessageAuthor;
     providerOptions?: MastraProviderMetadata;
     transient?: boolean;
-    escapeContents?: false;
   };
   transient: true;
 };
@@ -277,18 +268,13 @@ function signalAttributesToXml(attributes?: AgentSignalAttributes): string {
 }
 
 export function signalToXmlMarkup(
-  signal: Pick<AgentSignalInput, 'type' | 'tagName' | 'attributes' | 'escapeContents'> & { contents?: string },
+  signal: Pick<AgentSignalInput, 'type' | 'tagName' | 'attributes'> & { contents?: string },
 ): string {
   const tagName = signal.tagName ?? normalizeSignalType(signal).tagName;
   assertXmlName(tagName, 'tag name');
   const attributesXml = signalAttributesToXml(signal.attributes);
   if (!signal.contents) return `<${tagName}${attributesXml} />`;
-  // XML allows whitespace before an end tag's `>`, so `</skill >` closes the tag too.
-  const body =
-    signal.escapeContents === false
-      ? signal.contents.replace(new RegExp(`</${tagName.replaceAll('.', '\\.')}\\s*>`, 'g'), escapeXml)
-      : escapeXml(signal.contents);
-  return `<${tagName}${attributesXml}>${body}</${tagName}>`;
+  return `<${tagName}${attributesXml}>${escapeXml(signal.contents)}</${tagName}>`;
 }
 
 // Recover legacy metadata.signal.contents shapes (pre-narrowing) into the current
@@ -472,7 +458,7 @@ function hasMeaningfulAttributes(attributes?: AgentSignalAttributes): boolean {
 // a self-closing marker as a synthetic first part so attributes still surface alongside the
 // file/image payload on the same turn.
 function injectMarkerInline(
-  signal: Pick<AgentSignalInput, 'type' | 'tagName' | 'attributes' | 'escapeContents'>,
+  signal: Pick<AgentSignalInput, 'type' | 'tagName' | 'attributes'>,
   parts: SignalPart[],
 ): SignalPart[] {
   let wrapped = false;
@@ -496,7 +482,7 @@ function injectMarkerInline(
 // (a prompt turn the model sees, not a signal row). The XML wrapper carries the attributes
 // inline so there's no metadata.signal here.
 function signalToLLMMessage(
-  signal: Pick<AgentSignalInput, 'type' | 'tagName' | 'attributes' | 'providerOptions' | 'escapeContents'>,
+  signal: Pick<AgentSignalInput, 'type' | 'tagName' | 'attributes' | 'providerOptions'>,
   parts: SignalPart[],
 ): UserModelMessage {
   const isUserMessage = signal.type === 'user';
@@ -541,7 +527,6 @@ function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: Sig
       ...(signal.author ? { author: signal.author } : {}),
       ...(signal.providerOptions ? { providerOptions: signal.providerOptions } : {}),
       ...(signal.transient ? { transient: true } : {}),
-      ...(signal.escapeContents === false ? { escapeContents: false as const } : {}),
     },
     transient: true,
   };
@@ -592,7 +577,6 @@ function signalToDBMessage(
           ...(signal.metadata ? { metadata: signal.metadata } : {}),
           ...(signal.author ? { author: signal.author } : {}),
           ...(signal.transient ? { transient: true } : {}),
-          ...(signal.escapeContents === false ? { escapeContents: false } : {}),
         },
       },
     },
@@ -736,7 +720,6 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
       providerMetadata && typeof providerMetadata === 'object' && !Array.isArray(providerMetadata)
         ? (providerMetadata as MastraProviderMetadata)
         : undefined,
-    escapeContents: signalMetadata?.escapeContents === false ? (false as const) : undefined,
   };
 
   if (type === 'state' && signalMetadata?.transient !== undefined) {
