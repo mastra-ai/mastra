@@ -60,6 +60,21 @@ describe('BillingIllustration', () => {
     expect(markup).toContain('group-focus-within/billing-illustration:[translate:0_-3px]');
   });
 
+  it('draws the credits coin stacks with one coin that drops in on hover or focus', () => {
+    const markup = draw('credits');
+    const [, classes = '', coin = ''] =
+      markup.match(/<g class="([^"]*opacity-0[^"]*)"[^>]*>((?:(?!<\/g>).)*)<\/g>/) ?? [];
+    const translates = classes.split(' ').filter(name => name.includes('translate'));
+
+    expect(markup).toMatch(/^<svg[^>]* aria-hidden="true"/);
+    expect(markup).toContain('data-illustration="credits"');
+    expect(coin.match(/<path /g)).toHaveLength(2);
+    expect(classes).toContain('group-hover/billing-illustration:opacity-100');
+    expect(classes).toContain('group-focus-within/billing-illustration:opacity-100');
+    expect(translates.length).toBeGreaterThan(0);
+    expect(translates.every(name => name.startsWith('motion-safe:'))).toBe(true);
+  });
+
   it('gives every instance its own mask so a table of projects draws each thumbnail', () => {
     const markup = renderToStaticMarkup(
       <>
