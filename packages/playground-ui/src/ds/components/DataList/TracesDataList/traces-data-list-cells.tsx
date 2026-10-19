@@ -69,16 +69,31 @@ export function TracesDataListInputCell({ input }: TracesDataListInputCellProps)
 
 export interface TracesDataListOutputCellProps {
   output?: string;
-  /** Shown instead of `output`, in the error color, when `status` is `'error'`. */
+  /** Shown instead of `output`, in the error color, when `status` is `'error'`. Hovering it shows it in a tooltip. */
   error?: string;
   status?: string | null;
 }
 
 export function TracesDataListOutputCell({ output, error, status }: TracesDataListOutputCellProps) {
   const failed = status === 'error';
-  const errorColor = failed ? 'text-destructive-foreground' : undefined;
+
+  if (failed && error) {
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <DataListTextCell font="mono" className="text-destructive-foreground">
+              {error}
+            </DataListTextCell>
+          }
+        />
+        <TooltipContent className="max-w-sm text-pretty wrap-break-word">{error}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
   return (
-    <DataListTextCell font="mono" className={errorColor}>
+    <DataListTextCell font="mono" className={failed ? 'text-destructive-foreground' : undefined}>
       {(failed ? error : output) || '-'}
     </DataListTextCell>
   );

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { TracesListView } from '../traces-list-view';
@@ -187,6 +188,37 @@ describe('TracesListView — type column', () => {
       expect(screen.getByText('weatherAgent')).not.toBeNull();
       expect(screen.getByText('fetchWeather')).not.toBeNull();
     });
+  });
+});
+
+describe('TracesListView — output column', () => {
+  const error = 'This request requires more credits, or fewer max_tokens. You requested up to 4096 tokens.';
+
+  it('shows the error in a tooltip when hovering a failed row', async () => {
+    render(
+      <TracesListView
+        traces={[makeTrace({ traceId: 'trace-failed', status: 'error', errorPreview: error })]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    await userEvent.hover(screen.getByText(error));
+
+    expect((await screen.findByRole('tooltip')).textContent).toBe(error);
+  });
+
+  it('shows no tooltip over the output of a successful row', async () => {
+    render(
+      <TracesListView
+        traces={[makeTrace({ traceId: 'trace-ok', status: 'success', outputPreview: 'Sunny, 22°C' })]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    await userEvent.hover(screen.getByText('Sunny, 22°C'));
+
+    await expect(screen.findByRole('tooltip')).rejects.toThrow();
   });
 });
 
