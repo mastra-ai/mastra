@@ -1061,6 +1061,7 @@ LIMIT 1`,
         'trace-aggregate',
         'span-query',
         'span-query-context-fields',
+        'thread-query-rows',
       ]);
     });
 
@@ -1089,6 +1090,7 @@ LIMIT 1`,
           'trace-aggregate',
           'span-query',
           'span-query-context-fields',
+          'thread-query-rows',
         ]);
       } finally {
         coreFeatures.add('observability-delta-polling');

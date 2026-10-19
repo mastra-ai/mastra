@@ -1239,3 +1239,10 @@ export async function queryThreads(
 export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate, offset: number): SqlFragment {
   return compileScalarPredicate(predicate, SPAN_QUERY_FIELDS, offset);
 }
+
+export function compileThreadQueryPredicate(predicate: TrustedTraceQueryScalarPredicate, offset: number): SqlFragment {
+  const fields = Object.fromEntries(
+    Object.keys(coreStorage.THREAD_QUERY_FIELD_REGISTRY).map(field => [field, `s."${field}"`]),
+  );
+  return compileScalarPredicate(predicate, fields, offset);
+}
