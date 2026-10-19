@@ -268,6 +268,8 @@ export class ReflectorRunner {
    */
   private readonly syncReflectionSuppression = new Map<string, number>();
 
+  private readonly trackBackgroundWork?: (work: Promise<unknown>) => void;
+
   constructor(opts: {
     reflectionConfig: ResolvedReflectionConfig;
     observationConfig: ResolvedObservationConfig;
@@ -293,6 +295,8 @@ export class ReflectorRunner {
     memory?: Memory;
     onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
     hooks?: ObserveTransformHooks;
+    /** Registers background work so `settled()` can join it. */
+    trackBackgroundWork?: (work: Promise<unknown>) => void;
   }) {
     this.reflectionConfig = opts.reflectionConfig;
     this.observationConfig = opts.observationConfig;
@@ -309,6 +313,7 @@ export class ReflectorRunner {
     this.memory = opts.memory;
     this.onReflectionCommitted = opts.onReflectionCommitted;
     this.hooks = opts.hooks;
+    this.trackBackgroundWork = opts.trackBackgroundWork;
   }
 
   __registerMastra(mastra: Mastra): void {
@@ -716,11 +721,12 @@ export class ReflectorRunner {
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, observationTokens);
 
     registerOp(record.id, 'bufferingReflection');
-    this.storage.setBufferingReflectionFlag(record.id, true).catch(err => {
+    const flagSet = this.storage.setBufferingReflectionFlag(record.id, true).catch(err => {
       omError('[OM] Failed to set buffering reflection flag', err);
     });
 
     const asyncOp = (async () => {
+      await flagSet;
       let outcome:
         | {
             usage?: ObserveHookUsage;
@@ -783,13 +789,14 @@ export class ReflectorRunner {
 
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
         unregisterOp(record.id, 'bufferingReflection');
-        this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
+        await this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
           omError('[OM] Failed to clear buffering reflection flag', err);
         });
       }
     })();
 
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, asyncOp);
+    this.trackBackgroundWork?.(asyncOp);
   }
 
   /**
