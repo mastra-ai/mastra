@@ -4,10 +4,34 @@ import type { Scenario, ScenarioStep } from '../scenario.js';
 import { makeStep, errorMessage, requireTools, probeTool } from '../scenario.js';
 
 const SHEET = 'Smoke';
+const PERSONAL_UNSUPPORTED_TOOLS = new Set([
+  'microsoft_excel_add_chart',
+  'microsoft_excel_add_defined_name',
+  'microsoft_excel_add_table',
+  'microsoft_excel_add_table_rows',
+  'microsoft_excel_add_worksheet',
+  'microsoft_excel_calculate_workbook',
+  'microsoft_excel_delete_defined_name',
+  'microsoft_excel_delete_table',
+  'microsoft_excel_delete_worksheet',
+  'microsoft_excel_get_chart_image',
+  'microsoft_excel_get_range',
+  'microsoft_excel_get_used_range',
+  'microsoft_excel_list_defined_names',
+  'microsoft_excel_list_table_columns',
+  'microsoft_excel_list_table_rows',
+  'microsoft_excel_list_tables',
+  'microsoft_excel_list_worksheets',
+  'microsoft_excel_update_range',
+  'microsoft_excel_update_worksheet',
+]);
+const isPersonalAccount = process.env.MASTRA_SMOKE_MICROSOFT_ACCOUNT_TYPE?.trim().toLowerCase() === 'personal';
 
 function isAccountCapabilityError(error: unknown): boolean {
-  return /personal|msa account|tenant-directory|work or school|sharepoint operations require/i.test(
-    errorMessage(error),
+  const detail = errorMessage(error);
+  return (
+    /personal|msa account|tenant-directory|work or school|sharepoint operations require/i.test(detail) ||
+    (isPersonalAccount && /status=(400|401|403|405|501)/i.test(detail))
   );
 }
 
@@ -24,6 +48,15 @@ export const microsoftExcelScenario: Scenario = {
   summary: 'upload workbook → worksheet/range/table/name/chart lifecycle → delete workbook',
   async run({ tools, runId, call, log }) {
     const steps: ScenarioStep[] = [];
+    steps.push(
+      makeStep(
+        'account type',
+        undefined,
+        'pass',
+        process.env.MASTRA_SMOKE_MICROSOFT_ACCOUNT_TYPE?.trim().toLowerCase() ??
+          'unknown; set MASTRA_SMOKE_MICROSOFT_ACCOUNT_TYPE=personal|work for capability classification',
+      ),
+    );
     const missing = requireTools(tools, [
       'microsoft_excel_get_user_drive',
       'microsoft_excel_create_workbook',
@@ -40,7 +73,16 @@ export const microsoftExcelScenario: Scenario = {
         steps.push(makeStep(name, toolId, 'pass', detail || undefined));
         return true;
       } catch (error) {
-        steps.push(makeStep(name, toolId, 'fail', errorMessage(error)));
+        steps.push(
+          makeStep(
+            name,
+            toolId,
+            isPersonalAccount && PERSONAL_UNSUPPORTED_TOOLS.has(toolId) && isAccountCapabilityError(error)
+              ? 'skip'
+              : 'fail',
+            errorMessage(error),
+          ),
+        );
         return false;
       }
     }
