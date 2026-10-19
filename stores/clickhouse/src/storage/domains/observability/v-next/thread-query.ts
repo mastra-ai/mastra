@@ -146,7 +146,9 @@ export function compileClickHouseThreadRowsQuery(
   // Select one root per logical trace before applying thread identity or time filters.
   // Malformed extra roots can disagree on thread/time; they must not qualify a thread.
   // Use the earliest-started root, then the lowest spanId, consistently across stores.
-  // Retried copies are immutable. queryTraces has a separate, order-dependent rule.
+  // Within that root, prefer the completed copy: a pending write encodes endedAt
+  // as startedAt and can lack threadId. Equal-time completion must win that tie too.
+  // queryTraces has a separate, order-dependent rule.
   const rootDataFields = [
     'threadId',
     'spanId',
@@ -164,7 +166,8 @@ export function compileClickHouseThreadRowsQuery(
   const sortedRoots = `roots AS (
     SELECT organizationId, traceId, ${rootDataFields.map(field => `${rootExpression(field)} AS ${field}`).join(', ')}
     FROM ${TABLE_TRACE_ROOTS} ${scope.length || strategy === 'candidates' ? `WHERE ${[...scope, ...(strategy === 'candidates' ? [candidateTracesFilter] : [])].join(' AND ')}` : ''}
-    ORDER BY organizationId, traceId, startedAt ASC, spanId, dedupeKey LIMIT 1 BY organizationId, traceId
+    ORDER BY organizationId, traceId, startedAt ASC, spanId, endedAt DESC, isNotNull(threadId) DESC, dedupeKey
+    LIMIT 1 BY organizationId, traceId
   )`;
   const query = `WITH ${strategy === 'candidates' ? `${candidateCtes(scope, from, to, plan)}, ` : ''}${sortedRoots}, grouped AS (
     SELECT organizationId, threadId, min(startedAt) AS firstActivity, max(endedAt) AS lastActivity,
@@ -277,7 +280,8 @@ export async function queryThreadRows(client: ClickHouseClient, plan: TrustedThr
         query: `SELECT organizationId, traceId, spanId, startedAt, endedAt, spanType,
       ${contextFields.join(', ')}, if(spanType = 'agent_run', timeToFirstChunkMs, NULL) AS timeToFirstChunkMs,
       if(isNull(error), 'success', 'error') AS status, ${PREVIEW_COLUMNS.join(', ')}
-      FROM ${TABLE_TRACE_ROOTS} WHERE ${rootWhere} LIMIT 1 BY organizationId, traceId, spanId`,
+      FROM ${TABLE_TRACE_ROOTS} WHERE ${rootWhere}
+      ORDER BY isNotNull(threadId) DESC LIMIT 1 BY organizationId, traceId, spanId`,
         query_params: { roots: keys(batch) },
       })),
     );
@@ -287,7 +291,7 @@ export async function queryThreadRows(client: ClickHouseClient, plan: TrustedThr
   for (const batch of batches(missing, 32)) {
     const payloads = await run<Root & Record<string, unknown>>({
       query: `SELECT organizationId, traceId, spanId, input, output, error FROM ${TABLE_TRACE_ROOTS}
-        WHERE ${rootWhere} LIMIT 1 BY organizationId, traceId, spanId`,
+        WHERE ${rootWhere} ORDER BY isNotNull(threadId) DESC LIMIT 1 BY organizationId, traceId, spanId`,
       query_params: { roots: keys(batch) },
     });
     for (const payload of payloads) {
