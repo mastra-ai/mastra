@@ -98,6 +98,13 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ message: 'see attached', files });
   });
 
+  it('sends a message bound to an exact thread', async () => {
+    mockJson({ ok: true });
+    await client.getAgentController('code').session('user-1').sendMessage('hello', { threadId: 'factory-session-1' });
+    const [, init] = lastCall();
+    expect(JSON.parse(init.body as string)).toEqual({ message: 'hello', threadId: 'factory-session-1' });
+  });
+
   it('steers and follows up with file attachments', async () => {
     const session = client.getAgentController('code').session('user-1');
     const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
@@ -265,6 +272,16 @@ describe('AgentController Resource', () => {
     const [url, init] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/model');
     expect(JSON.parse(init.body as string)).toEqual({ modelId: 'openai/gpt-5.5', thinkingLevel: 'off' });
+  });
+
+  it('switches a model on an exact thread', async () => {
+    mockJson({ ok: true });
+    await client
+      .getAgentController('code')
+      .session('user-1')
+      .switchModel('openai/gpt-5.5', { threadId: 'factory-session-1' });
+    const [, init] = lastCall();
+    expect(JSON.parse(init.body as string)).toEqual({ modelId: 'openai/gpt-5.5', threadId: 'factory-session-1' });
   });
 
   it('lists modes and threads, and switches thread', async () => {

@@ -145,9 +145,10 @@ export function useHandoffPrompt(): void {
     thinkingLevel,
   ]);
 
-  // The send and model routes resolve the session without a thread id. Sending
-  // before session init binds the session thread would persist the prompt to a
-  // random-id thread this page never reads, so the network calls wait for it.
+  // The network calls wait for session init to bind the session thread: init
+  // also sets the session's project tags and state, which a send that created
+  // the session would skip. The calls still name the thread so a send can never
+  // land on a random-id thread this page does not read.
   // No deps: it must also run in the same commit the first effect queues in.
   useEffect(() => {
     const handoff = queued.current;
@@ -171,11 +172,15 @@ export function useHandoffPrompt(): void {
     queued.current = null;
     void (async () => {
       if (modelId) {
-        await switchModel({ modelId, thinkingLevel }).catch((error: unknown) =>
+        await switchModel({ modelId, thinkingLevel, threadId: sessionThreadId }).catch((error: unknown) =>
           pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
         );
       }
-      await sendMessage(outgoing.length ? { text: prompt, files: outgoing } : prompt);
+      await sendMessage({
+        text: prompt,
+        ...(outgoing.length ? { files: outgoing } : {}),
+        ...(sessionThreadId ? { threadId: sessionThreadId } : {}),
+      });
       clearPendingHandoff(resourceId);
     })().catch(error => {
       const reason = error instanceof Error ? error.message : 'The message could not be sent.';

@@ -700,10 +700,13 @@ export class AgentControllerSession extends BaseResource {
    * Pass a structured message to attach files (e.g. pasted images) as base64-encoded data:
    * `sendMessage({ content: 'What is in this image?', files })`.
    * Pass `options.requestContext` to merge custom context into the run's request context.
+   * Pass `options.threadId` when this may be the first request to reach the session
+   * (e.g. while `create({ threadId })` is still in flight): the session binds to
+   * that exact thread before sending instead of a new random-id thread.
    */
   async sendMessage(
     message: string | { content: string; files?: Array<{ data: string; mediaType: string; filename?: string }> },
-    options?: AgentControllerRequestOptions,
+    options?: AgentControllerRequestOptions & { threadId?: string },
   ): Promise<void> {
     const { content, files } = typeof message === 'string' ? { content: message, files: undefined } : message;
     const requestContext = parseClientRequestContext(options?.requestContext);
@@ -713,6 +716,7 @@ export class AgentControllerSession extends BaseResource {
         message: content,
         ...(files?.length ? { files } : {}),
         ...(requestContext ? { requestContext } : {}),
+        ...(options?.threadId ? { threadId: options.threadId } : {}),
       },
     });
   }
@@ -808,14 +812,20 @@ export class AgentControllerSession extends BaseResource {
   /**
    * Switch the session model and persist it to the active thread. When
    * `thinkingLevel` is provided it is applied and persisted with the model.
+   * Pass `threadId` to bind the session to that exact thread first, as with
+   * `sendMessage`.
    */
   async switchModel(
     modelId: string,
-    { thinkingLevel }: { thinkingLevel?: AgentControllerThinkingLevel } = {},
+    { thinkingLevel, threadId }: { thinkingLevel?: AgentControllerThinkingLevel; threadId?: string } = {},
   ): Promise<void> {
     await this.request(this.url(`${this.base()}/model`), {
       method: 'POST',
-      body: thinkingLevel !== undefined ? { modelId, thinkingLevel } : { modelId },
+      body: {
+        modelId,
+        ...(thinkingLevel !== undefined ? { thinkingLevel } : {}),
+        ...(threadId ? { threadId } : {}),
+      },
     });
   }
 

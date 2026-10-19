@@ -11,11 +11,11 @@ import type { ScenarioContext } from './scenario-runner';
  * First prompt of a new user session (Factory UI draft → thread handoff).
  *
  * The page owns a session whose thread id is its session id. Session init binds
- * that thread with `create({ threadId })`, but the send-message and model routes
- * resolve the session without a thread id. This scenario drives the real
- * client → Hono → @mastra/server → AgentController stack in the order the
- * handoff now uses (send waits for init to bind), and reads the session thread
- * with a fresh client, the way a page refresh does.
+ * that thread with `create({ threadId })`. A send or model switch that reaches
+ * the server first must bind the same thread, or the prompt lands on a stray
+ * random-id thread the page never reads. These scenarios drive the real
+ * client → Hono → @mastra/server → AgentController stack and read the session
+ * thread with a fresh client, the way a page refresh does.
  */
 
 const PROMPT = 'First message of a new session';
@@ -56,6 +56,29 @@ describe('web scenario: first message handoff', () => {
         await session.sendMessage(PROMPT);
 
         await expect.poll(() => reloadSessionThread(ctx, sessionId), { timeout: 5000 }).toContain(PROMPT);
+        const threads = await session.listThreads();
+        expect(threads.map(thread => thread.id)).toEqual([sessionId]);
+      },
+    });
+  });
+
+  it('persists the first prompt to the session thread when the send reaches the server before init', async () => {
+    await runScenario({
+      name: 'first-message-handoff-send-first',
+      description: 'The first send arrives before init binds the session thread.',
+      aimockFixture: 'first-message-handoff.json',
+      server: { memory: true },
+      run: async ctx => {
+        const sessionId = randomUUID();
+        const session = pageSession(ctx, sessionId);
+
+        await session.sendMessage(PROMPT, { threadId: sessionId });
+        await expect.poll(() => reloadSessionThread(ctx, sessionId), { timeout: 5000 }).toContain(PROMPT);
+
+        // Init lands late; it must keep the session on the thread holding the prompt.
+        const created = await session.create({ threadId: sessionId });
+        expect(created.threadId).toBe(sessionId);
+        expect(await reloadSessionThread(ctx, sessionId)).toContain(PROMPT);
         const threads = await session.listThreads();
         expect(threads.map(thread => thread.id)).toEqual([sessionId]);
       },

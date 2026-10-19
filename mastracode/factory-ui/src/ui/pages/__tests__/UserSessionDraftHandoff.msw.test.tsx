@@ -40,6 +40,8 @@ interface DraftRoute {
   bindingsBeforePrompt: string[];
   /** Thread-agnostic writes that reached the server before session init bound the session thread. */
   unboundWrites: string[];
+  /** Thread each model/message write names, in order. */
+  writeThreads: string[];
   finishWorkspace: () => void;
 }
 
@@ -77,6 +79,7 @@ function stubDraftRoute({
     bindings: [],
     bindingsBeforePrompt: [],
     unboundWrites: [],
+    writeThreads: [],
     finishWorkspace: () => releaseWorkspace(),
   };
 
@@ -176,6 +179,7 @@ function stubDraftRoute({
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/model`, async ({ request }) => {
       if (!sessionBound) route.unboundWrites.push('model');
       const body = await request.json();
+      route.writeThreads.push(readBody(body, 'threadId'));
       const thinkingLevel = readBody(body, 'thinkingLevel');
       const thinkingSuffix = thinkingLevel ? ` thinking:${thinkingLevel}` : '';
       route.bindings.push(`model:${readBody(body, 'modelId')}${thinkingSuffix}`);
@@ -184,7 +188,9 @@ function stubDraftRoute({
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/messages`, async ({ request }) => {
       if (!sessionBound) route.unboundWrites.push('message');
       route.bindingsBeforePrompt = [...route.bindings];
-      route.posted.push(readSentMessage(await request.json()));
+      const body = await request.json();
+      route.writeThreads.push(readBody(body, 'threadId'));
+      route.posted.push(readSentMessage(body));
       await workspaceReady;
       return HttpResponse.json({ ok: true });
     }),
@@ -236,6 +242,7 @@ describe('a user session draft on the real thread route', () => {
     await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
     expect(route.bindingsBeforePrompt).toEqual(['model:openai/gpt-4o-mini']);
     expect(route.unboundWrites).toEqual([]);
+    expect(route.writeThreads).toEqual([DRAFT_SESSION_ID, DRAFT_SESSION_ID]);
     await waitForMutationsIdle(client);
     expect(route.posted).toEqual(['fix the login bug']);
   });

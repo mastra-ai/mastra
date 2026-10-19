@@ -276,6 +276,48 @@ describe('agent-controller routes', () => {
       } as any);
       expect(res).toEqual({ ok: true });
     });
+
+    // A client can send before its exact-thread session create lands (e.g. a
+    // page sending its first prompt while session init is in flight). The send
+    // must bind the session to the requested thread, not a new random one that
+    // the later create would switch away from, stranding the message.
+    it('binds a send that creates the session to the requested thread', async () => {
+      const controller = mastra.getAgentController('code')!;
+      const sendMessage = vi.fn(async () => {});
+      controller.onSessionCreated(
+        session => {
+          vi.spyOn(session, 'sendMessage').mockImplementation(async () => {
+            sendMessage(session.thread.getId());
+          });
+        },
+        { blocking: true },
+      );
+
+      await SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        message: 'hello',
+        threadId: 'factory-session-1',
+      } as any);
+      const created = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        threadId: 'factory-session-1',
+      } as any)) as { threadId?: string };
+
+      expect(sendMessage).toHaveBeenCalledWith('factory-session-1');
+      expect(created.threadId).toBe('factory-session-1');
+      const session = (await controller.getSessionByResource('user-1'))!;
+      expect((await session.thread.list()).map(thread => thread.id)).toEqual(['factory-session-1']);
+    });
+
+    it('rejects an empty thread id', () => {
+      const schema = SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.bodySchema!;
+      expect(schema.safeParse({ message: 'hello', threadId: '' }).success).toBe(false);
+      expect(schema.safeParse({ message: 'hello', threadId: 't-1' }).success).toBe(true);
+    });
   });
 
   // The messages/steer/follow-up/tool-suspension routes ack immediately and let
@@ -1689,6 +1731,32 @@ describe('agent-controller routes', () => {
         resourceId: 'user-1',
       } as any);
       expect(state).toMatchObject({ modelId: 'openai/gpt-5.5', settings: { thinkingLevel: 'high' } });
+    });
+
+    it('persists a switch that creates the session to the requested thread', async () => {
+      await SWITCH_AGENT_CONTROLLER_MODEL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        modelId: 'openai/gpt-5.5',
+        threadId: 'factory-session-1',
+      } as any);
+      const created = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        threadId: 'factory-session-1',
+      } as any)) as { threadId?: string };
+
+      expect(created.threadId).toBe('factory-session-1');
+      const state = await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any);
+      expect(state).toMatchObject({ threadId: 'factory-session-1', modelId: 'openai/gpt-5.5' });
+      const session = (await mastra.getAgentController('code')!.getSessionByResource('user-1'))!;
+      expect((await session.thread.list()).map(thread => thread.id)).toEqual(['factory-session-1']);
     });
 
     it.each([undefined, 'high'] as const)(
