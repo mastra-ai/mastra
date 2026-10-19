@@ -491,11 +491,11 @@ export class Memory extends MastraMemory {
    * await store.close();
    * ```
    */
-  override async settled(): Promise<void> {
+  override async settled(scope?: { threadId?: string | null; resourceId?: string | null }): Promise<void> {
     await this.pendingVectorCleanup;
     // Only join an engine that already exists — never instantiate one just to drain it.
     const engine = this._omEngine ? await this._omEngine : this._omEngineInstance;
-    await engine?.settled();
+    await engine?.settled(scope);
     // Observational-memory cycles can start further vector cleanup; drain once more.
     await this.pendingVectorCleanup;
   }
