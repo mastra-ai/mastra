@@ -3546,6 +3546,57 @@ export const API_ROUTE_METADATA = {
       "listProperty": "contents"
     }
   },
+  "GET /mcp/:serverId/events": {
+    "method": "GET",
+    "path": "/mcp/:serverId/events",
+    "pathParams": [
+      "serverId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "events"
+    }
+  },
+  "POST /mcp/:serverId/events/:eventName/poll": {
+    "method": "POST",
+    "path": "/mcp/:serverId/events/:eventName/poll",
+    "pathParams": [
+      "serverId",
+      "eventName"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "arguments",
+      "cursor",
+      "maxEvents"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /mcp/:serverId/events/:eventName/emit": {
+    "method": "POST",
+    "path": "/mcp/:serverId/events/:eventName/emit",
+    "pathParams": [
+      "serverId",
+      "eventName"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "data"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /stored/agents": {
     "method": "GET",
     "path": "/stored/agents",

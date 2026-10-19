@@ -1,6 +1,10 @@
 import { MastraError } from '@mastra/core/error';
+import type { Mastra } from '@mastra/core/mastra';
+import { MCP_SERVER_EVENT_ERROR_IDS } from '@mastra/core/mcp';
 import type {
   MCPServerBase as MastraMCPServerImplementation,
+  MCPServerEventStreamFrame,
+  MCPServerEventsInspector,
   MCPToolExecutionResultV2,
   ServerInfo,
 } from '@mastra/core/mcp';
@@ -21,6 +25,14 @@ import {
   readResourceBodySchema,
   readResourceResponseSchema,
   listResourcesResponseSchema,
+  mcpServerEventPathParams,
+  listMcpServerEventsResponseSchema,
+  pollMcpServerEventBodySchema,
+  pollMcpServerEventResponseSchema,
+  streamMcpServerEventBodySchema,
+  mcpServerEventStreamFrameSchema,
+  emitMcpServerEventBodySchema,
+  emitMcpServerEventResponseSchema,
 } from '../schemas/mcp';
 import type { MCPServerTransport } from '../schemas/mcp';
 import type { ServerContext } from '../server-adapter';
@@ -42,6 +54,7 @@ function hasSSETransport(server: MastraMCPServerImplementation): boolean {
 export interface MCPServerInfoResponse extends ServerInfo {
   /** Endpoints served under `/mcp/:serverId`; 2026-07-28 servers speak Streamable HTTP only. */
   transports: MCPServerTransport[];
+  events_capability?: boolean;
 }
 
 function transportsOf(server: MastraMCPServerImplementation): MCPServerTransport[] {
@@ -120,6 +133,7 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
     const serverInfoList: MCPServerInfoResponse[] = paginatedServers.map(server => ({
       ...server.getServerInfo(),
       transports: transportsOf(server),
+      ...eventsCapabilityOf(server),
     }));
 
     return {
@@ -152,7 +166,11 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
       throw new HTTPException(404, { message: `MCP server with ID '${id}' not found` });
     }
 
-    const serverDetail = { ...server.getServerDetail(), transports: transportsOf(server) };
+    const serverDetail = {
+      ...server.getServerDetail(),
+      transports: transportsOf(server),
+      ...eventsCapabilityOf(server),
+    };
 
     // If a specific version was requested, check if it matches
     if (version && serverDetail.version_detail.version !== version) {
@@ -363,6 +381,237 @@ export const READ_MCP_SERVER_RESOURCE_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Resource '${uri}' not found on server '${serverId}'` });
       }
       throw error;
+    }
+  },
+});
+
+// ============================================================================
+// MCP Event Routes (experimental; used by Studio)
+// ============================================================================
+
+/** Present only for servers that declare event types, so older responses stay unchanged. */
+function eventsCapabilityOf(server: MastraMCPServerImplementation): { events_capability?: true } {
+  const events = typeof server.getEventsInfo === 'function' ? server.getEventsInfo()?.events : undefined;
+  return events && events.length > 0 ? { events_capability: true } : {};
+}
+
+function isTestEmitEnabled(): boolean {
+  return process.env.MASTRA_DEV === 'true';
+}
+
+function getEventsServer(mastra: Mastra | undefined, serverId: string): MastraMCPServerImplementation {
+  if (!mastra || typeof mastra.getMCPServerById !== 'function') {
+    throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
+  }
+  const server = mastra.getMCPServerById(serverId);
+  if (!server) {
+    throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
+  }
+  return server;
+}
+
+function getEventsInspector(server: MastraMCPServerImplementation): MCPServerEventsInspector {
+  const inspector = typeof server.getEventsInspector === 'function' ? server.getEventsInspector() : undefined;
+  if (!inspector) throw new HTTPException(404, { message: 'Event not found' });
+  return inspector;
+}
+
+const EVENT_ERROR_RESPONSES: Record<string, { status: 400 | 404; message: string }> = {
+  [MCP_SERVER_EVENT_ERROR_IDS.unknownEvent]: { status: 404, message: 'Event not found' },
+  [MCP_SERVER_EVENT_ERROR_IDS.unsupportedDelivery]: {
+    status: 400,
+    message: 'This event does not support streaming; poll it instead',
+  },
+  [MCP_SERVER_EVENT_ERROR_IDS.invalidArguments]: { status: 400, message: 'Invalid event arguments' },
+  [MCP_SERVER_EVENT_ERROR_IDS.notEmittable]: {
+    status: 400,
+    message: 'This event is fed by a poll source and cannot be emitted',
+  },
+  [MCP_SERVER_EVENT_ERROR_IDS.invalidPayload]: { status: 400, message: 'Invalid event data' },
+};
+
+/**
+ * Maps event errors to generic HTTP errors. The details (which can come from a poll
+ * source or an upstream API) are only logged, never returned.
+ */
+function toEventsHttpError(error: unknown, mastra: Mastra | undefined, context: string): HTTPException {
+  if (error instanceof HTTPException) return error;
+  const known = error instanceof MastraError ? EVENT_ERROR_RESPONSES[error.id] : undefined;
+  if (known) return new HTTPException(known.status, { message: known.message });
+  mastra?.getLogger()?.error(`MCP event request failed: ${context}`, { error });
+  return new HTTPException(500, { message: 'Event request failed' });
+}
+
+export const LIST_MCP_SERVER_EVENTS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/mcp/:serverId/events',
+  responseType: 'json',
+  pathParamSchema: mcpServerIdPathParams,
+  responseSchema: listMcpServerEventsResponseSchema,
+  summary: 'List MCP server events',
+  description: 'Returns the event types the MCP server declares (experimental)',
+  tags: ['MCP'],
+  requiresAuth: true,
+  handler: async ({ mastra, serverId }: ServerContext & { serverId: string }) => {
+    const server = getEventsServer(mastra, serverId);
+    const events = typeof server.getEventsInfo === 'function' ? (server.getEventsInfo()?.events ?? []) : [];
+    return { events, testEmit: isTestEmitEnabled() };
+  },
+});
+
+export const POLL_MCP_SERVER_EVENT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/mcp/:serverId/events/:eventName/poll',
+  responseType: 'json',
+  pathParamSchema: mcpServerEventPathParams,
+  bodySchema: pollMcpServerEventBodySchema,
+  responseSchema: pollMcpServerEventResponseSchema,
+  summary: 'Poll an MCP server event',
+  description: 'Reads occurrences of an event type, like the events/poll MCP request (experimental)',
+  tags: ['MCP'],
+  requiresAuth: true,
+  handler: async ({
+    mastra,
+    serverId,
+    eventName,
+    arguments: args,
+    cursor,
+    maxEvents,
+    requestContext,
+    abortSignal,
+  }: ServerContext & {
+    serverId: string;
+    eventName: string;
+    arguments?: Record<string, unknown>;
+    cursor?: string | null;
+    maxEvents?: number;
+  }) => {
+    const inspector = getEventsInspector(getEventsServer(mastra, serverId));
+    try {
+      return await inspector.poll(
+        eventName,
+        { arguments: args, cursor, maxEvents },
+        { requestContext, signal: abortSignal },
+      );
+    } catch (error) {
+      throw toEventsHttpError(error, mastra, `poll ${serverId}/${eventName}`);
+    }
+  },
+});
+
+export const STREAM_MCP_SERVER_EVENT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/mcp/:serverId/events/:eventName/stream',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  sseFlushOnConnect: true,
+  pathParamSchema: mcpServerEventPathParams,
+  bodySchema: streamMcpServerEventBodySchema,
+  responseSchema: mcpServerEventStreamFrameSchema,
+  summary: 'Stream an MCP server event',
+  description:
+    'Streams occurrences of an event type as server-sent events, like the events/stream MCP request (experimental)',
+  tags: ['MCP', 'Streaming'],
+  requiresAuth: true,
+  handler: async ({
+    mastra,
+    serverId,
+    eventName,
+    arguments: args,
+    cursor,
+    requestContext,
+    abortSignal,
+  }: ServerContext & {
+    serverId: string;
+    eventName: string;
+    arguments?: Record<string, unknown>;
+    cursor?: string | null;
+  }) => {
+    const inspector = getEventsInspector(getEventsServer(mastra, serverId));
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    if (abortSignal?.aborted) abort();
+    else abortSignal?.addEventListener('abort', abort, { once: true });
+
+    // Frames sent before the stream's `start` runs are buffered here.
+    const buffered: MCPServerEventStreamFrame[] = [];
+    let sink: ReadableStreamDefaultController<MCPServerEventStreamFrame> | undefined;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      abortSignal?.removeEventListener('abort', abort);
+      abort();
+      try {
+        sink?.close();
+      } catch {
+        // Already closed or cancelled by the client.
+      }
+    };
+
+    let closed: Promise<void>;
+    try {
+      ({ closed } = await inspector.stream(
+        eventName,
+        { arguments: args, cursor },
+        {
+          signal: controller.signal,
+          requestContext,
+          onFrame: frame => {
+            if (done) return;
+            if (sink) sink.enqueue(frame);
+            else buffered.push(frame);
+            if (frame.type === 'terminated') finish();
+          },
+        },
+      ));
+    } catch (error) {
+      finish();
+      throw toEventsHttpError(error, mastra, `stream ${serverId}/${eventName}`);
+    }
+    void closed.then(finish);
+
+    return new ReadableStream<MCPServerEventStreamFrame>({
+      start(streamController) {
+        if (done) {
+          for (const frame of buffered.splice(0)) streamController.enqueue(frame);
+          streamController.close();
+          return;
+        }
+        sink = streamController;
+        for (const frame of buffered.splice(0)) streamController.enqueue(frame);
+      },
+      cancel() {
+        finish();
+      },
+    });
+  },
+});
+
+export const EMIT_MCP_SERVER_EVENT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/mcp/:serverId/events/:eventName/emit',
+  responseType: 'json',
+  pathParamSchema: mcpServerEventPathParams,
+  bodySchema: emitMcpServerEventBodySchema,
+  responseSchema: emitMcpServerEventResponseSchema,
+  summary: 'Send a test MCP server event',
+  description:
+    'Emits a test occurrence of an emit-fed event type. Only served under `mastra dev`; otherwise 404 (experimental)',
+  tags: ['MCP'],
+  requiresAuth: true,
+  handler: async ({
+    mastra,
+    serverId,
+    eventName,
+    data,
+  }: ServerContext & { serverId: string; eventName: string; data: Record<string, unknown> }) => {
+    if (!isTestEmitEnabled()) throw new HTTPException(404, { message: 'Not Found' });
+    const inspector = getEventsInspector(getEventsServer(mastra, serverId));
+    try {
+      return { occurrence: await inspector.emit(eventName, data) };
+    } catch (error) {
+      throw toEventsHttpError(error, mastra, `emit ${serverId}/${eventName}`);
     }
   },
 });
