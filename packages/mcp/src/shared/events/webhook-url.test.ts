@@ -62,6 +62,9 @@ describe('isGloballyRoutableAddress', () => {
     ['2001::1', 'Teredo / IETF protocol assignments'],
     ['3fff::1', 'documentation'],
     ['100::1', 'discard-only'],
+    ['100:0:0:1::1', 'dummy prefix'],
+    ['5f00::1', 'SRv6 SIDs'],
+    ['5f00:ffff:ffff::1', 'SRv6 SIDs (end of block)'],
     ['64:ff9b:1::1', 'local-use NAT64'],
     ['::ffff:127.0.0.1', 'IPv4-mapped loopback'],
     ['::ffff:7f00:1', 'IPv4-mapped loopback (hex)'],
@@ -91,6 +94,10 @@ describe('isGloballyRoutableAddress', () => {
     ['223.255.255.255'],
     ['2606:4700:4700::1111'],
     ['2a00:1450:4001:80b::200e'],
+    ['5eff:ffff::1'],
+    ['5f01::1'],
+    ['100:0:0:2::1'],
+    ['6000::1'],
     ['64:ff9b::808:808'],
     ['2002:808:808::1'],
     ['[2606:4700:4700::1111]'],
@@ -159,6 +166,13 @@ describe('resolveAndValidate', () => {
   it('rejects a private answer', async () => {
     const lookup = recordingLookup([{ address: '10.0.0.5', family: 4 }]);
     await expectRejectsWith(resolveAndValidate('https://internal.example.com/h', { lookup }), 'disallowed_address');
+  });
+
+  it('rejects an answer in a special-purpose IPv6 block', async () => {
+    for (const address of ['5f00::1', '100:0:0:1::1']) {
+      const lookup = recordingLookup([{ address, family: 6 }]);
+      await expectRejectsWith(resolveAndValidate('https://srv6.example.com/h', { lookup }), 'disallowed_address');
+    }
   });
 
   it('rejects a mixed public and private answer', async () => {

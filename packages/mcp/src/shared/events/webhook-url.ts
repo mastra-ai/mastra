@@ -73,9 +73,13 @@ const BLOCKED_IPV6: ReadonlyArray<[string, number]> = [
   ['::ffff:0:0', 96],
   ['64:ff9b:1::', 48],
   ['100::', 64],
+  // Dummy IPv6 prefix (RFC 9780).
+  ['100:0:0:1::', 64],
   ['2001::', 23],
   ['2001:db8::', 32],
   ['3fff::', 20],
+  // Segment Routing (SRv6) SIDs (RFC 9602).
+  ['5f00::', 16],
   ['fc00::', 7],
   ['fe80::', 10],
   ['fec0::', 10],
