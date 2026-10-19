@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { EventEmitterPubSub } from '../events';
 import { Mastra } from '../mastra';
 import { InMemoryStore } from '../storage/mock';
 import { createTestAgent, createTestController } from './test-utils';
@@ -72,6 +73,37 @@ describe('AgentController ↔ Mastra registration', () => {
     // reachable by its id, so the parent owns the agent surface.
     const agent = mastra.getAgentById('test-agent');
     expect(agent).toBeDefined();
+  });
+
+  it("keeps an application's agent on the application's pubsub when a standalone controller takes it", async () => {
+    const agent = createTestAgent();
+    const app = new Mastra({ logger: false, agents: { agent }, pubsub: new EventEmitterPubSub() });
+    const controller = createTestController({ agent });
+    await controller.init();
+    await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    expect(agent.getMastraInstance()).toBe(controller.getMastra());
+    expect(agent.getPubSub()).toBe(app.pubsub);
+  });
+
+  it("moves its agent to the parent's pubsub when registered on a parent after a standalone init", async () => {
+    const storage = new InMemoryStore();
+    const agent = createTestAgent();
+    const controller = createTestController({ agent, storage });
+    await controller.init();
+    const internal = controller.getMastra()!;
+    expect(agent.getMastraInstance()).toBe(internal);
+
+    const parent = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      agentControllers: { code: controller },
+    });
+    await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    expect(agent.getMastraInstance()).toBe(parent);
+    expect(agent.getPubSub()).toBe(parent.pubsub);
   });
 
   it('returns undefined from getAgentController/getAgentControllerById when no controller is registered', () => {

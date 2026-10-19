@@ -1552,10 +1552,13 @@ export class AgentController<TState = {}> {
     const mastra = this.getMastra();
     if (mastra && agent.getMastraInstance() !== mastra) {
       // Runs on a thread are coordinated through the agent's pubsub. Moving an
-      // agent off the Mastra it belongs to would leave the agents still there
-      // on another event bus, so their runs could share a thread with its runs.
+      // application's agent onto this controller's internal Mastra would put it
+      // on that Mastra's own event bus, away from the agents still on the
+      // application's, so their runs could share a thread with its runs.
       const previous = agent.getMastraInstance();
-      if (previous && !agent.hasOwnPubSub()) agent.__setPubSub(previous.pubsub);
+      if (previous && mastra === this.#internalMastra && !agent.hasOwnPubSub()) {
+        agent.__setPubSub(previous.pubsub);
+      }
       mastra.addAgent(agent);
     }
 
