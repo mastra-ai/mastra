@@ -1760,7 +1760,7 @@ When no other message has been sent for `heartbeatIntervalMs`, the stream sends 
     isOptional: true,
     defaultValue: '1024',
     description:
-      'Most push streams open at once across all clients. Further `events/stream` requests are rejected with `-32025` until one closes, and clients retry them.',
+      'Most push streams open at once across all clients. Further `events/stream` requests are rejected with `-32025` until one closes. A Mastra client retries the rejection when reconnecting an established subscription; a new `subscribe()` call rejects with it.',
   },
 ]}
 />
