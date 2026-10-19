@@ -1185,6 +1185,8 @@ export class MastraFactory {
         disableSettingsOmSeed: true,
         hostInstructions: createFactoryHostInstructions({
           workItems: workItemsStorage,
+          projects: factoryProjectsStorage,
+          authEnabled: () => routeAuth.enabled(),
           readySourceControlSessions: () =>
             storage.isDomainReady('source-control') ? sourceControlSessions : undefined,
         }),

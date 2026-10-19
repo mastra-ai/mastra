@@ -24,6 +24,7 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { FACTORY_INTERACTIVE_KEY } from './auth.js';
 import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
@@ -868,7 +869,7 @@ describe('MastraFactory.prepare', () => {
     ).rejects.toThrow('security state could not be restored before prompt creation');
   });
 
-  it('offers plan review only to unbound user sessions, outside channel runs and runs whose binding cannot be looked up', async () => {
+  it('offers plan review only on turns a person started in a user session, outside channels and side sessions', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage });
     (config.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
@@ -900,24 +901,23 @@ describe('MastraFactory.prepare', () => {
       sandboxProvider: 'local',
       sandboxWorkdir: '/sandbox/mastra',
     });
-    const branches = {
-      'user-session-1': 'user/session-user-session-1',
-      'workspace-1': 'feature/login',
-      'slack-1': 'slack/C123',
+    const sessionRow = {
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      baseBranch: 'main',
     };
-    for (const [sessionId, branch] of Object.entries(branches)) {
-      await sourceControl.sessions.create({
-        sessionId,
-        projectRepositoryId: projectRepository.id,
-        orgId: 'org-1',
-        userId: 'user-1',
-        branch,
-        baseBranch: 'main',
-      });
-    }
-    const promptContext = (sessionId: keyof typeof branches) => {
+    await sourceControl.sessions.create({ ...sessionRow, sessionId: 'user-session-1', branch: 'user/session-1' });
+    await sourceControl.sessions.create({
+      ...sessionRow,
+      sessionId: 'side-session-1',
+      branch: 'user/session-side-1',
+      origin: { sessionId: 'user-session-1', threadId: 'user-session-1' },
+    });
+    const promptContext = (sessionId: string, { interactive = true } = {}) => {
       const context = new RequestContext();
       context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      if (interactive) context.set(FACTORY_INTERACTIVE_KEY, true);
       context.set('controller', {
         resourceId: sessionId,
         threadId: sessionId,
@@ -931,8 +931,10 @@ describe('MastraFactory.prepare', () => {
     await expect(hostInstructions({ requestContext: promptContext('user-session-1') })).resolves.toBe(
       PLAN_REVIEW_INSTRUCTIONS,
     );
-    await expect(hostInstructions({ requestContext: promptContext('workspace-1') })).resolves.toBeUndefined();
-    await expect(hostInstructions({ requestContext: promptContext('slack-1') })).resolves.toBeUndefined();
+    await expect(
+      hostInstructions({ requestContext: promptContext('user-session-1', { interactive: false }) }),
+    ).resolves.toBeUndefined();
+    await expect(hostInstructions({ requestContext: promptContext('side-session-1') })).resolves.toBeUndefined();
 
     const channelRun = promptContext('user-session-1');
     channelRun.set('channel', { platform: 'slack' });

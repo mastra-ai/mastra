@@ -4,15 +4,18 @@ import type { RequestContext } from '@mastra/core/request-context';
 
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '../auth.js';
 import { resolveFactorySessionAddress } from '../rules/binding-context.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { resolveFactoryToolScope } from '../tools/scope.js';
 import type { SourceControlSessionLookup } from './factory-session.js';
 import { PLAN_REVIEW_INSTRUCTIONS } from './plan-review-instructions.js';
-import { USER_SESSION_BRANCH_PREFIX } from './user-session-branch.js';
 
 type SessionController = AgentControllerRequestContext<MastraCodeState>;
 
 interface FactoryHostInstructionsDeps {
-  workItems: Pick<WorkItemsStorage, 'findActiveRunBindingByThread' | 'get'>;
+  workItems: Pick<WorkItemsStorage, 'findActiveRunBindingByThread' | 'get' | 'hasRunBindingForSession'>;
+  projects: Pick<FactoryProjectsStorage, 'get'>;
+  authEnabled: () => boolean;
   readySourceControlSessions: () => Pick<SourceControlSessionLookup, 'getBySessionId'> | undefined;
 }
 
@@ -22,9 +25,17 @@ export function createFactoryHostInstructions(deps: FactoryHostInstructionsDeps)
     const controller = requestContext.get('controller') as SessionController | undefined;
     if (!controller?.threadId || !controller.resourceId) return undefined;
     const binding = await restoreTrustStateBeforePrompt(controller, requestContext, deps);
-    if (binding !== 'unbound' || requestContext.get('channel')) return undefined;
-    const session = await deps.readySourceControlSessions()?.getBySessionId(controller.resourceId);
-    return session?.branch.startsWith(USER_SESSION_BRANCH_PREFIX) ? PLAN_REVIEW_INSTRUCTIONS : undefined;
+    if (binding === 'bound' || requestContext.get('channel')) return undefined;
+    const sessions = deps.readySourceControlSessions();
+    if (!sessions) return undefined;
+    const scope = await resolveFactoryToolScope({
+      requestContext,
+      authEnabled: deps.authEnabled(),
+      sessions,
+      projects: deps.projects,
+      workItems: deps.workItems,
+    });
+    return scope?.kind === 'user' && scope.interactive ? PLAN_REVIEW_INSTRUCTIONS : undefined;
   };
 }
 
