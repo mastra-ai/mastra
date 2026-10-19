@@ -234,6 +234,18 @@ describe('DepsService custom pnpm workspace settings', () => {
     expect(fs.existsSync(join(outputDir, 'pnpm-workspace.yaml'))).toBe(false);
   });
 
+  it('rejects permissions that could override denied source build approvals before installing', async () => {
+    await writeFile(join(sourceRoot, 'pnpm-workspace.yaml'), 'allowBuilds:\n  bcrypt: false\n');
+    await expect(
+      new DepsService(sourceRoot).install({
+        dir: outputDir,
+        pnpmWorkspaceSettings: { permissions: { bcrypt: { build: true } } },
+      }),
+    ).rejects.toMatchObject({ id: 'DEPLOYER_INVALID_PNPM_WORKSPACE_SETTING' });
+    expect(runChildProcess).not.toHaveBeenCalled();
+    expect(fs.existsSync(join(outputDir, 'pnpm-workspace.yaml'))).toBe(false);
+  });
+
   it('validates explicitly supplied build approvals', async () => {
     await expect(
       new DepsService(sourceRoot).install({

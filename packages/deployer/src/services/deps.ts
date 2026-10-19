@@ -206,6 +206,7 @@ function serializePnpmWorkspaceSettings(settings: BundlerConfig['pnpmWorkspaceSe
     if (
       !/^[a-z][a-zA-Z0-9]*$/.test(key) ||
       PNPM_MANAGED_KEYS.has(key) ||
+      key === 'permissions' ||
       /auth|token|password|secret|registr|proxy|cert|key|script|shell|exec|hook|file|config|global|dir|path|node|packageManager|unsafePerm|dangerously/i.test(
         key,
       )
