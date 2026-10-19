@@ -583,6 +583,21 @@ describe('Observability Methods', () => {
         }),
       );
     });
+
+    it('should not retry trace query execution timeouts', async () => {
+      vi.mocked(global.fetch).mockResolvedValue(
+        new Response(JSON.stringify({ code: 'TRACE_QUERY_EXECUTION_TIMEOUT', message: 'Trace query timed out' }), {
+          status: 504,
+        }),
+      );
+      const retryingClient = new MastraClient({ ...clientOptions, retries: 2, backoffMs: 0 });
+
+      await expect(
+        retryingClient.queryTraces({ timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' } }),
+      ).rejects.toMatchObject({ status: 504, body: { code: 'TRACE_QUERY_EXECUTION_TIMEOUT' } });
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('aggregateTraces()', () => {
@@ -651,6 +666,22 @@ describe('Observability Methods', () => {
       const retryingClient = new MastraClient({ ...clientOptions, retries: 2, backoffMs: 0 });
 
       await expect(retryingClient.aggregateTraces(request)).rejects.toThrow();
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not retry trace query execution timeouts', async () => {
+      vi.mocked(global.fetch).mockResolvedValue(
+        new Response(JSON.stringify({ code: 'TRACE_QUERY_EXECUTION_TIMEOUT', message: 'Trace query timed out' }), {
+          status: 504,
+        }),
+      );
+      const retryingClient = new MastraClient({ ...clientOptions, retries: 2, backoffMs: 0 });
+
+      await expect(retryingClient.aggregateTraces(request)).rejects.toMatchObject({
+        status: 504,
+        body: { code: 'TRACE_QUERY_EXECUTION_TIMEOUT' },
+      });
 
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });
@@ -742,9 +773,10 @@ describe('Observability Methods', () => {
 
       const result = await client.queryTraceThreads(request);
 
-      expectTypeOf(result).toEqualTypeOf<QueryTraceThreadsResult>();
-      expectTypeOf<QueryTraceThreadsResult['threads'][number]>().toEqualTypeOf<{ threadId: string }>();
-      expectTypeOf<QueryTraceThreadsResult['threads'][number]>().not.toHaveProperty('traceId');
+      expectTypeOf(result).toEqualTypeOf<QueryTraceThreadsResult<typeof request>>();
+      expectTypeOf<QueryTraceThreadsResult<typeof request>['threads'][number]>().toEqualTypeOf<{ threadId: string }>();
+      expectTypeOf<QueryTraceThreadsResult['threads'][number]>().toHaveProperty('firstTraceId');
+      expectTypeOf<QueryTraceThreadsResult['threads'][number]['traceCount']>().toEqualTypeOf<number>();
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/threads/query`,
         expect.objectContaining({

@@ -9,6 +9,8 @@ import {
   TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES,
   TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
   TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
+  TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_YEAR_FIXTURE_DATA,
   traceAggregateResponseMismatch,
   writeTraceAggregateFixture,
   writeTraceQueryFixture,
@@ -146,12 +148,15 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-aggregate',
         'span-query',
         'span-query-context-fields',
+        'thread-query-rows',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        'trace-query-time-to-first-chunk',
+        'trace-query-root-span-fields',
       ]);
 
       coreFeatures.delete('observability-delta-polling');
@@ -169,12 +174,15 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-aggregate',
         'span-query',
         'span-query-context-fields',
+        'thread-query-rows',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        'trace-query-time-to-first-chunk',
+        'trace-query-root-span-fields',
       ]);
       await expect(storage.listLogs({ mode: 'delta' })).rejects.toThrow(
         'This storage provider does not support observability delta polling',
@@ -207,12 +215,15 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-aggregate',
         'span-query',
         'span-query-context-fields',
+        'thread-query-rows',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        'trace-query-time-to-first-chunk',
+        'trace-query-root-span-fields',
       ]);
 
       coreFeatures.delete('observability-delta-polling');
@@ -229,12 +240,15 @@ describe('ObservabilityStorageDuckDB', () => {
         'trace-aggregate',
         'span-query',
         'span-query-context-fields',
+        'thread-query-rows',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        'trace-query-time-to-first-chunk',
+        'trace-query-root-span-fields',
       ]);
     } finally {
       coreFeatures.clear();
@@ -3750,6 +3764,29 @@ describe('ObservabilityStorageDuckDB aggregateTraces', () => {
     expect(total).toBeGreaterThan(0);
     expect(aggregate.rows).toEqual([{ measures: { count: total } }]);
   });
+});
+
+describe('ObservabilityStorageDuckDB aggregateTraces over a 365-day window', () => {
+  let store: DuckDBStore;
+
+  beforeAll(async () => {
+    store = new DuckDBStore({ path: ':memory:' });
+    await store.init();
+    await writeTraceQueryFixture(store.observability, TRACE_AGGREGATE_YEAR_FIXTURE_DATA, 'event-sourced');
+  });
+
+  afterAll(async () => {
+    await store.db.close();
+  });
+
+  it.each(TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+    'matches the reference evaluator: %s',
+    async (_name, testCase) => {
+      const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+      const response = await store.observability.aggregateTraces(plan);
+      expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+    },
+  );
 });
 
 describe('ObservabilityStorageDuckDB aggregateTraces token and cost measures', () => {

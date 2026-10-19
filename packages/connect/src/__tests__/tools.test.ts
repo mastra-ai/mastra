@@ -3,7 +3,8 @@ import { createTool } from '@mastra/core/tools';
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { PROVIDERS, type ProviderRegistration, type ProxyProviderRegistration } from '../registry.js';
+import { PROVIDERS } from '../registry.js';
+import type { ProviderRegistration, ProxyProviderRegistration } from '../registry.js';
 import { tools as connect } from '../tools.js';
 
 // Test-only seam: the shipped barrel exports a readonly view; tests mutate the
@@ -718,5 +719,229 @@ describe('connect', () => {
       linear_fake_tool: { id: 'linear_fake_tool' },
       notion_fake: { id: 'notion_fake' },
     });
+  });
+});
+
+describe('connect with an options callback', () => {
+  const roleOf = (ctx?: { requestContext?: unknown }): string | undefined =>
+    (ctx?.requestContext as Map<string, string> | undefined)?.get('role');
+
+  function callbackResolver(fetchMock: typeof fetch) {
+    return connect(ctx => ({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      providers: {
+        linear: roleOf(ctx) === 'viewer' ? { allowTools: ['linear_fake_tool'] } : {},
+      },
+    }));
+  }
+
+  it('derives provider options from the request context', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    const resolver = callbackResolver(fetchMock as never);
+
+    await resolver({ requestContext: new Map([['role', 'viewer']]) });
+    await resolver({ requestContext: new Map([['role', 'admin']]) });
+
+    expect(createTools.mock.calls[0]![0].allowTools).toEqual(['linear_fake_tool']);
+    expect(createTools.mock.calls[1]![0].allowTools).toBeUndefined();
+  });
+
+  it('shares one cached snapshot across requests producing equal options', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    const resolver = callbackResolver(fetchMock as never);
+
+    // Distinct ctx objects, structurally equal options from the callback.
+    const first = await resolver({ requestContext: new Map([['role', 'viewer']]) });
+    const second = await resolver({ requestContext: new Map([['role', 'viewer']]) });
+
+    expect(second).toBe(first);
+    expect(createTools).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps separate caches per distinct options value', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    const resolver = callbackResolver(fetchMock as never);
+
+    await resolver({ requestContext: new Map([['role', 'viewer']]) });
+    await resolver({ requestContext: new Map([['role', 'admin']]) });
+    await resolver({ requestContext: new Map([['role', 'viewer']]) });
+    await resolver({ requestContext: new Map([['role', 'admin']]) });
+
+    // One platform refresh (and provider build) per distinct options value.
+    expect(createTools).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails resolution loudly when the callback produces invalid options', async () => {
+    installProvider();
+    const resolver = connect(() => ({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN },
+      providers: {
+        linear: { allowTools: ['a'], disallowTools: ['b'] } as unknown as Record<string, never>,
+      },
+    }));
+
+    await expect(resolver()).rejects.toMatchObject({
+      code: 'invalid_options',
+      message: expect.stringMatching(/mutually exclusive/),
+    });
+  });
+
+  it('rejects a callback that does not return an options object', async () => {
+    installProvider();
+    const resolver = connect(() => undefined as unknown as Record<string, never>);
+
+    await expect(resolver()).rejects.toMatchObject({
+      code: 'invalid_options',
+      message: expect.stringMatching(/must return a ToolsOptions object/),
+    });
+  });
+
+  it('refresh() re-fetches the no-context variant', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    const resolver = callbackResolver(fetchMock as never);
+
+    await resolver();
+    await resolver.refresh();
+
+    expect(createTools).toHaveBeenCalledTimes(2);
+  });
+
+  it('disconnect() clears every variant cache', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    const resolver = callbackResolver(fetchMock as never);
+
+    await resolver({ requestContext: new Map([['role', 'viewer']]) });
+    await resolver.disconnect();
+    await resolver({ requestContext: new Map([['role', 'viewer']]) });
+
+    expect(createTools).toHaveBeenCalledTimes(2);
+  });
+
+  it('supports .with() extras on the callback form', async () => {
+    installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    const extra = createTool({
+      id: 'extra_tool',
+      description: 'extra',
+      inputSchema: z.object({}),
+      execute: async () => 'ok',
+    });
+    const resolver = callbackResolver(fetchMock as never).with({ extraTool: extra });
+
+    const tools = await resolver({ requestContext: new Map([['role', 'admin']]) });
+    expect(Object.keys(tools).sort()).toEqual(['extraTool', 'linear_fake_tool']);
+  });
+
+  it('evicts the least recently used variant past the cap', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(Response.json({ connections: [makeConnection()] }));
+    const resolver = connect(ctx => ({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      ttlMs: (ctx?.requestContext as number | undefined) ?? 30_000,
+    }));
+
+    // 33 distinct options values: the first becomes the LRU and is evicted.
+    for (let variant = 0; variant < 33; variant++) {
+      await resolver({ requestContext: 1_000 + variant });
+    }
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('evicting the least recently used variant'));
+    expect(createTools).toHaveBeenCalledTimes(33);
+
+    // The evicted variant resolves again from scratch; a surviving one is cached.
+    await resolver({ requestContext: 1_000 });
+    expect(createTools).toHaveBeenCalledTimes(34);
+    await resolver({ requestContext: 1_032 });
+    expect(createTools).toHaveBeenCalledTimes(34);
+  });
+
+  it('keeps an evicted variant connected until its in-flight resolution settles', async () => {
+    const { createTools } = installProvider();
+    let releaseFirstFetch!: () => void;
+    const firstFetchGate = new Promise<void>(resolve => (releaseFirstFetch = resolve));
+    let connectionCalls = 0;
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async input => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/v2/integrations') return Response.json({ integrations: [] });
+      connectionCalls += 1;
+      if (connectionCalls === 1) await firstFetchGate;
+      return Response.json({ connections: [makeConnection()] });
+    });
+    const resolver = connect(ctx => ({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+      ttlMs: (ctx?.requestContext as number | undefined) ?? 30_000,
+    }));
+
+    // The first variant hangs on its platform fetch…
+    const inflight = resolver({ requestContext: 1_000 });
+    await vi.waitFor(() => expect(connectionCalls).toBe(1));
+    // …while 33 more variants evict it from the LRU cache.
+    for (let variant = 1; variant <= 33; variant++) {
+      await resolver({ requestContext: 1_000 + variant });
+    }
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('evicting the least recently used variant'));
+
+    // The eviction must not tear the variant down under the in-flight call.
+    releaseFirstFetch();
+    await expect(inflight).resolves.toHaveProperty('linear_fake_tool');
+    expect(createTools).toHaveBeenCalledTimes(34);
+
+    // Once that resolution settled the evicted variant was disconnected, so
+    // resolving the same options again rebuilds from scratch.
+    await resolver({ requestContext: 1_000 });
+    expect(createTools).toHaveBeenCalledTimes(35);
+  });
+
+  it('does not memoize a variant behind an in-progress disconnect()', async () => {
+    installProvider();
+    const events: string[] = [];
+    let releaseFirstFetch!: () => void;
+    const firstFetchGate = new Promise<void>(resolve => (releaseFirstFetch = resolve));
+    let connectionCalls = 0;
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async input => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/v2/integrations') return Response.json({ integrations: [] });
+      connectionCalls += 1;
+      if (connectionCalls === 1) await firstFetchGate;
+      if (connectionCalls === 2) events.push('second variant fetch');
+      return Response.json({ connections: [makeConnection()] });
+    });
+    let releaseOptions!: () => void;
+    const optionsGate = new Promise<void>(resolve => (releaseOptions = resolve));
+    const resolver = connect(async ctx => {
+      if (roleOf(ctx) === 'late') await optionsGate;
+      return {
+        projectId: 'proj_1',
+        client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+        providers: { linear: roleOf(ctx) === 'late' ? {} : { allowTools: ['linear_fake_tool'] } },
+      };
+    });
+
+    // First variant's platform fetch hangs, so disconnect() below stays
+    // pending while that refresh drains.
+    const first = resolver({ requestContext: new Map([['role', 'admin']]) });
+    await vi.waitFor(() => expect(connectionCalls).toBe(1));
+    // Second resolution is parked inside the options callback.
+    const second = resolver({ requestContext: new Map([['role', 'late']]) });
+    const closed = resolver.disconnect().then(() => events.push('disconnected'));
+
+    // The callback settles while disconnect() is still draining; the
+    // resolution must wait for the cleanup instead of inserting a variant
+    // behind its back.
+    releaseOptions();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(events).toEqual([]);
+
+    releaseFirstFetch();
+    await Promise.all([first, second, closed]);
+    expect(events).toEqual(['disconnected', 'second variant fetch']);
   });
 });

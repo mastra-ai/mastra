@@ -30,10 +30,12 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
     () => [{ id: experiment.id, status: experiment.status }],
     [experiment.id, experiment.status],
   );
-  const { data: usageById, isLoading: isUsageLoading } = useExperimentsItemUsage({
+  const { data: usageById, isLoading: isUsageQueryLoading } = useExperimentsItemUsage({
     experiments: experimentRefs,
     supportsMetrics: metrics?.isEnabled ?? false,
   });
+  // Usage is only fetched once the run finishes, so an in-progress run reads as loading rather than empty.
+  const isUsageLoading = experiment.status === 'running' || experiment.status === 'pending' || isUsageQueryLoading;
 
   // Averages every score of the run, across all scorers.
   const avgScore = useMemo(() => {

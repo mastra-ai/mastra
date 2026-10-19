@@ -7,7 +7,7 @@ description: "Browse MiniMax (minimax.cn) model IDs, capabilities, context windo
 
 # <img src="https://models.dev/logos/minimax-cn.svg" alt="MiniMax (minimax.cn) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />MiniMax (minimax.cn)
 
-Access 7 MiniMax (minimax.cn) models through Mastra's model router. Authentication is handled automatically using the `MINIMAX_API_KEY` environment variable.
+Access 8 MiniMax (minimax.cn) models through Mastra's model router. Authentication is handled automatically using the `MINIMAX_API_KEY` environment variable.
 
 Learn more in the [MiniMax (minimax.cn) documentation](https://platform.minimaxi.com/docs/guides/quickstart).
 
@@ -128,6 +128,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 512000,
     "inputCost": 0.3,
     "outputCost": 1.2
+  },
+  {
+    "model": "minimax-cn/MiniMax-M3.1-Flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 512000,
+    "inputCost": 0.15,
+    "outputCost": 0.6
   }
 ]}
 />
@@ -162,7 +174,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "minimax-cn/MiniMax-M3"
+      ? "minimax-cn/MiniMax-M3.1-Flash"
       : "minimax-cn/MiniMax-M2";
   }
 });

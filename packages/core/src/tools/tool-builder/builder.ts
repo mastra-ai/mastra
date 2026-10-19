@@ -323,7 +323,7 @@ export class CoreToolBuilder extends MastraBase {
     if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
       if (isBackgroundEligible || this.isResumableTool) {
         let schema = this.originalTool.inputSchema;
-        if (typeof schema === 'function') {
+        if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
           schema = schema();
         }
         if (!schema) {
@@ -402,7 +402,7 @@ export class CoreToolBuilder extends MastraBase {
         z.object({});
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 
@@ -419,7 +419,7 @@ export class CoreToolBuilder extends MastraBase {
     }
 
     // If schema is a function, call it to get the actual schema
-    if (typeof schema === 'function') {
+    if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
       schema = schema();
     }
 
@@ -436,7 +436,7 @@ export class CoreToolBuilder extends MastraBase {
     }
 
     let schema = originalSchema;
-    if (typeof schema === 'function') {
+    if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
       schema = schema();
     }
 
@@ -461,7 +461,7 @@ export class CoreToolBuilder extends MastraBase {
       }
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 
@@ -476,7 +476,7 @@ export class CoreToolBuilder extends MastraBase {
       let schema = this.originalTool.resumeSchema;
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 
@@ -490,7 +490,7 @@ export class CoreToolBuilder extends MastraBase {
       let schema = this.originalTool.suspendSchema;
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 
@@ -1209,8 +1209,8 @@ export class CoreToolBuilder extends MastraBase {
         : undefined;
     // The hook can return data to the model, so it must pass the same TOOLS_EXECUTE check as
     // execute before it runs; a denial propagates exactly as it would from execute.
-    // The hook is typed against the parsed input, so validate with the same schema execute uses.
-    // Invalid input skips the hook; execute reports the validation error after the approval gate.
+    // The agent runtime validates input with `validateInput` before calling the hook, so the hook
+    // receives parsed input and never runs for invalid calls.
     const beforeApproval: BeforeApprovalFn | undefined = originalBeforeApproval
       ? markBuiltBeforeApproval(
           async (input: unknown, context: BeforeApprovalContext, runtime?: BeforeApprovalRuntime) => {
@@ -1220,13 +1220,7 @@ export class CoreToolBuilder extends MastraBase {
               runtime?.requestContext ?? this.options.requestContext,
               runtime?.actor,
             );
-            const { data, error } = validateToolInput(
-              (inputValidationSchema ?? originalSchema) as StandardSchemaWithJSON | undefined,
-              input,
-              this.options.name,
-            );
-            if (error) return undefined;
-            return originalBeforeApproval(data, context);
+            return originalBeforeApproval(input, context);
           },
         )
       : undefined;
@@ -1237,6 +1231,21 @@ export class CoreToolBuilder extends MastraBase {
       requireApproval,
       needsApprovalFn,
       beforeApproval,
+      validateInput: (input: unknown) => {
+        const validation = validateToolInput(
+          (inputValidationSchema ?? originalSchema) as StandardSchemaWithJSON | undefined,
+          input,
+          this.options.name,
+        );
+        // suspendedToolRunId is only required when resumeData is provided (matches execute).
+        if (
+          validation.error?.message?.includes('suspendedToolRunId: Required') &&
+          !(input as Record<string, unknown> | undefined)?.resumeData
+        ) {
+          return { data: input };
+        }
+        return validation;
+      },
       hasSuspendSchema: !!this.getSuspendSchema(),
       execute: this.originalTool.execute
         ? this.createExecute(
