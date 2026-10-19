@@ -64,7 +64,7 @@ export function WorkItemListRow({
       cardRef={morph.setCardElement}
       detailsRef={deepLinkRef}
       expanded={morph.open}
-      onOpen={morph.openDetails}
+      onToggleDetails={morph.toggleDetails}
       dragPayload={dragPayload}
       locked={locked}
       busy={busy}

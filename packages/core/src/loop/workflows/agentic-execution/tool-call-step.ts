@@ -8,7 +8,7 @@ import type { MastraDBMessage } from '../../../memory';
 import { BACKGROUND_WORK_CONTEXT, notifyBackgroundWorkTerminal } from '../../../processors/background-work-signals';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
-import type { ChunkType, ProviderMetadata } from '../../../stream/types';
+import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../../../stream/types';
 import {
   getTransformedToolPayload,
   hasTransformedToolPayload,
@@ -404,9 +404,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
       // Recalled messages become refs only when memory is a fixed instance: a resume may not
       // repeat the request context that function or inherited memory resolved against.
-      const serializeStreamStateForSuspend = () =>
+      const serializeStreamStateForSuspend = (pendingSuspension: { usage?: LanguageModelUsage }) =>
         dehydrateStreamState(
-          streamState.serialize(),
+          streamState.serialize(pendingSuspension),
           memoryMessageRefs,
           readScoped(scopeCtx, FIXED_MEMORY_KEY, 'fixedMemory')
             ? readScoped(scopeCtx, MEMORY_KEY, 'memory')
@@ -572,6 +572,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               runId,
               now: readScoped(scopeCtx, NOW_KEY, 'now'),
             });
+            const suspendedStepUsage = takeSuspendedStepUsage();
             const approvalChunk = await transformChunk({
               type: 'tool-call-approval',
               runId,
@@ -582,7 +583,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 args: approvalArgs,
                 resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
-                usage: takeSuspendedStepUsage(),
+                usage: suspendedStepUsage,
               },
             });
             if (outputWriter) {
@@ -616,7 +617,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: approvalToolName,
                   args: approvalArgs,
                 },
-                __streamState: await serializeStreamStateForSuspend(),
+                __streamState: await serializeStreamStateForSuspend({ usage: suspendedStepUsage }),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
                 // Persisted unconditionally — [] included — so absence marks a pre-upgrade snapshot,
@@ -633,6 +634,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               },
             );
           } else {
+            const suspendedStepUsage = takeSuspendedStepUsage();
             const suspensionChunk = await transformChunk({
               type: 'tool-call-suspended',
               runId,
@@ -643,7 +645,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 suspendPayload,
                 args: inputData.args,
                 resumeSchema: options?.resumeSchema,
-                usage: takeSuspendedStepUsage(),
+                usage: suspendedStepUsage,
               },
             });
             safeEnqueue(controller, suspensionChunk);
@@ -666,7 +668,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             return await suspend(
               {
                 toolCallSuspended: suspendPayload,
-                __streamState: await serializeStreamStateForSuspend(),
+                __streamState: await serializeStreamStateForSuspend({ usage: suspendedStepUsage }),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
                 // Persisted unconditionally — [] included — so absence marks a pre-upgrade snapshot,
@@ -720,6 +722,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               runId,
               now: readScoped(scopeCtx, NOW_KEY, 'now'),
             });
+            const suspendedStepUsage = takeSuspendedStepUsage();
             const approvalChunk = await transformChunk({
               type: 'tool-call-approval',
               runId,
@@ -730,7 +733,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 args: inputData.args,
                 resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
-                usage: takeSuspendedStepUsage(),
+                usage: suspendedStepUsage,
               },
             });
             if (outputWriter) {
@@ -759,7 +762,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: inputData.toolName,
                   args: inputData.args,
                 },
-                __streamState: await serializeStreamStateForSuspend(),
+                __streamState: await serializeStreamStateForSuspend({ usage: suspendedStepUsage }),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
                 // Persisted unconditionally — [] included — so absence marks a pre-upgrade snapshot,

@@ -1,17 +1,19 @@
+import { ActivityWick } from '@mastra/playground-ui/components/Activity';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
-import { useParams } from 'react-router';
 
+import { useParams } from 'react-router';
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
 import { boardCardState } from '../boardCardState';
-import { nextBoardPhase, primaryCardMove, proposedCardRun, movingCardStatus } from '../workItemCardPresentation';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
 import { itemThreadSession } from '../boardItems';
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
+import type { BoardLayout } from '../boardLayout';
 import { itemBoard } from '../boardStages';
 import {
   awaitsTriageDecision,
@@ -27,23 +29,20 @@ import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import { relationshipPath } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
-import type { BoardLayout } from '../boardLayout';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
-import { ActivityWick } from '@mastra/playground-ui/components/Activity';
-import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
+import { nextBoardPhase, primaryCardMove, proposedCardRun, movingCardStatus } from '../workItemCardPresentation';
 import { CardDetailsHint, REVEAL_ON_CARD_HOVER } from './BoardCardParts';
 import { RelatedWorkItemLink } from './RelatedWorkItemLink';
 import { WorkItemCardRows } from './WorkItemCardRows';
 import { WorkItemDetailsPanel } from './WorkItemDetailsPanel';
+import { WorkItemListRow } from './WorkItemListRow';
 import type { WorkItemMenuProps } from './WorkItemMenuItems';
 import { WorkItemMenuItems } from './WorkItemMenuItems';
-import { WorkItemListRow } from './WorkItemListRow';
 
 export function WorkItemCard({
   item,
   deepLinkRef,
-  deepLinkCommentId,
   highlighted,
   columnStage,
   relatedItems,
@@ -68,8 +67,6 @@ export function WorkItemCard({
   item: WorkItem;
   // Hands the card's own control to the board, which scrolls to it and focuses it when the card is deeplinked.
   deepLinkRef: (element: HTMLElement | null) => void;
-  /** Comment deep link (`?item&comment`): holds the details popover open so the feed is reachable. */
-  deepLinkCommentId?: string;
   highlighted: boolean;
   columnStage: BoardStageId;
   /** Cards linked to this one, resolved once for the whole board. */
@@ -99,7 +96,7 @@ export function WorkItemCard({
   layout: BoardLayout;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
-  const morph = useCardMorph({ openFor: deepLinkCommentId });
+  const morph = useCardMorph();
   const catalog = useBoardCatalog(item.githubProjectId);
   const boardId = itemBoard(item);
   const custom = boardId !== 'work' && boardId !== 'review';
@@ -225,6 +222,7 @@ export function WorkItemCard({
       status={status}
       actions={actions}
       menu={<WorkItemMenuItems {...panelMenu} />}
+      layout={layout}
     />
   );
 

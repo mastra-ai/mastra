@@ -142,7 +142,7 @@ describe('Tools', () => {
 
     const searchInput = getByTestId('tools-card-picker-search');
     expect(searchInput).toBeTruthy();
-    fireEvent.change(searchInput!, { target: { value: 'unchecked' } });
+    fireEvent.change(searchInput, { target: { value: 'unchecked' } });
 
     fireEvent.click(getByTestId('tools-only-selected-filter-checkbox'));
 
@@ -351,7 +351,7 @@ describe('Tools — toolkit filter pane', () => {
     await findByTestId('tools-toolkit-filter-item-gmail');
     const filterSearch = getByTestId('tools-toolkit-filter-search');
     expect(filterSearch).toBeTruthy();
-    fireEvent.change(filterSearch!, { target: { value: 'slack' } });
+    fireEvent.change(filterSearch, { target: { value: 'slack' } });
 
     await waitFor(() => expect(queryByTestId('tools-toolkit-filter-item-gmail')).toBeNull());
     expect(getByTestId('tools-toolkit-filter-item-slack')).toBeTruthy();
@@ -448,7 +448,7 @@ describe('Tools — integration rows without a connection', () => {
     const openPopup = vi.fn().mockReturnValue({ close: vi.fn() });
     // Stub window.open so useAuthorize's default opener resolves synchronously.
     const originalOpen = window.open;
-    window.open = openPopup as unknown as typeof window.open;
+    window.open = openPopup;
 
     try {
       const { findByTestId } = render(
@@ -474,7 +474,7 @@ describe('Tools — integration rows without a connection', () => {
   it('pins the new connection into the toolkit form field after successful OAuth when a tool is selected', async () => {
     const openPopup = vi.fn().mockReturnValue({ close: vi.fn() });
     const originalOpen = window.open;
-    window.open = openPopup as unknown as typeof window.open;
+    window.open = openPopup;
 
     // After OAuth completes the connections list must report the new active
     // account so the toolkit control pins it into the form.
@@ -498,11 +498,9 @@ describe('Tools — integration rows without a connection', () => {
       const { findByTestId, getByTestId } = render(
         <ConnectHarness
           onState={spy}
-          defaultToolProviders={
-            {
-              composio: { tools: { GMAIL_FETCH_EMAILS: { toolkit: 'gmail' } }, connections: {} },
-            } as AgentBuilderEditFormValues['toolProviders']
-          }
+          defaultToolProviders={{
+            composio: { tools: { GMAIL_FETCH_EMAILS: { toolkit: 'gmail' } }, connections: {} },
+          }}
         >
           <Tools availableAgentTools={[checkedAndUnconnected]} />
         </ConnectHarness>,
@@ -599,7 +597,7 @@ describe('Tools — toolkit row connection management', () => {
   // pins connections while a tool in the toolkit is selected in the form.
   const gmailToolSelected: AgentBuilderEditFormValues['toolProviders'] = {
     composio: { tools: { GMAIL_FETCH_EMAILS: { toolkit: 'gmail' } }, connections: {} },
-  } as AgentBuilderEditFormValues['toolProviders'];
+  };
 
   it('shows a skeleton while the connections query is loading, then resolves the control', async () => {
     let releaseConnections: () => void = () => {};

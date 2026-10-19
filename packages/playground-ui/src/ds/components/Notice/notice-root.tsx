@@ -1,5 +1,6 @@
 import { FileTextIcon, InfoIcon, LightbulbIcon, OctagonAlertIcon, TriangleAlertIcon } from 'lucide-react';
-import { Children, type ReactNode } from 'react';
+import { Children } from 'react';
+import type { ReactNode } from 'react';
 import './notice.css';
 import { GrainFill } from '@/ds/components/GrainFill/grain-fill';
 import { textStyle } from '@/ds/primitives/text';

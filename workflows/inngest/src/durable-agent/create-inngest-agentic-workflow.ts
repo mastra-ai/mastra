@@ -31,8 +31,8 @@ import type {
 import { MessageList } from '@mastra/core/agent/message-list';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
-import { SpanType, InternalSpans } from '@mastra/core/observability';
-import type { AIModelGenerationSpan, ExportedSpan } from '@mastra/core/observability';
+import { InternalSpans } from '@mastra/core/observability';
+import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '@mastra/core/observability';
 import { ChunkFrom } from '@mastra/core/stream';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { BaseContext, Inngest } from 'inngest';

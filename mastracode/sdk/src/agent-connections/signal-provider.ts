@@ -2,7 +2,8 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '@mastr
 import { SignalProvider } from '@mastra/core/signals';
 
 import { CrossAgentMessagingExpectedReplyProcessor } from './messaging-processor.js';
-import { AgentConnectionRegistry, type AgentConnectionRegistryOptions } from './registry.js';
+import { AgentConnectionRegistry } from './registry.js';
+import type { AgentConnectionRegistryOptions } from './registry.js';
 import { AgentConnectionsStateProcessor } from './state-processor.js';
 import { createAgentConnectionTools } from './tools.js';
 

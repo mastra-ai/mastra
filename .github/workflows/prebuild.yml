@@ -509,8 +509,9 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          # A cancelled run says nothing about whether the suite is red or green.
-          if [ "$FAILED" != "true" ] && [ "$CANCELLED" = "true" ]; then
+          # A cancelled run was usually superseded by a newer push, which reports instead.
+          # Failures seen before the cancel would otherwise alert once per superseded run.
+          if [ "$CANCELLED" = "true" ]; then
             echo "Run was cancelled; leaving the alert state unchanged."
             exit 0
           fi
@@ -527,12 +528,19 @@ jobs:
           done
 
           # Otherwise this run is still in progress, so the newest completed run is the previous one.
-          if [ -z "$previous" ] && ! previous=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/prebuild.yml/runs" \
-            -f branch="$BRANCH" -f event=pull_request -f status=completed -F per_page=20 \
-            --jq "[.workflow_runs[] | select(.id != $GITHUB_RUN_ID and .conclusion != \"cancelled\")][0].conclusion // \"none\""); then
-            echo "::warning::Could not read the previous run; alerting on failure only."
-            previous=unknown
-          fi
+          # Most release PR runs are cancelled by newer pushes, so page past them.
+          page=1
+          while [ -z "$previous" ] && [ "$page" -le 5 ]; do
+            if ! result=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/prebuild.yml/runs" \
+              -f branch="$BRANCH" -f event=pull_request -f status=completed -F per_page=100 -F page="$page" \
+              --jq "if (.workflow_runs | length) == 0 then \"none\" else ([.workflow_runs[] | select(.id != $GITHUB_RUN_ID and .conclusion != \"cancelled\")][0].conclusion // \"\") end"); then
+              echo "::warning::Could not read the previous run; alerting on failure only."
+              result=unknown
+            fi
+            previous=$result
+            page=$((page + 1))
+          done
+          previous=${previous:-none}
           echo "Previous release PR run: $previous; this run failed: $FAILED"
 
           pr="<$PR_URL|#$PR_NUMBER $PR_TITLE>"

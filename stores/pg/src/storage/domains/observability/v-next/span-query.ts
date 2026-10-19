@@ -9,7 +9,7 @@ import type {
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
 import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './preview-compat';
-import { compileSpanQueryPredicate, runWithPostgresTraceQueryTimeout } from './trace-query';
+import { compileSpanQueryPredicate, timeToFirstChunkSupported, runWithPostgresTraceQueryTimeout } from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
 const fields = [
@@ -38,6 +38,7 @@ const fields = [
   'experimentId',
   'environment',
   'executionSource',
+  'timeToFirstChunkMs',
 ];
 const identities = identityFields.map(field => `"${field}"`).join(', ');
 const identityOrder = identityFields.map(field => `"${field}" COLLATE "C" ASC NULLS LAST`).join(', ');
@@ -174,8 +175,9 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
     async tx => {
       const query = compilePostgresSpanQuery(schema, plan);
       const rows = await tx.any<Selected>(query.text, query.values);
-      const selected = rows.map(({ version: _version, startedAt, endedAt, ...row }) => ({
+      const selected = rows.map(({ version: _version, startedAt, endedAt, timeToFirstChunkMs, ...row }) => ({
         ...row,
+        ...(timeToFirstChunkSupported && { timeToFirstChunkMs }),
         startedAt: startedAt.toISOString(),
         endedAt: endedAt.toISOString(),
       }));

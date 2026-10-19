@@ -238,10 +238,20 @@ describe('planTraceAggregate', () => {
     });
 
     it('rejects identity fields, attributes, span-scope fields and unknown names', () => {
-      for (const field of [...TRACE_AGGREGATE_IDENTITY_FIELDS, 'attributes.foo', 'name', 'model', 'bucket']) {
+      for (const field of [...TRACE_AGGREGATE_IDENTITY_FIELDS, 'attributes.foo', 'model', 'bucket']) {
         const issue = expectIssue({ ...baseRequest, groupBy: ['status', field] }, 'field_not_allowed', ['groupBy', 1]);
         expect(issue.message).not.toContain(field);
       }
+    });
+
+    it('accepts the root span name and type as dimensions and countDistinct fields', () => {
+      const planned = plan({
+        ...baseRequest,
+        groupBy: ['spanType', 'name'],
+        measures: ['count', 'countDistinct.name'],
+      });
+      expect(planned.dimensions).toEqual(['spanType', 'name']);
+      expect(planned.measures).toContainEqual({ type: 'countDistinct', name: 'countDistinct.name', field: 'name' });
     });
 
     it('rejects nested metadata paths as dimensions', () => {
@@ -265,7 +275,7 @@ describe('planTraceAggregate', () => {
     });
 
     it('rejects countDistinct over non-groupable fields', () => {
-      for (const field of ['spanId', 'runId', 'attributes.x', 'name']) {
+      for (const field of ['spanId', 'runId', 'attributes.x', 'model']) {
         const issue = expectIssue({ timeRange, measures: ['count', `countDistinct.${field}`] }, 'field_not_allowed', [
           'measures',
           1,

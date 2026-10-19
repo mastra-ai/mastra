@@ -1,7 +1,7 @@
-import {
-  APICallError,
-  type Experimental_DecisionModelV4 as DecisionModelV4,
-  type Experimental_EvaluationModelV4 as EvaluationModelV4,
+import { APICallError } from '@ai-sdk/provider-v7';
+import type {
+  Experimental_DecisionModelV4 as DecisionModelV4,
+  Experimental_EvaluationModelV4 as EvaluationModelV4,
 } from '@ai-sdk/provider-v7';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 

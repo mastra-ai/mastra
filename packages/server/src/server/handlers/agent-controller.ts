@@ -92,7 +92,11 @@ function getAgentControllerOrThrow(
   return controller;
 }
 
-async function getSession(
+/**
+ * Get-or-create a session. Only the create-session route calls this: it is the one request that carries the
+ * tags and exact thread a conversation starts on.
+ */
+async function startSession(
   controller: AgentController<any>,
   resourceId: string,
   options?: { tags?: Record<string, string>; scope?: string; threadId?: string },
@@ -108,6 +112,41 @@ async function getSession(
   return controller.createSession({ resourceId, id, ownerId: controller.id, tags, scope, threadId, requestContext });
 }
 
+/**
+ * Resolve the session every other route acts on: the live one, or a lost one (e.g. after a restart) rebuilt on
+ * its most recent stored thread. Never starts a conversation, so a write that arrives before the session was
+ * started fails instead of landing on a thread nobody reads.
+ */
+async function getSession(
+  controller: AgentController<any>,
+  resourceId: string,
+  options?: { scope?: string },
+  requestContext?: RequestContext,
+): Promise<Session<any>> {
+  await controller.init();
+  const scope = options?.scope;
+  const id = scope ? `${resourceId}::${scope}` : resourceId;
+  try {
+    return await controller.createSession({
+      resourceId,
+      id,
+      ownerId: controller.id,
+      scope,
+      resumeOnly: true,
+      requestContext,
+    });
+  } catch (error) {
+    // Matched by code, not class: this module may only import types from @mastra/core/agent-controller.
+    if (error instanceof Error && (error as { code?: unknown }).code === 'SESSION_NOT_STARTED') {
+      throw new HTTPException(404, {
+        message: `No session has been started for resource "${resourceId}". Create it with POST /agent-controller/:controllerId/sessions first.`,
+        cause: error,
+      });
+    }
+    throw error;
+  }
+}
+
 async function getExistingSession(
   controller: AgentController<any>,
   resourceId: string,
@@ -119,8 +158,8 @@ async function getExistingSession(
   if (session) return session;
 
   // Read routes inspect an existing session with read permission. If the
-  // in-memory session was lost after a restart, preserve the historical
-  // recovery behavior by recreating it through the execute-authorized path.
+  // in-memory session was lost after a restart, recover it from its stored
+  // thread through the execute-authorized path.
   return getSession(controller, resourceId, { scope }, requestContext);
 }
 
@@ -525,14 +564,19 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   responseSchema: createSessionResponseSchema,
   summary: 'Create or resume a controller session',
   description:
-    'Creates a session for the given resourceId, or returns the existing one (get-or-create), so reconnects resume the conversation.',
+    'Creates a session for the given resourceId, or returns the existing one (get-or-create), so reconnects resume the conversation. Every other session route requires a started session and returns 404 until one exists or can be recovered from a stored thread.',
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, controllerId, resourceId, sessionScope, tags, threadId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, { tags, scope: sessionScope, threadId }, requestContext);
+      const session = await startSession(
+        controller,
+        resourceId,
+        { tags, scope: sessionScope, threadId },
+        requestContext,
+      );
       return {
         controllerId,
         resourceId,

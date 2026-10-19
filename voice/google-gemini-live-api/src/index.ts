@@ -15,6 +15,7 @@ import type {
   AudioConfig,
   GeminiLiveServerMessage,
   GeminiSessionConfig,
+  GeminiAudioTranscriptionConfig,
   IncrementalTurn,
   UpdateMessage,
 } from './types';
@@ -917,6 +918,18 @@ export class GeminiLiveVoice extends MastraVoice<
 
       if (config.vertexAI !== undefined || config.project !== undefined || config.location !== undefined) {
         this.log('Warning: Authentication settings cannot be changed during an active session.');
+      }
+
+      // Transcription config is a setup-only field in the Live API, so it can't be sent in a
+      // session.update. Store it so the next connect() uses it.
+      if (config.inputAudioTranscription !== undefined || config.outputAudioTranscription !== undefined) {
+        if (config.inputAudioTranscription !== undefined) {
+          this.options.inputAudioTranscription = config.inputAudioTranscription;
+        }
+        if (config.outputAudioTranscription !== undefined) {
+          this.options.outputAudioTranscription = config.outputAudioTranscription;
+        }
+        this.log('Warning: Transcription settings apply at setup time and take effect on the next connect().');
       }
 
       const updateMessage: UpdateMessage = {
@@ -1969,20 +1982,22 @@ export class GeminiLiveVoice extends MastraVoice<
         }>;
       }>;
       /**
-       * Empty-object flag that enables server-side ASR for the user's spoken
-       * input. When set, the server emits `serverContent.inputTranscription.text`
-       * frames alongside audio. Required to surface what the user said.
+       * Enables server-side ASR for the user's spoken input. When set (even as
+       * `{}`), the server emits `serverContent.inputTranscription.text` frames
+       * alongside audio. Required to surface what the user said.
+       * `language_codes` adds BCP-47 hints; omitted means auto-detect.
        */
-      input_audio_transcription?: Record<string, never>;
+      input_audio_transcription?: { language_codes?: string[] };
       /**
-       * Empty-object flag that enables server-side transcription of the model's
+       * Enables server-side transcription of the model's
        * spoken output. When set, the server emits
        * `serverContent.outputTranscription.text` frames. Required on
        * native-audio models — without this, the spoken response text is never
        * delivered to the client (`modelTurn.parts.text` on native-audio is
-       * reasoning, not spoken content).
+       * reasoning, not spoken content). Accepts the same `language_codes`
+       * hints as `input_audio_transcription`.
        */
-      output_audio_transcription?: Record<string, never>;
+      output_audio_transcription?: { language_codes?: string[] };
       /**
        * Activity handling tells the server how to react to new user activity
        * while the model is still responding. `START_OF_ACTIVITY_INTERRUPTS`
@@ -2050,8 +2065,10 @@ export class GeminiLiveVoice extends MastraVoice<
         // unconditionally enable STT in `connect()`. On native-audio models this is the ONLY way
         // to receive the spoken response as text (`modelTurn.parts.text` carries reasoning, not
         // speech), so without these flags the assistant's words are silently dropped client-side.
-        input_audio_transcription: {},
-        output_audio_transcription: {},
+        // Caller-supplied hints (`inputAudioTranscription` / `outputAudioTranscription`) are
+        // mapped to snake_case; with no hints the flags stay `{}` so the frame is unchanged.
+        input_audio_transcription: this.toWireTranscriptionConfig(this.options.inputAudioTranscription),
+        output_audio_transcription: this.toWireTranscriptionConfig(this.options.outputAudioTranscription),
         // Activity-based interrupts surface barge-in as `serverContent.interrupted = true` and
         // cancel the in-flight model response. This is the only way to wire up the `interrupt`
         // event declared in `GeminiLiveEventMap`.
@@ -2105,6 +2122,14 @@ export class GeminiLiveVoice extends MastraVoice<
         `Failed to send Live API setup message: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
+  }
+
+  /**
+   * Map the public camelCase transcription config to the Live API wire format. Always returns an
+   * object so transcription stays enabled; `language_codes` is only included when set.
+   */
+  private toWireTranscriptionConfig(config?: GeminiAudioTranscriptionConfig): { language_codes?: string[] } {
+    return config?.languageCodes !== undefined ? { language_codes: config.languageCodes } : {};
   }
 
   /**
@@ -2386,4 +2411,4 @@ export class GeminiLiveVoice extends MastraVoice<
   }
 }
 
-export type { IncrementalTurn } from './types';
+export type { GeminiAudioTranscriptionConfig, IncrementalTurn } from './types';

@@ -192,6 +192,45 @@ export function createSpanQueryTests(
       expect(result.spans[0]).toMatchObject({ model: 'test-model', provider: 'test-provider' });
     });
 
+    describe('time to first chunk', () => {
+      const ids = async (where: SpanQueryRequest['where']) =>
+        (await query({ where })).spans.map(row => row.spanId).sort();
+
+      it('returns the stored value, keeping zero and leaving missing values empty', async () => {
+        await getStorage().batchCreateSpans({
+          records: [
+            span('present', { timeToFirstChunkMs: 250 }),
+            span('zero', { timeToFirstChunkMs: 0 }),
+            span('empty', { timeToFirstChunkMs: null }),
+            span('missing'),
+          ],
+        });
+        const values = Object.fromEntries((await query()).spans.map(row => [row.spanId, row.timeToFirstChunkMs]));
+        expect(values).toEqual({ present: 250, zero: 0, empty: null, missing: null });
+      });
+
+      it('reads the value from the ended record when the span started before its first chunk', async () => {
+        await getStorage().createSpan({ span: span('lifecycle', { endedAt: null }) });
+        await getStorage().batchCreateSpans({ records: [span('lifecycle', { timeToFirstChunkMs: 400 })] });
+        expect((await query()).spans.map(row => row.timeToFirstChunkMs)).toEqual([400]);
+      });
+
+      it('filters by the value, counting zero as a value and missing as empty', async () => {
+        await getStorage().batchCreateSpans({
+          records: [
+            span('present', { timeToFirstChunkMs: 250 }),
+            span('zero', { timeToFirstChunkMs: 0 }),
+            span('missing'),
+          ],
+        });
+        const field = { path: 'timeToFirstChunkMs' } as const;
+        expect(await ids({ op: 'gt', left: field, right: { literal: 100 } })).toEqual(['present']);
+        expect(await ids({ op: 'eq', left: field, right: { literal: 0 } })).toEqual(['zero']);
+        expect(await ids({ op: 'exists', path: 'timeToFirstChunkMs' })).toEqual(['present', 'zero']);
+        expect(await ids({ op: 'notExists', path: 'timeToFirstChunkMs' })).toEqual(['missing']);
+      });
+    });
+
     it('preserves error presence through current-record selection and boolean filters', async () => {
       await getStorage().batchCreateSpans({ records: [span('failed', { error: { message: 'failure' } }), span('ok')] });
       const result = await query({

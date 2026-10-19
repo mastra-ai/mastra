@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowDown, ArrowUp } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { Txt } from '../components/Txt/Txt';
 import { ARRIVING_CLASS, ARRIVING_MS } from './animations';
 import { FoundationPage, FoundationSection, Specimen, SpecimenGroup } from './foundations-layout';

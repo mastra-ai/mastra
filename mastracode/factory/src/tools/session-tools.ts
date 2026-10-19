@@ -7,11 +7,8 @@ import type { BoardRegistry } from '../boards/registry.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { USER_SESSION_BRANCH_PREFIX } from '../routes/source-control-sessions.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
-import {
-  FactoryStartTransitionError,
-  WorkItemRepositoryError,
-  type FactoryStartCoordinator,
-} from '../rules/start-coordinator.js';
+import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
+import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import {
   ensureFactorySourceSession,
@@ -27,7 +24,7 @@ import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { deliverFactorySessionNotification } from './deliver.js';
+import { deliverFactorySessionNotification, resolveSessionThread } from './deliver.js';
 import type { FactoryMessaging } from './messaging-tools.js';
 import { findWorkItem, workItemNotFound, workItemNumber, workItemRefSchema } from './read-tools.js';
 import { heartbeatOpenRunUntilEnd } from './run-watch.js';
@@ -48,6 +45,7 @@ export interface FactorySessionToolDependencies {
     | 'list'
     | 'getForProject'
     | 'listRunBindings'
+    | 'findActiveRunBindingForSession'
     | 'subscribeToWorkItem'
     | 'unsubscribeFromWorkItem'
     | 'listSessionSubscriptions'
@@ -87,6 +85,44 @@ export function createFactorySessionTools(
   scope: FactoryToolScope,
   deps: FactorySessionToolDependencies,
 ): IntegrationTools {
+  const switchModel = createTool({
+    id: 'factory_switch_session_model',
+    description:
+      'Switch the model of a session you own in this Factory (side, work item, or review session) without recreating it. A running session switches immediately; a stopped one uses the model on its next run. The model must be one this server can run. Use a session ID from the Factory session or work item tools.',
+    inputSchema: z
+      .object({
+        sessionId: z.string().trim().min(1).max(200),
+        modelId: z.string().trim().min(1).max(200),
+      })
+      .strict(),
+    execute: async ({ sessionId, modelId }) => {
+      const row = await deps.sessions.getBySessionId(sessionId);
+      if (
+        !row ||
+        row.orgId !== scope.orgId ||
+        row.factoryProjectId !== scope.factoryProjectId ||
+        row.userId !== scope.userId
+      ) {
+        throw new Error('Session not found or not owned by you in this Factory.');
+      }
+      const messaging = await deps.messaging();
+      if (!messaging) throw new Error('Session model switching is not available on this server.');
+      const threadId = await resolveSessionThread({
+        controller: messaging.controller,
+        sessions: deps.sessions,
+        workItems: deps.workItems,
+        sessionId,
+      });
+      if (!threadId) throw new Error('Session has no conversation thread yet.');
+      const available = await messaging.controller.listAvailableModels();
+      if (!available.some(model => model.id === modelId && model.hasApiKey)) {
+        throw new Error(`Model ${modelId} is not available on this server.`);
+      }
+      const { live } = await messaging.controller.setThreadModel({ resourceId: sessionId, threadId, modelId });
+      return { sessionId, threadId, modelId, live };
+    },
+  });
+
   const start = createTool({
     id: 'factory_start_session',
     description: [
@@ -364,5 +400,5 @@ export function createFactorySessionTools(
     return repository.projectRepositoryId;
   }
 
-  return { factory_start_session: start };
+  return { factory_start_session: start, factory_switch_session_model: switchModel };
 }

@@ -67,7 +67,7 @@ export function DatasetItemDetails({ item, diff }: DatasetItemDetailsProps) {
 /** Item id and timestamps, laid out like the experiment result metadata. */
 function metadataMetrics(item: DatasetItem): ComparisonMetric[] {
   const wasUpdated = item.updatedAt && new Date(item.updatedAt).getTime() !== new Date(item.createdAt).getTime();
-  return [
+  const metrics: ComparisonMetric[] = [
     {
       id: 'item-id',
       icon: <FingerprintIcon />,
@@ -89,12 +89,15 @@ function metadataMetrics(item: DatasetItem): ComparisonMetric[] {
       value: formatDate(item.createdAt, 'date-time'),
       delta: null,
     },
-    {
+  ];
+  if (wasUpdated) {
+    metrics.push({
       id: 'updated',
       icon: <CalendarClockIcon />,
       label: 'Updated',
-      value: wasUpdated ? formatDate(item.updatedAt, 'date-time') : 'n/a',
+      value: formatDate(item.updatedAt, 'date-time'),
       delta: null,
-    },
-  ];
+    });
+  }
+  return metrics;
 }
