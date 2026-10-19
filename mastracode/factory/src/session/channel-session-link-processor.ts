@@ -28,9 +28,10 @@ const REPROCESS_PART_KEY = '__mastraReprocessPart';
 const LINK_PART_ID = 'factory-session-link';
 
 /**
- * Appends an `Open session ↗` link, on its own line, to the end of the first
- * reply of a new channel session, so the link and the reply are one message
- * and the link closes the text rather than leading it.
+ * Emits an `Open session ↗` link right after the first reply of a new channel
+ * session, so the link closes the reply rather than leading it. The channel
+ * driver ends a post at `text-end`, so Slack shows the link as its own short
+ * message after the reply.
  *
  * "End of the reply" is not `text-end`: a reply with citations is several
  * text blocks (`text … source … text`), each with its own `text-end`. The
