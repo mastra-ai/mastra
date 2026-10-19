@@ -165,6 +165,33 @@ describe('UpstashTransport process lifecycle', () => {
     expect(result).toMatchObject({ timedOut: false, code: 0 });
     expect(pushed).toEqual(['buffered before exit']);
   });
+
+  it('keeps retrying after a failed request, then exits once delivered', async () => {
+    const pushed: string[] = [];
+    let attempts = 0;
+    const url = await startServer((_req, body, res) => {
+      attempts++;
+      if (attempts === 1) {
+        res.statusCode = 503;
+        res.end('{}');
+        return;
+      }
+      const [[command, _list, ...values]] = JSON.parse(body);
+      if (command === 'LPUSH') pushed.push(...values.map((value: string) => JSON.parse(value).msg));
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify([{ result: pushed.length }, { result: 'OK' }]));
+    });
+
+    const result = await runScript(`
+      import { UpstashTransport } from ${JSON.stringify(upstashTransportPath)};
+      new UpstashTransport({ upstashUrl: ${JSON.stringify(url)}, upstashToken: 'test', flushInterval: 200 })
+        .write({ level: 30, msg: 'survives one outage' });
+    `);
+
+    expect(result).toMatchObject({ timedOut: false, code: 0 });
+    expect(attempts).toBe(2);
+    expect(pushed).toEqual(['survives one outage']);
+  });
 });
 
 // Web-standard runtimes (e.g. Cloudflare Workers without Node global timers) return a numeric id from
