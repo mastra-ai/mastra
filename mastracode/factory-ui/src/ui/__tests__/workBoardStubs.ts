@@ -7,7 +7,13 @@ export const FACTORY_ID = 'fp-1';
 export const REPO_ID = 'repo-1';
 export const OTHER_FACTORY_ID = 'fp-2';
 
-function workItem(id: string, title: string, createdAt: string, enteredAt: string, factoryProjectId = FACTORY_ID) {
+export function workItem(
+  id: string,
+  title: string,
+  createdAt: string,
+  enteredAt: string,
+  factoryProjectId = FACTORY_ID,
+) {
   return {
     id,
     orgId: 'org-1',

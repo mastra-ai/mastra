@@ -5,11 +5,10 @@ import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
-import { useContext, useEffect, useEffectEvent } from 'react';
+import { useContext, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { BoardLayout } from '../boardLayout';
-import type { BoardDetailsDock } from '../context/BoardDetailsDockContext';
 import { BoardDetailsDockContext } from '../context/BoardDetailsDockContext';
 import { cardMorphStyle } from '../hooks/useCardMorph';
 import type { CardMorph } from '../hooks/useCardMorph';
@@ -53,7 +52,7 @@ export function CardDetailsPanel({
 
   if (layout === 'list' && dock) {
     return morph.open ? (
-      <DockedCardDetails dock={dock} morph={morph} labelledBy={labelledBy} header={header}>
+      <DockedCardDetails element={dock.element} morph={morph} labelledBy={labelledBy} header={header}>
         {children}
       </DockedCardDetails>
     ) : null;
@@ -128,28 +127,33 @@ export function CardDetailsPanel({
 }
 
 function DockedCardDetails({
-  dock: { element, claim },
+  element,
   morph,
   labelledBy,
   header,
   children,
-}: CardDetailsProps & { dock: BoardDetailsDock }) {
-  const closeDetails = useEffectEvent(() => morph.closeDetails());
-  useEffect(() => claim(() => closeDetails()), [claim]);
-
+}: CardDetailsProps & { element: HTMLElement | null }) {
   const { cardRef } = morph;
-  useEffect(
-    () => () => {
+  const sectionRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (element === null) return;
+    sectionRef.current?.focus({ preventScroll: true });
+    return () => {
       // Removing the focused panel drops focus onto the page.
       if (document.activeElement === document.body) cardRef.current?.focus({ preventScroll: true });
-    },
-    [cardRef],
-  );
+    };
+  }, [element, cardRef]);
 
   if (element === null) return null;
 
   return createPortal(
-    <section role="dialog" aria-labelledby={labelledBy} className="flex min-h-0 flex-1 flex-col">
+    <section
+      ref={sectionRef}
+      role="dialog"
+      aria-labelledby={labelledBy}
+      tabIndex={-1}
+      className="flex min-h-0 flex-1 flex-col outline-none"
+    >
       <div className="relative flex shrink-0 flex-col gap-3 p-3">{header}</div>
       <div className="border-border flex min-h-0 grow flex-col border-t">{children}</div>
     </section>,

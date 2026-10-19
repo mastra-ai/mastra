@@ -1,44 +1,31 @@
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 
 import { BoardDetailsDockContext } from '../context/BoardDetailsDockContext';
+import { useBoardOpenCard } from '../context/useBoardOpenCard';
 
 const MIN_VIEWPORT_PX_FOR_DOCKED_DETAILS = 1280;
-
-function createDockHolder() {
-  let closeHeldPanel: (() => void) | undefined;
-  return {
-    claim: (close: () => void) => {
-      closeHeldPanel?.();
-      closeHeldPanel = close;
-      return () => {
-        if (closeHeldPanel === close) closeHeldPanel = undefined;
-      };
-    },
-    closeHeldPanel: () => closeHeldPanel?.(),
-  };
-}
 
 export function BoardDetailsDock({ enabled, children }: { enabled: boolean; children: ReactNode }) {
   const tooNarrow = useIsMobile(MIN_VIEWPORT_PX_FOR_DOCKED_DETAILS);
   const docked = enabled && !tooNarrow;
   const [element, setElement] = useState<HTMLElement | null>(null);
-  const [holder] = useState(createDockHolder);
+  const { openKey, setCardOpen } = useBoardOpenCard();
 
+  const closeOpenCardOnEscape = useEffectEvent((event: KeyboardEvent) => {
+    if (event.key === 'Escape' && !event.defaultPrevented && openKey !== undefined) setCardOpen(openKey, false);
+  });
   useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !event.defaultPrevented) holder.closeHeldPanel();
-    };
-    document.addEventListener('keydown', closeOnEscape);
-    return () => document.removeEventListener('keydown', closeOnEscape);
-  }, [holder]);
-
-  const dock = docked ? { element, claim: holder.claim } : null;
+    if (!docked) return;
+    const onKeyDown = (event: KeyboardEvent) => closeOpenCardOnEscape(event);
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [docked]);
 
   return (
     <div className="flex min-h-0 flex-1">
-      <BoardDetailsDockContext value={dock}>{children}</BoardDetailsDockContext>
+      <BoardDetailsDockContext value={docked ? { element } : null}>{children}</BoardDetailsDockContext>
       {docked && (
         <div
           ref={setElement}

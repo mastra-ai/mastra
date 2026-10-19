@@ -43,7 +43,6 @@ import { WorkItemMenuItems } from './WorkItemMenuItems';
 export function WorkItemCard({
   item,
   deepLinkRef,
-  deepLinkCommentId,
   highlighted,
   columnStage,
   relatedItems,
@@ -68,8 +67,6 @@ export function WorkItemCard({
   item: WorkItem;
   // Hands the card's own control to the board, which scrolls to it and focuses it when the card is deeplinked.
   deepLinkRef: (element: HTMLElement | null) => void;
-  /** Comment deep link (`?item&comment`): holds the details popover open so the feed is reachable. */
-  deepLinkCommentId?: string;
   highlighted: boolean;
   columnStage: BoardStageId;
   /** Cards linked to this one, resolved once for the whole board. */
@@ -99,7 +96,7 @@ export function WorkItemCard({
   layout: BoardLayout;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
-  const morph = useCardMorph({ openFor: deepLinkCommentId });
+  const morph = useCardMorph();
   const catalog = useBoardCatalog(item.githubProjectId);
   const boardId = itemBoard(item);
   const custom = boardId !== 'work' && boardId !== 'review';

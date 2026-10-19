@@ -7,8 +7,8 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
-import { stageToggle } from './boardLayoutQueries';
-import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
+import { saveKanbanView, stageToggle } from './boardLayoutQueries';
+import { FACTORY_ID, stubWorkBoard, workItem } from './workBoardStubs';
 
 function renderBoard() {
   stubWorkBoard();
@@ -200,5 +200,55 @@ describe('Default grouped issue list', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(within(triage).getByRole('article', { name: 'Moved recently' })).toHaveFocus();
+  });
+
+  it('moves focus into the docked panel when a row opens from the keyboard', async () => {
+    renderBoard();
+    const user = userEvent.setup();
+    const details = await screen.findByRole('button', { name: 'Details for Moved recently' });
+    act(() => details.focus());
+
+    await user.keyboard('{Enter}');
+
+    const panel = await screen.findByRole('dialog', { name: 'Moved recently' });
+    await waitFor(() => expect(panel).toHaveFocus());
+  });
+
+  it('opens only the clicked copy of an item that sits in two stages', async () => {
+    renderBoard();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...workItem('split-card', 'In two stages', '2026-08-01T00:00:00.000Z', '2026-08-04T00:00:00.000Z'),
+              stages: ['triage', 'planning'],
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    const triage = await screen.findByTestId('board-column-triage');
+    expect(await within(screen.getByTestId('board-column-planning')).findByText('In two stages')).toBeInTheDocument();
+
+    await user.click(await within(triage).findByText('In two stages'));
+
+    await screen.findByRole('dialog', { name: 'In two stages' });
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+  });
+
+  it('keeps one card open on the kanban board when another card opens', async () => {
+    renderBoard();
+    const user = userEvent.setup();
+    await screen.findByText('Moved recently');
+    await saveKanbanView(user);
+
+    await user.click(await screen.findByRole('button', { name: 'Details for Moved recently' }));
+    await screen.findByRole('dialog', { name: 'Moved recently' });
+    await user.click(screen.getByRole('button', { name: 'Details for Created later' }));
+
+    await screen.findByRole('dialog', { name: 'Created later' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Moved recently' })).not.toBeInTheDocument());
   });
 });
