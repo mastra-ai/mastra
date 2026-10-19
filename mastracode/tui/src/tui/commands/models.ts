@@ -150,6 +150,34 @@ export async function handleModelCommand(ctx: SlashCommandContext): Promise<void
       return;
     }
 
+    if (ctx.state.factory) {
+      return new Promise<void>(resolve => {
+        const selector = new ModelSelectorComponent({
+          tui: ctx.state.ui,
+          models: connected,
+          currentModelId,
+          onSelect: async (model: ModelItem) => {
+            ctx.state.ui.hideOverlay();
+            try {
+              await ctx.state.session.model.switch(model.id);
+              ctx.updateStatusLine();
+              ctx.showInfo(`Switched to ${model.id}`);
+            } catch (error) {
+              ctx.showError(`Failed to switch model: ${error instanceof Error ? error.message : String(error)}`);
+            } finally {
+              resolve();
+            }
+          },
+          onCancel: () => {
+            ctx.state.ui.hideOverlay();
+            resolve();
+          },
+        });
+        showModalOverlay(ctx.state.ui, selector, { maxHeight: '75%' });
+        selector.focused = true;
+      });
+    }
+
     const settings = loadSettings();
     const threadId = ctx.state.session.thread.getId?.();
     const thread = threadId ? (await ctx.state.session.thread.list()).find(item => item.id === threadId) : undefined;

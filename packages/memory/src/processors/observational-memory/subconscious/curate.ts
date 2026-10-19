@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import type { KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
@@ -142,21 +143,29 @@ export function dispatchCuratorObservation(
   config: ResolvedSubconsciousAgent,
   observations: string,
 ) {
+  const threadId = `subconscious:${context.threadId}:curate`;
+  const resourceId = context.resourceId ?? context.threadId;
+  // The parent's thread and resource ids in its request context outrank the
+  // memory target, so point them at the curator's own thread. A copy keeps the
+  // parent's context unchanged.
+  let requestContext: RequestContext | undefined;
+  if (context.requestContext) {
+    requestContext = new RequestContext(context.requestContext.entries());
+    requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+  }
   return agent.sendMessage(
     {
       contents: `Parent thread: ${context.threadId}\nResource: ${context.resourceId}\nCurrent time: ${formatLocalTimestamp(new Date())}\n\nCompleted observations to curate:\n${frameUntrustedObservations(observations)}`,
     },
     {
-      resourceId: context.resourceId ?? context.threadId,
-      threadId: `subconscious:${context.threadId}:curate`,
+      resourceId,
+      threadId,
       ifIdle: {
         streamOptions: {
-          requestContext: context.requestContext,
+          requestContext,
           maxSteps: config.maxSteps,
-          memory: {
-            thread: `subconscious:${context.threadId}:curate`,
-            resource: context.resourceId ?? context.threadId,
-          },
+          memory: { thread: threadId, resource: resourceId },
         },
       },
     },

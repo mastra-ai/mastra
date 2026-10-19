@@ -6,9 +6,6 @@ on:
       head_sha:
         required: true
         type: string
-      base_ref:
-        required: true
-        type: string
       has_code:
         required: true
         type: string

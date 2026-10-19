@@ -234,6 +234,8 @@ export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord 
 }
 
 export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown> {
+  // Re-emitted copies and retries of a span must preserve startedAt. querySpans applies
+  // its start-time window before selecting the latest completed copy of each identity.
   const endedAt = span.isEvent ? span.startedAt : (span.endedAt ?? span.startedAt);
   const metadata = span.metadata ?? null;
   const input = jsonEncode(span.input);
@@ -273,6 +275,7 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     isEvent: span.isEvent,
     startedAt: toISOString(span.startedAt),
     endedAt: toISOString(endedAt),
+    timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
     tags: normalizeTags(span.tags),
     metadataSearch: buildMetadataSearch(metadata),
     metadataRaw: jsonEncode(metadata),

@@ -475,7 +475,7 @@ export function TraceDataPanelView({
                       size="sm"
                       value={query}
                       onValueChange={setQuery}
-                      className="w-full"
+                      className="min-w-0 flex-1"
                     />
                     <ButtonsGroup size="sm" className="shrink-0">
                       <Button

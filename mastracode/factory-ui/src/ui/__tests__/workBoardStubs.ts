@@ -74,16 +74,22 @@ export function stubWorkBoard() {
                   '2026-08-02T00:00:00.000Z',
                   OTHER_FACTORY_ID,
                 ),
-                workItem(
-                  'other-moved-card',
-                  'Other factory moved',
-                  '2026-07-01T00:00:00.000Z',
-                  '2026-08-04T00:00:00.000Z',
-                  OTHER_FACTORY_ID,
-                ),
+                {
+                  ...workItem(
+                    'other-moved-card',
+                    'Other factory moved',
+                    '2026-07-01T00:00:00.000Z',
+                    '2026-08-04T00:00:00.000Z',
+                    OTHER_FACTORY_ID,
+                  ),
+                  metadata: { labels: ['moved'] },
+                },
               ]
             : [
-                workItem('newer-card', 'Created later', '2026-08-02T00:00:00.000Z', '2026-08-03T00:00:00.000Z'),
+                {
+                  ...workItem('newer-card', 'Created later', '2026-08-02T00:00:00.000Z', '2026-08-03T00:00:00.000Z'),
+                  metadata: { labels: ['later'] },
+                },
                 workItem('recent-card', 'Moved recently', '2026-07-01T00:00:00.000Z', '2026-08-04T00:00:00.000Z'),
               ],
       }),

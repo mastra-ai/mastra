@@ -44,7 +44,7 @@ import { relatedWorkItemIndex } from '../../domains/factory/services/relationshi
 import { workItemHumanActorIds } from '../../domains/factory/workItemActivity';
 import type { FactoryProject, LinkedRepositoryPayload } from '../../domains/workspaces/services/github';
 
-import { ColumnReveal } from '../../domains/factory/components/ColumnReveal';
+import { VirtualBoardItems } from '../../domains/factory/components/VirtualBoardItems';
 import { WorkItemCard } from '../../domains/factory/components/WorkItemCard';
 import { InlineWorkItemComposer } from '../../domains/factory/components/InlineWorkItemComposer';
 import { BoardStageCandidates } from '../../domains/factory/components/BoardStageCandidates';
@@ -86,8 +86,6 @@ export function BoardContent({
   const currentUserId = auth.data?.user?.userId;
   const view = useBoardView({ factoryProjectId, kind, currentUserId });
   const { searchParams, filters, sort, layout } = view;
-  const cardMatchesViewSearch = (card: Parameters<typeof cardMatchesSearch>[0]) =>
-    cardMatchesSearch(card, filters.search) && cardMatchesSearch(card, view.search);
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
 
@@ -166,7 +164,7 @@ export function BoardContent({
     if (!candidateMatchesRelevance(candidate, filters.participantIds, filters.relevanceTypes)) return false;
     if (!candidateMatchesLabels(candidate, filters.labels)) return false;
     if (!cardMatchesSourceFilters(candidate, filters)) return false;
-    return cardMatchesViewSearch(candidate);
+    return cardMatchesSearch(candidate, view.search);
   };
   const filteredCandidates = intake.candidates.filter(candidateMatchesView);
   const unfilteredWorkItemsForStage = (stage: (typeof stages)[number]['id']) =>
@@ -177,7 +175,7 @@ export function BoardContent({
       return false;
     if (!workItemMatchesLabels(item, filters.labels, liveCandidate)) return false;
     if (!cardMatchesSourceFilters(item, filters, liveCandidate)) return false;
-    return cardMatchesViewSearch(item);
+    return cardMatchesSearch(item, view.search);
   };
   const workItemsForStage = (stage: (typeof stages)[number]['id']) => {
     const matchingItems = unfilteredWorkItemsForStage(stage).filter(workItemMatchesView);
@@ -305,12 +303,13 @@ export function BoardContent({
             )
           }
         >
-          <ColumnReveal
+          <VirtualBoardItems
             items={stageWorkItems}
-            pinned={item => item.id === targetItemId}
+            itemKey={item => item.id}
+            layout={layout}
+            pinnedKey={targetItemId}
             renderItem={item => (
               <WorkItemCard
-                key={`${item.id}:${stage.id}`}
                 layout={layout}
                 item={item}
                 deepLinkRef={registerDeepLinkedCard(item.id)}
@@ -407,6 +406,8 @@ export function BoardContent({
                   factoryProjectId={factoryProjectId}
                   autoRunEnabled={factory.autoRunEnabled ?? false}
                   autoApprovePlans={factory.autoApprovePlans ?? false}
+                  reviewTestChecksEnabled={factory.reviewTestChecksEnabled ?? false}
+                  selfReviewEnabled={factory.selfReviewEnabled ?? false}
                 />
               )
             }

@@ -79,20 +79,22 @@ function decodeThreadTopic(topic: string): string | undefined {
 
 /**
  * The lease that lets exactly one process dispatch a resource's due
- * notifications. Held in that resource's directory, so every process serving
- * the resource contends for it whichever project it was started in.
+ * notifications: those of the resource's threads that carry `scope` (a
+ * `threadScopeKey`, one project's threads), or with no `scope`, those of its
+ * threads that carry none. Held in that resource's directory, so every process
+ * serving the resource contends for it whichever project it was started in.
  */
-export function notificationDispatchLeaseKey(resourceId: string): string {
-  return `${NOTIFICATION_DISPATCH_LEASE_PREFIX}${resourceId}`;
+export function notificationDispatchLeaseKey(resourceId: string, scope?: string): string {
+  return `${NOTIFICATION_DISPATCH_LEASE_PREFIX}${resourceId}${scope === undefined ? '' : `${THREAD_KEY_SEPARATOR}${scope}`}`;
 }
 
 /**
  * The resource a lease key belongs to: a thread's run lease and claim lease,
- * and a resource's notification dispatch lease.
+ * and a resource's notification dispatch leases.
  */
 function resourceOfLeaseKey(key: string): string | undefined {
   if (key.startsWith(NOTIFICATION_DISPATCH_LEASE_PREFIX)) {
-    const resourceId = key.slice(NOTIFICATION_DISPATCH_LEASE_PREFIX.length);
+    const [resourceId = ''] = key.slice(NOTIFICATION_DISPATCH_LEASE_PREFIX.length).split(THREAD_KEY_SEPARATOR, 1);
     return isSafePathSegment(resourceId) ? resourceId : undefined;
   }
   return resourceOfThreadKey(

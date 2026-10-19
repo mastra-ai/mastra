@@ -11,7 +11,7 @@ import {
   clearOpenCard,
 } from '../boardFilters';
 import type { BoardFilterState } from '../boardFilters';
-import { DEFAULT_BOARD_LAYOUT } from '../boardLayout';
+import { boardLayoutFromParams, boardLayoutParams } from '../boardLayout';
 import type { BoardLayout } from '../boardLayout';
 import type { BoardSort } from '../boardOrder';
 import { BOARD_VIEW_QUERY, boardViewSettingsSchema, savedBoardViewsStorageKey } from '../boardSavedViews';
@@ -36,6 +36,7 @@ export interface BoardView {
   setSearch: (next: string) => void;
   setSort: (next: BoardSort) => void;
   setLayout: (next: BoardLayout) => void;
+  resetProperties: () => void;
 }
 
 export function useBoardView({
@@ -71,7 +72,7 @@ export function useBoardView({
   const { applied } = savedViews;
   const pageSettings: BoardViewSettings = {
     sort: boardSortFromParams(searchParams, currentUserId),
-    layout: DEFAULT_BOARD_LAYOUT,
+    layout: boardLayoutFromParams(searchParams),
   };
   const pageFilters = boardFiltersFromParams(searchParams, kind);
   const settings = applied?.settings ?? pageSettings;
@@ -114,6 +115,19 @@ export function useBoardView({
     },
     setLayout: (next: BoardLayout) => {
       if (applied) savedViews.change({ settings: { ...applied.settings, layout: next } });
+      else replaceParams(boardLayoutParams(searchParams, next));
+    },
+    resetProperties: () => {
+      if (applied) {
+        savedViews.change({ filters: [], settings: { ...applied.settings, sort: DEFAULT_BOARD_SORT } });
+        return;
+      }
+      const params = boardSortParams(
+        boardFilterParams(searchParams, boardFilterStateFromItems([], kind), kind),
+        DEFAULT_BOARD_SORT,
+      );
+      clearOpenCard(params);
+      replaceParams(params);
     },
   };
 }
