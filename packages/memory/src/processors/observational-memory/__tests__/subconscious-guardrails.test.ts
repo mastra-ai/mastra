@@ -1,4 +1,5 @@
-import { createSignal, type MastraDBMessage } from '@mastra/core/agent';
+import { createSignal } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { describe, expect, it } from 'vitest';
 
 import { stripSubconsciousSignals } from '../subconscious/origin';

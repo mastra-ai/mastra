@@ -78,6 +78,17 @@ function startChild(
       });
     },
     result: new Promise<number | null>(resolve => child.on('close', resolve)),
+    /**
+     * SIGKILLs the fixture process itself. `child` is the tsx launcher, which runs the
+     * fixture in its own node subprocess; killing only the launcher orphans the fixture
+     * (and, in CI containers whose PID 1 does not reap, leaves it a zombie that still
+     * answers `kill(pid, 0)`), so its leases never look stale.
+     */
+    killFixture() {
+      const pid = events[0]?.pid;
+      if (!pid) throw new Error(`${role} has not reported its pid yet`);
+      process.kill(pid, 'SIGKILL');
+    },
   };
 }
 
@@ -534,7 +545,7 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     contender.child.stdin.write('claim\n');
     expect(await contender.waitFor('claim-result')).toMatchObject({ threadId: 'owner-thread', claimed: false });
 
-    owner.child.kill('SIGKILL');
+    owner.killFixture();
     await owner.result;
 
     const contenderAttempts = () => contender.events.filter(event => event.event === 'claim-attempt');
@@ -560,7 +571,7 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
   it('lets exactly one contender reclaim a filesystem lease from a killed holder', async () => {
     const holder = startChild('owner', resourceId, 'stale-lease-takeover');
     expect(await holder.waitFor('lease-result')).toMatchObject({ acquired: true });
-    holder.child.kill('SIGKILL');
+    holder.killFixture();
     await holder.result;
 
     const startAt = String(Date.now() + 2_000);
@@ -656,7 +667,7 @@ describe.skipIf(process.platform === 'win32')('cross-agent signals over Unix soc
     before.child.stdin.end();
     expect(await before.result).toBe(0);
 
-    owner.child.kill('SIGKILL');
+    owner.killFixture();
     expect(await owner.result).not.toBe(0);
 
     const after = startChild('sender', resourceId, 'discovery-probe');

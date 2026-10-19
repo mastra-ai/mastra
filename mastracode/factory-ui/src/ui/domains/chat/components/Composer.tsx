@@ -6,11 +6,11 @@ import {
   ComposerActions,
   ComposerBox,
   ComposerInput,
-  type ComposerInputProps,
   ComposerRing,
   ComposerSuggestions,
   useComposerCommands,
 } from '@mastra/playground-ui/components/Composer';
+import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square } from 'lucide-react';
@@ -23,6 +23,7 @@ import { useChatConnection } from '../context/useChatConnection';
 import { useChatModels } from '../context/useChatModels';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
+import type { PendingImage } from '../context/ComposerImagesContext';
 import {
   useAbortAgentControllerMutation,
   useSendAgentControllerMessageMutation,
@@ -37,7 +38,6 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { StatusLine } from './StatusLine';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { useComposerImages } from './useComposerImages';
-import type { PendingImage } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 
 type ComposerProps = Pick<ComposerInputProps, 'variant'>;
@@ -79,9 +79,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
   const draftConfigNotReady = onUserDraft && (modelLoading || modelError !== undefined);
-  const attachDisabled = onUserDraft || blocked || chatPreparing || planFeedback.pending;
+  const attachDisabled = blocked || chatPreparing || planFeedback.pending;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
-    onUserDraft,
     disabled: chatPreparing || planFeedback.pending,
   });
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
@@ -138,6 +137,18 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     localUser(text, false, outgoing);
     await sendMutation.mutateAsync({ text, files: outgoing });
     clearPendingHandoff(resourceId);
+  };
+
+  // Images leave the composer while in flight and come back if the send fails.
+  const withPendingImages = async (run: (files: PendingImage[]) => Promise<unknown>) => {
+    const files = images;
+    setImages([]);
+    try {
+      await run(files);
+    } catch (error) {
+      setImages(current => [...files, ...current]);
+      throw error;
+    }
   };
 
   const steer = async (text: string) => {
@@ -207,7 +218,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
     if (onUserDraft) {
       try {
-        await createDraftSessionMutation.mutateAsync(text);
+        await withPendingImages(files => createDraftSessionMutation.mutateAsync({ prompt: text, files }));
       } catch (error) {
         updateDraft(text);
         throw error;
@@ -224,14 +235,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       await steer(text);
       return;
     }
-    const files = images;
-    setImages([]);
-    try {
-      await send(text, files);
-    } catch (error) {
-      setImages(current => [...files, ...current]);
-      throw error;
-    }
+    await withPendingImages(files => send(text, files));
   }
 
   return (

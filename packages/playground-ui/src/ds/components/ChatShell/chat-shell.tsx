@@ -66,8 +66,9 @@ export function ChatShellStage({ className, ...props }: ComponentPropsWithoutRef
 /**
  * The one scroll container. It takes the end inset itself — on an ancestor the
  * same room would drag the scrollbar inward, off the true edge. No overscroll
- * bounce on either axis: the dock is sticky inside this box, so the rubber band
- * would carry the composer off its edge along with the transcript.
+ * bounce vertically: the dock is sticky inside this box, so the rubber band
+ * would carry the composer off its edge along with the transcript. Horizontal
+ * overscroll stays native so trackpad swipes can navigate browser history.
  *
  * The same edge room on both sides keeps the scrollbar clear of the composer and
  * the column centred, with a matching gutter for classic scrollbars.
@@ -76,7 +77,7 @@ export function ChatShellViewport({ className, children, ...props }: MessageScro
   return (
     <MessageScrollerViewport
       className={cn(
-        'h-auto min-h-0 flex-1 overscroll-none ps-(--chat-edge) pe-[calc(var(--chat-edge)+var(--chat-inset-end))]',
+        'h-auto min-h-0 flex-1 overscroll-y-none ps-(--chat-edge) pe-[calc(var(--chat-edge)+var(--chat-inset-end))]',
         '[scrollbar-gutter:stable_both-edges]',
         'transition-[padding] duration-360 ease-out-custom motion-reduce:transition-none',
         className,

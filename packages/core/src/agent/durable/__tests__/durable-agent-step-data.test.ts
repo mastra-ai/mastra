@@ -273,6 +273,11 @@ describe('DurableAgent step data (#26780)', () => {
     expect(finish.steps).toHaveLength(3);
     expect(finish.toolCalls.map((c: any) => c.payload?.toolName ?? c.toolName)).toEqual(['free', 'gated']);
     expect(finish.toolResults).toHaveLength(2);
+    // The first step finished before the approval, so its content comes from the run's stored steps.
+    expect(finish.steps[0].content.find((part: any) => part.type === 'tool-result')).toMatchObject({
+      toolCallId: 'call-free',
+      output: { type: 'json', value: { ok: true } },
+    });
     expect(finish.steps.at(-1).response?.modelId).toBe('resume-model');
     expect(finish.steps.at(-1).response?.messages?.length).toBeGreaterThan(0);
   }, 30000);
@@ -351,5 +356,48 @@ describe('DurableAgent step data (#26780)', () => {
     cleanup();
     expect(response.modelId).toBe('response-model');
     expect(response.messages.some((m: any) => m.role === 'tool')).toBe(true);
+  });
+});
+
+describe('DurableAgent final step text', () => {
+  it('reports the text an output processor rewrote in the finish steps', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const { model } = toolThenTextModel('rewrite-model');
+    const durableAgent = createDurableAgent({
+      agent: new Agent({
+        id: 'rewrite-agent',
+        name: 'Rewrite Agent',
+        instructions: 'Test',
+        model: model as LanguageModelV2,
+        tools: { probe: probe() },
+        outputProcessors: [
+          {
+            id: 'redact',
+            processOutputResult: async ({ messages }: { messages: any[] }) => {
+              for (const message of messages) {
+                if (message.role !== 'assistant') continue;
+                for (const part of message.content.parts) {
+                  if (part.type === 'text') part.text = part.text.replace('done', 'rewritten');
+                }
+              }
+              return messages;
+            },
+          },
+        ],
+      }),
+      pubsub,
+    });
+
+    let finish: any;
+    const { output, cleanup } = await durableAgent.stream('go', {
+      maxSteps: 5,
+      onFinish: (e: any) => void (finish = e),
+    });
+    await output.consumeStream();
+    cleanup();
+    await pubsub.close();
+
+    expect(finish.text).toBe('rewritten');
+    expect(finish.steps.at(-1).text).toBe('rewritten');
   });
 });

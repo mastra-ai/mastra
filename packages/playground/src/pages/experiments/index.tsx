@@ -8,7 +8,7 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { useDatasets } from '@mastra/react/hooks/datasets';
 import { useInfiniteExperiments } from '@mastra/react/hooks/experiments';
 import { useReviewSummary } from '@mastra/react/hooks/review';
-import { Play } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -108,10 +108,16 @@ export default function Experiments() {
     });
   };
 
-  // Any selection clears; otherwise pick the listed experiments, up to the compare cap.
+  // Any selection clears; otherwise pick the listed experiments sharing the first one's dataset, up to the cap.
   const toggleAllExperiments = (visibleExperimentIds: string[]) => {
+    const datasetByExperimentId = new Map(experiments.map(exp => [exp.id, exp.datasetId]));
+    const datasetId = datasetByExperimentId.get(visibleExperimentIds[0]);
     setSelectedExperimentIds(current =>
-      current.length > 0 ? [] : visibleExperimentIds.slice(0, MAX_COMPARED_EXPERIMENTS),
+      current.length > 0
+        ? []
+        : visibleExperimentIds
+            .filter(id => datasetByExperimentId.get(id) === datasetId)
+            .slice(0, MAX_COMPARED_EXPERIMENTS),
     );
   };
 
@@ -121,11 +127,16 @@ export default function Experiments() {
     const ids = selectedExperimentIds.filter(id => datasetByExperimentId.has(id));
     return { selectedIds: ids, selectedDatasetIds: new Set(ids.map(id => datasetByExperimentId.get(id))) };
   }, [experiments, selectedExperimentIds]);
+  // The first pick is the baseline, so its dataset decides which experiments can join the comparison.
+  const comparableDatasetId = experiments.find(exp => exp.id === selectedIds[0])?.datasetId ?? undefined;
+  const comparableDataset = comparableDatasetId
+    ? { id: comparableDatasetId, name: datasets.find(ds => ds.id === comparableDatasetId)?.name ?? comparableDatasetId }
+    : undefined;
   const compareDisabledReason =
     selectedIds.length < 2
       ? 'Select at least two experiments to compare'
       : selectedDatasetIds.size !== 1
-        ? 'Select experiments from the same dataset to compare'
+        ? 'Only experiments from the same dataset can be compared'
         : undefined;
 
   const executeCompare = () => {
@@ -202,14 +213,8 @@ export default function Experiments() {
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
-        <Button
-          variant="primary"
-          size="sm"
-          icon={<Play />}
-          tooltip="Run an experiment"
-          onClick={() => setRunDialogOpen(true)}
-        >
-          Run Experiment
+        <Button variant="primary" size="sm" icon={<Plus />} onClick={() => setRunDialogOpen(true)}>
+          New experiment
         </Button>
       }
       actionRow={
@@ -227,6 +232,7 @@ export default function Experiments() {
             onCompare: executeCompare,
             compareDisabledReason,
           }}
+          comparableDataset={comparableDataset}
         />
       }
     >
@@ -248,6 +254,7 @@ export default function Experiments() {
           selectedExperimentIds: selectedIds,
           onToggleSelection: toggleExperimentSelection,
           onToggleAll: toggleAllExperiments,
+          comparableDatasetId,
         }}
       />
 

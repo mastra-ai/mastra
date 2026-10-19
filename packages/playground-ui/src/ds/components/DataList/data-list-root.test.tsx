@@ -272,6 +272,18 @@ describe('DataListRoot', () => {
       expect(defaultRow.dataset.variant).toBe('default');
     });
 
+    it('exposes the info tone as data-variant', () => {
+      const { container } = render(
+        <DataList columns="1fr">
+          <DataList.RowButton variant="info">
+            <DataList.Cell>highlighted</DataList.Cell>
+          </DataList.RowButton>
+        </DataList>,
+      );
+      const row = container.querySelector<HTMLButtonElement>('.data-list-row');
+      expect(row?.dataset.variant).toBe('info');
+    });
+
     describe('when the error row is pressed', () => {
       it('keeps a red tint instead of the grey active fill', () => {
         const { container } = render(

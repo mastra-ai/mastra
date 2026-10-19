@@ -27,6 +27,11 @@
         "type": "budget_tokens"
       }
     ],
+    "MiniMaxAI/MiniMax-M2.5": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
     "deepseek-ai/DeepSeek-V3.2": [
       {
         "type": "toggle"
@@ -35,7 +40,11 @@
         "type": "budget_tokens"
       }
     ],
-    "MiniMaxAI/MiniMax-M2.5": [
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      },
       {
         "type": "budget_tokens"
       }
@@ -43,18 +52,6 @@
     "zai-org/GLM-5.1": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "zai-org/GLM-5.2": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
       },
       {
         "type": "budget_tokens"
@@ -69,10 +66,13 @@
         "type": "budget_tokens"
       }
     ],
-    "zai-org/GLM-5.3": [
+    "zai-org/GLM-5.2": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["high", "max"]
       },
       {
         "type": "budget_tokens"

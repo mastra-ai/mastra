@@ -143,6 +143,13 @@ export const spanRecordSchema = z
     outputPreview: z.string().nullish().describe('Short text preview of the span output'),
     errorPreview: z.string().nullish().describe('Short text preview of the span error'),
 
+    // Derived from `attributes.completionStartTime` when an exporter builds the record, so stores
+    // persist it without computing it themselves.
+    timeToFirstChunkMs: z
+      .number()
+      .nullish()
+      .describe('Milliseconds from span start to the first streamed chunk; null when the span never streamed one'),
+
     // Database timestamps
     ...dbTimestamps,
   })

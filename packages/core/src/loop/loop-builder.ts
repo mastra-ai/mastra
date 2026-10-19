@@ -1,13 +1,14 @@
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { normalizeToolOutput } from '../agent/message-list/utils/unwrap-legacy-tool-output';
 import type { MastraDBMessage } from '../memory';
-import { InternalSpans } from '../observability';
+import { InternalSpans, resolveExportedSpanId, SpanType } from '../observability';
 import { safeEnqueue } from '../stream/base';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
-import { createEventedWorkflow, createWorkflow } from '../workflows/create';
+import type { createEventedWorkflow } from '../workflows/create';
+import { createWorkflow } from '../workflows/create';
 import type { Step } from '../workflows/step';
-import type { OutputWriter } from '../workflows/types';
+import type { OutputWriter, WorkflowStateTracingContext } from '../workflows/types';
 import type { Workflow } from '../workflows/workflow';
 import { createStep } from '../workflows/workflow';
 import type { LoopRuntime, MainLoopIterationState } from './loop-runtime';
@@ -19,6 +20,7 @@ import {
   RESOURCE_ID_KEY,
   STEP_ACTIVE_TOOLS_KEY,
   STEP_TOOLS_KEY,
+  STEP_USAGE_KEY,
   STEP_WORKSPACE_KEY,
   THREAD_ID_KEY,
   TOOL_APPROVAL_VERDICTS_KEY,
@@ -381,6 +383,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           });
           emittedConcurrencyResolved = true;
           writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
+          writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', typedInputData.output.usage);
           return toolCalls;
         },
         { id: 'map-tool-calls' },
@@ -501,7 +504,13 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         return typedInputData.stepResult.isContinued;
       }
 
-      const responseMessages = typedInputData.messages.nonUser;
+      // Read this run's response from the persisted view: with savePerStep the
+      // live response set is drained after each saved step, and a message that
+      // is no longer updated drops out of it, which would shift the content
+      // offset below and hand stopWhen the wrong parts (#25538).
+      const responseMessages = messageList.getPersisted.response.aiV5
+        .model()
+        .filter(message => message.role === 'assistant' || message.role === 'tool');
       const allContent: StepResult<Tools>['content'] = responseMessages.flatMap(
         message => message.content as unknown as StepResult<Tools>['content'],
       );
@@ -686,7 +695,36 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
    * predicate).
    */
   build(): LoopWorkflow {
-    return this.workflowFactory()({
+    const currentSpan = this.params.tracingContext?.currentSpan;
+    let agentSpan = currentSpan;
+    if (currentSpan?.type !== SpanType.AGENT_RUN) {
+      agentSpan = currentSpan?.findParent(SpanType.AGENT_RUN);
+    }
+
+    // Keep all resumed invocations under the initial agent, not the generation
+    // that happened to be active when the internal workflow suspended. Only
+    // reuse the saved parent when this invocation actually resumed beneath it;
+    // an explicit caller tracing context can start a different lineage.
+    let resumeTracingContext: WorkflowStateTracingContext | undefined;
+    if (agentSpan) {
+      const previousContext = this.params.resumeContext?.snapshot?.tracingContext;
+      const continuesSavedLineage =
+        previousContext?.spanId &&
+        agentSpan.traceId === previousContext.traceId &&
+        agentSpan.getParentSpanId() === previousContext.spanId;
+
+      if (continuesSavedLineage) {
+        resumeTracingContext = { ...previousContext };
+      } else {
+        resumeTracingContext = {
+          traceId: agentSpan.traceId,
+          spanId: resolveExportedSpanId(agentSpan),
+          parentSpanId: agentSpan.getParentSpanId(),
+        };
+      }
+    }
+
+    const workflow = this.workflowFactory()({
       id: AGENTIC_LOOP_WORKFLOW_ID,
       inputSchema: llmIterationOutputSchema,
       outputSchema: llmIterationOutputSchema,
@@ -720,5 +758,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     })
       .dowhile(this.buildIterationWorkflow(), this.buildContinuationPredicate())
       .commit();
+    workflow.__setResumeTracingContext(resumeTracingContext);
+    return workflow;
   }
 }

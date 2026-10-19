@@ -1,4 +1,4 @@
-import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
+import { describeFactorySandbox, isFactorySandbox, normalizeFactorySandboxSettings } from '@mastra/core/workspace';
 import type { FactorySandboxContext } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -70,6 +70,22 @@ describe('PlatformFactorySandbox', () => {
       'idleTimeoutMinutes',
     ]);
     expect(description.capabilities).toEqual({ template: true, builds: { available: true, history: false } });
+  });
+
+  it('offers memory as labelled sizes up to 8 GB and rejects anything else', async () => {
+    const sandbox = new PlatformFactorySandbox();
+    const memory = describeFactorySandbox(sandbox).settingsSchema.properties?.memoryMb as { oneOf?: unknown };
+    expect(memory.oneOf).toEqual([
+      { const: 512, title: '512 MB' },
+      { const: 1024, title: '1 GB' },
+      { const: 2048, title: '2 GB' },
+      { const: 4096, title: '4 GB' },
+      { const: 8192, title: '8 GB' },
+    ]);
+    const schema = normalizeFactorySandboxSettings(sandbox);
+    expect((await schema['~standard'].validate({ memoryMb: 8192 })).issues).toBeUndefined();
+    expect((await schema['~standard'].validate({ memoryMb: 3000 })).issues).toBeDefined();
+    expect((await schema['~standard'].validate({ memoryMb: 16384 })).issues).toBeDefined();
   });
 
   it('advertises the effective defaults: built-in values overridden by the defaults option', () => {

@@ -33,8 +33,8 @@ const identifier = z.string().min(1).max(512);
 
 const timeRangeSchema = traceQueryTimeRangeSchema.superRefine((range, context) => {
   const duration = Date.parse(range.to) - Date.parse(range.from);
-  if (duration <= 0 || duration > 31 * 24 * 60 * 60 * 1000) {
-    context.addIssue({ code: 'custom', message: 'The time range must be positive and at most 31 days' });
+  if (duration <= 0) {
+    context.addIssue({ code: 'custom', message: 'The time range must be positive' });
   }
 });
 
@@ -99,15 +99,35 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
     entityType: z.string().nullable(),
     entityId: z.string().nullable(),
     entityName: z.string().nullable(),
+    // Older adapters omit these fields; keep mixed-version responses readable.
+    entityVersionId: z.string().nullable().default(null),
+    parentEntityType: z.string().nullable().default(null),
+    parentEntityId: z.string().nullable().default(null),
+    parentEntityName: z.string().nullable().default(null),
+    parentEntityVersionId: z.string().nullable().default(null),
+    rootEntityType: z.string().nullable().default(null),
+    rootEntityId: z.string().nullable().default(null),
+    rootEntityName: z.string().nullable().default(null),
+    rootEntityVersionId: z.string().nullable().default(null),
+    threadId: z.string().nullable().default(null),
+    runId: z.string().nullable().default(null),
+    sessionId: z.string().nullable().default(null),
+    userId: z.string().nullable().default(null),
+    requestId: z.string().nullable().default(null),
+    serviceName: z.string().nullable().default(null),
+    experimentId: z.string().nullable().default(null),
+    environment: z.string().nullable().default(null),
+    executionSource: z.string().nullable().default(null),
     model: z.string().nullable(),
     provider: z.string().nullable(),
     inputPreview: previewSchema,
-    inputTruncated: z.boolean(),
     outputPreview: previewSchema,
-    outputTruncated: z.boolean(),
     errorPreview: previewSchema,
-    errorTruncated: z.boolean(),
-    cost: spanQueryCostSchema,
+    /**
+     * Time from the span's start to its first model response chunk; `null` when it never
+     * streamed one. Absent when the store lacks the `trace-query-time-to-first-chunk` feature.
+     */
+    timeToFirstChunkMs: z.number().nullable().optional(),
   })
   .superRefine((row, context) => {
     const duration = Date.parse(row.endedAt) - Date.parse(row.startedAt);
@@ -119,15 +139,6 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
         path: ['durationMs'],
         message: 'Duration must match the completed span timestamps',
       });
-    }
-    for (const field of ['input', 'output', 'error'] as const) {
-      if (row[`${field}Preview`] === null && row[`${field}Truncated`]) {
-        context.addIssue({
-          code: 'custom',
-          path: [`${field}Truncated`],
-          message: 'An absent preview cannot be truncated',
-        });
-      }
     }
   });
 
@@ -288,7 +299,7 @@ export const SPAN_QUERY_MAX_COST_METRICS = 50_000;
  * A provider-supplied query_total carrier replaces both directional totals.
  * Missing means no token metrics have arrived; partial/unpriced/ambiguous cost is unavailable.
  */
-export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): SpanQueryRow['cost'] {
+export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): z.infer<typeof spanQueryCostSchema> {
   if (!metrics.length) return { state: 'missing' };
   const names = ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'];
   const totals = metrics.filter(metric => names.includes(metric.name));
@@ -321,10 +332,7 @@ export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): SpanQueryR
 }
 
 /** @internal Selected page metadata; adapters normalize dates to ISO strings. */
-export type SpanQuerySelectedRow = Omit<
-  SpanQueryRow,
-  'inputPreview' | 'inputTruncated' | 'outputPreview' | 'outputTruncated' | 'errorPreview' | 'errorTruncated' | 'cost'
->;
+export type SpanQuerySelectedRow = Omit<SpanQueryRow, 'inputPreview' | 'outputPreview' | 'errorPreview'>;
 
 /**
  * @internal Previews built by `buildPreview`: the stored preview columns, or for rows written
@@ -341,16 +349,10 @@ export function buildSpanQueryResponse(
   plan: TrustedSpanQueryPlan,
   selected: SpanQuerySelectedRow[],
   payloads: SpanQueryPayload[],
-  metrics: SpanQueryCostMetric[],
+  // Older adapters pass metrics as a fourth argument. Keep the call shape, without returning costs.
+  _metrics?: SpanQueryCostMetric[],
 ): SpanQueryResponse {
   const byIdentity = new Map(payloads.map(payload => [spanQueryIdentityKey(payload), payload]));
-  const costs = new Map<string, SpanQueryCostMetric[]>();
-  for (const metric of metrics) {
-    const key = spanQueryIdentityKey(metric);
-    const group = costs.get(key) ?? [];
-    group.push(metric);
-    costs.set(key, group);
-  }
   const visible = selected.slice(0, plan.limit);
   const last = visible.at(-1);
   return spanQueryResponseSchema.parse({
@@ -363,12 +365,8 @@ export function buildSpanQueryResponse(
       return {
         ...row,
         inputPreview: input.value,
-        inputTruncated: input.truncated,
         outputPreview: output.value,
-        outputTruncated: output.truncated,
         errorPreview: error.value,
-        errorTruncated: error.truncated,
-        cost: resolveSpanQueryCost(costs.get(key) ?? []),
       };
     }),
     page: {

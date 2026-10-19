@@ -54,7 +54,7 @@ describe('useTraceColumnPreferences', () => {
 
       const returnVisit = renderHook(() => useTraceColumnPreferences(), { wrapper: projectA });
       expect(returnVisit.result.current.preferences).toEqual({
-        visibleColumns: ['type', 'input', 'estimatedCost'],
+        visibleColumns: ['type', 'input', 'output', 'estimatedCost'],
         customColumns: [],
         metadataKeys: ['tenantId'],
       });
@@ -62,7 +62,7 @@ describe('useTraceColumnPreferences', () => {
       const projectB = makeWrapper('http://project-b.test');
       const otherProject = renderHook(() => useTraceColumnPreferences(), { wrapper: projectB });
       expect(otherProject.result.current.preferences).toEqual({
-        visibleColumns: ['type', 'input', 'duration', 'estimatedCost'],
+        visibleColumns: ['type', 'input', 'output', 'duration', 'estimatedCost'],
         customColumns: [],
         metadataKeys: [],
       });
@@ -79,7 +79,7 @@ describe('useTraceColumnPreferences', () => {
       });
 
       expect(result.current.preferences).toEqual({
-        visibleColumns: ['type', 'input', 'estimatedCost'],
+        visibleColumns: ['type', 'input', 'output', 'estimatedCost'],
         customColumns: [],
         metadataKeys: ['tenantId'],
       });
@@ -141,6 +141,7 @@ describe('useTraceColumnPreferences', () => {
       expect(result.current.preferences.visibleColumns).toEqual([
         'type',
         'input',
+        'output',
         'duration',
         'estimatedCost',
         'inputTokens',
@@ -149,12 +150,18 @@ describe('useTraceColumnPreferences', () => {
       act(() => {
         result.current.toggleColumn('inputTokens');
       });
-      expect(result.current.preferences.visibleColumns).toEqual(['type', 'input', 'duration', 'estimatedCost']);
+      expect(result.current.preferences.visibleColumns).toEqual([
+        'type',
+        'input',
+        'output',
+        'duration',
+        'estimatedCost',
+      ]);
 
       act(() => {
         result.current.toggleColumn('input');
       });
-      expect(result.current.preferences.visibleColumns).toEqual(['type', 'duration', 'estimatedCost']);
+      expect(result.current.preferences.visibleColumns).toEqual(['type', 'output', 'duration', 'estimatedCost']);
     });
 
     it('removes a metadata column without touching the others', () => {
@@ -281,6 +288,7 @@ describe('useTraceColumnPreferences', () => {
       expect(result.current.preferences.visibleColumns).toEqual([
         'type',
         'input',
+        'output',
         'duration',
         'estimatedCost',
         'inputTokens',
@@ -312,7 +320,7 @@ describe('useTraceColumnPreferences', () => {
         result.current.toggleColumn('duration');
       });
 
-      expect(result.current.preferences.visibleColumns).toEqual(['type', 'input', 'estimatedCost']);
+      expect(result.current.preferences.visibleColumns).toEqual(['type', 'input', 'output', 'estimatedCost']);
     });
   });
 });

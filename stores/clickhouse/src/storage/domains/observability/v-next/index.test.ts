@@ -20,6 +20,8 @@ import {
   TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES,
   TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
   TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
+  TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_YEAR_FIXTURE_DATA,
   traceAggregateResponseMismatch,
   writeTraceAggregateFixture,
   writeTraceQueryFixture,
@@ -46,6 +48,8 @@ import {
   MV_DISCOVERY_PAIRS,
   MV_DISCOVERY_VALUES,
   MV_SCORE_EVENTS_CURRENT,
+  MV_TRACE_BRANCHES,
+  MV_TRACE_ROOTS,
   MV_TRACE_ROOTS_DELTA,
   MV_SCORE_EVENTS_DELTA,
   buildScoreEventsDeltaMvDDL,
@@ -62,8 +66,11 @@ import {
   TABLE_SCORE_EVENTS_CURRENT_BACKFILL,
   TABLE_SCORE_EVENTS_DELTA,
   TABLE_SPAN_EVENTS,
+  TABLE_TRACE_BRANCHES,
   TABLE_TRACE_ROOTS,
   TABLE_TRACE_ROOTS_DELTA,
+  TRACE_BRANCHES_MV_DDL,
+  TRACE_ROOTS_MV_DDL,
 } from './ddl';
 import { feedbackRecordToRow, scoreRecordToRow, spanRecordToRow } from './helpers';
 import { isReplacingMergeTreeEngine } from './migration';
@@ -1051,8 +1058,12 @@ LIMIT 1`,
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        'trace-query-time-to-first-chunk',
+        'trace-query-root-span-fields',
         'trace-aggregate',
         'span-query',
+        'span-query-context-fields',
+        'thread-query-rows',
       ]);
     });
 
@@ -1076,8 +1087,12 @@ LIMIT 1`,
           'trace-query-tenant-scope',
           'feedback',
           'trace-query-context-ids',
+          'trace-query-time-to-first-chunk',
+          'trace-query-root-span-fields',
           'trace-aggregate',
           'span-query',
+          'span-query-context-fields',
+          'thread-query-rows',
         ]);
       } finally {
         coreFeatures.add('observability-delta-polling');
@@ -6418,6 +6433,63 @@ LIMIT 1`,
       }
     });
 
+    it('adds timeToFirstChunkMs to existing span tables and copies it into trace roots and branches', async () => {
+      const client = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const spanTables = [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES];
+      const startedAt = new Date('2026-01-01T00:00:00Z');
+      const span = (traceId: string, timeToFirstChunkMs: number) => ({
+        traceId,
+        spanId: 'root',
+        parentSpanId: null,
+        name: 'agent run',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        startedAt,
+        endedAt: new Date(startedAt.getTime() + 1000),
+        timeToFirstChunkMs,
+      });
+
+      try {
+        // Rebuild the pre-upgrade state: tables without the column, and the
+        // root / branch views created on top of them.
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_TRACE_ROOTS}` });
+        await client.command({ query: `DROP VIEW IF EXISTS ${MV_TRACE_BRANCHES}` });
+        for (const table of spanTables) {
+          await client.command({ query: `ALTER TABLE ${table} DROP COLUMN IF EXISTS timeToFirstChunkMs` });
+        }
+        await client.command({ query: TRACE_ROOTS_MV_DDL });
+        await client.command({ query: TRACE_BRANCHES_MV_DDL });
+        // A row written before the upgrade, through the old column set.
+        const { timeToFirstChunkMs: _dropped, ...legacyRow } = spanRecordToRow(span('ttfc-upgrade-old', 100));
+        await client.insert({ table: TABLE_SPAN_EVENTS, values: [legacyRow], format: 'JSONEachRow' });
+
+        const upgraded = new ObservabilityStorageClickhouseVNext({ client });
+        await upgraded.init();
+        await upgraded.batchCreateSpans({
+          records: [span('ttfc-upgrade-new', 250)],
+        });
+
+        for (const table of spanTables) {
+          const result = await client.query({
+            query: `SELECT traceId, timeToFirstChunkMs FROM ${table} FINAL
+              WHERE traceId IN ('ttfc-upgrade-old', 'ttfc-upgrade-new') ORDER BY traceId`,
+            format: 'JSONEachRow',
+          });
+          expect(await result.json(), table).toEqual([
+            { traceId: 'ttfc-upgrade-new', timeToFirstChunkMs: 250 },
+            { traceId: 'ttfc-upgrade-old', timeToFirstChunkMs: null },
+          ]);
+        }
+      } finally {
+        await new ObservabilityStorageClickhouseVNext({ client }).init();
+        await client.close();
+      }
+    });
+
     it('resumes a partial current-score backfill and skips it after completion', async () => {
       const client = createClient({
         url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
@@ -7172,47 +7244,135 @@ describe('ObservabilityStorageClickhouseVNext aggregateTraces', () => {
     }
   });
 
-  it('matches pushed-down filters against the current root, not a replaced one', async () => {
+  it('counts unmerged copies of a root once under pushed-down filters', async () => {
     await storage.dangerouslyClearAll();
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
     const root = {
       traceId: 'aggregate-pushdown-trace',
+      spanId: 'pushdown-root',
       parentSpanId: null,
       name: 'root-span',
       spanType: SpanType.AGENT_RUN,
       isEvent: false,
       entityType: EntityType.AGENT,
+      entityName: 'agentA',
       environment: 'test',
       startedAt: new Date('2026-08-02T00:00:00Z'),
       endedAt: new Date('2026-08-02T00:00:01Z'),
     } as const;
-    await storage.createSpan({ span: { ...root, spanId: 'pushdown-root-a', entityName: 'agentA' } });
-    await storage.createSpan({ span: { ...root, spanId: 'pushdown-root-b', entityName: 'agentB' } });
 
-    const all = await storage.aggregateTraces(
-      planTraceAggregate(
-        parseTraceAggregateRequest({ timeRange: TIME_RANGE, groupBy: ['entityName'], measures: ['count'] }),
-      ),
-    );
-    expect(all.rows).toHaveLength(1);
-    const current = all.rows[0]!.dimensions?.entityName;
-    const replaced = current === 'agentA' ? 'agentB' : 'agentA';
+    await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+    try {
+      // Two physical copies of the same root, as left by a retried insert before merges run.
+      await storage.createSpan({ span: root });
+      await storage.createSpan({ span: root });
 
-    for (const [entityName, expected] of [
-      [current, 1],
-      [replaced, 0],
-    ] as const) {
-      const where = {
-        op: 'and',
-        args: [
-          { op: 'eq', left: { path: 'entityName' }, right: { literal: entityName } },
-          { op: 'eq', left: { path: 'environment' }, right: { literal: 'test' } },
-        ],
-      };
-      const aggregate = await storage.aggregateTraces(
-        planTraceAggregate(parseTraceAggregateRequest({ timeRange: TIME_RANGE, where, measures: ['count'] })),
-      );
-      expect(aggregate.rows).toEqual(expected === 1 ? [{ measures: { count: 1 } }] : []);
+      for (const [entityName, expected] of [
+        ['agentA', [{ measures: { count: 1 } }]],
+        ['agentB', []],
+      ] as const) {
+        const where = {
+          op: 'and',
+          args: [
+            { op: 'eq', left: { path: 'entityName' }, right: { literal: entityName } },
+            { op: 'eq', left: { path: 'environment' }, right: { literal: 'test' } },
+          ],
+        };
+        const aggregate = await storage.aggregateTraces(
+          planTraceAggregate(parseTraceAggregateRequest({ timeRange: TIME_RANGE, where, measures: ['count'] })),
+        );
+        expect(aggregate.rows).toEqual(expected);
+      }
+    } finally {
+      await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+      await client.close();
     }
+  });
+});
+
+describe('ObservabilityStorageClickhouseVNext aggregateTraces over a 365-day window', () => {
+  const connection = {
+    url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+    username: process.env.CLICKHOUSE_USERNAME || 'default',
+    password: process.env.CLICKHOUSE_PASSWORD || 'password',
+  };
+  let storage: ObservabilityStorageClickhouseVNext;
+
+  beforeAll(async () => {
+    storage = new ObservabilityStorageClickhouseVNext(connection);
+    await storage.init();
+  });
+
+  afterAll(async () => {
+    await storage.dangerouslyClearAll();
+  });
+
+  describe('written once', () => {
+    beforeAll(async () => {
+      await storage.dangerouslyClearAll();
+      await writeTraceQueryFixture(
+        storage as unknown as ObservabilityStorage,
+        TRACE_AGGREGATE_YEAR_FIXTURE_DATA,
+        'completion-only',
+      );
+    });
+
+    it.each(TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      'matches the reference evaluator: %s',
+      async (_name, testCase) => {
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await storage.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
+  });
+
+  // Every root lands twice in separate parts and merges are stopped, as after an exporter retry
+  // that background merges have not collapsed yet. Results must not depend on those merges.
+  describe('written twice with merges stopped', () => {
+    let client: ReturnType<typeof createClient>;
+
+    beforeAll(async () => {
+      await storage.dangerouslyClearAll();
+      client = createClient(connection);
+      await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+      for (let copy = 0; copy < 2; copy += 1) {
+        await writeTraceQueryFixture(
+          storage as unknown as ObservabilityStorage,
+          TRACE_AGGREGATE_YEAR_FIXTURE_DATA,
+          'completion-only',
+        );
+      }
+    });
+
+    afterAll(async () => {
+      await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+      await client.close();
+    });
+
+    it('keeps both physical copies of every root', async () => {
+      // 43 traces: the 41 in the window plus the two boundary decoys.
+      const [counts] = await (
+        await client.query({
+          query: `SELECT toUInt32(count()) AS rows, toUInt32(uniqExact(traceId)) AS traces FROM ${TABLE_TRACE_ROOTS}`,
+          format: 'JSONEachRow',
+        })
+      ).json<{ rows: number; traces: number }>();
+      expect(counts).toEqual({ rows: 86, traces: 43 });
+    });
+
+    it.each(TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      'matches the reference evaluator: %s',
+      async (_name, testCase) => {
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await storage.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
   });
 });
 

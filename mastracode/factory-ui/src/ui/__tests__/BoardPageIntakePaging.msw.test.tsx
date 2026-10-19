@@ -282,7 +282,7 @@ describe('Intake candidate paging', () => {
   it('announces loading without showing a card skeleton while an empty visible column scroll-loads', async () => {
     const { scrollSentinel } = stubIntersectionObserver(false);
     const { requestedTriagePages, releaseSecondPage } = stubWorkBoard();
-    const { client } = renderWorkBoard('?q=signup');
+    const { client } = renderWorkBoard('?search=signup');
 
     const triage = await screen.findByTestId('board-column-triage');
     expect(await within(triage).findByRole('button', { name: 'Load more candidates' })).toBeInTheDocument();

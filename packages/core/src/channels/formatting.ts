@@ -135,14 +135,20 @@ export function formatToolApproval(
 }
 
 /** Format an "approved" status message (shown while tool runs) */
-export function formatToolApproved(toolName: string, argsSummary: string, useCards: boolean): PostableMessage {
+export function formatToolApproved(
+  toolName: string,
+  argsSummary: string,
+  useCards: boolean,
+  byUser?: string,
+): PostableMessage {
   const header = formatToolHeader(toolName, argsSummary);
+  const suffix = byUser ? ` by ${byUser}` : '';
 
   if (useCards) {
-    return ui().Card({ children: [ui().CardText(`${header} ⋯`), ui().CardText('✓ Approved')] });
+    return ui().Card({ children: [ui().CardText(`${header} ⋯`), ui().CardText(`✓ Approved${suffix}`)] });
   }
 
-  return `${header} ⋯\n✓ Approved`;
+  return `${header} ⋯\n✓ Approved${suffix}`;
 }
 
 /** Format a "denied" status message */

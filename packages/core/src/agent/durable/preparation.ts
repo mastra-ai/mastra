@@ -42,7 +42,7 @@ import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import { applyResolvedAgentScopes, resolveAgentScopes } from '../scopes';
 import type { CreatedAgentSignal } from '../signals';
-import { mastraDBMessageToSignal } from '../signals';
+import { mastraDBMessageToSignal, signalSpanAttributes } from '../signals';
 import { TripWire } from '../trip-wire';
 import type {
   AgentInstructions,
@@ -578,6 +578,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
   const agentTracingPolicy =
     typeof (agent as any).getTracingPolicy === 'function' ? (agent as any).getTracingPolicy() : undefined;
+  const startingSignal = signalSpanAttributes(messages);
   const agentSpan = getOrCreateSpan({
     type: SpanType.AGENT_RUN,
     name: `agent run: '${publicAgentId}'`,
@@ -588,6 +589,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     attributes: {
       conversationId: threadId,
       instructions: convertInstructionsToString(instructions),
+      ...(startingSignal ? { signal: startingSignal } : {}),
       // @deprecated — use entityVersionId (top-level span context field) instead.
       // Kept for backward compatibility during migration.
       ...(resolvedVersionId ? { resolvedVersionId } : {}),
@@ -962,6 +964,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // when the merged config has no `generateTitle` or the thread already has a
     // title. Non-serializable — cross-process engines skip title generation.
     generateThreadTitle: memory ? async args => generateDurableThreadTitle({ agent, memory, ...args }) : undefined,
+    // generate() returns JSON, so only stream() runs carry the title chunk (as in #executeOnFinish).
+    streamThreadTitle:
+      methodType === 'stream' &&
+      !!memory &&
+      !!agent.resolveTitleGenerationConfig(memory.getMergedThreadConfig(memoryConfig).generateTitle).emitEvent,
+    onTitleGenerated: execOptions?.memory?.onTitleGenerated,
     // Signal messages already in the messageList at run start (from persisted
     // history). Echoed as data-signal parts on the first LLM step so the client
     // sees them without refetching. Spliced once, never re-emitted.

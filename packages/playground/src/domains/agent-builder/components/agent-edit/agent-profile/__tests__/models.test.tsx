@@ -160,7 +160,7 @@ describe('Models', () => {
 
       const filterSearch = getByTestId('models-provider-filter-search');
       expect(filterSearch).toBeTruthy();
-      fireEvent.change(filterSearch!, { target: { value: 'anthropic' } });
+      fireEvent.change(filterSearch, { target: { value: 'anthropic' } });
 
       await waitFor(() => expect(queryByTestId('models-provider-filter-item-openai')).toBeNull());
       expect(queryByTestId('models-provider-filter-item-anthropic')).toBeTruthy();
@@ -177,7 +177,7 @@ describe('Models', () => {
 
       const searchInput = getByTestId('model-card-picker-search');
       expect(searchInput).toBeTruthy();
-      fireEvent.change(searchInput!, { target: { value: 'claude' } });
+      fireEvent.change(searchInput, { target: { value: 'claude' } });
 
       await findByText('No models match "claude"');
     });

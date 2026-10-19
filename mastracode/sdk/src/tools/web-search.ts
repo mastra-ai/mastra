@@ -1,9 +1,11 @@
-import { createTool, isValidationError, type ValidationError } from '@mastra/core/tools';
+import { createTool, isValidationError } from '@mastra/core/tools';
+import type { ValidationError } from '@mastra/core/tools';
 import { createParallelSearchTool, createParallelExtractTool } from '@mastra/parallel';
 import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily';
 import { z } from 'zod';
 
-import { loadSettings, type WebSearchProviderSetting } from '../onboarding/settings.js';
+import { loadSettings } from '../onboarding/settings.js';
+import type { WebSearchProviderSetting } from '../onboarding/settings.js';
 import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
 
 const MAX_WEB_SEARCH_TOKENS = 2_000;

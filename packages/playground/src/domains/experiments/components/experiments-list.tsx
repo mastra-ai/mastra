@@ -7,6 +7,7 @@ import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { Trash2 } from 'lucide-react';
 import type { MouseEvent, ReactNode, SyntheticEvent } from 'react';
 import { useMemo, useRef, useState } from 'react';
+import { columnLabel, sideVariant } from './comparison/constants';
 import { DeleteExperimentDialog } from './delete-experiment-dialog';
 import {
   EXPERIMENT_DATASET_COLUMN,
@@ -51,6 +52,8 @@ export interface ExperimentsListSelection {
   onToggleSelection: (experimentId: string) => void;
   /** Receives the ids currently listed (after filtering), in display order. */
   onToggleAll: (visibleExperimentIds: string[]) => void;
+  /** Only experiments of this dataset can join the selection; the others get a disabled checkbox. */
+  comparableDatasetId?: string;
 }
 
 const BASE_COLUMNS = `${EXPERIMENT_NAME_COLUMN} ${EXPERIMENT_DESCRIPTION_COLUMN} ${EXPERIMENT_DATASET_COLUMN} ${EXPERIMENT_DETAIL_COLUMNS}`;
@@ -262,11 +265,27 @@ export function ExperimentsList({
         const dsName = exp.datasetId
           ? (datasetMap.get(exp.datasetId) ?? getShortId(exp.datasetId) ?? exp.datasetId)
           : '—';
+        const selectionIndex = selection?.selectedExperimentIds.indexOf(exp.id) ?? -1;
+        const isSelected = selectionIndex !== -1;
+        const isDisabled =
+          !isSelected &&
+          selection?.comparableDatasetId !== undefined &&
+          exp.datasetId !== selection.comparableDatasetId;
         const rowCells = (
-          <ExperimentRowCells experiment={exp} datasetName={dsName} review={reviewByExperiment?.get(exp.id)} />
+          <ExperimentRowCells
+            experiment={exp}
+            datasetName={dsName}
+            review={reviewByExperiment?.get(exp.id)}
+            selectionRole={
+              isSelected
+                ? {
+                    label: columnLabel(selectionIndex),
+                    variant: selectionIndex === 0 ? sideVariant.baseline : sideVariant.contender,
+                  }
+                : undefined
+            }
+          />
         );
-
-        const isSelected = selection?.selectedExperimentIds.includes(exp.id) ?? false;
 
         return (
           <ExperimentRow
@@ -280,6 +299,7 @@ export function ExperimentsList({
               selection && (
                 <DataList.SelectCell
                   checked={isSelected}
+                  disabled={isDisabled}
                   onToggle={() => selection.onToggleSelection(exp.id)}
                   aria-label={`Select experiment ${exp.id}`}
                 />

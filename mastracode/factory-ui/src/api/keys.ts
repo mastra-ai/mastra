@@ -15,6 +15,13 @@
  */
 export const INITIAL_THREAD_MESSAGE_LIMIT = 100;
 
+export interface AvailableModelsFilter {
+  factoryProjectId?: string;
+  scope?: 'org' | 'user';
+  resourceId?: string;
+  threadId?: string;
+}
+
 export const queryKeys = {
   serverFeatures: () => ['server-features'] as const,
   factoryAuth: () => ['factory-auth'] as const,
@@ -121,22 +128,20 @@ export const queryKeys = {
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
   factoryAttentionRoot: (factoryProjectId: string | undefined) =>
     ['factory', 'attention', factoryProjectId ?? null] as const,
-  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number, group = 'all') =>
-    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit, group] as const,
-  factorySupervisorHealth: (factoryProjectId: string | undefined) =>
-    ['factory', 'supervisor', 'health', factoryProjectId ?? null] as const,
+  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number) =>
+    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
   sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   providers: () => ['providers'] as const,
-  availableModels: () => ['available-models'] as const,
+  availableModels: (filter?: AvailableModelsFilter) =>
+    filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,
   defaultModel: () => ['default-model'] as const,
   om: (resourceId: string | undefined, scope?: string, factoryId?: string) =>
     ['om', resourceId ?? null, scope ?? null, factoryId ?? null] as const,
-  thinkingConfig: () => ['thinking-config'] as const,
   factorySkills: () => ['factory', 'skills'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
@@ -144,6 +149,7 @@ export const queryKeys = {
     ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
   workspaceFiles: (workspacePath: string | undefined, threadId: string | undefined) =>
     ['workspace-files', workspacePath ?? null, threadId ?? null] as const,
+  workspaceFilesScope: (workspacePath: string | undefined) => ['workspace-files', workspacePath ?? null] as const,
   workspaceFileScope: (workspacePath: string | undefined) => ['workspace-file', workspacePath ?? null] as const,
   workspaceFile: (workspacePath: string | undefined, filePath: string | undefined, threadId?: string) =>
     ['workspace-file', workspacePath ?? null, filePath ?? null, threadId ?? null] as const,

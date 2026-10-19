@@ -1,4 +1,5 @@
-import { Badge, type BadgeVariant } from '@mastra/playground-ui/components/Badge';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
@@ -7,18 +8,9 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  Brain,
-  CircleCheck,
-  CircleDashed,
-  CirclePause,
-  CircleSlash,
-  CircleX,
-  ListFilter,
-  Repeat,
-  type LucideIcon,
-} from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { CircleCheck, CircleDashed, CirclePause, CircleSlash, CircleX, ListFilter, Repeat } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { useSearchParams } from 'react-router';
 
 import { useFactoryDecisionAction, useFactoryDecisionHistory } from '../../hooks/useFactoryDecisions';
 import { relativeTime } from '../../lib/date/relativeTime';
@@ -27,7 +19,6 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
-import { supervisorAskPath } from '../domains/supervisor/services/supervisor';
 import { DayHeading, RailRow, RAIL_LIST, RAIL_MARK_TONE, RAIL_ROW_BODY } from '../domains/factory/components/Timeline';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import { SkeletonRows } from '../ui/SkeletonRows';
@@ -178,7 +169,6 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
                         mark={<StatusIcon size={14} className={RAIL_MARK_TONE[tone]} aria-hidden />}
                       >
                         <DecisionRow
-                          factoryProjectId={factoryProjectId ?? ''}
                           decision={decision}
                           retrying={retryDecision.isPending && retryDecision.variables === decision.id}
                           approving={approveDecision.isPending && approveDecision.variables === decision.id}
@@ -207,7 +197,6 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
 }
 
 function DecisionRow({
-  factoryProjectId,
   decision,
   retrying,
   approving,
@@ -216,7 +205,6 @@ function DecisionRow({
   onApprove,
   onDismiss,
 }: {
-  factoryProjectId: string;
   decision: FactoryDecisionSummary;
   retrying: boolean;
   approving: boolean;
@@ -225,7 +213,6 @@ function DecisionRow({
   onApprove: () => void;
   onDismiss: () => void;
 }) {
-  const navigate = useNavigate();
   const { tone, label, live } = STATUS_STYLE[decision.status];
   const progress = decision.completedAt
     ? `Completed ${relativeTime(decision.completedAt)}`
@@ -250,24 +237,6 @@ function DecisionRow({
         </Txt>
       ) : null}
       <div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
-        {decision.status === 'failed' ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            tooltip="Ask supervisor"
-            aria-label={`Ask supervisor about failed ${decision.type} decision`}
-            onClick={() =>
-              void navigate(
-                supervisorAskPath(
-                  factoryProjectId,
-                  `Explain why rule decision ${decision.id} failed and recommend the safest repair.`,
-                ),
-              )
-            }
-          >
-            <Brain aria-hidden />
-          </Button>
-        ) : null}
         {decision.status === 'proposed' ? (
           <>
             <Button variant="ghost" size="sm" disabled={approving || dismissing} onClick={onDismiss}>

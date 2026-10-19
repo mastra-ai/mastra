@@ -178,8 +178,6 @@ const traceQueryDiscoveryTimeRangeSchema = traceQueryTimeRangeSchema.superRefine
   const to = new Date(timeRange.to);
   if (from >= to) {
     context.addIssue({ code: 'custom', path: [], message: '`from` must be earlier than `to`' });
-  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
-    context.addIssue({ code: 'custom', path: [], message: 'The time range cannot exceed 31 days' });
   }
 });
 const traceQueryDiscoverySearchSchema = z.string().trim().max(TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH).optional();
@@ -238,11 +236,37 @@ export const traceQueryObservedFieldDescriptorSchema = z
     occurrences: z.number().int().nonnegative(),
   })
   .strict();
+export const traceAggregateDimensionDescriptorSchema = z
+  .object({
+    path: z.string(),
+    valueKind: z.literal('string'),
+  })
+  .strict();
+export const traceAggregateMeasureDescriptorSchema = z
+  .object({
+    name: z.string(),
+    kind: z.enum(['count', 'duration', 'error', 'tokens', 'cost']),
+    statistic: z.enum(['avg', 'min', 'max', 'p50', 'p90', 'p95', 'p99', 'sum']).optional(),
+    unit: z.enum(['count', 'milliseconds', 'ratio', 'tokens', 'currency']),
+    approximate: z.boolean(),
+  })
+  .strict();
+export const traceAggregateDiscoverySchema = z
+  .object({
+    dimensions: z.array(traceAggregateDimensionDescriptorSchema),
+    measures: z.array(traceAggregateMeasureDescriptorSchema),
+  })
+  .strict()
+  .describe(
+    'What `aggregateTraces()` accepts. Present only for `predicateScope: "trace"` when the store supports aggregation. ' +
+      'Every observed field is also a groupable dimension, and `countDistinct.<field>` accepts any dimension or `traceId`.',
+  );
 export const getTraceQueryFieldsResponseSchema = z
   .object({
     canonicalFields: z.array(traceQueryCanonicalFieldDescriptorSchema),
     observedFields: z.array(traceQueryObservedFieldDescriptorSchema).max(TRACE_QUERY_DISCOVERY_MAX_LIMIT),
     observedFieldsTruncated: z.boolean(),
+    aggregate: traceAggregateDiscoverySchema.optional(),
   })
   .strict();
 export const getTraceQueryValuesResponseSchema = z
@@ -393,6 +417,11 @@ export const traceQueryTraceSchema = z
     entityType: z.string().nullable(),
     environment: z.string().nullable(),
     status: z.enum(['success', 'error']),
+    /**
+     * The root span's time to first chunk; `null` when the root never streamed one.
+     * Absent when the store lacks the `trace-query-time-to-first-chunk` feature.
+     */
+    timeToFirstChunkMs: z.number().nullable().optional(),
   })
   .strict();
 
@@ -546,8 +575,11 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     startedAt: orderedField('timestamp'),
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
+    timeToFirstChunkMs: orderedField('number'),
     entityName: stringField(true),
     entityType: stringField(true),
+    name: stringField(true),
+    spanType: stringField(true),
     environment: stringField(true),
     status: stringField(true),
     tags: arrayField(),
@@ -560,6 +592,7 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     startedAt: orderedField('timestamp'),
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
+    timeToFirstChunkMs: orderedField('number'),
     status: stringField(true),
     error: presenceField(),
     entityType: stringField(true),
@@ -598,6 +631,74 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
   },
 } as const satisfies Record<TraceQueryPredicateScope, Record<string, FieldRule>>;
 
+/** Direct span queries have a separate policy from trace queries' related span predicates. */
+export const SPAN_QUERY_FIELD_REGISTRY = {
+  name: textField(true),
+  spanType: stringField(true),
+  status: stringField(true),
+  error: presenceField(),
+  startedAt: orderedField('timestamp'),
+  endedAt: orderedField('timestamp'),
+  durationMs: orderedField('number'),
+  timeToFirstChunkMs: orderedField('number'),
+  traceId: stringField(false),
+  spanId: stringField(false),
+  parentSpanId: stringField(false),
+  threadId: stringField(false),
+  organizationId: stringField(false),
+  resourceId: stringField(false),
+  runId: stringField(false),
+  sessionId: stringField(false),
+  userId: stringField(false),
+  requestId: stringField(false),
+  serviceName: stringField(true),
+  experimentId: stringField(false),
+  environment: stringField(true),
+  executionSource: stringField(true),
+  entityType: stringField(true),
+  entityId: stringField(false),
+  entityName: stringField(true),
+  entityVersionId: stringField(false),
+  parentEntityType: stringField(true),
+  parentEntityId: stringField(false),
+  parentEntityName: stringField(true),
+  parentEntityVersionId: stringField(false),
+  rootEntityType: stringField(true),
+  rootEntityId: stringField(false),
+  rootEntityName: stringField(true),
+  rootEntityVersionId: stringField(false),
+} as const satisfies Record<string, FieldRule>;
+
+export type SpanQueryField = keyof typeof SPAN_QUERY_FIELD_REGISTRY;
+
+/** Direct thread-row predicates apply after full-history representative selection. */
+export const THREAD_QUERY_FIELD_REGISTRY = {
+  threadId: stringField(false),
+  organizationId: stringField(false),
+  firstTraceId: stringField(false),
+  lastTraceId: stringField(false),
+  resourceId: stringField(false),
+  userId: stringField(false),
+  entityType: stringField(false),
+  entityId: stringField(false),
+  entityName: stringField(false),
+  entityVersionId: stringField(false),
+  runId: stringField(false),
+  sessionId: stringField(false),
+  requestId: stringField(false),
+  serviceName: stringField(false),
+  experimentId: stringField(false),
+  environment: stringField(false),
+  executionSource: stringField(false),
+  status: { ...stringField(false), operators: ['eq', 'ne', 'in', 'notIn'] },
+  startedAt: orderedField('timestamp'),
+  endedAt: orderedField('timestamp'),
+  traceCount: { ...orderedField('number'), operators: ['eq', 'ne', 'lt', 'lte', 'gt', 'gte'] },
+  timeToFirstChunkMs: orderedField('number'),
+} as const satisfies Record<string, FieldRule>;
+
+export type ThreadQueryField = keyof typeof THREAD_QUERY_FIELD_REGISTRY;
+
 const METADATA_FIELD_RULE: FieldRule = {
   valueKind: 'string',
   operators: TRACE_QUERY_STRING_OPERATORS,
@@ -610,6 +711,8 @@ export type TraceQuerySpanField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['spa
 export type TraceQueryScoreField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['scores'];
 export type TraceQueryFeedbackField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['feedback'];
 export type TraceQueryCanonicalField =
+  | ThreadQueryField
+  | SpanQueryField
   | TraceQueryField
   | TraceQuerySpanField
   | TraceQueryScoreField
@@ -630,6 +733,7 @@ export type NormalizedGetTraceQueryValuesArgs = z.output<typeof getTraceQueryVal
 export type TraceQueryCanonicalFieldDescriptor = z.infer<typeof traceQueryCanonicalFieldDescriptorSchema>;
 export type TraceQueryObservedFieldDescriptor = z.infer<typeof traceQueryObservedFieldDescriptorSchema>;
 export type GetTraceQueryFieldsResponse = z.infer<typeof getTraceQueryFieldsResponseSchema>;
+export type TraceAggregateDiscovery = z.infer<typeof traceAggregateDiscoverySchema>;
 export type GetTraceQueryValuesResponse = z.infer<typeof getTraceQueryValuesResponseSchema>;
 
 export type TrustedTraceQueryScalarPredicate =
@@ -847,7 +951,7 @@ export function resolveTraceQueryTimeoutMs(timeoutMs = TRACE_QUERY_DEFAULT_TIMEO
   return timeoutMs;
 }
 
-type PredicateContext = TraceQueryPredicateScope;
+type PredicateContext = TraceQueryPredicateScope | 'spanQuery' | 'threadQuery';
 
 interface PlannerState {
   nodes: number;
@@ -1066,12 +1170,6 @@ export function planTraceQuery(
   const to = new Date(request.timeRange.to);
   if (from >= to) {
     issues.push({ code: 'invalid_time_range', path: ['timeRange'], message: '`from` must be earlier than `to`' });
-  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
-    issues.push({
-      code: 'time_range_too_large',
-      path: ['timeRange'],
-      message: 'The time range cannot exceed 31 days',
-    });
   }
 
   if (request.group && request.orderBy) {
@@ -1191,12 +1289,6 @@ export function planThreadQuery(
       code: 'invalid_time_range',
       path: ['traces', 'timeRange'],
       message: '`from` must be earlier than `to`',
-    });
-  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
-    issues.push({
-      code: 'time_range_too_large',
-      path: ['traces', 'timeRange'],
-      message: 'The time range cannot exceed 31 days',
     });
   }
 
@@ -1380,14 +1472,23 @@ export function planTraceQuerySelectionPredicate(
   return planPredicate(where, 'trace', path, 1, state);
 }
 
-/** @internal Plans a span-row predicate using the same rules as `spans.some` / `spans.none`. */
+/** @internal Plans a direct span-row predicate without changing related trace predicates. */
 export function planSpanQuerySelectionPredicate(
   where: TraceQueryScalarPredicate,
   issues: TraceQueryIssue[],
 ): TrustedTraceQueryScalarPredicate | undefined {
   const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
   // Scalar grammar cannot produce a related-record predicate.
-  return planPredicate(where, 'spans', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
+  return planPredicate(where, 'spanQuery', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
+}
+
+/** @internal Shares scalar validation without admitting related-trace predicates. */
+export function planThreadQuerySelectionPredicate(
+  where: TraceQueryScalarPredicate,
+  issues: TraceQueryIssue[],
+): TrustedTraceQueryScalarPredicate | undefined {
+  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  return planPredicate(where, 'threadQuery', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
 }
 
 function planPredicate(
@@ -1576,6 +1677,8 @@ function planPredicate(
 }
 
 function rulesForContext(context: PredicateContext): Record<string, FieldRule> {
+  if (context === 'threadQuery') return THREAD_QUERY_FIELD_REGISTRY;
+  if (context === 'spanQuery') return SPAN_QUERY_FIELD_REGISTRY;
   return TRACE_QUERY_FIELD_REGISTRY[context];
 }
 

@@ -163,14 +163,14 @@ type InputShared_Auxiliary_230 =
       arg: InputShared_Auxiliary_230;
     };
 
-type InputShared_Auxiliary_264 =
+type InputShared_Auxiliary_271 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_264[];
+      args: InputShared_Auxiliary_271[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_264;
+      arg: InputShared_Auxiliary_271;
     }
   | {
       traces:
@@ -182,7 +182,7 @@ type InputShared_Auxiliary_264 =
           };
     };
 
-type InputShared_Auxiliary_692 =
+type InputShared_Auxiliary_699 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,27 +227,27 @@ type InputShared_Auxiliary_692 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_692[];
+      args: InputShared_Auxiliary_699[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_692;
+      arg: InputShared_Auxiliary_699;
     };
 
-type InputShared_Auxiliary_766 = {
+type InputShared_Auxiliary_773 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_766[] | undefined;
+  children?: InputShared_Auxiliary_773[] | undefined;
 };
 
-type Shared_Auxiliary_764 = {
+type Shared_Auxiliary_767 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_764[] | undefined;
+  children?: Shared_Auxiliary_767[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -769,6 +769,8 @@ type InputShared_Type_19 = {
   tags?: string[] | undefined;
   /** Filter by one or more trace IDs */
   traceIds?: string[] | undefined;
+  /** Filter by one or more experiment IDs */
+  experimentIds?: string[] | undefined;
   /** Filter by metric name(s) */
   name?: string[] | undefined;
   /** Filter by execution source */
@@ -1806,7 +1808,7 @@ type InputShared_Type_88 = {
       }
     | undefined;
   steps: InputShared_Type_83[];
-  predicates: InputShared_Auxiliary_692[];
+  predicates: InputShared_Auxiliary_699[];
 };
 
 type InputShared_Type_89 = {
@@ -1820,7 +1822,7 @@ type InputShared_Type_89 = {
     | undefined;
   step: InputShared_Type_83;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_692;
+  predicate: InputShared_Auxiliary_699;
 };
 
 type InputShared_Type_90 =
@@ -2349,6 +2351,8 @@ type Shared_Type_6 = {
   modelVersion?: string | undefined;
   supportsMemory?: boolean | undefined;
   modelList?: Shared_Type_2[] | undefined;
+  /** False when the model list comes from a function and cannot be reordered or edited */
+  modelListEditable?: boolean | undefined;
   /** Default options for agent execution */
   defaultOptions?: Shared_Type_5 | undefined;
   defaultGenerateOptionsLegacy?:
@@ -3482,6 +3486,8 @@ type Shared_Type_61 = {
   outputPreview?: (string | null) | undefined;
   /** Short text preview of the span error */
   errorPreview?: (string | null) | undefined;
+  /** Milliseconds from span start to the first streamed chunk; null when the span never streamed one */
+  timeToFirstChunkMs?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3597,6 +3603,8 @@ type Shared_Type_63 = {
   outputPreview?: (string | null) | undefined;
   /** Short text preview of the span error */
   errorPreview?: (string | null) | undefined;
+  /** Milliseconds from span start to the first streamed chunk; null when the span never streamed one */
+  timeToFirstChunkMs?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3624,6 +3632,7 @@ type Shared_Type_64 = {
   entityType: string | null;
   environment: string | null;
   status: 'success' | 'error';
+  timeToFirstChunkMs?: (number | null) | undefined;
 };
 
 type Shared_Type_65 = {
@@ -3713,14 +3722,24 @@ type Shared_Type_67 = {
   traceQueryRootDuration: boolean;
   /** `runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries */
   traceQueryContextIds: boolean;
+  /** `timeToFirstChunkMs` in trace and span query results, and predicates on it in trace, thread and span queries */
+  traceQueryTimeToFirstChunk: boolean;
+  /** Root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct` */
+  traceQueryRootSpanFields: boolean;
   /** Trace query field discovery (POST /observability/traces/query/fields and /values) */
   traceQueryDiscovery: boolean;
   /** Trusted tenant scoping of trace and thread queries */
   traceQueryTenantScope: boolean;
+  /** Trace aggregation (POST /observability/traces/aggregate). Unlike `traceQuery`, clients should treat a missing value as unavailable. */
+  traceAggregate: boolean;
   /** Advanced thread queries (POST /observability/threads/query) */
   threadQuery: boolean;
+  /** Full-history thread rows with activity windows, filters and sorting. Treat a missing value as unavailable. */
+  threadQueryRows: boolean;
   /** Span queries (POST /observability/spans/query) */
   spanQuery: boolean;
+  /** Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit. */
+  traceRetentionDays?: number | undefined;
   /** Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501. */
   feedback: boolean;
 };
@@ -4230,7 +4249,7 @@ type Shared_Type_83 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_764[] | undefined;
+  files?: Shared_Auxiliary_767[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -5318,11 +5337,11 @@ export interface PostAgentsAgentIdQueueMessage_RouteContract {
 }
 
 // ============================================================================
-// Route: POST /agents/:agentId/signals
+// Route: POST /agents/:agentId/queue-signal
 // ============================================================================
-export type PostAgentsAgentIdSignals_PathParams = GetAgentsAgentId_PathParams;
+export type PostAgentsAgentIdQueueSignal_PathParams = GetAgentsAgentId_PathParams;
 
-export type PostAgentsAgentIdSignals_Body =
+export type PostAgentsAgentIdQueueSignal_Body =
   | {
       ifActive?: InputShared_Type_4 | undefined;
       runId: string;
@@ -5339,6 +5358,34 @@ export type PostAgentsAgentIdSignals_Body =
       ifIdle?: InputShared_Type_9 | undefined;
       signal: InputShared_Type_10 | InputShared_Type_11;
     };
+
+export type PostAgentsAgentIdQueueSignal_Response = PostAgentsAgentIdSendMessage_Response;
+
+export type PostAgentsAgentIdQueueSignal_Request = Simplify<
+  (PostAgentsAgentIdQueueSignal_PathParams extends never ? {} : { params: PostAgentsAgentIdQueueSignal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdQueueSignal_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdQueueSignal_Body
+        ? { body?: PostAgentsAgentIdQueueSignal_Body }
+        : { body: PostAgentsAgentIdQueueSignal_Body })
+>;
+
+export interface PostAgentsAgentIdQueueSignal_RouteContract {
+  pathParams: PostAgentsAgentIdQueueSignal_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdQueueSignal_Body;
+  request: PostAgentsAgentIdQueueSignal_Request;
+  response: PostAgentsAgentIdQueueSignal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/signals
+// ============================================================================
+export type PostAgentsAgentIdSignals_PathParams = GetAgentsAgentId_PathParams;
+
+export type PostAgentsAgentIdSignals_Body = PostAgentsAgentIdQueueSignal_Body;
 
 export type PostAgentsAgentIdSignals_Response = PostAgentsAgentIdSendMessage_Response;
 
@@ -10637,29 +10684,90 @@ export interface PostObservabilityTracesAggregate_RouteContract {
 // ============================================================================
 // Route: POST /observability/threads/query
 // ============================================================================
-export type PostObservabilityThreadsQuery_Body = {
-  traces: {
-    timeRange: {
-      from: string;
-      to: string;
+export type PostObservabilityThreadsQuery_Body =
+  | {
+      timeRange:
+        | {
+            traces: {
+              from: string;
+              to: string;
+            };
+          }
+        | {
+            threads: {
+              from: string;
+              to: string;
+              field: 'startedAt' | 'endedAt';
+            };
+          };
+      where?: InputShared_Auxiliary_230 | undefined;
+      orderBy?: {
+        field: 'startedAt' | 'endedAt';
+        direction: 'asc' | 'desc';
+      }[];
+      page?: {
+        limit?: number;
+        after?: string | undefined;
+      };
+    }
+  | {
+      traces: {
+        timeRange: {
+          from: string;
+          to: string;
+        };
+        where?: InputShared_Auxiliary_207 | undefined;
+      };
+      where?: InputShared_Auxiliary_271 | undefined;
+      page?: {
+        limit?: number;
+        after?: (string | null) | undefined;
+      };
     };
-    where?: InputShared_Auxiliary_207 | undefined;
-  };
-  where?: InputShared_Auxiliary_264 | undefined;
-  page?: {
-    limit?: number;
-    after?: (string | null) | undefined;
-  };
-};
 
-export type PostObservabilityThreadsQuery_Response = {
-  threads: {
-    threadId: string;
-  }[];
-  page: {
-    next: string | null;
-  };
-};
+export type PostObservabilityThreadsQuery_Response =
+  | {
+      threads: {
+        organizationId: string | null;
+        threadId: string;
+        firstTraceId: string;
+        lastTraceId: string;
+        resourceId: string | null;
+        userId: string | null;
+        entityType: string | null;
+        entityId: string | null;
+        entityName: string | null;
+        entityVersionId: string | null;
+        runId: string | null;
+        sessionId: string | null;
+        requestId: string | null;
+        serviceName: string | null;
+        experimentId: string | null;
+        environment: string | null;
+        executionSource: string | null;
+        status: 'success' | 'error';
+        startedAt: string;
+        endedAt: string;
+        timeToFirstChunkMs: number | null;
+        inputPreview: string | null;
+        outputPreview: string | null;
+        errorPreview: string | null;
+        traceCount: number;
+        model: string | null;
+        provider: string | null;
+      }[];
+      page: {
+        next: string | null;
+      };
+    }
+  | {
+      threads: {
+        threadId: string;
+      }[];
+      page: {
+        next: string | null;
+      };
+    };
 
 export type PostObservabilityThreadsQuery_Request = Simplify<
   (never extends never ? {} : { params: never }) &
@@ -10715,26 +10823,30 @@ export type PostObservabilitySpansQuery_Response = {
     entityType: string | null;
     entityId: string | null;
     entityName: string | null;
+    entityVersionId: string | null;
+    parentEntityType: string | null;
+    parentEntityId: string | null;
+    parentEntityName: string | null;
+    parentEntityVersionId: string | null;
+    rootEntityType: string | null;
+    rootEntityId: string | null;
+    rootEntityName: string | null;
+    rootEntityVersionId: string | null;
+    threadId: string | null;
+    runId: string | null;
+    sessionId: string | null;
+    userId: string | null;
+    requestId: string | null;
+    serviceName: string | null;
+    experimentId: string | null;
+    environment: string | null;
+    executionSource: string | null;
     model: string | null;
     provider: string | null;
     inputPreview: string | null;
-    inputTruncated: boolean;
     outputPreview: string | null;
-    outputTruncated: boolean;
     errorPreview: string | null;
-    errorTruncated: boolean;
-    cost:
-      | {
-          state: 'available';
-          amount: number;
-          currency: string;
-        }
-      | {
-          state: 'missing';
-        }
-      | {
-          state: 'unavailable';
-        };
+    timeToFirstChunkMs?: (number | null) | undefined;
   }[];
   page: {
     next: string | null;
@@ -10803,6 +10915,22 @@ export type PostObservabilityTracesQueryFields_Response = {
     occurrences: number;
   }[];
   observedFieldsTruncated: boolean;
+  /** What `aggregateTraces()` accepts. Present only for `predicateScope: "trace"` when the store supports aggregation. Every observed field is also a groupable dimension, and `countDistinct.<field>` accepts any dimension or `traceId`. */
+  aggregate?:
+    | {
+        dimensions: {
+          path: string;
+          valueKind: 'string';
+        }[];
+        measures: {
+          name: string;
+          kind: 'count' | 'duration' | 'error' | 'tokens' | 'cost';
+          statistic?: ('avg' | 'min' | 'max' | 'p50' | 'p90' | 'p95' | 'p99' | 'sum') | undefined;
+          unit: 'count' | 'milliseconds' | 'ratio' | 'tokens' | 'currency';
+          approximate: boolean;
+        }[];
+      }
+    | undefined;
 };
 
 export type PostObservabilityTracesQueryFields_Request = Simplify<
@@ -10896,6 +11024,7 @@ export type GetObservabilityMetrics_QueryParams = {
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | string;
   traceIds?: ((string[] | undefined) | undefined) | string;
+  experimentIds?: ((string[] | undefined) | undefined) | string;
   name?: ((string[] | undefined) | undefined) | string;
   /** Filter by execution source */
   source?: (string | undefined) | undefined;
@@ -18593,7 +18722,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_766[] | undefined;
+  files?: InputShared_Auxiliary_773[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18651,7 +18780,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_766[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_773[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -19530,6 +19659,8 @@ export type GetDatasets_QueryParams = {
   targetType?: ('agent' | 'workflow' | 'scorer' | 'processor') | undefined;
   /** Only return datasets attached to at least one of these target IDs */
   targetIds?: string[] | undefined;
+  /** Only return datasets with these IDs (up to 100). All matches come back on one page; page and perPage are ignored. A blank value matches no datasets. */
+  datasetIds?: string[] | undefined;
   orderBy?:
     | (
         | {
@@ -23370,6 +23501,7 @@ export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_QueryP
 export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body = {
   toolCallId: string;
   approved: boolean;
+  alwaysAllowCategory?: boolean | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -23576,6 +23708,41 @@ export interface PostAgentControllerControllerIdSessionsResourceIdThread_RouteCo
   body: PostAgentControllerControllerIdSessionsResourceIdThread_Body;
   request: PostAgentControllerControllerIdSessionsResourceIdThread_Request;
   response: PostAgentControllerControllerIdSessionsResourceIdThread_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_PathParams =
+  DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams;
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams =
+  PostAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_Response = {
+  ok: boolean;
+  ownerId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_PathParams }) &
+    (PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_PathParams;
+  queryParams: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_QueryParams;
+  body: never;
+  request: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_Response;
   responseType: 'json';
 }
 
@@ -24130,6 +24297,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/observe': PostAgentsAgentIdObserve_RouteContract;
   'POST /agents/:agentId/send-message': PostAgentsAgentIdSendMessage_RouteContract;
   'POST /agents/:agentId/queue-message': PostAgentsAgentIdQueueMessage_RouteContract;
+  'POST /agents/:agentId/queue-signal': PostAgentsAgentIdQueueSignal_RouteContract;
   'POST /agents/:agentId/signals': PostAgentsAgentIdSignals_RouteContract;
   'POST /agents/:agentId/threads/abort': PostAgentsAgentIdThreadsAbort_RouteContract;
   'POST /agents/:agentId/threads/signals/cancel': PostAgentsAgentIdThreadsSignalsCancel_RouteContract;
@@ -24525,6 +24693,7 @@ export interface RouteTypes {
   'POST /agent-controller/:controllerId/sessions/:resourceId/mode': PostAgentControllerControllerIdSessionsResourceIdMode_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/model': PostAgentControllerControllerIdSessionsResourceIdModel_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/thread': PostAgentControllerControllerIdSessionsResourceIdThread_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner': PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/notifications': PostAgentControllerControllerIdSessionsResourceIdNotifications_RouteContract;
   'GET /agent-controller/:controllerId/workspace': GetAgentControllerControllerIdWorkspace_RouteContract;
   'GET /agent-controller/:controllerId/sessions/:resourceId/om': GetAgentControllerControllerIdSessionsResourceIdOm_RouteContract;
@@ -24689,6 +24858,9 @@ export interface Client {
   '/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages': {
     GET: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_RouteContract;
   };
+  '/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/owner': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdThreadsThreadIdOwner_RouteContract;
+  };
   '/agent-controller/:controllerId/sessions/:resourceId/threads/clone': {
     POST: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_RouteContract;
   };
@@ -24766,6 +24938,9 @@ export interface Client {
   };
   '/agents/:agentId/queue-message': {
     POST: PostAgentsAgentIdQueueMessage_RouteContract;
+  };
+  '/agents/:agentId/queue-signal': {
+    POST: PostAgentsAgentIdQueueSignal_RouteContract;
   };
   '/agents/:agentId/recover': {
     POST: PostAgentsAgentIdRecover_RouteContract;

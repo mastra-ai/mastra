@@ -17,10 +17,13 @@ const HIGHLIGHT_SAMPLE_INTERVAL_MS = 75;
 export function useHighlight(code: string, lang: string | undefined): Highlighted | null {
   const [highlighted, setHighlighted] = useState<Highlighted | null>(null);
   // maxWait equal to the delay turns the debounce into a throttle.
-  const [sampledCode] = useDebounce(code, HIGHLIGHT_SAMPLE_INTERVAL_MS, {
+  const [sampledCode, sampler] = useDebounce(code, HIGHLIGHT_SAMPLE_INTERVAL_MS, {
     leading: true,
     maxWait: HIGHLIGHT_SAMPLE_INTERVAL_MS,
   });
+
+  // With `leading`, use-debounce's pending timer still calls setState after unmount.
+  useEffect(() => () => sampler.cancel(), [sampler]);
 
   useEffect(() => {
     if (!lang) return;
@@ -43,7 +46,7 @@ export function useHighlight(code: string, lang: string | undefined): Highlighte
 
 export function tokenStyle(token: ThemedToken): CSSProperties | undefined {
   if (token.htmlStyle && typeof token.htmlStyle === 'object') {
-    return token.htmlStyle as CSSProperties;
+    return token.htmlStyle;
   }
 
   return token.color ? { color: token.color } : undefined;

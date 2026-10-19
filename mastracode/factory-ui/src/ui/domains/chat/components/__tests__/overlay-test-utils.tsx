@@ -6,7 +6,6 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import { thinkingConfig } from '../../../../__tests__/fixtures/thinkingConfig';
 import { OverlaysProvider } from '../../../../lib/overlays';
 
 if (typeof globalThis.ResizeObserver === 'undefined') {
@@ -26,7 +25,7 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoVi
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 
-const OVERLAY_FACTORY_ID = 'p-overlay';
+export const OVERLAY_FACTORY_ID = 'p-overlay';
 const OVERLAY_PROJECT_REPOSITORY_ID = 'repo-overlay';
 const OVERLAY_SESSION_ID = 'session-overlay';
 
@@ -126,7 +125,9 @@ export function useOverlayControllerHandlers() {
     ),
     http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
-    http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(thinkingConfig)),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${OVERLAY_FACTORY_ID}`, () =>
+      HttpResponse.json({ project: { id: OVERLAY_FACTORY_ID, name: 'Overlay', defaultThinkingLevel: 'medium' } }),
+    ),
   );
 }
 

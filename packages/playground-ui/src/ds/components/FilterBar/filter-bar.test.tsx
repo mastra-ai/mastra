@@ -50,6 +50,7 @@ function Harness({
   onChange,
   readOnlyIds = [],
   nonRemovableIds = [],
+  describeSuggestionsError,
 }: {
   initial?: FilterBarItem[];
   fields?: FilterBarField[];
@@ -57,12 +58,14 @@ function Harness({
   onChange?: (items: FilterBarItem[]) => void;
   readOnlyIds?: string[];
   nonRemovableIds?: string[];
+  describeSuggestionsError?: (error: unknown) => string | undefined;
 }) {
   const [items, setItems] = useState<FilterBarItem[]>(initial);
   return (
     <FilterBar
       fields={fields}
       operators={operators}
+      describeSuggestionsError={describeSuggestionsError}
       value={items}
       onValueChange={next => {
         setItems(next);
@@ -1219,6 +1222,36 @@ describe('FilterBar', () => {
       expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: 'manual' });
     });
 
+    it('describes a failed resolver with the consumer text', async () => {
+      const failure = new Error('too expensive');
+      const resolver = vi.fn(async () => {
+        throw failure;
+      });
+      const describe = vi.fn((error: unknown) => (error === failure ? 'Narrow the time range.' : undefined));
+      const fields: FilterBarField[] = [{ id: 'name', label: 'Name', operators: ['is'], suggestions: resolver }];
+      render(<Harness fields={fields} describeSuggestionsError={describe} />);
+      getInput().focus();
+      type('name');
+      key('Enter');
+      key('Enter');
+      await screen.findByText('Narrow the time range.');
+      expect(screen.queryByText(/Couldn't load values./)).toBeNull();
+      expect(describe).toHaveBeenCalledWith(failure);
+    });
+
+    it("keeps the default error text when the consumer doesn't describe the failure", async () => {
+      const resolver = vi.fn(async () => {
+        throw new Error('boom');
+      });
+      const fields: FilterBarField[] = [{ id: 'name', label: 'Name', operators: ['is'], suggestions: resolver }];
+      render(<Harness fields={fields} describeSuggestionsError={() => undefined} />);
+      getInput().focus();
+      type('name');
+      key('Enter');
+      key('Enter');
+      await screen.findByText(/Couldn't load values./);
+    });
+
     it('tolerates an inline resolver whose identity changes on every render', async () => {
       const calls: string[] = [];
       function Inline() {
@@ -1264,7 +1297,7 @@ describe('FilterBar', () => {
       render(
         <Harness fields={fields} initial={[{ id: 'scope', fieldId: 'scope', operatorId: 'is', value: 'agent-1' }]} />,
       );
-      expect(within(getChips()[0] as HTMLElement).getByText('Scope')).toBeTruthy();
+      expect(within(getChips()[0]).getByText('Scope')).toBeTruthy();
     });
   });
 
@@ -1439,7 +1472,7 @@ describe('FilterBar', () => {
         const onChange = vi.fn();
         render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
         const editor = await openPopover();
-        fireEvent.click(within(editor).getAllByRole('button', { name: 'Remove Tags filter' })[0] as HTMLElement);
+        fireEvent.click(within(editor).getAllByRole('button', { name: 'Remove Tags filter' })[0]);
         fireEvent.click(within(editor).getByRole('button', { name: 'Remove Tags filter' }));
         // Empty group persists while editing…
         expect(argAt(onChange, 1, 0).nodes[1]).toMatchObject({ id: 'g', nodes: [] });
@@ -1477,7 +1510,7 @@ describe('FilterBar', () => {
         pressActive({ key: 'ArrowLeft' });
         pressActive({ key: 'ArrowLeft' });
         pressActive({ key: 'ArrowLeft' });
-        const advanced = getAdvancedChips()[0] as HTMLElement;
+        const advanced = getAdvancedChips()[0];
         expect(advanced.contains(document.activeElement)).toBe(true);
         expect((document.activeElement as HTMLElement).dataset.filterBarSegment).toBe('remove');
         pressActive({ key: 'ArrowLeft' });

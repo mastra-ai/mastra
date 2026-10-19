@@ -272,6 +272,24 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(trace, 'aggregate', 'POST /observability/traces/aggregate', {
+    description: 'Aggregate observability traces into grouped measures',
+    input: 'required',
+    examples: [
+      {
+        description: 'Count traces and error rate per entity over 7 days',
+        command: `mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"groupBy":["entityName"],"measures":["count","errorRate"]}'`,
+      },
+      {
+        description: 'Top 10 entities by cost, with total tokens',
+        command: `mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"groupBy":["entityName"],"measures":["tokens.total.sum","cost.sum"],"orderBy":{"field":"cost.sum","direction":"desc"},"limit":10}'`,
+      },
+      {
+        description: 'Daily trace count and p95 duration for one agent',
+        command: `mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"entityName"},"right":{"literal":"weather-agent"}},"interval":"1d","measures":["count","duration.p95"]}'`,
+      },
+    ],
+  });
 
   const log = api.command('log').description('Inspect runtime logs');
   addAction(log, 'list', 'GET /observability/logs', {
@@ -643,16 +661,6 @@ export function registerApiCommand(program: CommanderCommand): void {
   });
   addAction(factoryAttention, 'restore', FACTORY_API_ROUTE_CATALOG.attentionRestore, {
     description: 'Restore a Factory attention item',
-    routePlacement: 'origin',
-  });
-
-  const factorySupervisor = factory.command('supervisor').description('Inspect the Factory supervisor');
-  addAction(factorySupervisor, 'session', FACTORY_API_ROUTE_CATALOG.supervisorSession, {
-    description: 'Get or create the deterministic Factory supervisor session',
-    routePlacement: 'origin',
-  });
-  addAction(factorySupervisor, 'health', FACTORY_API_ROUTE_CATALOG.supervisorHealth, {
-    description: 'Run the deterministic Factory supervisor health check',
     routePlacement: 'origin',
   });
 
