@@ -946,14 +946,39 @@ export async function hasLocalBranch(sandbox: ExecutableSandbox, workdir: string
 }
 
 /**
- * Make sure the checkout has a local `<branch>`. Where it was never created,
- * create it at `HEAD` and switch to it, so the agent's next commits land on
- * the branch every push sends; the index and working tree carry over.
+ * Put the session branch at HEAD and switch to it, carrying over local work.
+ * An existing branch can only advance: never discard its own commits.
  */
 export async function ensureLocalBranch(sandbox: ExecutableSandbox, workdir: string, branch: string): Promise<void> {
-  if (await hasLocalBranch(sandbox, workdir, branch)) return;
-  const created = await execute(sandbox, 'git', ['-C', workdir, 'switch', '-c', branch]);
-  if (created.exitCode !== 0) throw classifyGitFailure(created, 'push-failed');
+  if (!isValidGitRef(branch)) {
+    throw new MaterializeError(`Refusing to materialize: invalid branch name '${branch}'.`, 'push-failed');
+  }
+  const exists = await hasLocalBranch(sandbox, workdir, branch);
+  if (exists) {
+    const ancestor = await execute(sandbox, 'git', [
+      '-C',
+      workdir,
+      'merge-base',
+      '--is-ancestor',
+      `refs/heads/${branch}`,
+      'HEAD',
+    ]);
+    if (ancestor.exitCode === 1) {
+      throw new MaterializeError(
+        `Refusing to move session branch '${branch}': it contains commits that are not in the active HEAD. Merge or reconcile the branches before pushing.`,
+        'push-failed',
+      );
+    }
+    if (ancestor.exitCode !== 0) throw classifyGitFailure(ancestor, 'push-failed');
+    const current = await execute(sandbox, 'git', ['-C', workdir, 'symbolic-ref', '--quiet', 'HEAD']);
+    if (current.exitCode !== 0 && current.exitCode !== 1) throw classifyGitFailure(current, 'push-failed');
+    if (current.stdout.trim() === `refs/heads/${branch}`) return;
+    // Unlike switch -C on older Git, branch -f refuses refs owned by another worktree.
+    const advanced = await execute(sandbox, 'git', ['-C', workdir, 'branch', '-f', branch, 'HEAD']);
+    if (advanced.exitCode !== 0) throw classifyGitFailure(advanced, 'push-failed');
+  }
+  const switched = await execute(sandbox, 'git', ['-C', workdir, 'switch', ...(exists ? [] : ['-c']), branch]);
+  if (switched.exitCode !== 0) throw classifyGitFailure(switched, 'push-failed');
 }
 
 /** Whether `workdir` is a checkout of the repository at `cloneUrl`. */
