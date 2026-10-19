@@ -22,7 +22,9 @@ import type {
   EventDeliveryMode,
   EventOccurrence,
   ListEventsResult,
+  PollEventsRequestParams,
   PollEventsResult,
+  StreamEventsRequestParams,
   StreamEventsResult,
   SubscribeEventsRequestParams,
 } from '../../shared/events';
@@ -30,6 +32,7 @@ import { principalOf } from '../request';
 import { toDescriptor, toTimestamp } from './registry';
 import type { RegisteredEvent, ServerEventRegistry } from './registry';
 import { EventStream } from './stream';
+import type { EventStreamOptions } from './stream';
 import type { WebhookDispatcher } from './webhook-dispatcher';
 
 const DEFAULT_MAX_EVENTS = 100;
@@ -80,63 +83,9 @@ export function registerEventHandlers(server: Server, deps: EventHandlerDeps): v
     EVENTS_METHODS.poll,
     { params: PollEventsRequestParamsSchema, result: PollEventsResultSchema },
     (params, ctx) =>
-      deps.trace(server, EVENTS_METHODS.poll, params, ctx, async (requestContext): Promise<PollEventsResult> => {
-        const event = registry.resolve(params.name, 'poll');
-        const args = await registry.validateArguments(event, params.arguments ?? {});
-        await authorizeOrThrow(event, args, requestContext, 'poll', deps);
-        const maxEvents = params.maxEvents ?? DEFAULT_MAX_EVENTS;
-        const { poll, match, pollIntervalMs } = event.definition;
-
-        if (poll) {
-          let result;
-          try {
-            result = await poll({
-              arguments: args,
-              cursor: params.cursor ?? null,
-              maxEvents,
-              maxAgeMs: params.maxAgeMs,
-              requestContext,
-              signal: ctx.mcpReq.signal,
-            });
-          } catch (error) {
-            deps.getLogger().error(`Poll source for event "${event.name}" failed`, { error });
-            throw new ProtocolError(ProtocolErrorCode.InternalError, `Polling event "${event.name}" failed`);
-          }
-          return withOptional(
-            {
-              events: result.events.map(
-                (polled): EventOccurrence => ({
-                  eventId: polled.eventId,
-                  name: event.name,
-                  timestamp: toTimestamp(polled.timestamp),
-                  data: polled.data,
-                }),
-              ),
-              cursor: result.cursor,
-            },
-            { hasMore: result.hasMore, nextPollMs: result.nextPollMs, truncated: result.truncated },
-          );
-        }
-
-        const read = bufferOf(event).read(params.cursor, {
-          maxEvents,
-          maxAgeMs: params.maxAgeMs,
-          match:
-            match &&
-            (data => {
-              try {
-                return match(args, data);
-              } catch (error) {
-                deps.getLogger().error(`Event filter for "${event.name}" failed`, { error });
-                throw new ProtocolError(ProtocolErrorCode.InternalError, `Event filter for "${event.name}" failed`);
-              }
-            }),
-        });
-        return withOptional(
-          { events: read.events, cursor: read.cursor },
-          { hasMore: read.hasMore || undefined, truncated: read.truncated || undefined, nextPollMs: pollIntervalMs },
-        );
-      }),
+      deps.trace(server, EVENTS_METHODS.poll, params, ctx, requestContext =>
+        pollEvent(deps, params, { requestContext, signal: ctx.mcpReq.signal }),
+      ),
   );
 
   server.setRequestHandler(
@@ -144,51 +93,14 @@ export function registerEventHandlers(server: Server, deps: EventHandlerDeps): v
     { params: StreamEventsRequestParamsSchema, result: StreamEventsResultSchema },
     (params, ctx) =>
       deps.trace(server, EVENTS_METHODS.stream, params, ctx, async (requestContext): Promise<StreamEventsResult> => {
-        const event = registry.resolve(params.name, 'push');
-        const args = await registry.validateArguments(event, params.arguments ?? {});
-        // Before the stream cap, so a forbidden caller never holds a slot.
-        await authorizeOrThrow(event, args, requestContext, 'push', deps);
-        const buffer = bufferOf(event);
-        if (registry.openStreams.size >= (deps.maxStreams ?? DEFAULT_EVENTS_MAX_STREAMS)) {
-          throw new ProtocolError(EVENTS_ERROR_CODES.ResourceExhausted, 'Too many open event streams');
-        }
-        const subscriptionId = ctx.mcpReq.id;
-        const { match } = event.definition;
-        const stream = new EventStream({
-          subscriptionId,
+        const stream = await openEventStream(deps, params, {
+          subscriptionId: ctx.mcpReq.id,
+          requestContext,
           notify: notification => ctx.mcpReq.notify(notification),
-          heartbeatIntervalMs: deps.heartbeatIntervalMs,
-          match: match && (data => match(args, data)),
-          onError: error =>
-            deps.getLogger().warn(`Event stream for "${event.name}" reported an error`, { error, subscriptionId }),
-        });
-
-        // Replay and live registration happen in the same tick, so no emit falls between them.
-        const replay = buffer.read(params.cursor, {
-          maxEvents: Number.POSITIVE_INFINITY,
-          maxAgeMs: params.maxAgeMs,
-          match: data => stream.matches(data),
-        });
-        const unsubscribe = registry.subscribe(event, entry => stream.deliver(entry));
-        registry.openStreams.add(stream);
-        stream.onClose(() => {
-          unsubscribe();
-          registry.openStreams.delete(stream);
-        });
-
-        const { signal } = ctx.mcpReq;
-        const onAbort = () => stream.close();
-        if (signal.aborted) stream.close();
-        else signal.addEventListener('abort', onAbort, { once: true });
-        stream.onClose(() => signal.removeEventListener('abort', onAbort));
-
-        stream.start({
-          cursor: params.cursor == null ? buffer.head : replay.from,
-          truncated: replay.truncated,
-          replay: replay.events,
+          signal: ctx.mcpReq.signal,
         });
         await stream.closed;
-        return { _meta: { [EVENTS_SUBSCRIPTION_ID_META_KEY]: subscriptionId } };
+        return { _meta: { [EVENTS_SUBSCRIPTION_ID_META_KEY]: stream.subscriptionId } };
       }),
   );
 
@@ -229,6 +141,135 @@ export function registerEventHandlers(server: Server, deps: EventHandlerDeps): v
         return {};
       }),
   );
+}
+
+type PollDeps = Pick<EventHandlerDeps, 'registry' | 'getLogger'>;
+type StreamDeps = Pick<EventHandlerDeps, 'registry' | 'getLogger' | 'heartbeatIntervalMs' | 'maxStreams'>;
+
+/** Serves one `events/poll` request: the event's `poll` source, or its ring buffer. */
+export async function pollEvent(
+  deps: PollDeps,
+  params: PollEventsRequestParams,
+  { requestContext, signal }: { requestContext: RequestContext; signal: AbortSignal },
+): Promise<PollEventsResult> {
+  const event = deps.registry.resolve(params.name, 'poll');
+  const args = await deps.registry.validateArguments(event, params.arguments ?? {});
+  await authorizeOrThrow(event, args, requestContext, 'poll', deps);
+  const maxEvents = params.maxEvents ?? DEFAULT_MAX_EVENTS;
+  const { poll, match, pollIntervalMs } = event.definition;
+
+  if (poll) {
+    let result;
+    try {
+      result = await poll({
+        arguments: args,
+        cursor: params.cursor ?? null,
+        maxEvents,
+        maxAgeMs: params.maxAgeMs,
+        requestContext,
+        signal,
+      });
+    } catch (error) {
+      deps.getLogger().error(`Poll source for event "${event.name}" failed`, { error });
+      throw new ProtocolError(ProtocolErrorCode.InternalError, `Polling event "${event.name}" failed`);
+    }
+    return withOptional(
+      {
+        events: result.events.map(
+          (polled): EventOccurrence => ({
+            eventId: polled.eventId,
+            name: event.name,
+            timestamp: toTimestamp(polled.timestamp),
+            data: polled.data,
+          }),
+        ),
+        cursor: result.cursor,
+      },
+      { hasMore: result.hasMore, nextPollMs: result.nextPollMs, truncated: result.truncated },
+    );
+  }
+
+  const read = bufferOf(event).read(params.cursor, {
+    maxEvents,
+    maxAgeMs: params.maxAgeMs,
+    match:
+      match &&
+      (data => {
+        try {
+          return match(args, data);
+        } catch (error) {
+          deps.getLogger().error(`Event filter for "${event.name}" failed`, { error });
+          throw new ProtocolError(ProtocolErrorCode.InternalError, `Event filter for "${event.name}" failed`);
+        }
+      }),
+  });
+  return withOptional(
+    { events: read.events, cursor: read.cursor },
+    { hasMore: read.hasMore || undefined, truncated: read.truncated || undefined, nextPollMs: pollIntervalMs },
+  );
+}
+
+/**
+ * Opens one `events/stream` subscription: replays from `cursor`, then delivers live events
+ * until the stream closes or `signal` aborts. Resolves once `active` is queued.
+ */
+export async function openEventStream(
+  deps: StreamDeps,
+  params: StreamEventsRequestParams,
+  {
+    subscriptionId,
+    requestContext,
+    notify,
+    signal,
+  }: {
+    subscriptionId: string | number;
+    requestContext: RequestContext;
+    notify: EventStreamOptions['notify'];
+    signal: AbortSignal;
+  },
+): Promise<EventStream> {
+  const event = deps.registry.resolve(params.name, 'push');
+  const args = await deps.registry.validateArguments(event, params.arguments ?? {});
+  // Before the stream cap, so a forbidden caller never holds a slot.
+  await authorizeOrThrow(event, args, requestContext, 'push', deps);
+  const buffer = bufferOf(event);
+  if (deps.registry.openStreams.size >= (deps.maxStreams ?? DEFAULT_EVENTS_MAX_STREAMS)) {
+    throw new ProtocolError(EVENTS_ERROR_CODES.ResourceExhausted, 'Too many open event streams');
+  }
+  const { match } = event.definition;
+  const stream = new EventStream({
+    subscriptionId,
+    notify,
+    heartbeatIntervalMs: deps.heartbeatIntervalMs,
+    match: match && (data => match(args, data)),
+    onError: error =>
+      deps.getLogger().warn(`Event stream for "${event.name}" reported an error`, { error, subscriptionId }),
+  });
+
+  // Replay and live registration happen in the same tick, so no emit falls between them.
+  const replay = buffer.read(params.cursor, {
+    maxEvents: Number.POSITIVE_INFINITY,
+    maxAgeMs: params.maxAgeMs,
+    match: data => stream.matches(data),
+  });
+  const unsubscribe = deps.registry.subscribe(event, entry => stream.deliver(entry));
+  deps.registry.openStreams.add(stream);
+  stream.onClose(() => {
+    unsubscribe();
+    deps.registry.openStreams.delete(stream);
+  });
+
+  const onAbort = () => stream.close();
+  if (signal.aborted) stream.close();
+  else signal.addEventListener('abort', onAbort, { once: true });
+  stream.onClose(() => signal.removeEventListener('abort', onAbort));
+
+  stream.start({
+    cursor: params.cursor == null ? buffer.head : replay.from,
+    truncated: replay.truncated,
+    replay: replay.events,
+  });
+  return stream;
 }
 
 /** Webhook subscriptions are keyed by the caller, so they need an authenticated one. */
