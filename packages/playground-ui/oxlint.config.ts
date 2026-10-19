@@ -53,7 +53,7 @@ const restrictedErrorCopySelectors = [
     message: `${ERROR_COPY_MESSAGE} Name the action that failed instead of generic copy.`,
   })),
   {
-    selector: `JSXExpressionContainer ${RAW_ERROR_MESSAGE}`,
+    selector: `JSXExpressionContainer ${RAW_ERROR_MESSAGE}:not(JSXAttribute > JSXExpressionContainer > :function *)`,
     message: `${ERROR_COPY_MESSAGE} Map the cause to written copy in ErrorNotice or errorToast instead of showing error.message.`,
   },
   {

@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Added `errorToast` and `ErrorNotice` for consistent error messages. Both take one typed message: what happened (`title`), why, and the next step (`fix`), plus optional `reassurance` and a `wayOut` link to docs or support, labeled `Docs` or `Support`. Toasts show the title, cause, and next step. `ErrorNotice` renders a destructive `Notice` with every part and the link.
+Added `errorToast` and `ErrorNotice` for consistent error messages. Both take one typed message: what happened (`title`), why, and the next step (`fix`), plus optional `reassurance` and a `wayOut` link to docs or support, labeled `Docs` or `Support`. Error toasts show the title, cause, and next step, with the link as the toast’s button. `ErrorNotice` shows an inline error box with every part of the message and the link.
 
 ```tsx
 import { errorToast, ErrorNotice, type ErrorMessage } from '@mastra/playground-ui/utils/error-message';
