@@ -3,12 +3,6 @@
   "temperature": ["deepseek-v4.1-flash-fast", "deepseek-v4.1-flash-fast-fp4", "glm-5.3-fast", "glm-5.3-fp4"],
   "structuredOutput": ["deepseek-v4.1-flash-fast", "deepseek-v4.1-flash-fast-fp4", "glm-5.3-fast", "glm-5.3-fp4"],
   "reasoning": {
-    "glm-5.3-fp4": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "deepseek-v4.1-flash-fast": [
       {
         "type": "effort",
@@ -16,6 +10,12 @@
       }
     ],
     "glm-5.3-fast": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.3-fp4": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
