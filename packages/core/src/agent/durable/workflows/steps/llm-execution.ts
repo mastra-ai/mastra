@@ -2255,6 +2255,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               cleanupToolObservabilitySpans(!(toolCalls.length > 0 && finishReason !== 'stop'));
             } catch (error) {
               ownership?.throwIfLost();
+              // This attempt is over: whatever processors still hold from it must not be
+              // released alongside a retry's parts or after an abort.
+              if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
+                const kept = await getToolResultRunner().discardHeldParts(registryEntry.processorStates);
+                if (pubsub) {
+                  for (const part of kept) await emitChunkEvent(pubsub, runId, part, true);
+                }
+              }
               throwIfInterrupted();
               cleanupToolObservabilitySpans(true);
               logger?.error?.('Error processing LLM stream', { error, runId });
