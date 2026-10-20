@@ -454,6 +454,12 @@ export interface SessionMachinery {
   }): Promise<Record<string, unknown>>;
   /** The run budget every initial stream and resume must carry (maxSteps, provider fallbacks, …). */
   buildSharedRunOptions(requestContext?: RequestContext): SharedRunOptions;
+  /**
+   * The current mode's `activeTools` allowlist, or `undefined` when the mode
+   * does not restrict tools. Approval resumes carry it so the continuation sees
+   * the same tools as the initial stream.
+   */
+  resolveModeActiveTools(): string[] | undefined;
   onSessionDeleted?(listener: () => void): () => void;
   /** Resolve the toolset (built-in controller  tools + user/subagent tools) for a run. */
   buildToolsets(requestContext: RequestContext): Promise<ToolsetsInput>;
@@ -5980,6 +5986,7 @@ export class Session<TState = unknown> {
     });
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     const toolsets = await this.machinery.buildToolsets(requestContext);
+    const activeTools = this.machinery.resolveModeActiveTools();
     onDispatch?.();
     await agent.sendToolApproval({
       threadId,
@@ -5997,6 +6004,8 @@ export class Session<TState = unknown> {
       streamOptions: {
         ...this.machinery.buildSharedRunOptions(requestContext),
         onStepFinish: this.#resumeUsageRecorder(agent, runId, requestContext),
+        // Without it the continuation sees every agent tool, not the mode's subset.
+        ...(activeTools !== undefined && { activeTools }),
       },
     });
   }
@@ -6066,6 +6075,7 @@ export class Session<TState = unknown> {
     });
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     const toolsets = await this.machinery.buildToolsets(requestContext);
+    const activeTools = this.machinery.resolveModeActiveTools();
     onDispatch?.();
     await agent.sendToolApproval({
       threadId,
@@ -6084,6 +6094,8 @@ export class Session<TState = unknown> {
       streamOptions: {
         ...this.machinery.buildSharedRunOptions(requestContext),
         onStepFinish: this.#resumeUsageRecorder(agent, runId, requestContext),
+        // Without it the continuation sees every agent tool, not the mode's subset.
+        ...(activeTools !== undefined && { activeTools }),
       },
     });
   }
