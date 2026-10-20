@@ -1,5 +1,7 @@
 import { createContext } from 'react';
 
+import type { ThreadOwner } from '../services/reply-credential';
+
 export interface FactorySessionState {
   factoryProjectId: string;
   projectRepositoryId?: string;
@@ -60,7 +62,7 @@ export interface ChatSessionContextApi {
    */
   kind: 'factory' | 'user';
   /** Who the stored session belongs to; absent where no session row backs the chat (supervisor, `?resourceId=` override). */
-  owner?: { id: string; name?: string };
+  owner?: ThreadOwner;
 }
 
 export const ChatSessionContext = createContext<ChatSessionContextApi | null>(null);
