@@ -2,15 +2,14 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createOpenAI as createOpenAIV1 } from '@ai-sdk/openai';
+import { createOpenAI as createOpenAIV3 } from '@ai-sdk/openai-ai6';
 import { createOpenAI as createOpenAIV2 } from '@ai-sdk/openai-v5';
-import { createOpenAI as createOpenAIV3 } from '@ai-sdk/openai-v6';
-import { createOpenAI as createOpenAIV4 } from '@ai-sdk/openai-v7';
+import { createOpenAI as createOpenAIV4 } from '@ai-sdk/openai-v6';
 import { LLMock } from '@copilotkit/aimock';
 import { InMemoryStore } from '@mastra/core/storage';
 import { LibSQLVector } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-
-import { Memory } from './index';
 
 const savedText = 'My preferred meeting time is nine in the morning.';
 const queryText = 'When should we schedule a meeting?';
