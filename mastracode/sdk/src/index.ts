@@ -349,8 +349,8 @@ export interface MastraCodeConfig {
   storageBackend?: 'libsql' | 'pg';
   /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
   vector?: MastraVector;
-  /** Host-owned Knowledge instance registered on the mounted Mastra under its own id. */
-  knowledge?: Knowledge;
+  /** Host-owned Knowledge instance and the key used to register it on the mounted Mastra runtime. */
+  knowledge?: { key: string; instance: Knowledge };
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
@@ -847,11 +847,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
+  const configuredKnowledgeKey = config?.knowledge?.key.trim();
+  if (config?.knowledge && !configuredKnowledgeKey) {
+    throw new Error('knowledge.key must be a non-empty string.');
+  }
   const knowledge =
-    config?.knowledge ??
+    config?.knowledge?.instance ??
     (process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1'
       ? new Knowledge({ id: 'mastracode', name: 'MastraCode Knowledge', storage })
       : undefined);
+  const knowledgeKey = configuredKnowledgeKey ?? 'default';
   const dynamicMemory =
     config?.memory === undefined
       ? getDynamicMemory(
@@ -1879,6 +1884,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     observability,
     memory,
     knowledge,
+    knowledgeKey,
     mcpManager,
     hookManager,
     pluginManager,
@@ -2076,7 +2082,7 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   // Mastra so the dynamic-workflow loading in startWorkers() can rehydrate
   // saved workflows against the right tool/agent registry.
   const mastra = controller.getMastra();
-  registerSelectedKnowledge(mastra, base.knowledge);
+  registerSelectedKnowledge(mastra, base.knowledgeKey, base.knowledge);
   if (mastra) await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, mcpManager });
   await mastra?.startWorkers();
   base.registerConfiguredProcessorsWithMastra();
@@ -2119,9 +2125,8 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
  * controller's internal Mastra, or a caller-owned one) so keyed lookups resolve
  * it and an instance without its own storage inherits the Mastra's.
  */
-function registerSelectedKnowledge(mastra: Mastra | undefined, knowledge: Knowledge | undefined) {
+function registerSelectedKnowledge(mastra: Mastra | undefined, key: string, knowledge: Knowledge | undefined) {
   if (!mastra || !knowledge) return;
-  const key = knowledge.id;
   const existing = (mastra.listKnowledge() as Record<string, Knowledge | undefined>)[key];
   if (existing === knowledge) return;
   if (existing) {
@@ -2170,7 +2175,7 @@ export async function mountAgentControllerOnMastra(
     // Mounting onto a Mastra the caller already built. Ensure the controller's
     // back-reference points at it (idempotent — only sets #externalMastra).
     prepared.base.controller.__registerMastra(config.mastra);
-    registerSelectedKnowledge(config.mastra, prepared.base.knowledge);
+    registerSelectedKnowledge(config.mastra, prepared.base.knowledgeKey, prepared.base.knowledge);
     await prepared.finalize();
     return { ...prepared.base, mastra: config.mastra };
   }
@@ -2240,7 +2245,7 @@ export async function prepareAgentControllerMount(
           },
         }
       : {}),
-    ...(base.knowledge ? { knowledge: { [base.knowledge.id]: base.knowledge } } : {}),
+    ...(base.knowledge ? { knowledge: { [base.knowledgeKey]: base.knowledge } } : {}),
     // Mirror the controller's internal-Mastra construction (which passes
     // `config.pubsub` through): the server-owned Mastra must run its event
     // bus on the same transport so streams/workflows/signals stay
