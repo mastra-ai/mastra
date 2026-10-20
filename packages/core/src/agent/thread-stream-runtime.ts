@@ -963,18 +963,28 @@ export class AgentThreadStreamRuntime {
   }
 
   #abortLeaseLostRun(state: AgentThreadRuntimeState, runId: string): void {
+    // Tool calls the step already queued check the fence after this, so they must keep failing until the
+    // run ends, not find no fence and run beside the successor.
+    const lost = async () => {
+      throw new AgentThreadLeaseLostError(runId);
+    };
+    state.leaseFences.set(runId, lost);
+    setRunLeaseFence(runId, lost);
     const preparedRun = state.preparedRunsById.get(runId);
     if (preparedRun) preparedRun.abortController.abort(new AgentThreadLeaseLostError(runId));
     // Durable runs own their controller outside the thread runtime.
     else state.threadRunsById.get(runId)?.agent.abortRunStream(runId);
   }
 
-  /** Pass `only` to stop that timer alone, never one a later registration of the run started. */
+  /**
+   * Pass `only` to stop that timer alone, never one a later registration of the run started.
+   * Without `only`, also clears the fence a lost lease left after its renewal had stopped.
+   */
   #stopLeaseRenewal(pubsub: PubSub, runId: string, only?: ReturnType<typeof setInterval>): void {
     const state = this.#getState(pubsub);
     const timer = state.leaseRenewalTimers.get(runId);
-    if (!timer || (only && timer !== only)) return;
-    clearInterval(timer);
+    if (only ? timer !== only : !timer && !state.leaseFences.has(runId)) return;
+    if (timer) clearInterval(timer);
     state.leaseRenewalTimers.delete(runId);
     const fence = state.leaseFences.get(runId);
     if (fence) clearRunLeaseFence(runId, fence);

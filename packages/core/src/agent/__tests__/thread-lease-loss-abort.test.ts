@@ -32,6 +32,7 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { createDurableAgent, createEventedAgent } from '../durable';
 import { assembleAgentFromFsEntry } from '../fs-routing';
+import { verifyRunLease } from '../run-lease-fence';
 
 const THREAD = 'lease-loss-thread';
 const RESOURCE = 'lease-loss-user';
@@ -534,6 +535,50 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     },
     30_000,
   );
+
+  it("runs none of the step's remaining tool calls once one of them finds the lease taken", async () => {
+    const thread = 'lease-queued-calls-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    llm.on(
+      { userMessage: 'queued calls', sequenceIndex: 0 },
+      {
+        toolCalls: Array.from({ length: 8 }, (_, i) => ({ id: `call_queued_${i}`, name: 'step', arguments: { n: i } })),
+      },
+    );
+    llm.on({ userMessage: 'queued calls', sequenceIndex: 1 }, { content: 'queued calls done' });
+
+    const shared = new SharedLeases();
+    let runId: string | undefined;
+    const ran: number[] = [];
+    const step = createTool({
+      id: 'step',
+      description: 'Run one step',
+      inputSchema: z.object({ n: z.number() }),
+      execute: async ({ n }) => {
+        ran.push(n);
+        if (ran.length === 5) {
+          // A successor on another replica takes the thread while the fifth call runs.
+          runId = shared.owner(key);
+          shared.leases.set(key, { owner: 'successor-run', expiresAt: Date.now() + 60_000 });
+        }
+        return 'stepped';
+      },
+    });
+    const agent = replica(shared, new MockMemory(), { step });
+
+    const { output, drain } = await startStream(agent, 'queued calls', {
+      maxSteps: 3,
+      toolCallConcurrency: 1,
+      memory: { thread, resource: RESOURCE },
+    });
+    await drain().catch(() => undefined);
+
+    expect(runId).toBeDefined();
+    expect(ran).toHaveLength(5);
+    expect(await output.finishReason).toBe('aborted');
+    // The ended run leaves no fence behind, so a later run with its id can call tools.
+    await expect(verifyRunLease(runId)).resolves.toBeUndefined();
+  }, 20_000);
 
   it('runs tools on a pubsub that cannot lease', async () => {
     for (let i = 0; i < 2; i++) {
