@@ -77,7 +77,11 @@ function Location() {
   return <output data-testid="board-url">{location.search}</output>;
 }
 
-function renderBoard(kind: 'work' | 'review', initialSearch = '') {
+function renderBoard(
+  kind: 'work' | 'review',
+  initialSearch = '',
+  issues = [issue(10, ['bug'], 'alice'), issue(11, ['other'], 'bob')],
+) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
@@ -106,7 +110,7 @@ function renderBoard(kind: 'work' | 'review', initialSearch = '') {
     http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/work-items`, () =>
       HttpResponse.json({
         workItems: [
-          workItem('bug', 'work', { labels: ['bug'], author: 'alice' }),
+          workItem('bug', 'work', { labels: ['bug'], author: 'alice', assignees: ['bob'] }),
           workItem('docs', 'work', { labels: ['documentation'], author: 'bob' }),
           workItem('both', 'work', { labels: ['bug', 'documentation'], author: 'alice' }),
           workItem('unlabelled', 'work', { labels: ['other'], author: 'bob' }),
@@ -137,9 +141,7 @@ function renderBoard(kind: 'work' | 'review', initialSearch = '') {
     // Label-routed intake refetches issues per routed label; keep that lane empty so candidates aren't duplicated.
     http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
       HttpResponse.json({
-        issues: new URL(request.url).searchParams.has('label')
-          ? []
-          : [issue(10, ['bug'], 'alice'), issue(11, ['other'], 'bob')],
+        issues: new URL(request.url).searchParams.has('label') ? [] : issues,
         nextPage: null,
       }),
     ),
@@ -205,104 +207,130 @@ describe('BoardPage filters', () => {
     expect(screen.getByText('Card unlabelled')).toBeInTheDocument();
   });
 
-  it('combines labels and relevance on work items and separate intake candidates', async () => {
+  it('combines person and label filters on work items and intake candidates and survives a URL reload', async () => {
     const user = userEvent.setup();
     const { client, unmount } = renderBoard('work');
     expect(await screen.findByText('Card bug')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     expect(candidateTitles()).toContain('Issue 10');
     expect(candidateTitles()).toContain('Issue 11');
-    await togglePropertyOption(user, MENU, 'Teammate', /alice/i);
-    await togglePropertyOption(user, MENU, 'Relevant because', 'Worked on');
-    await togglePropertyOption(user, MENU, 'Relevant because', 'Assigned');
-    await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('relevance=authored'));
-    expect(screen.getByTestId('board-url')).toHaveTextContent('teammate=github%3Aalice');
+    await togglePropertyOption(user, MENU, 'Author', /alice/i);
+    await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('author=github%3Aalice'));
     expect(screen.getByText('Card bug')).toBeInTheDocument();
     expect(candidateTitles()).toContain('Issue 10');
     expect(screen.queryByText('Card docs')).not.toBeInTheDocument();
     await waitFor(() => expect(candidateTitles()).not.toContain('Issue 11'));
     await togglePropertyOption(user, MENU, 'Label', /^bug$/);
     await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('label=bug'));
-    expect(screen.getByText('Card bug')).toBeInTheDocument();
     expect(screen.getByText('Card both')).toBeInTheDocument();
-    expect(candidateTitles()).toContain('Issue 10');
-    expect(screen.queryByText('Card docs')).not.toBeInTheDocument();
+    expect(screen.queryByText('Card unlabelled')).not.toBeInTheDocument();
     const search = screen.getByTestId('board-url').textContent ?? '';
     unmount();
     renderBoard('work', search);
     expect(await screen.findByText('Card bug')).toBeInTheDocument();
     expect(candidateTitles()).toContain('Issue 10');
     expect(candidateTitles()).not.toContain('Issue 11');
-    await togglePropertyOption(user, MENU, 'Relevant because', 'Worked on');
-    await togglePropertyOption(user, MENU, 'Relevant because', 'Assigned');
-    expect(screen.getByTestId('board-url')).not.toHaveTextContent('relevance=');
     expect(screen.queryByText('Card docs')).not.toBeInTheDocument();
-    await togglePropertyOption(user, MENU, 'Teammate', /alice/i);
-    expect(screen.getByTestId('board-url')).not.toHaveTextContent('teammate=');
+    await togglePropertyOption(user, MENU, 'Author', /alice/i);
+    expect(screen.getByTestId('board-url')).not.toHaveTextContent('author=');
     expect(screen.getByTestId('board-url')).toHaveTextContent('label=bug');
-    expect(screen.getByText('Card bug')).toBeInTheDocument();
     expect(screen.queryByText('Card docs')).not.toBeInTheDocument();
-    expect(screen.queryByText('Card unlabelled')).not.toBeInTheDocument();
   });
 
-  it('applies authored or review requested to review cards and survives a URL reload', async () => {
+  it('keeps only work cards authored by one person and assigned to another', async () => {
     const user = userEvent.setup();
-    const { client, unmount } = renderBoard('review');
+    const { client } = renderBoard('work');
+    expect(await screen.findByText('Card bug')).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    await togglePropertyOption(user, MENU, 'Author', /alice/i);
+    await waitFor(() => expect(screen.queryByText('Card docs')).not.toBeInTheDocument());
+    expect(screen.getByText('Card both')).toBeInTheDocument();
+    await togglePropertyOption(user, MENU, 'Assignee', /bob/i);
+    await waitFor(() => expect(screen.queryByText('Card both')).not.toBeInTheDocument());
+    expect(screen.getByText('Card bug')).toBeInTheDocument();
+    expect(candidateTitles()).toEqual([]);
+    await openPropertiesMenu(user, MENU);
+    expect(screen.queryByRole('menuitem', { name: /^Review requested/ })).not.toBeInTheDocument();
+    await closePropertiesMenus(user);
+  });
+
+  it('keeps only review cards authored by one person with review requested from another', async () => {
+    const user = userEvent.setup();
+    const { client } = renderBoard('review');
     expect(await screen.findByText('Card authored')).toBeInTheDocument();
     await waitForMutationsIdle(client);
-    await togglePropertyOption(user, MENU, 'Teammate', /alice/i);
-    await togglePropertyOption(user, MENU, 'Relevant because', 'Worked on');
-    await togglePropertyOption(user, MENU, 'Relevant because', 'Assigned');
-    await waitFor(() =>
-      expect(screen.getByTestId('board-url')).toHaveTextContent('relevance=authored%2Creview-requested'),
+    await togglePropertyOption(user, MENU, 'Involves', /alice/i);
+    await waitFor(() => expect(screen.queryByText('Card unrelated')).not.toBeInTheDocument());
+    expect(screen.getByText('Card authored')).toBeInTheDocument();
+    expect(screen.getByText('Card requested')).toBeInTheDocument();
+    await togglePropertyOption(user, MENU, 'Involves', /alice/i);
+    await togglePropertyOption(user, MENU, 'Author', /bob/i);
+    await togglePropertyOption(user, MENU, 'Review requested', /alice/i);
+    await waitFor(() => expect(screen.queryByText('Card unrelated')).not.toBeInTheDocument());
+    expect(screen.getByTestId('board-url')).toHaveTextContent('author=github%3Abob&reviewer=github%3Aalice');
+    expect(screen.getByText('Card requested')).toBeInTheDocument();
+    expect(screen.queryByText('Card authored')).not.toBeInTheDocument();
+    await waitFor(() => expect(candidateTitles()).toEqual(['Pull 21']));
+  });
+
+  it('lists you first and matches your cards through your GitHub login', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-alice', name: 'Alice' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          connected: true,
+          installations: [],
+          userConnected: true,
+          userGithubUsername: 'Alice',
+        }),
+      ),
     );
-    const search = screen.getByTestId('board-url').textContent ?? '';
+    const user = userEvent.setup();
+    const { client } = renderBoard('review', '?teammate=github%3Aalice');
     expect(await screen.findByText('Card authored')).toBeInTheDocument();
-    expect(screen.getByText('Card requested')).toBeInTheDocument();
-    expect(screen.queryByText('Card unrelated')).not.toBeInTheDocument();
-    unmount();
-    renderBoard('review', search);
-    expect(await screen.findByText('Card authored')).toBeInTheDocument();
-    expect(screen.getByText('Card requested')).toBeInTheDocument();
-    expect(screen.queryByText('Card unrelated')).not.toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    await openPropertySubmenu(user, MENU, 'Involves');
+    expect(screen.getByRole('menuitem', { name: /^Involves\s*You$/ })).toBeInTheDocument();
+    expect(screen.getAllByRole('menuitemcheckbox').map(option => option.textContent)).toEqual(['You', 'bob']);
+    await user.click(screen.getByRole('menuitemcheckbox', { name: /You$/ }));
+    await closePropertiesMenus(user);
+    await waitFor(() => expect(screen.getByText('Card unrelated')).toBeInTheDocument());
+    await togglePropertyOption(user, MENU, 'Author', /You$/);
+    await waitFor(() =>
+      expect(screen.getByTestId('board-url')).toHaveTextContent('author=factory%3Auser-alice&author=github%3Aalice'),
+    );
+    expect(screen.getByText('Card authored')).toBeInTheDocument();
+    expect(screen.queryByText('Card requested')).not.toBeInTheDocument();
+    await waitFor(() => expect(candidateTitles()).toEqual(['Pull 20']));
   });
 
-  it('offers Relevant because only once a teammate is picked', async () => {
+  it('searches a long list of people and keeps picked people on top', async () => {
+    const authors = ['carol', 'dave', 'erin', 'frank', 'grace', 'heidi', 'ivan', 'judy'];
     const user = userEvent.setup();
-    const { client } = renderBoard('work');
-    expect(await screen.findByText('Card bug')).toBeInTheDocument();
+    const { client } = renderBoard(
+      'work',
+      '?author=github%3Ajudy',
+      authors.map((author, index) => issue(30 + index, [], author)),
+    );
+    await waitFor(() => expect(candidateTitles()).toEqual(['Issue 37']));
     await waitForMutationsIdle(client);
-    await openPropertiesMenu(user, MENU);
-    expect(screen.queryByRole('menuitem', { name: /^Relevant because/ })).not.toBeInTheDocument();
+    await openPropertySubmenu(user, MENU, 'Author');
+    expect(screen.getAllByRole('menuitemcheckbox')[0]).toHaveTextContent('judy');
+    await user.keyboard('ER');
+    expect(screen.getByRole('textbox', { name: 'Search author' })).toHaveValue('ER');
+    expect(screen.getAllByRole('menuitemcheckbox').map(option => option.textContent)).toEqual(['erin']);
+    await user.keyboard('{ArrowDown} ');
+    await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('github%3Aerin'));
+    expect(screen.getByRole('menuitemcheckbox', { name: /erin$/ })).toHaveAttribute('aria-checked', 'true');
+    await user.keyboard('zz');
+    expect(screen.queryAllByRole('menuitemcheckbox')).toEqual([]);
+    expect(screen.getByText('No matches')).toBeInTheDocument();
     await closePropertiesMenus(user);
-    await togglePropertyOption(user, MENU, 'Teammate', /alice/i);
-    await openPropertiesMenu(user, MENU);
-    expect(screen.getByRole('menuitem', { name: /^Relevant because/ })).toBeInTheDocument();
-    await closePropertiesMenus(user);
-  });
-
-  it('starts Relevant because with every reason checked, narrows by unchecking and keeps the last one', async () => {
-    const user = userEvent.setup();
-    const { client } = renderBoard('work');
-    expect(await screen.findByText('Card bug')).toBeInTheDocument();
-    await waitForMutationsIdle(client);
-    await togglePropertyOption(user, MENU, 'Teammate', /alice/i);
-    await togglePropertyOption(user, MENU, 'Relevant because', 'Assigned');
-    await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('relevance=worked%2Cauthored'));
-    await togglePropertyOption(user, MENU, 'Relevant because', 'Worked on');
-    await waitFor(() => expect(screen.getByTestId('board-url')).toHaveTextContent('relevance=authored'));
-    await openPropertySubmenu(user, MENU, 'Relevant because');
-    expect(screen.getByRole('menuitem', { name: /^Relevant because\s*Authored$/ })).toBeInTheDocument();
-    expect(screen.getByRole('menuitemcheckbox', { name: 'Authored' })).toHaveAttribute('aria-disabled', 'true');
-    await closePropertiesMenus(user);
-    await togglePropertyOption(user, MENU, 'Relevant because', 'Worked on');
-    await togglePropertyOption(user, MENU, 'Relevant because', 'Assigned');
-    await waitFor(() => expect(screen.getByTestId('board-url')).not.toHaveTextContent('relevance='));
-    await openPropertySubmenu(user, MENU, 'Relevant because');
-    expect(screen.getByRole('menuitem', { name: /^Relevant because$/ })).toBeInTheDocument();
-    for (const reason of ['Worked on', 'Authored', 'Assigned']) {
-      expect(screen.getByRole('menuitemcheckbox', { name: reason })).toHaveAttribute('aria-checked', 'true');
-    }
+    await openPropertySubmenu(user, MENU, 'Author');
+    expect(screen.getByRole('textbox', { name: 'Search author' })).toHaveValue('');
     await closePropertiesMenus(user);
   });
 
@@ -313,6 +341,11 @@ describe('BoardPage filters', () => {
     await waitForMutationsIdle(client);
     const trigger = screen.getByRole('button', { name: 'Board properties, 2 changed' });
     expect(trigger).toHaveTextContent('2');
+    await user.hover(trigger);
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Sort:');
+    expect(tooltip).toHaveTextContent('Label: bug');
+    await user.unhover(trigger);
     await openPropertiesMenu(user, MENU);
     await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
     await waitFor(() => expect(screen.getByTestId('board-url')).not.toHaveTextContent('label='));

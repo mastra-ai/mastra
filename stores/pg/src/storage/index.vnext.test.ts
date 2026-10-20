@@ -144,6 +144,7 @@ describe('PostgresStoreVNext', () => {
           'feedback',
           'trace-query-context-ids',
           'trace-query-time-to-first-chunk',
+          'trace-query-time-to-first-chunk-sort',
           'trace-query-root-span-fields',
         ]);
 
@@ -169,6 +170,7 @@ describe('PostgresStoreVNext', () => {
           'feedback',
           'trace-query-context-ids',
           'trace-query-time-to-first-chunk',
+          'trace-query-time-to-first-chunk-sort',
           'trace-query-root-span-fields',
         ]);
       } finally {

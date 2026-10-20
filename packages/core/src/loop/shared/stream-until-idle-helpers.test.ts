@@ -61,6 +61,7 @@ const runIdleLoopWithDeps = (deps: {
     {
       activeStreams: new Map(),
       bgManager: {
+        config: {},
         listTasks: deps.listTasks,
         stream: () => deps.bgStream,
       } as any,
@@ -214,7 +215,7 @@ describe('runIdleLoop adopts tasks started by a prior wrapper (#26841)', () => {
       {},
       {
         activeStreams: new Map(),
-        bgManager: { listTasks, stream: () => bg.stream } as any,
+        bgManager: { config: {}, listTasks, stream: () => bg.stream } as any,
       },
       async () => ({ fullStream: streamOf(textChunks('first answer')), runId: 'run-1' }),
       continuation,
@@ -267,7 +268,7 @@ describe('runIdleLoop adopts tasks started by a prior wrapper (#26841)', () => {
     const ctx = await runIdleLoop(
       makeAgent(),
       {},
-      { activeStreams: new Map(), bgManager: { listTasks: vi.fn(), stream: () => bg.stream } as any },
+      { activeStreams: new Map(), bgManager: { config: {}, listTasks: vi.fn(), stream: () => bg.stream } as any },
       async () => ({ fullStream: firstStream, runId: 'run-1' }),
       continuation,
       (_first: unknown, loopCtx: any) => loopCtx,

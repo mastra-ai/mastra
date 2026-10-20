@@ -5,7 +5,7 @@ import { globalRunRegistry } from '../../run-registry';
 import { createDurableLLMExecutionStep } from '../steps/llm-execution';
 import { createDurableLLMMappingStep } from '../steps/llm-mapping';
 import { calculateAccumulatedUsage, createBaseIterationStateUpdate } from './iteration-state';
-import { baseIterationStateSchema } from './schemas';
+import { baseDurableAgenticInputSchema, baseIterationStateSchema } from './schemas';
 
 const providerRequest = {
   body: {
@@ -142,6 +142,46 @@ describe('calculateAccumulatedUsage', () => {
 });
 
 describe('createBaseIterationStateUpdate', () => {
+  it('preserves a cold input rejection across preemption and clears it after the terminal step (COR-1481)', () => {
+    const runId = 'cold-input-tripwire';
+    const inputTripwire = {
+      reason: 'Deploy target rejected',
+      retry: false,
+      processorId: 'preflight',
+      metadata: { target: 'staging' },
+    };
+    expect(globalRunRegistry.get(runId)).toBeUndefined();
+    const input = baseDurableAgenticInputSchema.parse(
+      JSON.parse(
+        JSON.stringify(iterationState({ runId, inputTripwire, modelConfig: { provider: 'test', modelId: 'mock' } })),
+      ),
+    );
+    const initial = baseIterationStateSchema.parse({
+      ...input,
+      iterationCount: 0,
+      accumulatedSteps: [],
+      accumulatedUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    });
+    const discarded = executionOutput();
+    discarded.stepResult = { reason: 'other', isContinued: true, signalPreempted: true };
+    const resumed = baseIterationStateSchema.parse(
+      JSON.parse(JSON.stringify(createBaseIterationStateUpdate({ currentState: initial, executionOutput: discarded }))),
+    );
+    const llm = createDurableLLMExecutionStep();
+    const workerInput = llm.inputSchema.parse(JSON.parse(JSON.stringify(resumed)));
+    expect(workerInput.inputTripwire).toEqual(inputTripwire);
+    expect(resumed.iterationCount).toBe(0);
+
+    const terminal = executionOutput();
+    terminal.stepResult = { reason: 'tripwire', isContinued: false };
+    const completed = baseIterationStateSchema.parse(
+      JSON.parse(JSON.stringify(createBaseIterationStateUpdate({ currentState: resumed, executionOutput: terminal }))),
+    );
+    expect(completed.inputTripwire).toBeUndefined();
+    expect(completed.lastStepResult).toMatchObject({ reason: 'tripwire', isContinued: false });
+    expect(globalRunRegistry.get(runId)).toBeUndefined();
+  });
+
   it('does not carry the provider request into the next iteration', () => {
     const update = createUpdate();
 

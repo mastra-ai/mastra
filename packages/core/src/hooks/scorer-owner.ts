@@ -1,4 +1,5 @@
 import type { ScoringHookInput } from '../evals';
+import type { MastraScorerEntry } from '../evals/base';
 import type { Mastra } from '../mastra';
 import { unwrapMastraTracingProxy } from '../observability/context';
 
@@ -39,4 +40,19 @@ export function setScorerHookOwner(data: ScoringHookInput, owner?: Mastra): void
 export function isScorerHookForMastra(data: ScoringHookInput, mastra: Mastra): boolean {
   const ownerToken = scorerHookOwnerTokens.get(data);
   return !ownerToken || ownerToken === getScorerHookToken(mastra);
+}
+
+const scorerHookEntries = new WeakMap<ScoringHookInput, MastraScorerEntry>();
+
+/**
+ * Attach the scorer entry a run was configured with to its hook payload.
+ * A scorer supplied at call time or through `defaultOptions.scorers` is
+ * registered nowhere, so the hook cannot find it again by id (#27579).
+ */
+export function setScorerHookEntry(data: ScoringHookInput, entry: MastraScorerEntry): void {
+  scorerHookEntries.set(data, entry);
+}
+
+export function getScorerHookEntry(data: ScoringHookInput): MastraScorerEntry | undefined {
+  return scorerHookEntries.get(data);
 }

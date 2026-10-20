@@ -193,6 +193,9 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'repository_cli_missing',
   'repository_pr_failed',
   'run_configuration_invalid',
+  'run_credentials_unavailable',
+  'run_user_unauthenticated',
+  'run_failed',
   'unknown',
 ] as const;
 
@@ -1457,6 +1460,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
                 attempts: Number(current.attempts) + 1,
                 lease_owner: input.ownerId,
                 lease_expires_at: input.leaseExpiresAt,
+                // A new attempt starts clean: the previous attempt's cause no longer describes this one.
+                last_error: null,
+                failure_code: null,
                 updated_at: input.now,
               };
             });

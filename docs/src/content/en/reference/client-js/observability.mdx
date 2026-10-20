@@ -93,7 +93,7 @@ const result = await mastraClient.querySpans({
 console.log(result.spans)
 ```
 
-Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt` or `endedAt`, ascending or descending, and defaults to descending start time.
+Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt`, `endedAt`, or `timeToFirstChunkMs`, ascending or descending, and defaults to descending start time. Spans without a `timeToFirstChunkMs` value sort last in both directions.
 
 | Fields | Operators |
 | - | - |
@@ -101,14 +101,14 @@ Pages default to 100 rows and allow at most 1,000. The response is `{ spans, pag
 | `organizationId`, `resourceId`, `runId`, `sessionId`, `userId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | Same string operators |
 | Entity, parent entity and root entity `Type`, `Id`, `Name`, `VersionId` fields, such as `parentEntityId` | Same string operators |
 | `name`, `spanType`, `status` | Same string operators; `name` also accepts `matches` / `notMatches` for normalized whole words and phrases |
-| `startedAt`, `endedAt`, `durationMs` | Comparisons, membership and presence |
+| `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs` | Comparisons, membership and presence |
 | `error` | `exists`, `notExists` |
 
 Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', value: { path: 'spanType' }, set: ['agent_run', 'tool_call'] }`. A span's status is `error` when it has an error and `success` otherwise.
 
 Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews. Model/provider are available in returned rows but aren't filterable.
 
-The additional identity, context and parent/root entity filters require an updated storage adapter. With an older adapter, requests using these filters return a structured `422` error.
+Check `capabilities.spanQueryContextFields` from `getObservabilityCapabilities()` before using the additional identity, context and parent/root entity filters. A missing or false value means these filters aren't available. With an older adapter, requests using these filters return a structured `422` error.
 
 DuckDB returns `null` for parent/root entity type, ID and name, and for `executionSource`. Equality filters on these fields match no spans. Parent/root entity version IDs remain available.
 
@@ -251,7 +251,7 @@ const result = await mastraClient.queryTraces({
 })
 ```
 
-See [Trace queries](/reference/observability/tracing/trace-query) for request fields, predicates, limits, response shapes, and errors.
+See [Query traces](/reference/observability/tracing/advanced-queries#query-traces) for request fields, predicates, limits, response shapes, and errors.
 
 ### Load a page and poll for traces
 
@@ -278,7 +278,7 @@ const changes = await mastraClient.queryTraces({
 
 Merge `changes.traces` by `traceId`, retain `changes.deltaCursor`, and continue while `changes.delta.hasMore` is `true`. Keep the same time range and predicate across polls. Only completed traces are returned; polling doesn't guarantee notifications for related-record updates, deletions, or traces that stop matching.
 
-See [Delta polling](/reference/observability/tracing/trace-query#poll-after-loading-a-numbered-page) for bootstrap behavior, cursor lifetime, retention, and a complete polling loop.
+See [Delta polling](/reference/observability/tracing/advanced-queries#poll-after-loading-a-numbered-page) for bootstrap behavior, cursor lifetime, retention, and a complete polling loop.
 
 ### Aggregate traces
 
@@ -303,11 +303,9 @@ if (capabilities.traceAggregate) {
 }
 ```
 
-`groupBy` accepts the root span's `name` and `spanType` as well as entity and context fields. Every `groupBy` field can also be used in `where` to drill into a group, except `serviceName`, `executionSource`, and `experimentId`, which are groupable only.
+Each row has `dimensions` keyed by `groupBy` field, `measures` keyed by measure name, a `bucket` timestamp when `interval` is set, and `cost` coverage when a cost measure is requested. `truncated` is `true` when more groups matched than `limit`. Check `capabilities.traceAggregate` before calling. The client retries server errors like `queryTraces()` but doesn't retry `422` validation errors.
 
-Each row has `dimensions` keyed by `groupBy` field, `measures` keyed by measure name, a `bucket` timestamp when `interval` is set, and `cost` coverage when a cost measure is requested. `truncated` is `true` when more groups matched than `limit`.
-
-Check `capabilities.traceAggregate` before calling. Unlike `traceQuery`, a missing value means the server doesn't support aggregation. The client retries server errors like `queryTraces()` but doesn't retry `422` validation errors.
+See [Aggregate traces](/reference/observability/tracing/advanced-queries#aggregate-traces) for dimensions, measures, token and cost semantics, time buckets, limits, and errors.
 
 ### Discover trace-query fields and values
 
@@ -327,7 +325,7 @@ const fields = await mastraClient.getTraceQueryFields({
 })
 ```
 
-For the `trace` scope on a server that supports aggregation, the response also includes `aggregate`: the `dimensions` you can pass to `groupBy` and the `measures` you can request. Every observed metadata field is also a dimension, and `countDistinct.<field>` accepts any dimension or `traceId`.
+For the `trace` scope on a server that supports aggregation, the response also includes `aggregate`: the `dimensions` you can pass to `groupBy` and the `measures` you can request. See [Discover fields and values](/reference/observability/tracing/advanced-queries#discover-fields-and-values).
 
 Use the exact local path from the response with the same scope. For example, `model` belongs inside a `spans.some` or `spans.none` predicate. A field picker can fetch the `trace` and `spans` scopes in parallel.
 
@@ -505,7 +503,7 @@ const ratingPercentiles = await mastraClient.getFeedbackPercentiles({
 
 ## Related
 
-- [Trace queries](/reference/observability/tracing/trace-query): Query completed traces with recursive predicates
+- [Advanced trace queries](/reference/observability/tracing/advanced-queries): Query and aggregate completed traces with recursive predicates
 - [Feedback guide](/docs/observability/feedback): Learn how to create, list, and query feedback
 - [Feedback reference](/reference/observability/feedback): Review feedback schemas and HTTP routes
 - [Agents API](./agents): Learn about agent interactions that generate traces

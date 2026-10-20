@@ -26,6 +26,7 @@ import {
 import type { BoardCandidate, IntakeFeed, IntakeSource } from '../boardCandidates';
 import type { BoardFilterState } from '../boardFilters';
 import { hasLabel, isPersistedCandidate } from '../boardItems';
+import { pickedBoardSources } from '../boardSourceFilters';
 import type { IntakeSourceBinding } from '../services/intake';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import type { BoardStageId } from '../stages';
@@ -116,7 +117,7 @@ export function useBoardIntake({
   knownSourceKeys: ReadonlySet<string>;
   /** Subset of `knownSourceKeys` whose card lives on another board. */
   elsewhereSourceKeys?: ReadonlySet<string>;
-  sourceFilters?: Pick<BoardFilterState, 'sources' | 'linearProjectIds'>;
+  sourceFilters?: Pick<BoardFilterState, 'source' | 'linearProject'>;
 }) {
   const kind = definition.id;
   const review = kind === 'review';
@@ -214,14 +215,13 @@ export function useBoardIntake({
         ...(jiraReady ? (['jira'] as const) : []),
         ...(incidentioReady ? (['incidentio'] as const) : []),
       ];
-  const browsedSources = available.filter(source => {
-    const provider = source.split('-')[0];
-    if (sourceFilters && sourceFilters.sources.size > 0 && !sourceFilters.sources.has(provider)) return false;
-    return !sourceFilters?.linearProjectIds.size || source === 'linear';
-  });
+  const pickedSources = sourceFilters ? pickedBoardSources(sourceFilters) : new Set<string>();
+  const browsedSources = available.filter(
+    source => pickedSources.size === 0 || pickedSources.has(source.split('-')[0]),
+  );
   const browsesGithub = browsedSources.includes('github');
 
-  // Fetch every configured source so teammate filters can include provider identities
+  // Fetch every configured source so person filters can include provider identities
   // even when a source filter hides its feed. Only browsed feeds affect loading.
   const issues = useProjectIssuesQuery(!review && githubIntakeActive ? githubRepositoryIds : NO_REPOSITORIES);
   // Auto-triage is a Work-only lane, so only Work browses the triaged feed.

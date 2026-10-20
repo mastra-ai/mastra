@@ -10,7 +10,13 @@ export const FACTORY_SESSION_NOTIFICATION_SOURCE = 'factory-session';
 
 export type FactoryDeliveryController = Pick<
   MountedMastraCode['controller'],
-  'queryThreadById' | 'queryThreads' | 'getSessionByResource' | 'createSession' | 'getCurrentAgent'
+  | 'queryThreadById'
+  | 'queryThreads'
+  | 'setThreadModel'
+  | 'listAvailableModels'
+  | 'getSessionByResource'
+  | 'createSession'
+  | 'getCurrentAgent'
 >;
 
 export interface FactoryDeliveryTarget {
@@ -21,7 +27,12 @@ export interface FactoryDeliveryTarget {
 }
 
 export type FactoryDeliveryResult =
-  | { delivered: 'woken' | 'persisted' | 'summarized'; notificationId: string; reason?: string }
+  /**
+   * `woken`: the target was idle and the notification started a run.
+   * `mid-run`: the target was already running; it reads the notification when that run
+   * next checks its inbox, not now.
+   */
+  | { delivered: 'woken' | 'mid-run' | 'persisted' | 'summarized'; notificationId: string; reason?: string }
   | {
       delivered: 'skipped';
       notificationId?: string;
@@ -83,6 +94,9 @@ export async function deliverFactorySessionNotification({
     });
   }
 
+  // Read before sending: the send itself starts a run on an idle target. Delivery is per thread,
+  // so a run on another thread of the same session leaves the target thread idle.
+  const busy = session.stream.isActive() && session.thread.getId() === target.threadId;
   const result = await controller
     .getCurrentAgent(session)
     .sendNotificationSignal(
@@ -95,7 +109,7 @@ export async function deliverFactorySessionNotification({
   const reason = result.decision.reason ? { reason: result.decision.reason } : {};
   switch (result.decision.action) {
     case 'deliver':
-      return { delivered: 'woken', notificationId, ...reason };
+      return { delivered: busy ? 'mid-run' : 'woken', notificationId, ...reason };
     case 'summarize':
       return { delivered: 'summarized', notificationId, ...reason };
     case 'discard':
@@ -103,6 +117,30 @@ export async function deliverFactorySessionNotification({
     default:
       return { delivered: 'persisted', notificationId, ...reason };
   }
+}
+
+export interface FactorySessionActivity {
+  /** Whether the session's agent is mid-run in this process. */
+  running: boolean;
+  /** When the session's thread last changed (a message saved, a run step persisted), ISO. */
+  lastActivityAt: string | null;
+}
+
+/** Whether a session is busy right now, and when its thread last moved, so a stuck run is told apart from a long one. */
+export async function sessionActivity(
+  controller: Pick<FactoryDeliveryController, 'getSessionByResource' | 'queryThreadById'>,
+  sessionId: string,
+  threadId: string,
+): Promise<FactorySessionActivity> {
+  const [live, thread] = await Promise.all([
+    controller.getSessionByResource(sessionId),
+    controller.queryThreadById({ threadId }),
+  ]);
+  const updatedAt = thread?.updatedAt ? new Date(thread.updatedAt) : null;
+  return {
+    running: live?.stream.isActive() ?? false,
+    lastActivityAt: updatedAt && Number.isFinite(updatedAt.getTime()) ? updatedAt.toISOString() : null,
+  };
 }
 
 /**
