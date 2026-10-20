@@ -1,17 +1,20 @@
 import * as coreStorage from '@mastra/core/storage';
 import type {
-  TraceAggregateCountDistinctField,
-  TraceAggregateDimension,
+  SpanAggregateResponse,
+  TraceAggregateInterval,
   TraceAggregateResponse,
   TraceAggregateRow,
+  TraceQueryTenantScope,
+  TrustedAggregateMeasure,
+  TrustedSpanAggregatePlan,
   TrustedTraceAggregateHavingPredicate,
-  TrustedTraceAggregateMeasure,
-  TrustedTraceAggregateMeasureName,
+  TrustedTraceAggregateOrderBy,
   TrustedTraceAggregatePlan,
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_METRIC_EVENTS } from './ddl';
+import { compilePostgresSpanSelection } from './span-query';
 import {
   compilePostgresTraceCandidates,
   durationMsSql,
@@ -43,6 +46,56 @@ const DIMENSION_SQL: Record<string, string> = {
   experimentId: 'r."experimentId"',
 };
 
+/** Span column expressions (alias `r`, a `selected` span row) for each groupable span dimension. */
+const SPAN_DIMENSION_SQL: Record<string, string> = Object.fromEntries(
+  [
+    'name',
+    'spanType',
+    'entityType',
+    'entityId',
+    'entityName',
+    'parentEntityType',
+    'parentEntityName',
+    'rootEntityType',
+    'rootEntityName',
+    'environment',
+    'status',
+    'serviceName',
+    'executionSource',
+    'threadId',
+    'resourceId',
+    'userId',
+    'sessionId',
+    'organizationId',
+    'experimentId',
+  ].map(field => [field, `r."${field}"`]),
+);
+
+/** What `aggregateTraces()` and `aggregateSpans()` plans share; each scope's plan is assignable to it. */
+interface AggregatePlan {
+  timeRange: { from: string; to: string };
+  scope?: TraceQueryTenantScope;
+  dimensions: readonly string[];
+  interval?: TraceAggregateInterval;
+  measures: readonly TrustedAggregateMeasure<string>[];
+  having?: TrustedTraceAggregateHavingPredicate<string>;
+  orderBy: TrustedTraceAggregateOrderBy<string, string>;
+  limit: number;
+}
+
+/**
+ * The population an aggregate groups: `ctes` end with `from`, whose rows (alias `r`) carry
+ * `traceId`, `startedAt`, `endedAt`, `error`, the `usageKey` columns, and every dimension column.
+ */
+interface AggregateSource {
+  ctes: string[];
+  values: unknown[];
+  from: string;
+  dimensionSql: (field: string, param: (value: unknown) => string) => string;
+  /** Columns that tie a usage metric row to one population row: `traceId`, or `traceId` + `spanId`. */
+  usageKey: readonly ('traceId' | 'spanId')[];
+}
+
 const PERCENTILES: Record<string, number> = {
   'duration.p50': 0.5,
   'duration.p90': 0.9,
@@ -66,18 +119,54 @@ export function compilePostgresTraceAggregate(
   plan: TrustedTraceAggregatePlan,
 ): CompiledPostgresTraceAggregate {
   const { ctes, values } = compilePostgresTraceCandidates(schema, plan, 'r.*');
+  return compilePostgresAggregate(schema, plan, {
+    ctes,
+    values,
+    from: 'candidates',
+    dimensionSql: (field, param) => {
+      if (field.startsWith('metadata.')) return traceMetadataValueSql(param(field.slice('metadata.'.length)));
+      return lookupDimensionSql(DIMENSION_SQL, field);
+    },
+    usageKey: ['traceId'],
+  });
+}
+
+/**
+ * Compiles a trusted span aggregate plan over the spans `querySpans()` selects. Usage is
+ * attributed by `(traceId, spanId)`, so only the span that recorded a metric row carries it.
+ */
+export function compilePostgresSpanAggregate(
+  schema: string,
+  plan: TrustedSpanAggregatePlan,
+): CompiledPostgresTraceAggregate {
+  const { ctes, values } = compilePostgresSpanSelection(schema, plan);
+  return compilePostgresAggregate(schema, plan, {
+    ctes,
+    values,
+    from: 'selected',
+    dimensionSql: field => lookupDimensionSql(SPAN_DIMENSION_SQL, field),
+    usageKey: ['traceId', 'spanId'],
+  });
+}
+
+function lookupDimensionSql(columns: Record<string, string>, field: string): string {
+  const sql = Object.hasOwn(columns, field) ? columns[field] : undefined;
+  if (sql === undefined) throw new Error(`Unsupported trusted aggregate field: ${field}`);
+  return sql;
+}
+
+function compilePostgresAggregate(
+  schema: string,
+  plan: AggregatePlan,
+  source: AggregateSource,
+): CompiledPostgresTraceAggregate {
+  const { ctes, values } = source;
   const param = (value: unknown): string => {
     values.push(value);
     return `$${values.length}`;
   };
-  const dimensionSql = (field: TraceAggregateDimension): string => {
-    if (field.startsWith('metadata.')) return traceMetadataValueSql(param(field.slice('metadata.'.length)));
-    const sql = Object.hasOwn(DIMENSION_SQL, field) ? DIMENSION_SQL[field] : undefined;
-    if (sql === undefined) throw new Error(`Unsupported trusted trace-aggregate field: ${field}`);
-    return sql;
-  };
-  const distinctSql = (field: TraceAggregateCountDistinctField): string =>
-    field === 'traceId' ? 'r."traceId"' : dimensionSql(field);
+  const dimensionSql = (field: string): string => source.dimensionSql(field, param);
+  const distinctSql = (field: string): string => (field === 'traceId' ? 'r."traceId"' : dimensionSql(field));
 
   const dimensionColumns = plan.dimensions.map((_, index) => `"d${index}"`);
   const distinctColumns = new Map<string, string>();
@@ -104,8 +193,8 @@ export function compilePostgresTraceAggregate(
   const hasCost = measureKinds.has('cost');
   let usageJoin = '';
   if (hasCost || measureKinds.has('tokens')) {
-    ctes.push(...compileUsageCtes(schema, plan, param));
-    usageJoin = '\n    LEFT JOIN usage u ON u."traceId" = r."traceId"';
+    ctes.push(...compileUsageCtes(schema, plan, source, param));
+    usageJoin = `\n    LEFT JOIN usage u ON ${source.usageKey.map(key => `u."${key}" = r."${key}"`).join(' AND ')}`;
     // A usage-bearing trace with no row of a name contributes 0; any other trace contributes NULL.
     USAGE_METRIC_NAMES.forEach((_, index) =>
       factColumns.push(`CASE WHEN u."traceId" IS NOT NULL THEN COALESCE(u."t${index}", 0) END AS "t${index}"`),
@@ -120,14 +209,14 @@ export function compilePostgresTraceAggregate(
   }
   ctes.push(`facts AS (
     SELECT ${factColumns.join(',\n      ')}
-    FROM candidates r${usageJoin}
+    FROM ${source.from} r${usageJoin}
   )`);
 
   // More than one distinct priced unit in the group; MIN/MAX are NULL when nothing is priced.
   const mixedUnitsSql = (alias: string) => `MIN(${alias}"unitMin" COLLATE "C") <> MAX(${alias}"unitMax" COLLATE "C")`;
 
   // All measures are float8 so having literals compare without integer-cast errors.
-  const measureSql = (name: TrustedTraceAggregateMeasureName, alias = ''): string => {
+  const measureSql = (name: string, alias = ''): string => {
     const column = (name: string) => `${alias}"${name}"`;
     if (name === 'count') return 'COUNT(*)::float8';
     const rule = measureRule(name);
@@ -151,7 +240,7 @@ export function compilePostgresTraceAggregate(
       return `percentile_cont(${percentile}) WITHIN GROUP (ORDER BY ${column('durationMs')})`;
     }
     const measure = plan.measures.find(
-      (candidate): candidate is Extract<TrustedTraceAggregateMeasure, { type: 'countDistinct' }> =>
+      (candidate): candidate is Extract<TrustedAggregateMeasure<string>, { type: 'countDistinct' }> =>
         candidate.type === 'countDistinct' && candidate.name === name,
     );
     const distinctColumn = measure && distinctColumns.get(measure.field);
@@ -159,7 +248,7 @@ export function compilePostgresTraceAggregate(
     return `(COUNT(DISTINCT ${alias}${distinctColumn}))::float8`;
   };
 
-  const compileHaving = (predicate: TrustedTraceAggregateHavingPredicate): string => {
+  const compileHaving = (predicate: TrustedTraceAggregateHavingPredicate<string>): string => {
     if (predicate.type === 'boolean') {
       return predicate.args.map(arg => `(${compileHaving(arg)})`).join(predicate.operator === 'and' ? ' AND ' : ' OR ');
     }
@@ -271,17 +360,24 @@ function usageMetricIndex(name: string): number {
 }
 
 /**
- * Builds `usage`: one row per candidate trace that has at least one token metric row, holding
- * per-name token sums (`t<i>`, indexed by `TRACE_AGGREGATE_USAGE_METRIC_NAMES`) and the trace's
- * pricing state. Metric rows are matched by traceId, usage metric name, tenant scope, and
- * `timestamp >= from` only: a trace that starts in the window can emit metrics after `to`, and
- * the candidates semi-join already bounds the scan.
+ * Builds `usage`: one row per population row (trace, or span) that has at least one token metric
+ * row, holding per-name token sums (`t<i>`, indexed by `TRACE_AGGREGATE_USAGE_METRIC_NAMES`) and
+ * its pricing state. Metric rows are matched by the source's usage key, usage metric name, tenant
+ * scope, and `timestamp >= from` only: a trace or span that starts in the window can emit metrics
+ * after `to`, and the population semi-join already bounds the scan.
  *
  * Rows are deduplicated on `metricId` alone. The primary key is (`metricId`, `timestamp`)
  * because the table is partitioned by timestamp, so retried copies with different timestamps
  * are both stored.
  */
-function compileUsageCtes(schema: string, plan: TrustedTraceAggregatePlan, param: (value: unknown) => string) {
+function compileUsageCtes(
+  schema: string,
+  plan: AggregatePlan,
+  source: AggregateSource,
+  param: (value: unknown) => string,
+) {
+  const key = source.usageKey.map(column => `"${column}"`).join(', ');
+  const metricKey = source.usageKey.map(column => `m."${column}"`).join(', ');
   const scopeConditions = plan.scope
     ? [
         `m."organizationId" = ${param(plan.scope.organizationId)}`,
@@ -289,7 +385,7 @@ function compileUsageCtes(schema: string, plan: TrustedTraceAggregatePlan, param
       ]
     : [];
   const rowConditions = [
-    `m."traceId" IN (SELECT "traceId" FROM candidates)`,
+    `${source.usageKey.length === 1 ? metricKey : `(${metricKey})`} IN (SELECT ${key} FROM ${source.from})`,
     `m."name" = ANY(${param(USAGE_METRIC_NAMES)}::text[])`,
     `m."timestamp" >= ${param(plan.timeRange.from)}::timestamptz`,
     ...scopeConditions,
@@ -302,14 +398,14 @@ function compileUsageCtes(schema: string, plan: TrustedTraceAggregatePlan, param
   );
   return [
     `usage_rows AS (
-    SELECT DISTINCT ON (m."metricId") m."traceId", m."name", m."value", m."estimatedCost", m."costUnit",
+    SELECT DISTINCT ON (m."metricId") ${metricKey}, m."name", m."value", m."estimatedCost", m."costUnit",
       COALESCE(jsonb_typeof(m."costMetadata" -> 'error'), 'null') <> 'null' AS "hasError"
     FROM ${qualifiedTable(schema, TABLE_METRIC_EVENTS)} m
     WHERE ${rowConditions.join('\n      AND ')}
     ORDER BY m."metricId", m."timestamp"
   )`,
     `usage AS (
-    SELECT "traceId",
+    SELECT ${key},
       ${tokenColumns.join(',\n      ')},
       SUM("estimatedCost") FILTER (WHERE ${priced}) AS "cost",
       bool_or(${priced}) AS "priced",
@@ -317,7 +413,7 @@ function compileUsageCtes(schema: string, plan: TrustedTraceAggregatePlan, param
       MIN("costUnit" COLLATE "C") FILTER (WHERE ${priced}) AS "unitMin",
       MAX("costUnit" COLLATE "C") FILTER (WHERE ${priced}) AS "unitMax"
     FROM usage_rows
-    GROUP BY "traceId"
+    GROUP BY ${key}
   )`,
   ];
 }
@@ -336,7 +432,24 @@ export async function aggregateTraces(
   plan: TrustedTraceAggregatePlan,
   timeoutMs: number,
 ): Promise<TraceAggregateResponse> {
-  const compiled = compilePostgresTraceAggregate(schema, plan);
+  return runAggregate(client, plan, compilePostgresTraceAggregate(schema, plan), timeoutMs);
+}
+
+export async function aggregateSpans(
+  client: DbClient,
+  schema: string,
+  plan: TrustedSpanAggregatePlan,
+  timeoutMs: number,
+): Promise<SpanAggregateResponse> {
+  return runAggregate(client, plan, compilePostgresSpanAggregate(schema, plan), timeoutMs);
+}
+
+async function runAggregate(
+  client: DbClient,
+  plan: AggregatePlan,
+  compiled: CompiledPostgresTraceAggregate,
+  timeoutMs: number,
+): Promise<TraceAggregateResponse> {
   const result = await runWithPostgresTraceQueryTimeout(client, timeoutMs, transaction =>
     transaction.any<Record<string, unknown>>(compiled.text, compiled.values),
   );

@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import {
   createObservabilityVNextTests,
   normalizeTraceQueryResponse,
+  SPAN_AGGREGATE_CONFORMANCE_CASES,
+  SPAN_AGGREGATE_FIXTURE_DATA,
   TRACE_AGGREGATE_CONFORMANCE_CASES,
   TRACE_AGGREGATE_FIXTURE_DATA,
   TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES,
@@ -19,6 +21,8 @@ import { SpanType } from '@mastra/core/observability';
 import {
   parseTraceAggregateRequest,
   parseTraceQueryRequest,
+  planSpanAggregate,
+  planSpanQuery,
   planTraceAggregate,
   planTraceQuery,
 } from '@mastra/core/storage';
@@ -136,6 +140,7 @@ describe('PostgresStoreVNext', () => {
           'trace-aggregate',
           'span-query',
           'span-query-context-fields',
+          'span-aggregate',
           'thread-query-rows',
           'trace-query-root-duration',
           'trace-query-discovery',
@@ -162,6 +167,7 @@ describe('PostgresStoreVNext', () => {
           'trace-aggregate',
           'span-query',
           'span-query-context-fields',
+          'span-aggregate',
           'thread-query-rows',
           'trace-query-root-duration',
           'trace-query-discovery',
@@ -489,6 +495,34 @@ describe('PostgresStoreVNext / shared observability suite', () => {
       const total = 'pagination' in traces ? traces.pagination?.total : undefined;
       expect(total).toBe(11);
       expect(aggregate.rows[0]?.measures.count).toBe(total);
+    });
+  });
+
+  describe('aggregateSpans', () => {
+    beforeAll(async () => {
+      if (!sharedStorage) throw new Error('shared observability storage was not initialized');
+      await sharedStorage.dangerouslyClearAll();
+      await writeTraceAggregateFixture(sharedStorage, SPAN_AGGREGATE_FIXTURE_DATA, 'event-sourced');
+    });
+    afterAll(async () => {
+      await sharedStorage?.dangerouslyClearAll();
+    });
+
+    it.each(SPAN_AGGREGATE_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      'matches the reference evaluator: %s',
+      async (_name, testCase) => {
+        const plan = planSpanAggregate(testCase.request, { scope: testCase.scope });
+        const response = await sharedStorage!.aggregateSpans(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
+
+    it('counts the same spans querySpans pages through', async () => {
+      const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-08-04T00:00:00Z' };
+      const aggregate = await sharedStorage!.aggregateSpans(planSpanAggregate({ timeRange, measures: ['count'] }));
+      const spans = await sharedStorage!.querySpans(planSpanQuery({ timeRange }));
+      expect(spans.spans).toHaveLength(8);
+      expect(aggregate.rows[0]?.measures.count).toBe(spans.spans.length);
     });
   });
 
