@@ -166,6 +166,20 @@ export interface PersistStepUpdateParams {
   recordResumedStepStart?: boolean;
 }
 
+export async function isWorkflowRunCanceled(
+  engine: DefaultExecutionEngine,
+  workflowId: string,
+  runId: string,
+): Promise<boolean> {
+  try {
+    const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+    return snapshot?.status === 'canceled';
+  } catch {
+    return false;
+  }
+}
+
 export async function persistStepUpdate(
   engine: DefaultExecutionEngine,
   params: PersistStepUpdateParams,
@@ -216,6 +230,10 @@ export async function persistStepUpdate(
       if (lastPersisted === 'suspended' || lastPersisted === 'paused') {
         return;
       }
+    }
+
+    if (workflowStatus !== 'canceled' && (await isWorkflowRunCanceled(engine, workflowId, runId))) {
+      return;
     }
 
     const requestContextObj = engine.serializeRequestContext(requestContext);

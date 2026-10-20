@@ -59,6 +59,57 @@ describe('workflow sleep cancellation', () => {
     expect(snapshot?.status).toBe('canceled');
   });
 
+  it('preserves cancellation requested by another workflow instance', async () => {
+    const workflowId = 'remote-cancel-workflow';
+    const storage = new MockStore();
+    const afterBlockedStep = vi.fn().mockResolvedValue({});
+    let releaseBlockedStep = () => {};
+    let markBlockedStepStarted = () => {};
+    const blockedStepStarted = new Promise<void>(resolve => {
+      markBlockedStepStarted = resolve;
+    });
+    const blockedStepReleased = new Promise<void>(resolve => {
+      releaseBlockedStep = resolve;
+    });
+    const buildWorkflow = () =>
+      createWorkflow({
+        id: workflowId,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { validateInputs: false },
+      })
+        .then(
+          noopStep('blocked-step', async () => {
+            markBlockedStepStarted();
+            await blockedStepReleased;
+            return {};
+          }),
+        )
+        .then(noopStep('after-blocked-step', afterBlockedStep))
+        .commit();
+
+    const activeWorkflow = buildWorkflow();
+    const remoteWorkflow = buildWorkflow();
+    new Mastra({ logger: false, storage, workflows: { [workflowId]: activeWorkflow } });
+    new Mastra({ logger: false, storage, workflows: { [workflowId]: remoteWorkflow } });
+
+    const activeRun = await activeWorkflow.createRun();
+    const resultPromise = activeRun.start({ inputData: {} });
+    await blockedStepStarted;
+
+    const remoteRun = await remoteWorkflow.createRun({ runId: activeRun.runId });
+    await remoteRun.cancel();
+    releaseBlockedStep();
+
+    const result = await resultPromise;
+    expect(result.status).toBe('canceled');
+    expect(afterBlockedStep).not.toHaveBeenCalled();
+
+    const store = await storage.getStore('workflows');
+    const snapshot = await store?.loadWorkflowSnapshot({ workflowName: workflowId, runId: activeRun.runId });
+    expect(snapshot?.status).toBe('canceled');
+  });
+
   it('completes a sleep normally when the run is not canceled', async () => {
     const afterSleep = vi.fn().mockResolvedValue({});
     const workflow = createWorkflow({

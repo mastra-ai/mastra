@@ -26,7 +26,11 @@ import {
   executeParallel as executeParallelHandler,
 } from './handlers/control-flow';
 import type { ExecuteEntryParams, PersistStepUpdateParams } from './handlers/entry';
-import { executeEntry as executeEntryHandler, persistStepUpdate as persistStepUpdateHandler } from './handlers/entry';
+import {
+  executeEntry as executeEntryHandler,
+  isWorkflowRunCanceled,
+  persistStepUpdate as persistStepUpdateHandler,
+} from './handlers/entry';
 import type { ExecuteSleepParams, ExecuteSleepUntilParams } from './handlers/sleep';
 import { executeSleep as executeSleepHandler, executeSleepUntil as executeSleepUntilHandler } from './handlers/sleep';
 import type { ExecuteStepParams } from './handlers/step';
@@ -983,6 +987,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       // Default engine keeps the original reference, Inngest deserializes from memoized result
       if (this.requiresDurableContextSerialization() && lastOutput.requestContext) {
         currentRequestContext = this.deserializeRequestContext(lastOutput.requestContext);
+      }
+
+      if (await isWorkflowRunCanceled(this, workflowId, runId)) {
+        lastOutput.result = { status: 'canceled' };
       }
 
       if (
