@@ -795,6 +795,23 @@ describe('side session tools', () => {
     expect(env.deps.sessions.setOriginMuted).not.toHaveBeenCalled();
   });
 
+  it('refuses to mute or unmute on a turn nobody signed in started, before reading or writing', async () => {
+    const env = setup();
+    const woken = { ...USER, interactive: false };
+    await expect(env.run(woken, 'factory_unsubscribe_session', { sessionId: 'session-side' })).rejects.toThrow(
+      'Only a person can mute a side session.',
+    );
+    await expect(env.run(woken, 'factory_subscribe_session', { sessionId: 'session-side-muted' })).rejects.toThrow(
+      'Only a person can unmute a side session.',
+    );
+    expect(env.deps.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(env.deps.sessions.setOriginMuted).not.toHaveBeenCalled();
+    expect((await env.deps.sessions.getBySessionId('session-side'))?.originMutedAt ?? null).toBeNull();
+    await expect(env.deps.sessions.getBySessionId('session-side-muted')).resolves.toMatchObject({
+      originMutedAt: new Date('2026-10-19T00:00:00Z'),
+    });
+  });
+
   it('keeps side session tools away from workers', () => {
     const tools = createFactoryMessagingTools(SIDE, setup().deps);
     expect(Object.keys(tools)).toEqual(['factory_message_origin']);
@@ -842,17 +859,8 @@ describe('Factory toolset composition', () => {
     );
   });
 
-  it('gives a non-interactive user turn read tools plus messaging', () => {
-    expect(names({ ...USER, interactive: false })).toEqual(
-      [
-        'factory_list_work_items',
-        'factory_inspect_work_item',
-        'factory_list_attention',
-        'factory_signal_session',
-        'factory_message_origin',
-        'factory_list_side_sessions',
-      ].sort(),
-    );
+  it('gives a non-interactive user turn the same tools as a person, each limiting itself', () => {
+    expect(names({ ...USER, interactive: false })).toEqual(names(USER));
   });
 
   it('runs the messaging and side-session tools without approval', () => {
