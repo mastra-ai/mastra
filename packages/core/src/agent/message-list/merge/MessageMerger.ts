@@ -267,6 +267,7 @@ export class MessageMerger {
     let previousLeftAnchor = -1;
     let insertionDrift = 0;
     const index = MessageMerger.createMergeIndex(latestMessage, incomingMessage);
+    let window: { leftAnchor: number; parts: MessagePart[]; start: number; counts: Map<string, number> } | undefined;
 
     // Walk through incomingMessage, inserting any part not present at the canonical position
     for (let i = 0; i < incomingMessage.content.parts.length; ++i) {
@@ -300,11 +301,27 @@ export class MessageMerger {
         const rightAnchorLatest =
           rightAnchorV2 !== -1 ? anchorMap.get(rightAnchorV2)! : latestMessage.content.parts.length;
 
-        if (
-          insertAt >= 0 &&
-          insertAt <= rightAnchorLatest &&
-          !latestMessage.content.parts.slice(insertAt, rightAnchorLatest).some(p => index.keyOf(p) === key)
-        ) {
+        if (insertAt < 0 || insertAt > rightAnchorLatest) continue;
+
+        // insertAt only moves forward within an interval and inserted parts always land before the
+        // next insertAt, so [insertAt, rightAnchorLatest) is always a suffix of the parts the interval
+        // held when first visited. Count that suffix once and trim it from the front instead of
+        // rescanning the slice for every incoming part.
+        if (!window || window.leftAnchor !== leftAnchorV2) {
+          const parts = latestMessage.content.parts.slice(insertAt, rightAnchorLatest);
+          const counts = new Map<string, number>();
+          for (const p of parts) {
+            const k = index.keyOf(p);
+            counts.set(k, (counts.get(k) ?? 0) + 1);
+          }
+          window = { leftAnchor: leftAnchorV2, parts, start: 0, counts };
+        }
+        while (window.parts.length - window.start > rightAnchorLatest - insertAt) {
+          const k = index.keyOf(window.parts[window.start++]!);
+          window.counts.set(k, window.counts.get(k)! - 1);
+        }
+
+        if (!window.counts.get(key)) {
           const insertedCount = MessageMerger.pushNewPart({
             latestMessage,
             newMessage: incomingMessage,

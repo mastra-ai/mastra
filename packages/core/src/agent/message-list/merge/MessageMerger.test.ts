@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../';
 import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import { MessageList } from '../index';
+import { MessageMerger } from './MessageMerger';
 
 type Part = MastraDBMessage['content']['parts'][number];
 const createdAt = new Date('2026-09-14T00:00:00Z');
@@ -252,5 +253,31 @@ describe('MessageMerger part-count scaling', () => {
     expect(parts.slice(1, 1001)).toMatchObject(many);
     expect(parts.slice(1001)).toMatchObject([tool('c1', true), step, text('done')]);
     expect(calls).toBeLessThanOrEqual(2 * 1005);
+  });
+
+  it('scans existing parts between tool anchors a bounded number of times', () => {
+    const existing = reasoning(400);
+    const added = reasoning(800).slice(400);
+    const latest = message([step, tool('c1'), ...existing]);
+    const incoming = message([step, tool('c1', true), ...added, ...existing]);
+
+    // Counts the existing parts read through slices of the merged message's parts. Rescanning the
+    // anchored interval for every inserted part read ~1.5 * n² of them (240k for n = 400).
+    let scanned = 0;
+    const slice = Array.prototype.slice;
+    vi.spyOn(Array.prototype, 'slice').mockImplementation(function (this: unknown[], ...args) {
+      const result = slice.apply(this, args);
+      if (this === latest.content.parts) scanned += result.length;
+      return result;
+    });
+    MessageMerger.merge(latest, incoming);
+    vi.restoreAllMocks();
+
+    const parts = latest.content.parts;
+    expect(parts).toHaveLength(802);
+    expect(parts.slice(0, 2)).toMatchObject([step, tool('c1', true)]);
+    expect(parts.slice(2, 402)).toMatchObject(added);
+    expect(parts.slice(402)).toMatchObject(existing);
+    expect(scanned).toBeLessThanOrEqual(2 * 802);
   });
 });
