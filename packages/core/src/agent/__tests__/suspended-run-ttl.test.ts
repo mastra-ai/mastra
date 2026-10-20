@@ -583,6 +583,42 @@ describe('suspended run in-memory TTL', () => {
         };
       };
 
+      it('ends it with an abort once it is aborted while parked', async () => {
+        const watcher = await watchThread(pubsub, 'thread-1');
+        const subscription = await parkAndSubscribeLazily(watcher);
+        try {
+          expect(runtime.abortRun('run-1', pubsub)).toBe(true);
+          await watcher.waitFor('run-aborted', 'run-1');
+          const run2 = createFakeRun('run-2');
+          await runtime.registerRun(
+            fakeAgent,
+            run2.output,
+            { memory: { thread: 'thread-1', resource: RESOURCE_ID } },
+            pubsub,
+          );
+          const seen: string[] = [];
+          let finished = false;
+          const reading = (async () => {
+            for await (const part of subscription.stream as AsyncIterable<any>) {
+              if (part?.type === 'abort' || part?.type === 'finish') seen.push(`${part.type}:${part.runId}`);
+              if (part?.runId === 'run-2' && part.type === 'finish') {
+                finished = true;
+                return;
+              }
+            }
+          })();
+          run2.emitFinishPart();
+          run2.settle('success');
+
+          await vi.waitFor(() => expect(finished).toBe(true));
+          expect(seen).toEqual(['abort:run-1', 'finish:run-2']);
+          subscription.unsubscribe();
+          await reading;
+        } finally {
+          subscription.unsubscribe();
+        }
+      });
+
       it('skips it once a later local run takes the thread over', async () => {
         const watcher = await watchThread(pubsub, 'thread-1');
         const subscription = await parkAndSubscribeLazily(watcher);

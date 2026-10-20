@@ -545,11 +545,11 @@ type AgentThreadRuntimeState = {
    */
   runStreamReaders: Map<string, Set<{ streamId: string; stop: () => void }>>;
   /**
-   * Parked records the thread moved on without: swept, taken over or released.
-   * A subscriber that queued one before reading it skips it instead of waiting
-   * on its open stream.
+   * Parked records the thread moved on without: swept, taken over, released or
+   * aborted. A subscriber that queued one before reading it skips it instead of
+   * waiting on its open stream, and ends an aborted one with an abort.
    */
-  displacedRecords: WeakSet<AgentThreadRunRecord<any>>;
+  displacedRecords: WeakMap<AgentThreadRunRecord<any>, 'moved-on' | 'aborted'>;
 };
 
 export type AgentThreadState = 'active' | 'idle';
@@ -744,7 +744,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     threadEventListeners: new Set(),
     threadControlSubscriptions: new Map(),
     runStreamReaders: new Map(),
-    displacedRecords: new WeakSet(),
+    displacedRecords: new WeakMap(),
   };
 }
 
@@ -2837,6 +2837,7 @@ export class AgentThreadStreamRuntime {
     const key = state.threadKeysByRunId.get(runId) ?? this.#threadKey(record.resourceId, record.threadId);
     this.#clearSuspendedRun(state, runId);
     record.lifecycle = 'completed';
+    state.displacedRecords.set(record, 'aborted');
     state.threadRunsByStreamId.delete(record.streamId);
     if (state.threadRunsById.get(runId) === record) state.threadRunsById.delete(runId);
     state.threadKeysByRunId.delete(runId);
@@ -2894,7 +2895,7 @@ export class AgentThreadStreamRuntime {
   #stopReadingDisplacedRun(state: AgentThreadRuntimeState, runId: string, streamId?: string): void {
     if (streamId === undefined) {
       const record = state.threadRunsById.get(runId);
-      if (record) state.displacedRecords.add(record);
+      if (record) state.displacedRecords.set(record, 'moved-on');
     }
     for (const reader of [...(state.runStreamReaders.get(runId) ?? [])]) {
       if (streamId === undefined || reader.streamId === streamId) reader.stop();
@@ -3349,7 +3350,7 @@ export class AgentThreadStreamRuntime {
       this.#clearSuspendedRun(state, record.runId);
       this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
       state.sweptLeasedRunIds.set(record.runId, now);
-      state.displacedRecords.add(record);
+      state.displacedRecords.set(record, 'moved-on');
       // A run parked across its suspension keeps its stream open, so subscribers
       // reading it would never reach the runs queued behind it. Only this record's
       // stream: a subscriber may be reading another instance's resume of the run.
@@ -5604,8 +5605,12 @@ export class AgentThreadStreamRuntime {
               continue;
             }
             const run = pendingRuns.shift()!;
-            if (isSuperseded(run.runId, run.generation) || state.displacedRecords.has(run)) {
+            const displaced = state.displacedRecords.get(run);
+            if (isSuperseded(run.runId, run.generation) || displaced) {
               abortedPendingStreamIds.delete(run.streamId);
+              if (displaced === 'aborted' && !isSuperseded(run.runId, run.generation)) {
+                yield { type: 'abort', runId: run.runId } as any;
+              }
               continue;
             }
             // A local run can be read before its `run-registered` event arrives.
