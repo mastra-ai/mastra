@@ -3552,18 +3552,24 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     let acquired: boolean;
     try {
+      const pending = leaseProvider.acquireLease(key, owner, ttl);
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timedOut = new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () =>
-            reject(
-              new Error(`step fence not acquired within ${WorkflowEventProcessor.STEP_FENCE_ACQUIRE_TIMEOUT_MS}ms`),
-            ),
-          WorkflowEventProcessor.STEP_FENCE_ACQUIRE_TIMEOUT_MS,
-        );
+        timer = setTimeout(() => {
+          // A slow backend can still grant the abandoned acquire. Nobody renews
+          // that fence, and it would drop the retry of a failed step as a
+          // duplicate, so give it back.
+          pending.then(
+            late => {
+              if (late.acquired) void leaseProvider.releaseLease(key, owner).catch(() => {});
+            },
+            () => {},
+          );
+          reject(new Error(`step fence not acquired within ${WorkflowEventProcessor.STEP_FENCE_ACQUIRE_TIMEOUT_MS}ms`));
+        }, WorkflowEventProcessor.STEP_FENCE_ACQUIRE_TIMEOUT_MS);
       });
       try {
-        ({ acquired } = await Promise.race([leaseProvider.acquireLease(key, owner, ttl), timedOut]));
+        ({ acquired } = await Promise.race([pending, timedOut]));
       } finally {
         clearTimeout(timer);
       }
