@@ -308,6 +308,38 @@ describe('workspace_apply_patch', () => {
       expect(await exists('b.ts')).toBe(false);
     });
 
+    it('does not delete a file that changed after the patch was checked', async () => {
+      await fs.writeFile(path.join(tempDir, 'gone.txt'), 'old\n');
+      const { workspace, tools } = await setup();
+      const filesystem = workspace.filesystem!;
+      const realWrite = filesystem.writeFile.bind(filesystem);
+      filesystem.writeFile = async (p, content, options) => {
+        await realWrite(p, content, options);
+        if (p === 'new.txt') {
+          // Another process rewrites the delete target between check and commit.
+          await fs.writeFile(path.join(tempDir, 'gone.txt'), 'replaced\n');
+          const later = new Date(Date.now() + 60_000);
+          await fs.utimes(path.join(tempDir, 'gone.txt'), later, later);
+        }
+      };
+
+      await expect(
+        tools[APPLY_PATCH].execute(
+          {
+            patch: `*** Begin Patch
+*** Add File: new.txt
++new
+*** Delete File: gone.txt
+*** End Patch`,
+          },
+          { workspace },
+        ),
+      ).rejects.toThrow(/modified externally/);
+
+      expect(await read('gone.txt')).toBe('replaced\n');
+      expect(await exists('new.txt')).toBe(false);
+    });
+
     it('rejects two spellings of the same path', async () => {
       await fs.writeFile(path.join(tempDir, 'a.ts'), 'a\n');
       const { apply } = await setup();

@@ -29,8 +29,8 @@ export function applyPatchDidWrite(result: unknown): boolean {
 }
 
 type PlannedChange =
-  | { kind: 'write'; path: string; content: string | Buffer; original?: string }
-  | { kind: 'delete'; path: string; original: string | Buffer };
+  | { kind: 'write'; path: string; content: string | Buffer; original?: string; mtime?: Date }
+  | { kind: 'delete'; path: string; original: string | Buffer; mtime: Date };
 
 async function statOrUndefined(filesystem: WorkspaceFilesystem, path: string): Promise<FileStat | undefined> {
   try {
@@ -52,11 +52,12 @@ async function requireExistingFile(
   filesystem: WorkspaceFilesystem,
   path: string,
   expectedMtimes: Record<string, Date> | undefined,
-): Promise<void> {
+): Promise<Date> {
   const stat = await statOrUndefined(filesystem, path);
   if (!stat) throw new ApplyPatchError(`${path} does not exist`);
   if (stat.type !== 'file') throw new ApplyPatchError(`${path} is a directory, not a file`);
   checkNotStale(path, stat, expectedMtimes);
+  return stat.modifiedAt;
 }
 
 async function requireMissing(filesystem: WorkspaceFilesystem, path: string): Promise<void> {
@@ -123,17 +124,17 @@ Rules:
             changes.push({ kind: 'write', path: op.path, content: op.content });
             summary.push(`A ${op.path}`);
           } else if (op.type === 'delete') {
-            await requireExistingFile(filesystem, op.path, expectedMtimes);
-            changes.push({ kind: 'delete', path: op.path, original: await filesystem.readFile(op.path) });
+            const mtime = await requireExistingFile(filesystem, op.path, expectedMtimes);
+            changes.push({ kind: 'delete', path: op.path, original: await filesystem.readFile(op.path), mtime });
             summary.push(`D ${op.path}`);
           } else {
-            await requireExistingFile(filesystem, op.path, expectedMtimes);
+            const mtime = await requireExistingFile(filesystem, op.path, expectedMtimes);
             if (op.chunks.length === 0 && op.moveTo) {
               // Pure rename: copy the raw bytes so binary files survive the move.
               await requireMissing(filesystem, op.moveTo);
               const raw = await filesystem.readFile(op.path);
               changes.push({ kind: 'write', path: op.moveTo, content: raw });
-              changes.push({ kind: 'delete', path: op.path, original: raw });
+              changes.push({ kind: 'delete', path: op.path, original: raw, mtime });
               summary.push(`R ${op.path} -> ${op.moveTo}`);
               continue;
             }
@@ -145,10 +146,10 @@ Rules:
             if (op.moveTo && op.moveTo !== op.path) {
               await requireMissing(filesystem, op.moveTo);
               changes.push({ kind: 'write', path: op.moveTo, content: updated });
-              changes.push({ kind: 'delete', path: op.path, original });
+              changes.push({ kind: 'delete', path: op.path, original, mtime });
               summary.push(`R ${op.path} -> ${op.moveTo}`);
             } else {
-              changes.push({ kind: 'write', path: op.path, content: updated, original });
+              changes.push({ kind: 'write', path: op.path, content: updated, original, mtime });
               summary.push(`M ${op.path}`);
             }
           }
@@ -170,9 +171,14 @@ Rules:
           if (change.kind === 'write') {
             await filesystem.writeFile(change.path, change.content, {
               overwrite: change.original !== undefined,
-              expectedMtime: change.original !== undefined ? expectedMtimes?.[change.path] : undefined,
+              expectedMtime: change.mtime,
             });
           } else {
+            // deleteFile has no conditional form, so re-check right before removing.
+            const current = await filesystem.stat(change.path);
+            if (current.modifiedAt.getTime() !== change.mtime.getTime()) {
+              throw new StaleFileError(change.path, change.mtime, current.modifiedAt);
+            }
             await filesystem.deleteFile(change.path);
           }
           done.push(change);
