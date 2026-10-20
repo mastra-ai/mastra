@@ -37,6 +37,7 @@ function fakePlatform(options?: {
   connections?: Array<Record<string, unknown>>;
   integrations?: Array<Record<string, unknown>>;
   endUserProviders?: string[] | null;
+  gateConnectUrl?: string;
 }) {
   const connections = options?.connections ?? [makeConnection()];
   const integrations = options?.integrations ?? [
@@ -46,7 +47,9 @@ function fakePlatform(options?: {
       displayName: 'Linear',
       logoUrl: 'https://logos.test/linear.png',
       authType: 'OAUTH2',
-      authFields: [],
+      // Includes `target` so tests cover the headless credentials/params
+      // split surviving the catalog schema parse.
+      authFields: [{ name: 'workspace', target: 'params', label: 'Workspace', required: true }],
     },
     { id: 'slack', capabilities: { mcp: false }, displayName: 'Slack', logoUrl: null, authType: 'OAUTH2' },
     { id: 'github', capabilities: { mcp: true }, displayName: 'GitHub', logoUrl: null, authType: 'OAUTH2' },
@@ -98,7 +101,9 @@ function fakePlatform(options?: {
         return Response.json({ error: 'not found' }, { status: 404 });
       }
       return Response.json({
-        connectUrl: 'https://connect.test/session-launch',
+        // Mirrors the real Nango format: the hosted-page URL carries the
+        // session token as its only secret.
+        connectUrl: options?.gateConnectUrl ?? 'https://connect.nango.dev/?session_token=nango_connect_session_t1',
         expiresAt: '2026-10-13T15:00:00Z',
       });
     }
@@ -125,6 +130,7 @@ function makeCtx(options?: {
   resourceId?: string;
   params?: Record<string, string>;
   query?: Record<string, string>;
+  requestHeaders?: Record<string, string>;
   user?: unknown;
 }) {
   const store = new Map<string, unknown>();
@@ -136,6 +142,7 @@ function makeCtx(options?: {
     req: {
       param: (name: string) => options?.params?.[name],
       query: (name: string) => options?.query?.[name],
+      header: (name: string) => options?.requestHeaders?.[name.toLowerCase()],
     },
     get: (key: string) => (key === 'requestContext' ? requestContext : undefined),
     header: (name: string, value: string) => {
@@ -303,7 +310,9 @@ describe('GET /providers', () => {
       displayName: 'Linear',
       logoUrl: 'https://logos.test/linear.png',
       authType: 'OAUTH2',
-      authFields: [],
+      // `target` survives the parse — headless auth needs it to route the
+      // value as a flow param instead of a credential.
+      authFields: [{ name: 'workspace', target: 'params', label: 'Workspace', required: true }],
     });
   });
 
@@ -490,11 +499,76 @@ describe('GET /connections/:id/launch', () => {
       makeCtx({ resourceId: 'end-user-42', params: { id: 'c_own' } }),
     );
     expect(response.status).toBe(302);
-    expect(response.headers.get('location')).toBe('https://connect.test/session-launch');
+    expect(response.headers.get('location')).toBe('https://connect.nango.dev/?session_token=nango_connect_session_t1');
     expect(response.headers.get('cache-control')).toBe('no-store');
     const gateRequest = requests.find(request => request.url.pathname.endsWith('/connect-url'))!;
     expect(gateRequest.url.pathname).toBe('/v2/connections/c_own/connect-url');
     expect(gateRequest.headers.get(RESOURCE_ID_HEADER)).toBe('end-user-42');
+  });
+
+  it('releases the session token to the owner when redeemed as JSON', async () => {
+    // Headless redemption: the same gate (same identity + ownership checks)
+    // hands the proven owner's fetch the session token instead of 302ing the
+    // popup into Nango's hosted page. The token and the hosted URL are the
+    // same capability — the URL is just the token in query-param clothing —
+    // so releasing it here does not widen the gate's blast radius.
+    const { fetchMock, requests } = fakePlatform({
+      connections: [makeConnection({ id: 'c_own', resourceId: 'end-user-42', status: 'pending' })],
+    });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'GET', '/connect/connections/:id/launch') as any).handler(
+      makeCtx({
+        resourceId: 'end-user-42',
+        params: { id: 'c_own' },
+        requestHeaders: { accept: 'application/json' },
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await json(response)).toEqual({
+      sessionToken: 'nango_connect_session_t1',
+      expiresAt: '2026-10-13T15:00:00Z',
+    });
+    const gateRequest = requests.find(request => request.url.pathname.endsWith('/connect-url'))!;
+    expect(gateRequest.headers.get(RESOURCE_ID_HEADER)).toBe('end-user-42');
+  });
+
+  it('returns a null token on JSON redemption when the vendor URL format changes', async () => {
+    // Fail safe, not open: if the token cannot be extracted, the client falls
+    // back to the hosted popup through the 302 flow. The vendor URL itself is
+    // never surfaced in the JSON body.
+    const { fetchMock } = fakePlatform({
+      connections: [makeConnection({ id: 'c_own', resourceId: 'end-user-42', status: 'pending' })],
+      gateConnectUrl: 'https://connect.nango.dev/some/other/shape',
+    });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'GET', '/connect/connections/:id/launch') as any).handler(
+      makeCtx({
+        resourceId: 'end-user-42',
+        params: { id: 'c_own' },
+        requestHeaders: { accept: 'application/json' },
+      }),
+    );
+    expect(response.status).toBe(200);
+    const body = await json(response);
+    expect(body.sessionToken).toBeNull();
+    expect(JSON.stringify(body)).not.toContain('connect.nango.dev');
+  });
+
+  it('keeps 404 parity on JSON redemption for a session owned by another resource', async () => {
+    const { fetchMock } = fakePlatform({
+      connections: [makeConnection({ id: 'c_other', resourceId: 'end-user-other', status: 'pending' })],
+    });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'GET', '/connect/connections/:id/launch') as any).handler(
+      makeCtx({
+        resourceId: 'end-user-42',
+        params: { id: 'c_other' },
+        requestHeaders: { accept: 'application/json' },
+      }),
+    );
+    expect(response.status).toBe(404);
+    expect((await json(response)).error.code).toBe('connection_not_found');
   });
 
   it('404s for a session owned by another resource — a leaked launch URL is useless', async () => {

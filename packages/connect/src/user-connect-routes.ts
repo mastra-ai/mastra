@@ -450,8 +450,23 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
         // useless.
         const id = String(c.req.param('id') ?? '');
         if (!id) return notFound(c, 'connection_not_found', 'Connection not found.');
-        const { connectUrl } = await getConnectUrl(client, id);
+        const { connectUrl, expiresAt } = await getConnectUrl(client, id);
         c.header('Cache-Control', 'no-store');
+        // JSON redemption for headless auth: the hosted-page URL is just the
+        // session token in query-param clothing, so handing the token to the
+        // proven owner's fetch releases the exact same capability as the 302
+        // below — through the same identity and ownership checks. A null
+        // token (unrecognized URL shape) tells the client to fall back to
+        // the hosted popup; the vendor URL itself is never in the body.
+        if ((c.req.header('accept') ?? '').includes('application/json')) {
+          let sessionToken: string | null = null;
+          try {
+            sessionToken = new URL(connectUrl).searchParams.get('session_token');
+          } catch {
+            sessionToken = null;
+          }
+          return c.json({ sessionToken, expiresAt });
+        }
         return c.redirect(connectUrl, 302);
       }),
     },
