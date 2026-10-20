@@ -2274,6 +2274,11 @@ export class Agent extends BaseResource {
       // run restores the conversation from its snapshot, so this is the only place a stateless
       // client can recover it for a client-tool continuation.
       let finishedHistory: unknown[] | undefined;
+      // A durable run keeps this stream open across a suspension, so it also carries the
+      // resumed continuation. Its client tools are run by the request that resumed the run
+      // (approve/decline/resume), so this stream must not run them again.
+      let suspended = false;
+      const resumedToolCallIds = new Set<string>();
 
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
@@ -2396,6 +2401,7 @@ export class Agent extends BaseResource {
             }
 
             const executableToolCalls = [...toolInvocationsById.values()].filter(toolCall => {
+              if (resumedToolCallIds.has(toolCall.toolCallId)) return false;
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               return Boolean(clientTool?.execute);
             });
@@ -2611,6 +2617,11 @@ export class Agent extends BaseResource {
         onStreamChunk: chunk => {
           if (!streamRunId && typeof chunk.runId === 'string') {
             streamRunId = chunk.runId;
+          }
+          if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
+            suspended = true;
+          } else if (suspended && chunk.type === 'tool-call' && typeof chunk.payload?.toolCallId === 'string') {
+            resumedToolCallIds.add(chunk.payload.toolCallId);
           }
         },
         lastMessage: undefined,
