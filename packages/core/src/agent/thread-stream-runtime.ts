@@ -926,10 +926,14 @@ export class AgentThreadStreamRuntime {
   #abortLeaseLostRun(state: AgentThreadRuntimeState, runId: string): void {
     const record = state.threadRunsById.get(runId);
     // A parked run calls neither the model nor tools, so there is nothing to stop. Aborting it would
-    // delete the snapshot it resumes from; its resume acquires the lease again instead. A run that is
-    // still suspending, or a partly resumed run whose sibling suspensions are pending, is still executing
-    // (its lifecycle is not 'suspended'), so it is aborted.
-    if (record?.lifecycle === 'suspended') return;
+    // delete the snapshot it resumes from. Its resume must acquire the lease again, so drop the in-place
+    // continuation: continuing the lapsed registration would run the resume without a lease. A run that
+    // is still suspending, or a partly resumed run whose sibling suspensions are pending, is still
+    // executing (its lifecycle is not 'suspended'), so it is aborted.
+    if (record?.lifecycle === 'suspended') {
+      record.continuation = undefined;
+      return;
+    }
     const preparedRun = state.preparedRunsById.get(runId);
     if (preparedRun) preparedRun.abortController.abort(new AgentThreadLeaseLostError(runId));
     // Durable runs own their controller outside the thread runtime.

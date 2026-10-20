@@ -72,6 +72,12 @@ class FlakyLeasePubSub extends EventEmitterPubSub {
   }
 }
 
+function heldLeaseOwners(pubsub: FlakyLeasePubSub): string[] {
+  return [...pubsub.leases.entries()]
+    .filter(([key, lease]) => key.startsWith(`${RESOURCE}\u0000`) && lease.expiresAt > Date.now())
+    .map(([, lease]) => lease.owner);
+}
+
 function buildAgent(
   engine: EngineVariant,
   llmUrl: string,
@@ -137,7 +143,9 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
       );
       llm.on({ toolCallId: `call_archive_${tag}`, hasToolResult: true }, { content: 'Archived.' });
 
+      const pubsub = new FlakyLeasePubSub();
       let executions = 0;
+      const leaseOwnersDuringResume: string[][] = [];
       const archive = createTool({
         id: 'archive',
         description: 'Archive an item',
@@ -145,11 +153,11 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
         requireApproval: true,
         execute: async () => {
           executions++;
+          leaseOwnersDuringResume.push(heldLeaseOwners(pubsub));
           return { archived: true };
         },
       });
 
-      const pubsub = new FlakyLeasePubSub();
       const storage = new InMemoryStore();
       const agent = buildAgent(engine, llm.url, archive, pubsub, storage);
 
@@ -188,6 +196,8 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
         // drain
       }
       expect(executions).toBe(1);
+      // The resume took the thread lease again rather than running without one.
+      expect(leaseOwnersDuringResume).toEqual([[expect.any(String)]]);
       expect(await resumed.text).toBe('Archived.');
     },
     20_000,
