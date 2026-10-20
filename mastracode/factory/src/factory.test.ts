@@ -1283,6 +1283,48 @@ describe('MastraFactory.prepare', () => {
       expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     });
 
+    it('wakes a user session under its owner resource through its own thread', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      controllerMock.queryThreadById.mockResolvedValueOnce({ id: 'session-1', resourceId: 'user-1', metadata: {} });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      await prepareWake({ requestContext: wake, resourceId: 'user-1', threadId: 'session-1' });
+
+      expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(runEndReports).toEqual([]);
+    });
+
+    it("wakes a run session on the Factory's resource through its thread's session stamp", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      controllerMock.queryThreadById.mockResolvedValueOnce({
+        id: 'thread-7',
+        resourceId: project.id,
+        metadata: { factorySessionId: 'session-1' },
+      });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      await prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'thread-7' });
+
+      expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(runEndReports).toEqual([]);
+    });
+
     it("fails a wake whose owner can't be resolved, with a failed report, rather than running it as the sender", async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });
