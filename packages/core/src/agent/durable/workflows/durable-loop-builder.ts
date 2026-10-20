@@ -591,7 +591,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               toolResults,
               runId: initData.runId,
               agentId: initData.agentId,
-              messageId: initData.messageId,
+              messageId: llmOutput?.stepResult?.messageId ?? initData.messageId,
               state: llmOutput?.state ?? initData.state,
             };
           },
