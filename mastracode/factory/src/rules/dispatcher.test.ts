@@ -6601,8 +6601,8 @@ describe('run-end backstop report', () => {
 });
 
 describe('a skill run that ends in error (#27740)', () => {
-  const CREDENTIAL_ERROR =
-    'Tenant model credential policy could not be resolved: the request has no authenticated user.';
+  const NO_USER_ERROR = 'Tenant model credential policy could not be resolved: the request has no authenticated user.';
+  const PROVIDER_401 = Object.assign(new Error('Provider rejected the request'), { statusCode: 401 });
 
   it('records the run error as its cause, clears it for the next attempt, and leaves a retryable failure for a person', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
@@ -6613,7 +6613,7 @@ describe('a skill run that ends in error (#27740)', () => {
       idempotencyKey: 'skill-credential-error',
     });
     await bindWorkRun(storage, item.id);
-    const { controller } = createSession(undefined, { agentEndReason: 'error', runError: CREDENTIAL_ERROR });
+    const { controller } = createSession(undefined, { agentEndReason: 'error', runError: PROVIDER_401 });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       transitionService,
@@ -6631,7 +6631,7 @@ describe('a skill run that ends in error (#27740)', () => {
     expect(first).toMatchObject({
       status: 'retry',
       failureCode: 'run_credentials_unavailable',
-      lastError: expect.stringContaining('no authenticated user'),
+      lastError: expect.stringContaining('Provider rejected the request'),
     });
 
     // The next attempt is a new run; it must not read as the last one's failure.
@@ -6652,13 +6652,50 @@ describe('a skill run that ends in error (#27740)', () => {
     expect(failed).toMatchObject({
       status: 'failed',
       failureCode: 'run_credentials_unavailable',
-      lastError: expect.stringContaining('no authenticated user'),
+      lastError: expect.stringContaining('Provider rejected the request'),
     });
     const provider = new DecisionAttentionProvider({ workItems: storage }, failedDecisionAttentionSpec);
     expect(await provider.counts({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 1 });
     expect(
       await storage.retryDeferredDecision('org-1', PROJECT_ID, failed!.id, new Date(start + 24 * 60 * 60_000)),
     ).toMatchObject({ id: failed!.id, status: 'retry', lastError: null, failureCode: null });
+  });
+
+  it('fails a run with no authenticated user on the first attempt, without retrying it, and shows it to a person', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-no-user',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller } = createSession(undefined, { agentEndReason: 'error', runError: NO_USER_ERROR });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      staleBindingTtlMs: Number.MAX_SAFE_INTEGER,
+    });
+    const start = Date.parse('2030-01-01T00:00:00Z');
+
+    await dispatcher.runOnce(new Date(start));
+    // Later ticks must not pick it up again: the same start would fail the same way.
+    await dispatcher.runOnce(new Date(start + 2 * 60 * 60_000));
+    await dispatcher.runOnce(new Date(start + 4 * 60 * 60_000));
+
+    const decisions = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
+      status: 'failed',
+      attempts: 1,
+      failureCode: 'run_user_unauthenticated',
+      lastError: expect.stringContaining('no authenticated user'),
+    });
+    const provider = new DecisionAttentionProvider({ workItems: storage }, failedDecisionAttentionSpec);
+    expect(await provider.counts({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 1 });
   });
 
   it('keeps a non-credential run error as a retryable run failure with its message', async () => {
@@ -6724,6 +6761,10 @@ describe('a skill run that ends in error (#27740)', () => {
   it.each([
     ['a 401 status', Object.assign(new Error('Request failed'), { statusCode: 401 })],
     ['a wrapped 403 status', Object.assign(new Error('Stream failed'), { cause: { statusCode: 403 } })],
+    [
+      'a resolver error with no policy for the user',
+      'Tenant model credential policy could not be resolved: no credential policy applies to this request.',
+    ],
   ])('blames model credentials for a provider error carrying %s', async (_label, runError) => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
