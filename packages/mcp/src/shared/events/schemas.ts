@@ -175,6 +175,8 @@ export const EventsListChangedNotificationSchema = z.object({
 export const WebhookSecretSchema = z
   .string()
   .regex(/^whsec_[A-Za-z0-9+/]+={0,2}$/, 'must be "whsec_" followed by base64')
+  // Buffer decodes leniently, but strict decoders (atob) reject unpadded or truncated base64.
+  .refine(value => (value.length - 'whsec_'.length) % 4 === 0, { message: 'must be padded base64' })
   .refine(
     value => {
       const decoded = Buffer.from(value.slice('whsec_'.length), 'base64').length;

@@ -217,6 +217,9 @@ describe('WebhookSecretSchema', () => {
     ['65 bytes', `whsec_${randomBytes(65).toString('base64')}`, false],
     ['missing prefix', randomBytes(32).toString('base64'), false],
     ['not base64', 'whsec_not-base64!!', false],
+    // Lenient decoders accept these; strict ones such as atob throw, so a receiver couldn't verify.
+    ['length not a multiple of 4', `whsec_${'A'.repeat(33)}`, false],
+    ['padding stripped', `whsec_${randomBytes(32).toString('base64').replace(/=+$/, '')}`, false],
   ])('%s', (_label, value, ok) => {
     expect(WebhookSecretSchema.safeParse(value).success).toBe(ok);
   });
