@@ -349,6 +349,22 @@ describe('SourceControlStorage', () => {
     );
   });
 
+  it('creates sessions already on their memory resource, so the resource migration never reads them', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000003',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000003',
+      baseBranch: 'main',
+    });
+
+    const awaiting = await domain.listSessionsAwaitingResourceMigration();
+    expect(awaiting.map(row => row.sessionId)).not.toContain(session.sessionId);
+  });
+
   it('defaults session visibility to org and round-trips private', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });

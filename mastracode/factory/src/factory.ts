@@ -21,6 +21,7 @@
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
 import { AgentControllerChannels } from '@mastra/core/channels';
@@ -28,7 +29,7 @@ import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
 import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -119,6 +120,7 @@ import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
+import { migrateSessionResources } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
@@ -770,6 +772,33 @@ export class MastraFactory {
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
+    // Sessions from before shared resources ran under their own id. Move them
+    // onto their Factory or owner before any session is served. Run bindings
+    // decide which sessions belong to a Factory, so it waits for work items.
+    if (storage.isDomainReady('source-control') && storage.isDomainReady('work-items')) {
+      await timedPhase('prepare.migrate.sessionResources', async () => {
+        try {
+          const mastraStorage = storage.getMastraStorage();
+          const memory = await mastraStorage.getStore('memory');
+          if (!memory) return;
+          // The sessions' own Memory, so a moved thread takes its observation vectors along.
+          const sessionMemory = getDynamicMemory(mastraStorage, vector);
+          await migrateSessionResources({
+            sessions: sourceControlStorage,
+            workItems: workItemsStorage,
+            ...(storage.isDomainReady('integrations') ? { integrations: integrationStorage } : {}),
+            memory,
+            threads: sessionMemory({ requestContext: new RequestContext() }),
+          });
+          await sessionMemory.settled();
+        } catch (error) {
+          // Unmoved sessions keep working under their own id; the next start retries.
+          console.warn(
+            `[factory] session resource migration stopped early: ${error instanceof Error ? error.message : error}`,
+          );
+        }
+      });
+    }
     const knowledgeEnabled =
       this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     const githubIntegration = integrations.find(integration => integration.id === 'github') as

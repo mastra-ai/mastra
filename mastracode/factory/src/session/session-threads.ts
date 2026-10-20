@@ -39,7 +39,7 @@ export async function sessionMemoryResourceId(
   return memoryResourceOf(session, own, runBound);
 }
 
-async function isRunBound(session: FactorySessionOwnership, runs: SessionRunBindings | undefined) {
+export async function isRunBound(session: FactorySessionOwnership, runs: SessionRunBindings | undefined) {
   if (!runs || !session.orgId || !session.factoryProjectId) return false;
   return runs.hasRunBindingForSession({
     orgId: session.orgId,
@@ -48,7 +48,8 @@ async function isRunBound(session: FactorySessionOwnership, runs: SessionRunBind
   });
 }
 
-function memoryResourceOf(
+/** {@link sessionMemoryResourceId} for a caller that already loaded the session's own thread. */
+export function memoryResourceOf(
   session: FactorySessionOwnership,
   own: { resourceId?: string | null } | null | undefined,
   runBound: boolean,

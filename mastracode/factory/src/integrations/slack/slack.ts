@@ -29,6 +29,8 @@ import {
   resolvePrimaryEnvironmentRepository,
 } from '../../session/factory-session.js';
 import { readRequestContextOrgId, seedSessionOrg } from '../../session/org-seed.js';
+import { isRunBound, memoryResourceOf, sessionStampCounts } from '../../session/session-threads.js';
+import type { SessionRunBindings } from '../../session/session-threads.js';
 import type {
   ChannelAccountLink,
   ChannelAccountLinkKey,
@@ -486,22 +488,42 @@ export function createChannelThreadIdResolver(startedSessions: SlackStartedSessi
 }
 
 /**
- * The Factory session a repo-backed Slack thread belongs to. A thread created
- * before Slack threads moved onto the Factory resource runs under its session
- * id as its resource; a newer thread runs under the Factory and is named after
- * its session. With no session row for either, the thread is addressed by its
- * own id and fails authorization like any session without a row.
+ * The Factory session a repo-backed Slack thread belongs to. A thread under
+ * the Factory resource is stamped with its session id (the startup migration
+ * stamps threads it moved there). An unmigrated thread runs under its session
+ * id as its resource, and a newer thread is named after its session. A stamp
+ * or thread id only counts under that session's memory resource; a thread
+ * named after a session it can't claim is refused. With no session row for
+ * either, the thread is addressed by its own id and fails authorization like
+ * any session without a row.
  */
+const UNCLAIMED_SESSION = Symbol('unclaimed-session');
+
 async function slackThreadSessionId(
   sessions: ReturnType<typeof createSourceControlSessionLookup>,
-  thread: { id: string; resourceId: string },
-): Promise<string | null> {
+  thread: { id: string; resourceId: string; metadata?: Record<string, unknown> },
+  loadThread: (threadId: string) => Promise<{ resourceId: string } | null | undefined>,
+  runs: SessionRunBindings | undefined,
+): Promise<string | null | typeof UNCLAIMED_SESSION> {
   if (thread.resourceId.startsWith('channel:')) return null;
+  // Stamps and thread ids are client-writable: a session only claims a thread
+  // under its own memory resource.
+  const claims = async (sessionId: string) => {
+    const row = await sessions.getBySessionId(sessionId);
+    if (!row) return false;
+    // A stamp only counts where the session's stamps are trusted.
+    if (sessionId !== thread.id && !sessionStampCounts(row, thread.resourceId)) return false;
+    const own = sessionId === thread.id ? thread : await loadThread(sessionId);
+    return thread.resourceId === memoryResourceOf(row, own, await isRunBound(row, runs));
+  };
+  const stamped = thread.metadata?.factorySessionId;
+  if (typeof stamped === 'string' && stamped && (await claims(stamped))) return stamped;
   if (await sessions.getSourceControlBySessionId(thread.resourceId)) return thread.resourceId;
-  if (await sessions.getSourceControlBySessionId(thread.id)) return thread.id;
+  if (await claims(thread.id)) return thread.id;
+  if (await sessions.getBySessionId(thread.id)) return UNCLAIMED_SESSION;
   // With no session row the thread is its own session: falling back to the
-  // resource would put every row-less thread under the Factory (or a sender)
-  // into one shared session.
+  // resource would put every such thread under the Factory (or a sender) into
+  // one shared session.
   return thread.id;
 }
 
@@ -512,7 +534,24 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
     // A session-bound Slack thread is addressed by its Factory session id and
     // runs under the thread's resource (the Factory). A chat-only thread is its
     // own session, addressed by its `channel:` resource.
-    const sessionId = (await slackThreadSessionId(sourceControlSessions, thread)) ?? thread.resourceId;
+    // Approval clicks pass the thread without its metadata; load the stored
+    // thread whenever the session stamp is missing so a migrated thread's
+    // stamp is read.
+    const stamped = (thread as { metadata?: Record<string, unknown> }).metadata?.factorySessionId;
+    const stored =
+      stamped || thread.resourceId.startsWith('channel:')
+        ? thread
+        : ((await controller.queryThreadById({ threadId: thread.id })) ?? thread);
+    const resolved = await slackThreadSessionId(
+      sourceControlSessions,
+      stored,
+      threadId => controller.queryThreadById({ threadId }),
+      deps.workItems,
+    );
+    if (resolved === UNCLAIMED_SESSION) {
+      throw new Error(`Slack thread ${thread.id} is named after a Factory session it doesn't belong to.`);
+    }
+    const sessionId = resolved ?? thread.resourceId;
     const sourceControl = sessionId.startsWith('channel:')
       ? null
       : await sourceControlSessions.getSourceControlBySessionId(sessionId);
@@ -724,7 +763,15 @@ async function prepareExistingSessionOwnerContext(
   }
   if (sourceControls.length === 0 || internalThread.resourceId.startsWith('channel:')) return 'ready';
   const sessions = createSourceControlSessionLookup(sourceControls);
-  const sessionId = (await slackThreadSessionId(sessions, internalThread)) ?? internalThread.resourceId;
+  const memory = await ctx.mastra?.getStorage()?.getStore('memory');
+  const resolved = await slackThreadSessionId(
+    sessions,
+    internalThread,
+    async threadId => memory?.getThreadById({ threadId }),
+    deps.workItems,
+  );
+  if (resolved === UNCLAIMED_SESSION) return 'access-denied';
+  const sessionId = resolved ?? internalThread.resourceId;
   const sessionRow = await sessions.getBySessionId(sessionId);
   if (
     sessionRow &&
