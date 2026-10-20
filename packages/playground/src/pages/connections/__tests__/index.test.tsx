@@ -21,6 +21,12 @@ import {
 } from './fixtures/user-connect';
 import { server } from '@/test/msw-server';
 
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+const { toast } = await import('@mastra/playground-ui/utils/toast');
+
 const BASE_URL = 'http://localhost:4111';
 
 // cmdk scrolls the selected option into view; jsdom has no implementation.
@@ -57,6 +63,8 @@ async function pickProvider(name: string) {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.mocked(toast.success).mockClear();
+  vi.mocked(toast.error).mockClear();
 });
 
 describe('ConnectionsPage', () => {
@@ -111,6 +119,25 @@ describe('ConnectionsPage', () => {
     });
   });
 
+  describe('when the connections request is still in flight', () => {
+    it('shows loading tables instead of fake empty states', async () => {
+      server.use(
+        http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
+        // Never resolves within the test: the tables must not claim emptiness.
+        http.get(`${BASE_URL}/connect/connections`, () => new Promise<never>(() => {})),
+      );
+
+      renderPage();
+
+      const userTable = await screen.findByRole('table', { name: 'Your connections' });
+      expect(userTable.getAttribute('aria-busy')).toBe('true');
+      const globalTable = await screen.findByRole('table', { name: 'Global connections' });
+      expect(globalTable.getAttribute('aria-busy')).toBe('true');
+      expect(screen.queryByText("You haven't connected any accounts yet.")).toBeNull();
+      expect(screen.queryByText('No global connections are linked to this project.')).toBeNull();
+    });
+  });
+
   describe('when the surface is ready with global and user connections', () => {
     it('splits the connections into tables with catalog names and row actions only on yours', async () => {
       server.use(
@@ -157,6 +184,30 @@ describe('ConnectionsPage', () => {
 
       await waitFor(() => expect(onDelete).toHaveBeenCalled());
       expect(await screen.findByText("You haven't connected any accounts yet.")).not.toBeNull();
+      expect(toast.success).toHaveBeenCalledWith('Disconnected Linear');
+    });
+
+    it('surfaces a disconnect failure as an error toast and keeps the row', async () => {
+      server.use(
+        http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
+        http.get(`${BASE_URL}/connect/connections`, () => HttpResponse.json(mixedConnectionsResponse)),
+        http.delete(`${BASE_URL}/connect/connections/conn-user-1`, () =>
+          HttpResponse.json(
+            { error: { code: 'conflict', message: 'Disconnect already in progress; retry shortly' } },
+            { status: 409 },
+          ),
+        ),
+      );
+
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Actions for Linear' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Disconnect' }));
+
+      // The route's error message (not a generic fallback) reaches the toast.
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Disconnect already in progress; retry shortly'));
+      const userSection = screen.getByRole('region', { name: 'Your connections' });
+      expect(within(userSection).getByText('Linear')).not.toBeNull();
     });
   });
 

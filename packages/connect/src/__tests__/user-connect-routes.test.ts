@@ -739,6 +739,49 @@ describe('platform failure mapping', () => {
     expect(body.error.code).toBe('platform_error');
   });
 
+  it('surfaces platform conflicts with their actionable detail', async () => {
+    const { fetchMock: base } = fakePlatform();
+    const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname.includes('/connect-sessions') && init?.method === 'POST') {
+        // Mirrors the platform's RFC-7807 conflict for the per-resource
+        // connection cap: the detail tells the end user what to do next.
+        return new Response(
+          JSON.stringify({
+            detail:
+              'Connection limit reached for this resource on linear (max 5); disconnect an existing connection and retry',
+          }),
+          { status: 409, headers: { 'content-type': 'application/problem+json' } },
+        );
+      }
+      return (base as unknown as typeof fetch)(input as string, init);
+    }) as unknown as typeof fetch;
+    const routes = userConnectRoutes(routeOptions(fetchMock));
+    const response = await (findRoute(routes, 'POST', '/connect/:provider/sessions') as any).handler(
+      makeCtx({ resourceId: 'end-user-42', params: { provider: 'linear' } }),
+    );
+    expect(response.status).toBe(409);
+    const body = await json(response);
+    expect(body.error.code).toBe('conflict');
+    expect(body.error.message).toContain('Connection limit reached');
+  });
+
+  it('maps platform rate limiting to a generic 429', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json({ detail: 'internal rate limiter detail' }, { status: 429 }),
+      ) as unknown as typeof fetch;
+    const routes = userConnectRoutes(routeOptions(fetchMock));
+    const response = await (findRoute(routes, 'GET', '/connect/connections') as any).handler(
+      makeCtx({ resourceId: 'end-user-42' }),
+    );
+    expect(response.status).toBe(429);
+    const body = await json(response);
+    expect(body.error.code).toBe('rate_limited');
+    expect(JSON.stringify(body)).not.toContain('rate limiter detail');
+  });
+
   it('maps a missing access token to a generic 500 configuration error', async () => {
     const previousToken = process.env.MASTRA_PLATFORM_ACCESS_TOKEN;
     const previousSecret = process.env.MASTRA_PLATFORM_SECRET_KEY;
