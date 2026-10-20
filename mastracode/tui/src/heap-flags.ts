@@ -2,9 +2,10 @@
  * V8 flags Mastra Code starts Node with. They have to be set when the heap is created, so the CLI
  * entry re-execs Node once with them before loading anything else.
  *
- * `--max-semi-space-size=8` caps the young generation at 8 MB per semi-space. Node's default sizes it
- * from system memory (16 MB or more), and Mastra Code's bursty allocation (streaming, rendering) keeps
- * it full: about 115 MB less RSS at idle and 60 MB less after 40 tool turns, for ~3% more CPU.
+ * `--max-semi-space-size=8` caps the young generation at 8 MB per semi-space. Node 24's default is
+ * larger, and Mastra Code's bursty allocation (streaming, rendering) keeps it full: on Node 24 that's
+ * about 100 MB less RSS at idle and 60 MB less after 40 tool turns, for ~3% more CPU. Node 22's default
+ * is already close to this, so the flag changes little there.
  */
 export const HEAP_FLAGS = ['--max-semi-space-size=8'] as const;
 
