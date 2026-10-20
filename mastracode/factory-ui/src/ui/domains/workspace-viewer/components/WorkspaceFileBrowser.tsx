@@ -16,14 +16,13 @@ import {
   FolderOpen,
   Image,
   NotepadText,
-  Power,
   RefreshCw,
 } from 'lucide-react';
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 import { queryKeys } from '../../../../api/keys';
-import { useStartSessionSandbox } from '../../workspaces/hooks/useStartSessionSandbox';
+import { WakeSandbox } from './WakeSandbox';
 import type { WorkspaceTreeEntry } from '../../../../api/types';
 import { useWorkspaceTree } from '../../../../hooks/use-fs';
 import { treeRowContainmentClass } from '../layout';
@@ -71,21 +70,6 @@ function TreeMessage({ children, tone = 'muted' }: { children: ReactNode; tone?:
     >
       {children}
     </Txt>
-  );
-}
-
-/** Shown when the session has no running sandbox: start one on request. */
-function WakeSandbox({ workspacePath }: { workspacePath: string }) {
-  const start = useStartSessionSandbox(workspacePath);
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <TreeMessage>The sandbox isn&apos;t running.</TreeMessage>
-      <Button size="sm" onClick={() => start.mutate()} disabled={start.isPending}>
-        {start.isPending ? <Spinner size="sm" /> : <Power />}
-        {start.isPending ? 'Waking sandbox…' : 'Wake sandbox'}
-      </Button>
-      {start.error ? <TreeMessage tone="error">{start.error.message}</TreeMessage> : null}
-    </div>
   );
 }
 

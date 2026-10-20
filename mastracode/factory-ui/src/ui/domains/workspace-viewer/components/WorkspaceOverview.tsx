@@ -21,7 +21,7 @@ interface WorkspaceOverviewProps {
 }
 
 function changesSummary(changes: WorkspaceChanges | undefined) {
-  if (!changes?.available) return 'No sandbox';
+  if (!changes?.available) return null;
   if (changes.changes.length === 0) return 'No changes';
   return `${changes.changes.length} changed`;
 }

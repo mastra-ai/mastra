@@ -429,7 +429,7 @@ describe('WorkspaceViewerPanel', () => {
   });
 
   describe('when the session sandbox is not running', () => {
-    it('reports the sandbox state instead of pretending changes are pending', async () => {
+    it('offers to wake the sandbox instead of pretending changes are pending', async () => {
       installHandlers();
       // Changes are the live-VM-backed surface: the server reports
       // `available: false` when no session sandbox is running (nothing is
@@ -442,12 +442,11 @@ describe('WorkspaceViewerPanel', () => {
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
 
       const changesButton = screen.getByRole('button', { name: /^Changes/ });
-      await within(changesButton).findByText('No sandbox');
+      await waitFor(() => expect(changesButton).toHaveTextContent(/^Changes$/));
       await user.click(changesButton);
 
-      expect(
-        await screen.findByText('No sandbox running. Changes appear once the session sandbox starts.'),
-      ).toBeInTheDocument();
+      expect(await screen.findByText(/The sandbox isn.t running/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Wake sandbox' })).toBeInTheDocument();
     });
   });
 });
