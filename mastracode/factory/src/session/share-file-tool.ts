@@ -11,6 +11,23 @@ import type { IntegrationTools } from '../integrations/base.js';
 export const SHARE_FILE_MAX_BYTES = 50 * 1024 * 1024;
 
 /**
+ * Uploads need a scope (`files:write` on Slack) that an app created before
+ * this tool existed will not have. `@slack/web-api` reports that as a
+ * platform error with `data.error === 'missing_scope'` and the scope in
+ * `data.needed`; say so plainly instead of surfacing the raw API error, so
+ * the model tells the user what to fix rather than retrying.
+ */
+function missingScopeError(error: unknown, platform: string): Error | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const data = (error as { data?: { error?: unknown; needed?: unknown } }).data;
+  if (data?.error !== 'missing_scope') return undefined;
+  const needed = typeof data.needed === 'string' && data.needed ? data.needed : 'files:write';
+  return new Error(
+    `The ${platform} app is missing the \`${needed}\` scope, so it cannot upload files. Add the scope to the app and reinstall it, then try again.`,
+  );
+}
+
+/**
  * Lets a channel-triggered run hand a workspace file back to the thread it
  * came from. The agent's reply stream can only carry text, so a report it
  * generated in the sandbox would otherwise be described by path and left
@@ -51,10 +68,14 @@ export function createShareFileTool(requestContext: RequestContext): Integration
         // File only. The Slack adapter posts any non-empty text as a second
         // message after the upload, so a comment would land as its own bubble
         // between the reply and the file; an empty body returns after the upload.
-        await render.chatThread.post({
-          markdown: '',
-          files: [{ data, filename, ...(stat.mimeType ? { mimeType: stat.mimeType } : {}) }],
-        });
+        try {
+          await render.chatThread.post({
+            markdown: '',
+            files: [{ data, filename, ...(stat.mimeType ? { mimeType: stat.mimeType } : {}) }],
+          });
+        } catch (error) {
+          throw missingScopeError(error, render.platform) ?? error;
+        }
         return { shared: true, filename, bytes: data.length };
       },
     }),

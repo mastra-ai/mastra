@@ -9,20 +9,28 @@ function setup({
   type = 'file' as 'file' | 'directory',
   mimeType = 'application/pdf',
   contents = Buffer.from('hello report'),
+  post = vi.fn(async () => ({})),
 } = {}) {
-  const post = vi.fn(async () => ({}));
   const fs = {
     stat: vi.fn(async (path: string) => ({ name: path.split('/').pop(), path, type, size, mimeType })),
     readFile: vi.fn(async () => contents),
   };
   const requestContext = new RequestContext();
   requestContext.set('channel', { platform: 'slack', isDM: true });
-  requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { chatThread: { post } });
+  requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { platform: 'slack', chatThread: { post } });
   requestContext.set('controller', { workspace: { filesystem: fs } });
   const tool = createShareFileTool(requestContext).share_file as {
     execute: (input: { path: string }, ctx: Record<string, unknown>) => Promise<unknown>;
   };
   return { tool, post, fs };
+}
+
+/** What `@slack/web-api` throws when the app lacks a scope: the API body is on `data`. */
+function slackPlatformError(data: Record<string, unknown>) {
+  return Object.assign(new Error('An API error occurred: missing_scope'), {
+    code: 'slack_webapi_platform_error',
+    data,
+  });
 }
 
 describe('share_file', () => {
@@ -68,6 +76,29 @@ describe('share_file', () => {
     // And the reported size is what was uploaded, not what stat claimed.
     const shrunk = setup({ size: 999, contents: Buffer.from('tiny') });
     await expect(shrunk.tool.execute({ path: '/workspace/shrunk.txt' }, {})).resolves.toMatchObject({ bytes: 4 });
+  });
+
+  it('names the missing scope when the Slack app cannot upload files', async () => {
+    const { tool } = setup({
+      post: vi.fn(async () => {
+        throw slackPlatformError({ ok: false, error: 'missing_scope', needed: 'files:write', provided: 'files:read' });
+      }),
+    });
+
+    await expect(tool.execute({ path: '/workspace/report.pdf' }, {})).rejects.toThrow(
+      'The slack app is missing the `files:write` scope',
+    );
+  });
+
+  it('passes other upload failures through untouched', async () => {
+    const boom = slackPlatformError({ ok: false, error: 'ratelimited' });
+    const { tool } = setup({
+      post: vi.fn(async () => {
+        throw boom;
+      }),
+    });
+
+    await expect(tool.execute({ path: '/workspace/report.pdf' }, {})).rejects.toBe(boom);
   });
 
   it('fails clearly when the session has no workspace', async () => {
