@@ -53,18 +53,21 @@ function buildScoredAgent(
     tools,
     defaultOptions,
     memory,
+    id = `scorers-live-agent-${++agentCounter}`,
+    storage = new InMemoryStore(),
   }: {
     scorers?: Record<string, { scorer: any }>;
     mastraScorers?: Record<string, any>;
     tools?: Record<string, any>;
     defaultOptions?: Record<string, any>;
     memory?: MockMemory;
+    id?: string;
+    storage?: InMemoryStore;
   } = {},
 ) {
   const model = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` })(
     SCENARIO_MODEL_ID,
   );
-  const id = `scorers-live-agent-${++agentCounter}`;
   const instructions = 'You are a test agent driven by scripted AIMock responses.';
   const config = {
     model,
@@ -94,7 +97,7 @@ function buildScoredAgent(
   const mastra = new Mastra({
     agents: engine === 'fs' ? {} : { [id]: registrable as any },
     logger: false,
-    storage: new InMemoryStore(),
+    storage,
     ...(mastraScorers ? { scorers: mastraScorers } : {}),
     ...(pubsub ? { pubsub } : {}),
   });
@@ -180,12 +183,43 @@ describeForAllEngines('AIMock loop scenario: live scorers and returnScorerData',
     expect(off.scoringData).toBeUndefined();
   });
 
-  // BUG #27580: the plain Agent (and fs-routed agents) drop a run-level
-  // returnScorerData on resumeGenerate(); durable/evented persist it at prepare time.
-  const itResumeScoringData = engine === 'normal' || engine === 'fs' ? it.fails : it;
-  itResumeScoringData(
-    'returnScorerData set on the run survives an approval resume, even when defaultOptions disable it',
-    async () => {
+  // #27580: the run-level returnScorerData is persisted with the suspended run, so a
+  // resume keeps it even when defaultOptions disable it.
+  it('returnScorerData set on the run survives an approval resume, even when defaultOptions disable it', async () => {
+    const llm = getMock();
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { toolCalls: [{ id: 'call-search', name: 'searchTool', arguments: { query: 'mastra' } }] },
+    );
+    llm.on({ endpoint: 'chat', toolCallId: 'call-search' }, { content: 'Found: mastra' });
+    const searchTool = createTool({
+      id: 'searchTool',
+      description: 'Search for information',
+      inputSchema: z.object({ query: z.string() }),
+      execute: async () => ({ results: ['mastra'] }),
+    });
+    const agent = buildScoredAgent(llm, engine, {
+      tools: { searchTool },
+      defaultOptions: { returnScorerData: false },
+    });
+
+    const first = await agent.generate('search for mastra', { requireToolApproval: true, returnScorerData: true });
+    expect(first.finishReason).toBe('suspended');
+
+    const second = await agent.resumeGenerate({ approved: true }, { runId: first.runId });
+    expect(second.text).toBe('Found: mastra');
+    expect(JSON.stringify(second.scoringData?.output)).toContain('Found: mastra');
+  });
+
+  // #27580: the flag must come from the suspended run in storage, not from the
+  // process that started it, so the resume runs on a fresh Agent and Mastra.
+  it.each([
+    { method: 'resumeGenerate', resumeFlag: undefined, expectScoringData: true },
+    { method: 'resumeStream', resumeFlag: undefined, expectScoringData: true },
+    { method: 'resumeGenerate', resumeFlag: false, expectScoringData: false },
+  ] as const)(
+    'a fresh process resuming with $method keeps the run returnScorerData (resume flag: $resumeFlag)',
+    async ({ method, resumeFlag, expectScoringData }) => {
       const llm = getMock();
       llm.on(
         { endpoint: 'chat', hasToolResult: false },
@@ -198,17 +232,35 @@ describeForAllEngines('AIMock loop scenario: live scorers and returnScorerData',
         inputSchema: z.object({ query: z.string() }),
         execute: async () => ({ results: ['mastra'] }),
       });
-      const agent = buildScoredAgent(llm, engine, {
-        tools: { searchTool },
-        defaultOptions: { returnScorerData: false },
-      });
+      const storage = new InMemoryStore();
+      const id = `scorers-live-cross-process-${++agentCounter}`;
+      const build = () =>
+        buildScoredAgent(llm, engine, {
+          id,
+          storage,
+          tools: { searchTool },
+          defaultOptions: { returnScorerData: false },
+        });
 
-      const first = await agent.generate('search for mastra', { requireToolApproval: true, returnScorerData: true });
+      const first = await build().generate('search for mastra', { requireToolApproval: true, returnScorerData: true });
       expect(first.finishReason).toBe('suspended');
 
-      const second = await agent.resumeGenerate({ approved: true }, { runId: first.runId });
-      expect(second.text).toBe('Found: mastra');
-      expect(JSON.stringify(second.scoringData?.output)).toContain('Found: mastra');
+      const resumer = build();
+      const resumeOptions = {
+        runId: first.runId,
+        ...(resumeFlag === undefined ? {} : { returnScorerData: resumeFlag }),
+      };
+      const full =
+        method === 'resumeGenerate'
+          ? await resumer.resumeGenerate({ approved: true }, resumeOptions)
+          : (await streamToEnd(resumer, engine, resumer.resumeStream({ approved: true }, resumeOptions))).full;
+
+      expect(full.text).toBe('Found: mastra');
+      if (expectScoringData) {
+        expect(JSON.stringify(full.scoringData?.output)).toContain('Found: mastra');
+      } else {
+        expect(full.scoringData).toBeUndefined();
+      }
     },
   );
 
@@ -333,12 +385,9 @@ describeForAllEngines('AIMock loop scenario: live scorers and returnScorerData',
     },
   );
 
-  // BUG #27579: a live scorer object passed only at call time (or via
-  // `defaultOptions.scorers`) never runs. The scorer hook resolves the scorer
-  // again by id through `agent.listScorers()` and then `mastra.getScorerById()`
-  // (`findScorer`, packages/core/src/mastra/hooks.ts), so a scorer registered on
-  // neither is reported as MASTRA_SCORER_NOT_FOUND and silently dropped.
-  it.fails('a call-time scorer that is not registered on the agent or Mastra still runs', async () => {
+  // #27579: a live scorer object passed only at call time (or via
+  // `defaultOptions.scorers`) runs even when registered on neither the agent nor Mastra.
+  it('a call-time scorer that is not registered on the agent or Mastra still runs', async () => {
     textFixture('Unregistered reply')(getMock());
     const { scorer, runs } = recordingScorer('call-only');
     const agent = buildScoredAgent(getMock(), engine);
@@ -348,7 +397,7 @@ describeForAllEngines('AIMock loop scenario: live scorers and returnScorerData',
     await vi.waitFor(() => expect(runs).toHaveLength(1));
   });
 
-  it.fails('a scorer set in defaultOptions.scorers still runs', async () => {
+  it('a scorer set in defaultOptions.scorers still runs', async () => {
     textFixture('Default options reply')(getMock());
     const { scorer, runs } = recordingScorer('default-options');
     const agent = buildScoredAgent(getMock(), engine, { defaultOptions: { scorers: { viaDefaults: { scorer } } } });
