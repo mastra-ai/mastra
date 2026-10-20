@@ -69,7 +69,7 @@ afterEach(async () => {
   rmSync(directory, { recursive: true, force: true });
 });
 
-async function start({ resume }: { resume: 'owner' | 'unresolvable' }) {
+async function start({ resume, scheduleTools = false }: { resume: 'owner' | 'unresolvable'; scheduleTools?: boolean }) {
   const settingsPath = path.join(directory, 'settings.json');
   writeFileSync(
     settingsPath,
@@ -96,6 +96,7 @@ async function start({ resume }: { resume: 'owner' | 'unresolvable' }) {
     disablePlugins: true,
     disableGithubSignals: true,
     createInitialThread: false,
+    scheduleTools,
     prepareWakeRequestContext: async ({ requestContext, resourceId }) => {
       if (resourceId === SESSION_ID) requestContext.set('user', { ...OWNER });
     },
@@ -236,6 +237,99 @@ describe('waking a Factory-style session that is not live in this process', () =
     expect(later.failed.map(failure => failure.error)).toEqual([error]);
     const [record] = await notifications.listNotifications({ threadId, resourceId: SESSION_ID });
     expect(record).toMatchObject({ status: 'pending', deliveryAttempts: 2 });
+    expect(mock.getRequests()).toEqual([]);
+  });
+});
+
+/**
+ * Session A has a schedule on its thread, and this process no longer holds A's
+ * session live. The scheduler fires it (`run` fires now instead of waiting).
+ */
+async function fireScheduleIntoEvictedSession(resume: 'owner' | 'unresolvable') {
+  const { code, ownerContext } = await start({ resume, scheduleTools: true });
+  const session = await code.controller.createSession({
+    id: SESSION_ID,
+    resourceId: SESSION_ID,
+    ownerId: OWNER.workosId,
+    requestContext: ownerContext(),
+  });
+  const threadId = session.thread.getId()!;
+  await code.controller.deleteSession({ resourceId: SESSION_ID });
+  const schedule = code.threadScheduler.create(
+    { prompt: 'check the build', trigger: { kind: 'every', interval: { ms: 60_000 } } },
+    { resourceId: SESSION_ID, threadId },
+  );
+  resolvedTenants = [];
+  storeTenants = [];
+  const result = await code.threadScheduler.run(schedule.id);
+  code.threadScheduler.delete(schedule.id);
+  return { result, threadId };
+}
+
+describe('a schedule firing into a session that is not live in this process', () => {
+  it('runs the scheduled prompt as the session owner, with the owner credentials', async () => {
+    const { result } = await fireScheduleIntoEvictedSession('owner');
+
+    expect(result).toMatchObject({ status: 'fired' });
+    await vi.waitFor(() => expect(mock.getRequests().length).toBeGreaterThan(0), { timeout: 20_000 });
+    expect(new Set(storeTenants)).toEqual(new Set([OWNER.workosId]));
+    expect(resolvedTenants.every(tenant => tenant.userId === OWNER.workosId)).toBe(true);
+  });
+
+  it('fails the fire with a clear error, without an anonymous run, when the owner cannot be resolved', async () => {
+    const { result, threadId } = await fireScheduleIntoEvictedSession('unresolvable');
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { message: `No session owns resource ${SESSION_ID} to run its wake on thread ${threadId}.` },
+    });
+    expect(mock.getRequests()).toEqual([]);
+    expect(resolvedTenants).toEqual([]);
+    expect(storeTenants).toEqual([]);
+  });
+});
+
+/**
+ * Session A is live here, and the schedule's thread is on A's resource but
+ * belongs to another project (its `projectPath` differs), so another process
+ * owns it. Running it here would run it with no owner identity, in the wrong
+ * workspace.
+ */
+describe("a schedule firing into another project's thread on this session's resource", () => {
+  it('leaves the wake to the claimed thread owner instead of running it here without one', async () => {
+    const { code, storage, ownerContext } = await start({ resume: 'owner', scheduleTools: true });
+    await code.controller.createSession({
+      id: SESSION_ID,
+      resourceId: SESSION_ID,
+      ownerId: OWNER.workosId,
+      requestContext: ownerContext(),
+    });
+    const memory = await storage.getStore('memory');
+    if (!memory) throw new Error('memory store unavailable');
+    const threadId = 'other-project-thread';
+    const now = new Date();
+    await memory.saveThread({
+      thread: {
+        id: threadId,
+        resourceId: SESSION_ID,
+        title: 'other project',
+        metadata: { projectPath: path.join(directory, 'other-project') },
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+    const schedule = code.threadScheduler.create(
+      { prompt: 'check the build', trigger: { kind: 'every', interval: { ms: 60_000 } } },
+      { resourceId: SESSION_ID, threadId },
+    );
+
+    const result = await code.threadScheduler.run(schedule.id);
+    code.threadScheduler.delete(schedule.id);
+
+    // No process here claims the thread, so the wake is refused rather than run
+    // locally as a bare wake with no owner identity.
+    expect(result).toMatchObject({ status: 'failed' });
+    expect(result.status === 'failed' ? result.error.message : '').toMatch(/No claimed thread owner responded/);
     expect(mock.getRequests()).toEqual([]);
   });
 });
