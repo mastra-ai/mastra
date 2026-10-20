@@ -27,25 +27,17 @@ type NotificationDispatchAgent = {
  * it needs to start a run. Only `streamOptions` and `hold` are honored here —
  * the record's persisted schedule already fixed WHEN and HOW it is delivered.
  * `hold` leaves the record for another process's dispatcher.
- * Best-effort: a throwing policy must not turn into a permanent delivery
- * failure, so fall back to a bare wake.
+ * A throwing policy fails the delivery attempt with its error, counted toward
+ * the attempt limit like any other failure. Falling back to a bare wake would
+ * start the run without the context the policy failed to build (owner
+ * identity, model selection), so it fails anyway, with a less useful error.
  */
 async function resolveDeliveryTimeDecision(
-  mastra: Mastra,
   agent: NotificationDispatchAgent,
   input: NotificationDeliveryPolicyInput,
 ): Promise<{ streamOptions?: AgentSignalIfIdleOptions['streamOptions']; hold: boolean }> {
-  try {
-    const decision = await agent.resolveNotificationDeliveryDecision?.(input);
-    return { streamOptions: decision?.streamOptions, hold: decision?.hold === true };
-  } catch (error) {
-    mastra
-      .getLogger()
-      ?.warn(
-        `Notification delivery policy failed for thread ${input.record.threadId}; delivering with a bare wake: ${errorMessage(error)}`,
-      );
-    return { hold: false };
-  }
+  const decision = await agent.resolveNotificationDeliveryDecision?.(input);
+  return { streamOptions: decision?.streamOptions, hold: decision?.hold === true };
 }
 
 /**
@@ -189,7 +181,7 @@ async function sendNotificationRecord({
     deliveredAt: now,
     lastDeliveryAttemptAt: now,
   });
-  const { streamOptions, hold } = await resolveDeliveryTimeDecision(mastra, agent, {
+  const { streamOptions, hold } = await resolveDeliveryTimeDecision(agent, {
     record: current,
     threadState,
     now,
@@ -234,7 +226,7 @@ async function sendNotificationSummary({
   if (!first.resourceId) throw new Error('Notification summary is missing resourceId');
 
   const agent = (await mastra.getAgentById(first.agentId as never)) as NotificationDispatchAgent;
-  const decision = await resolveDeliveryTimeDecision(mastra, agent, {
+  const decision = await resolveDeliveryTimeDecision(agent, {
     record: first,
     threadState: agentThreadStreamRuntime.getThreadState(
       { resourceId: first.resourceId, threadId: first.threadId },
