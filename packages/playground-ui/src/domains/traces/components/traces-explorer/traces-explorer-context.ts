@@ -1,4 +1,5 @@
 import type { EntityType } from '@mastra/core/observability';
+import type { TraceQueryDiscoveryTimeRange } from '@mastra/react/hooks/traces';
 import { createContext, useContext } from 'react';
 import type { useTraceColumnPreferences } from '../../hooks/use-trace-column-preferences';
 import type { useTracesListSource } from '../../hooks/use-traces-list-source';
@@ -8,7 +9,6 @@ import type { SpanTab, TraceDatePreset } from '../../types';
 import type { TraceSpanView } from '../trace-data-panel-view';
 import type { TracesFilters, TracesSelection, TracesSortDirection } from './traces-explorer-actions';
 import type { DataListSort } from '@/ds/components/DataList';
-import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
 
 export type TracesExplorerScope = { entityId: string; entityType?: EntityType };
 
@@ -27,17 +27,17 @@ export type TracesConfigContextValue = {
   withQueryTrace: boolean;
   withFeedback: boolean;
   withRootDuration: boolean;
+  /** Whether field discovery should run: the server supports it and the trace query API is on. */
+  withDiscovery: boolean;
   isCapabilitiesLoading: boolean;
   metricsSupport: TracesMetricsSupport;
-  filterBarFields: FilterBarField[];
-  availableMetadataKeys: string[];
-  isDiscoveryLoading: boolean;
+  /** Shared by every discovery consumer so they hit the same cached query. */
+  discoveryTimeRange: TraceQueryDiscoveryTimeRange;
 };
 
 export type TracesFiltersActions = {
-  onFilterBarChange: (expression: FilterBarExpression) => void;
-  onFlatFilterBarChange: (items: FilterBarItem[]) => void;
-  onFilterByField: (fieldId: string, value: string) => void;
+  /** Replaces the filter tokens and groups. The scope tokens are always kept. */
+  setFilterTokens: (tokens: TracesFilters['tokens'], groups: TracesFilters['groups']) => void;
   setDatePreset: (preset: TraceDatePreset) => void;
   setDate: (value: Date | undefined, end: 'from' | 'to') => void;
   setDateRange: (from: Date | undefined, to: Date | undefined) => void;
@@ -50,8 +50,6 @@ export type TracesFiltersContextValue = TracesFiltersActions & {
   dateTo?: Date;
   filtersApplied: boolean;
   contentFiltersApplied: boolean;
-  filterBarValue: FilterBarExpression;
-  flatFilterBarValue: FilterBarItem[];
 };
 
 export type TracesSelectionActions = {

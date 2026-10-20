@@ -4,6 +4,7 @@ import type { TraceDatePreset } from '../../types';
 import { TRACE_TIME_RANGE_FIELD_ID, TraceTimeRangeChip } from '../trace-time-range-chip';
 import type { TraceTimeRangeChipProps } from '../trace-time-range-chip';
 import { useTracesConfig, useTracesFilters, useTracesList } from './traces-explorer-context';
+import { useTracesFilterBar, useTracesFilterBarFields } from './use-traces-filter-bar';
 import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarItem } from '@/ds/components/FilterBar';
 
@@ -28,11 +29,12 @@ export type TracesExplorerFilterBarProps = {
 /**
  * The trace filters bar, wired to the explorer's fields and filters. Hosts that need extra
  * fields or items (e.g. their own scope pickers) can render the design-system `FilterBar`
- * themselves from `useTracesConfig()` / `useTracesFilters()` and reuse `FilterChips`.
+ * themselves from `useTracesFilterBarFields()` / `useTracesFilterBar()` and reuse `FilterChips`.
  */
 export function TracesExplorerFilterBar({ children }: TracesExplorerFilterBarProps) {
-  const { filterBarFields, withQueryTrace } = useTracesConfig();
-  const { filterBarValue, flatFilterBarValue, onFilterBarChange, onFlatFilterBarChange } = useTracesFilters();
+  const { withQueryTrace } = useTracesConfig();
+  const filterBarFields = useTracesFilterBarFields();
+  const { filterBarValue, flatFilterBarValue, onFilterBarChange, onFlatFilterBarChange } = useTracesFilterBar();
 
   return (
     <FilterBar

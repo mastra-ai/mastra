@@ -29,7 +29,7 @@ export function TracesExplorerPanel({
   headerActionsSlot,
 }: TracesExplorerPanelProps) {
   const { withQueryTrace, withFeedback } = useTracesConfig();
-  const { rows, autoRefetch } = useTracesList();
+  const { rows, autoRefetch, isLoading: isListLoading } = useTracesList();
   const { selection, selectTrace, closeTrace, selectSpan, setSpanTab, setSpanView, selectScore, highlightSpans } =
     useTracesSelection();
   const { usageEnabled } = useTraceUsageColumns();
@@ -72,10 +72,15 @@ export function TracesExplorerPanel({
     : undefined;
 
   // Same key as the list's usage query when the trace is listed, so React Query serves it from cache.
+  // Waits for the list so a deep-linked trace doesn't fetch its own usage before the rows arrive.
   const rowIds = useMemo(() => rows.map(row => row.traceId), [rows]);
   const isListed = !!traceId && rowIds.includes(traceId);
   const usageTraceIds = useMemo(() => (isListed ? rowIds : traceId ? [traceId] : []), [isListed, rowIds, traceId]);
-  const { data: usageByTraceId } = useTraceUsage({ traceIds: usageTraceIds, enabled: usageEnabled, autoRefetch });
+  const { data: usageByTraceId } = useTraceUsage({
+    traceIds: usageTraceIds,
+    enabled: usageEnabled && !isListLoading,
+    autoRefetch,
+  });
   const usage = traceId ? usageByTraceId?.get(traceId) : undefined;
 
   const { handlePreviousTrace, handleNextTrace } = useTraceListNavigation(rows, traceId, null, selectTrace);

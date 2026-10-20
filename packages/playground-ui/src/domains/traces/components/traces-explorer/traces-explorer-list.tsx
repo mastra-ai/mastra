@@ -9,6 +9,7 @@ import {
   useTracesList,
   useTracesSelection,
 } from './traces-explorer-context';
+import { useTracesFilterBar } from './use-traces-filter-bar';
 
 export function TracesExplorerList() {
   const { listId } = useTracesConfig();
@@ -22,7 +23,8 @@ export function TracesExplorerList() {
     sortDirection,
     onSortChange,
   } = useTracesList();
-  const { filtersApplied, onFilterByField } = useTracesFilters();
+  const { filtersApplied } = useTracesFilters();
+  const { onFilterByField } = useTracesFilterBar();
   const { selectedTraceId, selectTrace, closeTrace } = useTracesSelection();
   const { displayedPreferences, usageEnabled } = useTraceUsageColumns();
 

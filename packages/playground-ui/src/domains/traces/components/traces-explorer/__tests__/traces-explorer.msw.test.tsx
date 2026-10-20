@@ -8,10 +8,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { TRACES_LIST_REFETCH_INTERVAL_MS } from '../../../hooks/use-traces-list-source';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../../trace-filters';
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
-import { TracesExplorer } from '../index';
+import { TracesExplorer, useTracesFilterBar, useTracesFilterBarFields } from '../index';
 import { DEFAULT_TRACES_FILTERS, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import type { TracesFilters, TracesSelection, TracesSortDirection } from '../traces-explorer-actions';
-import { useTracesConfig, useTracesFilters } from '../traces-explorer-context';
 import type { TracesExplorerFeatures } from '../traces-explorer-context';
 import {
   emptyDatasets,
@@ -50,8 +49,8 @@ const regionField: FilterBarField = { id: 'region', label: 'Region', operators: 
 
 /** A host bar: its own design-system FilterBar with an extra field, fed by the explorer hooks. */
 function HostFilterBar() {
-  const { filterBarFields } = useTracesConfig();
-  const { filterBarValue, onFilterBarChange } = useTracesFilters();
+  const filterBarFields = useTracesFilterBarFields();
+  const { filterBarValue, onFilterBarChange } = useTracesFilterBar();
   return (
     <FilterBar
       aria-label="Trace filters"

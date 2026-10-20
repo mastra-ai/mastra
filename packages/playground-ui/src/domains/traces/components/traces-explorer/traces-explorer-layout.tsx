@@ -9,6 +9,7 @@ import {
   useTracesList,
   useTracesSelection,
 } from './traces-explorer-context';
+import { useTracesDiscovery } from './use-traces-discovery';
 import { PageLayout } from '@/ds/components/PageLayout';
 
 export type TracesExplorerLayoutProps = {
@@ -18,7 +19,8 @@ export type TracesExplorerLayoutProps = {
 };
 
 export function TracesExplorerLayout({ breadcrumbs, actionRow, children }: TracesExplorerLayoutProps) {
-  const { isCapabilitiesLoading, isDiscoveryLoading } = useTracesConfig();
+  const { isCapabilitiesLoading } = useTracesConfig();
+  const { isLoading: isDiscoveryLoading } = useTracesDiscovery();
   const { rows, isLoading, error } = useTracesList();
   const { filters, dateFrom, dateTo, contentFiltersApplied } = useTracesFilters();
   const { selectedTraceId } = useTracesSelection();

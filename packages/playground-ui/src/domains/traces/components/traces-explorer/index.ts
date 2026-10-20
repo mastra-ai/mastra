@@ -40,3 +40,5 @@ export {
   useTracesSelection,
 } from './traces-explorer-context';
 export type { TracesExplorerFeatures, TracesExplorerScope, TracesMetricsSupport } from './traces-explorer-context';
+export { useTracesFilterBar, useTracesFilterBarFields } from './use-traces-filter-bar';
+export { useTracesDiscovery } from './use-traces-discovery';
