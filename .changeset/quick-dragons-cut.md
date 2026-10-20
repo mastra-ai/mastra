@@ -1,8 +1,12 @@
 ---
 '@mastra/react': minor
-'@mastra/client-js': patch
-'@mastra/server': patch
-'mastra': patch
 ---
 
 Added `useSpanAggregateAvailable()`, which reports whether the server supports `aggregateSpans()`.
+
+```tsx
+const { isLoading, enabled } = useSpanAggregateAvailable();
+if (!isLoading && enabled) {
+  // render span aggregate charts
+}
+```
