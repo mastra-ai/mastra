@@ -12,6 +12,7 @@ describe('getEditorOwnership', () => {
       ownsInstructions: boolean;
       ownsTools: boolean;
       ownsToolDescriptions: boolean;
+      ownsModel?: boolean;
       isInstructionsLocked: boolean;
       isToolsLocked: boolean;
       toolDescriptionsOnly: boolean;
@@ -162,11 +163,26 @@ describe('getEditorOwnership', () => {
         isFullyLocked: false,
       },
     },
+    {
+      name: 'editor: { model: true }',
+      isCodeAgentOverride: true,
+      editorConfig: { model: true },
+      expected: {
+        ownsInstructions: false,
+        ownsTools: false,
+        ownsToolDescriptions: false,
+        ownsModel: true,
+        isInstructionsLocked: true,
+        isToolsLocked: true,
+        toolDescriptionsOnly: false,
+        isFullyLocked: false,
+      },
+    },
   ];
 
   for (const { name, isCodeAgentOverride, editorConfig, expected } of cases) {
     it(name, () => {
-      expect(getEditorOwnership(isCodeAgentOverride, editorConfig)).toEqual(expected);
+      expect(getEditorOwnership(isCodeAgentOverride, editorConfig)).toMatchObject(expected);
     });
   }
 

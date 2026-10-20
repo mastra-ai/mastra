@@ -512,10 +512,11 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    * from the stored config override the code agent's values (if explicitly set):
    * - `instructions` — system prompt
    * - `tools` — tool selection with description overrides (merged on top of code tools)
+   * - `modelList` — ordered serializable fallback settings matched to code entries by ID
    *
    * Fields that are absent or undefined in the stored config are left untouched.
-   * Model, workspace, memory, and other code-defined fields are never overridden —
-   * they may contain SDK instances or dynamic functions that cannot be safely serialized.
+   * Workspace, memory, and other code-defined fields are never overridden because they
+   * may contain SDK instances or dynamic functions that cannot be safely serialized.
    * Returns the (possibly mutated) agent.
    */
   async applyStoredOverrides(

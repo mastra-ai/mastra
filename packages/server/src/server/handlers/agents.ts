@@ -22,7 +22,7 @@ import type {
 } from '@mastra/core/processors';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { StorageCreateAgentInput, StorageModelListEntry } from '@mastra/core/storage';
+import type { StorageModelListEntry } from '@mastra/core/storage';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
@@ -179,7 +179,14 @@ async function persistEditorOwnedModelList({
   if (storedAgent) {
     await editorAgent.update({ id: agent.id, modelList: storedModelList });
   } else {
-    await editorAgent.create({ id: agent.id, modelList: storedModelList } as StorageCreateAgentInput);
+    const primaryModel = storedModelList[0]!;
+    await editorAgent.create({
+      id: agent.id,
+      name: agent.name,
+      instructions: '',
+      model: { provider: primaryModel.provider, name: primaryModel.modelId },
+      modelList: storedModelList,
+    });
   }
 
   return true;

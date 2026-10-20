@@ -66,6 +66,8 @@ export const useReorderModelList = ({
     mutationFn: async (payload: ReorderModelListParams) => client.getAgent(agentId).reorderModelList(payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
     },
     onError: err => {
       console.error('Error reordering model list', err);
@@ -89,6 +91,8 @@ export const useUpdateModelInModelList = ({
       client.getAgent(agentId).updateModelInModelList(payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
     },
     onError: err => {
       console.error('Error updating model in model list', err);

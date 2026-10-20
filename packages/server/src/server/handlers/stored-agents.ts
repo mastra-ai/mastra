@@ -399,7 +399,7 @@ async function buildStoredAgentExport({
     throw new HTTPException(404, { message: `Agent with id ${storedAgentId} not found` });
   }
 
-  const config = buildExportConfig(body, codeAgent);
+  const config = buildExportConfig({ ...storedAgent, ...body }, codeAgent);
   const content = `${JSON.stringify(config, null, 2)}\n`;
 
   return {

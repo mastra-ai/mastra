@@ -810,6 +810,63 @@ describe('Stored Agents Handlers', () => {
       });
     });
 
+    it('should export a model-only code agent draft from storage', async () => {
+      mockAgentsData.set('model-agent', {
+        id: 'model-agent',
+        name: 'Model Agent',
+        modelList: [
+          {
+            id: 'fallback',
+            provider: 'openai',
+            modelId: 'gpt-5.5',
+            enabled: true,
+            maxRetries: 2,
+          },
+          {
+            id: 'primary',
+            provider: 'openai',
+            modelId: 'gpt-5.4-mini',
+            enabled: true,
+            maxRetries: 0,
+          },
+        ],
+      });
+      mockMastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'model-agent': {
+            source: 'code',
+            __getEditorConfig: () => ({ model: true }),
+          },
+        },
+      });
+
+      const result = await EXPORT_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'model-agent',
+      });
+
+      expect(result.config).toEqual({
+        modelList: [
+          {
+            enabled: true,
+            id: 'fallback',
+            maxRetries: 2,
+            modelId: 'gpt-5.5',
+            provider: 'openai',
+          },
+          {
+            enabled: true,
+            id: 'primary',
+            maxRetries: 0,
+            modelId: 'gpt-5.4-mini',
+            provider: 'openai',
+          },
+        ],
+      });
+    });
+
     it('should omit fields not owned by the editor config', async () => {
       mockMastra = createMockMastra({
         storage: mockStorage,
