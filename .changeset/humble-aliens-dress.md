@@ -1,9 +1,7 @@
 ---
-'@mastra/platform-workspace': patch
 '@mastra/factory': patch
-'@mastra/code-sdk': patch
-'@mastra/e2b': patch
-'@mastra/core': patch
 ---
 
-The Files tab now shows the session's live checkout instead of only files the agent touched. Each folder loads from the sandbox when you open it, a refresh button reloads open folders, and folders and the open file refresh after the agent writes, edits, deletes, or runs a command. Opening the panel never starts a sandbox; when none is running, a **Wake sandbox** button starts it (`POST /web/user-sessions/:sessionId/sandbox/start`). `.git` and gitignored files (such as `.env` and `node_modules`) are neither listed nor served, and the `/web/workspace/files` route is replaced by `GET /web/workspace/tree?workspacePath=&path=`.
+The Files tab now shows the session's live working directory instead of only files the agent touched. Each folder loads from the sandbox when you open it, a refresh button reloads open folders, and folders and the open file refresh after the agent writes, edits, deletes, or runs a command. Dotfiles are hidden until you toggle them on. `.git`, the sandbox's setup markers, and gitignored files inside a checkout (such as `.env` and `node_modules`) are never listed or served.
+
+Opening the panel never starts a sandbox. When none is running, the Files and Changes tabs show a **Wake sandbox** button that starts it without a model turn (`POST /web/user-sessions/:sessionId/sandbox/start`). The `/web/workspace/files` route is replaced by `GET /web/workspace/tree?workspacePath=&path=`.
