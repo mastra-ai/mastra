@@ -530,11 +530,12 @@ type AgentThreadRuntimeState = {
   threadEventListeners: Set<ThreadEventListenerRegistration>;
   threadControlSubscriptions: Map<string, ThreadControlSubscription>;
   /**
-   * Thread subscribers reading a run's stream, by run id. A parked run that
-   * continues across its suspension keeps its stream open; once the thread
-   * moves on without it, its readers stop and read the runs queued behind it.
+   * Thread subscribers reading a run's stream, by run id, with the stream each
+   * reads. A parked run that continues across its suspension keeps its stream
+   * open; once the thread moves on without it, its readers stop and read the
+   * runs queued behind it.
    */
-  runStreamReaders: Map<string, Set<() => void>>;
+  runStreamReaders: Map<string, Set<{ streamId: string; stop: () => void }>>;
 };
 
 export type AgentThreadState = 'active' | 'idle';
@@ -2768,8 +2769,10 @@ export class AgentThreadStreamRuntime {
    * stream. Subscribers still reading its open stream move on to the runs queued
    * behind it.
    */
-  #stopReadingDisplacedRun(state: AgentThreadRuntimeState, runId: string): void {
-    for (const stop of [...(state.runStreamReaders.get(runId) ?? [])]) stop();
+  #stopReadingDisplacedRun(state: AgentThreadRuntimeState, runId: string, streamId?: string): void {
+    for (const reader of [...(state.runStreamReaders.get(runId) ?? [])]) {
+      if (streamId === undefined || reader.streamId === streamId) reader.stop();
+    }
   }
 
   getActiveThreadRunId(options: AgentThreadIdentityOptions, pubsub?: PubSub): string | undefined {
@@ -3217,8 +3220,9 @@ export class AgentThreadStreamRuntime {
       this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
       state.sweptLeasedRunIds.set(record.runId, now);
       // A run parked across its suspension keeps its stream open, so subscribers
-      // reading it would never reach the runs queued behind it.
-      this.#stopReadingDisplacedRun(state, record.runId);
+      // reading it would never reach the runs queued behind it. Only this record's
+      // stream: a subscriber may be reading another instance's resume of the run.
+      this.#stopReadingDisplacedRun(state, record.runId, streamId);
       if (
         state.activeThreadRunIds.get(staleKey) === record.runId &&
         state.activeThreadStreamIds.get(staleKey) === streamId
@@ -5456,10 +5460,13 @@ export class AgentThreadStreamRuntime {
             currentReader = reader as ReadableStreamDefaultReader<any>;
             activeReaderRunId = run.runId;
             activeReaderStreamId = run.streamId;
-            const stopReading = () => {
-              try {
-                void reader.cancel();
-              } catch {}
+            const stopReading = {
+              streamId: run.streamId,
+              stop: () => {
+                try {
+                  void reader.cancel();
+                } catch {}
+              },
             };
             const readers = state.runStreamReaders.get(run.runId) ?? new Set();
             readers.add(stopReading);

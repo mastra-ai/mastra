@@ -438,6 +438,58 @@ describe('suspended run in-memory TTL', () => {
       }
     });
 
+    it('keeps a subscriber reading another instance’s resume of the run the sweep drops', async () => {
+      const watcher = await watchThread(pubsub, 'thread-1');
+      await registerSuspendedRun('run-1', 'thread-1', watcher);
+      const { agent } = createWakeableAgent('run-2');
+      const registration = watcher.find('run-registered', 'run-1')!;
+
+      const subscription = await runtime.subscribeToThread(
+        agent,
+        { resourceId: RESOURCE_ID, threadId: 'thread-1' },
+        pubsub,
+      );
+      const texts: string[] = [];
+      let finished = false;
+      const reading = (async () => {
+        for await (const part of subscription.stream as AsyncIterable<any>) {
+          if (part?.runId !== 'run-1') continue;
+          if (part.type === 'text-delta') texts.push(part.payload.text);
+          if (part.type === 'finish') {
+            finished = true;
+            return;
+          }
+        }
+      })();
+      const publishResumedPart = (part: unknown) =>
+        pubsub.publish(threadTopic(RESOURCE_ID, 'thread-1'), {
+          type: 'stream-part',
+          runId: 'run-1',
+          data: { type: 'stream-part', runId: 'run-1', streamId: 'run-1-resumed', part, sourceId: 'other-instance' },
+        });
+      try {
+        // Another instance resumed run-1 while this instance still holds its parked record.
+        await pubsub.acquireLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1', 15_000);
+        await pubsub.publish(threadTopic(RESOURCE_ID, 'thread-1'), {
+          type: registration.type,
+          runId: registration.runId,
+          data: { ...registration.data, sourceId: 'other-instance', streamId: 'run-1-resumed' },
+        });
+        await publishResumedPart({ type: 'text-delta', payload: { text: 'before-sweep' } });
+        await vi.waitFor(() => expect(texts).toEqual(['before-sweep']));
+
+        await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+        await publishResumedPart({ type: 'text-delta', payload: { text: 'after-sweep' } });
+        await publishResumedPart({ type: 'finish', finishReason: 'stop' });
+
+        await vi.waitFor(() => expect(finished).toBe(true));
+        expect(texts).toEqual(['before-sweep', 'after-sweep']);
+      } finally {
+        subscription.unsubscribe();
+        await reading;
+      }
+    });
+
     it('still forwards to a lease owner the sweep did not evict', async () => {
       const watcher = await watchThread(pubsub, 'thread-1');
       await registerSuspendedRun('run-1', 'thread-1', watcher);
