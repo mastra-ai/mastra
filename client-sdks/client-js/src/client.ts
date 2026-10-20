@@ -53,6 +53,8 @@ import type {
   TraceQueryResponse,
   AggregateTracesArgs,
   AggregateTracesResponse,
+  AggregateSpansArgs,
+  AggregateSpansResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,
@@ -1150,6 +1152,15 @@ export class MastraClient extends BaseResource {
    */
   aggregateTraces(params: AggregateTracesArgs): Promise<AggregateTracesResponse> {
     return this.observability.aggregateTraces(params);
+  }
+
+  /**
+   * Groups and measures individual completed spans selected by a time range and optional span-query predicate.
+   * Token and cost measures count usage recorded on each span itself. Check `capabilities.spanAggregate` from
+   * `getObservabilityCapabilities()` first; servers without it return 404 or 501.
+   */
+  aggregateSpans(params: AggregateSpansArgs): Promise<AggregateSpansResponse> {
+    return this.observability.aggregateSpans(params);
   }
 
   /** Returns canonical and observed fields available to the advanced trace-query grammar. */

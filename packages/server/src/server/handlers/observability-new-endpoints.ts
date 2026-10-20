@@ -93,6 +93,7 @@ import {
   assertObservabilitySpanQueryFieldsSupported,
   assertObservabilityThreadQuerySupported,
   assertObservabilityTraceAggregateSupported,
+  assertObservabilitySpanAggregateSupported,
   assertObservabilityTraceQueryTenantScopeSupported,
   OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_CORE_FEATURE,
   OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_UPGRADE_MESSAGE,
@@ -119,6 +120,7 @@ import {
   supportsObservabilityTraceAggregate,
   supportsSpanQueryCore,
   supportsTraceAggregateCore,
+  supportsSpanAggregateCore,
   supportsTraceQueryDiscoveryCore,
   withDiscoveryFallback,
 } from './observability-shared';
@@ -289,7 +291,8 @@ function resolveTraceQueryScope(
     | 'TRACE_QUERY_UNSUPPORTED'
     | 'TRACE_QUERY_DISCOVERY_UNSUPPORTED'
     | 'TRACE_AGGREGATE_UNSUPPORTED'
-    | 'SPAN_QUERY_UNSUPPORTED' = 'TRACE_QUERY_UNSUPPORTED',
+    | 'SPAN_QUERY_UNSUPPORTED'
+    | 'SPAN_AGGREGATE_UNSUPPORTED' = 'TRACE_QUERY_UNSUPPORTED',
 ): coreStorage.TraceQueryTenantScope | undefined {
   const organizationId = requestContext.get('organizationId');
   if (typeof organizationId !== 'string' || organizationId.length === 0) return undefined;
@@ -546,6 +549,121 @@ if (AGGREGATE_TRACES.openapi) {
   };
   AGGREGATE_TRACES.openapi.responses[504] = {
     description: 'Trace aggregate query exceeded the configured database execution timeout',
+    content: { 'application/json': { schema: traceQueryTimeoutErrorSchema } },
+  };
+}
+
+// ============================================================================
+// Span aggregate route
+// ============================================================================
+
+const spanAggregateUnsupportedErrorSchema = z
+  .object({
+    code: z.literal('SPAN_AGGREGATE_UNSUPPORTED'),
+    message: z.string(),
+  })
+  .strict();
+
+/** Never echoes caller input: only the predicate-complexity issue keeps its own fixed message. */
+const spanAggregateValidationError: ValidationErrorHook = error => ({
+  status: 422,
+  body: {
+    code: 'TRACE_QUERY_INVALID',
+    message: 'The span aggregate query is invalid',
+    issues: error.issues.map(issue => {
+      const predicateTooComplex =
+        issue.code === 'custom' && issue.message === coreStorage.TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE;
+      return {
+        code: predicateTooComplex ? 'predicate_too_complex' : 'invalid_request',
+        path: issue.path.map(part => (typeof part === 'symbol' ? String(part) : part)),
+        message: predicateTooComplex
+          ? coreStorage.TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE
+          : 'The value does not match the span-aggregate request contract',
+      };
+    }),
+  },
+});
+
+export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
+  bodySchema: coreStorage.spanAggregateRequestSchema,
+  responseSchema: coreStorage.spanAggregateResponseSchema,
+  onValidationError: spanAggregateValidationError,
+  maxBodySize: 256 * 1024,
+  preserveHttpExceptions: true,
+  isCoreSupported: supportsSpanAggregateCore,
+  onUnsupportedCore: () =>
+    throwTraceQueryError(501, {
+      code: 'SPAN_AGGREGATE_UNSUPPORTED',
+      message: 'Span aggregation requires a newer @mastra/core. Please upgrade.',
+    }),
+  handler: async ({
+    mastra,
+    requestContext,
+    timeRange,
+    where,
+    groupBy,
+    interval,
+    measures,
+    having,
+    orderBy,
+    limit,
+  }) => {
+    let plan;
+    try {
+      plan = coreStorage.planSpanAggregate(
+        { timeRange, where, groupBy, interval, measures, having, orderBy, limit },
+        { scope: resolveTraceQueryScope(requestContext, 'SPAN_AGGREGATE_UNSUPPORTED') },
+      );
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryValidationError) {
+        throwTraceQueryError(422, { code: error.code, message: error.message, issues: error.issues });
+      }
+      throw error;
+    }
+
+    let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
+    try {
+      observabilityStore = await getObservabilityStore(mastra);
+      // `span-aggregate` covers every span query field, so no per-field gates apply.
+      assertObservabilitySpanAggregateSupported(observabilityStore);
+      assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
+    } catch (error) {
+      if (error instanceof HTTPException && error.status === 501) {
+        throwTraceQueryError(501, { code: 'SPAN_AGGREGATE_UNSUPPORTED', message: error.message });
+      }
+      throw error;
+    }
+
+    try {
+      return await observabilityStore.aggregateSpans(plan);
+    } catch (error) {
+      if (error instanceof coreStorage.TraceQueryExecutionError) {
+        throwTraceQueryError(504, { code: error.code, message: error.message });
+      }
+      throw error;
+    }
+  },
+});
+
+if (AGGREGATE_SPANS.openapi) {
+  AGGREGATE_SPANS.openapi.responses[400] = {
+    description: 'Malformed JSON',
+    content: { 'application/json': { schema: traceQueryMalformedBodyErrorSchema } },
+  };
+  AGGREGATE_SPANS.openapi.responses[413] = {
+    description: 'Request body exceeds 256 KiB',
+    content: { 'application/json': { schema: traceQueryBodyTooLargeErrorSchema } },
+  };
+  AGGREGATE_SPANS.openapi.responses[422] = {
+    description: 'Structurally or semantically invalid span aggregate query',
+    content: { 'application/json': { schema: traceQueryValidationResponseSchema } },
+  };
+  AGGREGATE_SPANS.openapi.responses[501] = {
+    description: 'The configured observability store does not support span aggregation',
+    content: { 'application/json': { schema: spanAggregateUnsupportedErrorSchema } },
+  };
+  AGGREGATE_SPANS.openapi.responses[504] = {
+    description: 'Span aggregate query exceeded the configured database execution timeout',
     content: { 'application/json': { schema: traceQueryTimeoutErrorSchema } },
   };
 }

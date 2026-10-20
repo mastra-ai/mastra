@@ -2113,6 +2113,28 @@ export const API_ROUTE_METADATA = {
       "listProperty": "rows"
     }
   },
+  "POST /observability/spans/aggregate": {
+    "method": "POST",
+    "path": "/observability/spans/aggregate",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "groupBy",
+      "having",
+      "interval",
+      "limit",
+      "measures",
+      "orderBy",
+      "timeRange",
+      "where"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "rows"
+    }
+  },
   "POST /observability/threads/query": {
     "method": "POST",
     "path": "/observability/threads/query",

@@ -30,6 +30,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   threadQueryRows: false,
   spanQuery: false,
   spanQueryContextFields: false,
+  spanAggregate: false,
   feedback: false,
 };
 
@@ -819,6 +820,28 @@ describe('System Handlers', () => {
           traceAggregate: true,
         });
         expect(await capabilitiesFor(new UndeclaredAggregateStore())).toMatchObject({ traceAggregate: false });
+      });
+
+      it('reports span aggregation only for stores that declare it', async () => {
+        class AggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-aggregate'] as const;
+          }
+        }
+        class UndeclaredAggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-query'] as const;
+          }
+          override async aggregateSpans() {
+            return { rows: [], truncated: false };
+          }
+        }
+
+        expect(await capabilitiesFor(new AggregateStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          spanAggregate: true,
+        });
+        expect(await capabilitiesFor(new UndeclaredAggregateStore())).toMatchObject({ spanAggregate: false });
       });
 
       it('does not report query refinements for stores without trace or thread queries', async () => {

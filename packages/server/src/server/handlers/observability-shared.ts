@@ -27,6 +27,7 @@ export const OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE =
 const OBSERVABILITY_TRACE_QUERY_STORAGE_FEATURE = 'trace-query';
 const OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE = 'trace-aggregate';
 const OBSERVABILITY_SPAN_QUERY_STORAGE_FEATURE = 'span-query';
+const OBSERVABILITY_SPAN_AGGREGATE_STORAGE_FEATURE = 'span-aggregate';
 const SPAN_QUERY_CONTEXT_FIELDS = new Set([
   'traceId',
   'spanId',
@@ -79,6 +80,14 @@ export function supportsTraceAggregateCore() {
     coreStorage.traceAggregateRequestSchema !== undefined &&
     coreStorage.traceAggregateResponseSchema !== undefined &&
     typeof coreStorage.planTraceAggregate === 'function'
+  );
+}
+
+export function supportsSpanAggregateCore() {
+  return (
+    coreStorage.spanAggregateRequestSchema !== undefined &&
+    coreStorage.spanAggregateResponseSchema !== undefined &&
+    typeof coreStorage.planSpanAggregate === 'function'
   );
 }
 
@@ -159,6 +168,14 @@ export function assertObservabilityTraceAggregateSupported(observabilityStore: O
 
   throw new HTTPException(501, {
     message: 'Trace aggregation is not supported by the configured observability store',
+  });
+}
+
+export function assertObservabilitySpanAggregateSupported(observabilityStore: ObservabilityStorage) {
+  if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_SPAN_AGGREGATE_STORAGE_FEATURE)) return;
+
+  throw new HTTPException(501, {
+    message: 'Span aggregation is not supported by the configured observability store',
   });
 }
 
@@ -449,6 +466,7 @@ export type ObservabilityStorageCapabilities = {
   threadQueryRows: boolean;
   spanQuery: boolean;
   spanQueryContextFields: boolean;
+  spanAggregate: boolean;
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
   traceRetentionDays?: number;
   feedback: boolean;
@@ -478,6 +496,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   threadQuery: false,
   threadQueryRows: false,
   spanQuery: false,
+  spanAggregate: false,
   spanQueryContextFields: false,
   feedback: false,
 };
@@ -569,6 +588,7 @@ export function getObservabilityStorageCapabilities(
       threadQuery && typeof coreStorage.planThreadRowsQuery === 'function' && declares('thread-query-rows'),
     spanQuery,
     spanQueryContextFields: spanQuery && declares('span-query-context-fields'),
+    spanAggregate: newApiCore && supportsSpanAggregateCore() && declares(OBSERVABILITY_SPAN_AGGREGATE_STORAGE_FEATURE),
     feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
   };
 }
@@ -660,6 +680,15 @@ export const NEW_ROUTE_DEFS = {
     path: '/observability/spans/query',
     summary: 'Query spans',
     description: 'Returns completed spans matching a span predicate, one row per span, with cursor pagination',
+    requiresPermission: 'observability:read',
+  },
+
+  AGGREGATE_SPANS: {
+    method: 'POST',
+    path: '/observability/spans/aggregate',
+    summary: 'Aggregate spans',
+    description:
+      'Returns grouped and optionally time-bucketed measures (counts, durations, error rates, tokens, cost) over completed spans matching a span predicate',
     requiresPermission: 'observability:read',
   },
 
