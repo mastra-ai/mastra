@@ -84,25 +84,26 @@ async function pausedInRestrictedMode({
     model: model(firstCall),
     tools: { lookup, write_note: writeNote },
   });
+  const modes = [
+    {
+      id: 'read-only',
+      name: 'Read only',
+      default: true,
+      agent,
+      defaultModelId: 'mock-model',
+      availableTools,
+      transitionsTo,
+    },
+    // No availableTools: every agent tool is visible in this mode.
+    { id: 'build', name: 'Build', agent, defaultModelId: 'mock-model' },
+    { id: 'notes', name: 'Notes', agent, defaultModelId: 'mock-model', availableTools: ['write_note'] },
+  ];
   const controller = new AgentController({
     workspace: createMockWorkspace(),
     id: 'mode-tools-controller',
     storage: new InMemoryStore(),
     memory: new MockMemory({ storage: new InMemoryStore() }),
-    modes: [
-      {
-        id: 'read-only',
-        name: 'Read only',
-        default: true,
-        agent,
-        defaultModelId: 'mock-model',
-        availableTools,
-        transitionsTo,
-      },
-      // No availableTools: every agent tool is visible in this mode.
-      { id: 'build', name: 'Build', agent, defaultModelId: 'mock-model' },
-      { id: 'notes', name: 'Notes', agent, defaultModelId: 'mock-model', availableTools: ['write_note'] },
-    ],
+    modes,
   });
   await controller.init();
   const session = await controller.createSession(ids);
@@ -123,7 +124,7 @@ async function pausedInRestrictedMode({
   // The first model call saw only the mode's subset.
   expect(requestedToolNames()).toEqual([[...availableTools].sort()]);
 
-  return { session, executed };
+  return { session, executed, modes };
 }
 
 async function continuationToolNames() {
@@ -218,6 +219,27 @@ describe('mode availableTools when the mode changes while a tool call is paused'
     const tools = await continuationToolNames();
     expect(env.executed).toEqual(['lookup']);
     expect(tools).toEqual(['lookup']);
+  }, 30_000);
+
+  it("falls back to the thread's mode when the suspended run mode was removed from config", async () => {
+    const env = await pausedInRestrictedMode({
+      availableTools: ['lookup'],
+      firstCall: { name: 'lookup', arguments: { q: 'x' } },
+      pausedEvent: 'tool_approval_required',
+    });
+    await env.session.mode.switch({ modeId: 'notes' });
+    env.modes.splice(
+      env.modes.findIndex(mode => mode.id === 'read-only'),
+      1,
+    );
+
+    expect(env.session.respondToToolApproval({ toolCallId: 'call-1', decision: 'approve' })).toEqual({
+      accepted: true,
+    });
+
+    const tools = await continuationToolNames();
+    expect(env.executed).toEqual(['lookup']);
+    expect(tools).toEqual(['write_note']);
   }, 30_000);
 
   it('keeps the suspended run mode subset after switching to another restricted mode and declining', async () => {

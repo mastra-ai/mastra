@@ -5727,14 +5727,24 @@ export class Session<TState = unknown> {
    * the continuation sees. Runs suspended before the mode was recorded fall back
    * to the mode of the run's source thread as `requestContext` resolves it.
    */
+  private isConfiguredMode(modeId: string): boolean {
+    try {
+      this.mode.resolveId(modeId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async resolveSuspendedRunModeId(
     agent: Agent,
     runId: string,
     requestContext: RequestContext,
   ): Promise<string | undefined> {
     const persisted = await agent.__getSuspendedRunRequestContextValue({ runId, key: RUN_MODE_ID_CONTEXT_KEY });
+    // A mode removed from config after the run paused falls back to the source thread's mode, like pre-fix snapshots.
     const modeId =
-      typeof persisted === 'string'
+      typeof persisted === 'string' && this.isConfiguredMode(persisted)
         ? persisted
         : (requestContext.get('controller') as AgentControllerRequestContext<TState> | undefined)?.session.modeId;
     // Carry the mode into the continuation so a second suspension keeps it.
