@@ -32,7 +32,7 @@
     "hono": "^4.13.7"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.115",
+    "@ai-sdk/openai": "^2.0.135",
     "@internal/lint": "workspace:*",
     "@mastra/server-adapters-test-suite": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",

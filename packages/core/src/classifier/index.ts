@@ -19,7 +19,7 @@ import type {
 
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
-import { SpanType } from '../observability/types';
+import { EntityType, SpanType } from '../observability/types';
 import { getOrCreateSpan, resolveCurrentSpan } from '../observability/utils';
 
 export type ClassifierState = DecisionModelV4Input;
@@ -308,6 +308,9 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
     const span = getOrCreateSpan({
       type: SpanType.CLASSIFIER_EVALUATION,
       name: `classifier evaluate: '${this.id}'`,
+      entityType: EntityType.CLASSIFIER,
+      entityId: this.id,
+      entityName: this.name ?? this.id,
       tracingContext: { currentSpan: resolveCurrentSpan() },
       mastra: this.#mastra,
       input: { state: options.state, questions },

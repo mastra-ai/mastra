@@ -1,5 +1,5 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
+import type { SerializableStructuredOutputOptions, ToolsInput } from '@mastra/core/agent';
 import type { AIV5Type, MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
@@ -51,6 +51,7 @@ import type {
   PartProviderMetadata,
   MaybeProviderMetadata,
   ToolInvocationUIPartWithMeta,
+  ClientToolsResolver,
 } from '../types';
 
 import {
@@ -2546,12 +2547,12 @@ export class Agent extends BaseResource {
 
               // Recursively call stream with updated messages
               // This will wait for the recursive stream to complete before continuing.
-              // Resume routes are one-shot (they consume server-side resumeData),
+              // Resume routes (including approve/decline) are one-shot (they consume server-side resumeData),
               // so client-tool continuations must fall back to the corresponding
               // non-resume stream endpoint. Other routes (e.g. stream-until-idle)
               // are idempotent continuations and stay on the same endpoint.
               const recursionRoute =
-                route === 'resume-stream'
+                route === 'resume-stream' || route === 'approve-tool-call' || route === 'decline-tool-call'
                   ? 'stream'
                   : route === 'resume-stream-until-idle'
                     ? 'stream-until-idle'
@@ -3041,6 +3042,14 @@ export class Agent extends BaseResource {
     /** Aborts the underlying request and any client-tool continuations. */
     abortSignal?: AbortSignal;
     requestContext?: RequestContext | Record<string, any>;
+    /** Client tools the model may call after the approval decision. */
+    clientTools?: ToolsInput;
+    clientToolsResolver?: ClientToolsResolver;
+    /**
+     * Memory thread/resource of the suspended run. Client-tool continuations go to `/stream`,
+     * so pass the same memory as the original call to keep them on the thread.
+     */
+    memory?: StreamParamsBaseWithoutMessages['memory'];
   }): Promise<
     Response & {
       processDataStream: ({
@@ -3051,7 +3060,11 @@ export class Agent extends BaseResource {
     }
   > {
     const { requestContext, ...rest } = params;
-    const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
+    const processedParams = {
+      ...rest,
+      requestContext: parseClientRequestContext(requestContext),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
+    };
 
     // Create a manually controlled readable stream
     const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
@@ -3113,6 +3126,14 @@ export class Agent extends BaseResource {
     /** Optional explanation surfaced to the model in place of the default decline message. */
     reason?: string;
     requestContext?: RequestContext | Record<string, any>;
+    /** Client tools the model may call after the approval decision. */
+    clientTools?: ToolsInput;
+    clientToolsResolver?: ClientToolsResolver;
+    /**
+     * Memory thread/resource of the suspended run. Client-tool continuations go to `/stream`,
+     * so pass the same memory as the original call to keep them on the thread.
+     */
+    memory?: StreamParamsBaseWithoutMessages['memory'];
   }): Promise<
     Response & {
       processDataStream: ({
@@ -3123,7 +3144,11 @@ export class Agent extends BaseResource {
     }
   > {
     const { requestContext, ...rest } = params;
-    const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
+    const processedParams = {
+      ...rest,
+      requestContext: parseClientRequestContext(requestContext),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
+    };
 
     // Create a manually controlled readable stream
     const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
@@ -3415,14 +3440,21 @@ export class Agent extends BaseResource {
    * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
    */
   async approveToolCallGenerate(
-    params: Omit<Body<'POST /agents/:agentId/approve-tool-call-generate'>, 'requestContext'> & {
+    params: Omit<Body<'POST /agents/:agentId/approve-tool-call-generate'>, 'requestContext' | 'clientTools'> & {
       requestContext?: RequestContext | Record<string, any>;
+      /** Client tools the model may call after the approval decision. */
+      clientTools?: ToolsInput;
+      clientToolsResolver?: ClientToolsResolver;
     },
   ): Promise<ToolCallGenerateResponse> {
-    const { requestContext, ...rest } = params;
+    const { requestContext, clientTools, clientToolsResolver, ...rest } = params;
     return this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
       method: 'POST',
-      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
+      body: {
+        ...rest,
+        requestContext: parseClientRequestContext(requestContext),
+        clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
+      },
     });
   }
 
@@ -3431,14 +3463,21 @@ export class Agent extends BaseResource {
    * Used when `requireToolApproval` is enabled with generate() to prevent tool execution.
    */
   async declineToolCallGenerate(
-    params: Omit<Body<'POST /agents/:agentId/decline-tool-call-generate'>, 'requestContext'> & {
+    params: Omit<Body<'POST /agents/:agentId/decline-tool-call-generate'>, 'requestContext' | 'clientTools'> & {
       requestContext?: RequestContext | Record<string, any>;
+      /** Client tools the model may call after the approval decision. */
+      clientTools?: ToolsInput;
+      clientToolsResolver?: ClientToolsResolver;
     },
   ): Promise<ToolCallGenerateResponse> {
-    const { requestContext, ...rest } = params;
+    const { requestContext, clientTools, clientToolsResolver, ...rest } = params;
     return this.request(`/agents/${this.agentId}/decline-tool-call-generate`, {
       method: 'POST',
-      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
+      body: {
+        ...rest,
+        requestContext: parseClientRequestContext(requestContext),
+        clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
+      },
     });
   }
 

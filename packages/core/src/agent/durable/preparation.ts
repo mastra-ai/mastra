@@ -921,6 +921,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     agentSpanData: agentSpan?.exportSpan(),
     modelSpanData: modelSpan?.exportSpan(),
     requestContextEntries: requestContextEntriesSnapshot,
+    inputTripwire: tripwireData,
   });
 
   // 14. Create registry entry for non-serializable state

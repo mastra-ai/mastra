@@ -34,7 +34,7 @@
     "@valkey/valkey-glide": "2.5.1"
   },
   "devDependencies": {
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.115",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.135",
     "@copilotkit/aimock": "^1.29.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",

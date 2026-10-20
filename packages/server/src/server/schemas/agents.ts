@@ -524,6 +524,8 @@ const toolCallActionBodySchema = z.object({
   format: z.string().optional(),
   providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
   modelSettings: typedPermissive<ModelSettings>(z.unknown()).optional(),
+  // Client tools must be re-sent on resume so the model can call them after the approval decision.
+  clientTools: typedPermissive<ToolsInput>(z.record(z.string(), z.unknown())).optional(),
 });
 const networkToolCallActionBodySchema = z.object({
   runId: z.string(),

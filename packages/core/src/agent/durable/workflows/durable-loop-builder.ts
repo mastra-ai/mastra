@@ -164,6 +164,7 @@ const durableAgenticInputSchema = z.object({
   // JSON-safe snapshot of requestContext.entries() so durable steps can read
   // it (e.g. is-task-complete scorers pass it as customContext).
   requestContextEntries: z.record(z.string(), z.any()).optional(),
+  inputTripwire: baseIterationStateSchema.shape.inputTripwire,
 });
 
 /**
@@ -530,6 +531,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               state: state.state,
               messageId: state.messageId,
               requestContextEntries: state.requestContextEntries,
+              inputTripwire: state.inputTripwire,
               stepIndex: state.iterationCount,
               signalPreempted: state.lastStepResult?.signalPreempted,
               // Processor hooks receive the running step list (#24293) — the

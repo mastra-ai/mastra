@@ -137,6 +137,7 @@ async function setup() {
 
   return {
     seed,
+    sourceControl,
     project,
     createSession,
     fileItem,
@@ -203,6 +204,21 @@ describe('FactorySessionsStateProcessor', () => {
     await env.createSession('side-1', { origin: { sessionId: 'parent', threadId: 'parent-thread' } });
     await env.reportFrom('side-1', 'blocked');
     expect((await env.step())!.contents).toContain('(session side-1): parked; last report blocked');
+  });
+
+  it('marks a side session muted until it is resubscribed, and re-emits on each change', async () => {
+    const env = await setup();
+    await env.createSession('side-1', { origin: { sessionId: 'parent', threadId: 'parent-thread' } });
+    env.running.add('side-1');
+    expect((await env.step())!.contents).toContain('(session side-1): running\n');
+
+    await env.sourceControl.sessions.setOriginMuted({ sessionId: 'side-1', muted: true });
+    expect((await env.step())!.contents).toContain('(session side-1): running (muted)');
+
+    await env.sourceControl.sessions.setOriginMuted({ sessionId: 'side-1', muted: false });
+    const unmuted = await env.step();
+    expect(unmuted!.contents).toContain('(session side-1): running');
+    expect(unmuted!.contents).not.toContain('(muted)');
   });
 
   it('skips while the state is unchanged and emits again when a report arrives or a stage changes', async () => {

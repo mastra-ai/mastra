@@ -387,7 +387,7 @@ export async function runIdleLoop<
   }
 
   const { threadId, resourceId, scopeKey } = scope;
-  const maxIdleMs = _maxIdleMs ?? 5 * 60_000;
+  const maxIdleMs = _maxIdleMs ?? deps.bgManager.config.untilIdleMaxIdleMs ?? 5 * 60_000;
 
   // Continuation calls reuse the memory thread but drop segment-scoped options.
   // Omitting runId lets durable agents start a fresh stream segment instead of

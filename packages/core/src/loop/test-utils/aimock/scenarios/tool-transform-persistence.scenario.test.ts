@@ -114,6 +114,51 @@ describeForAllEngines('AIMock loop scenario: tool transform persistence', engine
     );
   });
 
+  it('emits each streamed tool call once, after its input ends and before its result', async () => {
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'run both',
+      tools: { redactedTool },
+      stopWhen: stepCountIs(3),
+      collectChunks: true,
+      transform: {
+        targets: ['display'],
+        transformToolPayload: (ctx: any) => `[redacted ${ctx.phase}]`,
+      },
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [
+              { id: 'call-a', name: 'redactedTool', arguments: { secret: 'a' } },
+              { id: 'call-b', name: 'redactedTool', arguments: { secret: 'b' } },
+            ],
+          },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'done' });
+      },
+    });
+
+    const all = (chunks ?? []) as any[];
+    const indexOf = (type: string, id: string) => all.findIndex(c => c.type === type && c.payload?.toolCallId === id);
+
+    for (const [id, secret] of [
+      ['call-a', 'a'],
+      ['call-b', 'b'],
+    ] as const) {
+      const calls = all.filter(c => c.type === 'tool-call' && c.payload.toolCallId === id);
+      expect(calls).toHaveLength(1);
+      expect(calls[0].payload.args).toEqual({ secret });
+      expect(calls[0].metadata?.mastra?.toolPayloadTransform?.display?.['input-available']?.transformed).toBe(
+        '[redacted input-available]',
+      );
+      expect(indexOf('tool-call-input-streaming-end', id)).toBeGreaterThanOrEqual(0);
+      expect(indexOf('tool-call-input-streaming-end', id)).toBeLessThan(indexOf('tool-call', id));
+      expect(indexOf('tool-call', id)).toBeLessThan(indexOf('tool-result', id));
+    }
+  });
+
   // The provider streams the tool input but never sends the final tool-call, so the loop
   // builds the call itself from the streamed args (#27585).
   it('stamps transforms on the tool-call built when the provider never sends a final tool-call', async () => {
