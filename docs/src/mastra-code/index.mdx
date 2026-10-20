@@ -83,7 +83,7 @@ Mastra Code requires Node.js 22.19.0 or later. To enable `@` filename suggestion
   </StepItem>
 </Steps>
 
-## Start with a prompt
+### Start with a prompt
 
 Pass `--tui-initial-prompt` to open Mastra Code with a first message already submitted, as if you had typed it. The session stays open, so you can follow up as usual:
 
@@ -195,15 +195,6 @@ You can also define custom slash commands as markdown files. See [Configuration]
 | `Ctrl+E` | Expand/collapse all tool outputs |
 | `Enter` | Send a message, or queue a follow-up while the agent is running |
 | `Ctrl+Y` | Toggle YOLO mode |
-
-## Architecture
-
-Mastra Code is built on four layers:
-
-1. **TUI**: Terminal interface (`pi-tui` components)
-1. **AgentController**: Mode management, thread persistence, event system, state management
-1. **Mastra Agent**: Dynamic model selection, tool execution, memory integration, subagents
-1. **LibSQL Storage**: Thread persistence, message history, token usage tracking, observational memory
 
 ## Next steps
 
