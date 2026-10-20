@@ -920,6 +920,147 @@ Notes:
 - When `enableProgressTracking` is true, tool calls include a `progressToken` so you can correlate updates to a specific run. Servers only send progress for requests that carry a token.
 - If you pass a `runId` when executing a tool, it will be used as the `progressToken`.
 
+### `events` Property (experimental)
+
+The `events` property lists and subscribes to server events from servers that implement the [MCP Events extension (SEP-3415)](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415). Use it to react to things that happen on the server, such as a push to a repository, without polling a tool.
+
+:::warning
+SEP-3415 is a draft. This API may change in any release.
+:::
+
+```typescript
+const events = await mcpClient.events.list('github')
+
+const subscription = await mcpClient.events.subscribe(
+  'github',
+  'repo.push',
+  { repo: 'mastra-ai/mastra' },
+  { cursor: await loadCursor() },
+)
+
+for await (const event of subscription) {
+  await handlePush(event.data)
+  // Safe to persist after each handled occurrence
+  await saveCursor(subscription.cursor)
+}
+```
+
+Servers that don't advertise the `io.modelcontextprotocol/events` extension receive no `events/*` requests. `list()` rejects with a `MastraError` whose id is `MCP_CLIENT_LIST_EVENTS_FAILED`, and `subscribe()` rejects with `MCP_CLIENT_SUBSCRIBE_EVENT_FAILED`. In both cases `error.cause.id` is `MCP_EVENTS_NOT_SUPPORTED`. Other `list()` and `subscribe()` failures use the same two ids, with the specific reason in `error.cause`.
+
+#### `events.list(serverName: string)`
+
+Returns every event type the server offers, following pagination. Each descriptor has a `name`, an optional `description`, the `delivery` modes the server supports, and optional `inputSchema` and `payloadSchema`.
+
+```typescript oxfmt:false
+async list(serverName: string): Promise<MCPEventDescriptor[]>
+```
+
+The client doesn't receive notifications when the server's event list changes yet. Call `list()` again to pick up new event types.
+
+#### `events.subscribe(serverName, eventName, args?, options?)`
+
+Starts a subscription and resolves once the server confirms it. Errors such as an unknown event, invalid arguments, or a forbidden subscription reject the returned promise.
+
+```typescript oxfmt:false
+async subscribe(
+  serverName: string,
+  eventName: string,
+  args?: Record<string, unknown>,
+  options?: MCPEventSubscribeOptions,
+): Promise<MCPEventSubscription>
+```
+
+The client picks `push` (a long-lived `events/stream` request) when the event offers it, otherwise `poll` (repeated `events/poll` requests). Pass `options.delivery` to force a mode.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'delivery',
+    type: "'push' | 'poll'",
+    isOptional: true,
+    description:
+      'Forces a delivery mode. When the event does not offer it, `subscribe()` rejects with `MCP_CLIENT_SUBSCRIBE_EVENT_FAILED` and `error.cause.id` is `MCP_EVENTS_NO_COMPATIBLE_DELIVERY_MODE`.',
+  },
+  {
+    name: 'cursor',
+    type: 'string | null',
+    isOptional: true,
+    description: 'Resumes from a cursor saved earlier. Omit or pass `null` to start from now.',
+  },
+  {
+    name: 'maxAgeMs',
+    type: 'number',
+    isOptional: true,
+    description: 'Asks the server not to replay occurrences older than this.',
+  },
+  {
+    name: 'maxEvents',
+    type: 'number',
+    isOptional: true,
+    description: 'Maximum occurrences per poll response. Poll mode only.',
+  },
+  {
+    name: 'minPollIntervalMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description: 'Lower bound for the wait between polls, applied to the server-suggested `nextPollMs`.',
+  },
+  {
+    name: 'heartbeatTimeoutMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '60000',
+    description:
+      'Push mode reopens the stream from the last cursor after this long without any message from the server.',
+  },
+  {
+    name: 'streamOpenTimeoutMs',
+    type: 'number',
+    isOptional: true,
+    description: 'How long to wait for the server to confirm a push stream. Defaults to the server request timeout.',
+  },
+  {
+    name: 'dedupWindow',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description: 'Number of recent event ids remembered to drop duplicate occurrences.',
+  },
+  {
+    name: 'maxBufferedEvents',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description:
+      "Most occurrences held while your loop isn't reading. When full, the oldest unread occurrence is dropped, the next one has `truncated` set, and `onError` receives `MCP_EVENTS_BUFFER_OVERFLOW`.",
+  },
+  {
+    name: 'retry',
+    type: '{ initialDelayMs?: number; maxDelayMs?: number; factor?: number; maxAttempts?: number }',
+    isOptional: true,
+    description:
+      'Backoff with full jitter for transient failures. Defaults to 1000 ms initial delay, 30000 ms maximum, factor 2, unlimited retries.',
+  },
+  {
+    name: 'signal',
+    type: 'AbortSignal',
+    isOptional: true,
+    description: 'Aborting it cancels the subscription.',
+  },
+]}
+/>
+
+The returned `MCPEventSubscription` is an async iterable of occurrences (`eventId`, `name`, `timestamp`, `data`) with these members:
+
+- `cursor`: The latest position that's safe to persist. It never moves past an occurrence your loop hasn't received yet. It's `null` when the event type doesn't support replay.
+- `truncated`: `true` when the server reported a gap right before the occurrence your loop received last, for example because the saved cursor was older than its retention window. Read it inside the loop: it's `true` for the first occurrence after the gap and `false` for the ones after it.
+- `mode`: The delivery mode in use, `'push'` or `'poll'`.
+- `onError(handler)`: Receives recoverable errors, such as a dropped stream that the client is reopening. Returns a function that removes the handler.
+- `cancel()`: Stops the subscription and ends the iterator. Breaking out of a `for await` loop also cancels it.
+
+The iterator throws a `MastraError` directly (not wrapped) when the subscription can't continue: `MCP_EVENTS_SUBSCRIPTION_FAILED` for a non-retryable server error, `MCP_EVENTS_SUBSCRIPTION_TERMINATED` when the server ends a push subscription, or `MCP_EVENTS_RETRIES_EXHAUSTED` after `retry.maxAttempts` failed attempts in a row. The client reopens dropped streams and resumes polling from the last cursor after a reconnect, including after `reconnectServer()`. `disconnect()` ends all subscriptions.
+
 ## Answering input requests
 
 A server tool, resource or prompt that needs something from the user ends its call with an `input_required` result instead of a value. The result carries one or more embedded requests, each with a server-chosen `key` and either a form (`requestedSchema`) or a URL the user must visit. Configure `inputRequests` on the server definition to answer them: the client calls the handler once per embedded request, retries the original call with the answers, and resolves the tool call with the final result. Without a handler an `input_required` result surfaces as an error.
