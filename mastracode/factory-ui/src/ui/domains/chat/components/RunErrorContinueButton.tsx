@@ -5,22 +5,24 @@ import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
+const CONTINUE_PROMPT = 'Continue from where you stopped.';
+
 export function RunErrorContinueButton() {
   const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
   const transcript = useChatTranscript();
-  const send = useSendAgentControllerMessageMutation({
+  const sendMessage = useSendAgentControllerMessageMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
+  const blocked = transcript.busy || sendMessage.isPending;
   const continueRun = async () => {
-    if (transcript.busy || send.isPending) return;
-    const text = 'Continue from where you stopped.';
-    const localId = transcript.localUser(text);
+    if (blocked) return;
+    const localId = transcript.localUser(CONTINUE_PROMPT);
     try {
-      await send.mutateAsync(text);
+      await sendMessage.mutateAsync(CONTINUE_PROMPT);
     } catch (error) {
       transcript.failLocalUser(localId);
       transcript.clearPending();
@@ -28,7 +30,7 @@ export function RunErrorContinueButton() {
     }
   };
   return (
-    <Notice.Button onClick={continueRun} disabled={transcript.busy || send.isPending}>
+    <Notice.Button onClick={() => void continueRun()} disabled={blocked}>
       Continue
     </Notice.Button>
   );

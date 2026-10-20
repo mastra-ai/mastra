@@ -39,9 +39,7 @@ export interface NoticeEntry {
   id: string;
   level: 'info' | 'error';
   text: string;
-  /** A provider credential is missing; the notice offers a way to sign in. */
-  action?: 'provider-login';
-  /** Safe identity retained from run error events for the shared error notice. */
+  /** Run error events keep the same `{ name, message }` identity as persisted error parts. */
   error?: MastraErrorPart['error'];
 }
 
@@ -399,35 +397,31 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
 
     case 'info':
       return pushNotice(state, 'info', event.message);
-    case 'error':
-      return pushNotice(
-        state,
-        'error',
-        describeErrorEvent(event),
-        isProviderAuthError(event.error) ? 'provider-login' : undefined,
-        {
-          name:
-            event.error && typeof event.error === 'object' && typeof event.error.name === 'string'
-              ? event.error.name
-              : 'Error',
-          message: describeErrorEvent(event),
-        },
-      );
+    case 'error': {
+      const error = errorEventIdentity(event);
+      return pushNotice(state, 'error', error.message, error);
+    }
 
     default:
       return state;
   }
 }
 
-function describeErrorEvent(event: { error: { message?: string } | string; errorType?: string }): string {
+interface RunErrorEvent {
+  error: { name?: string; message?: string } | string;
+  errorType?: string;
+}
+
+function errorEventIdentity(event: RunErrorEvent): MastraErrorPart['error'] {
+  const name = typeof event.error === 'object' && typeof event.error.name === 'string' ? event.error.name : 'Error';
+  return { name, message: describeErrorEvent(event) };
+}
+
+function describeErrorEvent(event: RunErrorEvent): string {
   const message = typeof event.error === 'string' ? event.error : event.error?.message;
   if (message) return message;
   if (event.errorType) return `Run failed (${event.errorType}). Check the server logs for details.`;
   return 'Run failed with an unknown error. Check the server logs for details.';
-}
-
-function isProviderAuthError(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'name' in error && error.name === PROVIDER_AUTH_REQUIRED_ERROR;
 }
 
 export function createInitialTranscript({
@@ -1072,11 +1066,9 @@ function pushNotice(
   state: TranscriptState,
   level: 'info' | 'error',
   text: string,
-  action?: NoticeEntry['action'],
   error?: MastraErrorPart['error'],
 ): TranscriptState {
   const notice: NoticeEntry = { kind: 'notice', id: `notice-${Date.now()}-${noticeSeq++}`, level, text };
-  if (action) notice.action = action;
   if (error) notice.error = error;
   return { ...state, entries: [...state.entries, notice] };
 }

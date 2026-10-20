@@ -137,7 +137,7 @@ export function ModelPicker({ triggerLabel, showThinking = true }: { triggerLabe
   const modelMenuLocked = busy || modelsQuery.isPending || scopeLoading;
 
   return (
-    <ButtonsGroup size="sm" aria-label="Model and thinking">
+    <ButtonsGroup size="sm" aria-label={showThinking ? 'Model and thinking' : 'Model'}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           type="button"

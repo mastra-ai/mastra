@@ -12,7 +12,7 @@ import { useChatSessionContext } from '../context/useChatSessionContext';
 /**
  * Sends the user to the settings page that owns the credential the session
  * runs on: organization credentials for factory-scoped sessions, the user's
- * own sign-ins otherwise.
+ * own sign-ins otherwise. A credential the viewer cannot repair names who can.
  */
 export function ProviderLoginAction({ label = 'Login' }: { label?: string }) {
   const location = useLocation();
@@ -20,23 +20,24 @@ export function ProviderLoginAction({ label = 'Login' }: { label?: string }) {
   const { owner } = useChatSessionContext();
   const models = useContext(ChatModelsContext);
   const { factoryId, modelScope, scopeLoading, sessionModelsQuery } = useChatModelScope();
-  const model = sessionModelsQuery.data?.models.find(candidate => candidate.id === models?.activeModelId);
   // Wait for the scope so the link never points at the wrong credentials page.
-  if (!factoryId || scopeLoading || !modelScope || !auth.isSuccess) return null;
+  if (!factoryId || scopeLoading || !modelScope) return null;
 
-  if (model?.credentialHolder === 'deployment') {
+  const activeModel = sessionModelsQuery.data?.models.find(model => model.id === models?.activeModelId);
+  if (activeModel?.credentialHolder === 'deployment') {
     return (
       <Notice.Message>This model uses server credentials. Ask the server administrator to review them.</Notice.Message>
     );
   }
 
-  const organizationCredential = model?.credentialHolder
-    ? model.credentialHolder === 'organization'
+  const organizationCredential = activeModel?.credentialHolder
+    ? activeModel.credentialHolder === 'organization'
     : modelScope === 'factory';
-  if (!organizationCredential && auth.data.authEnabled && owner && owner.id !== auth.data.user?.userId) {
+  const teammateOwner = auth.data?.authEnabled && owner && owner.id !== auth.data.user?.userId ? owner : undefined;
+  if (!organizationCredential && teammateOwner) {
     return (
       <Notice.Message>
-        Ask {owner.name ?? 'the session owner'} to review the credentials used by this session.
+        Ask {teammateOwner.name ?? 'the session owner'} to review the credentials used by this session.
       </Notice.Message>
     );
   }

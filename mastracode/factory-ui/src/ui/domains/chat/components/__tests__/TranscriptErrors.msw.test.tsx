@@ -170,6 +170,18 @@ describe('chat run errors', () => {
     expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
   });
 
+  it('matches a rejected provider sign-in on its wire name, not its message', async () => {
+    renderWithProviders(
+      <ErrorSession messages={[failedReply('Anthropic rejected the stored sign-in.', 'ProviderAuthRequiredError')]} />,
+    );
+
+    expect(screen.getByText('Provider sign-in required')).toBeVisible();
+    expect(await screen.findByRole('link', { name: 'Review credentials' })).toHaveAttribute(
+      'href',
+      '/factories/factory-1/settings/personal-models',
+    );
+  });
+
   it.each([
     { message: 'context_length_exceeded', title: 'Conversation exceeds the model’s limit' },
     { message: "Unsupported_parameter: 'reasoning.effort'", title: 'Model configuration rejected' },

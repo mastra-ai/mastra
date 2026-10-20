@@ -1429,32 +1429,26 @@ describe('transcript reducer mergeWindow', () => {
 });
 
 describe('transcript reducer error notices', () => {
-  function errorNoticeText(event: Record<string, unknown>): string {
+  function errorNotice(event: Record<string, unknown>) {
     const state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'error', ...event } });
     const notice = state.entries.find(entry => entry.kind === 'notice');
     if (!notice || notice.kind !== 'notice') throw new Error('expected a notice entry');
-    return notice.text;
+    return notice;
   }
+  const errorNoticeText = (event: Record<string, unknown>) => errorNotice(event).text;
 
-  it('offers a provider login on a missing-credential error', () => {
-    const state = transcriptReducer(initialTranscript, {
-      type: 'event',
-      event: { type: 'error', error: { name: 'ProviderAuthRequiredError', message: 'Not logged in to Anthropic.' } },
-    });
-    expect(state.entries.at(-1)).toMatchObject({
-      kind: 'notice',
+  it('keeps the wire error name so the notice can match a missing credential on it', () => {
+    expect(
+      errorNotice({ error: { name: 'ProviderAuthRequiredError', message: 'Not logged in to Anthropic.' } }),
+    ).toMatchObject({
       level: 'error',
       text: 'Not logged in to Anthropic.',
-      action: 'provider-login',
+      error: { name: 'ProviderAuthRequiredError', message: 'Not logged in to Anthropic.' },
     });
   });
 
-  it('offers no action on other errors', () => {
-    const state = transcriptReducer(initialTranscript, {
-      type: 'event',
-      event: { type: 'error', error: { name: 'Error', message: 'boom' } },
-    });
-    expect(state.entries.at(-1)).not.toHaveProperty('action');
+  it('names a bare error payload Error', () => {
+    expect(errorNotice({ error: 'boom' }).error).toEqual({ name: 'Error', message: 'boom' });
   });
 
   it('renders a string error payload verbatim', () => {

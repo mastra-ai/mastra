@@ -11,7 +11,6 @@ interface RunErrorDescription {
 /** Saved errors contain only name and message. Classify explicit evidence, never guess a 400's cause. */
 export function describeRunError(error: MastraErrorPart['error']): RunErrorDescription {
   const message = error.message.toLowerCase();
-  const reason = providerMessage(error.message) ?? error.message;
   if (message.includes('the request has no authenticated user')) {
     return {
       title: 'Run started without an authenticated user',
@@ -25,6 +24,7 @@ export function describeRunError(error: MastraErrorPart['error']): RunErrorDescr
 
   const providerError = error.name === 'AI_APICallError' || error.name === 'APICallError';
   if (providerError) {
+    const reason = providerMessage(error.message) ?? error.message;
     // Providers also use HTTP 429 for exhausted billing quota; waiting won't resolve it.
     if (/insufficient_quota|quota (exceeded|exhausted)|exceeded your current quota|credit balance/.test(message)) {
       return {
@@ -94,7 +94,7 @@ export function describeRunError(error: MastraErrorPart['error']): RunErrorDescr
     return { title: 'Model request failed', message: reason };
   }
 
-  if (/TimeoutError|APITimeoutError/.test(error.name) || /^(request )?timed out\.?$/i.test(error.message)) {
+  if (error.name.endsWith('TimeoutError') || /^(request )?timed out\.?$/i.test(error.message)) {
     return {
       title: 'Request timed out',
       message: 'The request took too long to complete. You can try continuing the run.',
@@ -107,31 +107,28 @@ export function describeRunError(error: MastraErrorPart['error']): RunErrorDescr
   };
 }
 
-/** Provider stream errors sometimes put a JSON envelope in the persisted message. */
-function providerMessage(value: unknown, depth = 0): string | undefined {
-  if (depth > 8) return undefined;
+/**
+ * A stream that fails before any output persists the provider's event as the
+ * message: `{ error }` or `{ type: 'response.failed', response: { error } }`,
+ * sometimes stringified once more by the error that wrapped it.
+ */
+function providerMessage(value: unknown): string | undefined {
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (!trimmed.startsWith('{')) return trimmed || undefined;
     try {
       const parsed: unknown = JSON.parse(trimmed);
-      return providerMessage(parsed, depth + 1) ?? trimmed;
+      return providerMessage(parsed) ?? trimmed;
     } catch {
       return trimmed;
     }
   }
   if (typeof value !== 'object' || value === null) return undefined;
-  if ('error' in value) {
-    const message = providerMessage(value.error, depth + 1);
-    if (message) return message;
-  }
-  if ('response' in value) {
-    const message = providerMessage(value.response, depth + 1);
-    if (message) return message;
-  }
-  if ('responseBody' in value) {
-    const message = providerMessage(value.responseBody, depth + 1);
-    if (message) return message;
-  }
-  return 'message' in value ? providerMessage(value.message, depth + 1) : undefined;
+  if ('error' in value) return providerMessage(value.error) ?? ownMessage(value);
+  if ('response' in value) return providerMessage(value.response) ?? ownMessage(value);
+  return ownMessage(value);
+}
+
+function ownMessage(value: object): string | undefined {
+  return 'message' in value ? providerMessage(value.message) : undefined;
 }
