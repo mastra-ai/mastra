@@ -176,7 +176,24 @@ function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): Mas
       errorText,
       approval: approval ?? storedCall.toolInvocation.approval,
     };
-    return [{ type: 'tool-invocation' as const, toolInvocation }];
+    const outcomePart: MastraToolInvocationPart = { type: 'tool-invocation' as const, toolInvocation };
+    // applyClientToolModelOutput runs before memory reconciliation and caches the
+    // server-computed toModelOutput projection on this live part. That mapping is
+    // server-generated, not a client rendering, so it must survive — but only these
+    // fields: any other client-supplied metadata stays untrusted and is dropped.
+    const liveMastra = part.providerMetadata?.mastra;
+    if (liveMastra && typeof liveMastra === 'object' && !Array.isArray(liveMastra)) {
+      const { modelOutput, modelOutputComputed } = liveMastra as Record<string, unknown>;
+      if (modelOutputComputed || modelOutput != null) {
+        outcomePart.providerMetadata = {
+          mastra: {
+            ...(modelOutputComputed ? { modelOutputComputed } : {}),
+            ...(modelOutput != null ? { modelOutput } : {}),
+          },
+        } as unknown as MastraToolInvocationPart['providerMetadata'];
+      }
+    }
+    return [outcomePart];
   });
   return { ...live, content: { format: 2, parts } };
 }
