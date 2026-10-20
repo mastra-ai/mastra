@@ -1,5 +1,88 @@
 # @mastra/core
 
+## 1.79.0-alpha.9
+
+### Minor Changes
+
+- **Breaking:** Agent controller sessions are now addressed by their session id. Many sessions can share one `resourceId`, so `resourceId` only says whose threads and memory a session works on. ([#27336](https://github.com/mastra-ai/mastra/pull/27336))
+
+  - Added `controller.getSession(sessionId)`. Removed `controller.getSessionByResource(resourceId, scope)`.
+  - Removed the `scope` option from `createSession()`. Give each session its own `id` instead. When `id` is omitted it defaults to the `resourceId`, so existing one-session-per-resource code keeps working.
+  - `deleteSession()` takes `{ sessionId }`, and `generateThreadTitle()` takes an optional `sessionId`.
+  - The controller request context exposes `sessionId` next to `resourceId`.
+
+  ```ts
+  // Before
+  await controller.createSession({ resourceId: 'repo-1', scope: 'run-a' });
+  const session = await controller.getSessionByResource('repo-1', 'run-a');
+  await controller.deleteSession({ resourceId: 'repo-1', scope: 'run-a' });
+
+  // After
+  await controller.createSession({ id: 'run-a', resourceId: 'repo-1' });
+  const session = await controller.getSession('run-a');
+  await controller.deleteSession({ sessionId: 'run-a' });
+  ```
+
+  `createSession` throws when an explicit `resourceId` doesn't match the resource of the live session with that id, so a session id can't be used to take over another resource's session.
+
+- `aggregateTraces()` can now group by the root span's `entityId`, and trace queries and aggregates accept `entityId` as a trace-scope `where` field. Use it to split traces that have no `entityName` (for example, scorer runs recorded before scorers set one) by the primitive that produced them, then drill into a group by filtering on the same `entityId`. ([#27684](https://github.com/mastra-ai/mastra/pull/27684))
+
+  ```ts
+  const { rows } = await client.aggregateTraces({
+    timeRange,
+    where: { op: 'notExists', path: 'entityName' },
+    groupBy: ['entityId'],
+    measures: ['count'],
+  });
+  ```
+
+  Trace-scope `entityId` reads the root span only. Inside `spans.some` and `spans.none`, `entityId` still matches any span in the trace. Stores that support the trace-scope field declare the new `trace-query-root-entity-id` storage feature.
+
+- Added the storage contract for span aggregation. Storage adapters can implement `aggregateSpans()` and advertise the `span-aggregate` feature to answer questions like "p95 latency per tool" or "token spend per calling agent" over individual spans. ([#27669](https://github.com/mastra-ai/mastra/pull/27669))
+
+  ```ts
+  class MyObservabilityStore extends ObservabilityStorage {
+    getFeatures(): readonly ObservabilityStorageFeature[] {
+      return [...(super.getFeatures() ?? []), 'span-aggregate'];
+    }
+
+    // `plan` is already validated: tool calls grouped by name, with count and p95 duration
+    async aggregateSpans(plan: TrustedSpanAggregatePlan): Promise<SpanAggregateResponse> {
+      // e.g. { rows: [{ dimensions: { name: 'search' }, measures: { count: 42, 'duration.p95': 812 } }], truncated: false }
+    }
+  }
+  ```
+
+  Span aggregates use the same request shape, measures, and limits as trace aggregates. Filters follow `querySpans()`, so counts match the spans `querySpans()` returns. Spans can be grouped by name, span type, and their own, parent, or root entity. Grouping by model or provider is not supported yet. Token and cost measures count usage on the span that recorded it. Adapters without the feature reject the call as not implemented.
+
+- Added an `embeddingDimension` option to Memory. When you know your embedder's output dimension, setting it lets semantic recall skip the probe embedding call it otherwise makes once per Memory instance. Startup then makes no billed embedding call and doesn't fail when the embedding provider is unreachable. The vector index name stays the same, so existing indexes keep working. If the configured value doesn't match the length of the embeddings the embedder returns, Memory throws a `MASTRA_MEMORY_EMBEDDING_DIMENSION_MISMATCH` error naming both values before creating or querying any vector index. ([#27588](https://github.com/mastra-ai/mastra/pull/27588))
+
+  ```ts
+  const memory = new Memory({
+    embedder: 'openai/text-embedding-3-small',
+    embeddingDimension: 1536,
+    options: { semanticRecall: true },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed durable agent startup recovery so unrelated runs can recover concurrently. Timed-out attempts are checked again after settlement without starting duplicate executions or releasing live ownership. ([#27768](https://github.com/mastra-ai/mastra/pull/27768))
+
+- Fixed a Session that follows a thread keeping a parked tool call after another Session aborted the run, or after the resumed run ended with a non-success finish such as `content-filter`. The follower now ends the run and retracts the call with `tool_suspension_cancelled`, so `suspensions.hasPending()` returns false. This also works when the follower runs in a different Mastra instance that shares the same pubsub ([#26997](https://github.com/mastra-ai/mastra/issues/26997)). ([#27786](https://github.com/mastra-ai/mastra/pull/27786))
+
+- Fixed Gemini 3 agents with working memory failing with "Function call is missing a thought_signature" when continuing a turn (for example after a client tool result). Gemini signs only the first tool call in a parallel step; when that call was `updateWorkingMemory`, removing it from saved history left the step without a signed first call. The next tool call in the step is now saved with Google's documented `skip_thought_signature_validator` signature, so the step replays on any Gemini client. ([#27787](https://github.com/mastra-ai/mastra/pull/27787))
+
+- Simplified Azure gateway defaults and synchronous stream handling without changing runtime behavior. ([#27646](https://github.com/mastra-ai/mastra/pull/27646))
+
+- Fixed evented `foreach` restarts hanging when the next iteration had not started and nested workflow iterations re-running already completed child steps. ([#26368](https://github.com/mastra-ai/mastra/pull/26368))
+
+- Clarified that schedule `onError` and `onAbort` hooks only observe failures and aborts the schedule worker sees directly. Threaded schedules report failures after a run starts on the thread's own run, not through these hooks. ([#27812](https://github.com/mastra-ai/mastra/pull/27812))
+
+- Scorer run and scorer step spans now record the scorer name as `entityName`, falling back to the scorer ID. Previously scorer traces had no entity name, so filtering or grouping traces by entity name left them out. ([#27684](https://github.com/mastra-ai/mastra/pull/27684))
+
+- Fixed trace query validation errors for an oversized `in` / `notIn` set pointing at the whole `where` predicate instead of its `set`. Zod 4.6.7 stopped reporting which union branch failed in this case. ([#27699](https://github.com/mastra-ai/mastra/pull/27699))
+
 ## 1.79.0-alpha.8
 
 ### Minor Changes
