@@ -10,6 +10,7 @@ import {
   isSameKnowledgeClaimant,
   knowledgeImportClaimKey,
   parseKnowledgeImportClaim,
+  knowledgeReleaseMarkerVersion,
   reconcileKnowledgeClaimScopes,
   serializeKnowledgeImportClaim,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
@@ -1765,6 +1766,7 @@ export class KnowledgePG extends KnowledgeStorage {
 
   async setNodeScopes(input: SetKnowledgeNodeScopesInput): Promise<KnowledgeNode> {
     return this.#transaction(async tx => {
+      await this.#lockClaimTarget(tx, 'node', input.id);
       const existing = await this.#getNode(tx, input.id);
       if (!existing) throw new KnowledgeNotFoundError('node', input.id);
       if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
@@ -1807,6 +1809,7 @@ export class KnowledgePG extends KnowledgeStorage {
 
   async claimRecord(input: ClaimKnowledgeRecordInput): Promise<KnowledgeRecord> {
     return this.#transaction(async tx => {
+      await this.#lockClaimTarget(tx, 'record', input.id);
       const record = await this.#getRecord(tx, input.id, false);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
       if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
@@ -1839,6 +1842,7 @@ export class KnowledgePG extends KnowledgeStorage {
 
   async releaseRecordClaim(input: ReleaseKnowledgeRecordClaimInput): Promise<ReleaseKnowledgeRecordClaimResult> {
     return this.#transaction(async tx => {
+      await this.#lockClaimTarget(tx, 'record', input.id);
       const record = await this.#getRecord(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
       if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
@@ -1853,14 +1857,20 @@ export class KnowledgePG extends KnowledgeStorage {
         sql: `SELECT importerId,binding,key,value FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" WHERE importerId=? AND binding=? AND key LIKE '__mastra_internal/claim/%'`,
         args: [input.importerId, binding],
       });
-      for (const row of rows.rows) {
-        const claim = parseKnowledgeImportClaim({
-          importerId: String(row.importerId),
-          binding: String(row.binding),
-          key: String(row.key),
-          value: String(row.value),
-        });
-        if (!claim) continue;
+      const claims = rows.rows
+        .map(row =>
+          parseKnowledgeImportClaim({
+            importerId: String(row.importerId),
+            binding: String(row.binding),
+            key: String(row.key),
+            value: String(row.value),
+          }),
+        )
+        .filter((claim): claim is NonNullable<typeof claim> => claim !== null)
+        // A fixed lock order keeps two concurrent releases from deadlocking on shared targets.
+        .sort((a, b) => `${a.targetType}/${a.targetId}`.localeCompare(`${b.targetType}/${b.targetId}`));
+      for (const claim of claims) {
+        await this.#lockClaimTarget(tx, claim.targetType, claim.targetId);
         if (claim.targetType === 'record') {
           const record = await this.#getRecord(tx, claim.targetId, true);
           if (record) await this.#releaseRecordClaim(tx, record, claim, input.importRunId);
@@ -1874,12 +1884,12 @@ export class KnowledgePG extends KnowledgeStorage {
         const remaining = await this.#claims(tx, 'node', node.id);
         const others = remaining.flatMap(other => other.scopeIds);
         const scopeIds = reconcileKnowledgeClaimScopes({ current, previous: claim.scopeIds, next: [], others });
-        // With no sibling left to vouch for the node, a scope-less claim keeps the node's version on record so the
-        // source can adopt it again (a moved or re-added binding) while an outside edit is still detected.
-        const keepsVersion = remaining.every(other => other.source !== claim.source);
+        // With no claim from this importer and source left, a scope-less marker keeps its version on record.
+        const marker = (after: number) => knowledgeReleaseMarkerVersion(claim, remaining, node.version, after);
         // A node keeps at least one membership; one only this binding held stays rather than orphaning it.
         if (scopeIds.length === 0 || knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) {
-          if (keepsVersion) await this.#writeClaim(tx, claim, 'node', node.id, [], node.version);
+          const version = marker(node.version);
+          if (version !== null) await this.#writeClaim(tx, claim, 'node', node.id, [], version);
           continue;
         }
         const now = new Date();
@@ -1892,9 +1902,20 @@ export class KnowledgePG extends KnowledgeStorage {
         await this.#outbox(tx, 'node', node.id, 'delete', node.version + 1, current);
         await this.#outbox(tx, 'node', node.id, 'upsert', node.version + 1, scopeIds);
         await this.#advanceClaims(tx, 'node', node.id, node.version, node.version + 1);
-        if (keepsVersion) await this.#writeClaim(tx, claim, 'node', node.id, [], node.version + 1);
+        const version = marker(node.version + 1);
+        if (version !== null) await this.#writeClaim(tx, claim, 'node', node.id, [], version);
       }
     });
+  }
+
+  /**
+   * Row-locks a claimable target for the rest of the transaction. Every write that reads a target's claims to decide
+   * memberships or deletion takes this first, so a concurrent claim and release on one target serialize instead of
+   * each acting on claims the other is about to change.
+   */
+  async #lockClaimTarget(tx: Executor, targetType: KnowledgeSemanticDocumentType, targetId: string): Promise<void> {
+    const table = targetType === 'node' ? TABLE_KNOWLEDGE_NODES : TABLE_KNOWLEDGE_RECORDS;
+    await tx.execute({ sql: `SELECT id FROM "${table}" WHERE id=? FOR UPDATE`, args: [targetId] });
   }
 
   async #releaseRecordClaim(

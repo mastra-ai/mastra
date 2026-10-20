@@ -11,6 +11,7 @@ import {
   isSameKnowledgeClaimant,
   knowledgeImportClaimKey,
   parseKnowledgeImportClaim,
+  knowledgeReleaseMarkerVersion,
   reconcileKnowledgeClaimScopes,
   serializeKnowledgeImportClaim,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
@@ -1617,12 +1618,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         const remaining = await this.#claims(tx, 'node', node.id);
         const others = remaining.flatMap(other => other.scopeIds);
         const scopeIds = reconcileKnowledgeClaimScopes({ current, previous: claim.scopeIds, next: [], others });
-        // With no sibling left to vouch for the node, a scope-less claim keeps the node's version on record so the
-        // source can adopt it again (a moved or re-added binding) while an outside edit is still detected.
-        const keepsVersion = remaining.every(other => other.source !== claim.source);
+        // With no claim from this importer and source left, a scope-less marker keeps its version on record.
+        const marker = (after: number) => knowledgeReleaseMarkerVersion(claim, remaining, node.version, after);
         // A node keeps at least one membership; one only this binding held stays rather than orphaning it.
         if (scopeIds.length === 0 || knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) {
-          if (keepsVersion) await this.#writeClaim(tx, claim, 'node', node.id, [], node.version);
+          const version = marker(node.version);
+          if (version !== null) await this.#writeClaim(tx, claim, 'node', node.id, [], version);
           continue;
         }
         const now = new Date();
@@ -1635,7 +1636,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         await this.#outbox(tx, 'node', node.id, 'delete', node.version + 1, current);
         await this.#outbox(tx, 'node', node.id, 'upsert', node.version + 1, scopeIds);
         await this.#advanceClaims(tx, 'node', node.id, node.version, node.version + 1);
-        if (keepsVersion) await this.#writeClaim(tx, claim, 'node', node.id, [], node.version + 1);
+        const version = marker(node.version + 1);
+        if (version !== null) await this.#writeClaim(tx, claim, 'node', node.id, [], version);
       }
     });
   }

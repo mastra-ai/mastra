@@ -243,6 +243,24 @@ export function isKnowledgeTargetImporterOwned(
   return versions.length > 0 && Math.max(...versions) === targetVersion;
 }
 
+/**
+ * Version for the scope-less claim a release leaves on a node when no claim from the same importer and source
+ * remains, or `null` when one does. While the importer still owned the node, the marker follows the node so a moved
+ * or re-added binding can adopt it; after an outside edit it keeps the importer's last version, so the edit is still
+ * detected and never becomes importer-owned by being released.
+ */
+export function knowledgeReleaseMarkerVersion(
+  released: { importerId: string; source: string; version: number },
+  remaining: readonly { importerId: string; source: string }[],
+  versionBefore: number,
+  versionAfter: number,
+): number | null {
+  if (remaining.some(claim => claim.importerId === released.importerId && claim.source === released.source)) {
+    return null;
+  }
+  return released.version === versionBefore ? versionAfter : released.version;
+}
+
 export interface SetKnowledgeNodeScopesInput {
   id: string;
   version: number;

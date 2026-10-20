@@ -225,6 +225,23 @@ export function createKnowledgeImporterMultiBindingTests(
       expect(sorted(await storage.getNodeScopeIds(nodeId))).toContain(alpha);
     });
 
+    it('does not let a release turn an earlier outside edit into importer-owned data', async () => {
+      const { knowledge, storage, importer } = await setup(createStore);
+      await importer.run(bindingA, { items: [person] });
+      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
+      const node = (await storage.getNode(nodeId))!;
+      await knowledge.updateNode({ id: nodeId, version: node.version, name: 'Curator title' });
+      const sync = { items: [{ ...person, name: 'Shane (updated)' }] };
+      expect((await importer.run(bindingA, sync)).status).toBe('failed');
+      await knowledge.releaseImportBinding({ importerId: 'fireflies', binding: knowledgeImporterBindingKey(bindingA) });
+      for (const binding of [bindingA, bindingB]) {
+        const run = await importer.run(binding, sync);
+        expect(run.status).toBe('failed');
+        expect(run.error).toMatch(/changed outside importer/);
+      }
+      expect((await storage.getNode(nodeId))!.name).toBe('Curator title');
+    });
+
     it('still treats an outside edit made after every binding was released as an outside edit', async () => {
       const { knowledge, storage, importer } = await setup(createStore);
       await importer.run(bindingA, { items: [person] });

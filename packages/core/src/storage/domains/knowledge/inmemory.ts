@@ -7,6 +7,7 @@ import {
   isKnowledgeNodeVisible,
   knowledgeImportClaimKey,
   parseKnowledgeImportClaim,
+  knowledgeReleaseMarkerVersion,
   reconcileKnowledgeClaimScopes,
   serializeKnowledgeImportClaim,
   assertKnowledgeSourceProbeLimit,
@@ -605,12 +606,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         const remaining = this.#claims('node', node.id);
         const others = remaining.flatMap(other => other.scopeIds);
         const scopeIds = reconcileKnowledgeClaimScopes({ current, previous: claim.scopeIds, next: [], others });
-        // With no sibling left to vouch for the node, a scope-less claim keeps the node's version on record so the
-        // source can adopt it again (a moved or re-added binding) while an outside edit is still detected.
-        const keepsVersion = remaining.every(other => other.source !== claim.source);
+        // With no claim from this importer and source left, a scope-less marker keeps its version on record.
+        const marker = (after: number) => knowledgeReleaseMarkerVersion(claim, remaining, node.version, after);
         // A node keeps at least one membership; one only this binding held stays rather than orphaning it.
         if (scopeIds.length === 0 || knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) {
-          if (keepsVersion) this.#writeClaim(claim, 'node', node.id, [], node.version);
+          const version = marker(node.version);
+          if (version !== null) this.#writeClaim(claim, 'node', node.id, [], version);
           continue;
         }
         const updated: KnowledgeNode = { ...node, version: node.version + 1, updatedAt: new Date() };
@@ -622,7 +623,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         this.#enqueue('node', node.id, 'delete', updated.version, current);
         this.#enqueue('node', node.id, 'upsert', updated.version, scopeIds);
         this.#advanceClaims('node', node.id, node.version, updated.version);
-        if (keepsVersion) this.#writeClaim(claim, 'node', node.id, [], updated.version);
+        const version = marker(updated.version);
+        if (version !== null) this.#writeClaim(claim, 'node', node.id, [], version);
       }
     });
   }
