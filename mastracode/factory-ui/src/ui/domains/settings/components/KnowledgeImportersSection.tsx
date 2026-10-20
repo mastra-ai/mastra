@@ -295,6 +295,9 @@ function KnowledgeImporterCard({ provider, logoUrl }: { provider: PlatformConnec
             onCompleted={startFirstSync}
           />
         )}
+        {!isLoading && !isError && isConnected && (
+          <ProviderConnectControl provider={provider} label="Connect another" size="sm" variant="ghost" />
+        )}
       </header>
       <Txt as="p" variant="meta" className="text-muted-foreground">
         {description}

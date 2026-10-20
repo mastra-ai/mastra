@@ -565,4 +565,165 @@ describe('KnowledgeImportersSection', () => {
       expect(await screen.findByText('Notion sync started')).toBeInTheDocument();
     });
   });
+
+  describe('Connect another', () => {
+    const NOTION_PRIMARY: ConnectionRow = {
+      id: 'notion-1',
+      integrationId: 'notion',
+      status: 'active',
+      accountLabel: 'acme-workspace',
+    };
+    const NOTION_SECOND: ConnectionRow = {
+      id: 'conn-new',
+      integrationId: 'notion',
+      status: 'active',
+      accountLabel: 'beta-workspace',
+    };
+
+    it('offers only the first-connect control when the provider has no connections', async () => {
+      useFeaturesHandler(true);
+      useConnectionHandlers({});
+      renderSection();
+
+      expect(await screen.findByRole('button', { name: 'Connect Notion' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Connect another' })).toBeNull();
+    });
+
+    it('offers Connect another alongside the single active account row', async () => {
+      useFeaturesHandler(true);
+      useConnectionHandlers({ notion: [NOTION_PRIMARY] });
+      renderSection();
+
+      expect(await screen.findByText('acme-workspace')).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Connect another' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Connect Notion' })).toBeNull();
+    });
+
+    it('keeps Connect another next to both rows when one account needs reauthorization', async () => {
+      useFeaturesHandler(true);
+      useConnectionHandlers({
+        zendesk: [
+          { id: 'zd-1', integrationId: 'zendesk', status: 'active', accountLabel: 'acme.zendesk.com' },
+          { id: 'zd-2', integrationId: 'zendesk', status: 'needs_reauth', accountLabel: 'beta.zendesk.com' },
+        ],
+      });
+      renderSection();
+
+      expect(await screen.findByText('acme.zendesk.com')).toBeInTheDocument();
+      expect(await screen.findByText('beta.zendesk.com')).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /Reconnect/i })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Connect another' })).toBeInTheDocument();
+    });
+
+    it('renders no connect control when the connection list errors or Platform connect is unavailable', async () => {
+      useFeaturesHandler(true);
+      useConnectionHandlers({});
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/notion/connections`, () =>
+          HttpResponse.json({ error: 'platform_request_failed' }, { status: 502 }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/linear/connections`, () =>
+          HttpResponse.json({ error: 'not_found' }, { status: 404 }),
+        ),
+      );
+      renderSection();
+
+      expect(await screen.findByText("Couldn't load connections.")).toBeInTheDocument();
+      expect(await screen.findByText("Platform connect isn't available in this deployment.")).toBeInTheDocument();
+      // Only the three healthy, unconnected providers offer a connect control.
+      await screen.findByRole('button', { name: 'Connect Confluence' });
+      expect(screen.queryByRole('button', { name: 'Connect Notion' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Connect Linear' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Connect another' })).toBeNull();
+    });
+
+    it('adds a second account through Connect another without starting a sync or saving routing', async () => {
+      useFeaturesHandler(true);
+      // Only the browser routes the card actually calls: the per-provider
+      // connection list (refetched after the connect settles) and the session
+      // mint. Every handler is counted so the spec cannot pass vacuously.
+      let authorized = false;
+      const hits = { notionConnections: 0, otherConnections: 0, session: 0 };
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/:provider/connections`, ({ params }) => {
+          if (params.provider !== 'notion') {
+            hits.otherConnections += 1;
+            return HttpResponse.json({ connections: [] });
+          }
+          hits.notionConnections += 1;
+          return HttpResponse.json({ connections: authorized ? [NOTION_PRIMARY, NOTION_SECOND] : [NOTION_PRIMARY] });
+        }),
+        http.post(`${TEST_BASE_URL}/web/integrations/platform/notion/connect-session`, () => {
+          hits.session += 1;
+          authorized = true;
+          return HttpResponse.json(
+            {
+              connectionId: 'conn-new',
+              integrationId: 'notion',
+              connectUrl: 'https://connect.nango.dev/notion',
+              sessionToken: 'session-notion',
+              expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            },
+            { status: 201 },
+          );
+        }),
+      );
+      const requests: string[] = [];
+      const unhandled: string[] = [];
+      const onStart = ({ request }: { request: Request }) =>
+        requests.push(`${request.method} ${new URL(request.url).pathname}`);
+      const onUnhandled = ({ request }: { request: Request }) =>
+        unhandled.push(`${request.method} ${new URL(request.url).pathname}`);
+      server.events.on('request:start', onStart);
+      server.events.on('request:unhandled', onUnhandled);
+
+      try {
+        const { unmount } = renderSection();
+        const user = userEvent.setup();
+        expect(await screen.findByText('acme-workspace')).toBeInTheDocument();
+        const refetchesBefore = hits.notionConnections;
+        await user.click(await screen.findByRole('button', { name: 'Connect another' }));
+
+        expect(await screen.findByText('beta-workspace')).toBeInTheDocument();
+        expect(screen.getByText('acme-workspace')).toBeInTheDocument();
+        await waitFor(() => expect(nangoAuthCalls[0]?.integrationId).toBe('notion'));
+        // Activation poll plus the settle-driven refetch both hit the list route.
+        expect(hits.notionConnections).toBeGreaterThanOrEqual(refetchesBefore + 2);
+        expect(hits.session).toBe(1);
+        expect(hits.otherConnections).toBeGreaterThan(0);
+
+        // Header Connect another has no first-sync hook: no importer run, no routing save.
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(requests.filter(r => /\/knowledge\/importers\/.*\/run$/.test(r))).toEqual([]);
+        expect(requests.filter(r => r.startsWith('PUT ') && r.endsWith('/routing'))).toEqual([]);
+        expect(screen.queryByText('Notion sync started')).toBeNull();
+        expect(unhandled).toEqual([]);
+
+        // A fresh QueryClient re-render refetches and still shows both accounts.
+        unmount();
+        renderSection();
+        expect(await screen.findByText('beta-workspace')).toBeInTheDocument();
+        expect(screen.getByText('acme-workspace')).toBeInTheDocument();
+      } finally {
+        server.events.removeListener('request:start', onStart);
+        server.events.removeListener('request:unhandled', onUnhandled);
+      }
+    });
+
+    it('opens the API-key dialog when Connect another is used for Fireflies', async () => {
+      useFeaturesHandler(true);
+      useConnectionHandlers({
+        fireflies: [{ id: 'ff-1', integrationId: 'fireflies', status: 'active', accountLabel: 'acme-meetings' }],
+      });
+      const minted = useConnectSessionSpy();
+      renderSection();
+
+      const user = userEvent.setup();
+      expect(await screen.findByText('acme-meetings')).toBeInTheDocument();
+      await user.click(await screen.findByRole('button', { name: 'Connect another' }));
+
+      expect(await screen.findByLabelText('Fireflies API key')).toBeInTheDocument();
+      expect(minted).toHaveLength(0);
+    });
+  });
 });
