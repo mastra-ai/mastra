@@ -432,6 +432,14 @@ describe('migrateSessionResources', () => {
     expect(session.thread.getId()).toBe(RUN_SESSION);
     const messages = await session.thread.listMessages({ threadId: RUN_SESSION });
     expect(messages.map(message => message.id)).toEqual([`message-${RUN_SESSION}`]);
-    expect((await listFactorySessionThreads(controller, RUN_SESSION)).map(thread => thread.id)).toEqual([RUN_SESSION]);
+    expect(
+      (
+        await listFactorySessionThreads(controller, {
+          sessionId: RUN_SESSION,
+          userId: 'user-1',
+          factoryProjectId: FACTORY_ID,
+        })
+      ).map(thread => thread.id),
+    ).toEqual([RUN_SESSION]);
   });
 });
