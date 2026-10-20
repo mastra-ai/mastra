@@ -115,7 +115,7 @@ Protecting Mastra routes with `server.auth` and providing interoperable OAuth di
 
 Alongside the MCP transport, Mastra registers REST routes used by Studio to list servers, inspect tools, execute tools, and read resources. See the [MCP routes reference](/reference/server/routes#mcp) for the full list. These paths use the default `/api` prefix.
 
-The `POST /api/mcp/:serverId/tools/:toolId/execute` route calls `executeTool()` directly, without a protocol client. With a Mastra FGA provider configured, `MCPServer.executeTool()` enforces tool execution permission using the user in `requestContext`. The REST tool list also filters tools through FGA. These permission checks don't replace route authentication.
+The `POST /api/mcp/:serverId/tools/:toolId/execute` route calls `executeTool()` directly, without a protocol client. With a Mastra FGA provider configured, `MCPServer.executeTool()` enforces tool execution permission using the user in `requestContext`. The REST tool list also filters tools through FGA, but these permission checks don't replace route authentication.
 
 Built-in authentication for these routes depends on `server.auth`. Without it, `requiresAuth: true` doesn't enforce authentication. Custom middleware that checks only the `/mcp` or `/sse` transport paths leaves the REST routes open. If you use custom middleware instead of `server.auth`, default-deny `/api/mcp/*` and allow access only after authentication.
 
