@@ -96,6 +96,10 @@ function platform() {
           : [],
       });
     }
+    const pageLookup = url.pathname.match(/^\/v2\/connections\/conn-notion\/proxy\/v1\/pages\/([^/]+)$/);
+    if (pageLookup && state.pages.some(candidate => candidate.id === pageLookup[1])) {
+      return json({ object: 'page', id: pageLookup[1], archived: false, in_trash: false });
+    }
     return new Response(JSON.stringify({ detail: `unexpected ${url.pathname}` }), {
       status: 404,
       headers: { 'content-type': 'application/problem+json' },
