@@ -226,11 +226,9 @@ describeForAllEngines('AIMock loop scenario: supervisor message history', engine
     expect(mentions(body(workerRequest!), 'SECRET')).toBe(false);
   });
 
-  // Inngest's agentic loop has no isTaskComplete step yet. Durable and evented
-  // move the feedback after the supervisor's next tool call and result
-  // (https://github.com/mastra-ai/mastra/issues/27548); that is asserted last.
-  const itFailsOnFeedbackOrder = ['inngest', 'durable', 'evented'].includes(engine) ? it.fails : it;
-  itFailsOnFeedbackOrder('shows isTaskComplete feedback to the supervisor and to the next delegation', async () => {
+  // Inngest's agentic loop has no isTaskComplete step yet.
+  const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
+  itFailsOnInngest('shows isTaskComplete feedback to the supervisor and to the next delegation', async () => {
     let scored = 0;
     const scorer = {
       id: 'fail-then-pass-scorer',
