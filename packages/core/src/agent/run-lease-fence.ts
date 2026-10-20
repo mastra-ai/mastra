@@ -9,8 +9,12 @@ export function setRunLeaseFence(runId: string, fence: () => Promise<void>): voi
   fences.set(runId, fence);
 }
 
-export function clearRunLeaseFence(runId: string): void {
-  fences.delete(runId);
+/**
+ * Another runtime in the process (for example a second Mastra instance) may have registered
+ * the same run id since, so a run that ends clears only its own check.
+ */
+export function clearRunLeaseFence(runId: string, fence: () => Promise<void>): void {
+  if (fences.get(runId) === fence) fences.delete(runId);
 }
 
 /** Throws when the run no longer holds its thread lease. */

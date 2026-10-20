@@ -422,6 +422,119 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(await oldRun.finishReason).toBe('aborted');
   }, 30_000);
 
+  // Durable runs also share process-global registries by run id, so two live runs with one id is not a supported
+  // setup there; this covers the thread-runtime engines, where only the tool fence was shared.
+  it.skipIf(isDurableEngineVariant(engine))(
+    'keeps fencing a run when an earlier run with the same id ends in another replica in the process',
+    async () => {
+      const thread = 'lease-shared-id-thread';
+      const otherThread = 'lease-shared-id-other-thread';
+      const key = [RESOURCE, thread].join('\u0000');
+      const runId = `shared-run-${engine}`;
+      for (let i = 0; i < 100; i++) {
+        llm.on(
+          { userMessage: 'shared id long', sequenceIndex: i },
+          { toolCalls: [{ id: `call_shared_long_${i}`, name: 'tick', arguments: {} }] },
+        );
+      }
+      llm.on(
+        { userMessage: 'shared id short', sequenceIndex: 0 },
+        { toolCalls: [{ id: 'call_shared_hold', name: 'hold', arguments: {} }] },
+      );
+      llm.on({ userMessage: 'shared id short', sequenceIndex: 1 }, { content: 'shared id short done' });
+      for (let i = 0; i < 6; i++) {
+        llm.on(
+          { userMessage: 'shared id handover', sequenceIndex: i },
+          { toolCalls: [{ id: `call_shared_handover_${i}`, name: 'write', arguments: {} }] },
+        );
+      }
+      llm.on({ userMessage: 'shared id handover', sequenceIndex: 6 }, { content: 'shared id handover done' });
+
+      const shared = new SharedLeases();
+      const memory = new MockMemory();
+      let oldOwner: string | undefined;
+      let ticks = 0;
+      const besideSuccessor: Array<string | undefined> = [];
+      const tick = createTool({
+        id: 'tick',
+        description: 'Tick once',
+        inputSchema: z.object({}),
+        execute: async () => {
+          ticks++;
+          const owner = shared.owner(key);
+          if (oldOwner && owner && owner !== oldOwner) besideSuccessor.push(owner);
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return 'ticked';
+        },
+      });
+      const write = createTool({
+        id: 'write',
+        description: 'Write once',
+        inputSchema: z.object({}),
+        execute: async () => {
+          await new Promise(resolve => setTimeout(resolve, 20));
+          return 'written';
+        },
+      });
+      let release!: () => void;
+      const released = new Promise<void>(resolve => (release = resolve));
+      let held = false;
+      const hold = createTool({
+        id: 'hold',
+        description: 'Hold until released',
+        inputSchema: z.object({}),
+        execute: async () => {
+          held = true;
+          await released;
+          return 'held';
+        },
+      });
+      const oldReplica = replica(shared, memory, { tick });
+      const otherReplica = replica(shared, memory, { hold });
+      const newReplica = replica(shared, memory, { write });
+
+      // Another Mastra instance in this process starts a run with the same id on another thread first.
+      const { output: other, drain: drainOther } = await startStream(otherReplica, 'shared id short', {
+        runId,
+        maxSteps: 3,
+        memory: { thread: otherThread, resource: RESOURCE },
+      });
+      const otherDone = drainOther();
+      await vi.waitFor(() => expect(held).toBe(true), { timeout: 5_000 });
+
+      const { output: oldRun, drain } = await startStream(oldReplica, 'shared id long', {
+        runId,
+        maxSteps: 100,
+        memory: { thread, resource: RESOURCE },
+      });
+      const oldDone = drain().catch(() => undefined);
+      await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+
+      // The earlier run ends while the later one is still running.
+      release();
+      await otherDone;
+      expect(await other.text).toBe('shared id short done');
+
+      oldOwner = shared.owner(key);
+      expect(oldOwner).toBe(runId);
+      const renewals = shared.renewals;
+      await vi.waitFor(() => expect(shared.renewals).toBeGreaterThan(renewals), { timeout: 5_000 });
+      shared.drop(key);
+
+      const { output: successor, drain: drainSuccessor } = await startStream(newReplica, 'shared id handover', {
+        maxSteps: 10,
+        memory: { thread, resource: RESOURCE },
+      });
+      await drainSuccessor();
+      expect(await successor.text).toBe('shared id handover done');
+      await oldDone;
+
+      expect(besideSuccessor).toEqual([]);
+      expect(await oldRun.finishReason).toBe('aborted');
+    },
+    30_000,
+  );
+
   it('runs tools on a pubsub that cannot lease', async () => {
     for (let i = 0; i < 2; i++) {
       llm.on(

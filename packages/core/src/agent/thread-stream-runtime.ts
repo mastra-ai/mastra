@@ -534,6 +534,7 @@ type AgentThreadRuntimeState = {
    * prove it still holds the lease, so it is aborted.
    */
   leaseDeadlines: Map<string, { timer: ReturnType<typeof setTimeout>; confirmedSentAt: number }>;
+  leaseFences: Map<string, () => Promise<void>>;
   threadEventListeners: Set<ThreadEventListenerRegistration>;
   threadControlSubscriptions: Map<string, ThreadControlSubscription>;
   /**
@@ -732,6 +733,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     startingQueuedRunIds: new Set(),
     leaseRenewalTimers: new Map(),
     leaseDeadlines: new Map(),
+    leaseFences: new Map(),
     threadEventListeners: new Set(),
     threadControlSubscriptions: new Map(),
     runStreamReaders: new Map(),
@@ -904,7 +906,9 @@ export class AgentThreadStreamRuntime {
     this.#armLeaseDeadline(pubsub, runId, Date.now());
     // A pubsub that can't lease has no owner to check, so every tool call would look like a takeover.
     if (!this.#resolveLeaseProvider(pubsub).isFallback) {
-      setRunLeaseFence(runId, this.#leaseFence(pubsub, key, runId, timer));
+      const fence = this.#leaseFence(pubsub, key, runId, timer);
+      state.leaseFences.set(runId, fence);
+      setRunLeaseFence(runId, fence);
     }
   }
 
@@ -972,7 +976,9 @@ export class AgentThreadStreamRuntime {
     if (!timer || (only && timer !== only)) return;
     clearInterval(timer);
     state.leaseRenewalTimers.delete(runId);
-    clearRunLeaseFence(runId);
+    const fence = state.leaseFences.get(runId);
+    if (fence) clearRunLeaseFence(runId, fence);
+    state.leaseFences.delete(runId);
     const deadline = state.leaseDeadlines.get(runId);
     if (deadline) clearTimeout(deadline.timer);
     state.leaseDeadlines.delete(runId);
@@ -3065,6 +3071,8 @@ export class AgentThreadStreamRuntime {
     state.leaseRenewalTimers.clear();
     state.leaseDeadlines.forEach(({ timer }) => clearTimeout(timer));
     state.leaseDeadlines.clear();
+    state.leaseFences.forEach((fence, runId) => clearRunLeaseFence(runId, fence));
+    state.leaseFences.clear();
     state.threadRunsById.clear();
     state.threadRunsByStreamId.clear();
     state.threadKeysByRunId.clear();
