@@ -1,5 +1,99 @@
 # @mastra/core
 
+## 1.79.0-alpha.7
+
+### Minor Changes
+
+- Add opt-in `bundler.pnpmWorkspaceSettings` to write pnpm install-policy settings to generated deployment workspaces. Supported keys are `allowBuilds`, `onlyBuiltDependencies`, `ignoredBuiltDependencies`, `minimumReleaseAge`, `minimumReleaseAgeExclude`, `trustPolicy`, `trustPolicyExclude`, `trustPolicyIgnoreAfter`, and `blockExoticSubdeps`; explicit values override copied source settings and any other key is rejected before pnpm runs. Existing behavior is unchanged when omitted. ([#27708](https://github.com/mastra-ai/mastra/pull/27708))
+
+  ```ts
+  import { Mastra } from '@mastra/core/mastra';
+
+  export const mastra = new Mastra({
+    bundler: {
+      pnpmWorkspaceSettings: {
+        blockExoticSubdeps: false,
+      },
+    },
+  });
+  ```
+
+- Added `backgroundTasks.untilIdleMaxIdleMs` to set the default idle timeout for `stream({ untilIdle: true })`. Before, calls that did not pass `maxIdleMs` always closed after 5 minutes without new events. This included calls Mastra makes internally, such as waking an agent after `sendMessage`. A background task that ran longer than that finished without a continuation turn. A per-call `untilIdle: { maxIdleMs }` still takes precedence. ([#27757](https://github.com/mastra-ai/mastra/pull/27757))
+
+  ```ts
+  const mastra = new Mastra({
+    backgroundTasks: {
+      enabled: true,
+      untilIdleMaxIdleMs: 30 * 60_000,
+    },
+  });
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#27728](https://github.com/mastra-ai/mastra/pull/27728))
+  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.61` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.61) (from `npm:@ai-sdk/provider-utils@4.0.56`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.62` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.62) (from `npm:@ai-sdk/provider-utils@5.0.54`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v5@npm:@ai-sdk/provider@2.0.5` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v5/v/2.0.5) (from `npm:@ai-sdk/provider@2.0.3`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v6@npm:@ai-sdk/provider@3.0.19` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v6/v/3.0.19) (from `npm:@ai-sdk/provider@3.0.14`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v7@npm:@ai-sdk/provider@4.0.29` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v7/v/4.0.29) (from `npm:@ai-sdk/provider@4.0.27`, in `dependencies`)
+
+- Fixed agent runs that were aborted while a tool was running finishing with `finishReason: 'tool-calls'`. When a tool stops because the run's abort signal fired, the run now ends with `finishReason: 'aborted'`, emits an `abort` chunk, and calls `onAbort`, the same as an abort during the model response. ([#27748](https://github.com/mastra-ai/mastra/pull/27748))
+
+- Channel streaming: text the agent writes before its first tool call now posts as its own message in `toolDisplay: 'grouped'` mode. An opening acknowledgement lands above the Thinking Steps widget instead of under it. ([#27350](https://github.com/mastra-ai/mastra/pull/27350))
+
+  The plan widget in `'grouped'` and `'timeline'` modes is quieter. The header is a fixed "Working…" label and no longer echoes the current tool. Each task row shows the tool's `description` argument (first line only) when it has one, and falls back to `toolName firstArg` otherwise.
+
+  Grouped mode is an adapter option on the channel provider:
+
+  ```ts
+  import { Mastra } from '@mastra/core';
+  import { SlackProvider } from '@mastra/slack';
+
+  export const mastra = new Mastra({
+    channels: {
+      slack: new SlackProvider({
+        refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+        toolDisplay: 'grouped',
+      }),
+    },
+  });
+  ```
+
+- Classifier evaluation traces now record the classifier as their entity, so they show the classifier name on the Traces page instead of "(not set)" and can be filtered and grouped like agents, workflows and scorers. `EntityType` gains a `classifier` value. ([#27756](https://github.com/mastra-ai/mastra/pull/27756))
+
+- Fixed durable and evented agents placing `isTaskComplete` feedback after the model's next tool call and its result. The feedback now comes right before the model's retry, as it does with regular agents, so the model reads it as the reason for continuing. Fixes #27548. ([#27743](https://github.com/mastra-ai/mastra/pull/27743))
+
+- Fixed durable and evented agents ignoring per-model `modelSettings` in a model list. When an agent is configured with `model: [{ model, modelSettings: { temperature: 0.1 } }, ...]`, each entry's settings now reach the provider on every attempt, including retries and fallbacks, instead of falling back to call-time settings. ([#27727](https://github.com/mastra-ai/mastra/pull/27727))
+
+- Fixed durable and evented agents dropping earlier tool calls from the prompt on a second output processor retry. When a processor called `abort(reason, { retry: true })` more than once in a run that had already made tool calls, the next request lost the earlier tool call and its result, which broke the provider prompt cache. Durable and evented agents now keep the full history across retries, matching the standard agent loop (#27561). ([#27758](https://github.com/mastra-ai/mastra/pull/27758))
+
+- Fixed durable and evented agents returning an empty `response.messages` when a `processOutputResult` processor rejects the final answer. `response.messages` now contains the assistant's draft, matching `text`, `steps` and the normal loop, so apps can still show the rejected reply to a reviewer. ([#27737](https://github.com/mastra-ai/mastra/pull/27737))
+
+- Fixed live DurableAgent observers attaching to runs owned by a different agent ID while preserving same-ID observation. Prepared runs now retain the DurableAgent's effective ID and name so ownership remains consistent after a restart. ([#27353](https://github.com/mastra-ai/mastra/pull/27353))
+
+- Stop an agent run as soon as another replica asks to abort it, even after the run has lost its thread lease. Previously the abort request was ignored once the lease was gone, so the run kept calling tools until its own lease renewal noticed the loss. ([#27738](https://github.com/mastra-ai/mastra/pull/27738))
+
+- Stop an agent run whose thread lease can no longer be confirmed. Previously, if lease renewals failed with an error or never answered (for example during a Redis outage on one process), the run kept calling the model and tools after its lease expired, alongside the successor run that took over the thread. Each run now aborts once one lease TTL has passed since its last confirmed acquire or renewal, the same way it already aborts when a renewal reports the lease lost. ([#27731](https://github.com/mastra-ai/mastra/pull/27731))
+
+- Fixed notifications getting stuck when the delivery policy throws while the notification is being sent. The notification now records a failed delivery attempt and is retried by the notification dispatcher, up to the attempt limit, instead of staying pending forever. ([#27736](https://github.com/mastra-ai/mastra/pull/27736))
+
+- Fixed `Agent.resumeGenerate()` and `Agent.resumeStream()` dropping `returnScorerData` on a plain Agent. A run started with `returnScorerData: true` now returns scoring data after a tool-approval or suspend resume, including when the resume happens in a different process or `defaultOptions` disable it. Passing `returnScorerData` to the resume call still overrides the run's value. ([#27747](https://github.com/mastra-ai/mastra/pull/27747))
+
+- Fixed input processor rejections being ignored by agents running in separate worker processes. Upgrade both API and worker processes to apply the fix. ([#27730](https://github.com/mastra-ai/mastra/pull/27730))
+
+- Fixed tool payload transforms not being applied to streamed tool calls. When a model streamed tool-call arguments, the `tool-call` chunk sent to the stream had no transform metadata, so UIs showed the raw arguments instead of the redacted display version. The stream now emits the model's final tool call, which carries the transform. ([#27501](https://github.com/mastra-ai/mastra/pull/27501))
+
+  A tool call ID of `__proto__` no longer breaks the stream.
+
+  A later step that reuses a tool call ID is now kept as its own call in `toolCalls` instead of being dropped.
+
+- Fixed deferred notifications running with no request context when the agent's delivery policy throws at delivery time. The delivery attempt now fails with the policy's error and is retried up to the attempt limit, instead of falling back to a bare wake that runs without a user. ([#27729](https://github.com/mastra-ai/mastra/pull/27729))
+
+  Fixed low-priority notification summaries failing to save when the agent's memory depends on who owns the thread. The summary is still saved without starting a run, but now carries the delivery policy's request context.
+
+- Fixed observation of unknown and completed durable agent runs so streams close promptly after replaying retained events, including when the requested offset skips the final event or a completed workflow snapshot remains after cleanup. Observers stay attached when lifecycle state cannot be read. ([#27358](https://github.com/mastra-ai/mastra/pull/27358))
+
 ## 1.79.0-alpha.6
 
 ### Minor Changes
