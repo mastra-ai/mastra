@@ -56,6 +56,7 @@ export type RestartExecutionParams = {
   stepExecutionPath?: string[];
   isPreFirstStepRestart?: boolean;
   isParallelOrConditionalRestarted?: boolean;
+  isForeachRestarted?: boolean;
 };
 
 export type TimeTravelExecutionParams = {
