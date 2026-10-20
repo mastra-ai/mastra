@@ -46,7 +46,9 @@ describe('Composer on a lazy user-session draft', () => {
     await user.type(message, '  fix the login bug  ');
     await user.keyboard('{Enter}');
 
-    await waitFor(() => expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: 'fix the login bug', visibility: 'private' }]));
+    await waitFor(() =>
+      expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: 'fix the login bug', visibility: 'private' }]),
+    );
     expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/new/${SESSION_ID}`);
     expect(preparation.controllerCreates).toBe(0);
 
