@@ -1,5 +1,5 @@
 ---
-'@mastra/factory': patch
+'mastra': patch
 ---
 
-Factory now shows code, IDs, timestamps and keyboard shortcuts in Commit Mono, the same monospace font as Studio. They used to fall back to the system monospace font, which looked different and smaller next to the rest of the UI.
+Fixed Factory's monospace text to use Commit Mono, the same font as Studio. Code, identifiers, timestamps and keyboard shortcuts used to fall back to the system monospace font, which looked different and smaller than the rest of the interface.
