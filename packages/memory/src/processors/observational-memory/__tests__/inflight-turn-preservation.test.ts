@@ -15,6 +15,8 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
 import { Agent } from '@mastra/core/agent';
+import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
+import { EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -129,6 +131,77 @@ const lookup = createTool({
 });
 
 describe('OM preserves the in-flight turn across mid-turn observation (#25372)', () => {
+  // COR-1472: the early save must not drain the live input bucket before OM captures
+  // the turn's input IDs, or observation removes the request from later actor prompts.
+  for (const engine of ['durable', 'evented'] as const) {
+    it.each(['stream', 'generate'] as const)(
+      `${engine} %s: persists input before execution without losing it during observation`,
+      async method => {
+        scriptLookupTurn(1);
+        const storage = new InMemoryStore();
+        const { memory, openai } = createMemory(storage);
+        const threadId = `durable-inflight-${engine}-${method}`;
+        const memoryStore = (await storage.getStore('memory'))!;
+        let inputIdAtToolEntry: string | undefined;
+        const agent = new Agent({
+          id: 'durable-inflight-agent',
+          name: 'durable-inflight-agent',
+          instructions: 'Use the lookup tool.',
+          model: openai.chat(ACTOR),
+          tools: {
+            lookup: createTool({
+              id: 'lookup',
+              description: 'Look up an order',
+              inputSchema: z.object({ orderId: z.string() }),
+              execute: async ({ orderId }) => {
+                const { messages } = await memoryStore.listMessages({ threadId, perPage: false });
+                expect(messages).toHaveLength(1);
+                expect(messages[0]).toMatchObject({ role: 'user', threadId, resourceId: 'r' });
+                expect(JSON.stringify(messages[0]!.content)).toContain(USER_REQUEST);
+                inputIdAtToolEntry = messages[0]!.id;
+                return { orderId, status: `${RESULT_MARKER}-${orderId}`, log: filler };
+              },
+            }),
+          },
+          memory,
+        });
+        const durableAgent =
+          engine === 'evented'
+            ? createEventedAgent({ agent, pubsub: new EventEmitterPubSub() })
+            : createDurableAgent({ agent });
+        const mastra = new Mastra({ agents: { agent: durableAgent }, storage, logger: false });
+        try {
+          expect(durableAgent.resolveWorkflowEngine()).toBe(engine === 'evented' ? 'evented' : 'default');
+          const options = { memory: { thread: threadId, resource: 'r' }, maxSteps: 3 };
+          let text = '';
+          if (method === 'generate') {
+            text = (await durableAgent.generate(USER_REQUEST, options)).text;
+          } else {
+            const stream = await durableAgent.stream(USER_REQUEST, options);
+            for await (const chunk of stream.fullStream) {
+              if (chunk.type === 'text-delta') text += chunk.payload.text;
+            }
+          }
+          expect(text).toBe(FINAL_ANSWER);
+          expect(inputIdAtToolEntry).toBeDefined();
+          expect(observerRequestCount()).toBeGreaterThan(0);
+          const requests = actorRequests();
+          expect(requests).toHaveLength(2);
+          expect(requests[1]).toContain('User asked to look up an order status');
+          expect(requests[1], 'observation must retain the accepted in-flight request').toContain(USER_REQUEST);
+          expect(requests[1]).toContain(`${RESULT_MARKER}-4471-0`);
+          const { messages } = await memoryStore.listMessages({ threadId, perPage: false });
+          const users = messages.filter(message => message.role === 'user');
+          expect(users).toHaveLength(1);
+          expect(users[0]!.id).toBe(inputIdAtToolEntry);
+          expect(JSON.stringify(messages.filter(message => message.role === 'assistant'))).toContain(FINAL_ANSWER);
+        } finally {
+          await mastra.stopWorkers();
+        }
+      },
+    );
+  }
+
   it('keeps the user message and the unread tool result in the next step request', async () => {
     scriptLookupTurn(1);
     const { memory, openai } = createMemory();
