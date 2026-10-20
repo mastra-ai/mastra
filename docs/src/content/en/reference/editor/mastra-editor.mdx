@@ -202,7 +202,7 @@ All namespaces extend a shared CRUD base class, so they expose the same `create`
             name: 'applyStoredOverrides',
             type: '(agent: Agent, options?: { status?: "draft" | "published" } | { versionId: string }, requestContext?: RequestContext) => Promise<Agent>',
             description:
-              'Mutate a code-defined agent in place to apply any stored overrides (instructions, tools, variables). Pass either a status or a specific versionId, not both. Called internally by mastra.getAgent() — you rarely call it directly.',
+              'Apply any stored overrides (instructions, tools, variables) to a code-defined agent. When overrides exist, returns a fork with them applied and leaves the input agent unchanged, so use the returned Agent. Pass either a status or a specific versionId, not both. Called internally by mastra.getAgent() — you rarely call it directly.',
           },
           {
             name: 'clone',
