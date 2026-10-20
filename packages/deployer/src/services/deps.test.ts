@@ -182,7 +182,6 @@ describe('DepsService custom pnpm workspace settings', () => {
       allowBuilds: { esbuild: true, bcrypt: false },
       onlyBuiltDependencies: ['esbuild'],
       ignoredBuiltDependencies: ['core-js'],
-      neverBuiltDependencies: ['fsevents'],
       minimumReleaseAge: 60,
       minimumReleaseAgeExclude: ['@internal/*'],
       trustPolicy: 'no-downgrade',
@@ -246,6 +245,9 @@ describe('DepsService custom pnpm workspace settings', () => {
     ['useNodeVersion', '18.0.0'],
     ['modulesDir', '../node_modules'],
     ['dangerouslyAllowAllBuilds', true],
+    // pnpm 10 treats any neverBuiltDependencies list as deny-list mode and runs every unlisted build script.
+    ['neverBuiltDependencies', []],
+    ['neverBuiltDependencies', ['core-js']],
     ['--offline', true],
     ['blockExoticSubdeps:\npackages', 'unsupported'],
   ])('rejects setting %s outside the install-policy allowlist before running pnpm', async (key, value) => {

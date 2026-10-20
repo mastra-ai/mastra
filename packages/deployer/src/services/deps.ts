@@ -193,8 +193,11 @@ const PNPM_CONFIG_KEYS_TO_COPY = new Set([
 ]);
 
 // supportedArchitectures is generated from deployer architecture targets, so it can't be set explicitly.
+// neverBuiltDependencies switches pnpm 10 into deny-list mode, which runs every build script it doesn't name.
 const PNPM_EXPLICIT_SETTING_KEYS = new Set(
-  [...PNPM_CONFIG_KEYS_TO_COPY, 'blockExoticSubdeps'].filter(key => key !== 'supportedArchitectures'),
+  [...PNPM_CONFIG_KEYS_TO_COPY, 'blockExoticSubdeps'].filter(
+    key => key !== 'supportedArchitectures' && key !== 'neverBuiltDependencies',
+  ),
 );
 
 function serializePnpmWorkspaceSettings(settings: BundlerConfig['pnpmWorkspaceSettings']) {
