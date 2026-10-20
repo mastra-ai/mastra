@@ -134,25 +134,30 @@ describeForAllEngines('A stopped approval cannot restart a run (#27617)', engine
             }
           }
         };
+        const captureRejection = (promise: Promise<void>) =>
+          promise.then(
+            () => undefined,
+            (error: unknown) => error,
+          );
         let rejection: unknown;
-        try {
-          if (resumeAfter === 'abort during snapshot load with snapshot cleanup pending') {
-            // The user responds first; the abort lands while the resume is reading the suspended snapshot.
-            const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
-            const loadSnapshot = workflows.loadWorkflowSnapshot.bind(workflows);
-            let releaseLoad = () => {};
-            const loadGate = new Promise<void>(resolve => (releaseLoad = resolve));
-            const loadStarted = new Promise<void>(started => {
-              workflows.loadWorkflowSnapshot = async args => {
-                if (args.workflowName !== AGENTIC_LOOP_WORKFLOW_ID) return loadSnapshot(args);
-                workflows.loadWorkflowSnapshot = loadSnapshot;
-                started();
-                await loadGate;
-                return loadSnapshot(args);
-              };
-            });
-            const response = respond();
-            response.catch(() => {});
+        if (resumeAfter === 'abort during snapshot load with snapshot cleanup pending') {
+          // The user responds first; the abort lands while the resume is reading the suspended snapshot.
+          const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
+          const loadSnapshot = workflows.loadWorkflowSnapshot.bind(workflows);
+          let releaseLoad = () => {};
+          const loadGate = new Promise<void>(resolve => (releaseLoad = resolve));
+          const loadStarted = new Promise<void>(started => {
+            workflows.loadWorkflowSnapshot = async args => {
+              if (args.workflowName !== AGENTIC_LOOP_WORKFLOW_ID) return loadSnapshot(args);
+              workflows.loadWorkflowSnapshot = loadSnapshot;
+              started();
+              await loadGate;
+              return loadSnapshot(args);
+            };
+          });
+          // Only respond() failures count as the resume's answer; setup assertions fail the test directly.
+          const response = captureRejection(respond());
+          try {
             let timer: ReturnType<typeof setTimeout> | undefined;
             const load = await Promise.race([
               loadStarted.then(() => 'started'),
@@ -168,15 +173,17 @@ describeForAllEngines('A stopped approval cannot restart a run (#27617)', engine
             ]);
             clearTimeout(timer);
             expect(cleanup).toBe('started');
+          } finally {
             releaseLoad();
-            await response;
-          } else {
-            await respond();
+            releaseCleanup();
           }
-        } catch (error) {
-          rejection = error;
-        } finally {
-          releaseCleanup();
+          rejection = await response;
+        } else {
+          try {
+            rejection = await captureRejection(respond());
+          } finally {
+            releaseCleanup();
+          }
         }
         expect(aborted).toBe(true);
         expect(executed).toEqual([]);

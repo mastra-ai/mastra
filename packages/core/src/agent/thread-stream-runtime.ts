@@ -697,7 +697,8 @@ function createThreadPeerId(agentId: string, resourceId: string, threadId: strin
 
 const MAX_LOCALLY_QUEUED_SIGNAL_IDS_PER_THREAD = 1000;
 // Resume fences outlive their stream segment until the suspended snapshot is gone, so cap them.
-const MAX_RESUME_FENCED_RUN_IDS = 1000;
+/** Bound for the per-run abort marks no run cleanup will clear (parked and durable runs). */
+const MAX_ABORT_MARKED_RUN_IDS = 1000;
 
 function createRuntimeState(): AgentThreadRuntimeState {
   return {
@@ -2733,12 +2734,14 @@ export class AgentThreadStreamRuntime {
     return this.#getState(pubsub).resumeFencedRunIds.has(runId);
   }
 
+  #addCapped(ids: Set<string>, runId: string): void {
+    ids.delete(runId);
+    ids.add(runId);
+    if (ids.size > MAX_ABORT_MARKED_RUN_IDS) ids.delete(ids.values().next().value!);
+  }
+
   #fenceResume(state: AgentThreadRuntimeState, runId: string): void {
-    state.resumeFencedRunIds.delete(runId);
-    state.resumeFencedRunIds.add(runId);
-    if (state.resumeFencedRunIds.size > MAX_RESUME_FENCED_RUN_IDS) {
-      state.resumeFencedRunIds.delete(state.resumeFencedRunIds.values().next().value!);
-    }
+    this.#addCapped(state.resumeFencedRunIds, runId);
   }
 
   /**
@@ -2750,7 +2753,8 @@ export class AgentThreadStreamRuntime {
     const state = this.#getState(pubsub);
     const preparedRun = state.preparedRunsById.get(runId);
     if (!preparedRun) {
-      state.abortedRunIds.add(runId);
+      // No prepared run means no #cleanupPreparedRun to clear this mark, so cap it.
+      this.#addCapped(state.abortedRunIds, runId);
       if (fenceResume) this.#fenceResume(state, runId);
       // A run parked on a tool suspension (a question to the user, a pending
       // generation) has no prepared run left to abort, and its completion
@@ -3124,7 +3128,7 @@ export class AgentThreadStreamRuntime {
     state.abortedRunIds.delete(runId);
     if (state.resumeFencedRunIds.has(runId) && preparedRun?.cleanupAbortedRun) {
       // The aborted segment persisted a suspended snapshot. Keep the fence until that
-      // snapshot is deleted; if deletion fails the fence stays (bounded by MAX_RESUME_FENCED_RUN_IDS).
+      // snapshot is deleted; if deletion fails the fence stays (bounded by MAX_ABORT_MARKED_RUN_IDS).
       void preparedRun.cleanupAbortedRun().then(
         deleted => {
           if (deleted) state.resumeFencedRunIds.delete(runId);

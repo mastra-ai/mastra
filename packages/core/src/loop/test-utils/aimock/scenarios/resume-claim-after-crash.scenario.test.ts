@@ -7,39 +7,11 @@ import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
 import { useLoopScenarioAimock } from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
-import { Agent as MainAgent } from '../../../../agent/agent-main';
 
 type HoldWrite = (method: string, args: any, phase: 'before' | 'after') => Promise<void> | undefined;
 
-// WIP handoff: EXPLORE_STORE=libsql|pg runs against built store dists with a real clock (pair with
-// EXPLORE_RESUME_CLAIM_STALE_MS, e.g. 2000). EXPLORE_STORES_DIR points at a checkout with built stores.
-const STORE = process.env.EXPLORE_STORE ?? 'memory';
-const STORES_DIR = process.env.EXPLORE_STORES_DIR ?? new URL('../../../../../../../stores', import.meta.url).pathname;
-const DB_DIR = process.env.EXPLORE_DB_DIR ?? '/tmp';
-const REAL_CLOCK = STORE !== 'memory' || process.env.EXPLORE_REAL_CLOCK === '1';
-async function createStorage(): Promise<any> {
-  const id = `claim-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  if (STORE === 'libsql') {
-    const { LibSQLStore } = await import(`${STORES_DIR}/libsql/dist/index.js`);
-    const store = new LibSQLStore({ id, url: `file:${DB_DIR}/${id}.db` });
-    await store.init();
-    return store;
-  }
-  if (STORE === 'pg') {
-    const { PostgresStore } = await import(`${STORES_DIR}/pg/dist/index.js`);
-    const store = new PostgresStore({
-      id,
-      connectionString: 'postgresql://postgres:postgres@127.0.0.1:5434/postgres?sslmode=disable',
-      schemaName: id.replace(/-/g, '_'),
-      max: 1,
-    });
-    await store.init();
-    return store;
-  }
-  return new InMemoryStore();
-}
-const advance = (ms: number) =>
-  REAL_CLOCK ? new Promise<void>(r => setTimeout(r, ms)) : vi.advanceTimersByTimeAsync(ms).then(() => {});
+const createStorage = async () => new InMemoryStore();
+const advance = (ms: number) => vi.advanceTimersByTimeAsync(ms).then(() => {});
 const outcome = (resume: Promise<{ text: string }>) =>
   resume.then(
     r => r.text,
@@ -186,7 +158,7 @@ describe('AIMock loop scenario: resume claim after the claimant dies', () => {
     // Fake only the clock and the claim renewal interval, so the test can jump past the stale
     // window. The clock still advances with real time, so resume's own snapshot polling and
     // aimock's HTTP traffic behave normally.
-    if (!REAL_CLOCK) vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'], shouldAdvanceTime: true });
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'], shouldAdvanceTime: true });
     const resumeA = workerA.agent.resumeGenerate({ name: 'Ada' }, { runId });
     resumeA.catch(() => {});
     await aEntered.promise;
@@ -427,56 +399,4 @@ describe('AIMock loop scenario: resume claim after the claimant dies', () => {
     const snapshot = await workflows.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId });
     expect(snapshot?.resumeLeasedClaimAt).toBeUndefined();
   }, 30_000);
-  describe('next to main from before this change (e3c7914518)', () => {
-    const run = (w: any, runId: string) => outcome(w.agent.resumeGenerate({ name: 'Ada' }, { runId }));
-
-    it('main processes next to a new takeover never double-run', async () => {
-      const { storage, runId, workerA } = await setup();
-      const mainC = createWorker(storage, 'mainC', async () => {}, { agentClass: MainAgent });
-      const bEntered = deferred();
-      const bFinish = deferred();
-      const workerB = createWorker(storage, 'B', () => {
-        bEntered.resolve();
-        return bFinish.promise;
-      });
-      const mainF = createWorker(storage, 'mainF', async () => {}, { agentClass: MainAgent });
-      workerA.die();
-      await advance(AGENT_RESUME_CLAIM_STALE_MS + 1);
-      const c = await run(mainC, runId);
-      const resumeB = workerB.agent.resumeGenerate({ name: 'Ada' }, { runId });
-      await bEntered.promise;
-      const f1 = await run(mainF, runId);
-      await advance(AGENT_RESUME_CLAIM_STALE_MS * 2);
-      const f2 = await run(mainF, runId);
-      bFinish.resolve();
-      expect((await resumeB).text).toBe('Found Ada.');
-      expect([c, f1, f2]).toEqual(Array(3).fill('AGENT_RESUME_ALREADY_CLAIMED'));
-      expect([...workerA.executions, ...mainC.executions, ...workerB.executions, ...mainF.executions]).toEqual([
-        'A',
-        'B',
-      ]);
-    }, 60_000);
-
-    it('a new process never takes over a running claim started by main', async () => {
-      const { storage, runId, workerA, resumeA, finishA } = await setup({ agentClass: MainAgent });
-      const workerB = createWorker(storage, 'B', async () => {});
-      await advance(AGENT_RESUME_CLAIM_STALE_MS * 2);
-      const b = await run(workerB, runId);
-      finishA();
-      expect((await resumeA).text).toBe('Found Ada.');
-      expect(b).toBe('AGENT_RESUME_ALREADY_CLAIMED');
-      expect([...workerA.executions, ...workerB.executions]).toEqual(['A']);
-    }, 60_000);
-
-    it('main never takes over a live new-build claim', async () => {
-      const { storage, runId, workerA, resumeA, finishA } = await setup();
-      const mainF = createWorker(storage, 'mainF', async () => {}, { agentClass: MainAgent });
-      await advance(AGENT_RESUME_CLAIM_STALE_MS * 2);
-      const f = await run(mainF, runId);
-      finishA();
-      expect((await resumeA).text).toBe('Found Ada.');
-      expect(f).toBe('AGENT_RESUME_ALREADY_CLAIMED');
-      expect([...workerA.executions, ...mainF.executions]).toEqual(['A']);
-    }, 60_000);
-  });
 });

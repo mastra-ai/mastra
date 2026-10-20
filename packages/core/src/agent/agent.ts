@@ -327,8 +327,7 @@ const inFlightUnclaimedResumes = new Set<string>();
  * not started) since it was claimed, a `running` claim (on stores with run fencing) since its
  * lease was last renewed.
  */
-// WIP handoff only: EXPLORE_RESUME_CLAIM_STALE_MS shortens the window for real-clock store runs. Remove before merge.
-export const AGENT_RESUME_CLAIM_STALE_MS = Number(process.env.EXPLORE_RESUME_CLAIM_STALE_MS ?? 60_000);
+export const AGENT_RESUME_CLAIM_STALE_MS = 60_000;
 
 /** How often a running resume renews its claim lease. Several renewals fit in one stale window. */
 const AGENT_RESUME_CLAIM_RENEW_MS = AGENT_RESUME_CLAIM_STALE_MS / 4;
