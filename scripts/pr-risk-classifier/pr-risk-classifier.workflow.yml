@@ -38,7 +38,6 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             .github/actions
-            .github/CODEOWNERS
             scripts/pr-risk-classifier
             **/package.json
           sparse-checkout-cone-mode: false
