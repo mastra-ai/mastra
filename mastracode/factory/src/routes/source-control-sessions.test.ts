@@ -998,6 +998,82 @@ describe('session sandbox recreate', () => {
 
   const recreatePath = (sessionId: string) => `/web/user-sessions/${sessionId}/sandbox/recreate`;
 
+  describe('starting a sandbox from the Files tab', () => {
+    const startPath = (sessionId: string) => `/web/user-sessions/${sessionId}/sandbox/start`;
+
+    function fakeController(live: { getWorkspace: () => unknown } | null, created = live) {
+      return {
+        getSession: vi.fn(async () => live),
+        createSession: vi.fn(async () => ({ ...created, state: { get: () => ({}), set: vi.fn() } })),
+        queryThreadById: vi.fn(async () => null),
+      } as unknown as NonNullable<RouteOptions['controller']> & {
+        createSession: ReturnType<typeof vi.fn>;
+      };
+    }
+
+    it("starts the live session's sandbox", async () => {
+      const { seed, sourceControl, session } = await seedRecreateSession();
+      const start = vi.fn(async () => {});
+      const controller = fakeController({ getWorkspace: () => ({ sandbox: { start } }) });
+      const app = buildRecreateApp(seed, sourceControl, { controller });
+
+      const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ started: true });
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(controller.createSession).not.toHaveBeenCalled();
+    });
+
+    it('brings an offline session online as its owner first', async () => {
+      const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+      const start = vi.fn(async () => {});
+      const controller = fakeController(null, { getWorkspace: () => ({ sandbox: { start } }) });
+      const app = buildRecreateApp(seed, sourceControl, { controller });
+
+      const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+      expect(response.status).toBe(200);
+      const created = controller.createSession.mock.calls[0]![0];
+      expect(created).toMatchObject({ id: session.sessionId, threadId: session.sessionId, ownerId: 'user-1' });
+      expect(created.requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(start).toHaveBeenCalledTimes(1);
+    });
+
+    it('forbids a non-owner who is not an org admin', async () => {
+      const { seed, sourceControl, session } = await seedRecreateSession('someone-else');
+      const start = vi.fn(async () => {});
+      const controller = fakeController({ getWorkspace: () => ({ sandbox: { start } }) });
+      const app = buildRecreateApp(seed, sourceControl, { controller });
+
+      const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+      expect(response.status).toBe(403);
+      expect(start).not.toHaveBeenCalled();
+    });
+
+    it('returns 500 with the message when the start fails', async () => {
+      const { seed, sourceControl, session } = await seedRecreateSession();
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      onTestFinished(() => error.mockRestore());
+      const controller = fakeController({
+        getWorkspace: () => ({
+          sandbox: {
+            start: async () => {
+              throw new Error('setup failed');
+            },
+          },
+        }),
+      });
+      const app = buildRecreateApp(seed, sourceControl, { controller });
+
+      const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({ error: 'setup failed' });
+    });
+  });
+
   it('recreates the owner session with the public session id, without an admin check', async () => {
     const { seed, sourceControl, session } = await seedRecreateSession();
     const sessionRetirement = fakeCoordinator();

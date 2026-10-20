@@ -503,6 +503,50 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         });
       },
     }),
+    // Start a session's sandbox without sending it a message, for the Files tab.
+    // Brings the controller session online as the row's owner, as a delivered
+    // message would, then starts its sandbox; a running sandbox returns at once.
+    registerApiRoute('/web/user-sessions/:sessionId/sandbox/start', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const match = await resolveSession(options.sourceControls, c.req.param('sessionId'));
+        const session = match?.session;
+        if (!session) return c.json({ error: 'Session not found' }, 404);
+        const permission = await sessionManagePermission(loose(c), options.auth, resolved.tenant, session);
+        if (permission === 'not-found') return c.json({ error: 'Session not found' }, 404);
+        if (permission === 'forbidden') {
+          return c.json({ error: "Only the session's owner or an organization admin can start its sandbox." }, 403);
+        }
+        const controller = options.controller;
+        if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
+
+        try {
+          let live = await controller.getSession(session.sessionId);
+          if (!live) {
+            const requestContext = new RequestContext();
+            requestContext.set('user', { workosId: session.userId, organizationId: session.orgId });
+            live = await controller.createSession({
+              id: session.sessionId,
+              resourceId: await sessionMemoryResourceId(controller, session, options.workItems),
+              threadId: session.sessionId,
+              ownerId: session.userId,
+              requestContext,
+            });
+            await seedSessionOrg(live, session.orgId);
+          }
+          const sandbox = live.getWorkspace()?.sandbox;
+          if (!sandbox?.start) return c.json({ error: 'This session has no sandbox to start.' }, 409);
+          await sandbox.start();
+          return c.json({ started: true });
+        } catch (error) {
+          console.error('[Factory Sessions] Failed to start session sandbox', { sessionId: session.sessionId, error });
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
     registerApiRoute('/web/user-sessions/:sessionId/sandbox/recreate', {
       method: 'POST',
       requiresAuth: false,

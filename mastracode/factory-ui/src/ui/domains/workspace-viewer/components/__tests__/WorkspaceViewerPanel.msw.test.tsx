@@ -256,12 +256,28 @@ describe('WorkspaceViewerPanel', () => {
       expect(screen.getByText('agent.ts')).toBeInTheDocument();
     });
 
-    it('says the sandbox is not running instead of starting it', async () => {
+    it('starts the sandbox only when asked, then lists its files', async () => {
       installHandlers();
+      let running = false;
+      const starts: string[] = [];
       server.use(
         http.get(TREE_URL, () =>
-          HttpResponse.json({ workspacePath: WORKSPACE, path: '', available: false, entries: [] }),
+          HttpResponse.json(
+            running
+              ? {
+                  workspacePath: WORKSPACE,
+                  path: '',
+                  available: true,
+                  entries: [{ name: 'README.md', path: 'README.md', type: 'file' }],
+                }
+              : { workspacePath: WORKSPACE, path: '', available: false, entries: [] },
+          ),
         ),
+        http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/sandbox/start`, ({ params }) => {
+          starts.push(String(params.sessionId));
+          running = true;
+          return HttpResponse.json({ started: true });
+        }),
       );
       const user = userEvent.setup();
 
@@ -269,6 +285,31 @@ describe('WorkspaceViewerPanel', () => {
       await user.click(await screen.findByRole('button', { name: /^Files/ }));
 
       expect(await screen.findByText(/The sandbox isn.t running/)).toBeInTheDocument();
+      expect(starts).toEqual([]);
+
+      await user.click(screen.getByRole('button', { name: 'Wake sandbox' }));
+
+      expect(await screen.findByText('README.md')).toBeInTheDocument();
+      expect(starts).toEqual([WORKSPACE]);
+    });
+
+    it('shows why the sandbox could not start', async () => {
+      installHandlers();
+      server.use(
+        http.get(TREE_URL, () =>
+          HttpResponse.json({ workspacePath: WORKSPACE, path: '', available: false, entries: [] }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/sandbox/start`, () =>
+          HttpResponse.json({ error: 'setup failed' }, { status: 500 }),
+        ),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await user.click(await screen.findByRole('button', { name: /^Files/ }));
+      await user.click(await screen.findByRole('button', { name: 'Wake sandbox' }));
+
+      expect(await screen.findByText('setup failed')).toBeInTheDocument();
     });
 
     it('shows a folder the server refuses as an error inside that folder', async () => {

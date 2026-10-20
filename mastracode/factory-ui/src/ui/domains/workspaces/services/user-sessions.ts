@@ -114,6 +114,16 @@ export async function recreateSessionSandbox(
   return { recreated: body.recreated === true, aborted: body.aborted === true };
 }
 
+/** Start the session's sandbox without sending it a message. Resolves once it's running. */
+export async function startSessionSandbox(baseUrl: string, sessionId: string): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/sandbox/start`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  const body: { error?: string } = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Failed to start sandbox (${res.status})`);
+}
+
 /** Ask the title model to re-name a session's conversation. Resolves to the new title. */
 export async function regenerateSessionTitle(baseUrl: string, sessionId: string): Promise<string> {
   const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/title`, {
