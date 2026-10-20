@@ -551,6 +551,18 @@ describe('FilesApiFilesystem', () => {
       expect((await readdir(W)).filter(name => name.includes('mastra-tmp'))).toEqual([]);
     });
 
+    it('deletes the temp file when its upload fails after reaching the disk', async () => {
+      const dropped = new Error('response lost');
+      const write = files.write.bind(files);
+      files.write = async (path, data) => {
+        await write(path, data);
+        throw dropped;
+      };
+      await expect(fs.appendFile(`${W}/a.txt`, 'x')).rejects.toBe(dropped);
+      expect((await readdir(W)).filter(name => name.includes('mastra-tmp'))).toEqual([]);
+      expect(fs.commands).toEqual([]);
+    });
+
     it('surfaces an unknown command failure with its exit code and stderr', async () => {
       await rm(join(root, 'w/src/b.ts'));
       await mkdir(join(root, 'w/src/b.ts'));

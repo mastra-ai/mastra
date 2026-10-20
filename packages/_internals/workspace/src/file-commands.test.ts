@@ -155,6 +155,19 @@ describe('moveNoClobberCommand', () => {
   it('reports a missing source', async () => {
     expect(await sh(moveNoClobberCommand(at('missing'), at('x')))).toBe(FILE_COMMAND_EXIT.notFound);
   });
+
+  it('reads a skip that exits nonzero (coreutils 9.2+) as a taken destination', async () => {
+    // Reach the race path (destination appears after the check) with an `mv`
+    // that skips and exits 1, as newer coreutils does.
+    await mkdir(at('bin'));
+    await writeFile(at('bin/mv'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    await writeFile(at('dest.txt'), 'old');
+    const lines = moveNoClobberCommand(at('a.txt'), at('dest.txt')).split('\n');
+    const script = lines.filter(line => !line.startsWith('{ [ -e "$dest" ]')).join('\n');
+    expect(script.split('\n')).toHaveLength(lines.length - 1);
+    expect(await sh(`PATH=${at('bin')}:$PATH\n${script}`)).toBe(FILE_COMMAND_EXIT.exists);
+    expect(await text('a.txt')).toBe('A');
+  });
 });
 
 describe('appendFromCommand', () => {

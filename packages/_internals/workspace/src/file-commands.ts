@@ -98,7 +98,9 @@ export function copyCommand(src: string, dest: string, options: CopyCommandOptio
 /**
  * Move `src` to `dest` without replacing anything at `dest`, creating `dest`'s
  * parent. A skipped `mv -n` is detected by the source surviving, whatever
- * its exit code; the no-clobber rename itself is atomic.
+ * its exit code. If a directory appears at `dest` between the check and the
+ * move, `mv` moves `src` into it (BSD `mv` has no `-T`), and that is reported
+ * as success; the no-clobber rename itself is atomic.
  *
  * Exits: `notFound` (no source), `exists`.
  */
