@@ -236,7 +236,8 @@ export type ScheduleFinishContext<TMastra = unknown> = {
 
 /**
  * Argument passed to `schedules.onError` whenever `prepare` or `sendSignal` threw
- * (including the signal failing to route), or a threadless agent run threw.
+ * (including the signal failing to route), or a threadless agent run threw a
+ * non-abort error.
  */
 export type ScheduleErrorContext<TMastra = unknown> = {
   mastra: TMastra;
@@ -251,7 +252,7 @@ export type ScheduleErrorContext<TMastra = unknown> = {
   effective?: ScheduleEffective;
 };
 
-/** Argument passed to `schedules.onAbort` when a threadless run was aborted mid-stream. */
+/** Argument passed to `schedules.onAbort` when a threadless run was aborted. */
 export type ScheduleAbortContext<TMastra = unknown> = {
   mastra: TMastra;
   /** The agent this schedule fires. Convenience alias for `schedule.agentId`. */
@@ -268,8 +269,8 @@ export type ScheduleAbortContext<TMastra = unknown> = {
  *
  * `onFinish` fires once per schedule trigger when the trigger reached a
  * non-error, non-abort outcome. `onError` fires when `prepare` or
- * `sendSignal` threw, or a threadless agent run threw. `onAbort` fires when a
- * threadless run was aborted mid-stream. A threaded schedule hands the prompt
+ * `sendSignal` threw, or a threadless agent run threw a non-abort error.
+ * `onAbort` fires when a threadless run was aborted. A threaded schedule hands the prompt
  * to the thread without waiting for the run, so failures or aborts after the
  * run starts surface on the thread's run stream, not through these hooks.
  * `prepare` can return overrides, `null` to skip, or `undefined` to use row

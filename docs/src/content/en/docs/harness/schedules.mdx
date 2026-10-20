@@ -182,10 +182,10 @@ const mastra = new Mastra({
       // Runs on any non-error, non-abort outcome. For a threaded schedule, this is the hand-off, not the end of the run
     },
     onError: async ({ agentId, phase, error }) => {
-      // Runs when prepare or the signal threw, or a threadless run failed
+      // Runs when prepare or the signal threw, or a threadless run failed without aborting
     },
     onAbort: async ({ agentId, runId }) => {
-      // Runs when a threadless run was aborted mid-stream
+      // Runs when a threadless run was aborted
     },
   },
 })
@@ -195,8 +195,8 @@ The hooks are:
 
 - `prepare`: runs before the fire. Return an object to override fire-time parameters such as `prompt` or `threadId`, `null` to skip the fire, or `undefined` to use the stored defaults.
 - `onFinish`: runs once per trigger that reached a non-error, non-abort outcome. When a threaded schedule starts a new run, it runs with `outcome: 'succeeded'` as soon as the run starts, not when it finishes.
-- `onError`: runs after a failure in `prepare` or the signal. For a schedule without a `threadId`, it also runs when the agent run fails.
-- `onAbort`: runs when the run of a schedule without a `threadId` was aborted mid-stream.
+- `onError`: runs after a failure in `prepare` or the signal. For a schedule without a `threadId`, it also runs when the agent run fails with an error that isn't an abort.
+- `onAbort`: runs when the run of a schedule without a `threadId` was aborted.
 
 For a schedule with a `threadId`, the worker hands the prompt to the thread and doesn't wait for the run. Errors and aborts after the run starts surface on that thread's run, not through `onError` or `onAbort`.
 
