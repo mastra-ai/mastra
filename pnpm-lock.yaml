@@ -4869,6 +4869,9 @@ importers:
       fs-extra:
         specifier: ^11.3.5
         version: 11.4.1
+      get-tsconfig:
+        specifier: ^4.14.0
+        version: 4.14.0
       hono:
         specifier: 4.13.13
         version: 4.13.13
@@ -4884,15 +4887,9 @@ importers:
       rollup-plugin-esbuild:
         specifier: ^6.2.1
         version: 6.2.1(esbuild@0.28.1)(rollup@4.62.2)(supports-color@10.2.2)
-      strip-json-comments:
-        specifier: ^5.0.3
-        version: 5.0.3
       tinyglobby:
         specifier: ^0.2.17
         version: 0.2.17
-      typescript-paths:
-        specifier: ^1.5.2
-        version: 1.5.2(typescript@6.0.3)
       ws:
         specifier: ^8.21.3
         version: 8.22.0(bufferutil@4.1.0)
@@ -31069,11 +31066,6 @@ packages:
     engines: {node: '>=20'}
     hasBin: true
 
-  typescript-paths@1.5.2:
-    resolution: {integrity: sha512-s5iiRIWOSw80dBgPACm0asPQZHHQcbPz69f26eRq01dStusuD11idZ0NDcAbkj6WuUGcRwJediPOsrArIS92eg==}
-    peerDependencies:
-      typescript: ^4.7.2 || ^5 || ^6
-
   typescript@4.9.5:
     resolution: {integrity: sha512-1FXk9E2Hm+QzZQ7z+McJiHL4NW1F2EzMu9Nq9i3zAaGqibafqYwCVU6WyWAuyQRRzOlxou8xZSyXLEN8oKj24g==}
     engines: {node: '>=4.2.0'}
@@ -57221,10 +57213,6 @@ snapshots:
     dependencies:
       vscode-jsonrpc: 5.0.1
       vscode-languageserver-protocol: 3.17.5
-
-  typescript-paths@1.5.2(typescript@6.0.3):
-    dependencies:
-      typescript: 6.0.3
 
   typescript@4.9.5: {}
 
