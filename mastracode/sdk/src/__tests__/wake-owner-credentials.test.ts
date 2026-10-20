@@ -288,3 +288,48 @@ describe('a schedule firing into a session that is not live in this process', ()
     expect(storeTenants).toEqual([]);
   });
 });
+
+/**
+ * Session A is live here, and the schedule's thread is on A's resource but
+ * belongs to another project (its `projectPath` differs), so another process
+ * owns it. Running it here would run it with no owner identity, in the wrong
+ * workspace.
+ */
+describe("a schedule firing into another project's thread on this session's resource", () => {
+  it('leaves the wake to the claimed thread owner instead of running it here without one', async () => {
+    const { code, storage, ownerContext } = await start({ resume: 'owner', scheduleTools: true });
+    await code.controller.createSession({
+      id: SESSION_ID,
+      resourceId: SESSION_ID,
+      ownerId: OWNER.workosId,
+      requestContext: ownerContext(),
+    });
+    const memory = await storage.getStore('memory');
+    if (!memory) throw new Error('memory store unavailable');
+    const threadId = 'other-project-thread';
+    const now = new Date();
+    await memory.saveThread({
+      thread: {
+        id: threadId,
+        resourceId: SESSION_ID,
+        title: 'other project',
+        metadata: { projectPath: path.join(directory, 'other-project') },
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+    const schedule = code.threadScheduler.create(
+      { prompt: 'check the build', trigger: { kind: 'every', interval: { ms: 60_000 } } },
+      { resourceId: SESSION_ID, threadId },
+    );
+
+    const result = await code.threadScheduler.run(schedule.id);
+    code.threadScheduler.delete(schedule.id);
+
+    // No process here claims the thread, so the wake is refused rather than run
+    // locally as a bare wake with no owner identity.
+    expect(result).toMatchObject({ status: 'failed' });
+    expect(result.status === 'failed' ? result.error.message : '').toMatch(/No claimed thread owner responded/);
+    expect(mock.getRequests()).toEqual([]);
+  });
+});
