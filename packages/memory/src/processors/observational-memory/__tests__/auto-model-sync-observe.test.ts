@@ -117,6 +117,49 @@ describe("'auto' model on the turn's sync observation", () => {
     expect(record?.activeObservations).toContain('User discussed topic X');
   });
 
+  it('uses an identity-only currentModel passed to observe() when Google is unusable', async () => {
+    vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+    const threadId = 'auto-identity-thread';
+    const resourceId = 'auto-identity-resource';
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    await storage.saveThread({
+      thread: { id: threadId, resourceId, title: 't', createdAt: new Date(), updatedAt: new Date(), metadata: {} },
+    });
+
+    const resolveModel = vi.fn(async (modelId: string) => createObserverModel(modelId));
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      canUseProvider: providerId => providerId === 'anthropic',
+      resolveModel,
+      observation: { model: 'auto', messageTokens: 500, bufferTokens: false },
+      reflection: { model: 'auto', observationTokens: 50_000 },
+    });
+
+    const messages = Array.from({ length: 20 }, (_, i) =>
+      createMessage(
+        `Step ${i}: `.padEnd(200, 'x'),
+        i % 2 === 0 ? 'user' : 'assistant',
+        `msg-${i}`,
+        new Date(Date.now() - (30 - i) * 1000),
+      ),
+    );
+
+    await om.observe({
+      threadId,
+      resourceId,
+      messages,
+      force: true,
+      currentModel: { provider: 'anthropic', modelId: 'claude-sonnet-4-5' },
+    });
+
+    const pickedModelIds = resolveModel.mock.calls.map(([modelId]) => modelId);
+    expect(pickedModelIds).toContain('anthropic/claude-haiku-4-5');
+    expect(pickedModelIds.filter(modelId => modelId.startsWith('google/'))).toEqual([]);
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record?.activeObservations).toContain('User discussed topic X');
+  });
+
   it('fails with a clear error instead of picking an unusable Gemini when no main model is known', async () => {
     vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
     const resolveModel = vi.fn(async (modelId: string) => createObserverModel(modelId));

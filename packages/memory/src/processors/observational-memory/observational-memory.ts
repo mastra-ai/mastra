@@ -1072,7 +1072,7 @@ export class ObservationalMemory {
         requestContext: options.requestContext,
       })) as ResolvedInvocationModel;
     }
-    const mainModelId = getModelId(mainModel);
+    const mainModelId = mainModel ? getModelId(mainModel) : getCurrentModel(options?.currentModel);
     const pick = resolveAutoModelId(mainModelId, this.autoModelOptions(options?.requestContext));
 
     // No cheaper sibling is known: reuse the main model exactly as configured.
