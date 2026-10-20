@@ -74,6 +74,27 @@ describe('AIMock loop scenario: structuring model on the generate() path', () =>
     expect(result.object).toEqual(article);
     expect(structuringRequests(llm).map(requestText)).toEqual([expect.stringContaining(prose)]);
   });
+
+  it('returns the main prose and fallbackValue when the structuring model call fails', async () => {
+    const llm = getMock();
+    const schema = z.object({ impossible: z.literal('exact_match_required'), number: z.number().min(1000).max(1000) });
+    const fallbackValue: z.infer<typeof schema> = { impossible: 'exact_match_required', number: 1000 };
+    const prose = 'It is sunny and warm today, a great day for a walk.';
+    llm.on({ endpoint: 'chat', predicate: req => !isStructuring(req) }, { content: prose });
+    llm.on(
+      { endpoint: 'chat', predicate: isStructuring },
+      { error: { message: 'structuring model failed', type: 'invalid_request_error' }, status: 400 },
+    );
+
+    const { agent } = await createSharedAgent(llm);
+    const result = await agent.generate('Tell me about the weather today in a casual way.', {
+      structuredOutput: { schema, model: structuringModel(llm), errorStrategy: 'fallback', fallbackValue },
+    });
+
+    expect(result.text).toBe(prose);
+    expect(result.object).toEqual(fallbackValue);
+    expect(structuringRequests(llm).length).toBeGreaterThan(0);
+  });
 });
 
 describeForAllEngines('AIMock loop scenario: structuring model error strategy and prompt injection', engine => {
