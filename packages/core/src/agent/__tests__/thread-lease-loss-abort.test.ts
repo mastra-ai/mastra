@@ -102,6 +102,16 @@ class ReplicaPubSub extends EventEmitterPubSub {
   }
 }
 
+/** A pubsub that can't lease, like google-cloud-pubsub or a custom backend. */
+class NoLeasePubSub extends EventEmitterPubSub {
+  constructor() {
+    super();
+    for (const method of ['acquireLease', 'getLeaseOwner', 'releaseLease', 'renewLease', 'transferLease']) {
+      Object.defineProperty(this, method, { value: undefined });
+    }
+  }
+}
+
 describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
   let llm: LLMock;
 
@@ -118,7 +128,7 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     shared: SharedLeases,
     memory: MockMemory,
     tools: Record<string, any> = {},
-    pubsub = new ReplicaPubSub(shared),
+    pubsub: EventEmitterPubSub = new ReplicaPubSub(shared),
   ) {
     const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
     const config = { model: openai('gpt-4o-mini'), memory, tools };
@@ -411,6 +421,38 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(besideSuccessor).toEqual([]);
     expect(await oldRun.finishReason).toBe('aborted');
   }, 30_000);
+
+  it('runs tools on a pubsub that cannot lease', async () => {
+    for (let i = 0; i < 2; i++) {
+      llm.on(
+        { userMessage: 'no lease run', sequenceIndex: i },
+        { toolCalls: [{ id: `call_no_lease_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    llm.on({ userMessage: 'no lease run', sequenceIndex: 2 }, { content: 'no lease done' });
+
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        return 'ticked';
+      },
+    });
+    const agent = replica(new SharedLeases(), new MockMemory(), { tick }, new NoLeasePubSub());
+
+    const { output, drain } = await startStream(agent, 'no lease run', {
+      maxSteps: 5,
+      memory: { thread: 'no-lease-thread', resource: RESOURCE },
+    });
+    await drain();
+
+    expect(ticks).toBe(2);
+    expect(await output.text).toBe('no lease done');
+    expect(await output.finishReason).not.toBe('aborted');
+  }, 20_000);
 
   it('never aborts a run whose lease stays healthy across many renewals', async () => {
     for (let i = 0; i < 6; i++) {

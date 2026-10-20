@@ -902,7 +902,10 @@ export class AgentThreadStreamRuntime {
     state.leaseRenewalTimers.set(runId, timer);
     // The lease was acquired or transferred just before this call.
     this.#armLeaseDeadline(pubsub, runId, Date.now());
-    setRunLeaseFence(runId, this.#leaseFence(pubsub, key, runId, timer));
+    // A pubsub that can't lease has no owner to check, so every tool call would look like a takeover.
+    if (!this.#resolveLeaseProvider(pubsub).isFallback) {
+      setRunLeaseFence(runId, this.#leaseFence(pubsub, key, runId, timer));
+    }
   }
 
   /**
