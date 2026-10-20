@@ -19,6 +19,9 @@ class CommandExitError extends Error {
   }
 }
 
+/** Shaped like envd ending a stream early (a Platform lease expiring). */
+class StreamDropError extends Error {}
+
 type Listener = { onStdout?: (data: string) => void; onStderr?: (data: string) => void };
 
 /**
@@ -32,6 +35,10 @@ class HostCommands implements CommandsApi {
     { child: ChildProcess; cmd: string; listeners: Listener[]; done: Promise<number> }
   >();
   readonly calls: string[] = [];
+  readonly connectTimeouts: Array<number | undefined> = [];
+  /** Ends every open stream: listeners stop and `wait()` rejects, the processes keep running. */
+  dropStreams = () => {};
+  private drops = new Set<() => void>();
 
   async run(command: string, opts: Listener & { stdin?: boolean; cwd?: string; envs?: Record<string, string> }) {
     this.calls.push('run');
@@ -55,15 +62,16 @@ class HostCommands implements CommandsApi {
       child.on('close', (code, signal) => resolve(code ?? (signal ? 137 : 1))),
     );
     this.children.set(child.pid!, { child, cmd: command, listeners, done });
-    return this.handle(child.pid!, done, () => ({ stdout, stderr }));
+    return this.handle(child.pid!, done, () => ({ stdout, stderr }), opts);
   }
 
-  async connect(pid: number, opts: Listener = {}) {
+  async connect(pid: number, opts: Listener & { timeoutMs?: number } = {}) {
     this.calls.push('connect');
+    this.connectTimeouts.push(opts.timeoutMs);
     const entry = this.children.get(pid);
     if (!entry || entry.child.exitCode !== null) throw new Error(`process ${pid} not found`);
     entry.listeners.push(opts);
-    return this.handle(pid, entry.done, () => ({ stdout: '', stderr: '' }));
+    return this.handle(pid, entry.done, () => ({ stdout: '', stderr: '' }), opts);
   }
 
   async list() {
@@ -83,16 +91,35 @@ class HostCommands implements CommandsApi {
     this.children.get(pid)!.child.stdin!.write(data);
   }
 
-  private handle(pid: number, done: Promise<number>, output: () => { stdout: string; stderr: string }) {
+  private handle(
+    pid: number,
+    done: Promise<number>,
+    output: () => { stdout: string; stderr: string },
+    listener?: Listener,
+  ) {
     let exitCode: number | undefined;
     void done.then(code => (exitCode = code));
+    let drop!: () => void;
+    const dropped = new Promise<never>((_, reject) => {
+      drop = () => {
+        const listeners = this.children.get(pid)?.listeners;
+        if (listeners && listener) listeners.splice(listeners.indexOf(listener), 1);
+        reject(new StreamDropError('[unavailable] the connection ended before the stream completed'));
+      };
+    });
+    dropped.catch(() => {});
+    this.drops.add(drop);
+    this.dropStreams = () => {
+      for (const d of this.drops) d();
+      this.drops.clear();
+    };
     return {
       pid,
       get exitCode() {
         return exitCode;
       },
       async wait() {
-        const code = await done;
+        const code = await Promise.race([done, dropped]);
         if (code !== 0) throw new CommandExitError(code, output().stdout, output().stderr);
         return { exitCode: code };
       },
@@ -114,6 +141,10 @@ class HostProcessManager extends CommandsApiProcessManager {
   runCommands<T>(operation: CommandsApiOperation, fn: (commands: CommandsApi) => Promise<T>): Promise<T> {
     this.operations.push(operation);
     return fn(this.commands);
+  }
+
+  isStreamDrop(error: unknown) {
+    return error instanceof StreamDropError;
   }
 }
 
@@ -154,6 +185,36 @@ describe('CommandsApiProcessManager', () => {
     await until(() => handle.stdout === 'first\n');
     expect(handle.exitCode).toBeUndefined();
     await handle.kill();
+  });
+
+  it('reattaches when the output stream drops while the process keeps running', async () => {
+    const processes = setup();
+    const handle = await processes.spawn('echo before; read _; echo after; exit 4');
+    const waiting = handle.wait();
+    await until(() => handle.stdout === 'before\n');
+
+    commands.dropStreams();
+    await until(() => commands.calls.filter(call => call === 'connect').length === 1);
+    await handle.sendStdin('go\n');
+
+    expect(await waiting).toMatchObject({ success: false, exitCode: 4, stdout: 'before\nafter\n' });
+    expect(await handle.wait()).toMatchObject({ exitCode: 4 });
+    // No deadline on the reattached stream: the SDK's default would cut it after 60s.
+    expect(commands.connectTimeouts).toEqual([0]);
+  });
+
+  it('gives up on a dropped stream once the process is gone', async () => {
+    const processes = setup();
+    const handle = await processes.spawn('sleep 5');
+    const waiting = handle.wait();
+    // The VM no longer lists it: it ended while nobody was attached.
+    commands.list = async () => [];
+
+    commands.dropStreams();
+    const result = await waiting;
+    expect(result.success).toBe(false);
+    expect(result.stderr).toContain('[unavailable]');
+    expect(commands.calls).not.toContain('connect');
   });
 
   it('maps a non-zero exit, keeping output that arrived only on the error', async () => {
@@ -199,6 +260,7 @@ describe('CommandsApiProcessManager', () => {
     const attached = await processes.get(String(other.pid));
     expect(attached?.pid).toBe(String(other.pid));
     await until(() => attached?.stdout === 'after\n');
+    expect(commands.connectTimeouts).toEqual([0]);
 
     expect(await processes.get('not-a-pid')).toBeUndefined();
     expect(await processes.get('999999')).toBeUndefined();

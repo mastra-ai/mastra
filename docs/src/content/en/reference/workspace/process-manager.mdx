@@ -128,6 +128,8 @@ const handle = await sandbox.processes.spawn('npm run dev', {
 
 List all tracked processes. Returns info about each process including PID, running state, and exit code.
 
+A process that has exited stays in the list until something reads it with `get(pid)`, so a finished command's output can still be read.
+
 ```typescript
 const procs = await sandbox.processes.list()
 for (const proc of procs) {
@@ -137,9 +139,11 @@ for (const proc of procs) {
 
 **Returns:** `Promise<ProcessInfo[]>`
 
-### `get(pid)`
+### `get(pid, options?)`
 
 Get a handle to a process by PID. Returns `undefined` if the process isn't found or has already been dismissed.
+
+Reading a process that has exited dismisses it: later calls return `undefined` and it leaves `list()`. Pass `{ release: false }` to read it and leave it available, for example when a UI shows a process's output that an agent will also read.
 
 ```typescript
 const handle = await sandbox.processes.get(1234)
@@ -147,7 +151,27 @@ if (handle) {
   console.log(handle.stdout)
   await handle.kill()
 }
+
+// Read without dismissing an exited process
+const peek = await sandbox.processes.get(1234, { release: false })
 ```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'pid',
+    type: 'string',
+    description: 'Process ID.',
+  },
+  {
+    name: 'options.release',
+    type: 'boolean',
+    description: 'Whether reading an exited process dismisses it. Defaults to `true`.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+]}
+/>
 
 **Returns:** `Promise<ProcessHandle | undefined>`
 
