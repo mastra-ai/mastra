@@ -13,6 +13,15 @@ const candidate = {
   reason: 'retrieved',
 };
 describe('discovery diagnostic privacy contract', () => {
+  it.each(['/.', '/..', '/%2e', '/%2e%2e', '/%2e%'])(
+    'discards_truncated_dot_segments_that_would_change_when_reparsed: %s',
+    ending => {
+      const prefix = 'https://example.com/';
+      const url = prefix + 'a'.repeat(512 - prefix.length - ending.length) + ending + 'suffix';
+      expect(selectionDiagnosticUrl(url)).toBeNull();
+    },
+  );
+
   it('discards_unsafe_urls_and_keeps_only_bounded_public_https_host_path_prefixes', () => {
     for (const value of [
       'sensitive-marker',

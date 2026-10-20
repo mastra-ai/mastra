@@ -38,6 +38,21 @@ async function research(
 }
 
 describe('persisted discovery selection diagnostics', () => {
+  it('persists_the_assessment_when_a_source_diagnostic_truncates_at_a_dot_segment', async () => {
+    const prefix = 'https://example.com/';
+    const source = prefix + 'a'.repeat(512 - prefix.length - 3) + '/..suffix';
+    const { qualify, app } = await research([source]);
+    const { assessment, round } = await qualify();
+    expect(round.diagnostic.discoverySelection!.candidates[0]).toMatchObject({
+      url: null,
+      priority: null,
+      rank: null,
+      selected: true,
+      reason: 'retrieved',
+    });
+    expect((await app.store.qualifications.get(assessment.runId))!.assessment!.id).toBe(assessment.id);
+  });
+
   it('explains_existing_priority_citation_ties_filters_and_attempts_without_changing_retrieval', async () => {
     const team = 'https://example.com/team?tracking=sensitive-marker#sensitive-marker';
     const about = 'https://example.com/about';

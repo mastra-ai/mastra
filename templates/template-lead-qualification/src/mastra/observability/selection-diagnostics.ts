@@ -17,7 +17,9 @@ export function selectionDiagnosticUrl(value: string): string | null {
     url.hostname = host.data;
     url.search = url.hash = '';
     // Keep a bounded host/path prefix, without a partial percent escape.
-    return url.href.slice(0, 512).replace(/%(?:[\da-f])?$/i, '');
+    const bounded = url.href.slice(0, 512).replace(/%(?:[\da-f])?$/i, '');
+    // A truncated dot segment must not normalize to a different persisted URL.
+    return new URL(bounded).href === bounded ? bounded : null;
   } catch {
     return null;
   }
