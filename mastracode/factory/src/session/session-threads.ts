@@ -63,11 +63,52 @@ export function memoryResourceOf(
         ? session.userId
         : factoryProjectId
       : undefined;
-  const allowed = shared
-    ? [session.sessionId, shared]
-    : [session.sessionId, session.userId, ...(runBound && factoryProjectId ? [factoryProjectId] : [])];
+  if (shared) {
+    if (own?.resourceId && [session.sessionId, shared].includes(own.resourceId)) return own.resourceId;
+    return shared;
+  }
+  // A session a person started runs on their resource while private and its
+  // Factory's once its owner shares it, which moves its threads there. Its own
+  // thread says where it is; a client cannot make a private session the
+  // Factory's by writing that thread, since the Factory is only allowed for a
+  // shared or run-bound session.
+  const allowed = [
+    session.sessionId,
+    session.userId,
+    ...((runBound || session.visibility === 'org') && factoryProjectId ? [factoryProjectId] : []),
+  ];
   if (own?.resourceId && allowed.includes(own.resourceId)) return own.resourceId;
-  return shared ?? session.userId;
+  return session.userId;
+}
+
+/** The resource a person's session belongs on for a visibility: its Factory's once shared, its owner's while private. */
+export function userSessionResourceFor(
+  session: Pick<FactorySessionOwnership, 'userId' | 'factoryProjectId'>,
+  visibility: 'org' | 'private',
+): string {
+  return visibility === 'org' && session.factoryProjectId ? session.factoryProjectId : session.userId;
+}
+
+/**
+ * The threads to move when a person's session changes visibility and so moves
+ * onto `resourceId`: its own thread and the threads stamped with its id that
+ * sit on its owner's or Factory's resource. Threads under the session's own id
+ * (from before resources were shared) stay where they are.
+ */
+export async function sessionThreadsToMove(
+  controller: Pick<AgentController<any>, 'queryThreads' | 'queryThreadById'>,
+  session: FactorySessionOwnership,
+  resourceId: string,
+): Promise<string[]> {
+  const movable = new Set([session.userId, ...(session.factoryProjectId ? [session.factoryProjectId] : [])]);
+  const [own, stamped] = await Promise.all([
+    controller.queryThreadById({ threadId: session.sessionId }),
+    controller.queryThreads({ metadata: { factorySessionId: session.sessionId } }),
+  ]);
+  const threads = [...(own ? [own] : []), ...stamped].filter(
+    thread => thread.resourceId !== resourceId && movable.has(thread.resourceId),
+  );
+  return [...new Set(threads.map(thread => thread.id))];
 }
 
 /**

@@ -5,10 +5,17 @@ import { describe, expect, it } from 'vitest';
 
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { canViewSourceControlSession, createSessionAccessGuard } from './session-access.js';
+import type { SessionResourceLookup } from './session-access.js';
 import { fakeRouteAuth } from './test-utils.js';
 
 const PRIVATE_ID = '00000000-0000-4000-8000-0000000000a1';
 const SHARED_ID = '00000000-0000-4000-8000-0000000000a2';
+/** Shared before resources followed visibility, so it still runs on its owner's resource. */
+const UNMOVED_SHARED_ID = '00000000-0000-4000-8000-0000000000a3';
+/** From before resources were shared: runs on its own id. */
+const LEGACY_PRIVATE_ID = '00000000-0000-4000-8000-0000000000a4';
+const FACTORY_ID = 'factory-1';
+const OTHER_FACTORY_ID = 'factory-2';
 
 function row(sessionId: string, visibility: SourceControlSession['visibility']): SourceControlSession {
   return { sessionId, orgId: 'org-1', userId: 'owner', visibility } as SourceControlSession;
@@ -17,9 +24,34 @@ function row(sessionId: string, visibility: SourceControlSession['visibility']):
 const rows = new Map([
   [PRIVATE_ID, row(PRIVATE_ID, 'private')],
   [SHARED_ID, row(SHARED_ID, 'org')],
+  [UNMOVED_SHARED_ID, row(UNMOVED_SHARED_ID, 'org')],
+  [LEGACY_PRIVATE_ID, row(LEGACY_PRIVATE_ID, 'private')],
 ]);
 
-function buildApp(user?: { workosId: string; organizationId: string }) {
+// Each session's own thread (thread id === session id) and the resource it sits on.
+const threadResources = new Map([
+  [PRIVATE_ID, 'owner'],
+  [SHARED_ID, FACTORY_ID],
+  [UNMOVED_SHARED_ID, 'owner'],
+  [LEGACY_PRIVATE_ID, LEGACY_PRIVATE_ID],
+  // A thread the owner opened from a session, addressed directly as if it were a session.
+  ['owner-side-thread', 'owner'],
+]);
+
+const controller: SessionResourceLookup = {
+  getSession: async () => undefined,
+  queryThreadById: async ({ threadId }) => {
+    const resourceId = threadResources.get(threadId);
+    return resourceId ? { resourceId } : null;
+  },
+};
+
+const projects = new Map([
+  [FACTORY_ID, 'org-1'],
+  [OTHER_FACTORY_ID, 'org-2'],
+]);
+
+function buildApp(user?: { workosId: string; organizationId: string }, options: { authEnabled?: boolean } = {}) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
@@ -29,8 +61,12 @@ function buildApp(user?: { workosId: string; organizationId: string }) {
   app.use(
     '*',
     createSessionAccessGuard({
-      auth: fakeRouteAuth(),
+      auth: fakeRouteAuth({ enabled: options.authEnabled }),
       sessions: { getBySessionId: async id => rows.get(id) ?? null },
+      projects: {
+        get: async ({ orgId, id }) => (projects.get(id) === orgId ? ({ id, orgId } as never) : null),
+      },
+      controller: () => controller,
     }),
   );
   // Downstream handlers echo the body the way the Mastra server adapter reads
@@ -39,7 +75,7 @@ function buildApp(user?: { workosId: string; organizationId: string }) {
   app.post('/api/agent-controller/:controllerId/sessions', async c =>
     c.json({ reached: true, body: await adapterBody(c) }),
   );
-  app.post('/api/agent-controller/:controllerId/sessions/:resourceId/resource', async c =>
+  app.post('/api/agent-controller/:controllerId/sessions/:sessionId/resource', async c =>
     c.json({ reached: true, body: await adapterBody(c) }),
   );
   app.all('/api/agent-controller/:controllerId/sessions/*', c => c.json({ reached: true }));
@@ -50,9 +86,10 @@ function buildApp(user?: { workosId: string; organizationId: string }) {
   app.get('/api/agent-controller/:controllerId/active-runs', c =>
     c.json({
       runs: [
-        { runId: 'run-private', resourceId: PRIVATE_ID, threadId: 'thread-private' },
-        { runId: 'run-shared', resourceId: SHARED_ID, threadId: 'thread-shared' },
-        { runId: 'run-personal', resourceId: 'teammate-own', threadId: 'thread-personal' },
+        { runId: 'run-owner', resourceId: 'owner', threadId: PRIVATE_ID },
+        { runId: 'run-factory', resourceId: FACTORY_ID, threadId: SHARED_ID },
+        { runId: 'run-legacy', resourceId: LEGACY_PRIVATE_ID, threadId: LEGACY_PRIVATE_ID },
+        { runId: 'run-teammate', resourceId: 'teammate', threadId: 'thread-teammate' },
       ],
     }),
   );
@@ -63,7 +100,7 @@ function buildApp(user?: { workosId: string; organizationId: string }) {
 
 const owner = buildApp({ workosId: 'owner', organizationId: 'org-1' });
 const teammate = buildApp({ workosId: 'teammate', organizationId: 'org-1' });
-const outsider = buildApp({ workosId: 'owner', organizationId: 'org-2' });
+const outsider = buildApp({ workosId: 'outsider', organizationId: 'org-2' });
 
 const post = (app: Hono, path: string, body: unknown) =>
   app.request(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -86,96 +123,124 @@ describe('createSessionAccessGuard', () => {
     ['PUT', 'state'],
     ['GET', ''],
   ] as const;
+  const sessionPath = (id: string, suffix = '') =>
+    `/api/agent-controller/code/sessions/${id}${suffix ? `/${suffix}` : ''}`;
 
   it.each(sessionRoutes)("404s a teammate's %s /%s on a private session", async (method, suffix) => {
-    const path = `/api/agent-controller/code/sessions/${PRIVATE_ID}${suffix ? `/${suffix}` : ''}`;
-    const res = await teammate.request(path, { method });
+    const res = await teammate.request(sessionPath(PRIVATE_ID, suffix), { method });
     expect(res.status).toBe(404);
     await expect(res.json()).resolves.toEqual({ error: 'Session not found' });
   });
 
   it.each(sessionRoutes)('lets the owner reach %s /%s on their private session', async (method, suffix) => {
-    const path = `/api/agent-controller/code/sessions/${PRIVATE_ID}${suffix ? `/${suffix}` : ''}`;
-    expect((await owner.request(path, { method })).status).toBe(200);
+    expect((await owner.request(sessionPath(PRIVATE_ID, suffix), { method })).status).toBe(200);
   });
 
-  it('lets teammates reach org-visible sessions but not across organizations', async () => {
-    expect((await teammate.request(`/api/agent-controller/code/sessions/${SHARED_ID}/stream`)).status).toBe(200);
-    expect((await outsider.request(`/api/agent-controller/code/sessions/${SHARED_ID}/stream`)).status).toBe(404);
+  it('lets teammates reach a shared session on its Factory, but not across organizations', async () => {
+    expect((await teammate.request(sessionPath(SHARED_ID, 'threads'))).status).toBe(200);
+    expect((await outsider.request(sessionPath(SHARED_ID, 'threads'))).status).toBe(404);
   });
 
-  it('guards get-or-create by the body resourceId and leaves the body readable', async () => {
-    const denied = await post(teammate, '/api/agent-controller/code/sessions', { resourceId: PRIVATE_ID });
-    expect(denied.status).toBe(404);
+  it("404s a teammate on a shared session still on its owner's resource, whose threads list every owner session", async () => {
+    expect((await teammate.request(sessionPath(UNMOVED_SHARED_ID, 'threads'))).status).toBe(404);
+    expect((await owner.request(sessionPath(UNMOVED_SHARED_ID, 'threads'))).status).toBe(200);
+  });
 
-    const allowed = await post(owner, '/api/agent-controller/code/sessions', { resourceId: PRIVATE_ID });
+  it("404s a teammate addressing one of the owner's threads as a session", async () => {
+    expect((await teammate.request(sessionPath('owner-side-thread', 'threads'))).status).toBe(404);
+    expect((await owner.request(sessionPath('owner-side-thread', 'threads'))).status).toBe(200);
+  });
+
+  it('passes through a session on its own id that no Factory session row claims', async () => {
+    expect((await teammate.request(sessionPath('teammate-scratch', 'stream'))).status).toBe(200);
+  });
+
+  it('guards get-or-create by the session and resource it names, leaving the body readable', async () => {
+    const create = '/api/agent-controller/code/sessions';
+    expect((await post(teammate, create, { sessionId: PRIVATE_ID, resourceId: 'teammate' })).status).toBe(404);
+    expect((await post(teammate, create, { resourceId: PRIVATE_ID })).status).toBe(404);
+    expect((await post(teammate, create, { sessionId: 'new-session', resourceId: 'owner' })).status).toBe(404);
+    expect((await post(teammate, create, { sessionId: 'new-session', resourceId: FACTORY_ID })).status).toBe(200);
+    expect((await post(outsider, create, { sessionId: 'new-session', resourceId: FACTORY_ID })).status).toBe(404);
+
+    const allowed = await post(owner, create, { sessionId: PRIVATE_ID, resourceId: 'owner' });
     expect(allowed.status).toBe(200);
-    await expect(allowed.json()).resolves.toEqual({ reached: true, body: { resourceId: PRIVATE_ID } });
+    await expect(allowed.json()).resolves.toEqual({
+      reached: true,
+      body: { sessionId: PRIVATE_ID, resourceId: 'owner' },
+    });
   });
 
-  it('guards memory-settings routes that resolve a live session', async () => {
-    expect((await teammate.request(`/web/config/om?resourceId=${PRIVATE_ID}`)).status).toBe(404);
-    expect((await owner.request(`/web/config/om?resourceId=${PRIVATE_ID}`)).status).toBe(200);
+  it('guards memory-settings routes by the session they name', async () => {
+    expect((await teammate.request(`/web/config/om?sessionId=${PRIVATE_ID}`)).status).toBe(404);
+    expect((await owner.request(`/web/config/om?sessionId=${PRIVATE_ID}`)).status).toBe(200);
+    expect((await teammate.request('/web/config/om')).status).toBe(200);
     expect(
-      (await post(teammate, '/web/config/om/observer/model', { resourceId: PRIVATE_ID, modelId: 'x' })).status,
+      (await post(teammate, '/web/config/om/observer/model', { sessionId: PRIVATE_ID, modelId: 'x' })).status,
     ).toBe(404);
-    const allowed = await post(owner, '/web/config/om/observer/model', { resourceId: PRIVATE_ID, modelId: 'x' });
+    const allowed = await post(owner, '/web/config/om/observer/model', { sessionId: PRIVATE_ID, modelId: 'x' });
     expect(allowed.status).toBe(200);
     await expect(allowed.json()).resolves.toMatchObject({ body: { modelId: 'x' } });
   });
 
-  it('passes through resources that are not source-control sessions', async () => {
-    expect((await teammate.request('/api/agent-controller/code/sessions/teammate/stream')).status).toBe(200);
-    expect((await teammate.request('/web/config/om')).status).toBe(200);
+  it('denies a signed-out caller addressing a session', async () => {
+    expect((await buildApp().request(sessionPath(PRIVATE_ID, 'stream'))).status).toBe(404);
   });
 
-  it('denies a signed-out caller addressing a private session', async () => {
-    expect((await buildApp().request(`/api/agent-controller/code/sessions/${PRIVATE_ID}/stream`)).status).toBe(404);
+  it('passes everything through when auth is disabled', async () => {
+    const open = buildApp(undefined, { authEnabled: false });
+    expect((await open.request(sessionPath(PRIVATE_ID, 'stream'))).status).toBe(200);
+    expect((await open.request('/api/memory/threads?resourceId=owner')).status).toBe(200);
   });
 
-  it('refuses to re-key a session onto a private session the caller cannot see', async () => {
-    const path = '/api/agent-controller/code/sessions/teammate-own/resource';
-    expect((await post(teammate, path, { newResourceId: PRIVATE_ID })).status).toBe(404);
+  it("refuses to re-key a session onto another person's resource", async () => {
+    const path = sessionPath('teammate-scratch', 'resource');
+    expect((await post(teammate, path, { newResourceId: 'owner' })).status).toBe(404);
+    expect((await post(teammate, path, { newResourceId: LEGACY_PRIVATE_ID })).status).toBe(404);
+    expect((await post(outsider, path, { newResourceId: FACTORY_ID })).status).toBe(404);
 
-    const shared = await post(teammate, path, { newResourceId: SHARED_ID });
-    await expect(shared.json()).resolves.toEqual({ reached: true, body: { newResourceId: SHARED_ID } });
-    expect((await post(owner, path, { newResourceId: PRIVATE_ID })).status).toBe(200);
+    const shared = await post(teammate, path, { newResourceId: FACTORY_ID });
+    await expect(shared.json()).resolves.toEqual({ reached: true, body: { newResourceId: FACTORY_ID } });
+    expect((await post(teammate, path, { newResourceId: 'teammate' })).status).toBe(200);
   });
 
-  it('404s memory routes addressing a private session the caller cannot see', async () => {
-    expect((await teammate.request(`/api/memory/threads?resourceId=${PRIVATE_ID}`)).status).toBe(404);
-    expect((await teammate.request(`/api/memory/threads/t-1?resourceId=${PRIVATE_ID}`)).status).toBe(404);
-    expect((await post(teammate, '/api/memory/threads', { resourceId: PRIVATE_ID })).status).toBe(404);
+  it("404s memory routes naming another person's resource or a private session's own id", async () => {
+    expect((await teammate.request('/api/memory/threads?resourceId=owner')).status).toBe(404);
+    expect((await teammate.request(`/api/memory/threads/t-1?resourceId=${LEGACY_PRIVATE_ID}`)).status).toBe(404);
+    expect((await post(teammate, '/api/memory/threads', { resourceId: 'owner' })).status).toBe(404);
+    expect((await outsider.request(`/api/memory/threads?resourceId=${FACTORY_ID}`)).status).toBe(404);
 
-    const allowed = await owner.request(`/api/memory/threads?resourceId=${PRIVATE_ID}`);
-    await expect(allowed.json()).resolves.toEqual({ reached: true, bound: PRIVATE_ID });
+    const own = await owner.request('/api/memory/threads?resourceId=owner');
+    await expect(own.json()).resolves.toEqual({ reached: true, bound: 'owner' });
+    const factory = await teammate.request(`/api/memory/threads?resourceId=${FACTORY_ID}`);
+    await expect(factory.json()).resolves.toEqual({ reached: true, bound: FACTORY_ID });
   });
 
-  it('binds memory requests without a resourceId to the caller, so a bare threadId cannot reach another session', async () => {
+  it('binds memory requests without a resourceId to the caller, so a bare threadId cannot reach another resource', async () => {
     const res = await teammate.request('/api/memory/threads/t-1');
     await expect(res.json()).resolves.toEqual({ reached: true, bound: 'teammate' });
   });
 
-  it('rejects a query and body naming different resources, since handlers may read either', async () => {
-    const path = `/web/config/om/observer/model?resourceId=${SHARED_ID}`;
-    expect((await post(teammate, path, { resourceId: PRIVATE_ID, modelId: 'x' })).status).toBe(400);
-    const memory = `/api/memory/threads?resourceId=${SHARED_ID}`;
-    expect((await post(teammate, memory, { resourceId: PRIVATE_ID })).status).toBe(400);
-    // Both resources visible to the caller still conflict: the bound resource must be unambiguous.
-    expect((await post(owner, memory, { resourceId: PRIVATE_ID })).status).toBe(400);
+  it('rejects a query and body naming different sessions or resources, since handlers may read either', async () => {
+    const om = `/web/config/om/observer/model?sessionId=${SHARED_ID}`;
+    expect((await post(teammate, om, { sessionId: PRIVATE_ID, modelId: 'x' })).status).toBe(400);
+    const memory = `/api/memory/threads?resourceId=${FACTORY_ID}`;
+    expect((await post(teammate, memory, { resourceId: 'owner' })).status).toBe(400);
+    // Both resources reachable by the caller still conflict: the bound resource must be unambiguous.
+    expect((await post(owner, memory, { resourceId: 'owner' })).status).toBe(400);
 
-    const same = await post(owner, `/api/memory/threads?resourceId=${PRIVATE_ID}`, { resourceId: PRIVATE_ID });
-    await expect(same.json()).resolves.toEqual({ reached: true, bound: PRIVATE_ID });
+    const same = await post(owner, '/api/memory/threads?resourceId=owner', { resourceId: 'owner' });
+    await expect(same.json()).resolves.toEqual({ reached: true, bound: 'owner' });
   });
 
-  it('hides runs on private sessions the caller cannot see from the active-runs list', async () => {
+  it('hides runs on resources the caller cannot reach from the active-runs list', async () => {
     const runIds = async (app: Hono) =>
       (
         (await (await app.request('/api/agent-controller/code/active-runs')).json()) as { runs: { runId: string }[] }
       ).runs.map(run => run.runId);
 
-    expect(await runIds(teammate)).toEqual(['run-shared', 'run-personal']);
-    expect(await runIds(owner)).toEqual(['run-private', 'run-shared', 'run-personal']);
-    expect(await runIds(outsider)).toEqual(['run-personal']);
+    expect(await runIds(teammate)).toEqual(['run-factory', 'run-teammate']);
+    expect(await runIds(owner)).toEqual(['run-owner', 'run-factory', 'run-legacy']);
+    expect(await runIds(outsider)).toEqual([]);
   });
 });

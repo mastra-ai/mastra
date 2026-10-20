@@ -11,7 +11,12 @@ import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { seedSessionOrg } from '../session/org-seed.js';
-import { sessionMemoryResourceId, listFactorySessionThreads } from '../session/session-threads.js';
+import {
+  sessionMemoryResourceId,
+  listFactorySessionThreads,
+  sessionThreadsToMove,
+  userSessionResourceFor,
+} from '../session/session-threads.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -62,6 +67,8 @@ export interface SourceControlSessionRoutesOptions {
   /** How long recreate waits for an aborted run to settle before destroying. */
   abortSettleTimeoutMs?: number;
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'>;
+  /** Moves a thread, with everything keyed by its resource, when a session's visibility changes. */
+  moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
 }
 
 const ABORT_SETTLE_TIMEOUT_MS = 5_000;
@@ -633,8 +640,25 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         ) {
           return c.json({ error: 'Only user sessions can change visibility' }, 409);
         }
+        const resourceId = userSessionResourceFor(row, visibility);
+        const controller = options.controller;
+        // The resource says who may read a session, so its threads move with it.
+        const threadIds = controller ? await sessionThreadsToMove(controller, row, resourceId) : [];
+        if (threadIds.length > 0 && !options.moveThread) {
+          return c.json({ error: 'Changing session visibility is not available on this server.' }, 503);
+        }
+        if (controller?.listActiveThreadRuns().some(run => threadIds.includes(run.threadId))) {
+          return c.json({ error: 'Wait for the session to finish its run before changing visibility' }, 409);
+        }
         const updated = await match.sourceControl.sessions.setVisibility({ sessionId, visibility });
         if (!updated) return c.json({ error: 'Session not found' }, 404);
+        for (const threadId of threadIds) await options.moveThread!({ threadId, resourceId });
+        // A live session keeps the resource it started on. Drop it so the next
+        // request resumes on its moved thread, or point it at the new resource
+        // when it has no thread to resume from yet.
+        const live = await controller?.getSession(sessionId);
+        if (live && threadIds.length > 0) await controller!.deleteSession({ sessionId });
+        else if (live) await controller!.setResourceId(live, { resourceId });
         const owners = await resolveOwnerProfiles([updated.userId]);
         return c.json({ session: withOwnerProfile(updated, owners) });
       },

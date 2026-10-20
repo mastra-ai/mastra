@@ -1672,6 +1672,15 @@ export class MastraFactory {
             sandbox: sandboxConfig,
             ...(environmentBuilds ? { onRepositoryPush: environmentBuilds.onRepositoryPush } : {}),
             sessionRetirement,
+            moveThread: async ({ threadId, resourceId }) => {
+              // The sessions' own Memory, so a moved thread takes its observation vectors along.
+              const sessionMemory = getDynamicMemory(storage.getMastraStorage(), vector);
+              await sessionMemory({ requestContext: new RequestContext() }).updateThreadResourceId({
+                threadId,
+                resourceId,
+              });
+              await sessionMemory.settled();
+            },
             factoryStorage: storage,
             integrationStorage,
             sourceControlStorage,
@@ -1804,7 +1813,18 @@ export class MastraFactory {
             middleware: [
               ...timing,
               createFactoryAuthGate(auth),
-              createSessionAccessGuard({ auth: routeAuth, sessions: sourceControlSessions }),
+              createSessionAccessGuard({
+                auth: routeAuth,
+                sessions: sourceControlSessions,
+                projects: {
+                  get: async args => {
+                    if (!storage.isDomainReady('projects')) return null;
+                    await factoryProjectsStorage.ensureReady();
+                    return factoryProjectsStorage.get(args);
+                  },
+                },
+                controller: () => this.#prepared?.base.controller,
+              }),
               createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
               createCustomProvidersPrimer({
                 auth: routeAuth,
