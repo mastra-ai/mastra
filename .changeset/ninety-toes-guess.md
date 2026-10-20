@@ -2,14 +2,14 @@
 '@mastra/factory': minor
 ---
 
-New user sessions are now private by default. Only the person who started a session can open it or see it in session lists; teammates in the same organization no longer see it. Existing sessions keep their current visibility. Factory runs, including runs started from a board card, and Slack channel threads stay visible to the organization.
+Sessions opened with **New session** are now private. Only the person who started one can open it or see it in session lists; teammates in the same organization don't see it. Every other session, including Factory runs started from a work item, stays visible to the organization. Existing sessions keep their current visibility.
 
-To create a session the whole organization can open, pass `visibility: 'org'` when creating it:
+The session create route takes an optional `visibility` (`'org'` by default, or `'private'`):
 
 ```ts
 await fetch(`/web/source-control/projects/${projectRepositoryId}/sessions`, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ branch: 'factory/card-7', visibility: 'org' }),
+  body: JSON.stringify({ sessionId, title: 'Fix the login bug', visibility: 'private' }),
 });
 ```

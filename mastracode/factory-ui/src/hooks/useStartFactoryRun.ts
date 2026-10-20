@@ -62,11 +62,7 @@ export function useStartFactoryRun() {
       if (workItem.metadata?.repository !== repository.slug) {
         await updateWorkItem(baseUrl, workItem.id, { metadata });
       }
-      const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, {
-        branch,
-        // The run works a shared card, so the whole org can open it and answer its approvals.
-        visibility: 'org',
-      });
+      const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, { branch });
       const sessionId = userSession.sessionId;
 
       const prepared = await startFactoryRun(baseUrl, factoryId, {

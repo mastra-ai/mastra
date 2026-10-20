@@ -65,7 +65,7 @@ export type CreateUserSessionOptions = (
   | { branch: string; baseBranch?: string; sessionId?: never; title?: never }
   | { sessionId: string; title: string; branch?: never; baseBranch?: never }
 ) & {
-  /** Defaults to `private`. Sessions that run work for a shared card are created `org`. */
+  /** Defaults to `org`. A session someone opens for themselves with New session is created `private`. */
   visibility?: 'private' | 'org';
 };
 

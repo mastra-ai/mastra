@@ -354,7 +354,7 @@ describe('source-control session routes', () => {
     });
   });
 
-  it('creates a session through the provider-neutral project route', async () => {
+  it('creates a private session through the provider-neutral project route when asked', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     const app = buildApp([sourceControl], seed);
     const sessionId = '11111111-1111-4111-8111-111111111111';
@@ -362,7 +362,7 @@ describe('source-control session routes', () => {
     const response = await app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ sessionId, title: 'Build GitLab issue' }),
+      body: JSON.stringify({ sessionId, title: 'Build GitLab issue', visibility: 'private' }),
     });
 
     expect(response.status).toBe(200);
@@ -385,7 +385,7 @@ describe('source-control session routes', () => {
     ).resolves.toEqual([]);
   });
 
-  it('creates a run session shared with the org when asked, and rejects unknown visibility', async () => {
+  it('creates sessions shared with the org unless asked for private, and rejects unknown visibility', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     const app = buildApp([sourceControl], seed);
     const create = (body: Record<string, unknown>) =>
@@ -395,7 +395,7 @@ describe('source-control session routes', () => {
         body: JSON.stringify(body),
       });
 
-    const shared = await create({ branch: 'factory/card-7', visibility: 'org' });
+    const shared = await create({ branch: 'factory/card-7' });
     expect(shared.status).toBe(200);
     const { session } = (await shared.json()) as { session: { sessionId: string; visibility: string } };
     expect(session.visibility).toBe('org');

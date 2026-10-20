@@ -365,7 +365,7 @@ describe('SourceControlStorage', () => {
     expect(awaiting.map(row => row.sessionId)).not.toContain(session.sessionId);
   });
 
-  it('defaults session visibility to private and round-trips org', async () => {
+  it('defaults session visibility to org and round-trips private', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
     const defaulted = await github.sessions.create({
@@ -376,28 +376,28 @@ describe('SourceControlStorage', () => {
       branch: 'user/session-00000000-0000-4000-8000-000000000011',
       baseBranch: 'main',
     });
-    expect(defaulted.visibility).toBe('private');
-    await expect(github.sessions.getBySessionId(defaulted.sessionId)).resolves.toMatchObject({
-      visibility: 'private',
-    });
+    expect(defaulted.visibility).toBe('org');
 
-    const shared = await github.sessions.create({
+    const dm = await github.sessions.create({
       sessionId: '00000000-0000-4000-8000-000000000012',
       projectRepositoryId: link.id,
       orgId: 'org-1',
       userId: 'user-1',
       branch: 'slack/1786574059-209929',
       baseBranch: 'main',
-      visibility: 'org',
+      visibility: 'private',
     });
-    expect(shared.visibility).toBe('org');
+    expect(dm.visibility).toBe('private');
+    await expect(github.sessions.getBySessionId(dm.sessionId)).resolves.toMatchObject({
+      visibility: 'private',
+    });
     await expect(
       github.sessions.getForBranch({
         projectRepositoryId: link.id,
         userId: 'user-1',
         branch: 'slack/1786574059-209929',
       }),
-    ).resolves.toMatchObject({ visibility: 'org' });
+    ).resolves.toMatchObject({ visibility: 'private' });
   });
 
   it('reads NULL visibility as org for rows created before the column existed', async () => {
@@ -818,14 +818,12 @@ describe('SourceControlStorage', () => {
       const gitlabLink = await linkRepository({ handle: gitlab, factoryProjectId: project.id });
       const elsewhere = await linkRepository({ factoryProjectId: other.id });
 
-      const a = await github.sessions.create({
-        ...sessionInput('00000000-0000-4000-8000-000000000131', first.id, 'user-1', 'a'),
-        visibility: 'org',
-      });
-      const b = await github.sessions.create({
-        ...sessionInput('00000000-0000-4000-8000-000000000132', second.id, 'user-2', 'b'),
-        visibility: 'org',
-      });
+      const a = await github.sessions.create(
+        sessionInput('00000000-0000-4000-8000-000000000131', first.id, 'user-1', 'a'),
+      );
+      const b = await github.sessions.create(
+        sessionInput('00000000-0000-4000-8000-000000000132', second.id, 'user-2', 'b'),
+      );
       const mine = await github.sessions.create({
         ...sessionInput('00000000-0000-4000-8000-000000000133', second.id, 'user-2', 'c'),
         visibility: 'private',
@@ -834,10 +832,9 @@ describe('SourceControlStorage', () => {
         ...sessionInput('00000000-0000-4000-8000-000000000134', first.id, 'user-1', 'd'),
         visibility: 'private',
       });
-      const viaGitlab = await gitlab.sessions.create({
-        ...sessionInput('00000000-0000-4000-8000-000000000135', gitlabLink.id, 'user-1', 'e'),
-        visibility: 'org',
-      });
+      const viaGitlab = await gitlab.sessions.create(
+        sessionInput('00000000-0000-4000-8000-000000000135', gitlabLink.id, 'user-1', 'e'),
+      );
       await github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000136', elsewhere.id, 'user-1', 'a'));
 
       const listed = await github.sessions.listByProject({
@@ -1031,7 +1028,7 @@ describe('SourceControlStorage', () => {
       const first = await store.projectRepositories.link({ ...linkInput, repositoryId: repoA.id });
       const second = await store.projectRepositories.link({ ...linkInput, repositoryId: repoB.id });
 
-      const session = await store.sessions.create({ ...sessionInput('s-1', first.id), visibility: 'org' });
+      const session = await store.sessions.create(sessionInput('s-1', first.id));
       expect(session.factoryProjectId).toBe('project-1');
       expect((await store.sessions.create(sessionInput('s-1', first.id))).id).toBe(session.id);
       await expect(store.sessions.create(sessionInput('s-2', second.id))).rejects.toBeInstanceOf(UniqueViolationError);
@@ -1045,7 +1042,10 @@ describe('SourceControlStorage', () => {
       await expect(
         store.sessions.create({ ...sessionInput('s-3', first.id, 'user-1', 'y'), factoryProjectId: 'project-2' }),
       ).rejects.toThrow(/does not match/);
-      const priv = await store.sessions.create(sessionInput('s-4', second.id, 'user-2', 'z'));
+      const priv = await store.sessions.create({
+        ...sessionInput('s-4', second.id, 'user-2', 'z'),
+        visibility: 'private',
+      });
       const listFor = async (viewerUserId: string) =>
         (await store.sessions.listByProject({ orgId: 'org-1', factoryProjectId: 'project-1', viewerUserId })).map(
           s => s.id,

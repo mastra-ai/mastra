@@ -386,7 +386,7 @@ export interface CreateSourceControlSessionInput {
   userId: string;
   branch: string;
   title?: string | null;
-  /** Defaults to 'private' when omitted. Legacy NULL rows still read as 'org'. */
+  /** Defaults to 'org' when omitted, matching how NULL rows are read. */
   visibility?: SourceControlSessionVisibility;
   /** The session and thread that started this one as a side session. */
   origin?: { sessionId: string; threadId: string };
@@ -1512,7 +1512,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               user_id: input.userId,
               branch: input.branch,
               title: input.title ?? null,
-              visibility: input.visibility ?? 'private',
+              visibility: input.visibility ?? 'org',
               origin_session_id: input.origin?.sessionId ?? null,
               origin_thread_id: input.origin?.threadId ?? null,
               origin_muted_at: null,
