@@ -236,20 +236,28 @@ async function sendNotificationSummary({
   });
   if (decision.hold) return null;
   // The all-low-priority batch persists without waking, so it never starts a
-  // run and needs no stream options.
+  // run. It still needs the policy's request context: resolving the agent's
+  // memory to write the summary can depend on who the thread belongs to.
   const allLowPriority = records.every(record => record.priority === 'low');
-  const streamOptions = allLowPriority ? undefined : decision.streamOptions;
   const requireClaimedOwner = records.some(
     record => readNotificationRoutingRequirement(record.metadata)?.requireClaimedOwner === true,
   );
   const summary = summarizeNotifications(records);
   const signal = createNotificationSummarySignal(summary);
+  const persistRequestContext = decision.streamOptions?.requestContext;
   const target: SendAgentSignalOptions = allLowPriority
-    ? { resourceId: first.resourceId, threadId: first.threadId, ifIdle: { behavior: 'persist' } }
+    ? {
+        resourceId: first.resourceId,
+        threadId: first.threadId,
+        ifIdle: {
+          behavior: 'persist',
+          ...(persistRequestContext ? { streamOptions: { requestContext: persistRequestContext } } : {}),
+        },
+      }
     : delayedDeliveryTarget({
         resourceId: first.resourceId,
         threadId: first.threadId,
-        streamOptions,
+        streamOptions: decision.streamOptions,
         requireClaimedOwner,
       });
   const result = agent.sendSignal(signal, target);

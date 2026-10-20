@@ -122,7 +122,7 @@ async function start({ resume }: { resume: 'owner' | 'unresolvable' }) {
  * session live: it was evicted, or the process restarted since. The core
  * dispatcher delivers the notification.
  */
-async function dispatchToEvictedSession(resume: 'owner' | 'unresolvable') {
+async function dispatchToEvictedSession(resume: 'owner' | 'unresolvable', priority: 'high' | 'low' = 'high') {
   const { code, storage, ownerContext } = await start({ resume });
   const session = await code.controller.createSession({
     id: SESSION_ID,
@@ -148,8 +148,9 @@ async function dispatchToEvictedSession(resume: 'owner' | 'unresolvable') {
     source: 'factory-session',
     kind: 'message',
     summary: 'session-b: please pick this back up',
-    priority: 'high',
-    deliverAt: new Date(Date.now() - 1_000),
+    priority,
+    // Low-priority notifications are summarized into the thread instead of waking it.
+    ...(priority === 'low' ? { summaryAt: new Date(Date.now() - 1_000) } : { deliverAt: new Date(Date.now() - 1_000) }),
   });
 
   // Only what the wake itself resolves counts.
@@ -171,6 +172,21 @@ describe('waking a Factory-style session that is not live in this process', () =
     expect(resolvedTenants.every(tenant => tenant.userId === OWNER.workosId)).toBe(true);
     const [record] = await notifications.listNotifications({ threadId, resourceId: SESSION_ID });
     expect(record!.status).toBe('delivered');
+  });
+
+  it('writes a low-priority summary as the session owner, with observational memory on', async () => {
+    // Writing the summary resolves the agent's memory, and observational memory
+    // resolves its model through the tenant credentials, so it needs the owner too.
+    vi.stubEnv('MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY', '');
+    const { result, notifications, threadId } = await dispatchToEvictedSession('owner', 'low');
+
+    expect(result.failed.map(failure => failure.error)).toEqual([]);
+    expect(result.signals).toHaveLength(1);
+    expect(resolvedTenants.length).toBeGreaterThan(0);
+    expect(resolvedTenants.every(tenant => tenant.userId === OWNER.workosId)).toBe(true);
+    const [record] = await notifications.listNotifications({ threadId, resourceId: SESSION_ID });
+    expect(record).toMatchObject({ deliveryAttempts: 0, summarySignalId: result.signals[0]!.id });
+    expect(mock.getRequests()).toEqual([]);
   });
 
   it('fails the delivery with a clear error, without an anonymous run, when the owner cannot be resolved', async () => {

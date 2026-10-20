@@ -1136,12 +1136,12 @@ describe('notification inbox', () => {
     });
   });
 
-  it('keeps the persist behavior and ignores policy stream options for all-low-priority summaries', async () => {
+  it('keeps the persist behavior for all-low-priority summaries and passes only the policy request context', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
     const resolveNotificationDeliveryDecision = vi.fn(async () => ({
       action: 'summarize' as const,
-      streamOptions: { requestContext: { model: 'model-from-policy' } },
+      streamOptions: { requestContext: { user: 'thread-owner' }, maxSteps: 3 },
     }));
     const sendSignal = vi.fn((signal, _target) => ({
       accepted: Promise.resolve({ action: 'persist' }),
@@ -1167,7 +1167,9 @@ describe('notification inbox', () => {
     expect(sendSignal).toHaveBeenCalledWith(expect.objectContaining({ tagName: 'notification-summary' }), {
       resourceId: 'resource-1',
       threadId: 'thread-1',
-      ifIdle: { behavior: 'persist' },
+      // Writing the summary resolves the agent's memory as the thread's owner; nothing else
+      // from the policy applies, because no run starts.
+      ifIdle: { behavior: 'persist', streamOptions: { requestContext: { user: 'thread-owner' } } },
     });
   });
 
