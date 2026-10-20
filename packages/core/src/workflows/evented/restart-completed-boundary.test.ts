@@ -48,6 +48,7 @@ type CompletedCase = {
   expected: any;
   build: Build;
   ready?: (snapshot: WorkflowRunState) => boolean;
+  successorPath?: number[];
 };
 
 const cases: CompletedCase[] = [
@@ -294,6 +295,39 @@ const cases: CompletedCase[] = [
       ).commit();
     },
   })),
+  ...(['parallel', 'conditional'] as const).flatMap(kind =>
+    [0, 1].map(branchIndex => ({
+      name: `${kind} successor reusing branch ${branchIndex} ID`,
+      index: 0,
+      finished: [],
+      next: { step: 'reused', input: { n: 2 } },
+      successorPath: [1, branchIndex],
+      expected: { reused: { n: 3 }, other: { n: 12 } },
+      ready: (snapshot: WorkflowRunState) =>
+        context(snapshot).reused?.status === 'success' && context(snapshot).reused.output.n === 2,
+      build(core: CoreGraph, generation: number, effects: Effect[]) {
+        const { workflow, step } = builders(core, `completed-reused-${kind}-${branchIndex}`, generation, effects);
+        const reused = step('reused');
+        const other = step('other', ({ inputData }) => ({ n: inputData.n + 10 }));
+        const branches = branchIndex === 0 ? [reused, other] : [other, reused];
+        const flow = workflow().then(reused);
+        return (
+          kind === 'parallel'
+            ? flow.parallel(branches)
+            : flow.branch(
+                branches.map(
+                  branch =>
+                    [
+                      async ({ getStepResult }: { getStepResult: (id: string) => { n: number } | null }) =>
+                        getStepResult('reused')?.n === 2,
+                      branch,
+                    ] as const,
+                ),
+              )
+        ).commit();
+      },
+    })),
+  ),
   ...[0, false, null, undefined].map(output => ({
     name: `saved ${String(output)} output`,
     index: 0,
@@ -393,6 +427,7 @@ describe('evented restart after a saved completed entry (COR-1354)', () => {
     'loop successor reusing the completed step ID',
     'sleep successor reusing the completed step ID',
     'sleepUntil successor reusing the completed step ID',
+    ...cases.filter(spec => spec.successorPath).map(spec => spec.name),
   ].flatMap(name => ['start snapshot', 'successor input'].map(boundary => ({ name, boundary })))) {
     it(`survives another crash after restart writes its ${boundary}: ${name}`, async () => {
       const effects: Effect[] = [];
@@ -451,7 +486,11 @@ describe('evented restart after a saved completed entry (COR-1354)', () => {
       expect(secondCheckpoint, 'a real restart start snapshot was captured').toBeDefined();
       const before = findRow(checkpoint, original.graph.workflow.id, runId)!.snapshot;
       const after = findRow(secondCheckpoint!, original.graph.workflow.id, runId)!.snapshot;
-      expect(after.activePaths).toEqual(spec.next!.step === 'reused' ? [1] : before.activePaths);
+      const recovered = await scenario.restart(secondCheckpoint!);
+      await assertRecovered(spec, effects, recovered, runId, 3);
+      expect(after.activePaths).toEqual(
+        spec.successorPath ?? (spec.next!.step === 'reused' ? [1] : before.activePaths),
+      );
       if (spec.next!.step === 'reused') {
         expect(context(after).reused.payload).toEqual({ n: 2 });
         expect(['running', 'waiting']).toContain(context(after).reused.status);
@@ -459,8 +498,12 @@ describe('evented restart after a saved completed entry (COR-1354)', () => {
         expect(context(after).reused.endedAt).toBeUndefined();
       }
       expect(after.context.input).toEqual(before.context.input);
-      const recovered = await scenario.restart(secondCheckpoint!);
-      await assertRecovered(spec, effects, recovered, runId, 3);
+      if (spec.successorPath && boundary === 'start snapshot') {
+        expect(after.activeStepsPath.reused).toEqual(spec.successorPath);
+        expect(after.activeStepsPath.other).toEqual([1, 1 - spec.successorPath[1]!]);
+        expect(context(after).other).toMatchObject({ status: 'running', payload: { n: 2 } });
+        expect(context(after).other.output).toBeUndefined();
+      }
       if (name === 'completed occurrence of a step ID reused later') {
         expect(
           effects.filter(effect => effect.generation === 3 && effect.step === 'reused').map(effect => effect.input),

@@ -731,6 +731,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Use initialState from event data if provided, otherwise use state from ProcessorArgs
     let initialState = (arguments[0] as any).initialState ?? state ?? {};
     const completed = restart && resolveCompletedRestartEntry(workflow.stepGraph, restart, initialState);
+    let successorActiveStepsPath: Record<string, number[]> | undefined;
     if (completed) {
       stepResults = completed.stepResults;
       initialState = completed.state;
@@ -741,22 +742,47 @@ export class WorkflowEventProcessor extends EventProcessor {
         (isSingleStepEntry(successor) ||
           successor.type === 'loop' ||
           successor.type === 'sleep' ||
-          successor.type === 'sleepUntil') &&
-        getStepIds(captured).includes(getStepIds(successor)[0]!)
+          successor.type === 'sleepUntil' ||
+          successor.type === 'parallel' ||
+          successor.type === 'conditional') &&
+        getStepIds(successor).some(id => getStepIds(captured).includes(id))
       ) {
-        // Reusing this ID would overwrite the only completed-boundary record.
-        // Atomically checkpoint the successor's input and cursor instead.
-        const id = getStepIds(successor)[0]!;
-        stepResults = {
-          ...stepResults,
-          [id]: {
+        // Reusing an ID would overwrite the only completed-boundary record.
+        // Atomically checkpoint the successor's inputs and cursor instead.
+        const ids = getStepIds(successor);
+        const isContainer = successor.type === 'parallel' || successor.type === 'conditional';
+        // Conditions may read the completed result via getStepResult. Decide the
+        // route before replacing those records, and retain it across recovery.
+        const conditionalRoute =
+          successor.type === 'conditional'
+            ? {
+                index: completed.executionPath[0]!,
+                branches: await this.stepExecutor.evaluateConditions({
+                  workflowId,
+                  runId,
+                  step: successor,
+                  stepResults: stepResults ?? {},
+                  state: initialState,
+                  requestContext: new RequestContext(Object.entries(requestContext ?? {})),
+                  actor,
+                  input: completed.output,
+                }),
+              }
+            : undefined;
+        successorActiveStepsPath = {};
+        stepResults = { ...stepResults };
+        for (const [branchIndex, id] of ids.entries()) {
+          stepResults[id] = {
             status: 'running',
             payload: completed.output,
             startedAt: Date.now(),
-          },
-        };
-        executionPath = completed.executionPath;
-        restart = { ...restart!, activePaths: executionPath, activeStepsPath: {} };
+            ...(conditionalRoute ? { metadata: { __restartConditional: conditionalRoute } } : {}),
+          };
+          if (isContainer) successorActiveStepsPath[id] = [...completed.executionPath, branchIndex];
+        }
+        const collisionIndex = ids.findIndex(id => getStepIds(captured).includes(id));
+        executionPath = isContainer ? [...completed.executionPath, collisionIndex] : completed.executionPath;
+        restart = { ...restart!, activePaths: executionPath, activeStepsPath: successorActiveStepsPath };
       }
     }
     const resolvedFormat = format ?? this.runFormats.get(runId);
@@ -872,7 +898,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         requestContext,
         actor,
         resumeData,
-        activeStepsPath: restart?.activeStepsPath ?? {},
+        activeStepsPath: successorActiveStepsPath ?? restart?.activeStepsPath ?? {},
         perStep,
         state: initialState,
         outputOptions,
