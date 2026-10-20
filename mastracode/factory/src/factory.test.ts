@@ -343,6 +343,12 @@ describe('MastraFactory.prepare', () => {
     expect(config.modes).toBe(false);
   });
 
+  it('given a Factory deployment, when the controller mounts, then subagents are disabled', async () => {
+    const config = await prepareFactory({ storage: fakeStorage(), auth: null });
+
+    expect(config.subagents).toEqual([]);
+  });
+
   it('loads authoritative memory settings before dynamic memory resolves for each invocation', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage, auth: null });
