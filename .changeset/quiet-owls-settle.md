@@ -1,5 +1,10 @@
 ---
 '@mastra/core': patch
+'@mastra/inngest': patch
 ---
 
-Fixed `DurableAgent.listSuspendedRuns()` still listing a run after it was resumed, for example after approving a tool call, until the resumed run had fully cleaned up. A resumed run is now marked as running as soon as it resumes, so it drops out of `listSuspendedRuns()` right away, including from other processes. A second resume of the same run now fails with `AGENT_RESUME_ALREADY_CLAIMED` instead of running twice. If the process running a resume dies, a later resume or approval waits for its lease to lapse (failing with `AGENT_RESUME_ALREADY_CLAIMED` until then) and then takes the run over, or fails with `AGENT_RESUME_RUN_FINISHED` when recovery already completed it.
+Fixed several ways a suspended agent run could be resumed twice, never, or after it was aborted.
+
+- **Approving after abort:** approving, declining, or resuming a run after `abortRunStream()` / `abortThreadStream()` hit its suspension now fails with `AGENT_RESUME_ABORTED_RUN` instead of running the tool or starting another model request. Fixes #27617.
+- **`listSuspendedRuns()` after resume:** `DurableAgent` now marks a resumed run as running as soon as it resumes, so it drops out of `listSuspendedRuns()` right away, including in other processes. A second resume of the same run fails with `AGENT_RESUME_ALREADY_CLAIMED` instead of running twice. Fixes #27619.
+- **Resumer process dies:** a running resume keeps renewing its claim. If the process dies, a later resume or approval fails with `AGENT_RESUME_ALREADY_CLAIMED` until the claim lapses, then takes the run over (or fails with `AGENT_RESUME_RUN_FINISHED` when recovery already completed it). Fixes #27366.
