@@ -46,10 +46,10 @@ MASTRA_THEME=catppuccin-latte/catppuccin-mocha mastracode
 }
 ```
 
-Mastra Code reads the terminal's background color (OSC 11), then its light/dark
-notification, then the `COLORFGBG` environment variable, and falls back to
-dark. It applies the light theme when the terminal is light and the dark theme
-otherwise. `auto` does the same for the built-in palettes.
+Mastra Code reads the terminal's background color (OSC 11), then the
+`COLORFGBG` environment variable, and falls back to dark. It applies the light
+theme when the terminal is light and the dark theme otherwise. `auto` does the
+same for the built-in palettes.
 
 The picker offers a pair for every bundled light/dark family:
 `catppuccin-latte/catppuccin-mocha` and `solarized-light/solarized-dark`. Any
@@ -112,25 +112,25 @@ your terminal is set to.
 
 ## Color keys
 
-| Key                                                           | Used for                                             |
-| ------------------------------------------------------------- | ---------------------------------------------------- |
-| `accent`                                                      | Primary accent: prompts, highlights, selected prefix |
-| `border` / `borderAccent` / `borderMuted`                     | Box borders                                          |
-| `success` / `error` / `warning`                               | Status colors                                        |
-| `text`                                                        | Main body text                                       |
-| `secondary`                                                   | One step softer than `text`: tool calls, status line |
-| `muted` / `dim`                                               | De-emphasized text                                   |
-| `thinkingText`                                                | Reasoning/thinking output                            |
-| `userMessageBg` / `userMessageText`                           | Sent user messages                                   |
-| `systemReminderBg`                                            | System reminder blocks                               |
-| `toolPendingBg` / `toolSuccessBg` / `toolErrorBg`             | Tool call panels                                     |
-| `toolBorderPending` / `toolBorderSuccess` / `toolBorderError` | Tool panel borders                                   |
-| `toolTitle` / `toolArgs` / `toolOutput`                       | Tool call text                                       |
-| `textHighlight`                                               | Inline code, headings, links                         |
-| `selectedBg`                                                  | Selected list rows                                   |
-| `overlayBg`                                                   | Modal overlays                                       |
-| `errorBg`                                                     | Error display background                             |
-| `path` / `number` / `function`                                | File paths, line numbers, function names             |
+| Key | Used for |
+| - | - |
+| `accent` | Primary accent: prompts, highlights, selected prefix |
+| `border` / `borderAccent` / `borderMuted` | Box borders |
+| `success` / `error` / `warning` | Status colors |
+| `text` | Main body text |
+| `secondary` | One step softer than `text`: tool calls, status line |
+| `muted` / `dim` | De-emphasized text |
+| `thinkingText` | Reasoning/thinking output |
+| `userMessageBg` / `userMessageText` | Sent user messages |
+| `systemReminderBg` | System reminder blocks |
+| `toolPendingBg` / `toolSuccessBg` / `toolErrorBg` | Tool call panels |
+| `toolBorderPending` / `toolBorderSuccess` / `toolBorderError` | Tool panel borders |
+| `toolTitle` / `toolArgs` / `toolOutput` | Tool call text |
+| `textHighlight` | Inline code, headings, links |
+| `selectedBg` | Selected list rows |
+| `overlayBg` | Modal overlays |
+| `errorBg` | Error display background |
+| `path` / `number` / `function` | File paths, line numbers, function names |
 
 ## Translating themes from other tools
 
@@ -142,20 +142,20 @@ palette, then map it onto the color keys above.
 
 Common source vocabularies and where they land:
 
-| Source concept                      | mastracode                                    |
-| ----------------------------------- | --------------------------------------------- |
-| Editor / terminal background        | `bg`                                          |
-| Accent / primary / blue             | `accent`, `borderAccent`, `function`          |
-| Green / success / diff-added        | `success`                                     |
-| Red / error / diff-removed          | `error`, `toolBorderError`                    |
-| Yellow / orange / warning           | `warning`, `number`                           |
-| Magenta / purple / keywords         | `textHighlight`                               |
-| Foreground / editor text            | `text`                                        |
-| Comments / gray / inactive          | `muted`, `dim`, `path`                        |
-| Selection background                | `selectedBg`                                  |
+| Source concept | mastracode |
+| - | - |
+| Editor / terminal background | `bg` |
+| Accent / primary / blue | `accent`, `borderAccent`, `function` |
+| Green / success / diff-added | `success` |
+| Red / error / diff-removed | `error`, `toolBorderError` |
+| Yellow / orange / warning | `warning`, `number` |
+| Magenta / purple / keywords | `textHighlight` |
+| Foreground / editor text | `text` |
+| Comments / gray / inactive | `muted`, `dim`, `path` |
+| Selection background | `selectedBg` |
 | Panel / sidebar / raised background | `overlayBg`, `toolPendingBg`, `toolSuccessBg` |
-| Error background                    | `errorBg`, `toolErrorBg`                      |
-| Dark/light variant                  | `appearance`                                  |
+| Error background | `errorBg`, `toolErrorBg` |
+| Dark/light variant | `appearance` |
 
 Specific source hints:
 
@@ -173,6 +173,6 @@ Specific source hints:
   base02 → `selectedBg`.
 
 Keep hex values as-is; drop source keys with no counterpart and let the
-built-in fallback fill the rest. Ask your agent: "translate <theme file or
-name> to a mastracode theme at ~/.mastracode/themes/<name>.json using the
+built-in fallback fill the rest. Ask your agent: "translate the theme file or
+name to a mastracode theme at `~/.mastracode/themes/<name>.json` using the
 mapping in themes.mdx".

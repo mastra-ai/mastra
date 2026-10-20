@@ -13,16 +13,16 @@ Mastra Code provides built-in tools that the agent uses to interact with your co
 
 ### `view`
 
-Read file contents with line numbers or list directory contents. The agent uses this tool before editing a file.
+Read file contents with line numbers. The agent uses this tool before editing a file. To list a directory or find files by pattern, use `find_files`.
 
 - Displays line-numbered output (like `cat -n`) for easy reference.
-- For directories, lists files up to 2 levels deep, excluding hidden items.
+- Reading a directory returns an error.
 - Supports `offset` and `limit` to read specific line ranges in large files.
 - Output is truncated if the file exceeds the token limit. Use `offset` and `limit` to read specific sections.
 
 | Parameter | Type | Required | Description |
 | - | - | - | - |
-| `path` | `string` | Yes | Path to the file or directory |
+| `path` | `string` | Yes | Path to the file |
 | `encoding` | `string` | No | Encoding to use (default: `utf-8`). Options: `utf-8`, `utf8`, `base64`, `hex`, `binary` |
 | `offset` | `number` | No | Line number to start reading from (1-indexed) |
 | `limit` | `number` | No | Maximum number of lines to read |
@@ -237,26 +237,33 @@ MCP tools fall under the `mcp` permission category. When YOLO mode is disabled, 
 
 Not all tools are available in every mode:
 
-| Tool | Build | Plan | Fast |
+| Tool | Build | Plan | Explore |
 | - | - | - | - |
 | `view` | Yes | Yes | Yes |
 | `search_content` | Yes | Yes | Yes |
 | `find_files` | Yes | Yes | Yes |
-| `execute_command` | Yes | Read-only | Yes |
-| `string_replace_lsp` | Yes | No | Yes |
-| `ast_smart_edit` | Yes | No | Yes |
-| `write_file` | Yes | No | Yes |
-| `web_search` | Yes | Yes | Yes |
-| `web_extract` | Yes | Yes | Yes |
-| `task_write` | Yes | Yes | Yes |
-| `task_update` | Yes | Yes | Yes |
-| `task_complete` | Yes | Yes | Yes |
-| `task_check` | Yes | Yes | Yes |
+| `file_stat` | Yes | Yes | Yes |
+| `lsp_inspect` | Yes | Yes | Yes |
+| `execute_command` | Yes | No | No |
+| `string_replace_lsp` | Yes | Plan files only | No |
+| `ast_smart_edit` | Yes | No | No |
+| `write_file` | Yes | Plan files only | No |
+| `web_search` | Yes | No | No |
+| `web_extract` | Yes | No | No |
+| `task_write` | Yes | Yes | No |
+| `task_update` | Yes | Yes | No |
+| `task_complete` | Yes | Yes | No |
+| `task_check` | Yes | Yes | No |
 | `ask_user` | Yes | Yes | Yes |
 | `submit_plan` | No | Yes | No |
-| `request_access` | Yes | Yes | Yes |
+| `request_access` | Yes | No | No |
+| `notification_inbox` | Yes | Yes | No |
+| `list-workflows`, `get-workflow` | Yes | Yes | Yes |
+| `create-workflow`, `run-workflow`, `delete-workflow` | Yes | No | No |
 
-In Plan mode, `execute_command` is available but restricted to read-only commands (`git status`, `git log`, `git diff`, etc.).
+Plan mode has no `execute_command` tool. It can write only Markdown plan files inside the session's plan directory. Explore mode is read-only.
+
+`/mode` displays the Explore mode as Explore, but its built-in id remains `fast`.
 
 ## Permission system
 
