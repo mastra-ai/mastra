@@ -63,4 +63,30 @@ describe('ACP prompt stop reasons', { timeout: 10_000 }, () => {
     ).rejects.toThrow(stopReason);
     await textAssertion;
   });
+
+  it.each(incompleteStopReasons)(
+    'rejects AcpAgent.stream() fullStream on %s without touching text',
+    async stopReason => {
+      const agent = new AcpAgent(peerOptions(stopReason));
+      const result = await agent.stream('hi');
+
+      const reader = result.fullStream.getReader();
+      await expect(
+        (async () => {
+          while (!(await reader.read()).done) {}
+        })(),
+      ).rejects.toThrow(`ACP prompt stopped before completing: ${stopReason}`);
+    },
+  );
+
+  it('rejects AcpAgent.stream() text on max_tokens even when onFinish throws', async () => {
+    const agent = new AcpAgent(peerOptions('max_tokens'));
+    const result = await agent.stream('hi', {
+      onFinish: () => {
+        throw new Error('onFinish failed');
+      },
+    });
+
+    await expect(result.text).rejects.toThrow('ACP prompt stopped before completing: max_tokens');
+  });
 });
