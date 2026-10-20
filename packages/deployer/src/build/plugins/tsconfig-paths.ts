@@ -1,14 +1,20 @@
 import fs from 'node:fs';
-import path, { normalize } from 'node:path';
+import { builtinModules } from 'node:module';
+import path from 'node:path';
+import { createPathsMatcher, getTsconfig, parseTsconfig } from 'get-tsconfig';
+import type { PathsMatcher } from 'get-tsconfig';
 import type { Plugin } from 'rollup';
-import stripJsonComments from 'strip-json-comments';
-import type { RegisterOptions } from 'typescript-paths';
-import { createHandler } from 'typescript-paths';
 
 const PLUGIN_NAME = 'tsconfig-paths';
 const JS_IMPORT_SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx'];
+const CORE_MODULES = new Set([...builtinModules, ...builtinModules.map(moduleName => `node:${moduleName}`)]);
 
-export type PluginOptions = Omit<RegisterOptions, 'loggerID'> & { localResolve?: boolean; cwd?: string };
+export type PluginOptions = {
+  tsConfigPath?: string;
+  respectCoreModule?: boolean;
+  localResolve?: boolean;
+  cwd?: string;
+};
 
 /**
  * Check if a tsconfig file has path mappings configured.
@@ -19,39 +25,38 @@ export type PluginOptions = Omit<RegisterOptions, 'loggerID'> & { localResolve?:
  */
 export function hasPaths(tsConfigPath: string): boolean {
   try {
-    const content = fs.readFileSync(tsConfigPath, 'utf8');
-    const config = JSON.parse(stripJsonComments(content));
-    return !!(
-      (config.compilerOptions?.paths && Object.keys(config.compilerOptions.paths).length > 0) ||
-      (typeof config.extends === 'string' && config.extends.length > 0) ||
-      (Array.isArray(config.extends) && config.extends.length > 0)
-    );
+    const paths = parseTsconfig(tsConfigPath).compilerOptions?.paths;
+    return !!paths && Object.keys(paths).length > 0;
   } catch {
     return false;
   }
 }
 
-export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve, cwd }: PluginOptions = {}): Plugin {
-  const handlerCache = new Map<string, ReturnType<typeof createHandler>>();
+export function tsConfigPaths({
+  tsConfigPath,
+  respectCoreModule = true,
+  localResolve,
+  cwd,
+}: PluginOptions = {}): Plugin {
+  const matcherCache = new Map<string, PathsMatcher | null>();
 
-  function resolveJsImportToSourceFile(moduleName: string): string {
-    if (fs.existsSync(moduleName)) {
+  function resolveImportToSourceFile(moduleName: string): string {
+    if (fs.existsSync(moduleName) && fs.statSync(moduleName).isFile()) {
       return moduleName;
     }
 
     const parsed = path.parse(moduleName);
-    if (parsed.ext !== '.js') {
-      return moduleName;
-    }
+    const candidates =
+      parsed.ext === '.js'
+        ? JS_IMPORT_SOURCE_EXTENSIONS.map(extension => path.join(parsed.dir, `${parsed.name}${extension}`))
+        : parsed.ext
+          ? []
+          : [
+              ...JS_IMPORT_SOURCE_EXTENSIONS.map(extension => `${moduleName}${extension}`),
+              ...JS_IMPORT_SOURCE_EXTENSIONS.map(extension => path.join(moduleName, `index${extension}`)),
+            ];
 
-    for (const extension of JS_IMPORT_SOURCE_EXTENSIONS) {
-      const candidate = path.join(parsed.dir, `${parsed.name}${extension}`);
-      if (fs.existsSync(candidate)) {
-        return candidate;
-      }
-    }
-
-    return moduleName;
+    return candidates.find(candidate => fs.existsSync(candidate)) ?? moduleName;
   }
 
   // Find tsconfig.json file starting from a directory and walking up
@@ -83,56 +88,29 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve, c
     return null;
   }
 
-  // Get or create handler for a specific tsconfig file
-  function getHandlerForFile(filePath: string): ReturnType<typeof createHandler> | null {
-    // If a specific tsConfigPath was provided, use it
-    if (tsConfigPath && typeof tsConfigPath === 'string') {
-      if (!handlerCache.has(tsConfigPath)) {
-        handlerCache.set(
-          tsConfigPath,
-          createHandler({
-            log: () => {},
-            tsConfigPath,
-            respectCoreModule,
-            falllback: moduleName => fs.existsSync(moduleName),
-          }),
-        );
-      }
-      return handlerCache.get(tsConfigPath)!;
-    }
-
-    // Find appropriate tsconfig for this file
-    const configPath = findTsConfigForFile(filePath);
+  function getMatcherForFile(filePath: string): PathsMatcher | null {
+    const configPath = tsConfigPath ?? findTsConfigForFile(filePath);
     if (!configPath) {
       return null;
     }
 
-    // Cache handlers to avoid recreation
-    if (!handlerCache.has(configPath)) {
-      handlerCache.set(
-        configPath,
-        createHandler({
-          log: () => {},
-          tsConfigPath: configPath,
-          respectCoreModule,
-          falllback: moduleName => fs.existsSync(moduleName),
-        }),
-      );
+    if (!matcherCache.has(configPath)) {
+      const config = getTsconfig(configPath);
+      if (config?.config.compilerOptions?.paths && !config.config.compilerOptions.baseUrl) {
+        config.config.compilerOptions.baseUrl = path.dirname(config.path);
+      }
+      matcherCache.set(configPath, config ? createPathsMatcher(config) : null);
     }
 
-    return handlerCache.get(configPath)!;
+    return matcherCache.get(configPath) ?? null;
   }
 
-  // Simple alias resolution using dynamic handler
-  function resolveAlias(request: string, importer: string): string | null | undefined {
-    // Get the appropriate handler for this file
-    const dynamicHandler = getHandlerForFile(importer);
-    if (!dynamicHandler) {
-      return null;
+  function resolveAliases(request: string, importer: string): string[] {
+    if (respectCoreModule && CORE_MODULES.has(request)) {
+      return [];
     }
 
-    const resolved = dynamicHandler(request, normalize(importer));
-    return resolved;
+    return getMatcherForFile(importer)?.(request) ?? [];
   }
 
   return {
@@ -150,76 +128,52 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve, c
           importer = path.resolve(cwd ?? process.cwd(), importer);
         }
 
-        const moduleName = resolveAlias(request, importer);
-        // No tsconfig alias found, so we need to resolve it normally
-        if (!moduleName) {
-          const resolved = await this.resolve(request, importer, { skipSelf: true, ...options });
-          if (!resolved) {
-            return null;
-          }
-
-          // If localResolve is true, we need to check if the importer has been resolved by the tsconfig-paths plugin
-          // if so, we need to resolve the request from the importer instead of the root and mark it as external
-          if (localResolve) {
-            const importerInfo = this.getModuleInfo(importer);
-            const importerPluginMeta = importerInfo?.meta?.[PLUGIN_NAME];
-
-            if (
-              !path.isAbsolute(request) &&
-              !request.startsWith('./') &&
-              !request.startsWith('../') &&
-              importerPluginMeta?.resolved
-            ) {
-              return {
-                ...resolved,
-                external: !request.startsWith('hono/') && request !== 'hono',
-              };
-            }
-          }
-
-          return {
-            ...resolved,
-            meta: {
-              ...(resolved.meta || {}),
-            },
-          };
-        }
-
-        const resolvedModuleName = resolveJsImportToSourceFile(moduleName);
-
-        // When a module does not have an extension, we need to resolve it to a file
-        if (!path.extname(resolvedModuleName)) {
+        const moduleNames = resolveAliases(request, importer);
+        for (const moduleName of moduleNames) {
+          const resolvedModuleName = resolveImportToSourceFile(moduleName);
           const resolved = await this.resolve(resolvedModuleName, importer, { skipSelf: true, ...options });
 
-          if (!resolved) {
-            return null;
-          }
-
-          return {
-            ...resolved,
-            meta: {
-              ...resolved.meta,
-              [PLUGIN_NAME]: {
-                resolved: true,
+          if (resolved) {
+            return {
+              ...resolved,
+              meta: {
+                ...resolved.meta,
+                [PLUGIN_NAME]: {
+                  resolved: true,
+                },
               },
-            },
-          };
+            };
+          }
         }
 
-        // Always pass through bundler's resolution to ensure proper path normalization
-        const resolved = await this.resolve(resolvedModuleName, importer, { skipSelf: true, ...options });
-
+        const resolved = await this.resolve(request, importer, { skipSelf: true, ...options });
         if (!resolved) {
           return null;
+        }
+
+        // If localResolve is true, we need to check if the importer has been resolved by the tsconfig-paths plugin
+        // if so, we need to resolve the request from the importer instead of the root and mark it as external
+        if (localResolve) {
+          const importerInfo = this.getModuleInfo(importer);
+          const importerPluginMeta = importerInfo?.meta?.[PLUGIN_NAME];
+
+          if (
+            !path.isAbsolute(request) &&
+            !request.startsWith('./') &&
+            !request.startsWith('../') &&
+            importerPluginMeta?.resolved
+          ) {
+            return {
+              ...resolved,
+              external: !request.startsWith('hono/') && request !== 'hono',
+            };
+          }
         }
 
         return {
           ...resolved,
           meta: {
-            ...resolved.meta,
-            [PLUGIN_NAME]: {
-              resolved: true,
-            },
+            ...(resolved.meta || {}),
           },
         };
       },
