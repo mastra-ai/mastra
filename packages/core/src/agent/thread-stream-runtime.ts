@@ -4,6 +4,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
 import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
+import { AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { parseMemoryRequestContext } from '../memory/types';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -16,6 +17,7 @@ import { readPositiveIntEnv } from '../utils';
 import type { WorkflowRunStatus } from '../workflows/types';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
+import { DurableStepIds } from './durable/constants';
 import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
 import { clearRunLeaseFence, setRunLeaseFence } from './run-lease-fence';
@@ -67,9 +69,6 @@ function toModelOutput<OUTPUT>(result: unknown): MastraModelOutput<OUTPUT> {
 }
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
-// Workflow names under which agent runs persist their snapshot: the regular agent
-// loop and the durable agent loop. Both key the row by the agent run id.
-const STORED_AGENT_RUN_WORKFLOW_NAMES = ['agentic-loop', 'durable-agentic-loop'] as const;
 const TERMINAL_STORED_RUN_STATUSES = new Set<WorkflowRunStatus>([
   'success',
   'failed',
@@ -1395,24 +1394,28 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
-   * Reads the persisted status of an agent run, or undefined when the agent has no
-   * storage, the run has no row, or the read fails. Callers fall back to the
-   * event-derived view in that case.
+   * Reads the persisted state of an agent run from the regular or durable agent
+   * loop row. Returns 'missing' when storage was read but holds no row for the
+   * run (both loops delete the row once a run finishes), and undefined when the
+   * agent has no storage or the read fails, so callers keep the event-derived view.
    */
-  async #readStoredRunStatus(agent: Agent<any, any, any, any>, runId: string): Promise<WorkflowRunStatus | undefined> {
+  async #readStoredRunStatus(
+    agent: Agent<any, any, any, any>,
+    runId: string,
+  ): Promise<WorkflowRunStatus | 'missing' | undefined> {
     try {
       const workflowsStore = await agent.getMastraInstance?.()?.getStorage?.()?.getStore('workflows');
       if (!workflowsStore) return undefined;
-      for (const workflowName of STORED_AGENT_RUN_WORKFLOW_NAMES) {
+      for (const workflowName of [AGENTIC_LOOP_WORKFLOW_ID, DurableStepIds.AGENTIC_LOOP]) {
         const run = await workflowsStore.getWorkflowRunById({ runId, workflowName });
         if (!run) continue;
         const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
-        if (typeof snapshot?.status === 'string') return snapshot.status as WorkflowRunStatus;
+        return typeof snapshot?.status === 'string' ? (snapshot.status as WorkflowRunStatus) : undefined;
       }
+      return 'missing';
     } catch {
-      // Unreadable storage is treated as unknown.
+      return undefined;
     }
-    return undefined;
   }
 
   #isThreadBlockingRun(state: AgentThreadRuntimeState, record: AgentThreadRunRecord<any>) {
@@ -5113,7 +5116,9 @@ export class AgentThreadStreamRuntime {
 
         // The lease alone cannot tell a parked run from a dead producer: a run
         // suspended on approval releases its lease, and the prompt that would
-        // tell us so may never have reached this subscriber. Ask storage first.
+        // tell us so may never have reached this subscriber. A stored suspended
+        // row settles it; anything else keeps the prompt heuristic, since a
+        // running regular-loop run has no row either.
         const storedStatus = await this.#readStoredRunStatus(agent, runId);
         if (
           done ||
@@ -5125,10 +5130,7 @@ export class AgentThreadStreamRuntime {
         }
         stopRemoteRunLeaseWatch(streamId);
         const promptSeen = remoteRunSuspensionPrompts.delete(streamId);
-        const parked =
-          storedStatus === 'suspended' ||
-          storedStatus === 'waiting' ||
-          (promptSeen && (storedStatus === undefined || !TERMINAL_STORED_RUN_STATUSES.has(storedStatus)));
+        const parked = storedStatus === 'suspended' || storedStatus === 'waiting' || promptSeen;
         if (parked) {
           const deferredRecord = deferredRunsByStreamId.get(streamId);
           if (deferredRecord) {
@@ -5483,10 +5485,13 @@ export class AgentThreadStreamRuntime {
           }
         }
         // A replayed run-suspended can describe a run that has since resumed and
-        // finished; storage is the authority on whether it is still parked.
+        // finished. Both loops persist the suspended row before publishing
+        // run-suspended and delete it when the run finishes, so a readable store
+        // without that row (or with a terminal one) means the run is no longer parked.
         const storedStatus =
           data.type === 'run-suspended' ? await this.#readStoredRunStatus(agent, data.runId) : undefined;
-        const suspendedRunEnded = storedStatus !== undefined && TERMINAL_STORED_RUN_STATUSES.has(storedStatus);
+        const suspendedRunEnded =
+          storedStatus === 'missing' || (storedStatus !== undefined && TERMINAL_STORED_RUN_STATUSES.has(storedStatus));
         if (data.type === 'run-suspended' && !suspendedRunEnded) {
           suspendedStreamIdsByRunId.set(data.runId, eventStreamId);
           noteRunHalf(data.runId);
