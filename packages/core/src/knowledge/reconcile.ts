@@ -29,8 +29,20 @@ export interface KnowledgeScopeTypeConfig {
   access?: KnowledgeScopeAccessConfig[];
   description?: string;
   children?: KnowledgeScopeChildTemplate[];
+  /**
+   * Pattern of the scope type this one nests under, e.g. `org:$orgId` for `project:$projectId`.
+   * When a run's scopes are materialized (see {@link planKnowledgeRunScopes}), the parent's value
+   * comes from the run's own scope of that type. A scope's parent is fixed when it is created.
+   */
+  parent?: string;
+  /**
+   * Host-vouched identity: scopes of this type come only from a run's trusted scopes or the host,
+   * never from child templates or importers.
+   */
+  identity?: boolean;
 }
 
+/** Scope types keyed by address pattern. Core configures none; see {@link memoryScopeTypes}. */
 export type KnowledgeScopeTypesConfig = Record<string, KnowledgeScopeTypeConfig>;
 
 export interface MaterializeKnowledgeScopeInput {
@@ -41,19 +53,28 @@ export interface MaterializeKnowledgeScopeInput {
   parameters?: Record<string, string>;
 }
 
-const BUILT_IN_SCOPE_TYPES: KnowledgeScopeTypesConfig = {
-  'org:$orgId': { access: [{ principal: 'self', role: 'owner' }] },
-  'resource:$resourceId': { access: [{ principal: 'self', role: 'owner' }] },
-  'resource:$resourceId:thread:$threadId': { access: [{ principal: 'self', role: 'owner' }] },
-  // Materializing an unmatched (custom) address creates the scope; it confers no
-  // ownership. Hosts that want owners on custom scopes configure a `custom` scope type.
-  custom: {},
+/**
+ * Opt-in scope types for Memory's identity: `org` → `resource` → `thread`, each owned by itself.
+ * Spread into `new Knowledge({ scopes: { ...memoryScopeTypes, ... } })`.
+ */
+export const memoryScopeTypes: KnowledgeScopeTypesConfig = {
+  'org:$orgId': { identity: true, access: [{ principal: 'self', role: 'owner' }] },
+  'resource:$resourceId': { identity: true, parent: 'org:$orgId', access: [{ principal: 'self', role: 'owner' }] },
+  'thread:$threadId': {
+    identity: true,
+    parent: 'resource:$resourceId',
+    access: [{ principal: 'self', role: 'owner' }],
+  },
 };
+
+// Materializing an unmatched (custom) address creates the scope; it confers no ownership.
+// Hosts that want owners on custom scopes configure a `custom` scope type.
+const DEFAULT_CUSTOM_SCOPE_TYPE: KnowledgeScopeTypeConfig = {};
 
 export function validateKnowledgeScopeTypes(
   scopeTypes: KnowledgeScopeTypesConfig | undefined,
 ): KnowledgeScopeTypesConfig {
-  const types = { ...BUILT_IN_SCOPE_TYPES, ...scopeTypes };
+  const types = scopeTypes ?? {};
   for (const [pattern, config] of Object.entries(types)) {
     assertScopeDescriptionWithinBound(config?.description);
     for (const child of config?.children ?? []) {
@@ -80,8 +101,22 @@ export function validateKnowledgeScopeTypes(
         throw new Error(`Knowledge mirror grant in ${pattern} cannot override suggest capability`);
       }
     }
+    assertParentType(pattern, types);
   }
   return types;
+}
+
+function assertParentType(pattern: string, types: Record<string, KnowledgeScopeTypeConfig>): void {
+  const seen = new Set([pattern]);
+  let current = pattern;
+  for (let parent = types[current]?.parent; parent !== undefined; parent = types[current]?.parent) {
+    if (!types[parent] || parent === 'custom') {
+      throw new Error(`Knowledge scope type ${current} names parent ${parent}, which is not a configured scope type`);
+    }
+    if (seen.has(parent)) throw new Error(`Knowledge scope type parents contain a cycle at ${parent}`);
+    seen.add(parent);
+    current = parent;
+  }
 }
 
 /** Scope descriptions share the node description bound, counted in UTF-16 code units. */
@@ -159,7 +194,7 @@ export function materializeKnowledgeScopePlan(
   }
 
   const match = matches[0];
-  const config = match?.config ?? types.custom ?? BUILT_IN_SCOPE_TYPES.custom!;
+  const config = match?.config ?? types.custom ?? DEFAULT_CUSTOM_SCOPE_TYPE;
   const parameters = { ...input.parameters, ...match?.parameters };
   for (const [key, value] of Object.entries(match?.parameters ?? {})) {
     if (input.parameters?.[key] !== undefined && input.parameters[key] !== value) {
@@ -204,21 +239,24 @@ export function materializeKnowledgeScopePlan(
   });
 }
 
-const IDENTITY_SCOPE_PATTERNS = [
-  'org:$orgId',
-  'resource:$resourceId',
-  'resource:$resourceId:thread:$threadId',
-  'thread:$threadId',
-];
+/** A run's own resource and thread are agent identity even when no Knowledge scope type uses them. */
+const AGENT_IDENTITY_SCOPE_PATTERNS = ['resource:$resourceId', 'thread:$threadId'];
+
+function identityScopePatterns(types: Record<string, KnowledgeScopeTypeConfig>): string[] {
+  return [
+    ...AGENT_IDENTITY_SCOPE_PATTERNS,
+    ...Object.entries(types).flatMap(([pattern, config]) => (config.identity ? [pattern] : [])),
+  ];
+}
 
 /**
  * Child templates must not mint identity scopes (those are host-vouched) or addresses owned by
  * another configured scope type: the child would get the template's grants instead of that type's
  * access and children, and a later materialization of it would find it existing and never repair it.
  */
-function assertChildAddress(address: string, types: KnowledgeScopeTypesConfig): string {
+function assertChildAddress(address: string, types: Record<string, KnowledgeScopeTypeConfig>): string {
   assertAddress(address);
-  if (IDENTITY_SCOPE_PATTERNS.some(pattern => matchPattern(pattern, address))) {
+  if (identityScopePatterns(types).some(pattern => matchPattern(pattern, address))) {
     throw new Error(`Knowledge child scope template cannot create identity scope ${address}`);
   }
   const owner = Object.keys(types).find(pattern => pattern !== 'custom' && matchPattern(pattern, address));
@@ -304,4 +342,86 @@ function assertAddress(address: string): void {
   if (address !== address.trim() || address.split(':').some(segment => !segment)) {
     throw new Error(`Invalid Knowledge scope address: ${address}`);
   }
+}
+
+/** One scope a run holds, as {@link planKnowledgeRunScopes} plans it. */
+export interface KnowledgeRunScopePlan extends MaterializeKnowledgeScopeInput {
+  /** The configured scope type pattern the address matched, e.g. `org:$orgId`. */
+  pattern: string;
+  /** The parent scope's address when the type nests under another held type. */
+  parentAddress?: string;
+}
+
+/**
+ * Plans which scopes a run holds from its trusted scope addresses (`<type>:<value>`, such as the
+ * agent scopes Core marks for the run). A configured scope type made of `<type>:$param` pairs is
+ * held when the run holds a scope of every type it names and its `parent` type is held too; its
+ * parameters come from those scopes. Scope types matching no configured pattern are ignored.
+ * Returned parent-first, ready for `materializeScope`.
+ */
+export function planKnowledgeRunScopes(
+  scopeTypes: KnowledgeScopeTypesConfig | undefined,
+  runScopes: readonly string[],
+): KnowledgeRunScopePlan[] {
+  const types = validateKnowledgeScopeTypes(scopeTypes);
+  const held = new Map<string, Set<string>>();
+  for (const scope of runScopes) {
+    const separator = scope.indexOf(':');
+    if (separator <= 0 || separator === scope.length - 1) continue;
+    const type = scope.slice(0, separator);
+    const values = held.get(type) ?? new Set<string>();
+    values.add(scope.slice(separator + 1));
+    held.set(type, values);
+  }
+
+  const resolved = new Map<string, KnowledgeRunScopePlan | null>();
+  const resolve = (pattern: string): KnowledgeRunScopePlan | null => {
+    if (resolved.has(pattern)) return resolved.get(pattern)!;
+    resolved.set(pattern, null);
+    const segments = pattern.split(':');
+    if (segments.length % 2 !== 0) return null;
+    const parameters: Record<string, string> = {};
+    const address: string[] = [];
+    for (let index = 0; index < segments.length; index += 2) {
+      const type = segments[index]!;
+      const parameter = segments[index + 1]!;
+      if (type.startsWith('$') || !parameter.startsWith('$')) return null;
+      const values = held.get(type);
+      if (!values) return null;
+      if (values.size > 1) {
+        throw new Error(
+          `Knowledge run scopes hold more than one ${type}: ${[...values].map(v => `${type}:${v}`).join(', ')}`,
+        );
+      }
+      const [value] = values as Set<string>;
+      if (value!.includes(':')) return null;
+      parameters[parameter.slice(1)] = value!;
+      address.push(type, value!);
+    }
+    const config = types[pattern]!;
+    const parent = config.parent ? resolve(config.parent) : undefined;
+    if (parent === null) return null;
+    const plan: KnowledgeRunScopePlan = {
+      pattern,
+      address: address.join(':'),
+      // A run holds this scope itself, so it vouches for itself: `self` grants go to it, never to its parent.
+      contextualScopeAddress: address.join(':'),
+      parameters,
+      ...(parent ? { parentAddress: parent.address, parentAddresses: [parent.address] } : {}),
+    };
+    resolved.set(pattern, plan);
+    return plan;
+  };
+
+  const plans = Object.keys(types)
+    .filter(pattern => pattern !== 'custom')
+    .flatMap(pattern => resolve(pattern) ?? []);
+  const depth = (plan: KnowledgeRunScopePlan): number => {
+    let count = 0;
+    for (let current = plan; current.parentAddress; count++) {
+      current = plans.find(candidate => candidate.address === current.parentAddress)!;
+    }
+    return count;
+  };
+  return plans.sort((first, second) => depth(first) - depth(second));
 }

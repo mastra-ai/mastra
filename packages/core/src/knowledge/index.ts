@@ -37,10 +37,11 @@ import {
 import { KnowledgeImporterRunner } from './imports/runner';
 import {
   materializeKnowledgeScopePlan,
+  planKnowledgeRunScopes,
   validateKnowledgeScopeTypes,
   validateKnowledgeStructurePlan,
 } from './reconcile';
-import type { KnowledgeScopeTypesConfig, MaterializeKnowledgeScopeInput } from './reconcile';
+import type { KnowledgeRunScopePlan, KnowledgeScopeTypesConfig, MaterializeKnowledgeScopeInput } from './reconcile';
 
 function configuredScopeDescription(scope: KnowledgeStructurePlan['scopes'][number]): string | undefined {
   const description = scope.metadata?.description;
@@ -271,6 +272,32 @@ export class Knowledge extends MastraBase {
       this.#reconcilePromise = promise;
     }
     return this.#reconcilePromise;
+  }
+
+  /**
+   * Materializes the scopes a run holds: every configured scope type its trusted scope addresses
+   * fill (see `planKnowledgeRunScopes`), parent-first. Pass only trusted scopes, such as
+   * `getRunAgentScopes(requestContext)` plus the run's own Memory resource and thread. A scope that
+   * already exists under a different parent is refused, never re-parented.
+   */
+  async materializeRunScopes(input: {
+    scopes: readonly string[];
+  }): Promise<Array<KnowledgeRunScopePlan & { scopeId: string }>> {
+    const held: Array<KnowledgeRunScopePlan & { scopeId: string }> = [];
+    for (const plan of planKnowledgeRunScopes(this.#scopeTypes, input.scopes)) {
+      const { pattern: _pattern, parentAddress, ...materialize } = plan;
+      const result = await this.materializeScope(materialize);
+      const scopeId = result.scopes[plan.address]!;
+      if (parentAddress) {
+        const parentId = held.find(scope => scope.address === parentAddress)!.scopeId;
+        const storage = await this.getStorage();
+        if (!(await storage.getNodeScopeIds(scopeId)).includes(parentId)) {
+          throw new Error(`Knowledge scope ${plan.address} already exists under a parent other than ${parentAddress}`);
+        }
+      }
+      held.push({ ...plan, scopeId });
+    }
+    return held;
   }
 
   async materializeScope(input: MaterializeKnowledgeScopeInput): Promise<KnowledgeStructureReconcileResult> {
@@ -602,12 +629,13 @@ export class Knowledge extends MastraBase {
 
 export * from '../storage/domains/knowledge';
 export * from './imports';
-export { materializeKnowledgeScopePlan } from './reconcile';
+export { materializeKnowledgeScopePlan, memoryScopeTypes, planKnowledgeRunScopes } from './reconcile';
 export type { KnowledgeConfig } from './config';
 export type {
   KnowledgeScopeAccessConfig,
   KnowledgeScopeChildTemplate,
   KnowledgeScopeTypeConfig,
   KnowledgeScopeTypesConfig,
+  KnowledgeRunScopePlan,
   MaterializeKnowledgeScopeInput,
 } from './reconcile';
