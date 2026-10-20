@@ -7578,6 +7578,9 @@ importers:
         specifier: ^0.18.0
         version: 0.18.0(bufferutil@4.1.0)
     devDependencies:
+      '@copilotkit/aimock':
+        specifier: ^1.29.0
+        version: 1.29.0(vitest@4.1.11)
       '@internal/core':
         specifier: workspace:*
         version: link:../../packages/_internal-core
@@ -7593,6 +7596,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/pg':
+        specifier: workspace:*
+        version: link:../pg
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
