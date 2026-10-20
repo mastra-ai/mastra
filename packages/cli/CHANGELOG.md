@@ -1,5 +1,36 @@
 # mastra
 
+## 1.35.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`59c02f5`](https://github.com/mastra-ai/mastra/commit/59c02f53955dde397f343f2107060ed70bbe63c5), [`9c66073`](https://github.com/mastra-ai/mastra/commit/9c66073db33749ab622d54db7e8885f183451ca4), [`e5b6877`](https://github.com/mastra-ai/mastra/commit/e5b6877fbdb471485b99019eb50046b44e778aae), [`e5b6877`](https://github.com/mastra-ai/mastra/commit/e5b6877fbdb471485b99019eb50046b44e778aae), [`8c05e78`](https://github.com/mastra-ai/mastra/commit/8c05e78b099b26daf4bfa9b229190201c8bf581d)]:
+  - @mastra/core@1.79.0-alpha.10
+  - @mastra/deployer@1.79.0-alpha.10
+
+## 1.35.0-alpha.9
+
+### Patch Changes
+
+- You can now filter Factory boards by **Author**, **Assignee** and, on the Review board, **Review requested**. **Involves** (formerly Teammate) and **Worked on by** remain available. Picks within one people field match any of them, and different fields must all match, so "Author: Alice" plus "Assignee: Bob" shows only Alice's cards that Bob is assigned to. **Label** still needs every picked label. ([#27659](https://github.com/mastra-ai/mastra/pull/27659))
+
+  - **You** comes first in every people list and also matches the cards you opened from your GitHub account.
+  - People and label lists longer than eight entries get a search box.
+  - **Linear project** shows up only once Linear is picked as an intake source. It now narrows only Linear cards, so other picked sources such as GitHub stay visible.
+  - Hovering Board properties lists the filters in use.
+
+  **Relevant because** is removed. Board links and saved views that used it now show every card involving the picked teammate. To narrow by role again, pick the person in the matching field: Teammate "Alice" with Relevant because "Assigned" becomes Assignee "Alice".
+
+- Factory chats now open each session by its session id, while the session's memory lives under its Factory or its owner. Slack "View session" links use `?sessionId=`; links already posted with `?resourceId=` still open. ([#27338](https://github.com/mastra-ai/mastra/pull/27338))
+
+- Simplified example-generation option handling while preserving the existing defaults. ([#27646](https://github.com/mastra-ai/mastra/pull/27646))
+
+- Studio is now built with Vite 8. Pages load the same as before. Studio now needs Chrome or Edge 111, Firefox 114 or Safari 16.4 or newer (previously Chrome or Edge 107, Firefox 104 or Safari 16). ([#27662](https://github.com/mastra-ai/mastra/pull/27662))
+
+- Updated dependencies [[`6362d32`](https://github.com/mastra-ai/mastra/commit/6362d32a905d32820dcab3b9a039ebc1cec4f444), [`e3678a5`](https://github.com/mastra-ai/mastra/commit/e3678a564cf3bb5922112b4dca65973c5fdc0a92), [`9c4d65f`](https://github.com/mastra-ai/mastra/commit/9c4d65f41ee21e407f0015b0e745881288f69d05), [`7425858`](https://github.com/mastra-ai/mastra/commit/74258589417e9e91114c64571a67702d2e352b3f), [`a97ba85`](https://github.com/mastra-ai/mastra/commit/a97ba8578a2dc91a16d945276ca8c7a4ad32e38a), [`750a4ed`](https://github.com/mastra-ai/mastra/commit/750a4edf7826da9ba7321682912504c60f29712d), [`c236d64`](https://github.com/mastra-ai/mastra/commit/c236d64974c68e6c0f9bf6e3d6442e0184c5f49e), [`22df9d7`](https://github.com/mastra-ai/mastra/commit/22df9d76651b3b4d513388a7eae8e51dbfb36a1b), [`0971298`](https://github.com/mastra-ai/mastra/commit/0971298317be971ae1c3f0c1d949a31df7d71c7f), [`98c7e10`](https://github.com/mastra-ai/mastra/commit/98c7e109fca4995d19d7eb132fdb8411c860b151), [`e3678a5`](https://github.com/mastra-ai/mastra/commit/e3678a564cf3bb5922112b4dca65973c5fdc0a92), [`5d5ea03`](https://github.com/mastra-ai/mastra/commit/5d5ea032a4c64cefe5bc217f4cc761a9364ccbf4)]:
+  - @mastra/core@1.79.0-alpha.9
+  - @mastra/deployer@1.79.0-alpha.9
+
 ## 1.35.0-alpha.8
 
 ### Patch Changes

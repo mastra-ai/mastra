@@ -24,6 +24,7 @@ import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import { insertTemporalGapMarkers } from './temporal-markers';
 import type { TokenCounterModelContext } from './token-counter';
+import type { ObservationModelContext } from './types';
 
 /**
  * Coerce a shared `state.__omTurn` value to a usable live turn.
@@ -296,7 +297,6 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         state.__omTurn = undefined;
       }
 
-      let responseMessageId = messageId;
       if (!this.turn || !state.__omTurn) {
         // End previous turn if state was reset mid-flow
         if (this.turn && !state.__omTurn) {
@@ -319,14 +319,6 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         this.turn.agent = args.agent;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory, runState);
-        // A run recovered by another worker can continue a response message that the dead
-        // worker already observed. That worker rotated the id in memory, but the rotation was
-        // lost with it. Seal and rotate again so the rest of the turn isn't merged into the observed message.
-        if (messageId && this.turn.record.observedMessageIds?.includes(messageId)) {
-          const observed = messageList.get.all.db().find(message => message.id === messageId);
-          if (observed) this.engine.sealMessagesForBuffering([observed]);
-          responseMessageId = rotateResponseMessageId?.() ?? messageId;
-        }
         if (stepNumber === 0 && this.temporalMarkers) {
           await insertTemporalGapMarkers({ messageList, sendSignal: args.sendSignal });
         }
@@ -342,7 +334,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       state.__omObservabilityContext = observabilityContext;
       this.turn.observabilityContext = observabilityContext;
       this.turn.actorModelContext = actorModelContext;
-      this.turn.responseMessageId = responseMessageId;
+      this.turn.responseMessageId = messageId;
 
       // ── Run step preparation (activation, threshold, observation, filtering) ──
       {
@@ -530,6 +522,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           sendSignal: args.sendSignal,
           sendStateSignal: args.sendStateSignal,
           requestContext,
+          currentModel: state.__omActorModelContext as ObservationModelContext | undefined,
           writer: args.writer,
           observabilityContext: getOmObservabilityContext(args),
         }),

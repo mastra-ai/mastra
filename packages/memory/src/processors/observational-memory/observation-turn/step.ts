@@ -635,6 +635,7 @@ export class ObservationStep {
         sendSignal: this.turn.sendSignal,
         sendStateSignal: this.turn.sendStateSignal,
         requestContext: this.turn.requestContext,
+        currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         observabilityContext: this.turn.observabilityContext,
       });

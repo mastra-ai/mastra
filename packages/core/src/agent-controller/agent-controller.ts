@@ -9,6 +9,7 @@ import type { ActorSignal, MastraFGAPermissionInput } from '../auth/ee';
 import { MastraFGAPermissions } from '../auth/ee';
 import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
+import type { PubSub } from '../events/pubsub';
 import { GatewayManager } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
 import type { MastraModelConfig, WidenedMastraModelConfig } from '../llm/model/shared.types';
@@ -253,6 +254,8 @@ export class AgentController<TState = {}> {
   private availableModelsCacheTime: number = 0;
   readonly #instructions?: string;
   #internalMastra: Mastra | undefined = undefined;
+  /** The application's event bus the backing agents share when the controller has none of its own. */
+  #applicationPubSub: PubSub | undefined = undefined;
   /**
    * Set when this AgentController is registered on a parent Mastra (via
    * {@link __registerMastra}). When present it is used in place of the
@@ -1126,6 +1129,21 @@ export class AgentController<TState = {}> {
   private async runInit(): Promise<void> {
     await this.initStorage();
 
+    // Runs on a thread are coordinated through the agent's pubsub. When an
+    // application's agent backs a mode of a controller with no pubsub of its
+    // own, keep every backing agent on that application's event bus rather than
+    // the internal Mastra's, so the controller's runs and the application's
+    // other runs on a thread see each other.
+    if (this.#internalMastra && !this.config.pubsub) {
+      for (const agent of this.backingAgents()) {
+        const owner = agent.getMastraInstance();
+        if (owner && owner !== this.#internalMastra && !agent.hasOwnPubSub()) {
+          this.#applicationPubSub = owner.pubsub;
+          break;
+        }
+      }
+    }
+
     // Propagate harness-level Mastra, memory, workspace, browser, and pubsub
     // to the agent(s) that back each mode. Workspaces initialize lazily when used.
     for (const agent of this.backingAgents()) {
@@ -1617,6 +1635,11 @@ export class AgentController<TState = {}> {
     // factory before the per-session request context is available.
     const mastra = this.getMastra();
     if (mastra && agent.getMastraInstance() !== mastra) {
+      // An agent pinned to the application's bus while on the internal Mastra
+      // takes the parent's bus once the controller is registered on a parent.
+      if (this.#applicationPubSub && !agent.hasOwnPubSub()) {
+        agent.__setPubSub(mastra === this.#internalMastra ? this.#applicationPubSub : mastra.pubsub);
+      }
       mastra.addAgent(agent);
     }
 

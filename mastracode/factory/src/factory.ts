@@ -1254,6 +1254,8 @@ export class MastraFactory {
         coAuthor: { name: 'mastra-platform[bot]' },
         ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
         modes: false,
+        // Subagents are disabled, matching the Mastra Code TUI default.
+        subagents: [],
         // Thinking defaults are stored per Factory, not in the host's settings.json.
         resolveDefaultThinkingLevel: ({ requestContext }) =>
           resolveFactoryThinkingLevel(requestContext, {
