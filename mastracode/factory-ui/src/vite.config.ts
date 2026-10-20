@@ -12,16 +12,15 @@ import type { Plugin } from 'vite';
 const here = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Resolve the font package roots. In the monorepo workspace each package is a
- * pnpm symlink into the virtual store; in the standalone web host (linked via
- * `link:`) it sits in the host's node_modules. realpathSync resolves the
- * symlink so Vite can serve font files in dev without exposing the entire
- * pnpm store.
+ * Resolve the mona-sans font package root. In the monorepo workspace the
+ * package is a pnpm symlink into the virtual store; in the standalone web
+ * host (linked via `link:`) it sits in the host's node_modules. realpathSync
+ * resolves the symlink so Vite can serve font files in dev without exposing
+ * the entire pnpm store.
  */
-const fontPackageRoots = ['@fontsource-variable/mona-sans', '@fontsource/commit-mono'].map(name =>
-  realpathSync(resolve(here, '../node_modules', name)),
-);
-const fsAllow = [searchForWorkspaceRoot(here), ...fontPackageRoots];
+const monaSansEntry = resolve(here, '../node_modules/@fontsource-variable/mona-sans');
+const monaSansPackageRoot = realpathSync(monaSansEntry);
+const fsAllow = [searchForWorkspaceRoot(here), monaSansPackageRoot];
 
 /**
  * Dev-proxy target for the API server and the UI dev-server port. Overridable

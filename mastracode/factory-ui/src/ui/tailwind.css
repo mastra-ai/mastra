@@ -2,8 +2,30 @@
 @import '@mastra/playground-ui/components.css';
 @import '@mastra/playground-ui/sources.css';
 
-/* Mona Sans and Commit Mono, same as Studio. Faces come from
- * @fontsource-variable/mona-sans and @fontsource/commit-mono, imported in main.tsx. */
+/* Mona Sans and Commit Mono, same as Studio. Mona Sans comes from
+ * @fontsource-variable/mona-sans, imported in main.tsx. Commit Mono is bundled
+ * like Studio's (packages/playground/src/fonts.css): SIL OFL, see
+ * assets/fonts/OFL-CommitMono.txt. */
+@font-face {
+  font-family: CommitMono;
+  src:
+    local('Commit Mono'),
+    url('./assets/fonts/CommitMono-400-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: CommitMono;
+  src:
+    local('Commit Mono'),
+    url('./assets/fonts/CommitMono-700-Regular.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     --font-display:
@@ -11,8 +33,7 @@
       'Segoe UI Symbol', 'Noto Color Emoji';
     --font-body: var(--font-display);
     --font-mono:
-      'Commit Mono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
-    /* Mona Sans's x-height, so mono text looks the same size as the text around it. */
+      'CommitMono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
     --font-mono-size-adjust: ex-height 0.508;
   }
 }
