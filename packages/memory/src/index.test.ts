@@ -311,6 +311,81 @@ describe('Memory', () => {
       expect(result?.content.parts[0]).toEqual({ type: 'text', text: 'Hello  world' });
     });
 
+    describe('Gemini thought signatures on parallel updateWorkingMemory calls (#27231)', () => {
+      const toolPart = (
+        toolCallId: string,
+        toolName: string,
+        providerMetadata?: Record<string, Record<string, any>>,
+      ) => ({
+        type: 'tool-invocation' as const,
+        toolInvocation: { state: 'result' as const, toolCallId, toolName, args: {}, result: { ok: true } },
+        ...(providerMetadata ? { providerMetadata } : {}),
+      });
+      const geminiMessage = (parts: MastraDBMessage['content']['parts']): MastraDBMessage => ({
+        id: 'assistant-gemini',
+        role: 'assistant',
+        createdAt: new Date('2026-01-01T00:00:01Z'),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: { format: 2, parts },
+      });
+      const replayedToolCalls = (message: MastraDBMessage) =>
+        new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' })
+          .add(message, 'memory')
+          .get.all.aiV5.prompt()
+          .flatMap(m => (m.role === 'assistant' && Array.isArray(m.content) ? m.content : []))
+          .filter(part => part.type === 'tool-call');
+
+      it('keeps the step signature on the first surviving call so it replays signed', () => {
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
+          geminiMessage([
+            { type: 'step-start' },
+            toolPart('wm-1', 'updateWorkingMemory', { google: { thoughtSignature: 'SIG_GEMINI' } }),
+            toolPart('call-1', 'lookupWeather'),
+            toolPart('call-2', 'lookupTime'),
+          ]),
+        );
+        expect(result?.content.parts).toEqual([
+          { type: 'step-start' },
+          toolPart('call-1', 'lookupWeather', { google: { thoughtSignature: 'SIG_GEMINI' } }),
+          toolPart('call-2', 'lookupTime'),
+        ]);
+
+        const toolCalls = replayedToolCalls(result!);
+        expect(toolCalls.map(call => call.providerOptions?.google)).toEqual([
+          { thoughtSignature: 'SIG_GEMINI' },
+          undefined,
+        ]);
+      });
+
+      it('keeps a signature the surviving call already has', () => {
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
+          geminiMessage([
+            { type: 'step-start' },
+            toolPart('wm-1', 'updateWorkingMemory', { google: { thoughtSignature: 'SIG_WM' } }),
+            toolPart('call-1', 'lookupWeather', { google: { thoughtSignature: 'SIG_WEATHER' } }),
+          ]),
+        );
+        expect(result?.content.parts).toEqual([
+          { type: 'step-start' },
+          toolPart('call-1', 'lookupWeather', { google: { thoughtSignature: 'SIG_WEATHER' } }),
+        ]);
+      });
+
+      it('drops the signature with a step whose only call was updateWorkingMemory', () => {
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
+          geminiMessage([
+            { type: 'step-start' },
+            toolPart('wm-1', 'updateWorkingMemory', { google: { thoughtSignature: 'SIG_WM_ONLY' } }),
+            { type: 'step-start' },
+            { type: 'text', text: 'Saved.' },
+          ]),
+        );
+        expect(result?.content.parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'Saved.' }]);
+        expect(replayedToolCalls(result!)).toEqual([]);
+      });
+    });
+
     describe('signed reasoning around updateWorkingMemory calls (#22798)', () => {
       const reasoning = (signature: string) => ({
         type: 'reasoning' as const,

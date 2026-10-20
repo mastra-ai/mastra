@@ -313,6 +313,89 @@ describe('removeWorkingMemoryToolInvocationParts', () => {
     ]);
   });
 
+  describe('Gemini thought signatures on parallel calls (#27231)', () => {
+    const signed = (part: MastraMessagePart, providerMetadata: Record<string, Record<string, any>>) =>
+      ({ ...part, providerMetadata }) as MastraMessagePart;
+
+    it('moves the signature from a removed working-memory call to the first surviving call', () => {
+      const wm = signed(call('wm', 'updateWorkingMemory'), {
+        google: { thoughtSignature: 'sig-1' },
+        mastra: { createdAt: 1 },
+      });
+      const other = signed(call('other', 'lookupWeather'), { mastra: { createdAt: 2 } });
+      const input = [{ type: 'step-start' }, wm, other, call('third', 'lookupTime')] as MastraMessagePart[];
+      const snapshot = structuredClone(input);
+
+      expect(removeWorkingMemoryToolInvocationParts(input)).toEqual([
+        { type: 'step-start' },
+        signed(call('other', 'lookupWeather'), { mastra: { createdAt: 2 }, google: { thoughtSignature: 'sig-1' } }),
+        call('third', 'lookupTime'),
+      ]);
+      expect(input).toEqual(snapshot);
+    });
+
+    it('keeps an existing signature on the surviving call', () => {
+      const wm = signed(call('wm', 'updateWorkingMemory'), { google: { thoughtSignature: 'sig-wm' } });
+      const other = signed(call('other', 'lookupWeather'), { google: { thoughtSignature: 'sig-other' } });
+      expect(removeWorkingMemoryToolInvocationParts([{ type: 'step-start' }, wm, other])).toEqual([
+        { type: 'step-start' },
+        other,
+      ]);
+    });
+
+    it('moves only the thought signature, not other provider metadata', () => {
+      const wm = signed(call('wm', 'updateWorkingMemory'), {
+        vertex: { thoughtSignature: 'sig-vertex', extra: 'wm-only' },
+        openai: { itemId: 'fc_wm' },
+      });
+      expect(
+        removeWorkingMemoryToolInvocationParts([{ type: 'step-start' }, wm, call('other', 'lookupWeather')]),
+      ).toEqual([
+        { type: 'step-start' },
+        signed(call('other', 'lookupWeather'), { vertex: { thoughtSignature: 'sig-vertex' } }),
+      ]);
+    });
+
+    it('adds nothing when the removed call is unsigned', () => {
+      expect(
+        removeWorkingMemoryToolInvocationParts([
+          { type: 'step-start' },
+          call('wm', 'updateWorkingMemory'),
+          call('other', 'lookupWeather'),
+        ]),
+      ).toEqual([{ type: 'step-start' }, call('other', 'lookupWeather')]);
+    });
+
+    it('still drops a step whose only call was the signed working-memory call', () => {
+      const next: MastraMessagePart[] = [{ type: 'step-start' }, { type: 'text', text: 'Done' }];
+      expect(
+        removeWorkingMemoryToolInvocationParts([
+          { type: 'step-start' },
+          reasoning,
+          signed(call('wm', 'updateWorkingMemory'), { google: { thoughtSignature: 'sig-1' } }),
+          ...next,
+        ]),
+      ).toEqual(next);
+    });
+
+    it('moves a signature only within its own step', () => {
+      expect(
+        removeWorkingMemoryToolInvocationParts([
+          { type: 'step-start' },
+          signed(call('wm', 'updateWorkingMemory'), { google: { thoughtSignature: 'sig-1' } }),
+          call('a', 'lookupWeather'),
+          { type: 'step-start' },
+          call('b', 'lookupWeather'),
+        ]),
+      ).toEqual([
+        { type: 'step-start' },
+        signed(call('a', 'lookupWeather'), { google: { thoughtSignature: 'sig-1' } }),
+        { type: 'step-start' },
+        call('b', 'lookupWeather'),
+      ]);
+    });
+  });
+
   it('leaves state-signal setWorkingMemory calls alone', () => {
     const parts: MastraMessagePart[] = [{ type: 'step-start' }, reasoning, call('wm', 'setWorkingMemory')];
     expect(removeWorkingMemoryToolInvocationParts(parts)).toBe(parts);
