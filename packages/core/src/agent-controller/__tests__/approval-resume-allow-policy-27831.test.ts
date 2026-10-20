@@ -130,8 +130,7 @@ describe('AgentController approval resume (#27831)', () => {
     }, 30_000);
   });
 
-  // Known bug on main and on #27791: approve/decline paths build options without activeTools.
-  it.fails("a mode's availableTools still applies to the model call after an approved tool call", async () => {
+  it("a mode's availableTools still applies to the model call after an approved tool call", async () => {
     const env = await setup({ registeredOnMastra: true, availableTools: ['read_data'] });
 
     await env.session.sendMessage({ content: "Call read_data with 'a', then with 'b', then answer 'done'." });

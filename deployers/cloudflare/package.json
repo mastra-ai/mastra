@@ -51,7 +51,6 @@
   },
   "devDependencies": {
     "@babel/types": "^8.0.4",
-    "@copilotkit/aimock": "^1.29.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
