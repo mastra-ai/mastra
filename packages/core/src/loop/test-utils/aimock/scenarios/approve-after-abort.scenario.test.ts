@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { MockMemory } from '../../../../memory';
 import { createTool } from '../../../../tools';
 import { AGENTIC_LOOP_WORKFLOW_ID } from '../../../loop-builder';
 import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
@@ -12,10 +13,12 @@ describeForAllEngines('A stopped approval cannot restart a run (#27617)', engine
     ['stream', 'stream completion'],
     ['stream', 'stream completion with snapshot cleanup pending'],
     ['stream', 'stream completion with snapshot cleanup failed'],
+    ['stream on a thread', 'abort during snapshot load with snapshot cleanup pending'],
     ['generate', 'abort'],
   ] as const) {
-    // Only normal/fs runs delete the suspended snapshot through the agent cleanup gated below.
-    if (resumeAfter.includes('snapshot cleanup') && engine !== 'normal' && engine !== 'fs') {
+    // Only normal/fs runs delete the suspended snapshot through the agent cleanup gated below,
+    // and only they load the suspended snapshot through the agent resume path gated below.
+    if (resumeAfter.includes('snapshot') && engine !== 'normal' && engine !== 'fs') {
       continue;
     }
     // Normal/fs generate runs are not registered for abortRunStream, which returns false.
@@ -40,7 +43,13 @@ describeForAllEngines('A stopped approval cannot restart a run (#27617)', engine
             return { status: `OK:${query}` };
           },
         });
-        const { agent, mastra } = await createSharedAgent(llm, { engine, tools: { lookup_status: lookup } });
+        // A thread keeps the suspended run parked, so abortRunStream can still stop it while a resume is loading.
+        const onThread = start === 'stream on a thread';
+        const { agent, mastra } = await createSharedAgent(llm, {
+          engine,
+          tools: { lookup_status: lookup },
+          ...(onThread ? { memory: new MockMemory() } : {}),
+        });
         // Hold the real store's snapshot deletion open so the user responds inside the cleanup window.
         let releaseCleanup = () => {};
         let cleanupStarted: Promise<void> | undefined;
@@ -65,14 +74,18 @@ describeForAllEngines('A stopped approval cannot restart a run (#27617)', engine
         }
         let runId: string;
         let aborted: boolean | undefined;
-        if (start === 'stream') {
-          const output = await agent.stream('Look up alpha', { requireToolApproval: true });
+        if (start !== 'generate') {
+          const output = await agent.stream('Look up alpha', {
+            requireToolApproval: true,
+            ...(onThread ? { memory: { thread: 'abort-thread', resource: 'abort-resource' } } : {}),
+          });
           let approvalSeen = false;
           for await (const chunk of output.fullStream) {
             if (chunk.type !== 'tool-call-approval') continue;
             approvalSeen = true;
             expect(executed).toEqual([]);
-            if (resumeAfter === 'abort') break;
+            if (resumeAfter === 'abort' || resumeAfter === 'abort during snapshot load with snapshot cleanup pending')
+              break;
             // Keep reading until the aborted segment closes, so its cleanup has run before the user responds.
             aborted = agent.abortRunStream(output.runId);
             // Durable/evented streams stay open after aborting an approval-suspended run.
@@ -87,7 +100,7 @@ describeForAllEngines('A stopped approval cannot restart a run (#27617)', engine
         expect(executed).toEqual([]);
         if (resumeAfter === 'abort') {
           aborted = agent.abortRunStream(runId);
-        } else if (cleanupStarted) {
+        } else if (cleanupStarted && resumeAfter !== 'abort during snapshot load with snapshot cleanup pending') {
           // Bounded so a run that never starts snapshot cleanup fails by assertion, not by test timeout.
           let timer: ReturnType<typeof setTimeout> | undefined;
           const cleanup = await Promise.race([
@@ -103,13 +116,12 @@ describeForAllEngines('A stopped approval cannot restart a run (#27617)', engine
         } else {
           await new Promise<void>(resolve => setImmediate(resolve));
         }
-        expect(aborted).toBe(true);
+        if (resumeAfter !== 'abort during snapshot load with snapshot cleanup pending') expect(aborted).toBe(true);
 
         const options = { runId, toolCallId: 'call_abort' };
         // Consume an incorrectly accepted resume too, so the regression proves the
         // side effect, not just whether the API happened to return a stream.
-        let rejection: unknown;
-        try {
+        const respond = async () => {
           if (method === 'resumeGenerate') {
             await agent.resumeGenerate({ approved: true }, options);
           } else {
@@ -121,11 +133,52 @@ describeForAllEngines('A stopped approval cannot restart a run (#27617)', engine
               // Drain the resumed execution.
             }
           }
+        };
+        let rejection: unknown;
+        try {
+          if (resumeAfter === 'abort during snapshot load with snapshot cleanup pending') {
+            // The user responds first; the abort lands while the resume is reading the suspended snapshot.
+            const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
+            const loadSnapshot = workflows.loadWorkflowSnapshot.bind(workflows);
+            let releaseLoad = () => {};
+            const loadGate = new Promise<void>(resolve => (releaseLoad = resolve));
+            const loadStarted = new Promise<void>(started => {
+              workflows.loadWorkflowSnapshot = async args => {
+                if (args.workflowName !== AGENTIC_LOOP_WORKFLOW_ID) return loadSnapshot(args);
+                workflows.loadWorkflowSnapshot = loadSnapshot;
+                started();
+                await loadGate;
+                return loadSnapshot(args);
+              };
+            });
+            const response = respond();
+            response.catch(() => {});
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const load = await Promise.race([
+              loadStarted.then(() => 'started'),
+              new Promise<string>(resolve => (timer = setTimeout(resolve, 2_000, 'never started'))),
+            ]);
+            clearTimeout(timer);
+            expect(load).toBe('started');
+            aborted = agent.abortRunStream(runId);
+            // The resume reads the snapshot while the abort's snapshot deletion is still pending.
+            const cleanup = await Promise.race([
+              cleanupStarted!.then(() => 'started'),
+              new Promise<string>(resolve => (timer = setTimeout(resolve, 2_000, 'never started'))),
+            ]);
+            clearTimeout(timer);
+            expect(cleanup).toBe('started');
+            releaseLoad();
+            await response;
+          } else {
+            await respond();
+          }
         } catch (error) {
           rejection = error;
         } finally {
           releaseCleanup();
         }
+        expect(aborted).toBe(true);
         expect(executed).toEqual([]);
         expect(llm.getRequests().map(request => request.body.messages)).toHaveLength(1);
         expect(rejection).toMatchObject({

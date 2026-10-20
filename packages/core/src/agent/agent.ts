@@ -7708,7 +7708,7 @@ export class Agent<
    * Used by resumeStream and resumeGenerate to fail fast at the agent boundary.
    * @internal
    */
-  async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
+  #throwIfRunAborted(runId: string) {
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       throw new MastraError({
         id: 'AGENT_RESUME_ABORTED_RUN',
@@ -7718,6 +7718,10 @@ export class Agent<
         details: { agentName: this.name, runId },
       });
     }
+  }
+
+  async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
+    this.#throwIfRunAborted(runId);
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
     let claimedThenFinished = false;
@@ -8070,6 +8074,8 @@ export class Agent<
 
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+    // The run may have been aborted while the snapshot was loading or validating; recheck with no await before claiming.
+    this.#throwIfRunAborted(runId);
 
     if (!workflowsStore?.supportsConcurrentUpdates()) {
       if (workflowsStore) {
