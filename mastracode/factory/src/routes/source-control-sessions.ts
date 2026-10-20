@@ -204,8 +204,8 @@ async function resolveSession(
 }
 
 /**
- * Start the live conversation for a user session on its own thread (thread id === session id), under its owner's
- * resource. Agent-controller
+ * Start the live conversation for a user session on its own thread (thread id === session id), under the resource
+ * its visibility gives it. Agent-controller
  * routes only act on started sessions, so the first prompt the page sends right after creation always lands on the
  * thread the page reads, with the org and Factory address already in state. Get-or-create, so retried or repeated
  * creates are safe.
@@ -219,7 +219,8 @@ async function startUserSessionConversation(
   requestContext.set('user', { workosId: session.userId, organizationId: session.orgId });
   const live = await controller.createSession({
     id: session.sessionId,
-    resourceId: session.userId,
+    // Its owner's resource while private, its Factory's when created shared (a run from a board card).
+    resourceId: userSessionResourceFor(session, session.visibility === 'org' ? 'org' : 'private'),
     threadId: session.sessionId,
     ownerId: session.userId,
     requestContext,

@@ -409,6 +409,41 @@ describe('source-control session routes', () => {
     expect((await create({ branch: 'factory/card-8', visibility: 'public' })).status).toBe(400);
   });
 
+  it('starts a session created shared on its Factory resource, so teammates can reach its memory', async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const controller = new AgentController<MastraCodeState>({
+      id: 'code',
+      stateSchema,
+      storage: new InMemoryStore({ id: 'factory-shared-session-start' }),
+      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          default: true,
+          agent: new Agent({
+            id: 'test-agent',
+            name: 'Test agent',
+            instructions: 'Test.',
+            model: { id: 'openai/gpt-5.5' },
+          }),
+        },
+      ],
+    });
+    await controller.init();
+    const app = buildApp([sourceControl], seed, controller);
+    const res = await app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ branch: 'factory/card-9', visibility: 'org' }),
+    });
+    const { session } = (await res.json()) as { session: { sessionId: string } };
+
+    await expect(controller.queryThreadById({ threadId: session.sessionId })).resolves.toMatchObject({
+      resourceId: project.id,
+    });
+  });
+
   it('starts the conversation on the session thread so the first prompt can be sent right away', async () => {
     const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
     const controller = new AgentController<MastraCodeState>({
