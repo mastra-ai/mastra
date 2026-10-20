@@ -21,6 +21,11 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
+// cmdk scrolls the selected option into view; jsdom has no implementation.
+if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
 const Wrap = ({ children }: { children: ReactNode }) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
@@ -38,6 +43,14 @@ const renderPage = () =>
       <ConnectionsPage />
     </Wrap>,
   );
+
+/** Opens the Add connection dialog and selects a provider from the picker. */
+async function pickProvider(name: string) {
+  fireEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
+  fireEvent.click(await within(dialog).findByRole('option', { name: new RegExp(name) }));
+  return dialog;
+}
 
 afterEach(() => {
   cleanup();
@@ -97,7 +110,7 @@ describe('ConnectionsPage', () => {
   });
 
   describe('when the surface is ready with global and user connections', () => {
-    it('splits the connections into separate tables with disconnect only on yours', async () => {
+    it('splits the connections into tables with catalog names and row actions only on yours', async () => {
       server.use(
         http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
         http.get(`${BASE_URL}/connect/connections`, () => HttpResponse.json(mixedConnectionsResponse)),
@@ -106,16 +119,19 @@ describe('ConnectionsPage', () => {
       renderPage();
 
       const userSection = await screen.findByRole('region', { name: 'Your connections' });
-      expect(await within(userSection).findByText('linear')).not.toBeNull();
+      // The catalog resolves 'linear' to its display name.
+      expect(await within(userSection).findByText('Linear')).not.toBeNull();
       expect(within(userSection).getByText('you@example.com')).not.toBeNull();
-      expect(within(userSection).getByRole('button', { name: 'Disconnect' })).not.toBeNull();
+      expect(within(userSection).getByRole('button', { name: 'Actions for Linear' })).not.toBeNull();
 
       const globalSection = await screen.findByRole('region', { name: 'Global connections' });
+      // 'notion' has no catalog entry, so the raw integration id is shown.
       expect(await within(globalSection).findByText('notion')).not.toBeNull();
-      expect(within(globalSection).queryByRole('button', { name: 'Disconnect' })).toBeNull();
+      // Global rows are read-only: no row actions at all.
+      expect(within(globalSection).queryByRole('button', { name: /^Actions for/ })).toBeNull();
     });
 
-    it('disconnects one of your connections and refetches the list', async () => {
+    it('disconnects one of your connections from the row menu and refetches the list', async () => {
       const onDelete = vi.fn<() => void>();
       let deleted = false;
       server.use(
@@ -132,15 +148,34 @@ describe('ConnectionsPage', () => {
 
       renderPage();
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Actions for Linear' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Disconnect' }));
 
       await waitFor(() => expect(onDelete).toHaveBeenCalled());
       expect(await screen.findByText("You haven't connected any accounts yet.")).not.toBeNull();
     });
   });
 
-  describe('when connecting a provider', () => {
-    it('creates a session, drives the popup, and polls until the connection is active', async () => {
+  describe('when connecting a provider through the dialog', () => {
+    it('filters the provider picker by search', async () => {
+      server.use(
+        http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
+        http.get(`${BASE_URL}/connect/connections`, () => HttpResponse.json(mixedConnectionsResponse)),
+      );
+
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Add connection' });
+      expect(await within(dialog).findByRole('option', { name: /Slack/ })).not.toBeNull();
+
+      fireEvent.change(within(dialog).getByPlaceholderText('Search providers'), { target: { value: 'lin' } });
+
+      expect(within(dialog).queryByRole('option', { name: /Slack/ })).toBeNull();
+      expect(within(dialog).getByRole('option', { name: /Linear/ })).not.toBeNull();
+    });
+
+    it('creates a session, drives the popup, and closes the dialog once the connection is active', async () => {
       const popup = { location: { href: '' }, close: vi.fn() };
       const openSpy = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
 
@@ -181,9 +216,7 @@ describe('ConnectionsPage', () => {
 
       renderPage();
 
-      const addSection = await screen.findByRole('region', { name: 'Add a connection' });
-      const slackRow = within(addSection).getByText('Slack').closest('li') as HTMLLIElement;
-      fireEvent.click(within(slackRow).getByRole('button', { name: 'Connect' }));
+      const dialog = await pickProvider('Slack');
 
       await waitFor(() => expect(onSession).toHaveBeenCalled());
       expect(openSpy).toHaveBeenCalled();
@@ -191,12 +224,16 @@ describe('ConnectionsPage', () => {
       // URL), never to a raw vendor connect URL.
       await waitFor(() => expect(popup.location.href).toBe(`${BASE_URL}${sessionResponse.launchUrl}`));
 
-      expect(await within(slackRow).findByRole('status')).not.toBeNull();
+      expect(await within(dialog).findByText('Waiting for authorization')).not.toBeNull();
 
-      // Polling (2s interval) eventually lands on active and refreshes the list.
+      // Polling (2s interval) eventually lands on active, closes the dialog,
+      // and the refreshed list shows the new connection.
       await waitFor(() => expect(statusPolls).toBeGreaterThanOrEqual(2), { timeout: 10_000 });
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add connection' })).toBeNull(), {
+        timeout: 10_000,
+      });
       const userSection = await screen.findByRole('region', { name: 'Your connections' });
-      await waitFor(() => expect(within(userSection).getByText('slack')).not.toBeNull(), { timeout: 10_000 });
+      await waitFor(() => expect(within(userSection).getByText('Slack')).not.toBeNull(), { timeout: 10_000 });
     }, 20_000);
 
     it('shows a fallback link when the popup is blocked', async () => {
@@ -213,12 +250,34 @@ describe('ConnectionsPage', () => {
 
       renderPage();
 
-      const addSection = await screen.findByRole('region', { name: 'Add a connection' });
-      const slackRow = within(addSection).getByText('Slack').closest('li') as HTMLLIElement;
-      fireEvent.click(within(slackRow).getByRole('button', { name: 'Connect' }));
+      const dialog = await pickProvider('Slack');
 
-      const fallback = await within(slackRow).findByRole('link', { name: 'Open the connect window' });
+      const fallback = await within(dialog).findByRole('link', { name: 'Open the connect window' });
       expect(fallback.getAttribute('href')).toBe(`${BASE_URL}${sessionResponse.launchUrl}`);
+    });
+
+    it('shows the failure with a retry when the session cannot be created', async () => {
+      vi.spyOn(window, 'open').mockReturnValue(null);
+
+      let sessionCalls = 0;
+      server.use(
+        http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
+        http.get(`${BASE_URL}/connect/connections`, () => HttpResponse.json(mixedConnectionsResponse)),
+        http.post(`${BASE_URL}/connect/slack/sessions`, () => {
+          sessionCalls += 1;
+          return HttpResponse.json({ error: { code: 'internal', message: 'Session mint failed' } }, { status: 500 });
+        }),
+      );
+
+      renderPage();
+
+      const dialog = await pickProvider('Slack');
+
+      expect(await within(dialog).findByText("Couldn't connect")).not.toBeNull();
+      expect(within(dialog).getByText(/Session mint failed/)).not.toBeNull();
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Try again' }));
+      await waitFor(() => expect(sessionCalls).toBe(2));
     });
   });
 });

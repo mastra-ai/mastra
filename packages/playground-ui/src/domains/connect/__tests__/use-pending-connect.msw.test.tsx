@@ -52,6 +52,33 @@ describe('usePendingConnect', () => {
       // observable; the recorded provider proves the full cycle ran.
       await waitFor(() => expect(result.current.connectedProviders.has('linear')).toBe(true));
       expect(result.current.pending).toBeNull();
+      expect(result.current.settled).toEqual({ provider: 'linear', status: 'active' });
+    });
+
+    it('clears the previous outcome when a new flow starts', async () => {
+      stubPopup();
+      // Each session mints a fresh connection; the second one stays pending.
+      let sessions = 0;
+      server.use(
+        http.post(`${BASE_URL}/connect/linear/sessions`, () => {
+          sessions += 1;
+          return HttpResponse.json(
+            sessions === 1 ? connectPromptSession : { ...connectPromptSession, connectionId: 'conn-second' },
+          );
+        }),
+        http.get(statusPath, () => HttpResponse.json(connectPromptStatusActive)),
+        http.get(`${BASE_URL}/connect/connections/conn-second/status`, () =>
+          HttpResponse.json({ ...connectPromptStatusActive, id: 'conn-second', status: 'pending' }),
+        ),
+      );
+
+      const { result } = renderPendingConnect();
+      act(() => result.current.connect('linear'));
+      await waitFor(() => expect(result.current.settled?.status).toBe('active'));
+
+      act(() => result.current.connect('linear'));
+      await waitFor(() => expect(result.current.pending).not.toBeNull());
+      expect(result.current.settled).toBeNull();
     });
   });
 
@@ -91,6 +118,7 @@ describe('usePendingConnect', () => {
       popup.closed = true;
       await waitFor(() => expect(result.current.pending).toBeNull());
       expect(result.current.connectedProviders.has('linear')).toBe(false);
+      expect(result.current.settled).toEqual({ provider: 'linear', status: 'failed' });
     });
   });
 
