@@ -425,11 +425,12 @@ export interface WorkflowRunState {
    */
   resumeClaimedAt?: number;
   /**
-   * Epoch ms when the process running a claimed agent resume (status `running`) last renewed its
-   * claim. Lets a later resume recognize a claim held by a process that died mid-run.
+   * The `resumeClaimedAt` of an agent resume that started running while holding a run-ownership
+   * lease on its claim. Only such a `running` claim can be taken over once its lease lapses, so a
+   * resume started by a process that holds no lease is never taken over.
    * @internal
    */
-  resumeLeaseRenewedAt?: number;
+  resumeLeasedClaimAt?: number;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
   stepExecutionPath?: string[];
