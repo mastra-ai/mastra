@@ -400,7 +400,9 @@ export function createFactorySessionTools(
       branch: `${USER_SESSION_BRANCH_PREFIX}${sessionId}`,
       projectRepositoryId,
       attributeToUserId: scope.userId,
-      visibility: parent.visibility,
+      // A run works a shared card, so the org can open it and answer its approvals even when the session that
+      // started it is private.
+      visibility: 'org',
     });
 
     // Follow first, so a fast run's first report already has somewhere to go.

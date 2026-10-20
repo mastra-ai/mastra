@@ -354,7 +354,7 @@ describe('source-control session routes', () => {
     });
   });
 
-  it('creates a session through the provider-neutral project route', async () => {
+  it('creates a private session through the provider-neutral project route when asked', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     const app = buildApp([sourceControl], seed);
     const sessionId = '11111111-1111-4111-8111-111111111111';
@@ -362,7 +362,7 @@ describe('source-control session routes', () => {
     const response = await app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ sessionId, title: 'Build GitLab issue' }),
+      body: JSON.stringify({ sessionId, title: 'Build GitLab issue', visibility: 'private' }),
     });
 
     expect(response.status).toBe(200);
@@ -373,11 +373,37 @@ describe('source-control session routes', () => {
         branch: `user/session-${sessionId}`,
         baseBranch: 'main',
         title: 'Build GitLab issue',
+        visibility: 'private',
       },
     });
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
       projectRepositoryId: projectRepository.id,
+      visibility: 'private',
     });
+    await expect(
+      sourceControl.sessions.list({ projectRepositoryId: projectRepository.id, viewerUserId: 'user-2' }),
+    ).resolves.toEqual([]);
+  });
+
+  it('creates sessions shared with the org unless asked for private, and rejects unknown visibility', async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const app = buildApp([sourceControl], seed);
+    const create = (body: Record<string, unknown>) =>
+      app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const shared = await create({ branch: 'factory/card-7' });
+    expect(shared.status).toBe(200);
+    const { session } = (await shared.json()) as { session: { sessionId: string; visibility: string } };
+    expect(session.visibility).toBe('org');
+    await expect(
+      sourceControl.sessions.list({ projectRepositoryId: projectRepository.id, viewerUserId: 'user-2' }),
+    ).resolves.toEqual([expect.objectContaining({ sessionId: session.sessionId })]);
+
+    expect((await create({ branch: 'factory/card-8', visibility: 'public' })).status).toBe(400);
   });
 
   it('starts the conversation on the session thread so the first prompt can be sent right away', async () => {

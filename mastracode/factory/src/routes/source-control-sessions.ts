@@ -375,6 +375,12 @@ function projectSessionRoutes(
           return c.json({ error: 'Invalid title' }, 400);
         }
         const normalizedTitle = body.title === undefined ? null : normalizeSessionTitle(body.title);
+        // Sessions start shared on the Factory. Only a session someone opens for themselves (New session) asks for
+        // `private`.
+        if (body.visibility !== undefined && body.visibility !== 'private' && body.visibility !== 'org') {
+          return c.json({ error: "visibility must be 'private' or 'org'" }, 400);
+        }
+        const visibility = body.visibility ?? 'org';
         let branch: string;
         if (body.branch === undefined) branch = `${USER_SESSION_BRANCH_PREFIX}${sessionId}`;
         else if (isValidGitRef(body.branch)) branch = body.branch;
@@ -406,7 +412,7 @@ function projectSessionRoutes(
             branch,
             baseBranch,
             title: normalizedTitle,
-            visibility: 'org',
+            visibility,
           })
           .catch(async error => {
             if (!(error instanceof UniqueViolationError) || !requestedSessionId) throw error;

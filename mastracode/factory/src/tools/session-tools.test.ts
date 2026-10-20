@@ -970,6 +970,19 @@ describe('factory_start_session in work-item mode', () => {
     expect(after.sessions.work).toMatchObject({ sessionId: result.sessionId });
   });
 
+  it('starts a work-item run shared with the org even from a private session', async () => {
+    const { start, item, sessions, sourceControl } = await withItem('private');
+
+    const result = (await start({ prompt: 'Profile the build.', workItem: item.id, role: 'work' })) as Started;
+
+    await expect(sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({ visibility: 'org' });
+    const teammateSees = await sourceControl.sessions.list({
+      projectRepositoryId: (await sessions.getBySessionId(result.sessionId))!.projectRepositoryId,
+      viewerUserId: 'user-2',
+    });
+    expect(teammateSees.map(row => row.sessionId)).toContain(result.sessionId);
+  });
+
   it("calls the coordinator with no destination stage and the project's model scope", async () => {
     const { start, item, prepare, scope } = await withItem();
     const result = (await start({ prompt: 'Go.', workItem: item.id, role: 'work' })) as Started;

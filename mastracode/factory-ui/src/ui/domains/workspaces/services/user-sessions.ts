@@ -61,9 +61,13 @@ export async function listUserSessions(
   return body.sessions.map(normalizeUserSession);
 }
 
-export type CreateUserSessionOptions =
+export type CreateUserSessionOptions = (
   | { branch: string; baseBranch?: string; sessionId?: never; title?: never }
-  | { sessionId: string; title: string; branch?: never; baseBranch?: never };
+  | { sessionId: string; title: string; branch?: never; baseBranch?: never }
+) & {
+  /** Defaults to `org`. A session someone opens for themselves with New session is created `private`. */
+  visibility?: 'private' | 'org';
+};
 
 export async function createUserSession(
   baseUrl: string,
