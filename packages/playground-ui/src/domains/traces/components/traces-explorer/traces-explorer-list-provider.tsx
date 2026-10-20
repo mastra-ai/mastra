@@ -3,7 +3,12 @@ import type { ReactNode } from 'react';
 import { useTracesListSource } from '../../hooks/use-traces-list-source';
 import { buildTracesLegacyFilters, buildTracesQueryRequest } from './traces-explorer-actions';
 import type { TracesSortDirection } from './traces-explorer-actions';
-import { TracesListContext, useTracesConfig, useTracesFilters } from './traces-explorer-context';
+import {
+  TracesListContext,
+  TracesListFetchingContext,
+  useTracesConfig,
+  useTracesFilters,
+} from './traces-explorer-context';
 import type { TracesListContextValue } from './traces-explorer-context';
 
 type TracesListProviderProps = {
@@ -32,8 +37,18 @@ export const TracesListProvider = memo(function TracesListProvider({
     legacyFilters: buildTracesLegacyFilters({ filters, dateFrom, dateTo }),
   });
 
-  const { rows, isLoading, isFetchingNextPage, hasNextPage, setEndOfListElement, error, autoRefetch, setAutoRefetch } =
-    list;
+  const {
+    rows,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    setEndOfListElement,
+    error,
+    refetch,
+    isFetching,
+    autoRefetch,
+    setAutoRefetch,
+  } = list;
   const value = useMemo<TracesListContextValue>(
     () => ({
       rows,
@@ -42,6 +57,7 @@ export const TracesListProvider = memo(function TracesListProvider({
       hasNextPage,
       setEndOfListElement,
       error,
+      refetch,
       autoRefetch,
       setAutoRefetch,
       sortDirection,
@@ -54,6 +70,7 @@ export const TracesListProvider = memo(function TracesListProvider({
       hasNextPage,
       setEndOfListElement,
       error,
+      refetch,
       autoRefetch,
       setAutoRefetch,
       sortDirection,
@@ -61,5 +78,9 @@ export const TracesListProvider = memo(function TracesListProvider({
     ],
   );
 
-  return <TracesListContext.Provider value={value}>{children}</TracesListContext.Provider>;
+  return (
+    <TracesListContext.Provider value={value}>
+      <TracesListFetchingContext.Provider value={isFetching}>{children}</TracesListFetchingContext.Provider>
+    </TracesListContext.Provider>
+  );
 });

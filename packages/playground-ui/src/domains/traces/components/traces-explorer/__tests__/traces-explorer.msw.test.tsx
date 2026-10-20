@@ -9,6 +9,7 @@ import { TRACES_LIST_REFETCH_INTERVAL_MS } from '../../../hooks/use-traces-list-
 import { TRACE_FILTER_BAR_OPERATORS } from '../../../trace-filters';
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
 import { TracesExplorer, useTracesFilterBar, useTracesFilterBarFields } from '../index';
+import type { TracesExplorerLayoutProps, TracesExplorerPanelProps } from '../index';
 import { DEFAULT_TRACES_FILTERS, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import type {
   TracesExplorerState,
@@ -17,7 +18,6 @@ import type {
   TracesSortDirection,
 } from '../traces-explorer-actions';
 import type { TracesExplorerFeatures } from '../traces-explorer-context';
-import type { TracesExplorerPanelProps } from '../traces-explorer-panel';
 import {
   emptyDatasets,
   emptyEntityNames,
@@ -128,6 +128,8 @@ type HarnessProps = {
   baselineFilters?: TracesFilters;
   filterBar?: ReactNode;
   onChange?: (next: TracesExplorerState) => void;
+  traceHref?: TracesExplorerPanelProps['traceHref'];
+  renderError?: TracesExplorerLayoutProps['renderError'];
   panelProps?: Partial<TracesExplorerPanelProps>;
 };
 
@@ -141,6 +143,8 @@ function Harness({
   baselineFilters,
   filterBar = <TracesExplorer.FilterBar />,
   onChange,
+  traceHref,
+  renderError,
   panelProps,
 }: HarnessProps) {
   const [selection, setSelection] = useState(initialSelection);
@@ -164,6 +168,7 @@ function Harness({
       initialFilters={baselineFilters}
     >
       <TracesExplorer.Layout
+        renderError={renderError}
         actionRow={
           <div>
             {filterBar}
@@ -173,7 +178,7 @@ function Harness({
         }
       >
         <TracesExplorer.List />
-        <TracesExplorer.Panel onOpenScore={() => {}} {...panelProps} />
+        <TracesExplorer.Panel onOpenScore={() => {}} traceHref={traceHref} {...panelProps} />
       </TracesExplorer.Layout>
     </TracesExplorer>
   );
@@ -252,6 +257,106 @@ describe('TracesExplorer', () => {
 
       expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
       expect(screen.getByText('Book a table for two')).toBeTruthy();
+    });
+  });
+
+  describe('when the list request fails', () => {
+    type ListResponse = 'ok' | 'fail' | 'hold';
+    /** Answers successive list requests in order; a `hold` waits for `release`. The last entry repeats. */
+    const respondInOrder = (responses: ListResponse[]) => {
+      setExplorerHandlers();
+      let release!: () => void;
+      const held = new Promise<void>(resolve => (release = resolve));
+      let calls = 0;
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async () => {
+          const response = responses[Math.min(calls, responses.length - 1)];
+          calls += 1;
+          if (response === 'fail') return HttpResponse.json({ error: 'Service busy' }, { status: 503 });
+          if (response === 'hold') await held;
+          return HttpResponse.json(twoTracesPage);
+        }),
+      );
+      return { release, listRequests: () => calls };
+    };
+
+    const hostError: TracesExplorerLayoutProps['renderError'] = ({ error, refetch, isFetching }) => (
+      <div role="alert">
+        <p>Host error: {error.message}</p>
+        <button type="button" disabled={isFetching} onClick={() => refetch()}>
+          {isFetching ? 'Retrying' : 'Retry'}
+        </button>
+      </div>
+    );
+
+    it('shows the default error state without a host renderer', async () => {
+      respondInOrder(['fail']);
+
+      renderExplorer();
+
+      expect(await screen.findByText('Failed to load traces')).toBeTruthy();
+    });
+
+    it('shows the host error state instead of the default one', async () => {
+      respondInOrder(['fail']);
+
+      renderExplorer({ renderError: hostError });
+
+      expect(await screen.findByText(/Host error:/)).toBeTruthy();
+      expect(screen.queryByText('Failed to load traces')).toBeNull();
+    });
+
+    it('re-fetches the list on retry and recovers once it succeeds', async () => {
+      const { listRequests } = respondInOrder(['fail', 'ok']);
+      renderExplorer({ renderError: hostError });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+      expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(listRequests()).toBe(2);
+    });
+
+    it('reports the retry as fetching when a refresh failed after traces loaded', async () => {
+      const { release } = respondInOrder(['ok', 'fail', 'hold']);
+      const { queryClient } = renderExplorer({ renderError: hostError });
+      await screen.findByText('What is the weather in Paris?');
+      await queryClient.refetchQueries({ queryKey: ['trace-query'] });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+      expect(await screen.findByRole('button', { name: 'Retrying' })).toHaveProperty('disabled', true);
+      release();
+      expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+  });
+
+  describe('when a trace is open', () => {
+    const openTraceActions = async (traceHref?: TracesExplorerPanelProps['traceHref']) => {
+      setExplorerHandlers();
+      const { queryClient } = renderExplorer({
+        initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
+        traceHref,
+      });
+      await settle(queryClient);
+      const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Open trace actions' }));
+      await screen.findByRole('menuitem', { name: 'Download trace JSON' });
+    };
+
+    it('links to the host trace page of the selected trace', async () => {
+      await openTraceActions(traceId => `/observe/traces/${traceId}`);
+
+      expect(screen.getByRole('menuitem', { name: 'Open trace page' }).getAttribute('href')).toBe(
+        '/observe/traces/trace-weather',
+      );
+    });
+
+    it('offers no trace page link without traceHref', async () => {
+      await openTraceActions();
+
+      expect(screen.queryByRole('menuitem', { name: 'Open trace page' })).toBeNull();
     });
   });
 

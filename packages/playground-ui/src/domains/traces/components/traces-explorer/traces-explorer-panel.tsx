@@ -19,6 +19,8 @@ export type TracesExplorerPanelProps = {
   renderCreateDatasetDialog?: ComponentProps<typeof TraceAsItemDialog>['renderCreateDatasetDialog'];
   /** Host integration actions rendered alongside the trace controls. */
   headerActionsSlot?: (args: { traceId: string; spans: TraceSpanPanelProps['spans'] }) => ReactNode;
+  /** Builds the href of the dedicated trace page; without it the drawer offers no "Open trace page" link. */
+  traceHref?: (traceId: string) => string;
   /** Shows "Add full trace to dataset" in the trace actions menu. Defaults to `true`. */
   withAddTraceToDataset?: boolean;
   /** Shows "Add tool mocks to item" in the trace actions menu for agent traces. Defaults to `true`. */
@@ -31,6 +33,7 @@ export function TracesExplorerPanel({
   onOpenScore,
   renderCreateDatasetDialog,
   headerActionsSlot,
+  traceHref,
   withAddTraceToDataset = true,
   withAddToolMocksToItem = true,
 }: TracesExplorerPanelProps) {
@@ -141,6 +144,7 @@ export function TracesExplorerPanel({
             : undefined
         }
         headerActionsSlot={traceId && headerActionsSlot ? headerActionsSlot({ traceId, spans }) : undefined}
+        traceHref={traceId && traceHref ? traceHref(traceId) : undefined}
       />
       <ScoreDataPanel depth={depth} score={featuredScore} onClose={() => selectScore(null)} />
       {withAddTraceToDataset && (

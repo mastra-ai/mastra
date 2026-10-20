@@ -22,7 +22,7 @@ export const TracesExplorer = Object.assign(TracesExplorerRoot, {
 });
 
 export type { TracesExplorerRootProps } from './traces-explorer-root';
-export type { TracesExplorerLayoutProps } from './traces-explorer-layout';
+export type { TracesExplorerErrorRenderArgs, TracesExplorerLayoutProps } from './traces-explorer-layout';
 export type {
   TracesExplorerFilterBarProps,
   TracesExplorerFilterChipsProps,
@@ -42,6 +42,7 @@ export {
   useTracesConfig,
   useTracesFilters,
   useTracesList,
+  useTracesListFetching,
   useTracesSelection,
 } from './traces-explorer-context';
 export type { TracesExplorerFeatures, TracesExplorerScope, TracesMetricsSupport } from './traces-explorer-context';
