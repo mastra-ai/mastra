@@ -173,7 +173,13 @@ export interface ToolsResolver extends Promise<ResolvedToolsRecord> {
   (ctx?: ToolsResolverContext): Promise<ResolvedToolsRecord>;
   /** Fetches tools from the platform now and updates the cache. Rejects if the platform fetch fails. */
   refresh(): Promise<ResolvedToolsRecord>;
-  /** Closes MCP transports owned by this resolver and clears its cached snapshot. */
+  /**
+   * Clears the cached snapshots and closes the MCP transports of the state
+   * behind this resolver. Resolvers created with identical options share that
+   * state, so this disconnects them too — but not permanently: a later
+   * resolution rebuilds the state, and already-returned MCP tools reconnect
+   * on their next call.
+   */
   disconnect(): Promise<void>;
   /**
    * Returns a new resolver that merges `extra` tools into every resolution,
