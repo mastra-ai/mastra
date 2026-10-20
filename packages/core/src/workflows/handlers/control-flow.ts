@@ -34,9 +34,12 @@ import {
   runCountDeprecationMessage,
   getResumeLabelsByStepId,
   getSingleStepEntryId,
+  getForeachProgress,
+  omitForeachProgress,
   omitPriorCompletionFields,
   resolveForeachConcurrency,
 } from '../utils';
+import type { ForeachProgress } from '../utils';
 import type { ExecuteStepParams } from './step';
 
 function publishStepEvent(
@@ -197,7 +200,8 @@ export async function executeParallel(
       makeStepRunning = timeTravel.steps[0] === stepId;
     }
     if (!makeStepRunning) {
-      break;
+      // Arms that already finished before a restart are skipped, not the arms after them.
+      continue;
     }
     const startTime = resume?.steps[0] === stepId ? undefined : Date.now();
     const resumeTime = resume?.steps[0] === stepId ? Date.now() : undefined;
@@ -263,6 +267,21 @@ export async function executeParallel(
       // Apply context changes from parallel step execution
       engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
       Object.assign(stepResults, stepExecResult.stepResults);
+      if (stepExecResult.result.status === 'success') {
+        // Checkpoint each finished arm so a crash before the others finish
+        // does not run it again on restart (#26214).
+        await engine.persistStepUpdate({
+          workflowId,
+          runId,
+          resourceId,
+          serializedStepGraph,
+          stepResults,
+          executionContext,
+          workflowStatus: 'running',
+          requestContext,
+          phase: `parallel-arm-end.${i}`,
+        });
+      }
       return stepExecResult.result;
     }),
   );
@@ -997,9 +1016,13 @@ export async function executeForeach(
   const startTime = resume?.steps[0] === stepId ? undefined : Date.now();
   const resumeTime = resume?.steps[0] === stepId ? Date.now() : undefined;
 
+  // Items that finished before a crash, checkpointed on the running foreach result (#26214).
+  const restartProgress =
+    restart && stepResults[stepId]?.status === 'running' ? getForeachProgress(stepResults[stepId]) : undefined;
+
   const stepInfo = {
     // Same as executeStep: strip prior completion/suspend fields on re-entry.
-    ...omitPriorCompletionFields((stepResults[stepId] ?? {}) as Record<string, unknown>),
+    ...omitForeachProgress(omitPriorCompletionFields((stepResults[stepId] ?? {}) as Record<string, unknown>)),
     ...(resume?.steps[0] === stepId ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
     ...(startTime ? { startedAt: startTime } : {}),
     ...(resumeTime ? { resumedAt: resumeTime } : {}),
@@ -1053,6 +1076,17 @@ export async function executeForeach(
 
   const prevForeachOutput = (prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput ||
     []) as PersistedForeachStepResult[];
+  const foreachProgress: ForeachProgress = { ...restartProgress };
+  for (const [index, { output, nestedRunId }] of Object.entries(foreachProgress)) {
+    prevForeachOutput[Number(index)] = {
+      status: 'success',
+      output,
+      payload: prevOutput[Number(index)],
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+      ...(nestedRunId ? { metadata: { nestedRunId } } : {}),
+    };
+  }
   const nestedRunIds: string[] = [];
   const prevResumeLabels = prevPayload?.suspendPayload?.__workflow_meta?.resumeLabels || {};
   const resumeLabels = getResumeLabelsByStepId(prevResumeLabels, stepId);
@@ -1208,6 +1242,34 @@ export async function executeForeach(
       // round-trip through the workflow snapshot. For non-suspended results we
       // clear it to keep the snapshot small.
       prevForeachOutput[k] = result.status === 'suspended' ? result : { ...result, suspendPayload: {} };
+
+      if (result.status === 'success') {
+        // Checkpoint finished items on the still-running foreach so a crash
+        // before the rest finish does not run them again on restart (#26214).
+        foreachProgress[k] = {
+          output: result.output,
+          ...(nestedRunIds[k] ? { nestedRunId: nestedRunIds[k] } : {}),
+        };
+        stepResults[stepId] = {
+          payload: prevOutput,
+          startedAt: Date.now(),
+          ...stepInfo,
+          status: 'running',
+          metadata: { ...stepInfo.metadata, foreachProgress },
+        };
+        executionContext.activeStepsPath[stepId] = executionContext.executionPath;
+        await engine.persistStepUpdate({
+          workflowId,
+          runId,
+          resourceId,
+          serializedStepGraph,
+          stepResults,
+          executionContext,
+          workflowStatus: 'running',
+          requestContext,
+          phase: `foreach-item-end.${k}`,
+        });
+      }
     } catch (err) {
       const errorObj = err instanceof Error ? err : new Error(String(err));
       const thrownResult: PersistedForeachStepResult = {

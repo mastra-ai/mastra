@@ -32,6 +32,8 @@ import {
   validateStepInput,
   createDeprecationProxy,
   defineLazyWriter,
+  getForeachProgress,
+  omitForeachProgress,
   omitPriorCompletionFields,
   runCountDeprecationMessage,
   validateStepResumeData,
@@ -186,7 +188,7 @@ export async function executeStep(
   const stepInfo = {
     // Drop prior completion/suspend fields so they cannot linger across re-entry
     // (e.g. suspendPayload/suspendedAt after resume, or startedAt > suspendedAt on loops).
-    ...omitPriorCompletionFields((stepResults[step.id] ?? {}) as Record<string, unknown>),
+    ...omitForeachProgress(omitPriorCompletionFields((stepResults[step.id] ?? {}) as Record<string, unknown>)),
     ...(hasResumeData ? { resumePayload: resumeDataToUse } : { payload: inputData, resumePayload: undefined }),
     // Keep the suspend payload while the resumed step runs so a restart after a crash still sees it.
     ...(hasResumeData && stepResults[step.id]?.suspendPayload !== undefined
@@ -234,6 +236,11 @@ export async function executeStep(
     skipEmits,
   });
 
+  // For a foreach item, carry over the progress that sibling items checkpointed while this
+  // item was starting, so this write cannot drop items that already finished (#26214).
+  const foreachProgress =
+    executionContext.foreachIndex !== undefined ? getForeachProgress(stepResults[step.id]) : undefined;
+
   await engine.persistStepUpdate({
     workflowId,
     runId,
@@ -241,7 +248,7 @@ export async function executeStep(
     serializedStepGraph,
     stepResults: {
       ...stepResults,
-      [step.id]: stepInfo,
+      [step.id]: foreachProgress ? { ...stepInfo, metadata: { ...stepInfo.metadata, foreachProgress } } : stepInfo,
     } as Record<string, StepResult<any, any, any, any>>,
     executionContext,
     workflowStatus: 'running',
