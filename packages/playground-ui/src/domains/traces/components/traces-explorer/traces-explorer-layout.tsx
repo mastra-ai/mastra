@@ -7,21 +7,30 @@ import {
   useTracesConfig,
   useTracesFilters,
   useTracesList,
+  useTracesListFetching,
   useTracesSelection,
 } from './traces-explorer-context';
+import type { TracesListContextValue } from './traces-explorer-context';
 import { useTracesDiscovery } from './use-traces-discovery';
 import { PageLayout } from '@/ds/components/PageLayout';
+
+export type TracesExplorerErrorRenderArgs = Pick<TracesListContextValue, 'refetch'> & {
+  error: NonNullable<TracesListContextValue['error']>;
+  isFetching: boolean;
+};
 
 export type TracesExplorerLayoutProps = {
   breadcrumbs?: ReactNode;
   actionRow: ReactNode;
   children: ReactNode;
+  /** Renders the list-error state (e.g. host-classified errors with a retry). Defaults to `TracesErrorContent`. */
+  renderError?: (args: TracesExplorerErrorRenderArgs) => ReactNode;
 };
 
-export function TracesExplorerLayout({ breadcrumbs, actionRow, children }: TracesExplorerLayoutProps) {
+export function TracesExplorerLayout({ breadcrumbs, actionRow, children, renderError }: TracesExplorerLayoutProps) {
   const { isCapabilitiesLoading } = useTracesConfig();
   const { isLoading: isDiscoveryLoading } = useTracesDiscovery();
-  const { rows, isLoading, error } = useTracesList();
+  const { rows, isLoading, error, refetch } = useTracesList();
   const { filters, dateFrom, dateTo, contentFiltersApplied } = useTracesFilters();
   const { selectedTraceId } = useTracesSelection();
   const { displayedPreferences } = useTraceUsageColumns();
@@ -45,7 +54,11 @@ export function TracesExplorerLayout({ breadcrumbs, actionRow, children }: Trace
       <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
         <h1 className="sr-only">Traces</h1>
         <div className="flex h-full items-center justify-center">
-          <TracesErrorContent error={error} resource="traces" errorTitle="Failed to load traces" />
+          {renderError ? (
+            <HostTracesError renderError={renderError} error={error} refetch={refetch} />
+          ) : (
+            <TracesErrorContent error={error} resource="traces" errorTitle="Failed to load traces" />
+          )}
         </div>
       </PageLayout>
     );
@@ -66,4 +79,15 @@ export function TracesExplorerLayout({ breadcrumbs, actionRow, children }: Trace
       {children}
     </PageLayout>
   );
+}
+
+/** Reads `isFetching` here so only the error state, not the whole layout, re-renders on fetches. */
+function HostTracesError({
+  renderError,
+  ...args
+}: Omit<TracesExplorerErrorRenderArgs, 'isFetching'> & {
+  renderError: NonNullable<TracesExplorerLayoutProps['renderError']>;
+}) {
+  const isFetching = useTracesListFetching();
+  return renderError({ ...args, isFetching });
 }
