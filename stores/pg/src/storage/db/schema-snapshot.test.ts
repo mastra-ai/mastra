@@ -337,7 +337,34 @@ describe('init catalog snapshot', () => {
     await admin(`ALTER TABLE "${schema}".mastra_threads DROP COLUMN "createdAtZ"`);
 
     // A snapshot that outlived init() would still report the column present.
-    expect(await db.hasColumn('mastra_threads', 'createdAtZ')).toBe(false);
+    // A fresh PgDB keeps the per-instance column cache out of the picture.
+    const freshDb = new PgDB({ client: store.db, schemaName: schema });
+    expect(await freshDb.hasColumn('mastra_threads', 'createdAtZ')).toBe(false);
+  }, 60000);
+
+  it('answers repeated hasColumn checks outside init from the column cache', async () => {
+    const schema = uniqueSchema('has_column_cache');
+    await admin(`CREATE SCHEMA "${schema}"`);
+
+    const store = await newStore(schema);
+    await store.init();
+    const workflows = (await store.getStore('workflows'))!;
+    const list = () =>
+      workflows.listWorkflowRuns({ workflowName: 'wf', status: 'running', resourceId: 'res-1', perPage: 0, page: 0 });
+
+    await list();
+    const statements = await captureStatements(async () => {
+      for (let i = 0; i < 10; i++) await list();
+    });
+
+    expect(count(statements, /COUNT\(\*\)/i)).toBe(10);
+    expect(count(statements, INFORMATION_SCHEMA_COLUMN_PROBE)).toBe(0);
+
+    // A cached positive is dropped when the store's own DDL removes the table.
+    const db = new PgDB({ client: store.db, schemaName: schema });
+    expect(await db.hasColumn('mastra_threads', 'resourceId')).toBe(true);
+    await db.dropTable({ tableName: 'mastra_threads' as TABLE_NAMES });
+    expect(await db.hasColumn('mastra_threads', 'resourceId')).toBe(false);
   }, 60000);
 
   it('migrates a legacy flat agents schema with the snapshot live', async () => {
