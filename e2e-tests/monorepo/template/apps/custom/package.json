@@ -25,6 +25,8 @@
     "@inner/hello-world": "workspace:*",
     "@inner/subpath-only": "workspace:*",
     "@inner/transitive-a": "workspace:*",
+    "@inner/transitive-only-dependent": "workspace:*",
+    "@inner/transitive-only-leaf": "workspace:*",
     "@inner/versionless": "workspace:*",
     "@inner/versionless-dependent": "workspace:*",
     "@inner/raw-ts": "workspace:*",

@@ -21,6 +21,21 @@
     "zai/GLM-5.2"
   ],
   "reasoning": {
+    "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": [
+      {
+        "type": "toggle"
+      }
+    ],
     "moonshotai/Kimi-K2.6": [
       {
         "type": "toggle"
@@ -40,21 +55,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B": [
-      {
-        "type": "toggle"
       }
     ]
   }

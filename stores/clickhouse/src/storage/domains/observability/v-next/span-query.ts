@@ -17,6 +17,7 @@ import {
   runWithClickHouseTraceQueryTimeout,
   timeToFirstChunkSupported,
 } from './trace-query';
+import type { ClickHouseParameterType } from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
 const identities = identityFields.join(', ');
@@ -59,10 +60,11 @@ const displayFields = [
 
 class Parameters {
   values: Record<string, string | number> = {};
-  add(value: string | number, timestamp = false) {
+  add(value: string | number, type: ClickHouseParameterType = typeof value === 'number' ? 'UInt64' : 'String') {
     const name = `span_${Object.keys(this.values).length}`;
-    this.values[name] = timestamp ? new Date(value).toISOString().replace('T', ' ').replace(/Z$/, '') : value;
-    return `{${name}:${timestamp ? "DateTime64(3, 'UTC')" : typeof value === 'number' ? 'UInt64' : 'String'}}`;
+    this.values[name] =
+      type === "DateTime64(3, 'UTC')" ? new Date(value).toISOString().replace('T', ' ').replace(/Z$/, '') : value;
+    return `{${name}:${type}}`;
   }
 }
 
@@ -80,10 +82,19 @@ function identityValues(row: SpanQueryIdentity): Array<string | number> {
 function afterCursor(plan: TrustedSpanQueryPlan, parameters: Parameters): string {
   if (!plan.cursor) return '1';
   const cursor = plan.cursor;
-  const timestamp = parameters.add(cursor.sortValue, true);
   const field = `s.${plan.orderBy.field}`;
-  const terms = [`${field} ${plan.orderBy.direction === 'asc' ? '>' : '<'} ${timestamp}`];
-  const equal = [`${field} = ${timestamp}`];
+  const terms: string[] = [];
+  const equal: string[] = [];
+  // Empty values sort last in both directions: they follow every value, and after an empty value
+  // only empty values remain.
+  if (cursor.sortValue === null) equal.push(`isNull(${field})`);
+  else {
+    const numeric = plan.orderBy.field === 'timeToFirstChunkMs';
+    const value = parameters.add(cursor.sortValue, numeric ? 'Float64' : "DateTime64(3, 'UTC')");
+    terms.push(`${field} ${plan.orderBy.direction === 'asc' ? '>' : '<'} ${value}`);
+    if (numeric) terms.push(`isNull(${field})`);
+    equal.push(`${field} = ${value}`);
+  }
   for (const key of identityFields) {
     const value = cursor[key];
     if (value === null) equal.push(`isNull(s.${key})`);
@@ -118,17 +129,17 @@ function fieldExpression(field: string): string {
 
 export function compileClickHouseSpanQuery(plan: TrustedSpanQueryPlan) {
   const parameters = new Parameters();
-  const from = parameters.add(plan.timeRange.from, true);
-  const to = parameters.add(plan.timeRange.to, true);
+  const from = parameters.add(plan.timeRange.from, "DateTime64(3, 'UTC')");
+  const to = parameters.add(plan.timeRange.to, "DateTime64(3, 'UTC')");
   const scope: string[] = [];
   if (plan.scope) {
     scope.push(`organizationId = ${parameters.add(plan.scope.organizationId)}`);
     if (plan.scope.resourceId !== undefined) scope.push(`resourceId = ${parameters.add(plan.scope.resourceId)}`);
   }
   const predicate = plan.where ? compileSpanQueryPredicate(plan.where) : { sql: '1', params: {} };
-  const selectionFields = [...new Set(['startedAt', 'endedAt', ...predicateFields(plan.where)])].filter(
-    field => !new Set<string>(identityFields).has(field),
-  );
+  const selectionFields = [
+    ...new Set(['startedAt', 'endedAt', plan.orderBy.field, ...predicateFields(plan.where)]),
+  ].filter(field => !new Set<string>(identityFields).has(field));
   const expressions = selectionFields.map(fieldExpression);
   // Completed insert-only records: latest endedAt wins. Equal-version retries must be identical.
   // Copies of a span share startedAt, so the time range can be applied before selecting the latest copy.
@@ -142,9 +153,9 @@ export function compileClickHouseSpanQuery(plan: TrustedSpanQueryPlan) {
     ORDER BY ${identities}, e.endedAt DESC
     LIMIT 1 BY ${identities}
   )
-  SELECT ${[...identityFields, 'startedAt', 'endedAt'].map(field => `s.${field}`).join(', ')}
+  SELECT ${[...new Set([...identityFields, 'startedAt', 'endedAt', plan.orderBy.field])].map(field => `s.${field}`).join(', ')}
   FROM candidates s WHERE s.startedAt >= ${from} AND s.startedAt < ${to} AND (${predicate.sql}) AND ${after}
-  ORDER BY s.${plan.orderBy.field} ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'}, ${identityFields.map(field => `s.${field} ASC NULLS LAST`).join(', ')}
+  ORDER BY s.${plan.orderBy.field} ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, ${identityFields.map(field => `s.${field} ASC NULLS LAST`).join(', ')}
   LIMIT ${parameters.add(plan.limit + 1)}`;
   return { query, query_params: { ...parameters.values, ...predicate.params } };
 }
@@ -170,7 +181,9 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
       compiled,
     )) as T[];
   };
-  const rows = await run<SpanQueryIdentity & { startedAt: string; endedAt: string }>(compileClickHouseSpanQuery(plan));
+  const rows = await run<
+    SpanQueryIdentity & { startedAt: string; endedAt: string; timeToFirstChunkMs?: number | null }
+  >(compileClickHouseSpanQuery(plan));
   const selected = rows.map(row => ({
     ...row,
     startedAt: iso(row.startedAt),
@@ -250,7 +263,7 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
           resourceId: last.resourceId,
           traceId: last.traceId,
           spanId: last.spanId,
-          sortValue: last[plan.orderBy.field],
+          sortValue: last[plan.orderBy.field] ?? null,
         })
       : null;
   return result;

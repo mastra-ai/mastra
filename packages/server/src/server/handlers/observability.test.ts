@@ -3464,6 +3464,8 @@ describe('Observability Handlers', () => {
             'trace-query',
             'trace-query-context-ids',
             'trace-query-root-span-fields',
+            'span-query',
+            'span-query-context-fields',
             'feedback',
           ] as const;
         }
@@ -3485,6 +3487,8 @@ describe('Observability Handlers', () => {
         traceQueryContextIds: true,
         traceQueryRootSpanFields: true,
         traceQueryRootDuration: false,
+        spanQuery: true,
+        spanQueryContextFields: true,
         feedback: true,
       });
       expect(result.capabilities.discovery.tags).toBe(true);

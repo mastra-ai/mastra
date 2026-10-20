@@ -148,18 +148,6 @@ for await (const chunk of stream) {
     "outputCost": null
   },
   {
-    "model": "xai/grok-imagine-image-quality",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 16000,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "xai/grok-imagine-video",
     "imageInput": true,
     "audioInput": false,
@@ -253,7 +241,7 @@ const response = await agent.generate("Hello!", {
   content={[
     {
         "name": "reasoningEffort",
-        "type": "\"none\" | \"low\" | \"medium\" | \"high\" | undefined",
+        "type": "\"none\" | \"low\" | \"medium\" | \"high\" | \"xhigh\" | undefined",
         "description": "",
         "isOptional": true
     },
@@ -266,6 +254,12 @@ const response = await agent.generate("Hello!", {
     {
         "name": "topLogprobs",
         "type": "number | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "serviceTier",
+        "type": "\"default\" | \"priority\" | undefined",
         "description": "",
         "isOptional": true
     },

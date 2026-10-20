@@ -39,12 +39,13 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
-    "mimo-v2.6-flash-rl": [
+    "glm-5.3-flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.x-menthol": [
+    "nemotron-3.5-content-safety": [
       {
         "type": "toggle"
       }
@@ -58,29 +59,32 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "qwen3.8-flash-next": [
+    "muse-glimmer-30b": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "deepseek-v4.1-flash": [
+    "mimo-v2.6-flash-rl": [
       {
         "type": "toggle"
-      },
+      }
+    ],
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+    "glm-5.x-menthol": [
       {
         "type": "toggle"
       }
     ],
-    "laguna-s-2.1": [
+    "qwen3.8-flash-next": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
       }
     ],
     "qwen3.8-27b": [
@@ -92,18 +96,17 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "nemotron-3.5-content-safety": [
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
       {
         "type": "toggle"
       }
     ],
-    "muse-glimmer-30b": [
+    "minimax-m3": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "type": "toggle"
       }
     ],
-    "minimax-m3": [
+    "mimo-v2.6-pro-rl": [
       {
         "type": "toggle"
       }
@@ -114,21 +117,18 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "mimo-v2.6-pro-rl": [
+    "deepseek-v4.1-flash": [
       {
         "type": "toggle"
-      }
-    ],
-    "glm-5.3": [
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "laguna-s-2.1": [
+      {
+        "type": "toggle"
       }
     ]
   }

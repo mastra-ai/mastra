@@ -55,6 +55,7 @@ async function setup() {
 
   const notifications = new InMemoryNotificationsStorage();
   const running = new Set<string>();
+  const threadMoved = new Map<string, number>();
   let now = Date.now();
   const processor = new FactorySessionsStateProcessor({
     authEnabled: true,
@@ -63,6 +64,7 @@ async function setup() {
     workItems: seed.workItems,
     boards: createBoardRegistry(),
     isRunning: async sessionId => running.has(sessionId),
+    lastActivity: async threadId => (threadMoved.has(threadId) ? new Date(threadMoved.get(threadId)!) : null),
     notifications: async () => notifications,
     now: () => now,
   });
@@ -137,6 +139,7 @@ async function setup() {
 
   return {
     seed,
+    sourceControl,
     project,
     createSession,
     fileItem,
@@ -144,6 +147,8 @@ async function setup() {
     bind,
     reportFrom,
     running,
+    threadMoved,
+    now: () => now,
     step,
     advance: (ms: number) => {
       now += ms;
@@ -198,11 +203,48 @@ describe('FactorySessionsStateProcessor', () => {
     expect((await env.step())!.contents).toContain('work session worker-7 parked; last report blocked');
   });
 
+  it('marks a running worker whose thread stopped moving as quiet, so stuck stands out from busy (#27742)', async () => {
+    const env = await setup();
+    const item = await env.fileItem(7);
+    await env.follow(item.id);
+    await env.bind(item.id, 'worker-7');
+    env.running.add('worker-7');
+
+    env.threadMoved.set('worker-7-thread', env.now() - 60_000);
+    const busy = (await env.step())!.contents;
+    expect(busy).toContain('work session worker-7 running');
+    expect(busy).not.toContain('quiet since');
+
+    const stoppedAt = env.now();
+    env.threadMoved.set('worker-7-thread', stoppedAt);
+    env.advance(35 * 60_000);
+    expect((await env.step())!.contents).toContain(
+      `work session worker-7 running but quiet since ${new Date(stoppedAt).toISOString()}`,
+    );
+    // Still quiet on the next step: the snapshot does not change, so nothing is re-sent.
+    await expect(env.step()).resolves.toBeUndefined();
+  });
+
   it('shows parked for a side session whose last report was blocked', async () => {
     const env = await setup();
     await env.createSession('side-1', { origin: { sessionId: 'parent', threadId: 'parent-thread' } });
     await env.reportFrom('side-1', 'blocked');
     expect((await env.step())!.contents).toContain('(session side-1): parked; last report blocked');
+  });
+
+  it('marks a side session muted until it is resubscribed, and re-emits on each change', async () => {
+    const env = await setup();
+    await env.createSession('side-1', { origin: { sessionId: 'parent', threadId: 'parent-thread' } });
+    env.running.add('side-1');
+    expect((await env.step())!.contents).toContain('(session side-1): running\n');
+
+    await env.sourceControl.sessions.setOriginMuted({ sessionId: 'side-1', muted: true });
+    expect((await env.step())!.contents).toContain('(session side-1): running (muted)');
+
+    await env.sourceControl.sessions.setOriginMuted({ sessionId: 'side-1', muted: false });
+    const unmuted = await env.step();
+    expect(unmuted!.contents).toContain('(session side-1): running');
+    expect(unmuted!.contents).not.toContain('(muted)');
   });
 
   it('skips while the state is unchanged and emits again when a report arrives or a stage changes', async () => {
@@ -308,7 +350,7 @@ describe('FactorySessionsStateProcessor', () => {
     await env.createSession('side-1', { origin: { sessionId: 'parent', threadId: 'parent-thread' } });
     const signal = await env.step({ sessionId: 'side-1', threadId: 'side-1' });
     expect(signal!.contents).toBe(
-      'Started by session parent (thread parent-thread). Report back with factory_message_origin.',
+      'Started by session parent (thread parent-thread). Report back with factory_message_origin. On long work, send a progress report after each plan step.',
     );
     await expect(env.step({ sessionId: 'side-1', threadId: 'side-1' })).resolves.toBeUndefined();
   });
@@ -329,7 +371,9 @@ describe('FactorySessionsStateProcessor', () => {
     await env.follow(item.id);
     await env.follow(item.id, 'other', 'other-thread');
     const signal = await env.step({ sessionId: 'worker-7', threadId: 'worker-7-thread' });
-    expect(signal!.contents).toBe('Working on #7 as work. Reports go to 2 following sessions.');
+    expect(signal!.contents).toBe(
+      'Working on #7 as work. Reports go to 2 following sessions. On long work, send a progress report after each plan step.',
+    );
   });
 
   it('clears the worker line once when its last follower leaves', async () => {
