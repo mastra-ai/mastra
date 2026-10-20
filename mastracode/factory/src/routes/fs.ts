@@ -245,11 +245,11 @@ async function realPathWithinRoot(candidate: string, root: string): Promise<stri
 }
 
 function assertRelativePath(path: string, label: string): string {
-  const trimmed = path.trim();
-  if (!trimmed) throw new Error(`Missing required query param: ${label}`);
-  if (isAbsolute(trimmed)) throw new Error(`${label} must be relative`);
-  if (trimmed.split(/[\\/]+/).includes('..')) throw new Error(`${label} escapes workspace`);
-  const normalized = resolve('/', trimmed).slice(1);
+  // Names may start or end with spaces; only a blank path is missing.
+  if (!path.trim()) throw new Error(`Missing required query param: ${label}`);
+  if (isAbsolute(path)) throw new Error(`${label} must be relative`);
+  if (path.split(/[\\/]+/).includes('..')) throw new Error(`${label} escapes workspace`);
+  const normalized = resolve('/', path).slice(1);
   if (!normalized || normalized === '..' || normalized.startsWith(`..${sep}`))
     throw new Error(`${label} escapes workspace`);
   return normalized;
@@ -684,6 +684,17 @@ async function realPaths(
   return { root: physicalRoot, paths: resolved.slice(0, paths.length) };
 }
 
+/** The first `bytes` bytes of a file, base64-encoded in the sandbox so binary content survives. */
+async function readFilePrefix(sandbox: ExecutableSandbox, path: string, bytes: number): Promise<Buffer> {
+  const result = await sandbox.executeCommand(
+    'sh',
+    ['-c', 'head -c "$1" -- "$2" | base64', 'sh', String(bytes), path],
+    { timeout: 30_000, maxRetainedBytes: Infinity },
+  );
+  if (result.exitCode !== 0) throw new Error(`Unable to read file: ${result.stderr.trim() || 'failed'}`);
+  return Buffer.from(result.stdout, 'base64');
+}
+
 /**
  * Where a real absolute path sits in the tree, or `undefined` when the tree
  * can't show it: missing, outside the working directory, or inside git
@@ -734,7 +745,7 @@ export async function listSessionWorkspaceTree(
   session: SourceControlSession,
   path = '',
 ): Promise<WorkspaceTreeListing> {
-  const requested = path.trim();
+  const requested = path.trim() ? path : '';
   const handle = await sessionSandbox(session);
   const listing = { workspacePath: session.sessionId, path: requested };
   if (!handle) return { ...listing, available: false, entries: [] };
@@ -817,17 +828,20 @@ export async function readSessionWorkspaceFile(session: SourceControlSession, pa
   const info = await filesystem.stat(safePath);
   if (info.type === 'directory') throw new Error('Path is a directory');
 
-  const buffer = (await filesystem.readFile(safePath)) as Buffer;
-  const truncated = buffer.length > MAX_TEXT_FILE_BYTES;
+  // Only the shown prefix of a large file leaves the sandbox.
+  const truncated = info.size > MAX_TEXT_FILE_BYTES;
+  const buffer = truncated
+    ? await readFilePrefix(sandbox, real.paths[0]!, MAX_TEXT_FILE_BYTES)
+    : ((await filesystem.readFile(safePath)) as Buffer);
   const base = {
     workspacePath: session.sessionId,
     path: safePath,
     name: posixPath.basename(safePath),
-    size: buffer.length,
+    size: info.size,
     updatedAt: info.modifiedAt.toISOString(),
   };
   try {
-    const content = TEXT_DECODER.decode(truncated ? buffer.subarray(0, MAX_TEXT_FILE_BYTES) : buffer);
+    const content = TEXT_DECODER.decode(buffer);
     return { ...base, contentType: 'text', content, truncated };
   } catch {
     return { ...base, contentType: 'unsupported' };

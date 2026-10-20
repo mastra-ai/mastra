@@ -431,6 +431,36 @@ describe('live session file tree', () => {
     });
   });
 
+  it('sends only the shown part of a large file out of the sandbox', async () => {
+    const { parent } = await seedHostCheckouts();
+    const shown = 512 * 1024;
+    await writeFile(join(parent, 'repo', 'big.log.txt'), 'a'.repeat(shown) + 'b'.repeat(10));
+    await writeFile(join(parent, 'repo', 'big.bin'), Buffer.concat([Buffer.alloc(shown, 0xff), Buffer.from('x')]));
+    const readFile = vi.spyOn(LocalFilesystem.prototype, 'readFile');
+
+    const big = await readSessionWorkspaceFile(makeSession(), 'big.log.txt');
+    expect(big).toMatchObject({ contentType: 'text', truncated: true, size: shown + 10 });
+    expect(big.contentType === 'text' && big.content).toBe('a'.repeat(shown));
+    await expect(readSessionWorkspaceFile(makeSession(), 'big.bin')).resolves.toMatchObject({
+      contentType: 'unsupported',
+      size: shown + 1,
+    });
+    expect(readFile).not.toHaveBeenCalled();
+    readFile.mockRestore();
+  });
+
+  it('keeps leading and trailing spaces in listed names', async () => {
+    const { parent } = await seedHostCheckouts();
+    await mkdir(join(parent, 'repo', ' spaced '));
+    await writeFile(join(parent, 'repo', ' spaced ', ' note.md '), 'spaced');
+
+    const listing = await listSessionWorkspaceTree(makeSession(), ' spaced ');
+    expect(listing.entries).toEqual([{ name: ' note.md ', path: ' spaced / note.md ', type: 'file', size: 6 }]);
+    await expect(readSessionWorkspaceFile(makeSession(), ' spaced / note.md ')).resolves.toMatchObject({
+      content: 'spaced',
+    });
+  });
+
   it('refuses a file whose symlink leads outside the checkout', async () => {
     const { parent } = await seedHostCheckouts();
     const outside = await mkdtemp(join(tmpdir(), 'factory-tree-outside-'));
