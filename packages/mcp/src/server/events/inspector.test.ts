@@ -1,6 +1,7 @@
 import { MastraError } from '@mastra/core/error';
 import { noopLogger } from '@mastra/core/logger';
 import type { MCPServerEventStreamFrame } from '@mastra/core/mcp';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -237,6 +238,70 @@ describe('MCPServer events inspector', () => {
         ),
         'MCP_SERVER_EVENT_UNSUPPORTED_DELIVERY',
       );
+    });
+  });
+
+  describe('authorize', () => {
+    function guarded() {
+      const seen: Array<{ user: unknown; delivery: string }> = [];
+      const definition = defineEvent({
+        description: 'A ticket was created',
+        inputSchema: z.object({ project: z.string() }),
+        payloadSchema: z.object({ id: z.string(), project: z.string() }),
+        authorize: ({ requestContext, delivery }) => {
+          const user = requestContext.get('user') as { id: string } | undefined;
+          seen.push({ user, delivery });
+          return user?.id === 'a';
+        },
+      });
+      return { seen, ...setup({ 'ticket.created': definition }) };
+    }
+
+    const as = (id: string) => {
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id });
+      return requestContext;
+    };
+
+    it("passes the caller's requestContext to authorize on stream and poll", async () => {
+      const { inspector, registry, seen } = guarded();
+      const controller = new AbortController();
+      const { frames, onFrame } = collect();
+
+      const stream = await inspector.stream(
+        'ticket.created',
+        { arguments: { project: 'web' } },
+        { requestContext: as('a'), signal: controller.signal, onFrame },
+      );
+      await inspector.poll('ticket.created', { arguments: { project: 'web' } }, { requestContext: as('a') });
+
+      expect(seen).toEqual([
+        { user: { id: 'a' }, delivery: 'push' },
+        { user: { id: 'a' }, delivery: 'poll' },
+      ]);
+      registry.emit('ticket.created', { id: 't-1', project: 'web' });
+      await flush();
+      expect(frames.some(frame => frame.type === 'event')).toBe(true);
+      controller.abort();
+      await stream.closed;
+    });
+
+    it('rejects a denied caller with a stable error id and holds no stream slot', async () => {
+      const { inspector, registry } = guarded();
+
+      await expectMastraError(
+        inspector.stream(
+          'ticket.created',
+          { arguments: { project: 'web' } },
+          { requestContext: as('b'), signal: new AbortController().signal, onFrame: () => {} },
+        ),
+        'MCP_SERVER_EVENT_FORBIDDEN',
+      );
+      await expectMastraError(
+        inspector.poll('ticket.created', { arguments: { project: 'web' } }, { requestContext: as('b') }),
+        'MCP_SERVER_EVENT_FORBIDDEN',
+      );
+      expect(registry.openStreams.size).toBe(0);
     });
   });
 

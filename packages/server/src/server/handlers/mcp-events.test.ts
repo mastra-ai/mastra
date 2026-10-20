@@ -373,6 +373,25 @@ describe('MCP event routes', () => {
         }),
       ).rejects.toMatchObject({ status: 400, message: 'This event does not support streaming; poll it instead' });
     });
+
+    it("returns 403 when the event's authorize denies the caller, on stream and poll, without logging", async () => {
+      const fake = fakeInspector();
+      const { mastra, logger } = makeMastra(makeServer(fake.inspector));
+      const denied = eventError('MCP_SERVER_EVENT_FORBIDDEN', 'Not allowed to subscribe to event "ticket.created"');
+      fake.inspector.stream.mockRejectedValueOnce(denied);
+      fake.inspector.poll.mockRejectedValueOnce(denied);
+      const context = { ...createTestServerContext({ mastra }), serverId: 'events', eventName: 'ticket.created' };
+
+      await expect(STREAM_MCP_SERVER_EVENT_ROUTE.handler(context)).rejects.toMatchObject({
+        status: 403,
+        message: 'Not allowed to use this event',
+      });
+      await expect(POLL_MCP_SERVER_EVENT_ROUTE.handler(context)).rejects.toMatchObject({
+        status: 403,
+        message: 'Not allowed to use this event',
+      });
+      expect(logger.error).not.toHaveBeenCalled();
+    });
   });
 
   describe('EMIT_MCP_SERVER_EVENT_ROUTE', () => {

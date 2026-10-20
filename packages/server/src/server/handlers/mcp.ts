@@ -416,7 +416,7 @@ function getEventsInspector(server: MastraMCPServerImplementation): MCPServerEve
   return inspector;
 }
 
-const EVENT_ERROR_RESPONSES: Record<string, { status: 400 | 404 | 429; message: string }> = {
+const EVENT_ERROR_RESPONSES: Record<string, { status: 400 | 403 | 404 | 429; message: string }> = {
   [MCP_SERVER_EVENT_ERROR_IDS.unknownEvent]: { status: 404, message: 'Event not found' },
   [MCP_SERVER_EVENT_ERROR_IDS.unsupportedDelivery]: {
     status: 400,
@@ -428,6 +428,7 @@ const EVENT_ERROR_RESPONSES: Record<string, { status: 400 | 404 | 429; message: 
     message: 'This event is fed by a poll source and cannot be emitted',
   },
   [MCP_SERVER_EVENT_ERROR_IDS.invalidPayload]: { status: 400, message: 'Invalid event data' },
+  [MCP_SERVER_EVENT_ERROR_IDS.forbidden]: { status: 403, message: 'Not allowed to use this event' },
   [MCP_SERVER_EVENT_ERROR_IDS.tooManyStreams]: { status: 429, message: 'Too many open event streams' },
 };
 
