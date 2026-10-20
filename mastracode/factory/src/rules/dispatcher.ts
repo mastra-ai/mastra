@@ -412,9 +412,10 @@ function positiveMs(value: number | undefined, fallback: number): number {
 const KEY_SHAPED_TOKEN =
   /\b(?:sk-[A-Za-z0-9_-]{3,}|gh[pousr]_[A-Za-z0-9]{10,}|github_pat_[A-Za-z0-9_]{10,}|xox[abprs]-[A-Za-z0-9-]{10,})/g;
 
-// Mixed-case alphanumeric runs read as keys; lowercase hex SHAs and UUIDs stay readable.
+// Mixed-case alphanumeric runs read as keys; lowercase hex SHAs, UUIDs, path segments and
+// hyphenated names such as branches stay readable.
 function looksLikeSecret(token: string): boolean {
-  return /[A-Z]/.test(token) && /[a-z]/.test(token) && /\d/.test(token);
+  return /[A-Z]/.test(token) && /[a-z]/.test(token) && /\d/.test(token) && /[A-Za-z0-9]{16,}/.test(token);
 }
 
 function sanitizeDispatchError(error: unknown): string {
@@ -422,7 +423,7 @@ function sanitizeDispatchError(error: unknown): string {
   return message
     .replace(KEY_SHAPED_TOKEN, '[redacted]')
     .replace(/\bbearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
-    .replace(/\b[A-Za-z0-9_+/=-]{24,}/g, token => (looksLikeSecret(token) ? '[redacted]' : token))
+    .replace(/\b[A-Za-z0-9_+=-]{24,}/g, token => (looksLikeSecret(token) ? '[redacted]' : token))
     .replace(/\b(?:bearer|token|api[-_ ]?key|authorization)\s*[:=]?\s*[^\s,;]+/gi, '[redacted]')
     .slice(0, MAX_ERROR_LENGTH);
 }

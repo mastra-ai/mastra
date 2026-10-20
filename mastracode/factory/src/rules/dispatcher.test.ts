@@ -6721,7 +6721,10 @@ describe('a skill run that ends in error (#27740)', () => {
     });
   });
 
-  it('blames model credentials for a provider error carrying a 401 status', async () => {
+  it.each([
+    ['a 401 status', Object.assign(new Error('Request failed'), { statusCode: 401 })],
+    ['a wrapped 403 status', Object.assign(new Error('Stream failed'), { cause: { statusCode: 403 } })],
+  ])('blames model credentials for a provider error carrying %s', async (_label, runError) => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -6730,7 +6733,6 @@ describe('a skill run that ends in error (#27740)', () => {
       idempotencyKey: 'skill-provider-401',
     });
     await bindWorkRun(storage, item.id);
-    const runError = Object.assign(new Error('Request failed'), { statusCode: 401 });
     const { controller } = createSession(undefined, { agentEndReason: 'error', runError });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
@@ -6779,6 +6781,32 @@ describe('a skill run that ends in error (#27740)', () => {
     expect(failedDecisionAttentionSpec.detail(decision!)).not.toContain(secret);
   });
 
+  it('redacts only the key-shaped segment of a path in a run error', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-path-secret-error',
+    });
+    await bindWorkRun(storage, item.id);
+    const runError = 'ENOENT: no such file /workspace/cache/Zm9vYmFyQmF6UXV4MTIzNDU2Nzg5MA/run.log';
+    const { controller } = createSession(undefined, { agentEndReason: 'error', runError });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.lastError).toContain(
+      'ENOENT: no such file /workspace/cache/[redacted]/run.log',
+    );
+  });
+
   it('leaves commit SHAs and ids in a run error readable', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
@@ -6789,7 +6817,8 @@ describe('a skill run that ends in error (#27740)', () => {
     });
     await bindWorkRun(storage, item.id);
     const runError =
-      'git checkout 9c34731d508cc586e92194d2e871d00fa7c030eb failed for run 8b065d55-2922-4ae8-915f-ee66aa30d726';
+      'git checkout 9c34731d508cc586e92194d2e871d00fa7c030eb failed for run 8b065d55-2922-4ae8-915f-ee66aa30d726 ' +
+      'on fix/Parked-snapshot-lease2-loss at Object.run (/Users/RyanH/Projects/mastra2/packages/core/dist/chunk-AB12CD.js:12:3)';
     const { controller } = createSession(undefined, { agentEndReason: 'error', runError });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
