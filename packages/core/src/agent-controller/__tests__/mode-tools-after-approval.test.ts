@@ -50,10 +50,12 @@ async function pausedInRestrictedMode({
   availableTools,
   firstCall,
   pausedEvent,
+  transitionsTo,
 }: {
   availableTools: string[];
   firstCall: FirstCall;
   pausedEvent: 'tool_approval_required' | 'tool_suspended';
+  transitionsTo?: string;
 }) {
   const executed: string[] = [];
   const lookup = createTool({
@@ -95,7 +97,11 @@ async function pausedInRestrictedMode({
         agent,
         defaultModelId: 'mock-model',
         availableTools,
+        transitionsTo,
       },
+      // No availableTools: every agent tool is visible in this mode.
+      { id: 'build', name: 'Build', agent, defaultModelId: 'mock-model' },
+      { id: 'notes', name: 'Notes', agent, defaultModelId: 'mock-model', availableTools: ['write_note'] },
     ],
   });
   await controller.init();
@@ -193,5 +199,85 @@ describe('mode availableTools after a paused tool call', () => {
     const tools = await continuationToolNames();
     expect(tools).toEqual(['lookup', 'submit_plan']);
     expect(tools).not.toContain('write_note');
+  }, 30_000);
+});
+
+describe('mode availableTools when the mode changes while a tool call is paused', () => {
+  it('keeps the suspended run mode subset after switching to an unrestricted mode and approving', async () => {
+    const env = await pausedInRestrictedMode({
+      availableTools: ['lookup'],
+      firstCall: { name: 'lookup', arguments: { q: 'x' } },
+      pausedEvent: 'tool_approval_required',
+    });
+    await env.session.mode.switch({ modeId: 'build' });
+
+    expect(env.session.respondToToolApproval({ toolCallId: 'call-1', decision: 'approve' })).toEqual({
+      accepted: true,
+    });
+
+    const tools = await continuationToolNames();
+    expect(env.executed).toEqual(['lookup']);
+    expect(tools).toEqual(['lookup']);
+  }, 30_000);
+
+  it('keeps the suspended run mode subset after switching to another restricted mode and declining', async () => {
+    const env = await pausedInRestrictedMode({
+      availableTools: ['lookup'],
+      firstCall: { name: 'lookup', arguments: { q: 'x' } },
+      pausedEvent: 'tool_approval_required',
+    });
+    await env.session.mode.switch({ modeId: 'notes' });
+
+    expect(env.session.respondToToolApproval({ toolCallId: 'call-1', decision: 'decline' })).toEqual({
+      accepted: true,
+    });
+
+    expect(await continuationToolNames()).toEqual(['lookup']);
+  }, 30_000);
+
+  it('keeps the suspended run mode subset after switching modes and answering ask_user', async () => {
+    const env = await pausedInRestrictedMode({
+      availableTools: ['lookup', 'ask_user'],
+      firstCall: { name: 'ask_user', arguments: { question: 'Which file?' } },
+      pausedEvent: 'tool_suspended',
+    });
+    await env.session.mode.switch({ modeId: 'build' });
+
+    await env.session.respondToToolSuspension({ toolCallId: 'call-1', resumeData: 'notes.md' });
+
+    expect(await continuationToolNames()).toEqual(['ask_user', 'lookup']);
+  }, 30_000);
+
+  it('keeps the source run mode subset when answering ask_user on a non-active thread', async () => {
+    const env = await pausedInRestrictedMode({
+      availableTools: ['lookup', 'ask_user'],
+      firstCall: { name: 'ask_user', arguments: { question: 'Which file?' } },
+      pausedEvent: 'tool_suspended',
+    });
+    const address = env.session.suspensions.resolveAddress({ toolCallId: 'call-1' })!;
+    expect(address).toBeDefined();
+    await env.session.thread.create();
+    await env.session.mode.switch({ modeId: 'build' });
+    expect(env.session.thread.getId()).not.toBe(address.threadId);
+
+    await env.session.respondToToolSuspension({ address, resumeData: 'notes.md' });
+
+    expect(await continuationToolNames()).toEqual(['ask_user', 'lookup']);
+  }, 30_000);
+
+  it('applies the plan transition target, not the switched-to mode, after approving a plan', async () => {
+    const env = await pausedInRestrictedMode({
+      availableTools: ['lookup', 'submit_plan'],
+      firstCall: { name: 'submit_plan', arguments: { path: '.mastracode/plans/p.md' } },
+      pausedEvent: 'tool_suspended',
+      transitionsTo: 'notes',
+    });
+    // `build` has no transition, so resolving from the live mode would keep every tool visible.
+    await env.session.mode.switch({ modeId: 'build' });
+
+    await env.session.respondToToolSuspension({ toolCallId: 'call-1', resumeData: { action: 'approved' } });
+
+    expect(await continuationToolNames()).toEqual(['write_note']);
+    expect(env.session.mode.get()).toBe('notes');
   }, 30_000);
 });
