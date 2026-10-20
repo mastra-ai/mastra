@@ -235,6 +235,20 @@ function shouldDetachPersistentTransportRequest(init?: RequestInit): boolean {
 }
 
 /**
+ * Reports the JSON-RPC id of each `events/stream` request as it goes out on `transport`. The
+ * server identifies a push stream by that id, and the SDK doesn't return it to the caller.
+ */
+function observeEventStreamRequests(transport: Transport, onSent: (id: string) => void): void {
+  const send = transport.send.bind(transport);
+  transport.send = (message, options) => {
+    if ('method' in message && message.method === EVENTS_METHODS.stream && 'id' in message) {
+      onSent(String(message.id));
+    }
+    return send(message, options);
+  };
+}
+
+/**
  * Extract a human-readable error message from a failed CallToolResult's `content`.
  * Joins the text of all `text` content blocks, falling back to a generic message
  * when the server returned no text (e.g. only image/resource content).
@@ -549,13 +563,16 @@ export class InternalMastraMCPClient extends MastraBase {
     this.events = new EventClientActions({ client: this, logger: this.logger });
     this.eventStreamRouter = new EventStreamRouter(
       {
-        request: (params, signal) =>
-          this.client.request(
+        request: (params, signal, onSent) => {
+          // The router serializes opens, so the next events/stream sent is this one.
+          this.onEventStreamSent = onSent;
+          return this.client.request(
             { method: EVENTS_METHODS.stream, params: { ...params, _meta: this.requestMeta(params._meta) } },
             StreamEventsResultSchema,
             // The stream lives as long as the subscription; only cancel() or a failure ends it.
             { timeout: 0x7fffffff, signal },
-          ),
+          );
+        },
         onNotification: (method, handler) =>
           this.client.setNotificationHandler(method, { params: z.looseObject({}) }, params => handler(params)),
       },
@@ -629,6 +646,7 @@ export class InternalMastraMCPClient extends MastraBase {
       stderr: this.serverConfig.stderr,
       cwd: this.serverConfig.cwd,
     });
+    observeEventStreamRequests(transport, this.noteEventStreamSent);
     try {
       await this.client.connect(transport, {
         timeout: this.serverConfig.timeout ?? this.timeout,
@@ -686,6 +704,7 @@ export class InternalMastraMCPClient extends MastraBase {
     // Constructed outside the try so an UnauthorizedError can keep a handle on the
     // transport that started the authorization flow (finishAuth must run on it).
     const transport = new StreamableHTTPClientTransport(url, { requestInit, authProvider, fetch });
+    observeEventStreamRequests(transport, this.noteEventStreamSent);
     try {
       await this.client.connect(transport, {
         timeout: connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC,
@@ -830,6 +849,13 @@ export class InternalMastraMCPClient extends MastraBase {
   private subscriptionUpdate: Promise<unknown> = Promise.resolve();
   private lifecycleGeneration = 0;
   private readonly eventStreamRouter: EventStreamRouter;
+  private onEventStreamSent?: (id: string) => void;
+
+  private readonly noteEventStreamSent = (id: string): void => {
+    const onSent = this.onEventStreamSent;
+    this.onEventStreamSent = undefined;
+    onSent?.(id);
+  };
   /** Live MCP Events subscriptions, restored after a reconnect and cancelled on disconnect. */
   private readonly eventSubscriptions = new Set<EventSubscription>();
 
