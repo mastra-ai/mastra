@@ -29,6 +29,8 @@ export function useTracesFilterBarFields(): FilterBarField[] {
   const { fields: metadataFields, canonicalFields } = useTracesDiscovery();
   const client = useMastraClient();
 
+  // Memoized for correctness: static suggestion lists live on the fields and become the value
+  // editor's Combobox `items`, which loops if handed a new array on every render.
   return useMemo(
     () => [
       TRACE_TIME_RANGE_FIELD,
@@ -68,19 +70,17 @@ export function useTracesFilterBar() {
   const { scopedFieldIds } = useTracesConfig();
   const { filters, setFilterTokens } = useTracesFilters();
 
-  const items = useMemo(
-    () => traceTokensToFilterBarItems(filters.tokens).filter(item => !scopedFieldIds.has(item.fieldId)),
-    [filters.tokens, scopedFieldIds],
-  );
+  const items = traceTokensToFilterBarItems(filters.tokens).filter(item => !scopedFieldIds.has(item.fieldId));
   // The time-range chip is a synthetic, always-present item so it takes part in keyboard
   // navigation; it never round-trips to filter tokens. Expression mode so root-level AND/OR
   // groups render as "Advanced filter" chips.
-  const filterBarValue = useMemo<FilterBarExpression>(() => {
-    const expression = traceFiltersToFilterBarExpression([], filters.groups);
-    return { ...expression, nodes: [TRACE_TIME_RANGE_ITEM, ...items, ...expression.nodes] };
-  }, [items, filters.groups]);
+  const groupsExpression = traceFiltersToFilterBarExpression([], filters.groups);
+  const filterBarValue: FilterBarExpression = {
+    ...groupsExpression,
+    nodes: [TRACE_TIME_RANGE_ITEM, ...items, ...groupsExpression.nodes],
+  };
   // Legacy mode: the list endpoint can't express AND/OR groups, so the bar runs flat.
-  const flatFilterBarValue = useMemo(() => [TRACE_TIME_RANGE_ITEM, ...items], [items]);
+  const flatFilterBarValue = [TRACE_TIME_RANGE_ITEM, ...items];
 
   const onFilterBarChange = (expression: FilterBarExpression) => {
     const { tokens, groups } = filterBarExpressionToTraceFilters({

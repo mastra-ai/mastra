@@ -1,9 +1,16 @@
 import { EMPTY_TRACES_SELECTION } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+import type { TracesFilters } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter, useLocation, useSearchParams } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { useTracesRouteState } from '../use-traces-route-state';
+
+const applyFilters = (filters: TracesFilters) => ({ filters, selection: EMPTY_TRACES_SELECTION });
+const selectTrace = (filters: TracesFilters, traceId: string) => ({
+  filters,
+  selection: { ...EMPTY_TRACES_SELECTION, traceId },
+});
 
 function renderRouteState(initialEntry: string) {
   const persistedWrites = vi.fn();
@@ -94,7 +101,9 @@ describe('useTracesRouteState', () => {
       const { result } = renderRouteState('/traces?filterThreadId=thread-1');
       const filters = result.current.route.filters;
 
-      act(() => result.current.route.setSelection({ ...EMPTY_TRACES_SELECTION, traceId: 'trace-a' }));
+      act(() =>
+        result.current.route.setState({ filters, selection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-a' } }),
+      );
 
       expect(result.current.route.filters).toBe(filters);
     });
@@ -105,7 +114,9 @@ describe('useTracesRouteState', () => {
       const { result } = renderRouteState('/traces?traceId=trace-a');
       const selection = result.current.route.selection;
 
-      act(() => result.current.route.setFilters({ datePreset: 'last-24h', tokens: [], groups: [] }));
+      act(() =>
+        result.current.route.setState({ selection, filters: { datePreset: 'last-24h', tokens: [], groups: [] } }),
+      );
 
       expect(result.current.route.selection).toBe(selection);
     });
@@ -115,7 +126,12 @@ describe('useTracesRouteState', () => {
     it('writes the selection with replace and keeps unrelated params', () => {
       const { result, params, navigations } = renderRouteState('/traces?filterEntityId=agent-1&foo=bar');
 
-      act(() => result.current.route.setSelection({ ...EMPTY_TRACES_SELECTION, traceId: 'trace-a', spanId: 'span-b' }));
+      act(() =>
+        result.current.route.setState({
+          filters: result.current.route.filters,
+          selection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-a', spanId: 'span-b' },
+        }),
+      );
 
       expect(params().get('traceId')).toBe('trace-a');
       expect(params().get('spanId')).toBe('span-b');
@@ -127,7 +143,7 @@ describe('useTracesRouteState', () => {
     it('persists the write', () => {
       const { result, persistedWrites } = renderRouteState('/traces');
 
-      act(() => result.current.route.setSelection({ ...EMPTY_TRACES_SELECTION, traceId: 'trace-a' }));
+      act(() => result.current.route.setState(selectTrace(result.current.route.filters, 'trace-a')));
 
       expect(persistedWrites).toHaveBeenCalledTimes(1);
     });
@@ -137,7 +153,7 @@ describe('useTracesRouteState', () => {
     it('drops the anchor span', () => {
       const { result, params } = renderRouteState('/traces?traceId=trace-a&anchorSpanId=span-x');
 
-      act(() => result.current.route.setSelection({ ...EMPTY_TRACES_SELECTION, traceId: 'trace-b' }));
+      act(() => result.current.route.setState(selectTrace(result.current.route.filters, 'trace-b')));
 
       expect(params().has('anchorSpanId')).toBe(false);
     });
@@ -148,11 +164,9 @@ describe('useTracesRouteState', () => {
       const { result, params } = renderRouteState('/traces?traceId=trace-a&spanId=span-b&tab=feedback');
 
       act(() =>
-        result.current.route.setSelection({
-          ...EMPTY_TRACES_SELECTION,
-          traceId: 'trace-a',
-          spanId: 'span-b',
-          spanTab: 'details',
+        result.current.route.setState({
+          filters: result.current.route.filters,
+          selection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-a', spanId: 'span-b', spanTab: 'details' },
         }),
       );
 
@@ -166,7 +180,7 @@ describe('useTracesRouteState', () => {
         '/traces?datePreset=custom&dateFrom=2026-01-01T00:00:00.000Z&dateTo=2026-01-02T00:00:00.000Z',
       );
 
-      act(() => result.current.route.setFilters({ datePreset: 'last-24h', tokens: [], groups: [] }));
+      act(() => result.current.route.setState(applyFilters({ datePreset: 'last-24h', tokens: [], groups: [] })));
 
       expect(params().get('datePreset')).toBe('last-24h');
       expect(params().has('dateFrom')).toBe(false);
@@ -178,7 +192,7 @@ describe('useTracesRouteState', () => {
     it('removes the preset param', () => {
       const { result, params } = renderRouteState('/traces?datePreset=last-24h');
 
-      act(() => result.current.route.setFilters({ datePreset: 'last-7d', tokens: [], groups: [] }));
+      act(() => result.current.route.setState(applyFilters({ datePreset: 'last-7d', tokens: [], groups: [] })));
 
       expect(params().has('datePreset')).toBe(false);
     });
@@ -189,11 +203,9 @@ describe('useTracesRouteState', () => {
       const { result, params } = renderRouteState('/traces?filterThreadId=thread-1&status=error&foo=bar');
 
       act(() =>
-        result.current.route.setFilters({
-          datePreset: 'last-7d',
-          tokens: [{ fieldId: 'environment', value: 'prod' }],
-          groups: [],
-        }),
+        result.current.route.setState(
+          applyFilters({ datePreset: 'last-7d', tokens: [{ fieldId: 'environment', value: 'prod' }], groups: [] }),
+        ),
       );
 
       expect(params().has('filterThreadId')).toBe(false);
@@ -203,30 +215,51 @@ describe('useTracesRouteState', () => {
     });
   });
 
-  describe('when setFilters and setSelection are called in the same tick', () => {
-    it('keeps both changes in the final URL', () => {
-      const { result, params } = renderRouteState('/traces?traceId=trace-a&spanId=span-b');
+  describe('when a filter edit clears an open trace', () => {
+    it('writes the new filter and drops the selection in one navigation', () => {
+      const { result, params, navigations } = renderRouteState('/traces?traceId=trace-a&spanId=span-b');
 
-      act(() => {
-        result.current.route.setFilters({ datePreset: 'last-24h', tokens: [], groups: [] });
-        result.current.route.setSelection(EMPTY_TRACES_SELECTION);
-      });
+      act(() => result.current.route.setState(applyFilters({ datePreset: 'last-24h', tokens: [], groups: [] })));
 
       expect(params().get('datePreset')).toBe('last-24h');
       expect(params().has('traceId')).toBe(false);
       expect(params().has('spanId')).toBe(false);
+      expect(navigations).toHaveLength(1);
+    });
+  });
+
+  describe('when setState is called twice in the same tick', () => {
+    it('keeps the last state', () => {
+      const { result, params } = renderRouteState('/traces?traceId=trace-a');
+
+      act(() => {
+        result.current.route.setState(applyFilters({ datePreset: 'custom', tokens: [], groups: [] }));
+        result.current.route.setState(
+          applyFilters({
+            datePreset: 'custom',
+            dateFrom: new Date('2026-01-01T00:00:00.000Z'),
+            tokens: [],
+            groups: [],
+          }),
+        );
+      });
+
+      expect(params().get('datePreset')).toBe('custom');
+      expect(params().get('dateFrom')).toBe('2026-01-01T00:00:00.000Z');
+      expect(params().has('traceId')).toBe(false);
     });
   });
 
   describe('when a later interaction follows a committed one', () => {
     it('builds on the committed URL', () => {
-      const { result, params } = renderRouteState('/traces');
+      const { result, params } = renderRouteState('/traces?foo=bar');
 
-      act(() => result.current.route.setSelection({ ...EMPTY_TRACES_SELECTION, traceId: 'trace-a' }));
-      act(() => result.current.route.setFilters({ datePreset: 'last-24h', tokens: [], groups: [] }));
+      act(() => result.current.route.setState(selectTrace(result.current.route.filters, 'trace-a')));
+      act(() => result.current.route.setSortDirection('asc'));
 
       expect(params().get('traceId')).toBe('trace-a');
-      expect(params().get('datePreset')).toBe('last-24h');
+      expect(params().get('dir')).toBe('asc');
+      expect(params().get('foo')).toBe('bar');
     });
   });
 

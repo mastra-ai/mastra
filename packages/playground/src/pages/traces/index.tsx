@@ -43,9 +43,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     <TracesExplorer
       metricsSupport={metricsSupport}
       selection={route.selection}
-      onSelectionChange={route.setSelection}
       filters={route.filters}
-      onFiltersChange={route.setFilters}
+      onChange={route.setState}
       sortDirection={route.sortDirection}
       onSortDirectionChange={route.setSortDirection}
       scope={scope}

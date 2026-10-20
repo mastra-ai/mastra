@@ -10,7 +10,12 @@ import { TRACE_FILTER_BAR_OPERATORS } from '../../../trace-filters';
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
 import { TracesExplorer, useTracesFilterBar, useTracesFilterBarFields } from '../index';
 import { DEFAULT_TRACES_FILTERS, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
-import type { TracesFilters, TracesSelection, TracesSortDirection } from '../traces-explorer-actions';
+import type {
+  TracesExplorerState,
+  TracesFilters,
+  TracesSelection,
+  TracesSortDirection,
+} from '../traces-explorer-actions';
 import type { TracesExplorerFeatures } from '../traces-explorer-context';
 import {
   emptyDatasets,
@@ -121,8 +126,7 @@ type HarnessProps = {
   /** The host's default filters, passed to the explorer as `initialFilters`. */
   baselineFilters?: TracesFilters;
   filterBar?: ReactNode;
-  onSelectionChange?: (next: TracesSelection) => void;
-  onFiltersChange?: (next: TracesFilters) => void;
+  onChange?: (next: TracesExplorerState) => void;
 };
 
 // Plain React state stands in for the host: no router, no search params.
@@ -134,8 +138,7 @@ function Harness({
   features,
   baselineFilters,
   filterBar = <TracesExplorer.FilterBar />,
-  onSelectionChange,
-  onFiltersChange,
+  onChange,
 }: HarnessProps) {
   const [selection, setSelection] = useState(initialSelection);
   const [filters, setFilters] = useState(initialFilters);
@@ -144,14 +147,11 @@ function Harness({
   return (
     <TracesExplorer
       selection={selection}
-      onSelectionChange={next => {
-        onSelectionChange?.(next);
-        setSelection(next);
-      }}
       filters={filters}
-      onFiltersChange={next => {
-        onFiltersChange?.(next);
-        setFilters(next);
+      onChange={next => {
+        onChange?.(next);
+        setSelection(next.selection);
+        setFilters(next.filters);
       }}
       sortDirection={sortDirection}
       onSortDirectionChange={setSortDirection}
@@ -255,13 +255,13 @@ describe('TracesExplorer', () => {
   describe('when a row is clicked', () => {
     it('emits the clicked trace as the next selection', async () => {
       setExplorerHandlers();
-      const onSelectionChange = vi.fn<(next: TracesSelection) => void>();
-      const { queryClient } = renderExplorer({ onSelectionChange });
+      const onChange = vi.fn<(next: TracesExplorerState) => void>();
+      const { queryClient } = renderExplorer({ onChange });
       await settle(queryClient);
 
       fireEvent.click(traceRow('What is the weather in Paris'));
 
-      expect(onSelectionChange).toHaveBeenLastCalledWith(expect.objectContaining({ traceId: 'trace-weather' }));
+      expect(onChange.mock.calls.at(-1)?.[0].selection.traceId).toBe('trace-weather');
     });
 
     it('opens the trace details panel', async () => {
@@ -278,31 +278,26 @@ describe('TracesExplorer', () => {
   describe('when a filter changes while a trace is open', () => {
     const editDatePreset = async () => {
       setExplorerHandlers();
-      const onSelectionChange = vi.fn<(next: TracesSelection) => void>();
-      const onFiltersChange = vi.fn<(next: TracesFilters) => void>();
+      const onChange = vi.fn<(next: TracesExplorerState) => void>();
       const { queryClient } = renderExplorer({
         initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
-        onSelectionChange,
-        onFiltersChange,
+        onChange,
       });
       await settle(queryClient);
       await screen.findByRole('dialog', { name: 'Trace details' });
+      onChange.mockClear();
 
       fireEvent.click(within(getFilterChips()[0]).getByRole('button', { name: 'Value: Last 7 days', hidden: true }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
-      return { onSelectionChange, onFiltersChange };
+      return { onChange };
     };
 
-    it('emits the new filters', async () => {
-      const { onFiltersChange } = await editDatePreset();
+    it('emits the new filters and an empty selection in a single change', async () => {
+      const { onChange } = await editDatePreset();
 
-      expect(onFiltersChange).toHaveBeenLastCalledWith(expect.objectContaining({ datePreset: 'last-24h' }));
-    });
-
-    it('emits an empty selection', async () => {
-      const { onSelectionChange } = await editDatePreset();
-
-      expect(onSelectionChange).toHaveBeenLastCalledWith(EMPTY_TRACES_SELECTION);
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0]?.[0].filters).toEqual(expect.objectContaining({ datePreset: 'last-24h' }));
+      expect(onChange.mock.calls[0]?.[0].selection).toEqual(EMPTY_TRACES_SELECTION);
     });
 
     it('closes the trace details panel', async () => {
@@ -316,7 +311,7 @@ describe('TracesExplorer', () => {
     // The picker reports the preset, then trailing `onDateChange` calls in the same handler.
     const switchToPreset = async () => {
       setExplorerHandlers();
-      const onFiltersChange = vi.fn<(next: TracesFilters) => void>();
+      const onChange = vi.fn<(next: TracesExplorerState) => void>();
       const { queryClient } = renderExplorer({
         initialFilters: {
           ...DEFAULT_TRACES_FILTERS,
@@ -324,33 +319,33 @@ describe('TracesExplorer', () => {
           dateFrom: new Date('2026-01-01T00:00:00Z'),
           dateTo: new Date('2026-01-02T00:00:00Z'),
         },
-        onFiltersChange,
+        onChange,
       });
       await settle(queryClient);
 
       fireEvent.click(within(getFilterChips()[0]).getByRole('button', { name: /^Value:/, hidden: true }));
       fireEvent.click(await screen.findByRole('button', { name: /Presets/, hidden: true }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
-      return { onFiltersChange };
+      return { onChange };
     };
 
     it('keeps the preset', async () => {
-      const { onFiltersChange } = await switchToPreset();
+      const { onChange } = await switchToPreset();
 
-      expect(onFiltersChange).toHaveBeenLastCalledWith(expect.objectContaining({ datePreset: 'last-24h' }));
+      expect(onChange.mock.calls.at(-1)?.[0].filters.datePreset).toBe('last-24h');
     });
 
     it('drops the custom dates', async () => {
-      const { onFiltersChange } = await switchToPreset();
+      const { onChange } = await switchToPreset();
 
-      const last = onFiltersChange.mock.calls.at(-1)?.[0];
+      const last = onChange.mock.calls.at(-1)?.[0].filters;
       expect(last?.dateFrom).toBeUndefined();
       expect(last?.dateTo).toBeUndefined();
     });
   });
 
   describe('when a scope is given', () => {
-    const renderScoped = async (onFiltersChange?: (next: TracesFilters) => void) => {
+    const renderScoped = async (onChange?: (next: TracesExplorerState) => void) => {
       setExplorerHandlers();
       const result = renderExplorer({
         scope: { entityId: 'weather-agent', entityType: 'agent' },
@@ -358,7 +353,7 @@ describe('TracesExplorer', () => {
           ...DEFAULT_TRACES_FILTERS,
           tokens: [...SCOPE_TOKENS, { fieldId: 'traceId', value: 'trace-a' }],
         },
-        onFiltersChange,
+        onChange,
       });
       await settle(result.queryClient);
       return result;
@@ -381,12 +376,12 @@ describe('TracesExplorer', () => {
     });
 
     it('keeps the scope tokens after Clear filters', async () => {
-      const onFiltersChange = vi.fn<(next: TracesFilters) => void>();
-      await renderScoped(onFiltersChange);
+      const onChange = vi.fn<(next: TracesExplorerState) => void>();
+      await renderScoped(onChange);
 
       fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
 
-      expect(onFiltersChange.mock.calls.at(-1)?.[0].tokens).toEqual(SCOPE_TOKENS);
+      expect(onChange.mock.calls.at(-1)?.[0].filters.tokens).toEqual(SCOPE_TOKENS);
     });
   });
 
@@ -602,6 +597,31 @@ describe('TracesExplorer', () => {
     });
   });
 
+  describe('when a trace is opened while the filters hold an entry the server cannot query', () => {
+    it('does not re-render the filter bar or the columns menu', async () => {
+      setExplorerHandlers();
+      const onToolbarRender = vi.fn();
+      const toolbar = (
+        <Profiler id="toolbar" onRender={onToolbarRender}>
+          <TracesExplorer.FilterBar />
+          <TracesExplorer.ColumnsMenu />
+        </Profiler>
+      );
+      const { queryClient } = renderExplorer({
+        initialFilters: { ...DEFAULT_TRACES_FILTERS, tokens: [{ fieldId: 'status', value: 'running' }] },
+        filterBar: toolbar,
+      });
+      await settle(queryClient);
+      onToolbarRender.mockClear();
+
+      fireEvent.click(traceRow('What is the weather in Paris'));
+      await waitFor(() => expect(traceDialog()).toBeTruthy());
+      await settle(queryClient);
+
+      expect(onToolbarRender).not.toHaveBeenCalled();
+    });
+  });
+
   describe('when the list refetches the same traces', () => {
     it('does not re-render the filter bar or the columns menu', async () => {
       setExplorerHandlers();
@@ -629,7 +649,7 @@ describe('TracesExplorer', () => {
     it('does not re-render the filter bar or the columns menu', async () => {
       setExplorerHandlers();
       const onToolbarRender = vi.fn();
-      const onSelectionChange = vi.fn<(next: TracesSelection) => void>();
+      const onChange = vi.fn<(next: TracesExplorerState) => void>();
       const toolbar = (
         <Profiler id="toolbar" onRender={onToolbarRender}>
           <TracesExplorer.FilterBar />
@@ -638,7 +658,7 @@ describe('TracesExplorer', () => {
       );
       const { queryClient } = renderExplorer({
         filterBar: toolbar,
-        onSelectionChange,
+        onChange,
         initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
       });
       await settle(queryClient);
@@ -646,9 +666,7 @@ describe('TracesExplorer', () => {
       onToolbarRender.mockClear();
 
       fireEvent.click(within(dialog).getAllByRole('button', { name: /weather-agent/ })[0]);
-      await waitFor(() =>
-        expect(onSelectionChange).toHaveBeenLastCalledWith(expect.objectContaining({ spanId: 'span-weather' })),
-      );
+      await waitFor(() => expect(onChange.mock.calls.at(-1)?.[0].selection.spanId).toBe('span-weather'));
       await settle(queryClient);
 
       expect(onToolbarRender).not.toHaveBeenCalled();

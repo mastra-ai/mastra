@@ -1,5 +1,6 @@
 import { DEFAULT_TRACES_FILTERS } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import type {
+  TracesExplorerState,
   TracesFilters,
   TracesSelection,
   TracesSortDirection,
@@ -16,7 +17,7 @@ import {
 } from '@mastra/playground-ui/domains/traces/trace-filters';
 import { SORT_DIR_PARAM, SORT_KEY_PARAM, readUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import type { SetURLSearchParamsLike } from '@mastra/playground-ui/sort/use-url-sort';
-import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 
 type TraceDatePreset = TracesFilters['datePreset'];
 
@@ -129,11 +130,10 @@ function encodeSortDirection(base: URLSearchParams, direction: TracesSortDirecti
  * `selection` / `filters` / `sortDirection` values and encodes their changes back.
  *
  * Each value is memoized on only the params it reads, so a trace click doesn't hand the explorer
- * new filters and vice versa. Setters called in the same tick compose: react-router resolves
- * functional updates against the render-time params, so each setter builds on the params already
- * written this tick (`pendingRef`) and the last write carries every change.
+ * new filters and vice versa. The explorer emits its full state once per action, and each write
+ * rewrites every filter and selection param, so when it emits twice in a tick the last write wins.
  *
- * `setFilters` / `setSelection` go through `setPersistedSearchParams`; sort is not persisted.
+ * `setState` goes through `setPersistedSearchParams`; sort is not persisted.
  */
 export function useTracesRouteState(
   searchParams: URLSearchParams,
@@ -148,32 +148,12 @@ export function useTracesRouteState(
   const sortDirection: TracesSortDirection =
     readUrlSort(searchParams, TRACES_SORT_KEYS, DEFAULT_TRACES_SORT)?.direction ?? DEFAULT_TRACES_SORT.direction;
 
-  const pendingRef = useRef<URLSearchParams | null>(null);
-  useLayoutEffect(() => {
-    pendingRef.current = null;
-  }, [searchParams]);
+  const setState = (next: TracesExplorerState) =>
+    setPersistedSearchParams(encodeSelection(encodeFilters(searchParams, next.filters), next.selection), {
+      replace: true,
+    });
+  const setSortDirection = (next: TracesSortDirection) =>
+    setSearchParams(encodeSortDirection(searchParams, next), { replace: true });
 
-  const write = useCallback(
-    (setter: SetURLSearchParamsLike, encode: (base: URLSearchParams) => URLSearchParams) => {
-      const next = encode(pendingRef.current ?? searchParams);
-      pendingRef.current = next;
-      setter(next, { replace: true });
-    },
-    [searchParams],
-  );
-
-  const setFilters = useCallback(
-    (next: TracesFilters) => write(setPersistedSearchParams, base => encodeFilters(base, next)),
-    [write, setPersistedSearchParams],
-  );
-  const setSelection = useCallback(
-    (next: TracesSelection) => write(setPersistedSearchParams, base => encodeSelection(base, next)),
-    [write, setPersistedSearchParams],
-  );
-  const setSortDirection = useCallback(
-    (next: TracesSortDirection) => write(setSearchParams, base => encodeSortDirection(base, next)),
-    [write, setSearchParams],
-  );
-
-  return { selection, setSelection, filters, setFilters, sortDirection, setSortDirection };
+  return { selection, filters, setState, sortDirection, setSortDirection };
 }

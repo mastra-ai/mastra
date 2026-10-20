@@ -1,6 +1,6 @@
 import { useTraceSpanScores } from '@mastra/react/hooks/scores';
 import { useSpanFeedback, useTraceFeedback, useTraceOrBranchSpans, useTraceUsage } from '@mastra/react/hooks/traces';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useTraceListNavigation } from '../../hooks/use-trace-list-navigation';
 import type { SpanTab } from '../../types';
@@ -57,10 +57,9 @@ export function TracesExplorerPanel({
     anchorSpanId,
     isLoading: isLoadingSpans,
   } = useTraceOrBranchSpans({ traceId: traceId ?? null, listMode: 'traces', anchorSpanId: null });
-  const anchorSpan = useMemo(
-    () => (anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : spans?.find(s => s.parentSpanId == null)),
-    [spans, anchorSpanId],
-  );
+  const anchorSpan = anchorSpanId
+    ? spans?.find(s => s.spanId === anchorSpanId)
+    : spans?.find(s => s.parentSpanId == null);
 
   const { data: spanScoresData } = useTraceSpanScores({
     traceId,
@@ -73,11 +72,10 @@ export function TracesExplorerPanel({
 
   // Same key as the list's usage query when the trace is listed, so React Query serves it from cache.
   // Waits for the list so a deep-linked trace doesn't fetch its own usage before the rows arrive.
-  const rowIds = useMemo(() => rows.map(row => row.traceId), [rows]);
+  const rowIds = rows.map(row => row.traceId);
   const isListed = !!traceId && rowIds.includes(traceId);
-  const usageTraceIds = useMemo(() => (isListed ? rowIds : traceId ? [traceId] : []), [isListed, rowIds, traceId]);
   const { data: usageByTraceId } = useTraceUsage({
-    traceIds: usageTraceIds,
+    traceIds: isListed ? rowIds : traceId ? [traceId] : [],
     enabled: usageEnabled && !isListLoading,
     autoRefetch,
   });

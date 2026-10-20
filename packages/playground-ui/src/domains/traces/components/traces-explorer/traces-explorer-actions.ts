@@ -26,6 +26,9 @@ export type TracesFilters = {
 
 export type TracesSortDirection = 'asc' | 'desc';
 
+/** What the explorer emits on every change: filters and selection move together (a filter edit clears the selection). */
+export type TracesExplorerState = { selection: TracesSelection; filters: TracesFilters };
+
 export const EMPTY_TRACES_SELECTION: TracesSelection = { spanView: 'tree', highlightSpanIds: [] };
 
 export const DEFAULT_TRACES_FILTERS: TracesFilters = { datePreset: 'last-7d', tokens: [], groups: [] };

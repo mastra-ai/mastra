@@ -1,5 +1,4 @@
 import { useTraceUsage } from '@mastra/react/hooks/traces';
-import { useMemo } from 'react';
 import { TracesListView } from '../traces-list-view';
 import type { TracesListViewTrace } from '../traces-list-view';
 import {
@@ -28,8 +27,11 @@ export function TracesExplorerList() {
   const { selectedTraceId, selectTrace, closeTrace } = useTracesSelection();
   const { displayedPreferences, usageEnabled } = useTraceUsageColumns();
 
-  const rowIds = useMemo(() => rows.map(row => row.traceId), [rows]);
-  const { data: usageByTraceId } = useTraceUsage({ traceIds: rowIds, enabled: usageEnabled, autoRefetch });
+  const { data: usageByTraceId } = useTraceUsage({
+    traceIds: rows.map(row => row.traceId),
+    enabled: usageEnabled,
+    autoRefetch,
+  });
 
   // Clicking the open row closes it; any other row opens.
   const handleTraceClick = (trace: TracesListViewTrace) => {

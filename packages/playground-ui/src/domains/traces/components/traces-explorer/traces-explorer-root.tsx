@@ -1,5 +1,5 @@
 import { EntityType } from '@mastra/core/observability';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { buildTraceQueryRequest } from '../../trace-query-filters';
 import {
@@ -19,7 +19,12 @@ import {
   setSpanTab,
   setSpanView,
 } from './traces-explorer-actions';
-import type { TracesFilters, TracesSelection, TracesSortDirection } from './traces-explorer-actions';
+import type {
+  TracesExplorerState,
+  TracesFilters,
+  TracesSelection,
+  TracesSortDirection,
+} from './traces-explorer-actions';
 import { TracesColumnsProvider } from './traces-explorer-columns-provider';
 import { TracesConfigContext, TracesFiltersContext, TracesSelectionContext } from './traces-explorer-context';
 import type {
@@ -42,9 +47,9 @@ import {
 
 export type TracesExplorerRootProps = {
   selection: TracesSelection;
-  onSelectionChange: (next: TracesSelection) => void;
   filters: TracesFilters;
-  onFiltersChange: (next: TracesFilters) => void;
+  /** Receives the full next state once per user action, so a filter edit and the selection it clears land together. */
+  onChange: (next: TracesExplorerState) => void;
   sortDirection: TracesSortDirection;
   onSortDirectionChange: (next: TracesSortDirection) => void;
   /** Pins the explorer to one entity: its fields stay in the filters but never surface as chips. */
@@ -70,16 +75,14 @@ const listIdForScope = (scope?: TracesExplorerScope) =>
       ? 'workflows-traces'
       : 'all-traces';
 
-type Latest = Pick<
-  TracesExplorerRootProps,
-  'selection' | 'filters' | 'onSelectionChange' | 'onFiltersChange' | 'onSortDirectionChange'
-> & { scopedFieldIds: ReadonlySet<string> };
+type Latest = Pick<TracesExplorerRootProps, 'selection' | 'filters' | 'onChange' | 'onSortDirectionChange'> & {
+  scopedFieldIds: ReadonlySet<string>;
+};
 
 export function TracesExplorerRoot({
   selection,
-  onSelectionChange,
   filters: rawFilters,
-  onFiltersChange,
+  onChange,
   sortDirection,
   onSortDirectionChange,
   scope,
@@ -115,51 +118,43 @@ export function TracesExplorerRoot({
     [rawFilters.datePreset, fromMs, toMs],
   );
 
-  // Every action reads the latest props when it runs, so the host doesn't need stable callbacks.
-  const current: Latest = {
-    selection,
-    filters: rawFilters,
-    onSelectionChange,
-    onFiltersChange,
-    onSortDirectionChange,
-    scopedFieldIds,
-  };
+  // Actions read the latest props when they run, so the host doesn't need stable callbacks.
+  // `latest` is written as soon as a change is emitted, so a second action in the same tick
+  // (the date picker fires a preset then its dates) builds on the first instead of the stale props.
+  const current: Latest = { selection, filters: rawFilters, onChange, onSortDirectionChange, scopedFieldIds };
   const latest = useRef(current);
   latest.current = current;
 
-  const selectionActions = useMemo<TracesSelectionActions>(() => {
-    const update = (next: TracesSelection) => {
+  const actions = useMemo(() => {
+    const emit = (next: TracesExplorerState) => {
+      latest.current.selection = next.selection;
+      latest.current.filters = next.filters;
+      latest.current.onChange(next);
+    };
+    const updateSelection = (next: TracesSelection) => {
       if (next === latest.current.selection) return;
-      latest.current.selection = next;
-      latest.current.onSelectionChange(next);
+      emit({ selection: next, filters: latest.current.filters });
     };
-    return {
-      selectTrace: traceId => update(selectTrace(latest.current.selection, traceId)),
-      closeTrace: () => update(selectTrace(latest.current.selection, null)),
-      selectSpan: spanId => update(selectSpan(latest.current.selection, spanId)),
-      setSpanTab: tab => update(setSpanTab(latest.current.selection, tab)),
-      setSpanView: view => update(setSpanView(latest.current.selection, view)),
-      selectScore: scoreId => update(selectScore(latest.current.selection, scoreId)),
-      highlightSpans: spanIds => update(highlightSpans(latest.current.selection, spanIds)),
+    // A filter change invalidates whatever is selected: the selected row may no longer be listed.
+    const updateFilters = (next: TracesFilters) => {
+      const { selection: currentSelection, filters: currentFilters } = latest.current;
+      if (next === currentFilters) return;
+      emit({
+        filters: next,
+        selection: isSelectionEmpty(currentSelection) ? currentSelection : clearSelection(currentSelection),
+      });
     };
-  }, []);
 
-  // A filter change invalidates whatever is selected: the selected row may no longer be listed.
-  // Writing `latest` right away lets a second call in the same tick build on the first.
-  const updateFilters = useCallback((next: TracesFilters) => {
-    if (next === latest.current.filters) return;
-    latest.current.filters = next;
-    latest.current.onFiltersChange(next);
-    const current = latest.current.selection;
-    if (!isSelectionEmpty(current)) {
-      const cleared = clearSelection(current);
-      latest.current.selection = cleared;
-      latest.current.onSelectionChange(cleared);
-    }
-  }, []);
-
-  const filtersActions = useMemo<TracesFiltersActions>(
-    () => ({
+    const selectionActions: TracesSelectionActions = {
+      selectTrace: traceId => updateSelection(selectTrace(latest.current.selection, traceId)),
+      closeTrace: () => updateSelection(selectTrace(latest.current.selection, null)),
+      selectSpan: spanId => updateSelection(selectSpan(latest.current.selection, spanId)),
+      setSpanTab: tab => updateSelection(setSpanTab(latest.current.selection, tab)),
+      setSpanView: view => updateSelection(setSpanView(latest.current.selection, view)),
+      selectScore: scoreId => updateSelection(selectScore(latest.current.selection, scoreId)),
+      highlightSpans: spanIds => updateSelection(highlightSpans(latest.current.selection, spanIds)),
+    };
+    const filtersActions: TracesFiltersActions = {
       // Re-inject the scope tokens so "Clear filters" (which drops every removable item) and any
       // other edit can never drop the scope.
       setFilterTokens: (tokens, groups) => {
@@ -170,13 +165,11 @@ export function TracesExplorerRoot({
       setDatePreset: preset => updateFilters(applyDatePreset(latest.current.filters, preset)),
       setDate: (value, end) => updateFilters(applyDate(latest.current.filters, value, end)),
       setDateRange: (from, to) => updateFilters(applyDateRange(latest.current.filters, from, to)),
-    }),
-    [updateFilters],
-  );
-
-  const onSortChange = useCallback((direction: TracesSortDirection) => {
-    latest.current.onSortDirectionChange(direction);
+    };
+    const onSortChange = (direction: TracesSortDirection) => latest.current.onSortDirectionChange(direction);
+    return { selectionActions, filtersActions, onSortChange };
   }, []);
+  const { selectionActions, filtersActions, onSortChange } = actions;
 
   // Discovery is keyed off the date window with a mount-time `now`, not the list's rolling one,
   // so its query key (and the skeleton) doesn't churn on every auto-refresh tick.
@@ -228,10 +221,13 @@ export function TracesExplorerRoot({
     [filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied],
   );
 
-  const selectionValue = useMemo<TracesSelectionContextValue>(
-    () => ({ ...selectionActions, selection, selectedTraceId: selection.traceId }),
-    [selectionActions, selection],
-  );
+  // Not memoized: the selection consumers (Layout, List, Panel) also re-render on filter and list
+  // changes, which are what re-render Root while the selection stays the same.
+  const selectionValue: TracesSelectionContextValue = {
+    ...selectionActions,
+    selection,
+    selectedTraceId: selection.traceId,
+  };
 
   return (
     <TracesConfigContext.Provider value={configValue}>

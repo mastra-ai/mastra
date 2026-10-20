@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { TraceColumnsMenu } from '../trace-columns-menu';
 import { useTraceUsageColumns, useTracesColumns, useTracesConfig } from './traces-explorer-context';
 import { useTracesDiscovery } from './use-traces-discovery';
@@ -10,14 +9,12 @@ export function TracesExplorerColumnsMenu() {
   const { fields: metadataFields } = useTracesDiscovery();
 
   // Metadata columns read top-level keys only, so nested paths collapse to their first segment.
-  const availableMetadataKeys = useMemo(() => {
-    const keys = new Set<string>();
-    for (const field of metadataFields) {
-      const key = field.path.replace(/^metadata\./, '').split('.')[0];
-      if (key) keys.add(key);
-    }
-    return [...keys].sort();
-  }, [metadataFields]);
+  const metadataKeys = new Set<string>();
+  for (const field of metadataFields) {
+    const key = field.path.replace(/^metadata\./, '').split('.')[0];
+    if (key) metadataKeys.add(key);
+  }
+  const availableMetadataKeys = [...metadataKeys].sort();
 
   return (
     <TraceColumnsMenu
