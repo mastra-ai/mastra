@@ -19,6 +19,9 @@ import { DurableStepIds } from '../constants';
 type SnapshotRow = { workflowName: string; runId: string; resourceId?: string; snapshot: WorkflowRunState };
 type Checkpoint = { rows: SnapshotRow[]; requestsSoFar: number };
 type JournalEntry = { body: Record<string, unknown> };
+// `evented-fallback` is an EventedAgent on a store without atomic concurrent
+// updates, the same setup durable-agent-crash-recovery.test.ts recovers.
+type AgentKind = 'durable' | 'evented-fallback';
 
 const RECOVERY_TIMEOUT_MS = 5_000;
 
@@ -44,13 +47,14 @@ beforeEach(() => {
   llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'done' });
 });
 
-async function startProcess() {
+async function startProcess(kind: AgentKind) {
   vi.resetModules();
-  const [{ Mastra }, { InMemoryStore }, { Agent }, { createDurableAgent }] = await Promise.all([
+  const [{ Mastra }, { InMemoryStore }, { Agent }, { createDurableAgent }, { createEventedAgent }] = await Promise.all([
     import('../../../mastra'),
     import('../../../storage'),
     import('../../agent'),
     import('../create-durable-agent'),
+    import('../create-evented-agent'),
   ]);
   const openai = createOpenAI({ apiKey: 'test-key', baseURL: `${llm.url}/v1` });
   const agent = new Agent({
@@ -76,8 +80,12 @@ async function startProcess() {
       },
     },
   });
-  const durableAgent = createDurableAgent({ agent });
+  const durableAgent = kind === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
   const storage = new InMemoryStore();
+  // Before `new Mastra(...)`: the engine resolves during agent registration.
+  if (kind === 'evented-fallback') {
+    vi.spyOn(storage.stores.workflows!, 'supportsConcurrentUpdates').mockReturnValue(false);
+  }
   const mastra = new Mastra({
     agents: { settingsAgent: durableAgent },
     storage,
@@ -94,12 +102,9 @@ async function drain(stream: { fullStream: AsyncIterable<any> }) {
   }
 }
 
-// DurableAgent only: crash recovery of the evented engine on InMemoryStore is not
-// covered by the existing crash-recovery harness either (see
-// durable-agent-crash-recovery.test.ts), so there is no working baseline for it.
-describe('DurableAgent recovery: per-entry model settings', () => {
+describe.each<AgentKind>(['durable', 'evented-fallback'])('%s recovery: per-entry model settings', kind => {
   it('sends the entry modelSettings on the model call made after recover()', async () => {
-    const original = await startProcess();
+    const original = await startProcess(kind);
     const rows = new Map<string, SnapshotRow>();
     const checkpoints: Checkpoint[] = [];
     const persist = original.workflows.persistWorkflowSnapshot.bind(original.workflows);
@@ -130,7 +135,7 @@ describe('DurableAgent recovery: per-entry model settings', () => {
     let recoveredCalls = 0;
     for (const checkpoint of midRun) {
       llm.clearRequests();
-      const restarted = await startProcess();
+      const restarted = await startProcess(kind);
       for (const row of checkpoint.rows) await restarted.workflows.persistWorkflowSnapshot(row);
       const attempt = restarted.durableAgent.recover(result.runId).then(drain);
       await Promise.race([attempt.catch(() => {}), new Promise(resolve => setTimeout(resolve, RECOVERY_TIMEOUT_MS))]);
