@@ -70,7 +70,10 @@ const toImportPath = (path: string) => (path.startsWith('.') ? path : `./${path}
 const runTsc = (args: string[]) =>
   new Promise<number>(resolveExit => {
     const child = spawn('tsc', args, { stdio: 'inherit', shell: process.platform === 'win32' });
-    child.on('error', () => resolveExit(1));
+    child.on('error', error => {
+      console.error(`Failed to run tsc: ${error.message}`);
+      resolveExit(1);
+    });
     child.on('close', code => resolveExit(code ?? 1));
   });
 
