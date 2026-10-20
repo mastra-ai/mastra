@@ -62,15 +62,8 @@ const COMPARISON_SQL = { eq: '=', ne: '!=', lt: '<', lte: '<=', gt: '>', gte: '>
  */
 export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
+  // Candidates hold each trace's current root once (ROOT_VERSION_ORDER), already filtered.
   const ctes = compileClickHouseTraceCandidates(plan, '*', parameters, { oneRootPerTrace: true });
-  // Candidates may hold unmerged copies of a trace's root; count each trace once, keeping the copy
-  // with the lowest dedupeKey.
-  ctes.push(`trace_roots AS (
-    SELECT *
-    FROM candidates
-    ORDER BY traceId, dedupeKey
-    LIMIT 1 BY traceId
-  )`);
 
   const dimensionSql = (field: TraceAggregateDimension): string => {
     if (field.startsWith('metadata.')) {
@@ -127,7 +120,7 @@ export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan)
   }
   ctes.push(`facts AS (
     SELECT ${factColumns.join(',\n      ')}
-    FROM trace_roots r${usageJoin}
+    FROM candidates r${usageJoin}
   )`);
 
   // More than one distinct priced unit in the group; NULL (treated as false) when nothing is priced.
