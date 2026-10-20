@@ -201,6 +201,54 @@ async function recoverAuthorizedReview(
   await resumed.app.close();
 }
 describe('Attio qualification pipeline', () => {
+  it.each([false, true])('continues_pending_work_when_an_Attio_inbox_row_is_invalid: review=%s', async review => {
+    const { app, fixture } = await setup(review ? { employees: null } : {}, attioFixture(true), {
+      outputProvider: client => new LocalOutputProvider(client),
+    });
+    const entry = fixture.add();
+    expect((await deliver(app, fixture, [fixture.event(entry)])).status).toBe(202);
+    await app.inputProvider.drain!();
+    const runId = await accepted(app, entry);
+    if (review) {
+      await app.mastra.startWorkers();
+      await state(app, runId, 'awaiting_review');
+      await app.mastra.stopWorkers();
+      const packet = (await app.reviews.read(runId))!.packet!;
+      await app.reviews.decide({
+        runId,
+        reviewId: packet.id,
+        revision: packet.revision,
+        digest: packet.digest,
+        decision: 'approved',
+        override: {
+          classification: 'nurture',
+          reason: 'Operator confirmed follow-up while workforce remains unknown.',
+        },
+      });
+    }
+    // PR #27839: a real inbox parse failure must not starve an admitted run or a pending review.
+    await app.store.client.execute({
+      sql: 'INSERT INTO lead_attio_events(id,delivery_id,event_json,received_at) VALUES(?,?,?,?)',
+      args: ['invalid-row', 'invalid-delivery', '{}', new Date().toISOString()],
+    });
+    await expect(app.inputProvider.drain!()).rejects.toThrow(/event_type/);
+    await app.mastra.startWorkers();
+    await vi.waitFor(
+      async () => {
+        expect((await app.reviews.read(runId))?.state).toBe('applied');
+      },
+      { timeout: 3_000 },
+    );
+    expect((await app.store.get(runId))!.status).toBe('intake_received');
+    expect(
+      (await app.store.client.execute("SELECT state FROM lead_attio_events WHERE id='invalid-row'")).rows[0]!.state,
+    ).toBe('pending');
+    await app.telemetry.observability.flush();
+    expect(
+      JSON.stringify(await app.duckdb.observability.listLogs({ pagination: { page: 0, perPage: 100 } })),
+    ).toContain('intake.retry');
+  });
+
   it('accepts_Attio_input_with_local_output_without_writing_to_the_CRM', async () => {
     const { app, fixture } = await setup({}, attioFixture(true), {
       outputProvider: client => new LocalOutputProvider(client),

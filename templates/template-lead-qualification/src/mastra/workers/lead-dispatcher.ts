@@ -53,7 +53,11 @@ export class LeadDispatcher extends MastraWorker {
 
   private async tick() {
     try {
-      await this.input?.drain?.();
+      try {
+        await this.input?.drain?.();
+      } catch {
+        await this.telemetry.diagnostic({ code: 'intake.retry' });
+      }
       const pending = new Map(
         (await this.store.pending(this.config.limits.activeRuns)).map(record => [record.runId, record]),
       );
