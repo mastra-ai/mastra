@@ -1774,7 +1774,7 @@ describe('GithubRules', () => {
           reviewVerdict: 'request changes',
           reviewedHeadSha,
           pullRequestHeadSha: reviewedHeadSha,
-          pullRequestHeadAt: '2030-01-01T00:00:00.000Z',
+          pullRequestHeadAt: Date.parse('2030-01-01T00:00:00.000Z'),
         },
       },
     });
@@ -1791,8 +1791,10 @@ describe('GithubRules', () => {
     // the push's re-review transition commits, before the webhook handler has
     // finished. Run it at exactly that point.
     const commitRuleEvaluation = workItems.commitRuleEvaluation.bind(workItems);
+    const pushStatuses: string[] = [];
     workItems.commitRuleEvaluation = async input => {
       const committed = await commitRuleEvaluation(input);
+      if (input.ingress.identity.includes('delivery-push-b')) pushStatuses.push(committed.status);
       if (committed.status === 'committed' && input.ingress.identity.endsWith('delivery-push-b')) {
         await dispatcher.runOnce(new Date('2030-01-01T01:00:00Z'));
       }
@@ -1823,6 +1825,10 @@ describe('GithubRules', () => {
       }),
     ).resolves.toEqual({ status: 'committed' });
     await dispatcher.runOnce(new Date('2030-01-01T01:00:01Z'));
+
+    // The push is evaluated against the card as it is after the head was
+    // recorded, so it commits first time rather than retrying a stale read.
+    expect(pushStatuses).toEqual(['committed']);
 
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     const invocations = decisions.filter(entry => entry.decision.type === 'invokeSkill');

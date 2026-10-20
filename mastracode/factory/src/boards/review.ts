@@ -72,23 +72,23 @@ function headLine(item: FactoryRuleItemContext, priorReviewCompleted: boolean): 
   const head = commitSha(item.metadata?.pullRequestHeadSha);
   const reviewed = priorReviewCompleted ? commitSha(item.metadata?.reviewedHeadSha) : undefined;
   const recorded = item.metadata?.reviewVerdict;
-  const verdict = recorded === 'approve' || recorded === 'request changes' ? ` "${recorded}"` : '';
+  const priorPass = recorded === 'approve' || recorded === 'request changes' ? `recorded "${recorded}"` : 'reviewed';
   if (head && reviewed && head !== reviewed) {
     return (
-      `\n\nThis is a new review pass for head \`${head}\`. The previous pass recorded${verdict} on \`${reviewed}\`; ` +
-      `that verdict does not cover this head. Review the changes since \`${reviewed}\` and record a verdict for \`${head}\`.`
+      `\n\nThis is a new review pass for head \`${head}\`. The previous pass ${priorPass} on \`${reviewed}\`; ` +
+      `that pass does not cover this head. Review the changes since \`${reviewed}\` and record a verdict for \`${head}\`.`
     );
   }
   if (head && reviewed) {
     return (
-      `\n\nThis is a new review pass for head \`${head}\`, which the previous pass already reviewed${verdict}. ` +
+      `\n\nThis is a new review pass for head \`${head}\`. The previous pass already ${priorPass} on this head. ` +
       `It was requested again: check the head and the change request for anything new, then record a verdict for \`${head}\`.`
     );
   }
   if (head) return `\n\nThis review pass covers head \`${head}\`. Record your verdict for that head.`;
   if (reviewed) {
     return (
-      `\n\nThis is a new review pass. The previous pass recorded${verdict} on \`${reviewed}\`. ` +
+      `\n\nThis is a new review pass. The previous pass ${priorPass} on \`${reviewed}\`. ` +
       `Read the current head first; if it moved, review the changes since \`${reviewed}\` and record a verdict for the new head.`
     );
   }
