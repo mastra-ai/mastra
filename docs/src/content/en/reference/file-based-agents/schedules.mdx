@@ -134,9 +134,9 @@ Frontmatter accepts every option below except `handler`, which needs a function 
   },
   {
     name: 'handler',
-    type: '(ctx) => ScheduleOverrides | null | undefined',
+    type: '(ctx) => AgentScheduleHandlerResult | null | undefined | Promise<AgentScheduleHandlerResult | null | undefined>',
     description:
-      'Computes the fire at trigger time. Return overrides to apply, or `null` to skip this fire. Returning nothing applies no overrides, which fails the fire because handler mode has no stored prompt. Set this or `prompt`, not both.',
+      'Computes the fire at trigger time and can be `async`. Return overrides to apply as an `AgentScheduleHandlerResult` (`Partial<ScheduleEffective>`), or `null` to skip this fire. Returning nothing applies no overrides, which fails the fire because handler mode has no stored prompt. Set this or `prompt`, not both.',
     isOptional: true,
   },
   {
