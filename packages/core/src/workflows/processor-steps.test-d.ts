@@ -143,7 +143,19 @@ describe('processor step chaining', () => {
     expectTypeOf<ProcessorStepOutput['model']>().toEqualTypeOf<MastraLanguageModel | undefined>();
 
     const standalone = createStep(new BatchPartsProcessor());
-    type StepInput<T> = T extends Step<any, any, infer I, any, any, any, any, any> ? I : never;
+    type StepInput<T> =
+      T extends Step<
+        infer _Id,
+        infer _State,
+        infer I,
+        infer _Out,
+        infer _Resume,
+        infer _Suspend,
+        infer _Engine,
+        infer _Ctx
+      >
+        ? I
+        : never;
     expectTypeOf<StepInput<typeof standalone>>().toEqualTypeOf<ProcessorStepInputType>();
   });
 });
