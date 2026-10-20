@@ -13,6 +13,7 @@ import { stripModelSnapshots } from '../stream/strip-model-snapshots';
 import { ChunkFrom } from '../stream/types';
 import type { ChunkType, ThreadHistoryChunk } from '../stream/types';
 import { readPositiveIntEnv } from '../utils';
+import type { WorkflowRunStatus } from '../workflows/types';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
@@ -66,6 +67,16 @@ function toModelOutput<OUTPUT>(result: unknown): MastraModelOutput<OUTPUT> {
 }
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
+// Workflow names under which agent runs persist their snapshot: the regular agent
+// loop and the durable agent loop. Both key the row by the agent run id.
+const STORED_AGENT_RUN_WORKFLOW_NAMES = ['agentic-loop', 'durable-agentic-loop'] as const;
+const TERMINAL_STORED_RUN_STATUSES = new Set<WorkflowRunStatus>([
+  'success',
+  'failed',
+  'canceled',
+  'bailed',
+  'tripwire',
+]);
 
 /**
  * Formats a thread key for use in error messages.
@@ -1381,6 +1392,27 @@ export class AgentThreadStreamRuntime {
 
   #isSuspendedRun(state: AgentThreadRuntimeState, runId: string) {
     return state.suspendedRunIds.has(runId) || this.#isApprovalSuspendedRun(state, runId);
+  }
+
+  /**
+   * Reads the persisted status of an agent run, or undefined when the agent has no
+   * storage, the run has no row, or the read fails. Callers fall back to the
+   * event-derived view in that case.
+   */
+  async #readStoredRunStatus(agent: Agent<any, any, any, any>, runId: string): Promise<WorkflowRunStatus | undefined> {
+    try {
+      const workflowsStore = await agent.getMastraInstance?.()?.getStorage?.()?.getStore('workflows');
+      if (!workflowsStore) return undefined;
+      for (const workflowName of STORED_AGENT_RUN_WORKFLOW_NAMES) {
+        const run = await workflowsStore.getWorkflowRunById({ runId, workflowName });
+        if (!run) continue;
+        const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+        if (typeof snapshot?.status === 'string') return snapshot.status as WorkflowRunStatus;
+      }
+    } catch {
+      // Unreadable storage is treated as unknown.
+    }
+    return undefined;
   }
 
   #isThreadBlockingRun(state: AgentThreadRuntimeState, record: AgentThreadRunRecord<any>) {
@@ -5079,8 +5111,24 @@ export class AgentThreadStreamRuntime {
           return;
         }
 
+        // The lease alone cannot tell a parked run from a dead producer: a run
+        // suspended on approval releases its lease, and the prompt that would
+        // tell us so may never have reached this subscriber. Ask storage first.
+        const storedStatus = await this.#readStoredRunStatus(agent, runId);
+        if (
+          done ||
+          remoteRunLeaseWatchTokens.get(streamId) !== watchToken ||
+          remoteRuns.get(streamId) !== remoteRun ||
+          remoteRun.done
+        ) {
+          return;
+        }
         stopRemoteRunLeaseWatch(streamId);
-        const parked = remoteRunSuspensionPrompts.delete(streamId);
+        const promptSeen = remoteRunSuspensionPrompts.delete(streamId);
+        const parked =
+          storedStatus === 'suspended' ||
+          storedStatus === 'waiting' ||
+          (promptSeen && (storedStatus === undefined || !TERMINAL_STORED_RUN_STATUSES.has(storedStatus)));
         if (parked) {
           const deferredRecord = deferredRunsByStreamId.get(streamId);
           if (deferredRecord) {
@@ -5434,7 +5482,12 @@ export class AgentThreadStreamRuntime {
             discardDeferredRun(eventStreamId);
           }
         }
-        if (data.type === 'run-suspended') {
+        // A replayed run-suspended can describe a run that has since resumed and
+        // finished; storage is the authority on whether it is still parked.
+        const storedStatus =
+          data.type === 'run-suspended' ? await this.#readStoredRunStatus(agent, data.runId) : undefined;
+        const suspendedRunEnded = storedStatus !== undefined && TERMINAL_STORED_RUN_STATUSES.has(storedStatus);
+        if (data.type === 'run-suspended' && !suspendedRunEnded) {
           suspendedStreamIdsByRunId.set(data.runId, eventStreamId);
           noteRunHalf(data.runId);
           state.suspendedRunIds.add(data.runId);
@@ -5443,7 +5496,7 @@ export class AgentThreadStreamRuntime {
         } else {
           clearActiveIfCurrent(data.runId, data.streamId);
         }
-        if (data.type !== 'run-suspended') {
+        if (data.type !== 'run-suspended' || suspendedRunEnded) {
           this.#clearSuspendedRun(state, data.runId);
         }
         const remoteRun = remoteRuns.get(eventStreamId);
