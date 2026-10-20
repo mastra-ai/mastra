@@ -125,8 +125,7 @@ function Providers({ children }: { children: ReactNode }) {
 }
 
 function renderDialog(props: DialogProps = {}) {
-  const view = render(<ReopenableDialog {...props} />, { wrapper: Providers });
-  return { ...view, rerenderDialog: (next: DialogProps) => view.rerender(<ReopenableDialog {...next} />) };
+  return render(<ReopenableDialog {...props} />, { wrapper: Providers });
 }
 
 // Stands in for the app's create-dataset dialog: creates through the real mutation hook.
@@ -643,22 +642,6 @@ describe('AddDatasetItemDialog', () => {
         },
       });
       expect(posted.mock.calls[0]?.[0]).not.toHaveProperty(['expectedTrajectory', 'steps', 0, 'toolResult']);
-    });
-  });
-
-  describe('when initial values are still loading', () => {
-    it('waits for them before showing the form', async () => {
-      setupHandlers();
-      const { rerenderDialog } = renderDialog({ initialValuesLoading: true });
-
-      expect(screen.queryByRole('textbox', { name: 'Input JSON' })).toBeNull();
-      expect(isDisabled('Next')).toBe(true);
-
-      rerenderDialog({ initialInput: '{"city":"Seattle"}' });
-
-      expect((await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Input JSON' })).value).toBe(
-        '{"city":"Seattle"}',
-      );
     });
   });
 

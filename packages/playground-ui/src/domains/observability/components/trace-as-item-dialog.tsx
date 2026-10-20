@@ -74,17 +74,18 @@ export function TraceAsItemDialog({
     enabled: isOpen && Boolean(traceId),
   });
 
+  // The dialog seeds its form when it opens, so it opens once everything the form is seeded from has arrived.
+  const isReady = !isSpanLoading && !isTrajectoryLoading;
   const steps = trajectory?.steps ?? [];
   // Derive item-level tool mocks from the recorded tool calls in the trajectory
   const toolMocks = collectToolMocks(steps);
 
   return (
     <AddDatasetItemDialog
-      open={isOpen}
+      open={isOpen && isReady}
       onOpenChange={open => {
         if (!open) onClose();
       }}
-      initialValuesLoading={isSpanLoading || isTrajectoryLoading}
       initialInput={getInitialInput(traceDetails)}
       initialGroundTruth={traceDetails?.output != null ? safeStringify(traceDetails.output, 2) : ''}
       initialToolMocks={toolMocks.length > 0 ? safeStringify(toolMocks, 2) : undefined}

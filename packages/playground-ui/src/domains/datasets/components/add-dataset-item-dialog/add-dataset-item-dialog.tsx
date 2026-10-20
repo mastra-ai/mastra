@@ -29,7 +29,6 @@ import {
   DialogTitle,
 } from '@/ds/components/Dialog';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
-import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
 import { SettingsContainer } from '@/ds/new/settings';
 import { useLinkComponent } from '@/lib/framework';
@@ -50,8 +49,6 @@ export interface AddDatasetItemDialogProps {
   initialToolMocks?: string;
   /** Steps prefilled in the trajectory editor; switches the expected trajectory on. */
   initialTrajectory?: TrajectoryExpectation;
-  /** While true, the form waits instead of opening with values that are about to change. */
-  initialValuesLoading?: boolean;
   /** Where the item comes from; sent as is. */
   source?: AddDatasetItemParams['source'];
   /** Renders a create-dataset dialog, offered first in the dataset picker. The created dataset gets picked. */
@@ -137,23 +134,14 @@ const stepTransition = 'animate-in fade-in slide-in-from-bottom-2 duration-200 m
  * Add an item to a dataset in three steps: the input and its expected answer, tool mocks, then the request
  * context and expected trajectory. Only the first step is required; the others can be left empty.
  */
-export function AddDatasetItemDialog({
-  open,
-  onOpenChange,
-  initialValuesLoading,
-  ...props
-}: AddDatasetItemDialogProps) {
+export function AddDatasetItemDialog({ open, onOpenChange, ...props }: AddDatasetItemDialogProps) {
   const { addItem } = useDatasetMutations();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={addItem.isPending}>
       <DialogContent size="xl">
-        {/* The form mounts once its initial values are known, and unmounts on close, so every open starts fresh. */}
-        {initialValuesLoading ? (
-          <LoadingForm />
-        ) : (
-          <AddDatasetItemForm {...props} addItem={addItem} onOpenChange={onOpenChange} />
-        )}
+        {/* The form unmounts on close, so every open starts fresh from the initial values. */}
+        <AddDatasetItemForm {...props} addItem={addItem} onOpenChange={onOpenChange} />
       </DialogContent>
     </Dialog>
   );
@@ -192,28 +180,7 @@ function StepProgress({ step }: { step: WizardStep }) {
   );
 }
 
-function LoadingForm() {
-  return (
-    <>
-      <WizardHeader step={1} />
-      <DialogBody aria-busy>
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Skeleton className="h-[220px]" />
-          <Skeleton className="h-[220px]" />
-        </div>
-      </DialogBody>
-      <DialogFooter>
-        <StepProgress step={1} />
-        <DialogCancel>Cancel</DialogCancel>
-        <DialogAction type="submit" disabled>
-          Next
-        </DialogAction>
-      </DialogFooter>
-    </>
-  );
-}
-
-type AddDatasetItemFormProps = Omit<AddDatasetItemDialogProps, 'open' | 'initialValuesLoading'> & {
+type AddDatasetItemFormProps = Omit<AddDatasetItemDialogProps, 'open'> & {
   addItem: ReturnType<typeof useDatasetMutations>['addItem'];
 };
 

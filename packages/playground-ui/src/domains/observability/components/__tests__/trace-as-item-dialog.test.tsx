@@ -33,13 +33,22 @@ vi.mock('@/ds/components/CodeEditor', () => ({
 
 afterEach(() => cleanup());
 
-function setupHandlers({ trajectory }: { trajectory: Trajectory }) {
+function setupHandlers({
+  trajectory,
+  trajectoryArrives,
+}: {
+  trajectory: Trajectory;
+  trajectoryArrives?: Promise<void>;
+}) {
   const posted = vi.fn<(body: unknown) => void>();
 
   server.use(
     http.get(`${BASE_URL}/api/datasets`, () => HttpResponse.json(datasetsList)),
     http.get(`${BASE_URL}/api/datasets/dataset-1`, () => HttpResponse.json(datasetsList.datasets[0])),
-    http.get(`${BASE_URL}/api/observability/traces/trace-1/trajectory`, () => HttpResponse.json(trajectory)),
+    http.get(`${BASE_URL}/api/observability/traces/trace-1/trajectory`, async () => {
+      await trajectoryArrives;
+      return HttpResponse.json(trajectory);
+    }),
     http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
       posted(await request.json());
       return HttpResponse.json(datasetItem);
@@ -98,6 +107,26 @@ describe('TraceAsItemDialog', () => {
 
       expect((await editor('Input JSON')).value).toContain('"self": "[Circular]"');
       expect((await editor('Ground truth JSON')).value).toContain('"self": "[Circular]"');
+    });
+  });
+
+  describe('when the trajectory is still loading', () => {
+    it('opens the dialog only once the trajectory has arrived, prefilled from it', async () => {
+      let arrive = () => {};
+      const trajectoryArrives = new Promise<void>(resolve => {
+        arrive = resolve;
+      });
+      setupHandlers({ trajectory: trajectoryWithToolCalls, trajectoryArrives });
+      renderDialog({ city: 'Seattle' }, { answer: 'rainy' });
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(screen.queryByRole('dialog')).toBeNull();
+
+      arrive();
+      await screen.findByRole('dialog', { name: 'Input and ground truth' });
+      await pickDataset('Dataset 1');
+      next();
+      expect((await editor('Tool mocks JSON')).value).toContain('getWeather');
     });
   });
 
