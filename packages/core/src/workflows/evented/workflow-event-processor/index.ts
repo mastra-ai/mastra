@@ -37,6 +37,7 @@ import { resolveCurrentState, withoutAuthToken } from '../helpers';
 import { StepExecutor } from '../step-executor';
 import { processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
+import { resolveCompletedRestartEntry } from './restart';
 import { processWorkflowSleep, processWorkflowSleepUntil, processWorkflowWaitForEvent } from './sleep';
 import { getNestedWorkflow, getStepId, isExecutableStep, toStepExecutionParentWorkflow } from './utils';
 
@@ -728,7 +729,36 @@ export class WorkflowEventProcessor extends EventProcessor {
     resourceId: eventResourceId,
   }: ProcessorArgs & { initialState?: Record<string, any> }) {
     // Use initialState from event data if provided, otherwise use state from ProcessorArgs
-    const initialState = (arguments[0] as any).initialState ?? state ?? {};
+    let initialState = (arguments[0] as any).initialState ?? state ?? {};
+    const completed = restart && resolveCompletedRestartEntry(workflow.stepGraph, restart, initialState);
+    if (completed) {
+      stepResults = completed.stepResults;
+      initialState = completed.state;
+      const successor = workflow.stepGraph[completed.executionPath[0]!];
+      const captured = workflow.stepGraph[restart!.activePaths[0] ?? 0]!;
+      if (
+        successor &&
+        (isSingleStepEntry(successor) ||
+          successor.type === 'loop' ||
+          successor.type === 'sleep' ||
+          successor.type === 'sleepUntil') &&
+        getStepIds(captured).includes(getStepIds(successor)[0]!)
+      ) {
+        // Reusing this ID would overwrite the only completed-boundary record.
+        // Atomically checkpoint the successor's input and cursor instead.
+        const id = getStepIds(successor)[0]!;
+        stepResults = {
+          ...stepResults,
+          [id]: {
+            status: 'running',
+            payload: completed.output,
+            startedAt: Date.now(),
+          },
+        };
+        executionPath = completed.executionPath;
+        restart = { ...restart!, activePaths: executionPath, activeStepsPath: {} };
+      }
+    }
     const resolvedFormat = format ?? this.runFormats.get(runId);
     this.runFormats.set(runId, resolvedFormat);
     // The run is starting (or restarting via timeTravel/restart under the
@@ -810,6 +840,16 @@ export class WorkflowEventProcessor extends EventProcessor {
       }
     }
 
+    // Keep the captured cursor until the successor records its own input. A crash
+    // between this snapshot and dispatch must revisit the same completed boundary.
+    if (completed) {
+      executionPath = completed.executionPath;
+      prevResult = { status: 'success', output: completed.output } as StepResult<any, any, any, any>;
+      restart = undefined;
+      resumeSteps = [];
+      resumeData = undefined;
+      timeTravel = undefined;
+    }
     const startExecutionPath = executionPath ?? [0];
     await this.mastra.pubsub.publish('workflows', {
       type: 'workflow.step.run',

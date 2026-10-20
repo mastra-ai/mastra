@@ -3,7 +3,7 @@
 // must finish correctly without re-running what was already saved.
 //
 // Two harness conditions are represented. `wf-evented-restart` parks a step and restarts:
-// `sequential`, `parallel`, `conditional`, `foreach`, `empty-path`. `wf-default` is the harness's
+// `sequential`, `parallel`, `conditional`, `foreach`, `finished`, `empty-path`. `wf-default` is the harness's
 // in-process reference on the default engine, and contributes the shapes whose default-engine
 // restart is also green: `sequential`, `parallel`, `conditional`, `state`, `finished`,
 // `nested-done`, `nested-pending`. `empty-path` is evented-only — the default engine never saves a
@@ -13,7 +13,7 @@
 // `.mastracode/plans/cor-1382-restart-helper.proof/sigkill-only-repro.scratch.test.ts`, to land with
 // their owning fixes; none of them is skipped here. On the evented engine: `state` (COR-1352) parks
 // in a step like `sequential` but loses the finished step's mark, and
-// `finished`/`foreach-gap`/`nested-done`/`nested-pending` (COR-1333/1350/1351/1348) are interrupted
+// `foreach-gap`/`nested-done`/`nested-pending` (COR-1350/1351/1348) are interrupted
 // between two persisted states rather than inside a step. On the default engine `foreach` re-runs
 // completed item 1 (COR-1350), and `foreach-gap` cannot be cut at all: the interruption point the
 // shape needs (`item`'s partial output array) is never written, so the harness does not exercise it
@@ -260,7 +260,7 @@ const SHAPES: Record<ShapeName, ShapeSpec> = {
 /** Which shapes restart cleanly on each engine (see the file header for the red ones). */
 const GREEN: Record<Engine, ShapeName[]> = {
   default: ['sequential', 'parallel', 'conditional', 'state', 'finished', 'nested-done', 'nested-pending'],
-  evented: ['sequential', 'parallel', 'conditional', 'foreach', 'empty-path'],
+  evented: ['sequential', 'parallel', 'conditional', 'foreach', 'finished', 'empty-path'],
 };
 
 describe('T65 wf-restart-shapes in a fresh module graph', () => {
