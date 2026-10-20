@@ -5032,11 +5032,13 @@ export class Run<
     // and throw. Claiming is an optimization over the pre-existing behaviour, so a store that
     // cannot claim keeps resuming exactly as it did before rather than failing the resume.
     if (!workflowsStore.supportsConcurrentUpdates()) {
-      this.#mastra
-        ?.getLogger()
-        ?.warn(
-          `[Workflow ${this.workflowId}] The configured workflow storage does not support concurrent updates, so concurrent ${operation}() calls for run ${this.runId} cannot be de-duplicated atomically. Concurrent calls may execute downstream steps more than once.`,
-        );
+      if (!this.executionEngine.options.allowUnclaimedResumes) {
+        this.#mastra
+          ?.getLogger()
+          ?.warn(
+            `[Workflow ${this.workflowId}] The configured workflow storage does not support concurrent updates, so concurrent ${operation}() calls for run ${this.runId} cannot be de-duplicated atomically. Concurrent calls may execute downstream steps more than once.`,
+          );
+      }
       return;
     }
 
