@@ -60,6 +60,7 @@ import {
 import { MASTRA_DURABLE_EXECUTIONS_KEY } from './execution-fence';
 import { authorizeDurableMemory } from './memory-fga';
 import { recordRunSavedMessages } from './run-message-refs';
+import { setRunScorerInstances } from './run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import {
   createWorkflowInput,
@@ -751,6 +752,19 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       logger?.debug?.(`[DurableAgent] Error getting scorers: ${error}`);
     }
   }
+  if (scorers) {
+    // Workflow input carries scorers by name only; keep the instances so a
+    // scorer Mastra has never registered still runs in this process (#27579).
+    setRunScorerInstances(
+      runId,
+      Object.fromEntries(
+        Object.entries(scorers).flatMap(([key, entry]) =>
+          entry?.scorer && typeof entry.scorer === 'object' ? [[key, entry.scorer]] : [],
+        ),
+      ),
+      mastra,
+    );
+  }
 
   // 9. Create SaveQueueManager (memory + memoryConfig were resolved in step 6)
   const saveQueueManager = memory
@@ -907,6 +921,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     agentSpanData: agentSpan?.exportSpan(),
     modelSpanData: modelSpan?.exportSpan(),
     requestContextEntries: requestContextEntriesSnapshot,
+    inputTripwire: tripwireData,
   });
 
   // 14. Create registry entry for non-serializable state

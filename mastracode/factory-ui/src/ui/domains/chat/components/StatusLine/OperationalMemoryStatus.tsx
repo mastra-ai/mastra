@@ -1,7 +1,5 @@
-import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { formatCompactTokens, TokenBudget, TokenBudgetDetail } from '@mastra/playground-ui/components/TokenBudget';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { Brain, MessageSquare } from 'lucide-react';
 
 import { useChatRuntime } from '../../context/useChatRuntime';
@@ -43,10 +41,7 @@ export function OperationalMemoryStatus() {
 
   return (
     <Popover>
-      <PopoverTrigger
-        aria-label={`Memory budgets: ${spoken.join('. ')}`}
-        className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'gap-3')}
-      >
+      <PopoverTrigger variant="ghost" size="sm" aria-label={`Memory budgets: ${spoken.join('. ')}`} className="gap-3">
         {showMsg && (
           <TokenBudget
             label={messageLabel[work.messages]}

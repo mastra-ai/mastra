@@ -2,8 +2,7 @@ import { resolveCredentialStore, resolveTenantFromRequestContext } from '@mastra
 import { normalizeLegacyProviderId } from '@mastra/code-sdk/providers/model-ids';
 import type { Processor, ProcessOutputStepArgs } from '@mastra/core/processors';
 
-import { providerDisplayName } from '../provider-display-name.js';
-import { getAuthProviderId, WEB_OAUTH_PROVIDERS } from '../routes/provider-credentials.js';
+import { credentialLabel, getAuthProviderId } from '../routes/provider-credentials.js';
 
 /**
  * Stamps each assistant reply with the credential that answered it, as
@@ -28,15 +27,9 @@ export class FactoryReplyCredentialProcessor implements Processor {
       const [sdkProviderRoot = metadata.provider] = metadata.provider.split('.');
       const provider = normalizeLegacyProviderId(sdkProviderRoot);
       const credential = store.get(getAuthProviderId(provider));
-      const subscription = WEB_OAUTH_PROVIDERS[provider]?.subscription;
-      const credentialLabel =
-        credential?.type === 'api_key'
-          ? `${providerDisplayName(provider)} API key`
-          : credential?.type === 'oauth' && subscription
-            ? subscription
-            : undefined;
-      if (!credentialLabel) continue;
-      metadata.credentialLabel = credentialLabel;
+      const label = credential && credentialLabel(provider, credential.type);
+      if (!label) continue;
+      metadata.credentialLabel = label;
       if (tenant.credentialScope === 'user') metadata.credentialOwnerId = tenant.userId;
     }
     return messageList;

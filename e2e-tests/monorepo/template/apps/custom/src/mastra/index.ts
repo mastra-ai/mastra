@@ -41,6 +41,7 @@ export const mastra = new Mastra({
   },
   bundler: {
     externals: ['bcrypt', '@inner/subpath-only'],
+    pnpmWorkspaceSettings: { blockExoticSubdeps: false },
   },
   // Model token metrics flow through observability; telemetry counts usage from there.
   observability: new Observability({
