@@ -379,14 +379,17 @@ export function generateOpenAPIDocument(
  * @param componentSchemas - The document's `components.schemas` map. Nested schema definitions are
  * hoisted into it and referenced as `#/components/schemas/<name>`, so the caller must serve it.
  * When omitted, schemas are left as converted (definitions stay nested), so no ref can point at a
- * component the caller never serves.
+ * component the caller never serves. Callers that serve the returned paths in an OpenAPI document
+ * should pass a map and emit it as `components.schemas`; otherwise refs stay schema-relative
+ * (for example `#/$defs/Invoice`) and do not resolve from the document root.
  * @returns OpenAPI paths object to be merged into the main spec
  */
 export function convertCustomRoutesToOpenAPIPaths(
   routes: ApiRoute[],
   componentSchemas?: OpenAPIComponentSchemas,
 ): Record<string, any> {
-  const paths: Record<string, any> = {};
+  // Null-prototype maps so a route path like "__proto__" can't pollute Object.prototype.
+  const paths: Record<string, any> = Object.create(null);
   const hoist = (schema: unknown) => (componentSchemas ? hoistSchemaDefinitions(schema, componentSchemas) : schema);
 
   for (const route of routes) {
@@ -404,7 +407,7 @@ export function convertCustomRoutesToOpenAPIPaths(
     const openapiPath = route.path.replace(/:(\w+)/g, '{$1}');
 
     if (!paths[openapiPath]) {
-      paths[openapiPath] = {};
+      paths[openapiPath] = Object.create(null);
     }
 
     const method = route.method.toLowerCase();

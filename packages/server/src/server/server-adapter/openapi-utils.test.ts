@@ -38,6 +38,24 @@ describe('generateOpenAPIDocument', () => {
 });
 
 describe('convertCustomRoutesToOpenAPIPaths', () => {
+  it('does not pollute Object.prototype when a route path is "__proto__"', () => {
+    const pollutingRoute = {
+      method: 'GET',
+      path: '__proto__',
+      handler: async () => new Response('ok'),
+      openapi: { summary: 'polluting' },
+    } as unknown as ApiRoute;
+
+    try {
+      const paths = convertCustomRoutesToOpenAPIPaths([pollutingRoute]);
+
+      expect(({} as any).get).toBeUndefined();
+      expect(Object.getOwnPropertyDescriptor(paths, '__proto__')?.value.get.summary).toBe('polluting');
+    } finally {
+      delete (Object.prototype as any).get;
+    }
+  });
+
   it('does not classify Hono routes by an incidental responseType property', () => {
     const route = Object.assign(
       registerApiRoute('/legacy', {
