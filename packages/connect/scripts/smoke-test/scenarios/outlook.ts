@@ -118,6 +118,7 @@ export const outlookScenario: Scenario = {
           attachmentId,
         });
       } else {
+        // The account could not create the attachment prerequisite, so verify the download route with a synthetic id.
         steps.push(
           await probeTool(call, tools, 'download message attachment (probe)', 'outlook_download_message_attachment', {
             messageId: draftId,
@@ -149,6 +150,7 @@ export const outlookScenario: Scenario = {
           steps.push(failedStep('move copied message', 'outlook_move_message', error, true));
         }
       } else {
+        // Copying the draft could not produce a real prerequisite, so verify the move route with a synthetic id.
         steps.push(
           await probeTool(
             call,
@@ -162,12 +164,14 @@ export const outlookScenario: Scenario = {
       }
     }
 
+    // Replies require an existing received message; the scenario does not modify real mailbox contents.
     steps.push(
       await probeTool(call, tools, 'reply to message (probe)', 'outlook_reply_to_message', {
         messageId: 'mastra-smoke-missing',
         comment: `@mastra/connect smoke test ${runId}`,
       }),
     );
+    // Reply-all has the same received-message prerequisite, so exercise only its routing with a synthetic id.
     steps.push(
       await probeTool(call, tools, 'reply all to message (draft probe)', 'outlook_reply_all_to_message', {
         messageId: 'mastra-smoke-missing',
@@ -177,6 +181,7 @@ export const outlookScenario: Scenario = {
     );
 
     steps.push(makeStep('send mail', 'outlook_send_mail', 'skip', 'Smoke scenarios never send external email.'));
+    // Sending a real draft would deliver external mail, so use a synthetic id to verify the route without side effects.
     steps.push(
       await probeTool(call, tools, 'send draft message (probe)', 'outlook_send_draft_message', {
         message_id: 'mastra-smoke-missing',
@@ -197,9 +202,8 @@ export const outlookScenario: Scenario = {
         if (/status=404|not found/i.test(detail)) {
           steps.push(makeStep(name, 'outlook_delete_message', 'pass', 'already removed by message lifecycle'));
         } else {
-          const step = failedStep(name, 'outlook_delete_message', error, true);
-          if (step.status === 'fail') log.error(`Outlook smoke test leaked ${name}`, { messageId, error: detail });
-          steps.push(step);
+          log.error(`Outlook smoke test leaked ${name}`, { messageId, error: detail });
+          steps.push(makeStep(name, 'outlook_delete_message', 'fail', detail));
         }
       }
     }
@@ -286,12 +290,12 @@ export const outlookScenario: Scenario = {
         if (/status=404|not found/i.test(detail)) {
           steps.push(makeStep('delete event', 'outlook_delete_event', 'pass', 'removed by cancellation'));
         } else {
-          const step = failedStep('delete event', 'outlook_delete_event', error, true);
-          if (step.status === 'fail') log.error('Outlook smoke test leaked event', { eventId, error: detail });
-          steps.push(step);
+          log.error('Outlook smoke test leaked event', { eventId, error: detail });
+          steps.push(makeStep('delete event', 'outlook_delete_event', 'fail', detail));
         }
       }
     } else {
+      // Event creation could not produce a real prerequisite, so verify list routing with a synthetic calendar id.
       steps.push(
         await probeTool(call, tools, 'list calendar events (probe)', 'outlook_list_calendar_events', {
           calendar_id: 'mastra-smoke-missing',
