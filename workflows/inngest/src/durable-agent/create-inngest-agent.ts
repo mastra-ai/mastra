@@ -1963,7 +1963,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const aborted = agent.abortThreadStream(abortOptions);
       if (!aborted || !runId) return aborted;
 
-      abortDurableRun(runId);
+      if (!abortOptions.localOnly) abortDurableRun(runId);
       return true;
     },
 

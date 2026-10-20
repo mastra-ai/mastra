@@ -13,8 +13,8 @@ describeForAllEngines(
   engine => {
     const getMock = useLoopScenarioAimock();
 
-    // A local-only detach currently discards the snapshot on durable/evented and Inngest.
-    it.fails('can approve from another connection without losing the parked run', async () => {
+    // A local-only detach must preserve the parked approval for reconnection.
+    it('can approve from another connection without losing the parked run', async () => {
       const llm = getMock();
       llm.on(
         { endpoint: 'chat', hasToolResult: false },
