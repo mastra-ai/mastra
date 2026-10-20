@@ -490,7 +490,18 @@ describe('PlatformSandbox.filesystem', () => {
     expect(fetchMock.mock.calls.filter(isLeaseCall)).toHaveLength(1);
   });
 
-  it('rejects a sandbox whose lease is not E2B', async () => {
+  it('has no filesystem on a Railway-backed sandbox, so callers use executeCommand', () => {
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      sandboxProvider: 'railway',
+      fetch: vi.fn() as unknown as typeof fetch,
+    });
+    expect(sandbox.filesystem).toBeUndefined();
+  });
+
+  it('rejects a lease that is not E2B on an E2B-configured sandbox', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(created()).mockResolvedValueOnce(e2bLease('jwt', 'railway'));
     const { sandbox, leases } = makeSandbox(fetchMock);
     await expect(sandbox.filesystem.readFile('/a.txt')).rejects.toThrow(/requires an E2B-backed sandbox.*"railway"/);

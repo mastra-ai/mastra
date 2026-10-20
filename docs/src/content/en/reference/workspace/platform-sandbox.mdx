@@ -463,9 +463,9 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   },
   {
     name: 'filesystem',
-    type: 'PlatformSandboxFilesystem',
+    type: 'PlatformSandboxFilesystem | undefined',
     description:
-      "The sandbox's disk through E2B's files API, sent straight to the VM with the same lease `executeCommand()` uses. Requires an E2B-backed sandbox. Paths are absolute and not confined to a root. Copies, appends, and no-overwrite writes run as one command in the VM. See [Native filesystem](/reference/workspace/sandbox#native-filesystem).",
+      "The sandbox's disk through E2B's files API, sent straight to the VM with the same lease `executeCommand()` uses. `undefined` when the sandbox isn't E2B-backed; use `executeCommand()` then. Paths are absolute and not confined to a root. Copies, appends, and no-overwrite writes run as one command in the VM. See [Native filesystem](/reference/workspace/sandbox#native-filesystem).",
   },
   {
     name: 'templatePending',

@@ -1562,10 +1562,11 @@ export class PlatformSandbox extends MastraSandbox {
   /**
    * The sandbox's disk through E2B's files API, called directly on the VM with
    * the same lease `executeCommand` uses. Paths are absolute inside the
-   * sandbox and are not confined to any root. Only E2B-backed sandboxes
-   * support it; others throw on the first call.
+   * sandbox and are not confined to any root. Absent on non-E2B sandboxes, so
+   * callers fall back to `executeCommand`.
    */
-  get filesystem(): PlatformSandboxFilesystem {
+  get filesystem(): PlatformSandboxFilesystem | undefined {
+    if (this._client.sandboxProvider !== 'e2b') return undefined;
     this._filesystem ??= new PlatformSandboxFilesystem({
       id: this.id,
       withFiles: (operation, fn) => this._withE2BFiles(operation, fn),
