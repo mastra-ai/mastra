@@ -17,13 +17,19 @@
     "kimi-k3"
   ],
   "reasoning": {
-    "glm-5-3": [
+    "kimi-k3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k3": [
+    "deepseek-v4-1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "glm-5-3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -36,12 +42,6 @@
       }
     ],
     "gemma4-31b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepseek-v4-1-flash": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]

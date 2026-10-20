@@ -63,18 +63,6 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "reflection/Beam-1.0-501B-A23B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "moonshotai/Kimi-K3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
       {
         "type": "toggle"
@@ -83,6 +71,15 @@
     "nvidia/nemotron-3-ultra-550b-a55b": [
       {
         "type": "toggle"
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-V4.1-Flash": [
@@ -105,25 +102,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
-      {
-        "type": "toggle"
-      },
+    "moonshotai/Kimi-K3": [
       {
         "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "meta-models/Muse-Spark-Open-816B-A42B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["low", "high", "max"]
       }
     ],
     "thinkingmachines/Inkling": [
@@ -132,9 +114,16 @@
         "values": ["max", "xhigh", "high", "medium", "low", "none"]
       }
     ],
-    "Qwen/Qwen3.5-397B-A17B": [
+    "reflection/Beam-1.0-501B-A23B": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "meta-models/Muse-Spark-Open-816B-A42B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "Qwen/Qwen3.5-9B": [
@@ -142,7 +131,28 @@
         "type": "toggle"
       }
     ],
+    "Qwen/Qwen3.5-397B-A17B": [
+      {
+        "type": "toggle"
+      }
+    ],
     "Qwen/Qwen3.6-Plus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5": [
       {
         "type": "toggle"
       }
@@ -156,26 +166,16 @@
         "values": ["high", "max"]
       }
     ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5": [
-      {
-        "type": "toggle"
-      }
-    ],
     "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }
