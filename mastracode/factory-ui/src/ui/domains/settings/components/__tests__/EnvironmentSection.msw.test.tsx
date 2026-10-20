@@ -400,6 +400,52 @@ describe('Environment settings', () => {
     expect(patches[0]).toEqual({ settings: { privileged: true } });
   });
 
+  it('suggests more memory only while Docker is on with less than 2 GB', async () => {
+    const withSettings = (settings: Record<string, unknown>) => {
+      const base = environmentPayload();
+      return environmentPayload({
+        sandbox: {
+          ...base.sandbox,
+          settingsSchema: {
+            ...base.sandbox.settingsSchema,
+            properties: {
+              ...(base.sandbox.settingsSchema.properties as Record<string, unknown>),
+              docker: { type: 'boolean', title: 'Docker', default: false },
+            },
+          },
+        },
+        settings,
+      });
+    };
+    const tip = /E2B recommends at least 2 GB for Docker/;
+
+    useFactory();
+    useEnvironment(withSettings({ docker: true }));
+    const first = renderWithProviders(
+      <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/settings/environment`]}>
+        <Routes>
+          <Route path="/factories/:factoryId/settings/environment" element={<EnvironmentSection />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText(tip)).toHaveTextContent('1024 MB');
+    first.unmount();
+
+    for (const settings of [{ docker: true, memoryMb: 2048 }, {}]) {
+      useEnvironment(withSettings(settings));
+      const view = renderWithProviders(
+        <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/settings/environment`]}>
+          <Routes>
+            <Route path="/factories/:factoryId/settings/environment" element={<EnvironmentSection />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(await screen.findByRole('switch', { name: 'Docker' })).toBeInTheDocument();
+      expect(screen.queryByText(tip)).not.toBeInTheDocument();
+      view.unmount();
+    }
+  });
+
   it('renders a oneOf of consts as a select labelled by title and saves the numeric value', async () => {
     useFactory();
     const environment = environmentPayload({
