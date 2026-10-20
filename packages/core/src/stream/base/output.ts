@@ -1456,6 +1456,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 warnings: self.#warnings,
                 providerMetadata: undefined,
                 response: {
+                  // Durable runs end on this chunk when processOutputResult trips, so no finish
+                  // chunk builds the response messages; keep the rejected draft visible (#27562).
+                  ...(self.#options.resolveFinalPromises && {
+                    messages: self.messageList.get.response.aiV5.model(),
+                    uiMessages:
+                      self.messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
+                  }),
                   dbMessages: self.messageList.get.response.db(),
                 },
                 request: {},
