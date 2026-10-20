@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 1.39.0-alpha.8
+
+### Patch Changes
+
+- Fixed Observational Memory merging the rest of an agent's reply into an already-observed message when another worker recovers the turn (for example after a durable agent's worker crashes). The recovering worker now starts a new message, so the stored conversation matches a run that never crashed. A stored record whose observed message list is not an array no longer crashes the turn with `includes is not a function`. ([#27887](https://github.com/mastra-ai/mastra/pull/27887))
+
+- Updated dependencies [[`f1b596e`](https://github.com/mastra-ai/mastra/commit/f1b596e3219bd8721079611c62b92b8f0f6c12d9), [`4e6701a`](https://github.com/mastra-ai/mastra/commit/4e6701a8534e29fad29c7fe4c6787dc1ed56b419), [`f905746`](https://github.com/mastra-ai/mastra/commit/f905746159def2d386dca516657123f43ef90e24), [`72cb1e2`](https://github.com/mastra-ai/mastra/commit/72cb1e2b9453f7bb1bd08e4f9aa54da56fa20600), [`0e5d045`](https://github.com/mastra-ai/mastra/commit/0e5d045be4ab67d1fba5eeb8125bc2ec43aa9519), [`0e4fa4f`](https://github.com/mastra-ai/mastra/commit/0e4fa4f0604bb2e6e63e5d1d203b2dcadd646a81), [`a7bfa1f`](https://github.com/mastra-ai/mastra/commit/a7bfa1ff7c592f368cf34be472c7d89e03b0098b)]:
+  - @mastra/core@1.79.0-alpha.11
+
 ## 1.39.0-alpha.7
 
 ### Patch Changes
