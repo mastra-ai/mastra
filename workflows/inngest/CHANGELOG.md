@@ -1,5 +1,18 @@
 # @mastra/inngest
 
+## 1.10.7-alpha.8
+
+### Patch Changes
+
+- Fixed several ways a suspended agent run could be resumed twice, never, or after it was aborted. ([#27791](https://github.com/mastra-ai/mastra/pull/27791))
+
+  - **Approving after abort:** approving, declining, or resuming a run after `abortRunStream()` / `abortThreadStream()` hit its suspension now fails with `AGENT_RESUME_ABORTED_RUN` instead of running the tool or starting another model request. Fixes #27617.
+  - **`listSuspendedRuns()` after resume:** `DurableAgent` now marks a resumed run as running as soon as it resumes, so it drops out of `listSuspendedRuns()` right away, including in other processes. A second resume of the same run fails with `AGENT_RESUME_ALREADY_CLAIMED` instead of running twice. Fixes #27619.
+  - **Resumer process dies:** a running resume keeps renewing its claim. If the process dies, a later resume or approval fails with `AGENT_RESUME_ALREADY_CLAIMED` until the claim lapses, then takes the run over (or fails with `AGENT_RESUME_RUN_FINISHED` when recovery already completed it). Fixes #27366.
+
+- Updated dependencies [[`f1b596e`](https://github.com/mastra-ai/mastra/commit/f1b596e3219bd8721079611c62b92b8f0f6c12d9), [`4e6701a`](https://github.com/mastra-ai/mastra/commit/4e6701a8534e29fad29c7fe4c6787dc1ed56b419), [`f905746`](https://github.com/mastra-ai/mastra/commit/f905746159def2d386dca516657123f43ef90e24), [`72cb1e2`](https://github.com/mastra-ai/mastra/commit/72cb1e2b9453f7bb1bd08e4f9aa54da56fa20600), [`0e5d045`](https://github.com/mastra-ai/mastra/commit/0e5d045be4ab67d1fba5eeb8125bc2ec43aa9519), [`0e4fa4f`](https://github.com/mastra-ai/mastra/commit/0e4fa4f0604bb2e6e63e5d1d203b2dcadd646a81), [`a7bfa1f`](https://github.com/mastra-ai/mastra/commit/a7bfa1ff7c592f368cf34be472c7d89e03b0098b)]:
+  - @mastra/core@1.79.0-alpha.11
+
 ## 1.10.7-alpha.7
 
 ### Patch Changes
