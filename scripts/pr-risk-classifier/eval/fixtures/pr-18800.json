@@ -1,0 +1,18 @@
+{
+  "number": 18800,
+  "url": "https://github.com/mastra-ai/mastra/pull/18800",
+  "title": "fix(ci): check out local action from main in privileged major-version-check workflow",
+  "body": null,
+  "expected": "high",
+  "why": "Changes which code a privileged workflow checks out; a mistake runs untrusted code with secrets.",
+  "files": [
+    {
+      "filename": ".github/workflows/major-version-check.yml",
+      "status": "modified",
+      "additions": 5,
+      "deletions": 5,
+      "sha": "f92edc916240290e4ccf3a4c0f55cc74664d3ab5",
+      "patch": "@@ -61,10 +61,8 @@ jobs:\n             ).data;\n \n             const headSha = pr.head.sha;\n-            // Output SHAs for downstream steps\n+            // Output head SHA for downstream steps\n             core.setOutput('head_sha', headSha);\n-            // Output base SHA for checkout step (to prevent malicious PR from modifying local action)\n-            core.setOutput('base_sha', pr.base.sha);\n \n             // Regex to check for major in frontmatter\n             const majorRegex = /:\\s*[\"']?major[\"']?/;\n@@ -94,8 +92,10 @@ jobs:\n         if: steps.check_major.outputs.has_major_changeset == 'true'\n         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10\n         with:\n-          # Pin to PR base SHA to prevent malicious PRs from modifying the local action\n-          ref: ${{ steps.check_major.outputs.base_sha }}\n+          # Always check out the local action from the trusted default branch.\n+          # Never use PR-derived refs here: this privileged workflow (issue_comment)\n+          # runs the checked-out action with access to app secrets.\n+          ref: main\n           sparse-checkout: .github/actions\n           sparse-checkout-cone-mode: false\n "
+    }
+  ]
+}

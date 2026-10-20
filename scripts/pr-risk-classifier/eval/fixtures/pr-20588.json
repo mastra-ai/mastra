@@ -1,0 +1,42 @@
+{
+  "number": 20588,
+  "url": "https://github.com/mastra-ai/mastra/pull/20588",
+  "title": "feat(cli): add --skip-install option",
+  "body": null,
+  "expected": "medium",
+  "why": "Adds a --skip-install flag that changes the create-mastra flow every new user runs.",
+  "files": [
+    {
+      "filename": "packages/cli/src/commands/create/command.test.ts",
+      "status": "modified",
+      "additions": 20,
+      "deletions": 0,
+      "sha": "9fcd7e68b6a7b7e4ec9c9950df495949f60d3d78",
+      "patch": "@@ -23,6 +23,7 @@ function createOptions(overrides: Partial<NormalizedCreateOptions> = {}): Normal\n     git: true,\n     template: undefined,\n     timeout: 60_000,\n+    skipInstall: false,\n     ...overrides,\n   };\n }\n@@ -157,6 +158,7 @@ describe('shared create Commander wiring', () => {\n       git: true,\n       template: undefined,\n       timeout: 60_000,\n+      skipInstall: false,\n     });\n   });\n \n@@ -187,9 +189,27 @@ describe('shared create Commander wiring', () => {\n       git: false,\n       template: undefined,\n       timeout: 12_345,\n+      skipInstall: false,\n     });\n     expect(subAction.mock.calls[0]?.[0]).toEqual(rootAction.mock.calls[0]?.[0]);\n   });\n+\n+  it('parses --skip-install option', async () => {\n+    const action = vi.fn();\n+    await parseRoot(['project', '--skip-install'], action);\n+\n+    expect(action).toHaveBeenCalledWith({\n+      projectName: 'project',\n+      empty: false,\n+      llmProvider: undefined,\n+      llmApiKey: undefined,\n+      skills: true,\n+      git: true,\n+      template: undefined,\n+      timeout: 60_000,\n+      skipInstall: true,\n+    });\n+  });\n });\n \n describe('release-channel tag selection', () => {"
+    },
+    {
+      "filename": "packages/cli/src/commands/create/command.ts",
+      "status": "modified",
+      "additions": 5,
+      "deletions": 1,
+      "sha": "3d93353f246ec4790a7529115464b7ff35d68a62",
+      "patch": "@@ -20,6 +20,7 @@ export interface CreateCommandOptions {\n   git: boolean;\n   template?: string | boolean;\n   timeout: number;\n+  skipInstall?: boolean;\n }\n \n export interface NormalizedCreateOptions {\n@@ -31,6 +32,7 @@ export interface NormalizedCreateOptions {\n   git: boolean;\n   template?: string | boolean;\n   timeout: number;\n+  skipInstall: boolean;\n }\n \n export function parseCreateLLMProvider(value: string): CreateLLMProvider {\n@@ -73,7 +75,8 @@ export function configureCreateCommand(command: Command) {\n       '-t, --template [template]',\n       'Create from a template slug or public GitHub URL, or select interactively when omitted',\n     )\n-    .option('--timeout <milliseconds>', 'Package installation timeout in milliseconds', parseCreateTimeout, 60_000);\n+    .option('--timeout <milliseconds>', 'Package installation timeout in milliseconds', parseCreateTimeout, 60_000)\n+    .option('--skip-install', 'Skip installing dependencies');\n }\n \n export function normalizeCreateCommandOptions(\n@@ -89,6 +92,7 @@ export function normalizeCreateCommandOptions(\n     git: options.git,\n     template: options.template,\n     timeout: options.timeout,\n+    skipInstall: options.skipInstall ?? false,\n   };\n }\n "
+    },
+    {
+      "filename": "packages/cli/src/commands/create/create.test.ts",
+      "status": "modified",
+      "additions": 14,
+      "deletions": 0,
+      "sha": "f0417643142ef43713504d75cee0b29adaaa6307",
+      "patch": "@@ -835,6 +835,20 @@ describe('create materialization lifecycle', () => {\n     }\n   });\n \n+  it('skips dependency installation when skipInstall is true', async () => {\n+    const { create } = await import('./create');\n+    const { installDependencies } = await import('../../utils/clone-template');\n+\n+    await create({\n+      projectName: 'my-project',\n+      empty: true,\n+      skipInstall: true,\n+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),\n+    });\n+\n+    expect(installDependencies).not.toHaveBeenCalled();\n+  });\n+\n   it('names the selected provider environment key in the completion note when the key is skipped', async () => {\n     const { create } = await import('./create');\n     const prompts = await import('@clack/prompts');"
+    },
+    {
+      "filename": "packages/cli/src/commands/create/create.ts",
+      "status": "modified",
+      "additions": 24,
+      "deletions": 11,
+      "sha": "f6bcc6b9f25558143721f49ca644aa65eaaaa9ee",
+      "patch": "@@ -89,6 +89,7 @@ export interface CreateOptions {\n   timeout?: number;\n   analytics?: PosthogAnalytics;\n   resolveVersionTag?: () => Promise<string | undefined>;\n+  skipInstall?: boolean;\n }\n \n type PlatformSetupResult =\n@@ -218,6 +219,7 @@ function normalizeDirectCreateOptions(args: CreateOptions): NormalizedCreateOpti\n     git: args.git ?? true,\n     template: args.template,\n     timeout: args.timeout ?? 60_000,\n+    skipInstall: args.skipInstall ?? false,\n   };\n }\n \n@@ -368,16 +370,23 @@ export const create = async (args: CreateOptions): Promise<void> => {\n       }\n     }\n \n-    if (observabilityEnabled) {\n-      await installDependencies(\n-        staging.projectPath,\n-        packageManager,\n-        options.timeout,\n-        materializationController.signal,\n-        true,\n-      );\n-    } else {\n-      await installDependencies(staging.projectPath, packageManager, options.timeout, materializationController.signal);\n+    if (!options.skipInstall) {\n+      if (observabilityEnabled) {\n+        await installDependencies(\n+          staging.projectPath,\n+          packageManager,\n+          options.timeout,\n+          materializationController.signal,\n+          true,\n+        );\n+      } else {\n+        await installDependencies(\n+          staging.projectPath,\n+          packageManager,\n+          options.timeout,\n+          materializationController.signal,\n+        );\n+      }\n     }\n     materializationController.signal.throwIfAborted();\n     await publishStagedProject({ projectPath: staging.projectPath, targetPath, projectName });\n@@ -413,7 +422,11 @@ export const create = async (args: CreateOptions): Promise<void> => {\n     analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'skipped' });\n     p.log.info('Skipping Mastra platform setup.');\n   } else if (observabilityEnabled) {\n-    p.log.success('Default template cloned and dependencies installed.');\n+    p.log.success(\n+      options.skipInstall\n+        ? 'Default template cloned. Dependency installation was skipped.'\n+        : 'Default template cloned and dependencies installed.',\n+    );\n   }\n \n   const postSetup = await runPostCreateSetup({"
+    }
+  ]
+}

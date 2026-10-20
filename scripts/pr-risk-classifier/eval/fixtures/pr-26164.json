@@ -1,0 +1,34 @@
+{
+  "number": 26164,
+  "url": "https://github.com/mastra-ai/mastra/pull/26164",
+  "title": "fix(core): stop fetchWithRetry retries when the request is aborted",
+  "body": null,
+  "expected": "high",
+  "why": "Changes abort/retry control flow in core fetchWithRetry.",
+  "files": [
+    {
+      "filename": ".changeset/fetch-retry-abort-signal.md",
+      "status": "added",
+      "additions": 5,
+      "deletions": 0,
+      "sha": "76085880690361448efa5df03f28d4e1026cef27",
+      "patch": "@@ -0,0 +1,5 @@\n+---\n+'@mastra/core': patch\n+---\n+\n+Fixed `fetchWithRetry` ignoring cancellation. An already-aborted `signal` now rejects immediately, and aborting during a request or backoff delay stops further retries instead of waiting through the remaining delays. Retries for non-aborted requests are unchanged."
+    },
+    {
+      "filename": "packages/core/src/utils/fetchWithRetry.test.ts",
+      "status": "modified",
+      "additions": 63,
+      "deletions": 0,
+      "sha": "d7ac778524a1df97953c4dede885903285fa2990",
+      "patch": "@@ -99,4 +99,67 @@ describe('fetchWithRetry', () => {\n     await fetchWithRetry('https://example.com', opts);\n     expect(mockFetch).toHaveBeenCalledWith('https://example.com', opts);\n   });\n+\n+  describe('abort signal', () => {\n+    it('rejects immediately without fetching when the signal is already aborted', async () => {\n+      const controller = new AbortController();\n+      controller.abort();\n+\n+      await expect(fetchWithRetry('https://example.com', { signal: controller.signal })).rejects.toMatchObject({\n+        name: 'AbortError',\n+      });\n+      expect(mockFetch).not.toHaveBeenCalled();\n+      expect(vi.getTimerCount()).toBe(0);\n+    });\n+\n+    it('stops waiting and does not retry when aborted during backoff', async () => {\n+      const controller = new AbortController();\n+      mockFetch.mockResolvedValue(new Response('', { status: 503 }));\n+\n+      const promise = fetchWithRetry('https://example.com', { signal: controller.signal });\n+      const assertion = expect(promise).rejects.toMatchObject({ name: 'AbortError' });\n+      await vi.advanceTimersByTimeAsync(250);\n+      expect(vi.getTimerCount()).toBe(1);\n+\n+      controller.abort();\n+      await assertion;\n+      expect(mockFetch).toHaveBeenCalledTimes(1);\n+      expect(vi.getTimerCount()).toBe(0);\n+    });\n+\n+    it('does not retry when fetch rejects because the signal was aborted', async () => {\n+      const controller = new AbortController();\n+      mockFetch.mockImplementation(async () => {\n+        controller.abort();\n+        throw new DOMException('The operation was aborted.', 'AbortError');\n+      });\n+\n+      await expect(fetchWithRetry('https://example.com', { signal: controller.signal })).rejects.toMatchObject({\n+        name: 'AbortError',\n+      });\n+      expect(mockFetch).toHaveBeenCalledTimes(1);\n+      expect(vi.getTimerCount()).toBe(0);\n+    });\n+\n+    it('propagates a custom abort reason', async () => {\n+      const controller = new AbortController();\n+      const reason = new Error('custom cancel');\n+      controller.abort(reason);\n+\n+      await expect(fetchWithRetry('https://example.com', { signal: controller.signal })).rejects.toBe(reason);\n+    });\n+\n+    it('removes the abort listener after a completed backoff', async () => {\n+      const controller = new AbortController();\n+      const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');\n+      const ok = new Response('ok', { status: 200 });\n+      mockFetch.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce(ok);\n+\n+      const promise = fetchWithRetry('https://example.com', { signal: controller.signal });\n+      await flush();\n+      await expect(promise).resolves.toBe(ok);\n+      expect(mockFetch).toHaveBeenCalledTimes(2);\n+      expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function));\n+    });\n+  });\n });"
+    },
+    {
+      "filename": "packages/core/src/utils/fetchWithRetry.ts",
+      "status": "modified",
+      "additions": 20,
+      "deletions": 2,
+      "sha": "2af393c8b29c502257af328b5c6b82dbaab6b161",
+      "patch": "@@ -7,7 +7,8 @@ const defaultShouldRetryResponse = () => true;\n /**\n  * Performs a fetch request with automatic retries using exponential backoff.\n  * Network failures are always retried. Non-OK responses are retried unless\n- * `shouldRetryResponse` returns false.\n+ * `shouldRetryResponse` returns false. Aborting `options.signal` stops retries\n+ * immediately and rejects with the signal's reason.\n  */\n export async function fetchWithRetry(\n   url: string,\n@@ -18,13 +19,19 @@ export async function fetchWithRetry(\n   let retryCount = 0;\n   let lastError: Error | null = null;\n   const shouldRetryResponse = retryOptions.shouldRetryResponse ?? defaultShouldRetryResponse;\n+  const signal = options.signal ?? undefined;\n \n   while (retryCount < maxRetries) {\n+    signal?.throwIfAborted();\n+\n     let response: Response | undefined;\n \n     try {\n       response = await fetch(url, options);\n     } catch (error) {\n+      if (signal?.aborted) {\n+        throw signal.reason;\n+      }\n       lastError = error instanceof Error ? error : new Error(String(error));\n     }\n \n@@ -47,7 +54,18 @@ export async function fetchWithRetry(\n     }\n \n     const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);\n-    await new Promise(resolve => setTimeout(resolve, delay));\n+    signal?.throwIfAborted();\n+    await new Promise<void>((resolve, reject) => {\n+      const onAbort = () => {\n+        clearTimeout(timer);\n+        reject(signal!.reason);\n+      };\n+      const timer = setTimeout(() => {\n+        signal?.removeEventListener('abort', onAbort);\n+        resolve();\n+      }, delay);\n+      signal?.addEventListener('abort', onAbort, { once: true });\n+    });\n   }\n \n   throw lastError || new Error('Request failed after multiple retry attempts');"
+    }
+  ]
+}

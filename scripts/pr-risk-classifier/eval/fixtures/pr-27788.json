@@ -1,0 +1,34 @@
+{
+  "number": 27788,
+  "url": "https://github.com/mastra-ai/mastra/pull/27788",
+  "title": "fix(core): keep invalid API key stream errors terminal after AI SDK bump",
+  "body": null,
+  "expected": "high",
+  "why": "Three lines in the core stream error retry processor decide whether auth errors are retried for every agent stream. Tiny diff, hot path.",
+  "files": [
+    {
+      "filename": ".changeset/terminal-auth-errors-no-retry.md",
+      "status": "added",
+      "additions": 5,
+      "deletions": 0,
+      "sha": "8b767014e7f24d5174e4544457d4623cb0956a8d",
+      "patch": "@@ -0,0 +1,5 @@\n+---\n+'@mastra/core': patch\n+---\n+\n+Fixed `isBadRequestError` retrying invalid API key errors. Newer OpenAI provider versions report `invalid_api_key` stream errors with status 400, so they were retried as bad requests instead of failing right away. Authorization errors now stay terminal."
+    },
+    {
+      "filename": "packages/core/src/processors/stream-error-retry-processor.test.ts",
+      "status": "modified",
+      "additions": 57,
+      "deletions": 0,
+      "sha": "924781567c68c8c8a22a629595cbaa070a9bbe02",
+      "patch": "@@ -1,3 +1,4 @@\n+import { createOpenAI } from '@ai-sdk/openai-v6';\n import { APICallError } from '@internal/ai-sdk-v5';\n import { afterEach, describe, expect, it, vi } from 'vitest';\n \n@@ -224,6 +225,62 @@ describe('StreamErrorRetryProcessor', () => {\n     await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toBeUndefined();\n   });\n \n+  it('does not retry OpenAI Responses invalid_api_key stream errors through isBadRequestError', async () => {\n+    // @ai-sdk/openai >=3.0.130 classifies this frame with a derived statusCode of 400.\n+    const errorFrame = {\n+      type: 'error',\n+      code: 'invalid_api_key',\n+      message: 'Incorrect API key provided.',\n+      param: null,\n+      sequence_number: 2,\n+    };\n+    const deltaFrame = {\n+      type: 'response.output_text.delta',\n+      content_index: 0,\n+      delta: 'Partial output.',\n+      item_id: 'msg-1',\n+      logprobs: [],\n+      output_index: 0,\n+      sequence_number: 1,\n+    };\n+    const streamOpenAIFrames = async (frames: Array<Record<string, unknown>>) => {\n+      const openai = createOpenAI({\n+        apiKey: 'test-key',\n+        fetch: async () =>\n+          new Response(frames.map(frame => `event: ${frame.type}\\ndata: ${JSON.stringify(frame)}\\n\\n`).join(''), {\n+            status: 200,\n+            headers: { 'content-type': 'text/event-stream' },\n+          }),\n+      });\n+      try {\n+        const { stream } = await openai.responses('gpt-5.4-mini').doStream({\n+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],\n+        });\n+        for await (const chunk of stream) {\n+          if (chunk.type === 'error') return chunk.error;\n+        }\n+      } catch (error) {\n+        return error;\n+      }\n+      throw new Error('Expected the OpenAI stream to surface an error');\n+    };\n+\n+    // Error after partial output arrives as a stream error chunk; error before output is thrown.\n+    const midStreamError = await streamOpenAIFrames([deltaFrame, errorFrame]);\n+    const beforeOutputError = await streamOpenAIFrames([errorFrame]);\n+    expect(midStreamError).toMatchObject({ code: 'invalid_api_key', statusCode: 400, isRetryable: false });\n+    expect(APICallError.isInstance(beforeOutputError)).toBe(true);\n+    expect(beforeOutputError).toMatchObject({ statusCode: 400, isRetryable: false });\n+\n+    const processor = new StreamErrorRetryProcessor({\n+      matchers: [{ match: isBadRequestError, maxRetries: 1 }],\n+    });\n+    for (const error of [midStreamError, beforeOutputError]) {\n+      expect(isBadRequestError(error)).toBe(false);\n+      await expect(processor.processAPIError(makeArgs({ error }))).resolves.toBeUndefined();\n+    }\n+  });\n+\n   it('respects maxRetries', async () => {\n     const processor = new StreamErrorRetryProcessor({\n       maxRetries: 1,"
+    },
+    {
+      "filename": "packages/core/src/processors/stream-error-retry-processor.ts",
+      "status": "modified",
+      "additions": 3,
+      "deletions": 0,
+      "sha": "2743f35c6c5dc50e55f07a7d57a4417060229e9c",
+      "patch": "@@ -132,9 +132,12 @@ export function isRetryableOpenAIResponsesStreamError(error: unknown): boolean {\n  * Matcher for transient HTTP 400 (Bad Request) failures. Providers like OpenAI\n  * occasionally return 400 during service degradation that succeeds on retry.\n  * Recommended with `maxRetries: 1` since a 400 could also be genuinely invalid.\n+ * Authorization failures are never matched: OpenAI stream error frames such as\n+ * `invalid_api_key` can surface with a derived `statusCode: 400`.\n  */\n export function isBadRequestError(error: unknown): boolean {\n   if (!error || typeof error !== 'object') return false;\n+  if (isKnownTerminalAuthorizationError(error)) return false;\n \n   if ('statusCode' in error && (error as { statusCode?: unknown }).statusCode === 400) return true;\n "
+    }
+  ]
+}

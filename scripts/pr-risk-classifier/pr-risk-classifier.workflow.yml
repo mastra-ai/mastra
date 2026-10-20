@@ -1,0 +1,78 @@
+# Install: move to .github/workflows/pr-risk-classifier.yml (the Factory app cannot push workflow files).
+name: PR Risk Classifier
+
+# pull_request_target runs with base-branch code and has access to secrets for fork PRs.
+# This workflow must never check out or execute code from the PR head: the diff is read
+# through the API and only base-branch files are checked out.
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - edited
+
+permissions:
+  contents: read
+
+jobs:
+  classify:
+    # `edited` only matters when the description changes (it carries the self-reported Risk line).
+    if: >-
+      ${{ github.repository == 'mastra-ai/mastra'
+      && !github.event.pull_request.draft
+      && (github.event.action != 'edited' || github.event.changes.body != null) }}
+    runs-on: starsling-ubuntu-26.04
+    # Job-level so skipped `edited` events do not cancel a run in progress.
+    concurrency:
+      group: pr-risk-classifier-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    timeout-minutes: 10
+    steps:
+      - name: Checkout automation scripts and package manifests from the base branch
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            .github/actions
+            .github/CODEOWNERS
+            scripts/pr-risk-classifier
+            **/package.json
+          sparse-checkout-cone-mode: false
+
+      - name: Generate GitHub App token
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          client-id: ${{ vars.DANE_CLIENT_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
+          permission-pull-requests: write
+
+      - name: Setup pnpm and node
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          install-dependencies: false
+          package-manager-cache: false
+          version: '10'
+
+      - name: Install dependencies
+        run: pnpm install --ignore-workspace --ignore-scripts --frozen-lockfile
+        working-directory: scripts/pr-risk-classifier
+
+      - name: Classify PR risk
+        run: npx tsx index.ts
+        working-directory: scripts/pr-risk-classifier
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          BOT_LOGIN: ${{ steps.app-auth.outputs.app-slug }}[bot]
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          RISK_MODEL: ${{ vars.PR_RISK_MODEL }}
+          REPO_ROOT: ${{ github.workspace }}

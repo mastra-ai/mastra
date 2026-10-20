@@ -1,0 +1,26 @@
+{
+  "number": 24988,
+  "url": "https://github.com/mastra-ai/mastra/pull/24988",
+  "title": "fix(core): correct Workspace JSDoc path examples",
+  "body": null,
+  "expected": "low",
+  "why": "Rewrites JSDoc examples in @mastra/core workspace.ts; comments only, no runtime change despite the core path.",
+  "files": [
+    {
+      "filename": ".changeset/open-rats-brake.md",
+      "status": "added",
+      "additions": 5,
+      "deletions": 0,
+      "sha": "91e62d6334b7ee86cf5d233b762d4f76f13b7493",
+      "patch": "@@ -0,0 +1,5 @@\n+---\n+'@mastra/core': patch\n+---\n+\n+Fixed the Workspace example to use current providers and distinguish local paths from cloud mount paths."
+    },
+    {
+      "filename": "packages/core/src/workspace/workspace.ts",
+      "status": "modified",
+      "additions": 17,
+      "deletions": 13,
+      "sha": "53c6756a92658919fbb3fbb3c52aad78d3dd9a7d",
+      "patch": "@@ -8,25 +8,29 @@\n  *\n  * @example\n  * ```typescript\n- * import { Workspace } from '@mastra/core';\n- * import { LocalFilesystem } from '@mastra/workspace-fs-local';\n- * import { AgentFS } from '@mastra/workspace-fs-agentfs';\n- * import { ComputeSDKSandbox } from '@mastra/workspace-sandbox-computesdk';\n+ * import { LocalFilesystem, Workspace } from '@mastra/core/workspace';\n+ * import { E2BSandbox } from '@mastra/e2b';\n+ * import { S3Filesystem } from '@mastra/s3';\n  *\n- * // Simple workspace with local filesystem\n- * const workspace = new Workspace({\n+ * // Local filesystems use paths relative to their base directory.\n+ * const localWorkspace = new Workspace({\n  *   filesystem: new LocalFilesystem({ basePath: './workspace' }),\n  * });\n  *\n- * // Full workspace with AgentFS and cloud sandbox\n- * const fullWorkspace = new Workspace({\n- *   filesystem: new AgentFS({ path: './agent.db' }),\n- *   sandbox: new ComputeSDKSandbox({ provider: 'e2b' }),\n+ * await localWorkspace.init();\n+ * await localWorkspace.filesystem?.writeFile('app.py', 'print(\"Hello locally!\")');\n+ *\n+ * // Mounted cloud filesystems use their absolute mount paths.\n+ * const cloudWorkspace = new Workspace({\n+ *   mounts: {\n+ *     '/code': new S3Filesystem({ bucket: 'my-code', region: 'us-east-1' }),\n+ *   },\n+ *   sandbox: new E2BSandbox(),\n  * });\n  *\n- * await fullWorkspace.init();\n- * await fullWorkspace.filesystem?.writeFile('/code/app.py', 'print(\"Hello!\")');\n- * const result = await fullWorkspace.sandbox?.executeCommand?.('python3', ['app.py'], { cwd: '/code' });\n+ * await cloudWorkspace.init();\n+ * await cloudWorkspace.filesystem?.writeFile('/code/app.py', 'print(\"Hello from E2B!\")');\n+ * const result = await cloudWorkspace.sandbox?.executeCommand?.('python3', ['app.py'], { cwd: '/code' });\n  * ```\n  */\n "
+    }
+  ]
+}
