@@ -3128,6 +3128,15 @@ export class DurableAgent<
     resumeData: unknown,
     options?: DurableAgentResumeOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
+    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_ABORTED_RUN',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${this.name}" cannot resume aborted run "${runId}".`,
+        details: { agentName: this.name, runId },
+      });
+    }
     // Marked before the first await, so a second resume of the same tool call
     // fails fast even when both start in the same tick (#27365).
     const toolCallId = options?.toolCallId;

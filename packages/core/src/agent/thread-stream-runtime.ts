@@ -368,6 +368,7 @@ type PreparedThreadRun = {
   threadKey?: string;
   abortController: AbortController;
   cleanup: () => void;
+  cleanupAbortedRun?: () => Promise<boolean>;
   finalizerToken?: object;
 };
 
@@ -693,6 +694,8 @@ function createThreadPeerId(agentId: string, resourceId: string, threadId: strin
 }
 
 const MAX_LOCALLY_QUEUED_SIGNAL_IDS_PER_THREAD = 1000;
+// Abort fences outlive their stream segment until the suspended snapshot is gone, so cap them.
+const MAX_ABORTED_RUN_IDS = 1000;
 
 function createRuntimeState(): AgentThreadRuntimeState {
   return {
@@ -2664,7 +2667,11 @@ export class AgentThreadStreamRuntime {
     return { threadId, resourceId };
   }
 
-  prepareRunOptions<OUTPUT>(options: AgentExecutionOptions<OUTPUT>, pubsub?: PubSub): AgentExecutionOptions<OUTPUT> {
+  prepareRunOptions<OUTPUT>(
+    options: AgentExecutionOptions<OUTPUT>,
+    pubsub?: PubSub,
+    cleanupAbortedRun?: () => Promise<boolean>,
+  ): AgentExecutionOptions<OUTPUT> {
     if (!options.runId) return options;
     const { threadId, resourceId } = this.#getThreadTarget(options);
     const key = threadId ? this.#threadKey(resourceId, threadId) : undefined;
@@ -2683,6 +2690,7 @@ export class AgentThreadStreamRuntime {
       ...(key ? { threadKey: key } : {}),
       abortController,
       cleanup: () => upstreamAbortSignal?.removeEventListener('abort', abort),
+      cleanupAbortedRun,
     };
     state.preparedRunsById.set(options.runId, preparedRun);
     this.#preparedRunsByAbortSignal.set(abortController.signal, preparedRun);
@@ -2714,11 +2722,19 @@ export class AgentThreadStreamRuntime {
     return this.#getState(pubsub).abortedRunIds.has(runId);
   }
 
+  #markRunAborted(state: AgentThreadRuntimeState, runId: string): void {
+    state.abortedRunIds.delete(runId);
+    state.abortedRunIds.add(runId);
+    if (state.abortedRunIds.size > MAX_ABORTED_RUN_IDS) {
+      state.abortedRunIds.delete(state.abortedRunIds.values().next().value!);
+    }
+  }
+
   abortRun(runId: string, pubsub?: PubSub): boolean {
     const state = this.#getState(pubsub);
     const preparedRun = state.preparedRunsById.get(runId);
     if (!preparedRun) {
-      state.abortedRunIds.add(runId);
+      this.#markRunAborted(state, runId);
       // A run parked on a tool suspension (a question to the user, a pending
       // generation) has no prepared run left to abort, and its completion
       // watcher returned when it suspended, so nothing else frees its thread.
@@ -2726,7 +2742,7 @@ export class AgentThreadStreamRuntime {
     }
 
     preparedRun.abortController.abort();
-    state.abortedRunIds.add(runId);
+    this.#markRunAborted(state, runId);
 
     const key = state.threadKeysByRunId.get(runId);
     if (key) {
@@ -3083,7 +3099,18 @@ export class AgentThreadStreamRuntime {
     if (preparedRun?.finalizerToken) this.#threadlessRunFinalizer?.unregister(preparedRun.finalizerToken);
     state.preparedRunsById.delete(runId);
     state.pendingSignalListenersByRunId.delete(runId);
-    state.abortedRunIds.delete(runId);
+    if (state.abortedRunIds.has(runId) && preparedRun?.cleanupAbortedRun) {
+      // The aborted segment may have persisted a suspended snapshot. Keep the fence until that
+      // snapshot is deleted; if deletion fails the fence stays (bounded by MAX_ABORTED_RUN_IDS).
+      void preparedRun.cleanupAbortedRun().then(
+        deleted => {
+          if (deleted) state.abortedRunIds.delete(runId);
+        },
+        () => {},
+      );
+    } else if (preparedRun) {
+      state.abortedRunIds.delete(runId);
+    }
   }
 
   async #persistSignal(
