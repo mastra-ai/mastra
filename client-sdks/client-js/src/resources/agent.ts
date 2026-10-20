@@ -451,7 +451,10 @@ export class Agent extends BaseResource {
    * stream that is still open from before the suspension skips them. Released when the last stream
    * of the run closes, which is after this request returns.
    */
-  private holdResumingClientTools(runId: string, clientTools: ToolsInput | undefined): () => void {
+  private holdResumingClientTools(
+    runId: string,
+    clientTools: ToolsInput | undefined,
+  ): (options?: { force?: boolean }) => void {
     const names = Object.entries(clientTools ?? {})
       .filter(([, tool]) => typeof (tool as { execute?: unknown }).execute === 'function')
       .map(([name]) => name);
@@ -466,8 +469,10 @@ export class Agent extends BaseResource {
     // leaves it: the open first stream still needs it after this request returns, and drops it
     // when that stream closes.
     let released = false;
-    return () => {
-      if (released || openStreamCountByRunKey.has(key)) return;
+    // force drops the hold even while a stream is tracking the run. A rejected resume request
+    // never resumes the run, so the open stream must not treat a later retry as already covered.
+    return ({ force = false }: { force?: boolean } = {}) => {
+      if (released || (!force && openStreamCountByRunKey.has(key))) return;
       released = true;
       const current = resumingClientToolNamesByRunKey.get(key);
       if (!current) return;
@@ -3165,7 +3170,7 @@ export class Agent extends BaseResource {
   > {
     const { requestContext, ...rest } = params;
     const executableClientTools = params.clientToolsResolver?.() ?? params.clientTools;
-    this.holdResumingClientTools(rest.runId, executableClientTools);
+    const releaseHold = this.holdResumingClientTools(rest.runId, executableClientTools);
     const processedParams = {
       ...rest,
       requestContext: parseClientRequestContext(requestContext),
@@ -3175,8 +3180,16 @@ export class Agent extends BaseResource {
     // Create a manually controlled readable stream
     const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
 
-    // Start processing the response in the background
-    const response = await this.processStreamResponse(processedParams, readableController, 'approve-tool-call', signal);
+    // A rejected request never resumes the run, so drop the hold even if the original stream is open.
+    const response = await this.processStreamResponse(
+      processedParams,
+      readableController,
+      'approve-tool-call',
+      signal,
+    ).catch(error => {
+      releaseHold({ force: true });
+      throw error;
+    });
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -3251,7 +3264,7 @@ export class Agent extends BaseResource {
   > {
     const { requestContext, ...rest } = params;
     const executableClientTools = params.clientToolsResolver?.() ?? params.clientTools;
-    this.holdResumingClientTools(rest.runId, executableClientTools);
+    const releaseHold = this.holdResumingClientTools(rest.runId, executableClientTools);
     const processedParams = {
       ...rest,
       requestContext: parseClientRequestContext(requestContext),
@@ -3261,8 +3274,16 @@ export class Agent extends BaseResource {
     // Create a manually controlled readable stream
     const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
 
-    // Start processing the response in the background
-    const response = await this.processStreamResponse(processedParams, readableController, 'decline-tool-call', signal);
+    // A rejected request never resumes the run, so drop the hold even if the original stream is open.
+    const response = await this.processStreamResponse(
+      processedParams,
+      readableController,
+      'decline-tool-call',
+      signal,
+    ).catch(error => {
+      releaseHold({ force: true });
+      throw error;
+    });
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -3375,7 +3396,7 @@ export class Agent extends BaseResource {
     }
   > {
     const executableClientTools = options.clientToolsResolver?.() ?? options.clientTools;
-    this.holdResumingClientTools(options.runId, executableClientTools);
+    const releaseHold = this.holdResumingClientTools(options.runId, executableClientTools);
     const processedParams = {
       ...options,
       resumeData,
@@ -3391,7 +3412,15 @@ export class Agent extends BaseResource {
 
     const { readable, controller: readableController, signal } = this.createCancellableStream(options.abortSignal);
 
-    const response = await this.processStreamResponse(processedParams, readableController, 'resume-stream', signal);
+    const response = await this.processStreamResponse(
+      processedParams,
+      readableController,
+      'resume-stream',
+      signal,
+    ).catch(error => {
+      releaseHold({ force: true });
+      throw error;
+    });
 
     const streamResponse = new Response(readable, {
       status: response.status,
@@ -3498,7 +3527,7 @@ export class Agent extends BaseResource {
     }
   > {
     const executableClientTools = options.clientToolsResolver?.() ?? options.clientTools;
-    this.holdResumingClientTools(options.runId, executableClientTools);
+    const releaseHold = this.holdResumingClientTools(options.runId, executableClientTools);
     const processedParams = {
       ...options,
       resumeData,
@@ -3519,7 +3548,10 @@ export class Agent extends BaseResource {
       readableController,
       'resume-stream-until-idle',
       signal,
-    );
+    ).catch(error => {
+      releaseHold({ force: true });
+      throw error;
+    });
 
     const streamResponse = new Response(readable, {
       status: response.status,
@@ -3568,21 +3600,32 @@ export class Agent extends BaseResource {
     // The open first stream receives the resumed call while this request is in flight. Hold before
     // the request so that stream skips tools this request can execute. A generate resume opens no
     // stream of its own, so release the hold here unless a stream is still tracking the run.
-    const releaseHold = this.holdResumingClientTools(rest.runId, clientToolsResolver?.() ?? clientTools);
+    const executableClientTools = clientToolsResolver?.() ?? clientTools;
+    const releaseHold = this.holdResumingClientTools(rest.runId, executableClientTools);
+    let response: ToolCallGenerateResponse;
     try {
-      const response: ToolCallGenerateResponse = await this.request(
-        `/agents/${this.agentId}/approve-tool-call-generate`,
-        {
-          method: 'POST',
-          body: {
-            ...rest,
-            requestContext: parseClientRequestContext(requestContext),
-            clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
-          },
+      response = await this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
+        method: 'POST',
+        body: {
+          ...rest,
+          requestContext: parseClientRequestContext(requestContext),
+          clientTools: processClientTools(executableClientTools),
         },
-      );
-      return await this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver, memory });
+      });
+    } catch (error) {
+      // The server rejected the resume, so it never happened. Drop the hold even if a stream is open.
+      releaseHold({ force: true });
+      throw error;
+    }
+    try {
+      return await this.continueResumedGenerate(response, {
+        requestContext,
+        clientTools: executableClientTools,
+        clientToolsResolver,
+        memory,
+      });
     } finally {
+      // The resume was accepted. Leave the hold while a stream is still tracking the run.
       releaseHold();
     }
   }
@@ -3608,21 +3651,32 @@ export class Agent extends BaseResource {
     // The open first stream receives the resumed call while this request is in flight. Hold before
     // the request so that stream skips tools this request can execute. A generate resume opens no
     // stream of its own, so release the hold here unless a stream is still tracking the run.
-    const releaseHold = this.holdResumingClientTools(rest.runId, clientToolsResolver?.() ?? clientTools);
+    const executableClientTools = clientToolsResolver?.() ?? clientTools;
+    const releaseHold = this.holdResumingClientTools(rest.runId, executableClientTools);
+    let response: ToolCallGenerateResponse;
     try {
-      const response: ToolCallGenerateResponse = await this.request(
-        `/agents/${this.agentId}/decline-tool-call-generate`,
-        {
-          method: 'POST',
-          body: {
-            ...rest,
-            requestContext: parseClientRequestContext(requestContext),
-            clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
-          },
+      response = await this.request(`/agents/${this.agentId}/decline-tool-call-generate`, {
+        method: 'POST',
+        body: {
+          ...rest,
+          requestContext: parseClientRequestContext(requestContext),
+          clientTools: processClientTools(executableClientTools),
         },
-      );
-      return await this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver, memory });
+      });
+    } catch (error) {
+      // The server rejected the resume, so it never happened. Drop the hold even if a stream is open.
+      releaseHold({ force: true });
+      throw error;
+    }
+    try {
+      return await this.continueResumedGenerate(response, {
+        requestContext,
+        clientTools: executableClientTools,
+        clientToolsResolver,
+        memory,
+      });
     } finally {
+      // The resume was accepted. Leave the hold while a stream is still tracking the run.
       releaseHold();
     }
   }
