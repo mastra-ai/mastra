@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import https from 'node:https';
 import type { ClientRequest, IncomingMessage } from 'node:http';
 import { gzipSync } from 'node:zlib';
+import { noopObserve } from '@mastra/core/tools';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { qualificationConfig, qualificationConfigSchema } from '../../src/mastra/config/qualification';
 import type { EvidenceProvider } from '../../src/mastra/providers/evidence';
@@ -11,7 +12,7 @@ import { PageRetriever, publicHttpsTransport } from '../../src/mastra/research/p
 import type { PageTransport } from '../../src/mastra/research/page-retrieval';
 import type { Assessment, Evidence, Fact } from '../../src/mastra/research/contracts';
 import { assessmentSchema, candidateSchema, researchRoundSchema } from '../../src/mastra/research/contracts';
-import { scoreCompany } from '../../src/mastra/tools/score-company';
+import { scoreCompany, scoreCompanyTool } from '../../src/mastra/tools/score-company';
 import { event, harness } from '../support/application';
 import { controlledHarness, controlledResearch, pageResponse, recordProvider, proposal } from '../support/research';
 
@@ -1859,6 +1860,7 @@ describe('sourced company qualification', () => {
       const first = scoreCompany(input);
       expect(first).toMatchObject({ classification: 'qualified', score: 100 });
       expect(JSON.stringify(scoreCompany(input))).toBe(JSON.stringify(first));
+      expect(await scoreCompanyTool.execute!(input, { observe: noopObserve })).toEqual(first);
     }
     for (const employees of [19, 501]) {
       input.facts.employeeCount = accepted({ min: employees, max: employees });
@@ -1895,6 +1897,7 @@ describe('sourced company qualification', () => {
         routing: { automaticOutcomes: ['qualified', 'disqualified'], reviewOutcomes: ['needs_review', 'nurture'] },
       }).requiresReview,
     ).toBe(true);
+    expect(() => scoreCompany({ ...input, assessmentTime: 'not-a-timestamp' })).toThrow(/Invalid ISO datetime/);
   });
 
   it('excludes_unapproved_sources_and_bounds_research', async () => {

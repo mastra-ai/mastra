@@ -19,6 +19,13 @@ describe('lead event contracts', () => {
     expect(domainSchema.parse('BÜCHER.de')).toBe('xn--bcher-kva.de');
   });
 
+  it.each(['пример.рф', 'xn--e1afmkfd.xn--p1ai', ' ПРИМЕР.РФ. '])(
+    'normalizes_internationalized_top_level_domains: %s',
+    domain => {
+      expect(domainSchema.parse(domain)).toBe('xn--e1afmkfd.xn--p1ai');
+    },
+  );
+
   it('rejects_ambiguous_shapes_and_unsafe_identifier_formats', () => {
     expect(
       discoverySchema.safeParse({
@@ -47,6 +54,11 @@ describe('lead event contracts', () => {
       'localhost',
       'company.local',
       '-bad.com',
+      'example.c0m',
+      'example.co-m',
+      'example.123',
+      'example.xn--',
+      'example.xn--p1ai-',
     ]) {
       expect(domainSchema.safeParse(domain)).toMatchObject({ success: false });
     }

@@ -19,7 +19,7 @@ export const domainSchema = z
     value =>
       value.length <= 253 &&
       !isIP(value) &&
-      /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(value) &&
+      /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{0,58}[a-z0-9])$/.test(value) &&
       !/(^|\.)(localhost|local|internal|test|invalid)$/.test(value),
     'Use a public DNS hostname without a URL, port, or path',
   );

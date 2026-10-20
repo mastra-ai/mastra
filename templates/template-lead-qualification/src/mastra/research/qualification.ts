@@ -1,11 +1,10 @@
 import type { Telemetry } from '../telemetry';
 import { createHash, randomUUID } from 'node:crypto';
-import { noopObserve } from '@mastra/core/tools';
 import type { NormalizedEvent } from '../contracts';
 import type { QualificationStore } from '../persistence/qualification-store';
 import { normalizedResearchError, retryWithinBudget } from '../providers/evidence';
 import type { EvidenceProvider, ResearchContext } from '../providers/evidence';
-import { scoreCompanyTool } from '../tools/score-company';
+import { scoreCompany } from '../tools/score-company';
 import {
   assessmentSchema,
   branchResultSchema,
@@ -497,17 +496,13 @@ export class QualificationService {
     } else {
       facts = collectFacts(branches, snapshot);
     }
-    const result = await scoreCompanyTool.execute!(
-      {
-        identity,
-        facts,
-        policy: snapshot.config.policy,
-        routing: snapshot.config.routing,
-        assessmentTime: snapshot.assessmentTime,
-      },
-      { observe: noopObserve },
-    );
-    if (!result || 'error' in result) throw new Error('Scoring contract failed');
+    const result = scoreCompany({
+      identity,
+      facts,
+      policy: snapshot.config.policy,
+      routing: snapshot.config.routing,
+      assessmentTime: snapshot.assessmentTime,
+    });
     const evidence = [
       ...new Map(branches.flatMap(branch => branch.evidence).map(item => [item.id, item])).values(),
     ].sort((a, b) => a.id.localeCompare(b.id));

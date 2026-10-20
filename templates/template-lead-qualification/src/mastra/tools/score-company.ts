@@ -11,8 +11,8 @@ const scoreInputSchema = z.strictObject({
   routing: qualificationConfigSchema.shape.routing,
   assessmentTime: z.iso.datetime({ offset: true }),
 });
-export function scoreCompany(input: z.infer<typeof scoreInputSchema>) {
-  const { identity, facts, policy, routing } = scoreInputSchema.parse(input);
+function score(input: z.infer<typeof scoreInputSchema>): z.infer<typeof scoreSchema> {
+  const { identity, facts, policy, routing, assessmentTime } = input;
   const rules = policy.rules;
   const contributions: z.infer<typeof scoreSchema>['contributions'] = [];
   function add(rule: keyof typeof rules, state: 'matched' | 'mismatched' | 'unknown' | 'no_signal', reason: string) {
@@ -53,7 +53,7 @@ export function scoreCompany(input: z.infer<typeof scoreInputSchema>) {
   );
   const intent = facts.buyingIntent;
   const signals = z.array(signalSchema).safeParse(intent.value);
-  const time = Date.parse(input.assessmentTime);
+  const time = Date.parse(assessmentTime);
   const invalidDate =
     signals.success && signals.data.some(signal => signal.occurredAt === null || Date.parse(signal.occurredAt) > time);
   const recent =
@@ -92,7 +92,7 @@ export function scoreCompany(input: z.infer<typeof scoreInputSchema>) {
             ? 'qualified'
             : 'nurture';
   if (identity.status !== 'resolved') reviewReasons.unshift(identity.reason);
-  return scoreSchema.parse({
+  return {
     score: identity.status === 'resolved' ? contributions.reduce((sum, rule) => sum + rule.points, 0) : 0,
     classification,
     requiresReview: routing.reviewOutcomes.includes(classification),
@@ -106,12 +106,15 @@ export function scoreCompany(input: z.infer<typeof scoreInputSchema>) {
           : classification === 'nurture'
             ? 'Nurture the account and ask about a concrete buying need.'
             : 'Record the decisive ICP mismatch; reconsider only with new evidence in a new cycle.',
-  });
+  };
+}
+export function scoreCompany(input: z.infer<typeof scoreInputSchema>) {
+  return scoreSchema.parse(score(scoreInputSchema.parse(input)));
 }
 export const scoreCompanyTool = createTool({
   id: 'score-company-icp',
   description: 'Apply the captured ICP policy to validated facts deterministically.',
   inputSchema: scoreInputSchema,
   outputSchema: scoreSchema,
-  execute: async input => scoreCompany(input),
+  execute: async input => score(input),
 });

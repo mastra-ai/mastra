@@ -23,6 +23,17 @@ afterEach(async () => {
 });
 
 describe('durable intake', () => {
+  it('accepts_and_persists_internationalized_top_level_domains_in_ascii_form', async () => {
+    const app = await harness();
+    cleanup.push(() => app.close());
+    for (const [index, domain] of ['пример.рф', 'xn--e1afmkfd.xn--p1ai'].entries()) {
+      const response = await app.post(event(`idn-tld-${index}`, { domain }));
+      expect(response.status).toBe(202);
+      const { runId } = await response.json();
+      expect((await app.store.get(runId))?.event.lead.domain).toBe('xn--e1afmkfd.xn--p1ai');
+    }
+  });
+
   it('lists_and_opens_persisted_workflow_history_for_the_authenticated_production_operator', async () => {
     const app = await harness({ production: true, dispatch: true });
     cleanup.push(() => app.close());
