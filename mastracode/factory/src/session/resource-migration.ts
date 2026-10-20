@@ -60,8 +60,8 @@ export interface SessionResourceMigrationReport {
 
 /**
  * The memory resource a session belongs to: its Factory for runs, side
- * sessions and Slack channel threads, its owner for sessions a person opened
- * and for Slack DMs. A run on untrusted content (a pull request, or a card
+ * sessions and Slack channel threads, its owner for sessions a person opened,
+ * private side sessions and Slack DMs. A run on untrusted content (a pull request, or a card
  * written outside the write-access circle) keeps its own resource, like a new
  * run would; so does a run whose work item no longer loads, since nothing then
  * shows its content was trusted. `null` when a Factory-owned session has no
@@ -74,9 +74,11 @@ export function sessionMemoryResource(
   if (boundItems.some(item => item === null || untrustedWorkItem(item))) {
     return { owner: 'isolated', resourceId: session.sessionId };
   }
-  // A Slack DM is private to its sender, so it belongs with their own sessions.
-  const slackChannelThread = session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) && session.visibility !== 'private';
-  const factoryOwned = boundItems.length > 0 || session.originSessionId !== null || slackChannelThread;
+  // A Slack DM or private side session is its owner's, so it belongs with their own sessions.
+  const sharedWithOrg =
+    session.visibility !== 'private' &&
+    (session.originSessionId !== null || session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX));
+  const factoryOwned = boundItems.length > 0 || sharedWithOrg;
   return factoryOwned
     ? { owner: 'factory', resourceId: session.factoryProjectId }
     : { owner: 'user', resourceId: session.userId };

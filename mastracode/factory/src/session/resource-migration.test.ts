@@ -6,9 +6,10 @@ import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { migrateSessionResources } from './resource-migration.js';
-import { listFactorySessionThreads } from './session-threads.js';
+import { migrateSessionResources, sessionMemoryResource } from './resource-migration.js';
+import { listFactorySessionThreads, sessionMemoryResourceId } from './session-threads.js';
 
 const FACTORY_ID = '11111111-2222-4333-8444-555555555555';
 
@@ -218,6 +219,34 @@ async function seedLegacyFactory() {
     });
   return { seed, memoryStore, memory, ops, vector, migrate };
 }
+
+describe('sessionMemoryResource', () => {
+  const base = {
+    sessionId: 'session-1',
+    orgId: 'org-1',
+    userId: 'user-1',
+    factoryProjectId: FACTORY_ID,
+    branch: 'user/session-1',
+    visibility: 'org',
+    originSessionId: null,
+  } as SourceControlSession;
+
+  // Each row migrates onto the resource the runtime then lets it claim threads under.
+  it.each([
+    ['a person-opened session', {}, [], 'user-1'],
+    ['an org side session', { originSessionId: 'parent-1' }, [], FACTORY_ID],
+    ['a private side session', { originSessionId: 'parent-1', visibility: 'private' }, [], 'user-1'],
+    ['a Slack channel thread', { branch: 'slack/1700-42' }, [], FACTORY_ID],
+    ['a Slack DM', { branch: 'slack/D-1-1700-44', visibility: 'private' }, [], 'user-1'],
+    ['a trusted run', {}, [{ externalSource: null, metadata: {} }], FACTORY_ID],
+  ] as const)('moves %s to the resource the runtime grants it', async (_name, row, items, expected) => {
+    const session = { ...base, ...row } as SourceControlSession;
+    expect(sessionMemoryResource(session, [...items] as never).resourceId).toBe(expected);
+    const runs = { hasRunBindingForSession: async () => items.length > 0 };
+    const own = { queryThreadById: async () => ({ id: session.sessionId, resourceId: expected }) as never };
+    expect(await sessionMemoryResourceId(own, session, runs)).toBe(expected);
+  });
+});
 
 describe('migrateSessionResources', () => {
   it('moves each legacy session onto its Factory or owner, and leaves sessions without a Factory alone', async () => {

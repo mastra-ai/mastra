@@ -29,7 +29,8 @@ import {
   resolvePrimaryEnvironmentRepository,
 } from '../../session/factory-session.js';
 import { readRequestContextOrgId, seedSessionOrg } from '../../session/org-seed.js';
-import { isRunBound, memoryResourceOf, type SessionRunBindings } from '../../session/session-threads.js';
+import { isRunBound, memoryResourceOf } from '../../session/session-threads.js';
+import type { SessionRunBindings } from '../../session/session-threads.js';
 import type {
   ChannelAccountLink,
   ChannelAccountLinkKey,
