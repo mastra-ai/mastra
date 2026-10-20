@@ -52,7 +52,8 @@ export function useTraceAggregateGate({ requiresRootSpanFields = false } = {}): 
 
 /**
  * `aggregateTraces()` for one card, queued behind the page's three-request cap. The request carries
- * the frozen window, so it is also the cache key. Retries come from the client only.
+ * the frozen window, so it is also the cache key. Retries come from the client only. Unmounting
+ * aborts the request, whether it is queued or already sent.
  */
 export function useMetricsTraceAggregate(request: AggregateTracesArgs): UseQueryResult<AggregateTracesResponse> {
   const client = useMastraClient();
@@ -60,7 +61,7 @@ export function useMetricsTraceAggregate(request: AggregateTracesArgs): UseQuery
   return useTraceAggregate({
     request,
     queryOptions: {
-      queryFn: ({ signal }) => limiter.run(() => client.aggregateTraces(request), signal),
+      queryFn: ({ signal }) => limiter.run(() => client.aggregateTraces(request, { signal }), signal),
       placeholderData: keepPreviousData,
     },
   });
