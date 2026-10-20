@@ -10,6 +10,7 @@ import { createMockWorkspace } from '../../agent-controller/test-utils';
 import type { AgentControllerEvent } from '../../agent-controller/types';
 import { FGADeniedError } from '../../auth/ee/fga-check';
 import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
+import type { MastraModelConfig } from '../../llm';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
@@ -143,7 +144,7 @@ async function createSetup({
   platform?: string;
   responseText?: string;
   instructions?: () => Promise<string>;
-  model?: ConstructorParameters<typeof Agent>[0]['model'];
+  model?: MastraModelConfig;
   tools?: Record<string, any>;
   toolDisplay?: 'text';
   stateSchema?: z.ZodTypeAny;
