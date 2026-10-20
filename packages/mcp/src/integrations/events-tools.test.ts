@@ -7,7 +7,7 @@ import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
 import type { JSONSchema7 } from '@mastra/schema-compat';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { createFakeEventsClient } from './__fixtures__/fake-events-client';
+import { createFakeEventsClient } from './__tests__/fake-events-client';
 import { MCPEventsSignalProvider } from './events-signals';
 import type { MCPEventsSignalProviderOptions } from './events-signals';
 import { formatUntrustedEvent } from './events-utils';

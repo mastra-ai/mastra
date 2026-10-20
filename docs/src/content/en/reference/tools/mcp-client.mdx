@@ -1086,7 +1086,7 @@ export const repoAgent = new Agent({
   id: 'repo-agent',
   name: 'Repo Agent',
   instructions: 'Triage repository activity.',
-  model: 'openai/gpt-5.6-sol',
+  model: '__GATEWAY_OPENAI_MODEL__',
   signals: [repoEvents],
 })
 

@@ -59,6 +59,8 @@ interface LiveSubscription {
   ready: Promise<void>;
   subscription?: MCPEventSubscription;
   closed: boolean;
+  /** Set when the last thread unsubscribed: its stored cursor is deleted and must not be written again. */
+  discarded?: boolean;
 }
 
 const GAP_NOTE = 'Some events may have been skipped (gap); re-fetch authoritative state with tools if it matters.';
@@ -140,6 +142,7 @@ export class MCPEventsSignalProvider extends SignalProvider {
       if (live) {
         this.#live.delete(key);
         live.closed = true;
+        live.discarded = true;
         await live.ready.catch(() => {});
         await live.subscription?.cancel();
       }
@@ -200,17 +203,21 @@ export class MCPEventsSignalProvider extends SignalProvider {
   }
 
   async #run(live: LiveSubscription, subscription: MCPEventSubscription): Promise<void> {
+    let ending: { error: unknown } | undefined;
     try {
       for await (const occurrence of subscription) {
         if (live.closed) break;
         await this.#deliver(live, subscription, occurrence);
         await this.#persistCursor(live, subscription);
       }
+      // The client closed the subscription itself, for example on disconnect().
+      if (!live.closed) ending = { error: new Error('The MCP event subscription was closed by the client') };
     } catch (error) {
-      if (!live.closed) await this.#ended(live, error);
-    } finally {
-      if (this.#live.get(live.key) === live) this.#live.delete(live.key);
+      if (!live.closed) ending = { error };
     }
+    // Drop the entry before notifying, so a thread subscribing meanwhile opens a new subscription.
+    if (this.#live.get(live.key) === live) this.#live.delete(live.key);
+    if (ending) await this.#ended(live, ending.error);
   }
 
   async #deliver(live: LiveSubscription, subscription: MCPEventSubscription, occurrence: MCPEventOccurrence) {
@@ -272,6 +279,7 @@ export class MCPEventsSignalProvider extends SignalProvider {
   }
 
   async #persistCursor(live: LiveSubscription, subscription: MCPEventSubscription): Promise<void> {
+    if (live.discarded) return;
     const cursor = subscription.cursor;
     if (typeof cursor !== 'string') return;
     try {

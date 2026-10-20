@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MCPClient } from '../client/configuration';
 import { createEventsFixture } from '../client/events/__fixtures__/events-server';
 import { EVENTS_EXTENSION_ID } from '../shared/events';
-import { createAgent, settle } from './__fixtures__/fake-events-client';
+import { createAgent, settle } from './__tests__/fake-events-client';
 import { InMemoryMCPEventCursorStore } from './events-cursor-store';
 import { MCPEventsSignalProvider } from './events-signals';
 

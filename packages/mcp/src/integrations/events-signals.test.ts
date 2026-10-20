@@ -1,6 +1,6 @@
 import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createAgent, createFakeEventsClient, settle } from './__fixtures__/fake-events-client';
+import { createAgent, createFakeEventsClient, settle } from './__tests__/fake-events-client';
 import { InMemoryMCPEventCursorStore } from './events-cursor-store';
 import { MCPEventsSignalProvider } from './events-signals';
 import type { MCPEventsSignalProviderOptions } from './events-signals';
@@ -246,6 +246,52 @@ describe('MCPEventsSignalProvider', () => {
       expect(del).toHaveBeenCalledWith(key);
       expect(cursorStore.get(key)).toBeUndefined();
     });
+  });
+
+  it('does not write back the cursor when the last thread unsubscribes during a delivery', async () => {
+    const cursorStore = new InMemoryMCPEventCursorStore();
+    const { provider, subscriptions, send } = setup({ cursorStore });
+    const key = MCPEventsSignalProvider.key(pushA);
+    let release!: () => void;
+    send.mockImplementationOnce(() => new Promise<never>(resolve => (release = () => resolve(undefined as never))));
+    await provider.subscribeThread(thread1, pushA);
+    subscriptions[0]!.push({}, { eventId: 'evt-1', cursor: 'c1' });
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+
+    await provider.unsubscribeThread(thread1, pushA);
+    release();
+    await settle();
+    expect(cursorStore.get(key)).toBeUndefined();
+  });
+
+  it('opens a new subscription for a thread that subscribes while the old one is ending', async () => {
+    const { provider, subscriptions, send, sent } = setup();
+    let release!: () => void;
+    send.mockImplementationOnce(() => new Promise<never>(resolve => (release = () => resolve(undefined as never))));
+    await provider.subscribeThread(thread1, pushA);
+    subscriptions[0]!.fail(new Error('terminated'));
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+
+    await provider.subscribeThread(thread2, pushA);
+    release();
+    await settle();
+    expect(subscriptions).toHaveLength(2);
+    subscriptions[1]!.push({}, { eventId: 'evt-1' });
+    await vi.waitFor(() => expect(sent().some(call => call.notification.kind === 'mcp-event')).toBe(true));
+    const delivered = sent().filter(call => call.notification.kind === 'mcp-event');
+    expect(delivered.map(call => call.target.threadId)).toEqual(['thread-2']);
+  });
+
+  it('tells threads their subscription ended when the client closes it without an error', async () => {
+    const { provider, subscriptions, sent, onError } = setup();
+    await provider.subscribeThread(thread1, pushA);
+    // What the client does to every subscription on disconnect().
+    await subscriptions[0]!.cancel();
+
+    await vi.waitFor(() => expect(sent()).toHaveLength(1));
+    expect(sent()[0]!.notification.kind).toBe('mcp-event-subscription-ended');
+    expect(onError).toHaveBeenCalledTimes(1);
+    await expect(provider.unsubscribeThread(thread1, pushA)).resolves.toBe(false);
   });
 
   it('stop() cancels every MCP subscription and later occurrences notify nobody', async () => {
