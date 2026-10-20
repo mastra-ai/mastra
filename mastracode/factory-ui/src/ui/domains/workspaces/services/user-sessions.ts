@@ -124,3 +124,32 @@ export async function regenerateSessionTitle(baseUrl: string, sessionId: string)
   if (!res.ok || !body.title) throw new Error(body.error ?? `Failed to rename session (${res.status})`);
   return body.title;
 }
+
+export type UserSessionVisibility = FactoryUserSession['visibility'];
+
+/** Owner-only: share a session with the organization or make it private again. */
+export async function setUserSessionVisibility(
+  baseUrl: string,
+  sessionId: string,
+  visibility: UserSessionVisibility,
+): Promise<FactoryUserSession> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/visibility`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ visibility }),
+  });
+  // The server explains refusals (a running session, a Factory run, storage still starting); show its words.
+  if (!res.ok) {
+    const reason = await res
+      .json()
+      .then((payload: { error?: unknown }) => (typeof payload.error === 'string' ? payload.error : null))
+      .catch(() => null);
+    if (reason) throw Object.assign(new Error(reason), { status: res.status });
+  }
+  const body = await readJsonOrThrow<{ session: FactoryUserSessionPayload }>(
+    res,
+    'Failed to change session visibility',
+  );
+  return normalizeUserSession(body.session);
+}

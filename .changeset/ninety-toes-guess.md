@@ -2,7 +2,7 @@
 '@mastra/factory': minor
 ---
 
-Sessions opened with **New session** are now private. Only the person who started one can open it or see it in session lists; teammates in the same organization don't see it. Every other session, including Factory runs started from a work item, stays visible to the organization. Existing sessions keep their current visibility.
+Sessions opened with **New session** are now private. Only the person who started one can open it or see it in session lists; teammates in the same organization don't see it. Every other session, including Factory runs started from a work item, stays visible to the organization.
 
 The session create route takes an optional `visibility` (`'org'` by default, or `'private'`):
 
