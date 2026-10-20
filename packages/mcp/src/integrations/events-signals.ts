@@ -239,14 +239,18 @@ export class MCPEventsSignalProvider extends SignalProvider {
       ...(this.#options.coalesce ? { coalesceKey: `mcp-events:${live.key}` } : {}),
       payload: { server, event, arguments: args, occurrence },
     };
-    await this.#notifyAll(live, notification);
+    await this.#notifyAll(live, this.getSubscriptionsForResource(live.key), notification);
   }
 
   async #ended(live: LiveSubscription, error: unknown): Promise<void> {
     const { server, event } = live.target;
     const message = error instanceof Error ? error.message : String(error);
+    // Unsubscribe before notifying, so a thread that resubscribes meanwhile keeps its new registration.
     const subscriptions = this.getSubscriptionsForResource(live.key);
-    await this.#notifyAll(live, {
+    for (const subscription of subscriptions) {
+      this.unsubscribe({ resourceId: subscription.resourceId, threadId: subscription.threadId }, live.key);
+    }
+    await this.#notifyAll(live, subscriptions, {
       source: this.id,
       kind: 'mcp-event-subscription-ended',
       priority: 'high',
@@ -257,14 +261,15 @@ export class MCPEventsSignalProvider extends SignalProvider {
       attributes: { server, event },
       payload: { server, event, arguments: live.target.args, error: message },
     });
-    for (const subscription of subscriptions) {
-      this.unsubscribe({ resourceId: subscription.resourceId, threadId: subscription.threadId }, live.key);
-    }
     this.#report(error, live);
   }
 
-  async #notifyAll(live: LiveSubscription, notification: SendNotificationSignalInput): Promise<void> {
-    for (const subscription of this.getSubscriptionsForResource(live.key)) {
+  async #notifyAll(
+    live: LiveSubscription,
+    recipients: SignalSubscription[],
+    notification: SendNotificationSignalInput,
+  ): Promise<void> {
+    for (const subscription of recipients) {
       const ifIdle = subscription.metadata.ifIdle as SignalProviderTarget['ifIdle'];
       try {
         await this.notify(notification, {

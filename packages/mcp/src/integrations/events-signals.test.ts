@@ -282,6 +282,27 @@ describe('MCPEventsSignalProvider', () => {
     expect(delivered.map(call => call.target.threadId)).toEqual(['thread-2']);
   });
 
+  it('keeps a thread that resubscribes while its old subscription is ending', async () => {
+    const { provider, subscriptions, send, sent } = setup();
+    let release!: () => void;
+    send.mockImplementationOnce(() => new Promise<never>(resolve => (release = () => resolve(undefined as never))));
+    await provider.subscribeThread(thread1, pushA);
+    subscriptions[0]!.fail(new Error('terminated'));
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+
+    await provider.subscribeThread(thread1, pushA);
+    release();
+    await settle();
+    expect(subscriptions).toHaveLength(2);
+    subscriptions[1]!.push({}, { eventId: 'evt-1' });
+    await vi.waitFor(() => expect(sent().some(call => call.notification.kind === 'mcp-event')).toBe(true));
+    const delivered = sent().filter(call => call.notification.kind === 'mcp-event');
+    expect(delivered.map(call => call.target.threadId)).toEqual(['thread-1']);
+
+    await expect(provider.unsubscribeThread(thread1, pushA)).resolves.toBe(true);
+    expect(subscriptions[1]!.cancelled).toBe(true);
+  });
+
   it('tells threads their subscription ended when the client closes it without an error', async () => {
     const { provider, subscriptions, sent, onError } = setup();
     await provider.subscribeThread(thread1, pushA);
