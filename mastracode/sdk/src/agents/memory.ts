@@ -6,7 +6,7 @@ import type { MastraVector } from '@mastra/core/vector';
 import type { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
 import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
-import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
+import { knowledgeAgentScopes, LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
 import { MASTRACODE_AUTO_OM_MODELS, resolveAutoOMModelId } from '../onboarding/packs.js';
 import { loadSettings } from '../onboarding/settings.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
@@ -264,6 +264,18 @@ export function hasSubconsciousTools(vector: MastraVector | undefined, state: Ma
 }
 
 /**
+ * The code agent's `scopes` resolver: the Knowledge scopes a session's runs hold (see
+ * `knowledgeAgentScopes`). Only set while the subconscious is on, as the org was before.
+ */
+export function getKnowledgeAgentScopes(vector: MastraVector | undefined) {
+  return ({ requestContext }: { requestContext: RequestContext }): string[] => {
+    if (!isSubconsciousEnabled(vector)) return [];
+    const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+    return knowledgeAgentScopes(resolveKnowledgeScopeIdentity(controller?.getState() as MastraCodeState | undefined));
+  };
+}
+
+/**
  * Dynamic memory factory function.
  * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
@@ -308,15 +320,11 @@ export function getDynamicMemory(
     let orgUnresolvedRefusal = false;
 
     if (subconsciousEnabled) {
+      // The run's Knowledge scopes come from the code agent's own `scopes` (see `knowledgeAgentScopes`).
       const identity = resolveKnowledgeScopeIdentity(state);
-      if (identity.resolved) {
-        requestContext.set('organizationId', identity.organizationId);
-      } else {
+      if (!identity.resolved) {
         orgUnresolvedRefusal = true;
-        reportOrgUnresolved(controller, identity.knowledgeResourceId, identity.reason);
-      }
-      if (identity.knowledgeResourceId) {
-        requestContext.set('knowledgeResourceId', identity.knowledgeResourceId);
+        reportOrgUnresolved(controller, identity.projectId, identity.reason);
       }
     }
 

@@ -1,5 +1,5 @@
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import {
   InMemoryDB,
@@ -73,12 +73,30 @@ function createSessionHarness(initialState: Partial<MastraCodeState> = {}) {
   };
 }
 
+/** Factory's org → project → thread scope types, as `@mastra/factory` configures them. */
+const factoryScopeTypes = {
+  'org:$orgId': { identity: true, access: [{ principal: 'self' as const, role: 'owner' as const }] },
+  'project:$projectId': {
+    identity: true,
+    parent: 'org:$orgId',
+    access: [{ principal: 'self' as const, role: 'owner' as const }],
+  },
+  'thread:$threadId': {
+    identity: true,
+    parent: 'project:$projectId',
+    access: [{ principal: 'self' as const, role: 'owner' as const }],
+  },
+};
+
 async function createHarness(state: Partial<MastraCodeState> = {}) {
   const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
   const storage = new MastraCompositeStore({ id: 'knowledge-inspector-test', domains: { knowledge } });
+  // Each host declares its own chain: Factory sessions nest threads under the project, local ones under the resource.
+  const factory = 'factoryProjectId' in state;
   const runtime = new Knowledge({
     id: 'default',
     storage,
+    scopes: factory ? factoryScopeTypes : memoryScopeTypes,
     importers: [
       {
         id: 'calendar',
@@ -99,12 +117,14 @@ async function createHarness(state: Partial<MastraCodeState> = {}) {
         { address: localOrgAddress, name: 'Local org' },
         { address: 'org:owner-1', name: 'Foreign owner' },
         { address: 'org:org-42', name: 'Factory org' },
-        { address: 'resource:proj-7', name: 'Factory project', parentAddresses: ['org:org-42'] },
-        { address: 'resource:proj-7:thread:thread-1', name: 'Factory thread', parentAddresses: ['resource:proj-7'] },
+        { address: 'project:proj-7', name: 'Factory project', parentAddresses: ['org:org-42'] },
         { address: 'resource:project-1', name: 'Project 1', parentAddresses: [localOrgAddress] },
         { address: 'resource:other-project', name: 'Other project', parentAddresses: [localOrgAddress] },
-        { address: 'resource:project-1:thread:thread-1', name: 'Thread 1', parentAddresses: ['resource:project-1'] },
-        { address: 'resource:project-1:thread:thread-2', name: 'Thread 2', parentAddresses: ['resource:project-1'] },
+        // Thread ids are global, so a thread nests under exactly one parent: the Factory project or the local resource.
+        factory
+          ? { address: 'thread:thread-1', name: 'Factory thread', parentAddresses: ['project:proj-7'] }
+          : { address: 'thread:thread-1', name: 'Thread 1', parentAddresses: ['resource:project-1'] },
+        { address: 'thread:thread-2', name: 'Thread 2', parentAddresses: ['resource:project-1'] },
       ],
     },
   });
@@ -112,13 +132,13 @@ async function createHarness(state: Partial<MastraCodeState> = {}) {
   const scopes = {
     org: [reconciled.scopes[localOrgAddress]!],
     resource: [reconciled.scopes['resource:project-1']!],
-    thread: [reconciled.scopes['resource:project-1:thread:thread-1']!],
-    siblingThread: [reconciled.scopes['resource:project-1:thread:thread-2']!],
+    thread: [reconciled.scopes['thread:thread-1']!],
+    siblingThread: [reconciled.scopes['thread:thread-2']!],
     foreignResource: [reconciled.scopes['resource:other-project']!],
     foreignOrg: [reconciled.scopes['org:owner-1']!],
     factoryOrg: [reconciled.scopes['org:org-42']!],
-    factoryResource: [reconciled.scopes['resource:proj-7']!],
-    factoryThread: [reconciled.scopes['resource:proj-7:thread:thread-1']!],
+    factoryResource: [reconciled.scopes['project:proj-7']!],
+    factoryThread: [reconciled.scopes['thread:thread-1']!],
   };
   const session = createSessionHarness(state);
   const inspector = await createKnowledgeInspector({ storage, knowledge: runtime, session: session.session });
@@ -639,6 +659,7 @@ describe('KnowledgeInspector', () => {
     const knowledge = new Knowledge({
       id: 'selected',
       storage: selectedStorage,
+      scopes: memoryScopeTypes,
       structure: {
         scopes: [
           { address: localOrgAddress, name: 'Owner 1' },
@@ -671,7 +692,7 @@ describe('KnowledgeInspector', () => {
       id: 'lazy-identity',
       domains: { knowledge: new InMemoryKnowledgeStorage({ db }) },
     });
-    const runtime = new Knowledge({ id: 'lazy-identity', storage });
+    const runtime = new Knowledge({ id: 'lazy-identity', storage, scopes: memoryScopeTypes });
     const inspector = await createKnowledgeInspector({
       storage,
       knowledge: runtime,
@@ -686,13 +707,17 @@ describe('KnowledgeInspector', () => {
         .filter(grant => grant.scopeNodeId === scopeId(address) && grant.role === 'owner')
         .map(grant => grant.scopeRefId);
     expect(owners('resource:project-1')).toEqual([scopeId('resource:project-1')]);
-    expect(owners('resource:project-1:thread:thread-1')).toEqual([scopeId('resource:project-1:thread:thread-1')]);
+    expect(owners('thread:thread-1')).toEqual([scopeId('thread:thread-1')]);
   });
 
   it('selects registered Knowledge keys and never falls back for an unknown key', async () => {
     const storage = new MastraCompositeStore({ id: 'fallback', default: new InMemoryStore({ id: 'fallback' }) });
-    const first = new Knowledge({ id: 'first', storage: new InMemoryStore({ id: 'first' }) });
-    const second = new Knowledge({ id: 'second', storage: new InMemoryStore({ id: 'second' }) });
+    const first = new Knowledge({ id: 'first', storage: new InMemoryStore({ id: 'first' }), scopes: memoryScopeTypes });
+    const second = new Knowledge({
+      id: 'second',
+      storage: new InMemoryStore({ id: 'second' }),
+      scopes: memoryScopeTypes,
+    });
     const mastra = new Mastra({ knowledge: { first, second } });
     for (const [runtime, name] of [
       [first, 'First'],

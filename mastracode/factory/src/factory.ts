@@ -28,7 +28,7 @@ import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
-import type { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
@@ -73,6 +73,7 @@ import { PlatformIncidentioIntegration } from './integrations/platform/incidenti
 import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
+import { factoryKnowledgeScopeTypes } from './knowledge/scope-types.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
@@ -783,8 +784,21 @@ export class MastraFactory {
         }
       });
     }
-    const knowledgeEnabled =
-      this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
+    // Without a host Knowledge, the experimental flag gives sessions one on Factory's org → project → thread scopes.
+    const knowledge =
+      this.#config.knowledge ??
+      (process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1'
+        ? {
+            key: 'default',
+            instance: new Knowledge({
+              id: 'mastracode',
+              name: 'MastraCode Knowledge',
+              storage: storage.getMastraStorage(),
+              scopes: factoryKnowledgeScopeTypes,
+            }),
+          }
+        : undefined);
+    const knowledgeEnabled = knowledge !== undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
@@ -1394,7 +1408,7 @@ export class MastraFactory {
         },
         storage: storage.getMastraStorage(),
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
-        ...(this.#config.knowledge ? { knowledge: this.#config.knowledge } : {}),
+        ...(knowledge ? { knowledge } : {}),
         // The environment signal tells the agent which repositories its
         // sandbox holds and where; the phase signal, when work items are on,
         // comes after it.
@@ -1682,7 +1696,7 @@ export class MastraFactory {
             knowledgeEnabled,
             mcpEnabled,
             deploymentModelProviders,
-            knowledgeKey: this.#config.knowledge?.key,
+            knowledgeKey: knowledge?.key,
             knowledgeImportOperator: this.#config.knowledge?.importOperator,
             configVersion,
             boardRegistry: this.#boards,

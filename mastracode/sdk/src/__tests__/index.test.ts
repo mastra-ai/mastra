@@ -322,6 +322,7 @@ const getDynamicMemoryMock = vi.fn();
 
 vi.mock('../agents/memory.js', () => ({
   getDynamicMemory: getDynamicMemoryMock,
+  getKnowledgeAgentScopes: () => () => [],
 }));
 
 vi.mock('../agents/model.js', () => ({

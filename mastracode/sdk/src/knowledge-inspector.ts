@@ -1,5 +1,6 @@
 import type { Session } from '@mastra/core/agent-controller';
-import { knowledgeAgentImportMemoryResourceId, type Knowledge } from '@mastra/core/knowledge';
+import { knowledgeAgentImportMemoryResourceId } from '@mastra/core/knowledge';
+import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
 import { createKnowledgeNodeCursor, isKnowledgeScopeVisible, parseKnowledgeWikilinks } from '@mastra/core/storage';
 import type {
@@ -13,7 +14,7 @@ import type {
   MastraCompositeStore,
 } from '@mastra/core/storage';
 
-import { resolveKnowledgeScopeIdentity } from './knowledge-scope.js';
+import { knowledgeAgentScopes, resolveKnowledgeScopeIdentity } from './knowledge-scope.js';
 import type { MastraCodeState } from './schema.js';
 
 export type KnowledgeInspectorScopeLevel = 'org' | 'resource' | 'thread';
@@ -184,9 +185,13 @@ export class KnowledgeInspectorError extends Error {
 interface Binding {
   /** Org rung shared with the subconscious writers (see knowledge-scope.ts). */
   organizationId: string;
-  /** Resource rung of the knowledge scope: the Factory project id, else the session resource. */
+  /** Middle rung of the knowledge scope: the Factory project id, else the session resource. */
   resourceId: string;
+  /** Its scope address: `project:<id>` in Factory, `resource:<id>` locally. */
+  resourceAddress: string;
   threadId?: string;
+  /** The run scopes the session holds, as the code agent's runs do. */
+  runScopes: string[];
   fingerprint: string;
   identityKey: string;
 }
@@ -295,10 +300,11 @@ function importRunSummary(run: KnowledgeImportRun): KnowledgeInspectorImportRun 
   };
 }
 
-function bindingBelongsToSession(binding: string, resourceId: string, threadId?: string): boolean {
+function bindingBelongsToSession(binding: string, session: Binding): boolean {
   const scope = importerBinding(binding).scope;
-  const resource = `resource:${resourceId}`;
-  return scope === resource || (threadId !== undefined && scope === `${resource}:thread:${threadId}`);
+  return (
+    scope === session.resourceAddress || (session.threadId !== undefined && scope === `thread:${session.threadId}`)
+  );
 }
 
 function truncateUtf8(value: string, maxBytes: number): { value: string; truncated: boolean } {
@@ -550,13 +556,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       const declaredBindings = [
         ...(importer.triggers.cron?.bindings ?? []),
         ...(importer.triggers.webhook?.bindings ?? []),
-      ].filter(candidate =>
-        bindingBelongsToSession(
-          JSON.stringify([candidate.source, candidate.scope]),
-          binding.resourceId,
-          binding.threadId,
-        ),
-      );
+      ].filter(candidate => bindingBelongsToSession(JSON.stringify([candidate.source, candidate.scope]), binding));
       if (declaredBindings.length === 0) return [];
       return [
         {
@@ -576,7 +576,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
     limit?: number;
   }): Promise<{ runs: KnowledgeInspectorImportRun[]; nextCursor?: string }> {
     const binding = await this.#binding();
-    if (!bindingBelongsToSession(input.binding, binding.resourceId, binding.threadId)) {
+    if (!bindingBelongsToSession(input.binding, binding)) {
       throw new KnowledgeInspectorError('not-visible', 'Knowledge importer binding is not visible.');
     }
     const page = await this.#runtime.listImportRuns({
@@ -598,11 +598,7 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
   async getImportRun(input: { importerId: string; runId: string }): Promise<KnowledgeInspectorImportRunDetail> {
     const binding = await this.#binding();
     const run = await this.#runtime.getImportRun(input.runId);
-    if (
-      !run ||
-      run.importerId !== input.importerId ||
-      !bindingBelongsToSession(run.binding, binding.resourceId, binding.threadId)
-    ) {
+    if (!run || run.importerId !== input.importerId || !bindingBelongsToSession(run.binding, binding)) {
       throw new KnowledgeInspectorError('not-visible', 'Knowledge import run is not visible.');
     }
     const importer = this.#runtime.getImporter(run.importerId);
@@ -667,10 +663,16 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       throw new KnowledgeInspectorError('unavailable', 'Knowledge inspection requires an active project.');
     }
     const organizationId = identity.organizationId;
-    const resourceId = identity.knowledgeResourceId ?? sessionResourceId;
+    const resourceId = identity.projectId ?? sessionResourceId;
+    const resourceAddress = identity.projectId ? `project:${identity.projectId}` : `resource:${sessionResourceId}`;
     const activeThreadId = this.#session.thread.getId() ?? undefined;
     const thread = activeThreadId ? await this.#session.thread.getById({ threadId: activeThreadId }) : null;
     const threadId = thread?.resourceId === sessionResourceId ? thread.id : undefined;
+    const runScopes = [
+      ...knowledgeAgentScopes(identity),
+      `resource:${sessionResourceId}`,
+      ...(threadId ? [`thread:${threadId}`] : []),
+    ];
     const fingerprint = `${organizationId}\0${resourceId}\0${threadId ?? ''}`;
     if (this.#fingerprint !== fingerprint) {
       this.#fingerprint = fingerprint;
@@ -678,41 +680,52 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
       this.#handles.clear();
       this.#cursors.clear();
     }
-    return { organizationId, resourceId, threadId, fingerprint, identityKey: this.#identityKey };
+    return {
+      organizationId,
+      resourceId,
+      resourceAddress,
+      threadId,
+      runScopes,
+      fingerprint,
+      identityKey: this.#identityKey,
+    };
   }
 
+  /**
+   * The scope ids a level reads, resolved like the code agent's runs (`materializeRunScopes` over the
+   * session's run scopes), so what curation writes is what the inspector reads. Levels map onto the
+   * run's chain: org, then its project or resource, then the thread.
+   */
   async #scope(binding: Binding, level: KnowledgeInspectorScopeLevel): Promise<KnowledgeScopeIds> {
-    const orgAddress = `org:${binding.organizationId}`;
-    const org = await this.#runtime.materializeScope({
-      address: orgAddress,
-      contextualScopeAddress: orgAddress,
-      parameters: { organizationId: binding.organizationId },
-    });
-    const scopeIds = [org.scopes[orgAddress]!];
-    if (level === 'org') return scopeIds;
-
-    const resourceAddress = `resource:${binding.resourceId}`;
-    const resource = await this.#runtime.materializeScope({
-      address: resourceAddress,
-      contextualScopeAddress: resourceAddress,
-      parentAddresses: [orgAddress],
-      parameters: { resourceId: binding.resourceId },
-    });
-    scopeIds.push(resource.scopes[resourceAddress]!);
-    if (level === 'resource') return scopeIds;
-
-    if (!binding.threadId) {
+    if (level === 'thread' && !binding.threadId) {
       throw new KnowledgeInspectorError('unavailable', 'The active thread does not belong to this project.');
     }
-    const threadAddress = `${resourceAddress}:thread:${binding.threadId}`;
-    const thread = await this.#runtime.materializeScope({
-      address: threadAddress,
-      contextualScopeAddress: threadAddress,
-      parentAddresses: [resourceAddress],
-      parameters: { threadId: binding.threadId },
-    });
-    scopeIds.push(thread.scopes[threadAddress]!);
-    return scopeIds;
+    // Each level materializes only the scopes it reads, so a project that can't be placed (for example
+    // one already filed under another org) never blocks reading the org.
+    const orgAddress = `org:${binding.organizationId}`;
+    const needed = binding.runScopes.filter(scope =>
+      level === 'org' ? scope === orgAddress : level === 'resource' ? !scope.startsWith('thread:') : true,
+    );
+    let held: Awaited<ReturnType<Knowledge['materializeRunScopes']>>;
+    try {
+      held = await this.#runtime.materializeRunScopes({ scopes: needed });
+    } catch (error) {
+      throw new KnowledgeInspectorError(
+        'unavailable',
+        `The selected Knowledge scope is unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    const chain = [
+      held.find(scope => scope.address === orgAddress),
+      held.find(scope => scope.address === binding.resourceAddress),
+      ...(binding.threadId ? [held.find(scope => scope.address === `thread:${binding.threadId}`)] : []),
+    ];
+    const depth = level === 'org' ? 1 : level === 'resource' ? 2 : 3;
+    const scopes = chain.slice(0, depth);
+    if (scopes.length < depth || scopes.some(scope => !scope)) {
+      throw new KnowledgeInspectorError('unavailable', 'The selected Knowledge scope is unavailable.');
+    }
+    return scopes.map(scope => scope!.scopeId);
   }
 
   async #assertStable(binding: Binding): Promise<void> {

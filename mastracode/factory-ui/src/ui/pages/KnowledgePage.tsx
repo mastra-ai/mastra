@@ -259,7 +259,8 @@ function ScopeTree({
     if (path.has(node.id)) return null;
     const nextPath = new Set(path).add(node.id);
     const marker = markerByNodeId.get(node.id);
-    const sessionPrefix = `resource:${factoryProjectId}:thread:`;
+    // The route only returns this project's sessions, so a `thread:` scope here is one of them.
+    const sessionPrefix = 'thread:';
     const sessionId =
       !marker && factoryProjectId && node.address.startsWith(sessionPrefix)
         ? node.address.slice(sessionPrefix.length)

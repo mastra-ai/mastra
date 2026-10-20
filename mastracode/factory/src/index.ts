@@ -22,6 +22,7 @@ export type {
   WorkBoardPhase,
 } from './boards/index.js';
 export { MastraFactory } from './factory.js';
+export { factoryKnowledgeScopeTypes } from './knowledge/scope-types.js';
 export { waitForPendingFilesystemCapture } from './session/filesystem-capture.js';
 export type {
   MastraArgs,
