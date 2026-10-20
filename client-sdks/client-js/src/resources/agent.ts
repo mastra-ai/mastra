@@ -3045,6 +3045,11 @@ export class Agent extends BaseResource {
     /** Client tools the model may call after the approval decision. */
     clientTools?: ToolsInput;
     clientToolsResolver?: ClientToolsResolver;
+    /**
+     * Memory thread/resource of the suspended run. Client-tool continuations go to `/stream`,
+     * so pass the same memory as the original call to keep them on the thread.
+     */
+    memory?: StreamParamsBaseWithoutMessages['memory'];
   }): Promise<
     Response & {
       processDataStream: ({
@@ -3124,6 +3129,11 @@ export class Agent extends BaseResource {
     /** Client tools the model may call after the approval decision. */
     clientTools?: ToolsInput;
     clientToolsResolver?: ClientToolsResolver;
+    /**
+     * Memory thread/resource of the suspended run. Client-tool continuations go to `/stream`,
+     * so pass the same memory as the original call to keep them on the thread.
+     */
+    memory?: StreamParamsBaseWithoutMessages['memory'];
   }): Promise<
     Response & {
       processDataStream: ({

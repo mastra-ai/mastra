@@ -18,6 +18,7 @@ import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { Memory } from '@mastra/memory';
 import { Hono } from 'hono';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -45,15 +46,17 @@ describe('client-js approveToolCall/declineToolCall with client tools (#27186)',
     await llm.stop();
   });
 
-  async function setup() {
+  async function setup({ withMemory = false }: { withMemory?: boolean } = {}) {
     const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
 
     const serverToolExecutions: string[] = [];
+    const memory = withMemory ? new Memory() : undefined;
     const agent = new Agent({
       id: 'approval-agent',
       name: 'approval-agent',
       instructions: 'Use the tools.',
       model: openai('gpt-4o-mini'),
+      memory,
       tools: {
         serverTool: createTool({
           id: 'serverTool',
@@ -80,7 +83,7 @@ describe('client-js approveToolCall/declineToolCall with client tools (#27186)',
     };
     const client = new MastraClient({ baseUrl: 'http://localhost', retries: 0, fetch: fetchViaApp });
 
-    return { client, serverToolExecutions };
+    return { client, serverToolExecutions, memory };
   }
 
   function registerFixtures() {
@@ -187,6 +190,42 @@ describe('client-js approveToolCall/declineToolCall with client tools (#27186)',
       .join('');
     expect(text).toBe('All done.');
   });
+
+  it('approveToolCall keeps the memory thread on the /stream client-tool continuation', async () => {
+    registerFixtures();
+    const { client, memory } = await setup({ withMemory: true });
+    const threadMemory = { thread: 't1', resource: 'r1' };
+    const clientTools = {
+      clientTool: createClientTool({
+        id: 'clientTool',
+        description: 'Client tool executed by the caller.',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async ({ value }) => ({ echoed: value }),
+      }),
+    };
+    const agent = client.getAgent('agent');
+    const first = await collect(await agent.stream('Do the thing.', { clientTools, memory: threadMemory }));
+    const runId = first.find(c => c.type === 'tool-call-approval')!.runId!;
+
+    const chunks = await collect(
+      await agent.approveToolCall({ runId, toolCallId: 'call_server', clientTools, memory: threadMemory }),
+    );
+    expect(chunks.filter(c => c.type === 'tool-error')).toEqual([]);
+
+    // The final model call must still see the original prompt, recalled from the thread.
+    const lastRequestMessages: { role: string; content: unknown }[] = llm.getRequests().at(-1)?.body?.messages ?? [];
+    expect(lastRequestMessages).toContainEqual(expect.objectContaining({ role: 'user', content: 'Do the thing.' }));
+
+    // The thread must end with the client tool result followed by the final answer.
+    const { messages } = await memory!.recall({ threadId: 't1', resourceId: 'r1' });
+    const parts = messages.flatMap(m => m.content.parts ?? []);
+    const clientInvocation = parts
+      .filter(p => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === 'call_client')
+      .at(-1);
+    expect(clientInvocation).toMatchObject({ toolInvocation: { state: 'result', result: { echoed: 'b' } } });
+    expect(parts.at(-1)).toMatchObject({ type: 'text', text: 'All done.' });
+  });
+
   it.each(['approveToolCallGenerate', 'declineToolCallGenerate'] as const)(
     '%s stops for a client tool called after the decision',
     async method => {
