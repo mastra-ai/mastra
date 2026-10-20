@@ -1673,7 +1673,7 @@ describe('KnowledgePage', () => {
       binding: 'kh_binding',
       source: 'notion:workspace',
       importKind: 'static',
-      triggerKind: 'cron',
+      triggerKind: 'programmatic',
       status: 'running',
       queuedAt: '2026-09-21T09:52:00.000Z',
     };
@@ -1791,5 +1791,78 @@ describe('KnowledgePage', () => {
     await user.click(await screen.findByRole('button', { name: 'Sync now' }));
 
     expect(await screen.findByText('import_trigger_failed')).toBeInTheDocument();
+  });
+
+  it('lists a failed manual sync as a programmatic run with its error in the row and detail', async () => {
+    stubKnowledgeRoute();
+    const triggered: string[] = [];
+    let synced = false;
+    const failedRun = {
+      id: 'kh_run_failed',
+      reference: 'run-failed',
+      importerId: 'connect:notion:conn-abc123',
+      binding: 'kh_binding',
+      source: 'notion:workspace',
+      scope: 'project:p1',
+      importKind: 'static',
+      triggerKind: 'programmatic',
+      status: 'failed',
+      error: 'Error: fixture provider unavailable',
+      queuedAt: '2026-09-21T09:52:00.000Z',
+      startedAt: '2026-09-21T09:52:01.000Z',
+      completedAt: '2026-09-21T09:52:02.000Z',
+    };
+    const importerPath = `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/connect%3Anotion%3Aconn-abc123`;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+        HttpResponse.json({
+          importers: [
+            {
+              id: 'connect:notion:conn-abc123',
+              importKind: 'static',
+              triggers: ['cron', 'programmatic'],
+              bindings: [{ source: 'notion:workspace', binding: 'kh_binding' }],
+              ...(synced ? { lastRun: failedRun } : {}),
+            },
+          ],
+        }),
+      ),
+      http.get(`${importerPath}/runs`, ({ request }) => {
+        const trigger = new URL(request.url).searchParams.get('trigger');
+        const runs = synced ? [failedRun] : [];
+        return HttpResponse.json({ runs: trigger ? runs.filter(run => run.triggerKind === trigger) : runs });
+      }),
+      http.get(`${importerPath}/runs/kh_run_failed`, () => HttpResponse.json({ run: failedRun, activity: [] })),
+      http.post(`${importerPath}/run`, ({ request }) => {
+        triggered.push(new URL(request.url).pathname);
+        synced = true;
+        return HttpResponse.json({ runs: [{ ...failedRun, status: 'queued', error: undefined }] }, { status: 202 });
+      }),
+    );
+    const user = userEvent.setup();
+    renderRoute(`/factories/${FACTORY_ID}/knowledge`);
+
+    await user.click(await screen.findByRole('tab', { name: 'imports' }));
+    await user.click(await screen.findByRole('button', { name: 'Sync now' }));
+    await waitFor(() => expect(triggered).toHaveLength(1));
+
+    const runs = await screen.findByRole('list', { name: 'Import runs' });
+    expect(await within(runs).findByText(/· programmatic ·/)).toBeInTheDocument();
+    expect(within(runs).getByText('failed')).toBeInTheDocument();
+    expect(within(runs).getByText('Error: fixture provider unavailable')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('combobox', { name: 'Run trigger' }));
+    await user.click(await screen.findByRole('option', { name: 'cron' }));
+    expect(await screen.findByText('No import runs match these filters.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('combobox', { name: 'Run trigger' }));
+    await user.click(await screen.findByRole('option', { name: 'programmatic' }));
+    const filtered = await screen.findByRole('list', { name: 'Import runs' });
+    await user.click(within(filtered).getByRole('button', { name: /notion:workspace/ }));
+
+    const detail = await screen.findByRole('region', { name: 'Import run detail' });
+    expect(within(detail).getByText(/· programmatic ·/)).toBeInTheDocument();
+    expect(within(detail).getByText('failed')).toBeInTheDocument();
+    expect(within(detail).getByText('Error: fixture provider unavailable')).toBeInTheDocument();
   });
 });

@@ -2097,6 +2097,65 @@ describe('KnowledgeRoutes', () => {
     expect(JSON.stringify(body)).not.toContain('00000000-0000-4000-8000-000000000099');
 
     await vi.waitFor(() => expect(handled).toHaveLength(1));
+
+    // A manual sync is a programmatic run, never a scheduled cron run.
+    expect(body.runs[0].triggerKind).toBe('programmatic');
+    const runId = body.runs[0].id as string;
+    const runsPath = `/web/factory/projects/${h.projectId}/knowledge/importers/connect:notion:conn-1/runs`;
+    await vi.waitFor(async () => {
+      const detail = await h.app.request(`${runsPath}/${runId}`);
+      expect(detail.status).toBe(200);
+      await expect(detail.json()).resolves.toMatchObject({
+        run: { id: runId, triggerKind: 'programmatic', status: 'succeeded' },
+      });
+    });
+    const programmatic = await (await h.app.request(`${runsPath}?trigger=programmatic`)).json();
+    expect(programmatic.runs.map((run: { id: string }) => run.id)).toContain(runId);
+    const cron = await (await h.app.request(`${runsPath}?trigger=cron`)).json();
+    expect(cron.runs.map((run: { id: string }) => run.id)).not.toContain(runId);
+  });
+
+  it('records a failed manual sync as a failed programmatic run with its error', async () => {
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [
+        {
+          id: 'connect:notion:conn-1',
+          access: { 'project:$projectId': 'owner' },
+          triggers: {
+            cron: {
+              schedule: '0 * * * *',
+              resolveBindings: async () => [{ source: 'notion:conn-1', scope: `project:${h.projectId}` }],
+            },
+          },
+          handler: async () => {
+            throw new Error('fixture provider unavailable');
+          },
+        },
+      ],
+    });
+    const h = await createHarness({ knowledgeRuntime: runtime });
+    const runsPath = `/web/factory/projects/${h.projectId}/knowledge/importers/connect:notion:conn-1/runs`;
+
+    const response = await h.app.request(
+      `/web/factory/projects/${h.projectId}/knowledge/importers/connect:notion:conn-1/run`,
+      { method: 'POST' },
+    );
+    expect(response.status).toBe(202);
+    const runId = (await response.json()).runs[0].id as string;
+
+    await vi.waitFor(async () => {
+      const detail = await h.app.request(`${runsPath}/${runId}`);
+      await expect(detail.json()).resolves.toMatchObject({
+        run: {
+          id: runId,
+          triggerKind: 'programmatic',
+          status: 'failed',
+          error: 'Error: fixture provider unavailable',
+        },
+      });
+    });
   });
 
   it('reconciles resolver importers before answering a manual trigger for a fresh connection', async () => {

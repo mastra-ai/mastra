@@ -991,7 +991,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             try {
               runs.push(
                 await resolved.knowledge.runImporter(importerId, binding, undefined, {
-                  triggerKind: 'cron',
+                  triggerKind: 'programmatic',
                   awaitCompletion: false,
                 }),
               );
