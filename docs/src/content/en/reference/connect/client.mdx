@@ -109,7 +109,12 @@ A failed request throws `MastraConnectError`. The `code` says who answered:
 | `unauthorized` | The platform rejected the token (401/403). |
 | `proxy_error` | The provider answered with a non-2xx status, available on `error.status`. Also used for other platform failures. |
 
-This matters for importers that remove knowledge when an item is deleted upstream. Treat only a provider's own "not found" (`proxy_error` with `status` 404, or the provider's explicit deleted/archived state) as removal. A platform error, an auth failure, any other status or a network error is not evidence of removal, so remove nothing.
+This matters for importers that remove knowledge when an item is deleted upstream. List and search APIs usually leave deleted items out, so an item missing from a list proves nothing. Look the item up and remove its knowledge only when the provider returns that item in an explicit deleted, trashed or archived state.
+
+Remove nothing on anything else:
+
+- A provider 404 or 403 (`proxy_error` with that `status`) is ambiguous: the item may be gone, or only hidden from this connection. Keep the knowledge and carry on.
+- A platform error (`connection_not_found`, `unauthorized`) or a network error says nothing about the item. Let the run fail.
 
 ## Example: a custom Knowledge importer
 
@@ -149,14 +154,20 @@ async function wikiImporters(projectId: string, scope: string): Promise<Knowledg
         }
         for (const node of await importer.listNodes()) {
           if (seen.has(node.node.address)) continue
+          const pageId = String(node.node.metadata?.pageId)
+          let page: { id?: string; status?: string }
           try {
-            await proxyRequestWithResponse(client, connection.id, {
+            ;({ data: page } = await proxyRequestWithResponse(client, connection.id, {
               method: 'GET',
-              path: `pages/${node.node.metadata?.pageId}`,
-            })
+              path: `pages/${encodeURIComponent(pageId)}`,
+            }))
           } catch (error) {
-            // Only the provider's own 404 confirms removal. Anything else fails the run and removes nothing.
-            if (!(error instanceof MastraConnectError && error.code === 'proxy_error' && error.status === 404)) throw error
+            // A provider 404/403 is ambiguous: keep the knowledge. Platform and network errors fail the run.
+            if (error instanceof MastraConnectError && error.code === 'proxy_error' && [403, 404].includes(error.status ?? 0)) continue
+            throw error
+          }
+          // Only the provider's explicit deleted state removes the page's knowledge.
+          if (page.id === pageId && page.status === 'deleted') {
             for (const record of await node.listKnowledge()) await node.removeKnowledge(record.id)
           }
         }

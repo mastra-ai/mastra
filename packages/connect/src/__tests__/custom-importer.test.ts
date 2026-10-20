@@ -26,6 +26,7 @@ interface WikiPage {
   id: string;
   title: string;
   body: string;
+  status?: 'current' | 'deleted';
 }
 
 /** One importer per active `acme-wiki` connection in the project. */
@@ -48,6 +49,7 @@ async function acmeWikiImporters(options: {
         const site = typeof context.connection_config?.site === 'string' ? context.connection_config.site : 'default';
         const importer = await ctx.importer();
         const listed = await proxyRequestWithResponse(client, connection.id, { method: 'GET', path: 'pages' });
+        // The list omits deleted pages, so absence alone proves nothing.
         const pages = (listed.data as { pages: WikiPage[] }).pages;
         const seen = new Set<string>();
         for (const page of pages) {
@@ -62,7 +64,7 @@ async function acmeWikiImporters(options: {
         for (const node of await importer.listNodes()) {
           if (seen.has(node.node.address)) continue;
           const pageId = String(node.node.metadata?.pageId);
-          if (await providerConfirmsRemoval(client, connection.id, pageId)) {
+          if ((await probePage(client, connection.id, pageId)) === 'removed') {
             for (const record of await node.listKnowledge()) await node.removeKnowledge(record.id);
           }
         }
@@ -71,24 +73,36 @@ async function acmeWikiImporters(options: {
 }
 
 /**
- * Point lookup: only the provider's own 404 counts as removal. A platform 404
- * (`connection_not_found`), auth failures, other statuses and transport errors
- * are not a removal signal, so they fail the run and nothing is removed.
+ * Positive point lookup. Only the provider returning this page with an explicit
+ * deleted state removes its knowledge. A provider 404 or 403 is ambiguous (the
+ * page may be gone, or just hidden from this connection), so the record stays
+ * and the run goes on. Platform errors (`connection_not_found`,
+ * `unauthorized`) and transport failures fail the run, removing nothing.
  */
-async function providerConfirmsRemoval(client: ResolvedClient, connectionId: string, pageId: string) {
+async function probePage(
+  client: ResolvedClient,
+  connectionId: string,
+  pageId: string,
+): Promise<'removed' | 'present' | 'uncertain'> {
+  let page: Partial<WikiPage>;
   try {
-    await proxyRequestWithResponse(client, connectionId, {
+    const response = await proxyRequestWithResponse(client, connectionId, {
       method: 'GET',
       path: `pages/${encodeURIComponent(pageId)}`,
     });
-    return false;
+    page = response.data as Partial<WikiPage>;
   } catch (error) {
-    if (error instanceof MastraConnectError && error.code === 'proxy_error' && error.status === 404) return true;
+    if (error instanceof MastraConnectError && error.code === 'proxy_error' && [403, 404].includes(error.status ?? 0)) {
+      return 'uncertain';
+    }
     throw error;
   }
+  if (page?.id !== pageId) return 'uncertain';
+  if (page.status === 'deleted') return 'removed';
+  return page.status === 'current' ? 'present' : 'uncertain';
 }
 
-type LookupOutcome = 'provider-404' | 'platform-404' | 'provider-403' | 'transport';
+type LookupOutcome = 'deleted' | 'provider-404' | 'platform-404' | 'provider-403' | 'transport' | 'other-id';
 
 function fakePlatform() {
   const state = {
@@ -96,7 +110,7 @@ function fakePlatform() {
       { id: 'p1', title: 'Onboarding', body: 'Start with the handbook.' },
       { id: 'p2', title: 'Retired runbook', body: 'Restart the legacy queue.' },
     ] as WikiPage[],
-    lookup: 'provider-404' as LookupOutcome,
+    lookup: 'deleted' as LookupOutcome,
     calls: [] as string[],
   };
   const fetch = (async (input: string | URL, init?: RequestInit) => {
@@ -119,8 +133,12 @@ function fakePlatform() {
     const match = /^\/v2\/connections\/con_wiki\/proxy\/pages\/(.+)$/.exec(path);
     if (match) {
       const page = state.pages.find(candidate => candidate.id === match[1]);
-      if (page) return Response.json(page);
+      if (page) return Response.json({ ...page, status: 'current' });
       switch (state.lookup) {
+        case 'deleted':
+          return Response.json({ id: match[1], title: 'Retired runbook', status: 'deleted' });
+        case 'other-id':
+          return Response.json({ id: 'p9', title: 'Something else', status: 'deleted' });
         case 'provider-404':
           return Response.json({ message: 'Page not found' }, { status: 404 });
         case 'platform-404':
@@ -191,7 +209,7 @@ describe('custom Knowledge importer on the public @mastra/connect surface', () =
     }
   });
 
-  it('removes records, but keeps the node, when the provider confirms the page is gone', async () => {
+  it('removes records, but keeps the node, when the provider reports the page deleted', async () => {
     const { platform, run, snapshot } = await setup();
     await run();
     platform.state.pages = platform.state.pages.filter(page => page.id !== 'p2');
@@ -204,11 +222,25 @@ describe('custom Knowledge importer on the public @mastra/connect surface', () =
     });
   });
 
+  it.each<LookupOutcome>(['provider-404', 'provider-403', 'other-id'])(
+    'keeps records when the lookup is ambiguous (%s) and the run goes on',
+    async outcome => {
+      const { platform, run, snapshot } = await setup();
+      await run();
+      const before = await snapshot();
+      platform.state.pages = platform.state.pages.filter(page => page.id !== 'p2');
+      platform.state.lookup = outcome;
+      const second = await run();
+      expect(second.error ?? null).toBeNull();
+      expect(second.status).toBe('succeeded');
+      expect(await snapshot()).toEqual(before);
+    },
+  );
+
   it.each<[LookupOutcome, string]>([
     ['platform-404', 'Connection con_wiki not found'],
-    ['provider-403', 'Provider request failed (403)'],
     ['transport', 'fetch failed'],
-  ])('removes nothing when the lookup is not a provider-confirmed removal (%s)', async (outcome, reason) => {
+  ])('fails the run and removes nothing on a platform or transport error (%s)', async (outcome, reason) => {
     const { platform, run, snapshot } = await setup();
     await run();
     const before = await snapshot();

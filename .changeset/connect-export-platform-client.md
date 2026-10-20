@@ -12,4 +12,4 @@ const [connection] = await listProjectConnections(client, projectId);
 const pages = await proxyRequest(client, connection.id, { method: 'POST', path: 'v1/search', body: {} });
 ```
 
-A blank project id or connection id now throws `missing_project_id` or `missing_connection_id` before any request is sent. See the Platform client reference for the provider-versus-platform error codes to check before treating an item as deleted.
+A blank project id or connection id now throws `missing_project_id` or `missing_connection_id` before any request is sent. The Platform client reference shows how to tell provider errors from platform errors, and why an importer should remove knowledge only when the provider reports the item deleted.
