@@ -286,7 +286,7 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
     }
     if (state.more > 0) lines.push(`+${state.more} more`);
     lines.push(
-      'Message any of these sessions with factory_signal_session; read full reports with notification_inbox; list or mute side sessions with factory_list_side_sessions and factory_unsubscribe_session.',
+      'Message any of these sessions with factory_signal_session; read full reports with notification_inbox; list side sessions with factory_list_side_sessions; on a turn a person started, mute one with factory_unsubscribe_session.',
     );
     return lines.join('\n');
   }
