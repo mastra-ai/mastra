@@ -17,6 +17,7 @@ import type {
 } from '../processors';
 import { isProcessorWorkflow, TokenLimiterProcessor } from '../processors';
 import { MemoryInputFilter, MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
+import { assertEmbeddingDimension } from '../processors/memory/embedding-dimension';
 import type { RequestContext } from '../request-context';
 import type {
   MastraCompositeStore,
@@ -374,6 +375,8 @@ https://mastra.ai/en/docs/memory/overview`,
     if (this.isSelfEmbedding) {
       return `memory${separator}messages${separator}selfembed`;
     }
+    assertEmbeddingDimension(this.embeddingDimension, dimensions);
+
     const defaultDimensions = 1536;
     const usedDimensions = dimensions ?? defaultDimensions;
     const isDefault = usedDimensions === defaultDimensions;
@@ -942,6 +945,7 @@ https://mastra.ai/en/docs/memory/overview`,
             vector: this.vector,
             embedder: this.embedder,
             embedderOptions: this.embedderOptions,
+            embeddingDimension: this.embeddingDimension,
             indexName,
             ...semanticConfig,
           }),
@@ -1084,6 +1088,7 @@ https://mastra.ai/en/docs/memory/overview`,
             vector: this.vector,
             embedder: this.embedder,
             embedderOptions: this.embedderOptions,
+            embeddingDimension: this.embeddingDimension,
             indexName,
             ...semanticRecallConfig,
           }),

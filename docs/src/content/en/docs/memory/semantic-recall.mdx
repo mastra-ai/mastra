@@ -451,7 +451,9 @@ const memory = new Memory({
 })
 ```
 
-The index name is the same whether the dimension is configured or probed, so existing indexes keep working. The value must match the vectors the embedder returns.
+The index name is the same whether the dimension is configured or probed, so existing indexes keep working.
+
+The value must match the vectors the embedder returns. Memory compares it with the first real embedding, and on a mismatch it throws a `MASTRA_MEMORY_EMBEDDING_DIMENSION_MISMATCH` error naming both values before creating or querying any index. Update `embeddingDimension` whenever you change the embedding model or its output dimension.
 
 ## PostgreSQL index optimization
 
