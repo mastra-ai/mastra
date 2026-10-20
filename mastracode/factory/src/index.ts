@@ -57,6 +57,7 @@ export type {
 } from './secret-encryption.js';
 export { createFactoryRouteAuth } from './auth.js';
 export type { RouteAuth } from './routes/route.js';
+export type { KnowledgeImportOperatorRule } from './routes/knowledge.js';
 // The integration seam, so a host can implement `FactoryIntegration` from
 // outside this package — the contract's stated design for third parties.
 // Built-ins (GitHub, Linear, Slack) implement the same interface from inside.

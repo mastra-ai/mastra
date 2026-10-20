@@ -81,6 +81,7 @@ import {
   primeCustomProvidersForRequestContext,
   registerCustomProvidersSource,
 } from './routes/custom-provider-source.js';
+import type { KnowledgeImportOperatorRule } from './routes/knowledge.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { createSessionAccessGuard } from './routes/session-access.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
@@ -208,7 +209,15 @@ export interface MastraFactoryConfig {
    * Host-owned Knowledge runtime. Factory registers this exact instance under `key` and uses that
    * key for its read surfaces. Omitted leaves Mastra Code's experimental default wiring in place.
    */
-  knowledge?: { key: string; instance: Knowledge };
+  knowledge?: {
+    key: string;
+    instance: Knowledge;
+    /**
+     * Who may see a project's importers, import runs, and transcripts. Omitted: every caller when
+     * auth is disabled, otherwise organization administrators.
+     */
+    importOperator?: KnowledgeImportOperatorRule;
+  };
   /**
    * Distributed event bus instance (e.g. `new RedisStreamsPubSub({ url })`).
    * When set, streams/workflows/signals ride it across processes and the
@@ -1674,6 +1683,7 @@ export class MastraFactory {
             mcpEnabled,
             deploymentModelProviders,
             knowledgeKey: this.#config.knowledge?.key,
+            knowledgeImportOperator: this.#config.knowledge?.importOperator,
             configVersion,
             boardRegistry: this.#boards,
             factoryTransitionService: transitionService,

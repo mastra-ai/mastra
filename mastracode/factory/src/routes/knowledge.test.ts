@@ -14,6 +14,7 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type {
   KnowledgeNodePayload,
   KnowledgeGraphPayload,
+  KnowledgeImportOperatorRule,
   KnowledgeRouteLimits,
   KnowledgeScopeTreePayload,
   KnowledgeSearchPayload,
@@ -68,6 +69,7 @@ async function createHarness(
     defaultKnowledgeKey?: string;
     isOrganizationAdmin?: (organizationId: string, userId: string) => Promise<boolean>;
     threadTitle?: (threadId: string) => Promise<string | undefined>;
+    importOperator?: KnowledgeImportOperatorRule;
   } = {},
 ): Promise<Harness> {
   const orgId = options.orgId ?? ORG;
@@ -83,6 +85,7 @@ async function createHarness(
     ...(options.defaultKnowledgeKey ? { defaultKnowledgeKey: options.defaultKnowledgeKey } : {}),
     ...(options.limits ? { limits: options.limits } : {}),
     ...(options.threadTitle ? { threadTitle: options.threadTitle } : {}),
+    ...(options.importOperator ? { importOperator: options.importOperator } : {}),
   }).routes();
   const app = new Hono();
   const user = options.user ?? { workosId: 'user-1', organizationId: orgId };
@@ -1973,5 +1976,51 @@ describe('KnowledgeRoutes', () => {
     const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error: 'forbidden' });
+  });
+
+  it("lets the host's import-operator rule decide instead of organization-admin trust", async () => {
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [{ id: 'calendar', handler: async () => {} }],
+    });
+    const asked: Array<{ orgId: string; userId: string; projectId: string }> = [];
+    const operators = new Set(['user-1']);
+    const importOperator: KnowledgeImportOperatorRule = input => {
+      asked.push(input);
+      return operators.has(input.userId);
+    };
+    const h = await createHarness({
+      knowledgeRuntime: runtime,
+      isOrganizationAdmin: async () => false,
+      importOperator,
+    });
+    const path = `/web/factory/projects/${h.projectId}/knowledge/importers`;
+
+    const allowed = await h.app.request(path);
+    expect(allowed.status).toBe(200);
+    await expect(allowed.json()).resolves.toEqual({ importers: expect.any(Array) });
+    expect(asked).toEqual([{ orgId: ORG, userId: 'user-1', projectId: h.projectId }]);
+
+    operators.clear();
+    const denied = await h.app.request(path);
+    expect(denied.status).toBe(403);
+    await expect(denied.json()).resolves.toEqual({ error: 'forbidden' });
+  });
+
+  it("denies an organization administrator the host's import-operator rule rejects", async () => {
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [{ id: 'calendar', handler: async () => {} }],
+    });
+    const h = await createHarness({
+      knowledgeRuntime: runtime,
+      isOrganizationAdmin: async () => true,
+      importOperator: () => false,
+    });
+
+    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
+    expect(response.status).toBe(403);
   });
 });
