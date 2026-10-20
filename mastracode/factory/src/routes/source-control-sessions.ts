@@ -655,6 +655,10 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         ) {
           return c.json({ error: 'Only user sessions can change visibility' }, 409);
         }
+        // Sharing puts the session on its Factory's memory; without a Factory there is nowhere to share it to.
+        if (visibility === 'org' && !row.factoryProjectId) {
+          return c.json({ error: "This session isn't linked to a Factory, so it can't be shared." }, 409);
+        }
         const resourceId = userSessionResourceFor(row, visibility);
         const controller = options.controller;
         // The resource says who may read a session, so its threads move with it.

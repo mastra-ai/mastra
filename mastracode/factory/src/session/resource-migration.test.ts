@@ -595,7 +595,17 @@ describe('privatizeOwnerResourceSessions', () => {
       [PR_SESSION]: 'org',
       [SHARED_SESSION]: 'org',
     });
-    // Safe to rerun on every start.
+    // Each session is checked once, so later starts have nothing to do.
+    await expect(seed.sourceControl.listSessionsAwaitingVisibilityCheck()).resolves.toEqual([]);
     expect(await backfill()).toBe(0);
+  });
+
+  it('waits for the resource migration before checking a session', async () => {
+    const { seed, ops } = await seedLegacyFactory();
+    // Before the resource migration nothing is checked: a session's resource isn't settled yet.
+    await expect(seed.sourceControl.listSessionsAwaitingVisibilityCheck()).resolves.toEqual([]);
+    expect(
+      (await ops.findMany<{ session_id: string }>('source_control_sessions', { visibility_checked_at: null })).length,
+    ).toBeGreaterThan(0);
   });
 });

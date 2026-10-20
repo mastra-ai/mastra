@@ -892,6 +892,27 @@ describe('source-control session routes', () => {
       });
     });
 
+    it("refuses to share a session that isn't linked to a Factory", async () => {
+      const { seed, sourceControl, session } = await seedPrivateSession();
+      // Only rows the project backfill couldn't resolve have no Factory; new sessions always do.
+      await seed.storage.ops.updateMany(
+        'source_control_sessions',
+        { session_id: session.sessionId },
+        { factory_project_id: null },
+      );
+
+      const res = await putVisibility(buildApp([sourceControl], seed, undefined, noRuns), session.sessionId, {
+        visibility: 'org',
+      });
+      expect(res.status).toBe(409);
+      await expect(res.json()).resolves.toEqual({
+        error: "This session isn't linked to a Factory, so it can't be shared.",
+      });
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        visibility: 'private',
+      });
+    });
+
     it('refuses to change a Slack thread session', async () => {
       const { seed, sourceControl, session } = await seedPrivateSession({
         branch: 'slack/1700000000-000100',

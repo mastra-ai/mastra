@@ -363,6 +363,9 @@ describe('SourceControlStorage', () => {
 
     const awaiting = await domain.listSessionsAwaitingResourceMigration();
     expect(awaiting.map(row => row.sessionId)).not.toContain(session.sessionId);
+    // Nor does the visibility check: a new session's visibility already matches its resource.
+    const unchecked = await domain.listSessionsAwaitingVisibilityCheck();
+    expect(unchecked.map(row => row.sessionId)).not.toContain(session.sessionId);
   });
 
   it('defaults session visibility to org and round-trips private', async () => {

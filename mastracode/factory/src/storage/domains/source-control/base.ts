@@ -163,6 +163,8 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       // When the session's threads reached their Factory or owner memory resource.
       // Null only on sessions from before shared resources, until the startup migration moves them.
       resources_migrated_at: { type: 'timestamp', nullable: true },
+      // When startup checked that the session's visibility matches its memory resource. New sessions start checked.
+      visibility_checked_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -630,6 +632,7 @@ interface SessionDbRow extends Record<string, unknown> {
   first_message_at: Date | null;
   first_meaningful_exec_at: Date | null;
   resources_migrated_at?: Date | null;
+  visibility_checked_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -775,18 +778,26 @@ export class SourceControlStorage extends FactoryStorageDomain {
     return (await this.ops.findMany<SessionDbRow>(SESSIONS, { resources_migrated_at: null })).map(toSession);
   }
 
-  /** Sessions, across providers and organizations, that teammates can see (`org` or legacy `NULL`). */
-  async listSharedSessions(): Promise<SourceControlSession[]> {
-    const [org, legacy] = await Promise.all([
-      this.ops.findMany<SessionDbRow>(SESSIONS, { visibility: 'org' }),
-      this.ops.findMany<SessionDbRow>(SESSIONS, { visibility: null }),
-    ]);
-    return [...org, ...legacy].map(toSession);
+  /**
+   * Sessions, across providers and organizations, whose visibility startup has not yet checked against
+   * their memory resource. Only sessions already on their resource are returned; the rest wait for the
+   * resource migration.
+   */
+  async listSessionsAwaitingVisibilityCheck(): Promise<SourceControlSession[]> {
+    const rows = await this.ops.findMany<SessionDbRow>(SESSIONS, { visibility_checked_at: null });
+    return rows.filter(row => row.resources_migrated_at).map(toSession);
   }
 
-  /** Make a session private without touching anything else on it. */
-  async markSessionPrivate(sessionId: string): Promise<void> {
-    await this.ops.updateMany(SESSIONS, { session_id: sessionId }, { visibility: 'private', updated_at: new Date() });
+  /** Record that a session's visibility was checked, making it private when `makePrivate`. */
+  async markVisibilityChecked(sessionId: string, { makePrivate }: { makePrivate: boolean }): Promise<void> {
+    const now = new Date();
+    await this.ops.updateMany(
+      SESSIONS,
+      { session_id: sessionId },
+      makePrivate
+        ? { visibility: 'private', visibility_checked_at: now, updated_at: now }
+        : { visibility_checked_at: now },
+    );
   }
 
   /** Record that a session's threads are on their memory resource, so later starts skip it. */
@@ -1549,6 +1560,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               first_message_at: null,
               // New sessions start on their memory resource.
               resources_migrated_at: now,
+              visibility_checked_at: now,
               created_at: now,
               updated_at: now,
             });
