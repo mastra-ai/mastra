@@ -100,7 +100,10 @@ export function WorkspaceProcessList({
 
 function Output({ label, text, truncated }: { label: string; text: string; truncated: boolean }) {
   const end = useRef<HTMLSpanElement>(null);
-  useEffect(() => end.current?.scrollIntoView?.({ block: 'end' }), [text]);
+  useEffect(() => {
+    // Not returned: browsers now resolve scrolling with a promise, which React would call as a cleanup.
+    end.current?.scrollIntoView?.({ block: 'end' });
+  }, [text]);
   return (
     <section className="flex flex-col gap-1" aria-label={label}>
       <Txt as="h3" variant="meta" tone="muted">

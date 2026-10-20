@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import type { WorkspaceProcessListing, WorkspaceProcessOutput } from '../../../../../api/types';
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -80,6 +80,25 @@ async function openProcesses() {
 }
 
 describe('Processes in the workspace sidebar', () => {
+  afterEach(() => {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+
+  it('goes back from a process in a browser whose scrolling returns a promise', async () => {
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: () => Promise.resolve(),
+    });
+    installSandbox([proc({ pid: '1', stdout: 'tick\n' })]);
+    const user = await openProcesses();
+    await user.click(await screen.findByRole('button', { name: /pnpm dev/ }));
+    expect(await screen.findByText('tick')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(await screen.findByRole('button', { name: /pnpm dev/ })).toBeInTheDocument();
+  });
+
   it('hides Processes when the sandbox has no process manager', async () => {
     installSandbox([], { supported: false });
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
