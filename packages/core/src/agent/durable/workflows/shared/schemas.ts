@@ -150,6 +150,14 @@ export const baseDurableAgenticInputSchema = z.object({
   options: durableOptionsSchema,
   state: z.any(),
   messageId: z.string(),
+  inputTripwire: z
+    .object({
+      reason: z.string(),
+      retry: z.boolean().optional(),
+      processorId: z.string().optional(),
+      metadata: z.unknown().optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -176,6 +184,7 @@ export const baseIterationStateSchema = z.object({
   // instance resolve with the same request context on iteration N as on
   // iteration 1. Dropping it here silently falls back to an empty context.
   requestContextEntries: z.record(z.string(), z.any()).optional(),
+  inputTripwire: baseDurableAgenticInputSchema.shape.inputTripwire,
   // Iteration tracking
   iterationCount: z.number(),
   accumulatedSteps: z.array(z.any()),

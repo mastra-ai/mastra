@@ -75,7 +75,11 @@ import {
   createNotificationSummarySignal,
   summarizeNotifications,
 } from '../notifications/signals';
-import type { NotificationDeliveryDecision, SendNotificationSignalInput } from '../notifications/types';
+import type {
+  NotificationDeliveryDecision,
+  NotificationRecord,
+  SendNotificationSignalInput,
+} from '../notifications/types';
 import type {
   DefinitionSource,
   TracingProperties,
@@ -9938,12 +9942,19 @@ export class Agent<
       this.getPubSub(),
     );
     const now = new Date();
-    const planned = [];
+    const planned: Array<
+      | { record: NotificationRecord; decision: NotificationDeliveryDecision }
+      | { record: NotificationRecord; error: unknown }
+    > = [];
     for (const record of records) {
-      planned.push({
-        record,
-        decision: await this.resolveNotificationDeliveryDecision({ now, record, threadState }),
-      });
+      try {
+        planned.push({
+          record,
+          decision: await this.resolveNotificationDeliveryDecision({ now, record, threadState }),
+        });
+      } catch (error) {
+        planned.push({ record, error });
+      }
     }
 
     const results: SendAgentNotificationSignalResult<OUTPUT>[] = [];
@@ -9951,7 +9962,29 @@ export class Agent<
     // those are delivered later by the notification dispatch workflow, so the
     // dispatcher schedule (and scheduler) must be lazily activated.
     let needsDispatcher = false;
-    for (const { record, decision } of planned) {
+    for (const entry of planned) {
+      const { record } = entry;
+      if ('error' in entry) {
+        // The record already exists with no schedule, so a throwing policy here
+        // would leave it pending forever: no dispatch pass considers it due.
+        // Fail this attempt and give it a due time, as a dispatch-time throw
+        // does, so the dispatcher retries it up to the attempt limit.
+        const failed = await notifications.updateNotification({
+          id: record.id,
+          threadId: record.threadId,
+          deliverAt: now,
+          ...resolveDeliveryFailureUpdate(record),
+          lastDeliveryAttemptAt: new Date(),
+          lastDeliveryError: entry.error instanceof Error ? entry.error.message : String(entry.error),
+        });
+        needsDispatcher = true;
+        results.push({
+          record: failed,
+          decision: { action: 'defer', deliverAt: now, reason: 'delivery-policy-failed' },
+        });
+        continue;
+      }
+      const { decision } = entry;
       if (decision.action === 'discard') {
         const updated = await notifications.updateNotification({
           id: record.id,

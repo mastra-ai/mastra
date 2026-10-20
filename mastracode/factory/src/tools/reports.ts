@@ -442,7 +442,14 @@ async function sessionAudience(
       binding: NonNullable<Awaited<ReturnType<WorkItemsStorage['findActiveRunBindingForSession']>>>;
       sender: FactoryReportSender;
     }
-  | { kind: 'origin'; sender: FactoryReportSender; recipient: FactoryDeliveryTarget; subject: string }
+  | {
+      kind: 'origin';
+      sender: FactoryReportSender;
+      recipient: FactoryDeliveryTarget;
+      subject: string;
+      /** Set while the origin has muted this side session's reports (approval notices still go through). */
+      mutedAt: Date | null;
+    }
   | null
 > {
   const row = await sessions.getBySessionId(sessionId);
@@ -474,6 +481,7 @@ async function sessionAudience(
     sender: { sessionId: row.sessionId, threadId, userId: row.userId },
     recipient: { sessionId: row.originSessionId, threadId: row.originThreadId },
     subject: `The side session "${row.title ?? row.sessionId}"`,
+    mutedAt: row.originMutedAt ?? null,
   };
 }
 
@@ -496,6 +504,8 @@ export function createSessionRunEndReporter(deps: SessionReportDependencies): Fa
       });
       return;
     }
+    // A muted origin still hears when the session is blocked: nothing else would tell it the session is waiting.
+    if (audience.mutedAt && outcome.status !== 'blocked') return;
     const resolved = await deps.reporting();
     if (!resolved) return;
     await sendRunEndReport(resolved, {

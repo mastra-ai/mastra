@@ -74,7 +74,7 @@ import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCall
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
-import { durableOptionsSchema } from '../shared/schemas';
+import { baseIterationStateSchema, durableOptionsSchema } from '../shared/schemas';
 
 /**
  * Detect a run-level budget expiry (`modelSettings.timeout.totalMs`, #21724
@@ -150,6 +150,7 @@ const durableLLMInputSchema = z.object({
   // rebuild-from-Mastra path resolves the model and tools with the caller's
   // context rather than an empty one.
   requestContextEntries: z.record(z.string(), z.any()).optional(),
+  inputTripwire: baseIterationStateSchema.shape.inputTripwire,
   // Agent span data for model span parenting
   agentSpanData: z.any().optional(),
   // Model span data (ONE span for entire agent run, created before workflow)
@@ -398,9 +399,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
       // 1c. Check for tripwire from processInput (initial input processing).
       // If an input processor called abort() during preparation, the tripwire
-      // data is stored on the registry entry. Emit a tripwire chunk and bail
-      // immediately — the model must never be called.
-      const registryTripwire = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tripwire;
+      // data is stored on the registry entry, with a serialized fallback for
+      // separate workers. Emit a tripwire chunk and bail before calling the model.
+      const registryTripwire =
+        getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tripwire ?? typedInput.inputTripwire;
       if (registryTripwire) {
         // Clear it so it doesn't fire again on a subsequent iteration (shouldn't
         // happen since the loop will stop, but belt-and-suspenders).
