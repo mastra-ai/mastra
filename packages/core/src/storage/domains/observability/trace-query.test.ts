@@ -271,6 +271,20 @@ describe('traceQueryRequestSchema', () => {
     );
   });
 
+  it('points an oversized membership set nested in other predicates at the set itself', () => {
+    const set = Array.from({ length: TRACE_QUERY_MAX_SET_VALUES + 1 }, (_, index) => `trace-${index}`);
+    const inSet = { op: 'in', value: { path: 'traceId' }, set };
+
+    for (const [where, path] of [
+      [{ op: 'not', arg: inSet }, ['where', 'arg', 'set']],
+      [{ op: 'and', args: [{ op: 'exists', path: 'traceId' }, inSet] }, ['where', 'args', 1, 'set']],
+      [{ spans: { some: inSet } }, ['where', 'spans', 'some', 'set']],
+    ] as const) {
+      const error = validationError(() => parsed({ ...baseRequest, where }));
+      expect(error.issues).toEqual([expect.objectContaining({ code: 'invalid_request', path })]);
+    }
+  });
+
   it('bounds raw predicate paths by UTF-8 bytes before allowlist resolution', () => {
     const maxPath = 'p'.repeat(TRACE_QUERY_MAX_PATH_BYTES);
     expect(traceQueryRequestSchema.safeParse({ ...baseRequest, where: { op: 'exists', path: maxPath } }).success).toBe(
