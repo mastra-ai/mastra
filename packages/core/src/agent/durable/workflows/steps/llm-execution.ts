@@ -135,6 +135,7 @@ const durableLLMInputSchema = z.object({
           modelId: z.string(),
           specificationVersion: z.string().optional(),
           originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
+          settings: z.record(z.string(), z.any()).optional(),
           providerOptions: z.record(z.string(), z.any()).optional(),
         }),
         maxRetries: z.number(),
@@ -690,7 +691,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             let currentTools = tools as unknown as ToolSet;
             let currentToolChoice = execOptions.toolChoice as ToolChoice<ToolSet> | undefined;
             let currentActiveTools = execOptions.activeTools;
-            let currentModelSettings: Record<string, unknown> = { ...(execOptions.modelSettings ?? {}) };
+            // Per-entry settings shallow-merge over call-time settings, timeout
+            // fields included — same precedence as the in-process loop.
+            const entrySettings = modelEntry.config.settings;
+            let currentModelSettings: Record<string, unknown> = {
+              ...execOptions.modelSettings,
+              ...entrySettings,
+              ...(execOptions.modelSettings?.timeout || entrySettings?.timeout
+                ? { timeout: { ...execOptions.modelSettings?.timeout, ...entrySettings?.timeout } }
+                : {}),
+            };
             let currentProviderOptions: SharedProviderOptions | undefined = mergeProviderOptions(
               execOptions.providerOptions,
               modelEntry.config.providerOptions,

@@ -77,15 +77,11 @@ export interface SerializableModelConfig {
   specificationVersion?: string;
   /** Original model string/config for resolution at runtime (e.g., 'openai/gpt-4o') */
   originalConfig?: string | Record<string, unknown>;
-  /** Additional model settings */
-  settings?: {
-    temperature?: number;
-    maxTokens?: number;
-    topP?: number;
-    frequencyPenalty?: number;
-    presencePenalty?: number;
-    [key: string]: unknown;
-  };
+  /**
+   * Per-entry call settings from a model list entry's `modelSettings`, merged
+   * over call-time `modelSettings` on each attempt. Headers are excluded.
+   */
+  settings?: SerializableModelSettings;
   /** Provider-specific options for the model call */
   providerOptions?: SharedProviderOptions;
 }
@@ -735,6 +731,8 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /** Effective public ID of the owning agent; absent on legacy or manually seeded entries. */
+  agentId?: string;
   /**
    * Marks a minimal cross-process placeholder entry (e.g. seeded by
    * @mastra/inngest resume() to carry an abort controller). Placeholder
