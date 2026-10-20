@@ -340,6 +340,78 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(await oldRun.finishReason).toBe('aborted');
   }, 20_000);
 
+  it('runs no tool once a successor holds the lease, even before the next renewal', async () => {
+    const thread = 'lease-takeover-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    for (let i = 0; i < 100; i++) {
+      llm.on(
+        { userMessage: 'fenced run', sequenceIndex: i },
+        { toolCalls: [{ id: `call_fenced_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    for (let i = 0; i < 6; i++) {
+      llm.on(
+        { userMessage: 'fence handover', sequenceIndex: i },
+        { toolCalls: [{ id: `call_handover_${i}`, name: 'write', arguments: {} }] },
+      );
+    }
+    llm.on({ userMessage: 'fence handover', sequenceIndex: 6 }, { content: 'fence handover done' });
+
+    const shared = new SharedLeases();
+    const memory = new MockMemory();
+    let oldOwner: string | undefined;
+    let ticks = 0;
+    const besideSuccessor: Array<string | undefined> = [];
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        const owner = shared.owner(key);
+        if (oldOwner && owner && owner !== oldOwner) besideSuccessor.push(owner);
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return 'ticked';
+      },
+    });
+    const write = createTool({
+      id: 'write',
+      description: 'Write once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return 'written';
+      },
+    });
+    const oldReplica = replica(shared, memory, { tick });
+    const newReplica = replica(shared, memory, { write });
+
+    const { output: oldRun, drain } = await startStream(oldReplica, 'fenced run', {
+      maxSteps: 100,
+      memory: { thread, resource: RESOURCE },
+    });
+    const oldDone = drain().catch(() => undefined);
+
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+    oldOwner = shared.owner(key);
+    expect(oldOwner).toBeDefined();
+    // Take the thread right after a confirmed renewal, so the next one is a full interval away.
+    const renewals = shared.renewals;
+    await vi.waitFor(() => expect(shared.renewals).toBeGreaterThan(renewals), { timeout: 5_000 });
+    shared.drop(key);
+
+    const { output: successor, drain: drainSuccessor } = await startStream(newReplica, 'fence handover', {
+      maxSteps: 10,
+      memory: { thread, resource: RESOURCE },
+    });
+    await drainSuccessor();
+    expect(await successor.text).toBe('fence handover done');
+    await oldDone;
+
+    expect(besideSuccessor).toEqual([]);
+    expect(await oldRun.finishReason).toBe('aborted');
+  }, 30_000);
+
   it('never aborts a run whose lease stays healthy across many renewals', async () => {
     for (let i = 0; i < 6; i++) {
       llm.on(

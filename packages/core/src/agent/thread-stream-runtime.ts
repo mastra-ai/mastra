@@ -17,6 +17,7 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
+import { clearRunLeaseFence, setRunLeaseFence } from './run-lease-fence';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
 import { resolveAgentScopes } from './scopes';
 import { createSignal, resolveDeliveryAttributes } from './signals';
@@ -901,6 +902,37 @@ export class AgentThreadStreamRuntime {
     state.leaseRenewalTimers.set(runId, timer);
     // The lease was acquired or transferred just before this call.
     this.#armLeaseDeadline(pubsub, runId, Date.now());
+    setRunLeaseFence(runId, this.#leaseFence(pubsub, key, runId, timer));
+  }
+
+  /**
+   * Checked before each tool call. Renewals run every TTL/3, so a lease that was
+   * taken over is otherwise only noticed after the run may have called tools beside
+   * its successor. A backend that can't answer leaves the decision to the deadline.
+   */
+  #leaseFence(pubsub: PubSub, key: string, runId: string, timer: ReturnType<typeof setInterval>): () => Promise<void> {
+    const state = this.#getState(pubsub);
+    const leaseProvider = this.#getLeaseProvider(pubsub);
+    return async () => {
+      const deadline = state.leaseDeadlines.get(runId);
+      if (state.leaseRenewalTimers.get(runId) !== timer || !deadline) return;
+      let onExpired: (value: undefined) => void = () => {};
+      const expiredAt = new Promise<undefined>(resolve => (onExpired = resolve));
+      const expired = setTimeout(
+        () => onExpired(undefined),
+        Math.max(0, deadline.confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS - Date.now()),
+      );
+      const owner = await Promise.race([leaseProvider.getLeaseOwner(key).catch(() => runId), expiredAt]).finally(() =>
+        clearTimeout(expired),
+      );
+      if (owner === runId) return;
+      // Only the registration that owns this fence may stop the run.
+      if (state.leaseRenewalTimers.get(runId) === timer) {
+        this.#stopLeaseRenewal(pubsub, runId, timer);
+        this.#abortLeaseLostRun(state, runId);
+      }
+      throw new AgentThreadLeaseLostError(runId);
+    };
   }
 
   #armLeaseDeadline(pubsub: PubSub, runId: string, confirmedSentAt: number): void {
@@ -937,6 +969,7 @@ export class AgentThreadStreamRuntime {
     if (!timer || (only && timer !== only)) return;
     clearInterval(timer);
     state.leaseRenewalTimers.delete(runId);
+    clearRunLeaseFence(runId);
     const deadline = state.leaseDeadlines.get(runId);
     if (deadline) clearTimeout(deadline.timer);
     state.leaseDeadlines.delete(runId);
