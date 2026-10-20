@@ -463,17 +463,32 @@ export class GithubRules {
     if (!item || item.externalSource?.type !== 'issue') return { status: 'ignored' };
     const assignees = actorLogins(issue?.assignees);
     if (sameStrings(item.metadata?.assignees, assignees)) return { status: 'ignored' };
+    // GitHub can deliver webhooks out of order; drop payloads older than the last applied one.
+    // Timestamps have one-second resolution, so equal timestamps still apply.
+    const updatedAt = string(issue?.updated_at);
+    const payloadTime = timestamp(updatedAt);
+    const storedTime = timestamp(item.metadata?.githubAssigneesUpdatedAt);
+    if (payloadTime !== undefined && storedTime !== undefined && payloadTime < storedTime) {
+      return { status: 'ignored' };
+    }
     try {
       const updated = await this.options.storage.update({
         orgId: item.orgId,
         id: item.id,
         userId: LABEL_ROUTE_USER_ID,
-        patch: { metadata: { ...(item.metadata ?? {}), assignees } },
+        patch: {
+          metadata: {
+            ...(item.metadata ?? {}),
+            assignees,
+            ...(payloadTime !== undefined ? { githubAssigneesUpdatedAt: updatedAt } : {}),
+          },
+        },
         expectedRevision: item.revision,
       });
       return { status: updated ? 'committed' : 'ignored' };
     } catch (error) {
-      // As with labels: the next delivery or reconcile pass carries the same assignees.
+      // A concurrent write won; nothing reconciles issue-card assignees, so they stay as the
+      // winner left them until the next assigned/unassigned delivery for this issue.
       if (!(error instanceof WorkItemUpdateConflictError)) throw error;
       return { status: 'ignored' };
     }

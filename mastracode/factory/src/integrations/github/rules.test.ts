@@ -3435,6 +3435,28 @@ describe('GithubRules label routes', () => {
     },
   );
 
+  it('keeps the newer assignees when an older assigned payload arrives after a newer unassigned one', async () => {
+    const { service, workItems, project } = await setupRoutes('release');
+    const created = await createLinkedIssue(workItems, project.id);
+    await workItems.update({
+      orgId: 'org-1',
+      id: created.id,
+      userId: 'user-1',
+      patch: { metadata: { assignees: ['alice'] } },
+    });
+    const newer = issueAssignees('unassigned', [], 'assignee-newer');
+    (newer.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:02Z';
+    const older = issueAssignees('assigned', ['alice'], 'assignee-older');
+    (older.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:01Z';
+
+    await expect(service.ingest(newer)).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(older)).resolves.toEqual({ status: 'ignored' });
+    expect((await workItems.get({ orgId: 'org-1', id: created.id }))?.metadata).toMatchObject({
+      assignees: [],
+      githubAssigneesUpdatedAt: '2030-01-01T00:00:02Z',
+    });
+  });
+
   it('ignores assignee changes for issues without a card and on pull requests', async () => {
     const { service, workItems, project } = await setupRoutes('release');
     await expect(service.ingest(issueAssignees('assigned', ['alice']))).resolves.toEqual({ status: 'ignored' });
