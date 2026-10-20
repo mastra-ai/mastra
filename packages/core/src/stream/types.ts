@@ -1257,12 +1257,6 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
    */
   resolveFinalPromises?: boolean;
   /**
-   * When true, the wrapped stream already carries every `tool-call` chunk (built by an
-   * inner MastraModelOutput and stamped with tool payload transforms), so this output must
-   * not synthesize its own tool-calls from `tool-call-input-streaming-end`.
-   */
-  upstreamEmitsToolCalls?: boolean;
-  /**
    * When true, `error` chunks and `finish` chunks with stepResult.reason
    * 'error' bypass the per-chunk output processor pass. These chunks describe a
    * single model call that the caller may still recover from via an error

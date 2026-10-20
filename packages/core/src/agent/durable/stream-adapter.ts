@@ -898,8 +898,6 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       structuredOutput: structuredOutput as any,
       isLLMExecutionStep: true,
       resolveFinalPromises: true,
-      // The durable llm-execution step builds (and stamps) the tool-calls.
-      upstreamEmitsToolCalls: true,
       outputProcessors,
       processorStates,
       returnScorerData,

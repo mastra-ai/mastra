@@ -162,8 +162,6 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       runId: runIdToUse,
       logger: loggerToUse,
       toolCallStreaming: rest.toolCallStreaming,
-      // Each step's llm-execution output builds (and stamps) the tool-calls.
-      upstreamEmitsToolCalls: true,
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
       includeRawChunks: !!includeRawChunks,

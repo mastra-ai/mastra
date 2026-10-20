@@ -1179,9 +1179,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               delete self.#toolCallStreamingMeta[toolCallId];
               delete self.#toolCallArgsDeltas[toolCallId];
               delete self.#toolCallDeltaIdNameMap[toolCallId];
-              if (self.#options.upstreamEmitsToolCalls) {
-                break;
-              }
               if (meta) {
                 // Let the real tool-call drive emission: it carries the final args (OpenAI Responses
                 // and Anthropic PTC stream none) and the tool payload transform metadata stamped
