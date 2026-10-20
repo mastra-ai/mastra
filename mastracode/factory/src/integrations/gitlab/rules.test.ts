@@ -650,7 +650,15 @@ describe('GitLabRules', () => {
       }
     });
 
-    it('starts the re-review of a pushed commit on that commit, not the one the last verdict covered (#27590)', async () => {
+    // GitLab documents `… UTC`; offset forms and pushes without an update
+    // time must still record the pushed head before the pass is built.
+    it.each([
+      ['in UTC form', '2030-01-01 01:00:00 UTC', undefined],
+      ['in offset form', '2030-01-01 01:00:00 +0000', undefined],
+      ['missing', '', '2030-01-01T01:00:00+00:00'],
+    ])(
+      'starts the re-review of a pushed commit on that commit, not the one the last verdict covered, with updated_at %s (#27590)',
+      async (_form, updatedAt, commitTimestamp) => {
       const { seeded, project, service } = await setup();
       const card = (
         await seeded.workItems.upsert({
@@ -698,7 +706,11 @@ describe('GitLabRules', () => {
         return committed;
       };
 
-      await expect(service.ingest(mergeRequestUpdated('d-push-b', pushedHeadSha, reviewedHeadSha))).resolves.toEqual({
+      const push = mergeRequestUpdated('d-push-b', pushedHeadSha, reviewedHeadSha, updatedAt);
+      if (commitTimestamp) {
+        push.payload.object_attributes.last_commit = { id: pushedHeadSha, timestamp: commitTimestamp } as never;
+      }
+      await expect(service.ingest(push)).resolves.toEqual({
         status: 'committed',
       });
       await dispatcher.runOnce(new Date('2030-01-01T01:00:01Z'));
@@ -720,7 +732,8 @@ describe('GitLabRules', () => {
         pullRequestHeadSha: pushedHeadSha,
         reviewedHeadSha,
       });
-    });
+    },
+    );
 
     it('stamps the new head on the Review card and its authoring Work item without clearing the verdict', async () => {
       const { service, workId, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });

@@ -177,10 +177,12 @@ describe('reviewBoard', () => {
       await kickoff({ ...reviewed, pullRequestHeadSha: b }, gitlabReviewContext('factory/mr', 'review')),
     ).toContain(`new review pass for head \`${b}\``);
 
-    // Requested again on the head the verdict already covers.
-    expect(await kickoff({ ...reviewed, pullRequestHeadSha: a })).toContain(
-      'The previous pass already recorded "request changes" on this head',
-    );
+    // Requested again with the recorded head still on the reviewed commit. The
+    // recorded head can lag a push, so the pass must not be called a repeat.
+    const again = await kickoff({ ...reviewed, pullRequestHeadSha: a });
+    expect(again).toContain(`recorded "request changes" on \`${a}\`, which is also the last recorded head`);
+    expect(again).toContain('Read the current head first: if it moved');
+    expect(again).not.toContain('already');
     // A verdict that is not a known value is not quoted, and the sentence still reads.
     expect(await kickoff({ reviewVerdict: 'lgtm', reviewedHeadSha: a, pullRequestHeadSha: b })).toContain(
       `The previous pass reviewed on \`${a}\`; that pass does not cover this head.`,
