@@ -451,16 +451,33 @@ export class Agent extends BaseResource {
    * stream that is still open from before the suspension skips them. Released when the last stream
    * of the run closes, which is after this request returns.
    */
-  private holdResumingClientTools(runId: string, clientTools: ToolsInput | undefined): void {
+  private holdResumingClientTools(runId: string, clientTools: ToolsInput | undefined): () => void {
     const names = Object.entries(clientTools ?? {})
       .filter(([, tool]) => typeof (tool as { execute?: unknown }).execute === 'function')
       .map(([name]) => name);
-    if (names.length === 0) return;
+    if (names.length === 0) return () => {};
 
     const key = this.getSignalRuntimeRunKey(runId);
     const held = resumingClientToolNamesByRunKey.get(key) ?? new Map<string, number>();
     for (const name of names) held.set(name, (held.get(name) ?? 0) + 1);
     resumingClientToolNamesByRunKey.set(key, held);
+
+    // A generate resume opens no stream, so nothing else would drop this hold. A stream resume
+    // leaves it: the open first stream still needs it after this request returns, and drops it
+    // when that stream closes.
+    let released = false;
+    return () => {
+      if (released || openStreamCountByRunKey.has(key)) return;
+      released = true;
+      const current = resumingClientToolNamesByRunKey.get(key);
+      if (!current) return;
+      for (const name of names) {
+        const count = (current.get(name) ?? 1) - 1;
+        if (count > 0) current.set(name, count);
+        else current.delete(name);
+      }
+      if (current.size === 0) resumingClientToolNamesByRunKey.delete(key);
+    };
   }
 
   /** Drops the held tool names when the last stream of the run closes. */
@@ -3549,22 +3566,25 @@ export class Agent extends BaseResource {
   ): Promise<ToolCallGenerateResponse> {
     const { requestContext, clientTools, clientToolsResolver, memory, ...rest } = params;
     // The open first stream receives the resumed call while this request is in flight. Hold before
-    // the request so that stream skips tools this request can execute.
-    // The open first stream receives the resumed call while this request is in flight. Hold before
-    // the request so that stream skips tools this request can execute.
-    this.holdResumingClientTools(rest.runId, clientToolsResolver?.() ?? clientTools);
-    const response: ToolCallGenerateResponse = await this.request(
-      `/agents/${this.agentId}/approve-tool-call-generate`,
-      {
-        method: 'POST',
-        body: {
-          ...rest,
-          requestContext: parseClientRequestContext(requestContext),
-          clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
+    // the request so that stream skips tools this request can execute. A generate resume opens no
+    // stream of its own, so release the hold here unless a stream is still tracking the run.
+    const releaseHold = this.holdResumingClientTools(rest.runId, clientToolsResolver?.() ?? clientTools);
+    try {
+      const response: ToolCallGenerateResponse = await this.request(
+        `/agents/${this.agentId}/approve-tool-call-generate`,
+        {
+          method: 'POST',
+          body: {
+            ...rest,
+            requestContext: parseClientRequestContext(requestContext),
+            clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
+          },
         },
-      },
-    );
-    return this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver, memory });
+      );
+      return await this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver, memory });
+    } finally {
+      releaseHold();
+    }
   }
 
   /**
@@ -3585,19 +3605,26 @@ export class Agent extends BaseResource {
     },
   ): Promise<ToolCallGenerateResponse> {
     const { requestContext, clientTools, clientToolsResolver, memory, ...rest } = params;
-    this.holdResumingClientTools(rest.runId, clientToolsResolver?.() ?? clientTools);
-    const response: ToolCallGenerateResponse = await this.request(
-      `/agents/${this.agentId}/decline-tool-call-generate`,
-      {
-        method: 'POST',
-        body: {
-          ...rest,
-          requestContext: parseClientRequestContext(requestContext),
-          clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
+    // The open first stream receives the resumed call while this request is in flight. Hold before
+    // the request so that stream skips tools this request can execute. A generate resume opens no
+    // stream of its own, so release the hold here unless a stream is still tracking the run.
+    const releaseHold = this.holdResumingClientTools(rest.runId, clientToolsResolver?.() ?? clientTools);
+    try {
+      const response: ToolCallGenerateResponse = await this.request(
+        `/agents/${this.agentId}/decline-tool-call-generate`,
+        {
+          method: 'POST',
+          body: {
+            ...rest,
+            requestContext: parseClientRequestContext(requestContext),
+            clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
+          },
         },
-      },
-    );
-    return this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver, memory });
+      );
+      return await this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver, memory });
+    } finally {
+      releaseHold();
+    }
   }
 
   /**
