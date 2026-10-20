@@ -5267,6 +5267,12 @@ export type PostAgentsAgentIdSendMessage_PathParams = GetAgentsAgentId_PathParam
 
 export type PostAgentsAgentIdSendMessage_Body =
   | {
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      tracingOptions?: InputShared_Type_2 | undefined;
       ifActive?: InputShared_Type_4 | undefined;
       runId: string;
       resourceId?: string | undefined;
@@ -5275,6 +5281,12 @@ export type PostAgentsAgentIdSendMessage_Body =
       message: (string | (InputShared_Type_5 | InputShared_Type_6)[]) | InputShared_Type_7;
     }
   | {
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      tracingOptions?: InputShared_Type_2 | undefined;
       ifActive?: InputShared_Type_4 | undefined;
       runId?: undefined | undefined;
       resourceId: string;
@@ -5343,6 +5355,12 @@ export type PostAgentsAgentIdQueueSignal_PathParams = GetAgentsAgentId_PathParam
 
 export type PostAgentsAgentIdQueueSignal_Body =
   | {
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      tracingOptions?: InputShared_Type_2 | undefined;
       ifActive?: InputShared_Type_4 | undefined;
       runId: string;
       resourceId?: string | undefined;
@@ -5351,6 +5369,12 @@ export type PostAgentsAgentIdQueueSignal_Body =
       signal: InputShared_Type_10 | InputShared_Type_11;
     }
   | {
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      tracingOptions?: InputShared_Type_2 | undefined;
       ifActive?: InputShared_Type_4 | undefined;
       runId?: undefined | undefined;
       resourceId: string;

@@ -741,6 +741,9 @@ const signalActiveBehaviorSchema = z.enum(['deliver', 'persist', 'discard']);
 const signalIdleBehaviorSchema = z.enum(['wake', 'persist', 'discard']);
 
 const signalTargetBaseBodySchema = z.object({
+  // Sender context for the signal. Merged into the server request context; reserved keys stay server-controlled.
+  requestContext: z.record(z.string(), z.unknown()).optional(),
+  tracingOptions: tracingOptionsSchema.optional(),
   ifActive: z
     .object({
       behavior: signalActiveBehaviorSchema.optional(),

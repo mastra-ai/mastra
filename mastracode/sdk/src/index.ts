@@ -961,11 +961,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     resourceId,
     threadId,
     owner,
+    senderContext,
   }: {
     resourceId: string;
     threadId: string;
     /** The thread's wake session, when the caller already found it. */
     owner?: WakeSession<MastraCodeState>;
+    /** The sender's request context; its entries carry into the woken run. */
+    senderContext?: RequestContext;
   }) => {
     // Run the woken notification as the session that owns the target thread
     // so it uses that session's model/mode/state/workspace. Never borrow
@@ -1032,6 +1035,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       return update.result;
     };
     const requestContext = new RequestContext();
+    senderContext?.forEach((value, key) => requestContext.setRaw(key, value));
     const agentControllerContext: AgentControllerRequestContext = {
       controllerId: controller.id,
       state: getNotificationState(),
@@ -1147,7 +1151,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
             process.env.GITCRAWL_BIN ??
             process.env.MASTRACODE_GITCRAWL_COMMAND ??
             process.env.GITCRAWL_COMMAND,
-          getNotificationStreamOptions: getWakeStreamOptions,
         })
       : undefined;
   // Mastra Code's own processors are constructed once, here, rather than inside
@@ -1298,6 +1301,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         defaultThinkingLevel: hasSessionLevel ? undefined : await config?.resolveDefaultThinkingLevel?.(ctx),
       });
     }),
+    // Every signal that wakes an idle thread (notifications, including deferred
+    // ones re-dispatched by the notification dispatch workflow, GitHub signals,
+    // schedules, peer messages) runs with these options, so the woken run has
+    // a model instead of failing with "No model selected".
+    wakeOptions: ({ resourceId, threadId, requestContext }) =>
+      getWakeStreamOptions({ resourceId, threadId, senderContext: requestContext }),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time

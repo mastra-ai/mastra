@@ -210,6 +210,157 @@ describe('Agent signals: claimed thread ownership', () => {
     claim.unsubscribe();
   });
 
+  it('honors a top-level request context when waking a locally claimed thread owner', async () => {
+    // The server's send-message and signal routes pass the authenticated
+    // caller's context as the top-level `requestContext`, not inside
+    // `ifIdle.streamOptions`. A locally claimed owner has to receive it too.
+    const pubsub = new EventEmitterPubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const ownerAgent = {
+      id: 'top-level-context-owner',
+      stream: vi.fn(async () => ({})),
+    } as unknown as Agent;
+    const senderAgent = new Agent({
+      id: 'top-level-context-sender',
+      name: 'Top-level Context Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const claim = await runtime.claimThreadOwnership(
+      ownerAgent,
+      {
+        resourceId: 'top-level-user',
+        threadId: 'top-level-thread',
+        streamOptions: { memory: { resource: 'top-level-user', thread: 'top-level-thread' } },
+      },
+      pubsub,
+    );
+    expect(claim.claimed).toBe(true);
+    const requestContext = new RequestContext();
+    requestContext.set('caller', { organizationId: 'top-level-org' });
+
+    const signalResult = runtime.sendSignal(
+      senderAgent,
+      { type: 'user-message', contents: 'wake with top-level context' },
+      {
+        resourceId: 'top-level-user',
+        threadId: 'top-level-thread',
+        requestContext,
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+      },
+      pubsub,
+    );
+
+    const accepted = await signalResult.accepted;
+    expect(accepted).toMatchObject({ action: 'wake' });
+    expect(ownerAgent.stream).toHaveBeenCalledTimes(1);
+    expect(ownerAgent.stream.mock.calls[0]?.[1]?.requestContext).toBe(requestContext);
+    expect(ownerAgent.stream.mock.calls[0]?.[1]?.memory).toEqual({
+      resource: 'top-level-user',
+      thread: 'top-level-thread',
+    });
+
+    claim.unsubscribe();
+  });
+
+  it('prefers ifIdle.streamOptions.requestContext over the top-level one for a locally claimed owner', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const ownerAgent = {
+      id: 'precedence-owner',
+      stream: vi.fn(async () => ({})),
+    } as unknown as Agent;
+    const senderAgent = new Agent({
+      id: 'precedence-sender',
+      name: 'Precedence Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const claim = await runtime.claimThreadOwnership(
+      ownerAgent,
+      { resourceId: 'precedence-user', threadId: 'precedence-thread' },
+      pubsub,
+    );
+    expect(claim.claimed).toBe(true);
+    const topLevel = new RequestContext();
+    topLevel.set('caller', { organizationId: 'top-level' });
+    const explicit = new RequestContext();
+    explicit.set('caller', { organizationId: 'explicit' });
+
+    const signalResult = runtime.sendSignal(
+      senderAgent,
+      { type: 'user-message', contents: 'wake with both contexts' },
+      {
+        resourceId: 'precedence-user',
+        threadId: 'precedence-thread',
+        requestContext: topLevel,
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true, streamOptions: { requestContext: explicit } },
+      },
+      pubsub,
+    );
+
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake' });
+    expect(ownerAgent.stream.mock.calls[0]?.[1]?.requestContext).toBe(explicit);
+
+    claim.unsubscribe();
+  });
+
+  it('keeps the claimed owner options unchanged when a wake carries no request context', async () => {
+    // No-regression: a signal without any request context must not inject one
+    // or replace the owner's own options.
+    const pubsub = new EventEmitterPubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const ownerAgent = {
+      id: 'no-context-owner',
+      stream: vi.fn(async () => ({})),
+    } as unknown as Agent;
+    const senderAgent = new Agent({
+      id: 'no-context-sender',
+      name: 'No Context Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const ownerContext = new RequestContext();
+    ownerContext.set('caller', { organizationId: 'owner-org' });
+    const claim = await runtime.claimThreadOwnership(
+      ownerAgent,
+      {
+        resourceId: 'no-context-user',
+        threadId: 'no-context-thread',
+        streamOptions: {
+          requestContext: ownerContext,
+          memory: { resource: 'no-context-user', thread: 'no-context-thread' },
+        },
+      },
+      pubsub,
+    );
+    expect(claim.claimed).toBe(true);
+
+    const signalResult = runtime.sendSignal(
+      senderAgent,
+      { type: 'user-message', contents: 'wake without context' },
+      {
+        resourceId: 'no-context-user',
+        threadId: 'no-context-thread',
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+      },
+      pubsub,
+    );
+
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake' });
+    expect(ownerAgent.stream).toHaveBeenCalledTimes(1);
+    expect(ownerAgent.stream.mock.calls[0]?.[1]?.requestContext).toBe(ownerContext);
+    expect(ownerAgent.stream.mock.calls[0]?.[1]?.memory).toEqual({
+      resource: 'no-context-user',
+      thread: 'no-context-thread',
+    });
+
+    claim.unsubscribe();
+  });
+
   it('routes idle signals to the claimed thread owner runtime', async () => {
     const pubsub = new EventEmitterPubSub();
     const ownerRuntime = agentThreadStreamRuntime;

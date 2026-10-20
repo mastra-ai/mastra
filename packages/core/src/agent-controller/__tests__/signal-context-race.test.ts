@@ -1,0 +1,268 @@
+import { describe, expect, it, vi } from 'vitest';
+import { Agent } from '../../agent';
+import type { AgentWakeOptionsInput } from '../../agent/types';
+import { Mastra } from '../../mastra';
+import { RequestContext } from '../../request-context';
+import { InMemoryStore } from '../../storage';
+import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { AgentController } from '../agent-controller';
+import { createMockWorkspace } from '../test-utils';
+
+describe('session signal context at run completion', () => {
+  it.each([
+    { kind: 'user', behavior: 'deliver' },
+    { kind: 'user', behavior: 'discard' },
+    { kind: 'notification', behavior: 'deliver' },
+    { kind: 'notification', behavior: 'discard' },
+  ] as const)('keeps active $kind $behavior free of idle setup', async ({ kind, behavior }) => {
+    let finishFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      finishFirst = resolve;
+    });
+    let calls = 0;
+    const model = new MastraLanguageModelV2Mock({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          async start(controller) {
+            const call = ++calls;
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 'text' });
+            controller.enqueue({ type: 'text-delta', id: 'text', delta: 'done' });
+            if (call === 1) await firstFinished;
+            controller.enqueue({ type: 'text-end', id: 'text' });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+      }),
+    });
+    const agent = new Agent({ id: 'active-context', name: 'Active context', instructions: 'Respond briefly.', model });
+    const storage = new InMemoryStore();
+    new Mastra({ agents: { agent }, storage, logger: false });
+    const controller = new AgentController({
+      id: 'active-controller',
+      workspace: createMockWorkspace(),
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'active-session', ownerId: 'owner' });
+    const first = session.sendMessage({ content: 'first' });
+    try {
+      await vi.waitFor(() => expect(calls).toBe(1));
+      const runId = session.run.getRunId();
+      const buildStreamOptions = vi.spyOn(session.machinery, 'buildStreamOptions');
+      const syncModel = vi.spyOn(session.model, 'syncFromPersisted');
+      const clearAbort = vi.spyOn(session.run, 'clearAbortRequested');
+      if (kind === 'user') {
+        await expect(
+          session.sendSignal(
+            { content: 'second', ifActive: { behavior } } as Parameters<typeof session.sendSignal>[0],
+            { requireDelivery: true },
+          ).accepted,
+        ).resolves.toEqual({
+          accepted: true,
+          action: behavior,
+          ...(behavior === 'deliver' && { runId }),
+        });
+      } else {
+        const result = await session.sendNotificationSignal(
+          { source: 'factory', kind: 'manual', priority: 'high', summary: 'second' },
+          { ifActive: { behavior } },
+        );
+        await expect(result.accepted).resolves.toEqual({
+          action: behavior,
+          ...(behavior === 'deliver' && { runId }),
+        });
+      }
+      expect(buildStreamOptions).not.toHaveBeenCalled();
+      expect(syncModel).not.toHaveBeenCalled();
+      expect(clearAbort).not.toHaveBeenCalled();
+      expect(session.run.getRunId()).toBe(runId);
+      finishFirst();
+      await first;
+      if (behavior === 'deliver') {
+        await vi.waitFor(() => expect(calls).toBe(2));
+      } else {
+        expect(calls).toBe(1);
+      }
+    } finally {
+      finishFirst();
+      await first;
+      session.stream.detach();
+    }
+  });
+
+  it.each(['user', 'notification'] as const)(
+    'preserves controller and caller context when an active %s send reaches an idle runtime',
+    async kind => {
+      let finishFirst!: () => void;
+      const firstFinished = new Promise<void>(resolve => {
+        finishFirst = resolve;
+      });
+      let calls = 0;
+      const contexts: RequestContext[] = [];
+      const model = new MastraLanguageModelV2Mock({
+        doStream: async () => ({
+          stream: new ReadableStream({
+            async start(controller) {
+              const call = ++calls;
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 'text' });
+              controller.enqueue({ type: 'text-delta', id: 'text', delta: 'done' });
+              if (call === 1) await firstFinished;
+              controller.enqueue({ type: 'text-end', id: 'text' });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        }),
+      });
+      const agent = new Agent({
+        id: 'context-race',
+        name: 'Context race',
+        instructions: 'Respond briefly.',
+        model: ({ requestContext }) => {
+          contexts.push(requestContext);
+          if (!requestContext.get('controller')) throw new Error('No controller session context');
+          return model;
+        },
+      });
+      const storage = new InMemoryStore();
+      new Mastra({ agents: { agent }, storage, logger: false });
+      const controller = new AgentController({
+        id: 'context-controller',
+        workspace: createMockWorkspace(),
+        storage,
+        modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      });
+      await controller.init();
+      const session = await controller.createSession({ id: 'context-session', ownerId: 'owner' });
+      const stream = vi.spyOn(agent, 'stream');
+      const first = session.sendMessage({ content: 'first' });
+      try {
+        await vi.waitFor(() => expect(calls).toBe(1));
+        if (kind === 'user') {
+          const ensureSubscription = session.thread.ensureSubscription.bind(session.thread);
+          vi.spyOn(session.thread, 'ensureSubscription').mockImplementationOnce(async threadId => {
+            finishFirst();
+            await first;
+            await ensureSubscription(threadId);
+          });
+        } else {
+          const sendNotificationSignal = agent.sendNotificationSignal.bind(agent);
+          vi.spyOn(agent, 'sendNotificationSignal').mockImplementationOnce(async (...args) => {
+            finishFirst();
+            await first;
+            return sendNotificationSignal(...args);
+          });
+        }
+        contexts.length = 0;
+        const requestContext = new RequestContext();
+        requestContext.set('caller', 'factory');
+        const tracingContext = {};
+        if (kind === 'user') {
+          await session.sendSignal({ content: 'second' }, { requestContext, tracingContext, requireDelivery: true })
+            .accepted;
+        } else {
+          await session.sendNotificationSignal(
+            { source: 'factory', kind: 'manual', priority: 'high', summary: 'second' },
+            { requestContext, tracingContext },
+          );
+        }
+        await vi.waitFor(() => expect(calls).toBe(2));
+        expect(
+          stream.mock.calls.some(call => {
+            const options = (call as unknown[])[1] as { tracingContext?: unknown } | undefined;
+            return options?.tracingContext === tracingContext;
+          }),
+        ).toBe(true);
+        await vi.waitFor(() => expect(session.run.isRunning()).toBe(false));
+        const threadId = session.thread.requireId();
+        await session.sendMessage({ content: 'third', requestContext });
+        expect(calls).toBe(3);
+        expect(session.thread.requireId()).toBe(threadId);
+        expect(contexts.length).toBeGreaterThan(0);
+        for (const context of contexts) {
+          expect(context.get('controller')).toBeDefined();
+          expect(context.get('caller')).toBe('factory');
+        }
+      } finally {
+        finishFirst();
+        await first;
+        session.stream.detach();
+      }
+    },
+    15_000,
+  );
+});
+
+describe('agent wakeOptions hook', () => {
+  it('builds wake options when a direct notification wakes an idle thread', async () => {
+    let seen: RequestContext | undefined;
+    const model = new MastraLanguageModelV2Mock({
+      doStream: async options => {
+        seen = (options as { requestContext?: RequestContext }).requestContext ?? seen;
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 'text' });
+              controller.enqueue({ type: 'text-delta', id: 'text', delta: 'ok' });
+              controller.enqueue({ type: 'text-end', id: 'text' });
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    const hookInputs: AgentWakeOptionsInput[] = [];
+    const agent = new Agent({
+      id: 'wake-hook',
+      name: 'Wake hook',
+      instructions: 'Respond briefly.',
+      model: ({ requestContext }) => {
+        seen = requestContext;
+        return model;
+      },
+      wakeOptions: async input => {
+        hookInputs.push(input);
+        const requestContext = new RequestContext(input.requestContext?.entries() ?? []);
+        requestContext.set('controller', 'hook');
+        return { requestContext, tracingContext: { currentSpan: undefined } };
+      },
+    });
+    new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+    const stream = vi.spyOn(agent, 'stream');
+    const tracingContext = {};
+
+    const requestContext = new RequestContext();
+    requestContext.set('caller', 'schedule');
+    const result = await agent.sendNotificationSignal(
+      { source: 'schedule', kind: 'manual', priority: 'high', summary: 'wake up' },
+      { resourceId: 'resource-1', threadId: 'thread-1', requestContext, tracingContext },
+    );
+    await result.accepted;
+
+    await vi.waitFor(() => expect(seen?.get('controller')).toBe('hook'));
+    expect(seen?.get('caller')).toBe('schedule');
+    expect(hookInputs).toEqual([
+      expect.objectContaining({ resourceId: 'resource-1', threadId: 'thread-1', requestContext, tracingContext }),
+    ]);
+    // The sender's trace wins over the hook's, so the woken run nests under its cause.
+    expect((stream.mock.calls[0]?.[1] as { tracingContext?: unknown }).tracingContext).toBe(tracingContext);
+  });
+});

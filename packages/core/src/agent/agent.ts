@@ -275,6 +275,8 @@ import type {
   ModelFallbackSettings,
   ModelWithRetries,
   ZodSchema,
+  AgentWakeOptions,
+  AgentWakeOptionsInput,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
@@ -852,6 +854,7 @@ export class Agent<
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions, TRequestContext>;
   #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
+  #wakeOptions?: AgentWakeOptions<TOutput>;
   #defaultNetworkOptions: DynamicArgument<NetworkOptions, TRequestContext>;
   #tools: DynamicArgument<TTools, TRequestContext>;
   #hooks?: ToolHooks;
@@ -994,6 +997,7 @@ export class Agent<
     this.#defaultGenerateOptionsLegacy = config.defaultGenerateOptionsLegacy || {};
     this.#defaultStreamOptionsLegacy = config.defaultStreamOptionsLegacy || {};
     this.#defaultOptions = config.defaultOptions || ({} as AgentExecutionOptions<TOutput>);
+    this.#wakeOptions = config.wakeOptions;
     this.#defaultNetworkOptions = config.defaultNetworkOptions || {};
     this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
       config.transform ?? (config as any).toolPayloadProjection,
@@ -3427,6 +3431,28 @@ export class Agent<
 
       return options;
     });
+  }
+
+  /**
+   * Resolve the stream options for a run started by a signal that wakes an
+   * idle thread, from the `wakeOptions` config.
+   *
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  public resolveWakeOptions(
+    input: AgentWakeOptionsInput,
+  ): AgentExecutionOptions<TOutput> | undefined | Promise<AgentExecutionOptions<TOutput> | undefined> {
+    const wakeOptions = this.#wakeOptions;
+    return typeof wakeOptions === 'function' ? wakeOptions(input) : wakeOptions;
+  }
+
+  /**
+   * Install a `wakeOptions` hook when the agent was not configured with one.
+   *
+   * @internal
+   */
+  __setDefaultWakeOptions(wakeOptions: AgentWakeOptions<TOutput>): void {
+    this.#wakeOptions ??= wakeOptions;
   }
 
   /**

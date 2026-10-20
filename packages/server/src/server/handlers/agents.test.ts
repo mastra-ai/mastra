@@ -3702,6 +3702,83 @@ describe('Agent Routes Authorization', () => {
       });
     });
 
+    it('wakes an idle thread through the agent wakeOptions hook with the sender context', async () => {
+      const prompts: unknown[] = [];
+      const model = {
+        specificationVersion: 'v2' as const,
+        provider: 'test',
+        modelId: 'wake-model',
+        supportedUrls: {},
+        doGenerate: async () => {
+          throw new Error('not used');
+        },
+        doStream: async ({ prompt }: { prompt: unknown }) => {
+          prompts.push(prompt);
+          return {
+            stream: new ReadableStream({
+              start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({ type: 'text-start', id: 't' });
+                controller.enqueue({ type: 'text-delta', id: 't', delta: 'ok' });
+                controller.enqueue({ type: 'text-end', id: 't' });
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1 },
+                });
+                controller.close();
+              },
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+      };
+      const wakeInputs: Array<{ threadId: string; tenant: unknown }> = [];
+      const agent = new Agent({
+        id: 'wake-agent',
+        name: 'wake-agent',
+        instructions: 'test',
+        model: model as any,
+        memory: mockMemory,
+        wakeOptions: ({ threadId, requestContext }) => {
+          wakeInputs.push({ threadId, tenant: requestContext?.get('tenant') });
+          return { instructions: 'Woken by the hook.' };
+        },
+      });
+      const localMastra = new Mastra({ agents: { 'wake-agent': agent }, storage, logger: false });
+      await mockMemory.createThread({ threadId: 'wake-thread', resourceId: 'user-a', title: 'Wake' });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      requestContext.set('tenant', 'acme');
+
+      const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
+        mastra: localMastra,
+        agentId: 'wake-agent',
+        requestContext,
+        signal: { type: 'user-message', contents: 'hello' },
+        resourceId: 'user-a',
+        threadId: 'wake-thread',
+      } as any);
+
+      expect(result.accepted).toBe(true);
+      await vi.waitFor(() => expect(prompts).toHaveLength(1));
+      expect(wakeInputs).toEqual([{ threadId: 'wake-thread', tenant: 'acme' }]);
+      expect(JSON.stringify(prompts[0])).toContain('Woken by the hook.');
+    });
+
+    it('accepts top-level requestContext and tracingOptions on signal bodies', () => {
+      const parsed = sendAgentSignalBodySchema.parse({
+        signal: { type: 'user-message', contents: 'hello' },
+        resourceId: 'user-a',
+        threadId: 't1',
+        requestContext: { tenant: 'acme' },
+        tracingOptions: { metadata: { source: 'webhook' } },
+      });
+
+      expect(parsed.requestContext).toEqual({ tenant: 'acme' });
+      expect(parsed.tracingOptions).toEqual({ metadata: { source: 'webhook' } });
+    });
+
     it.each([
       { route: SEND_AGENT_MESSAGE_ROUTE, method: 'sendMessage' },
       { route: QUEUE_AGENT_MESSAGE_ROUTE, method: 'queueMessage' },
@@ -3817,7 +3894,8 @@ describe('Agent Routes Authorization', () => {
         contents: 'Triage it.',
       });
       expect(capturedTarget).toMatchObject({ resourceId: 'user-a', threadId: 'queue-signal-thread' });
-      expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
+      expect(capturedTarget.requestContext).toBe(requestContext);
+      expect(capturedTarget.ifIdle).toBeUndefined();
     });
 
     it('should reject queueing a signal on a thread owned by another resource', async () => {

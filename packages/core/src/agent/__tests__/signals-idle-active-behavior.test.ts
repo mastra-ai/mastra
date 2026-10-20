@@ -3,6 +3,7 @@ import { fork } from 'node:child_process';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
@@ -984,4 +985,109 @@ describe('Agent signals: idle and active behaviors', () => {
       ).toBe(true);
     },
   );
+});
+
+describe("idle wakes queued behind another agent's run", () => {
+  async function startBusyThread(id: string, secondOptions: Record<string, unknown> = {}) {
+    const scope = { resourceId: id, threadId: id };
+    let releaseFirst!: () => void;
+    const firstReleased = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    const firstAgent = new Agent({
+      id: `${id}-first`,
+      name: 'First',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          await firstReleased;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'first' },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+          };
+        },
+      }),
+    });
+    const tenants: unknown[] = [];
+    const secondModel = createTextStreamModel('second');
+    const secondAgent = new Agent({
+      id: `${id}-second`,
+      name: 'Second',
+      instructions: 'Test',
+      model: ({ requestContext }) => {
+        tenants.push(requestContext.get('tenant'));
+        return secondModel;
+      },
+      ...secondOptions,
+    } as ConstructorParameters<typeof Agent>[0]);
+    new Mastra({ agents: { firstAgent, secondAgent }, logger: false });
+    const firstStream = await firstAgent.stream('Hello', { memory: { thread: id, resource: id } });
+    return { scope, secondAgent, secondModel, tenants, releaseFirst, firstText: firstStream.text };
+  }
+
+  it('keeps the sender request context when explicit idle stream options omit it', async () => {
+    const { scope, secondAgent, secondModel, tenants, releaseFirst, firstText } =
+      await startBusyThread('queued-wake-context');
+    const requestContext = new RequestContext();
+    requestContext.set('tenant', 'acme');
+    try {
+      await secondAgent.sendSignal(
+        { type: 'user-message', contents: 'queued' },
+        { ...scope, requestContext, ifIdle: { behavior: 'wake', streamOptions: { maxSteps: 1 } } },
+      ).accepted;
+      await nextTick();
+      expect(secondModel.doStreamCalls).toHaveLength(0);
+      releaseFirst();
+      await firstText;
+      await vi.waitFor(() => expect(secondModel.doStreamCalls).toHaveLength(1));
+      expect(tenants.length).toBeGreaterThan(0);
+      expect(tenants.every(tenant => tenant === 'acme')).toBe(true);
+    } finally {
+      releaseFirst();
+    }
+  });
+
+  it('does not start a queued wake that is cancelled while its wakeOptions hook resolves', async () => {
+    let hookEntered!: () => void;
+    const entered = new Promise<void>(resolve => {
+      hookEntered = resolve;
+    });
+    let finishHook!: () => void;
+    const hookDone = new Promise<void>(resolve => {
+      finishHook = resolve;
+    });
+    const { scope, secondAgent, secondModel, releaseFirst, firstText } = await startBusyThread('queued-wake-cancel', {
+      wakeOptions: async () => {
+        hookEntered();
+        await hookDone;
+        return {};
+      },
+    });
+    try {
+      const queued = secondAgent.sendSignal(
+        { type: 'user-message', contents: 'queued' },
+        { ...scope, ifIdle: { behavior: 'wake' } },
+      );
+      await queued.accepted;
+      releaseFirst();
+      await firstText;
+      await entered;
+      expect(secondAgent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] })).toEqual({
+        cancelledSignalIds: [queued.signal.id],
+      });
+      finishHook();
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(secondModel.doStreamCalls).toHaveLength(0);
+    } finally {
+      releaseFirst();
+      finishHook();
+    }
+  });
 });

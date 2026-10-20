@@ -529,6 +529,35 @@ describe('AgentController session registry', () => {
     expect(await controller.getSessionByResource('user-a', '/worktrees/other')).toBeUndefined();
   });
 
+  it('resolves the session a woken thread runs as, in any scope', async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+
+    const scopedA = await controller.createSession({
+      id: 'user-a::wt-a',
+      ownerId: 'test-owner',
+      resourceId: 'user-a',
+      scope: '/worktrees/a',
+    });
+    const scopedB = await controller.createSession({
+      id: 'user-a::wt-b',
+      ownerId: 'test-owner',
+      resourceId: 'user-a',
+      scope: '/worktrees/b',
+    });
+    const threadA = (await scopedA.thread.create({ title: 'a' })).id;
+    const threadB = (await scopedB.thread.create({ title: 'b' })).id;
+
+    expect(await controller.getSessionForThread({ resourceId: 'user-a', threadId: threadA })).toBe(scopedA);
+    expect(await controller.getSessionForThread({ resourceId: 'user-a', threadId: threadB })).toBe(scopedB);
+    // No session is bound to the thread and none is unscoped: don't borrow a scoped one.
+    expect(await controller.getSessionForThread({ resourceId: 'user-a', threadId: 'other' })).toBeUndefined();
+
+    const unscoped = await controller.createSession({ id: 'user-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    expect(await controller.getSessionForThread({ resourceId: 'user-a', threadId: 'other' })).toBe(unscoped);
+    expect(await controller.getSessionForThread({ resourceId: 'user-a', threadId: threadB })).toBe(scopedB);
+  });
+
   it('keeps the scope when a scoped session is re-keyed to a new resourceId', async () => {
     const controller = createController(new InMemoryStore());
     await controller.init();

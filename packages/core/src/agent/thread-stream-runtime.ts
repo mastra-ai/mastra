@@ -45,6 +45,7 @@ import type {
   QueueAgentSignalResult,
   SendAgentMessageOptions,
   SendAgentMessageResult,
+  AgentWakeOptionsInput,
   SendAgentSignalOptions,
   SendAgentSignalAccepted,
   SendAgentSignalResult,
@@ -378,9 +379,56 @@ type PendingIdleSignal<OUTPUT = unknown> = {
   resourceId: string;
   threadId: string;
   streamOptions?: AgentExecutionOptions<OUTPUT>;
+  /** Set when the run's options come from the agent's `wakeOptions` hook, resolved at start. */
+  wake?: Omit<AgentWakeOptionsInput, 'resourceId' | 'threadId'>;
   queueOwnerId?: string;
   cancelled?: boolean;
 };
+
+/**
+ * Stream options for a run started by a signal waking an idle thread. Explicit
+ * options (from the sender or a notification delivery policy) are used, with the
+ * sender's context filling fields they omit; otherwise the agent's `wakeOptions` hook is called, falling back to the
+ * sender's request context.
+ */
+/**
+ * Stays synchronous unless the agent's wake hook returns a promise, so wakes
+ * without a hook start their run on the same tick as before.
+ */
+function resolveWakeStreamOptions<OUTPUT>(
+  agent: Agent<any, any, any, any>,
+  input: AgentWakeOptionsInput & { streamOptions?: AgentExecutionOptions<OUTPUT> },
+): AgentExecutionOptions<OUTPUT> | undefined | Promise<AgentExecutionOptions<OUTPUT> | undefined> {
+  const { streamOptions: explicit, ...hookInput } = input;
+  const { requestContext, tracingContext, tracingOptions } = hookInput;
+  if (explicit) {
+    // Explicit fields win; the sender's context fills only what they leave out.
+    if (
+      (explicit.requestContext || !requestContext) &&
+      (explicit.tracingContext || !tracingContext) &&
+      (explicit.tracingOptions || !tracingOptions)
+    ) {
+      return explicit;
+    }
+    return {
+      ...explicit,
+      requestContext: explicit.requestContext ?? requestContext,
+      tracingContext: explicit.tracingContext ?? tracingContext,
+      tracingOptions: explicit.tracingOptions ?? tracingOptions,
+    };
+  }
+  // The sender's trace wins so the woken run nests under whatever caused it;
+  // the sender's request context is only a fallback for the hook's.
+  const merge = (hooked: AgentExecutionOptions<any> | undefined): AgentExecutionOptions<OUTPUT> | undefined => {
+    const merged: Record<string, unknown> = { ...hooked };
+    if (!merged.requestContext && requestContext) merged.requestContext = requestContext;
+    if (tracingContext) merged.tracingContext = tracingContext;
+    if (tracingOptions) merged.tracingOptions = tracingOptions;
+    return hooked || Object.keys(merged).length ? (merged as AgentExecutionOptions<OUTPUT>) : undefined;
+  };
+  const hooked = agent.resolveWakeOptions?.(hookInput);
+  return hooked instanceof Promise ? hooked.then(merge) : merge(hooked);
+}
 
 type PendingContinuation<OUTPUT = unknown> = {
   agent: Agent<any, any, any, any>;
@@ -4286,7 +4334,7 @@ export class AgentThreadStreamRuntime {
       return drained || owns.acquired;
     }
 
-    if (pendingIdle.cancelled) {
+    const dropCancelled = () => {
       state.drainingIdleSignalsByThread.delete(key);
       state.threadKeysByRunId.delete(pendingIdle.runId);
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
@@ -4296,12 +4344,27 @@ export class AgentThreadStreamRuntime {
       this.#notifyThreadEvents(state);
       void this.#drainPendingIdleSignals(state, pubsub, key);
       return true;
-    }
+    };
+    if (pendingIdle.cancelled) return dropCancelled();
 
+    let resolvingWakeOptions = false;
     try {
+      state.startingQueuedRunIds.add(pendingIdle.runId);
+      if (pendingIdle.wake) {
+        resolvingWakeOptions = true;
+        const resolved = resolveWakeStreamOptions(pendingIdle.agent, {
+          resourceId: pendingIdle.resourceId,
+          threadId: pendingIdle.threadId,
+          streamOptions: pendingIdle.streamOptions,
+          ...pendingIdle.wake,
+        });
+        // Stay in the draining slot while an async hook resolves so the signal can still be cancelled.
+        pendingIdle.streamOptions = resolved instanceof Promise ? await resolved : resolved;
+        resolvingWakeOptions = false;
+        if (pendingIdle.cancelled) return dropCancelled();
+      }
       state.drainingIdleSignalsByThread.delete(key);
       this.#notifyThreadEvents(state);
-      state.startingQueuedRunIds.add(pendingIdle.runId);
       const output = await pendingIdle.agent.stream(pendingIdle.signal, {
         ...(pendingIdle.streamOptions as any),
         runId: pendingIdle.runId,
@@ -4320,11 +4383,17 @@ export class AgentThreadStreamRuntime {
       // way the immediate-start path does: a sender retrying this logical message
       // must learn the turn failed rather than be told it was delivered. Only
       // settle the identity this run reserved.
+      // If the wake options failed to resolve, no stream started: release the
+      // identity so a retry is admitted again instead of reported as failed.
       if (drainedIdentity && state.acceptedIdleMessagesByIdentity.get(drainedIdentity)?.runId === pendingIdle.runId) {
-        state.acceptedIdleMessagesByIdentity.set(drainedIdentity, {
-          runId: pendingIdle.runId,
-          terminalReason: message,
-        });
+        if (resolvingWakeOptions) {
+          state.acceptedIdleMessagesByIdentity.delete(drainedIdentity);
+        } else {
+          state.acceptedIdleMessagesByIdentity.set(drainedIdentity, {
+            runId: pendingIdle.runId,
+            terminalReason: message,
+          });
+        }
       }
       state.threadKeysByRunId.delete(pendingIdle.runId);
       this.#cleanupPreparedRun(state, pendingIdle.runId);
@@ -5844,7 +5913,7 @@ export class AgentThreadStreamRuntime {
     const resourceId = target.resourceId;
     const threadId = target.threadId;
 
-    const requestContext = target.ifIdle?.streamOptions?.requestContext;
+    const requestContext = target.requestContext ?? target.ifIdle?.streamOptions?.requestContext;
     const memoryContext = parseMemoryRequestContext(requestContext);
     const memory = await agent.getMemory({ requestContext });
     if (!memory) {
@@ -5998,7 +6067,7 @@ export class AgentThreadStreamRuntime {
           signal,
           resourceId,
           threadId,
-          target.ifIdle?.streamOptions?.requestContext,
+          target.requestContext ?? target.ifIdle?.streamOptions?.requestContext,
         );
         void persisted.catch(() => {});
         return {
@@ -6111,7 +6180,7 @@ export class AgentThreadStreamRuntime {
         signal,
         resourceId,
         threadId,
-        target.ifIdle?.streamOptions?.requestContext,
+        target.requestContext ?? target.ifIdle?.streamOptions?.requestContext,
       );
       void persisted.catch(() => {});
       return {
@@ -6148,7 +6217,19 @@ export class AgentThreadStreamRuntime {
       // Another run owns the thread. Queue this idle-start request and let the watcher
       // launch it only after the active run clears the thread reservation.
       const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
-      idleQueue.push({ agent, signal, runId, resourceId, threadId, streamOptions: target.ifIdle?.streamOptions });
+      idleQueue.push({
+        agent,
+        signal,
+        runId,
+        resourceId,
+        threadId,
+        streamOptions: target.ifIdle?.streamOptions,
+        wake: {
+          requestContext: target.requestContext,
+          tracingContext: target.tracingContext,
+          tracingOptions: target.tracingOptions,
+        },
+      });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
       if (activeRecord) {
         this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
@@ -6187,7 +6268,11 @@ export class AgentThreadStreamRuntime {
           signal,
           Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
           () => state.claimedThreadOwners.get(reservedKey)?.unsubscribe === localClaimedOwner.unsubscribe,
-          target.ifIdle?.streamOptions,
+          // The server routes pass an authenticated caller as the top-level
+          // `requestContext`; it is the fallback when `ifIdle.streamOptions` has none.
+          target.requestContext && target.ifIdle?.streamOptions?.requestContext === undefined
+            ? { ...target.ifIdle?.streamOptions, requestContext: target.requestContext }
+            : target.ifIdle?.streamOptions,
         );
         if (!localAcceptance) {
           throw new Error(
@@ -6283,13 +6368,23 @@ export class AgentThreadStreamRuntime {
       // We own the lease. Start the renewal timer so it survives runs
       // that outlive the TTL, then kick off the stream.
       this.#startLeaseRenewal(resolvedPubSub, reservedKey, reservedRunId);
+      let wakeStreamOptions: AgentExecutionOptions<OUTPUT> | undefined = target.ifIdle?.streamOptions;
       try {
+        const resolved = resolveWakeStreamOptions(agent, {
+          resourceId,
+          threadId,
+          requestContext: target.requestContext,
+          tracingContext: target.tracingContext,
+          tracingOptions: target.tracingOptions,
+          streamOptions: target.ifIdle?.streamOptions,
+        });
+        wakeStreamOptions = resolved instanceof Promise ? await resolved : resolved;
         const output = toModelOutput<OUTPUT>(
           await agent.stream(signal, {
-            ...(target.ifIdle?.streamOptions as any),
+            ...(wakeStreamOptions as any),
             untilIdle: true,
             runId: reservedRunId,
-            memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
+            memory: withThreadMemory(wakeStreamOptions?.memory, resourceId, threadId),
           }),
         );
         return { action: 'wake' as const, runId: reservedRunId, output };
@@ -6307,7 +6402,7 @@ export class AgentThreadStreamRuntime {
         });
         this.#trimFailedRun(pubsub, reservedKey, {
           agent,
-          streamOptions: target.ifIdle?.streamOptions ?? {},
+          streamOptions: wakeStreamOptions ?? {},
           runId: reservedRunId,
         });
         void this.#drainPendingIdleSignals(state, pubsub, reservedKey);

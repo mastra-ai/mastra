@@ -44,7 +44,14 @@ import type {
   NotificationRecord,
   SendNotificationSignalInput,
 } from '../notifications/types';
-import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
+import type {
+  Span,
+  SpanType,
+  TracingContext,
+  TracingOptions,
+  TracingPolicy,
+  ObservabilityContext,
+} from '../observability';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
@@ -204,6 +211,31 @@ export type DiscoverAgentThreadPeersOptions = {
   timeoutMs?: number;
 };
 
+/**
+ * Input passed to an agent's `wakeOptions` hook.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentWakeOptionsInput = {
+  resourceId: string;
+  threadId: string;
+  /** The sender's request context, when one was provided. */
+  requestContext?: RequestContext;
+  /** The sender's tracing context, when one was provided. The woken run is traced as its child. */
+  tracingContext?: TracingContext;
+  /** The sender's tracing options, when provided. */
+  tracingOptions?: TracingOptions;
+};
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentWakeOptions<OUTPUT = unknown> =
+  | AgentExecutionOptions<OUTPUT>
+  | ((
+      input: AgentWakeOptionsInput,
+    ) => AgentExecutionOptions<OUTPUT> | undefined | Promise<AgentExecutionOptions<OUTPUT> | undefined>);
+
 export type SendAgentSignalOptions<OUTPUT = unknown> =
   | {
       runId: string;
@@ -211,6 +243,12 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       threadId?: string;
       ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
       ifIdle?: never;
+      /** The sender's request context. Used whether the thread is active or idle. */
+      requestContext?: RequestContext;
+      /** The sender's tracing context. If the signal wakes an idle thread, the run is traced as its child. */
+      tracingContext?: TracingContext;
+      /** Tracing options for a run started when the signal wakes an idle thread. */
+      tracingOptions?: TracingOptions;
       /**
        * Validated, but does not change the scopes of the run receiving the signal:
        * a run's scopes are fixed when it starts.
@@ -223,6 +261,18 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       threadId: string;
       ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
       ifIdle?: AgentSignalIfIdleOptions<OUTPUT>;
+      /**
+       * The sender's request context. Used whether the thread is active or idle,
+       * and passed to the agent's `wakeOptions` hook when the signal wakes an idle thread.
+       */
+      requestContext?: RequestContext;
+      /**
+       * The sender's tracing context. If the signal wakes an idle thread, the run is traced
+       * as its child, taking precedence over tracing returned by the `wakeOptions` hook.
+       */
+      tracingContext?: TracingContext;
+      /** Tracing options for a run started when the signal wakes an idle thread. */
+      tracingOptions?: TracingOptions;
       /**
        * Scopes for a run this signal starts, unioned with `ifIdle.streamOptions.scopes`.
        * `resource:`/`thread:` scopes must equal `resourceId`/`threadId`.
@@ -786,6 +836,17 @@ interface AgentConfigBase<
    * Default options used when calling `stream()` in vNext mode.
    */
   defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
+  /**
+   * Stream options for a run started by a signal that wakes an idle thread
+   * (notifications, schedules, peer messages, `sendSignal`). Called only when a
+   * signal actually starts a run. When the sender passes `ifIdle.streamOptions`,
+   * the hook is not called and those options are used as-is; the sender's
+   * `requestContext` and tracing fill only what they leave out. Otherwise the
+   * returned `requestContext` takes precedence over the sender's `requestContext`.
+   *
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  wakeOptions?: AgentWakeOptions<TOutput>;
   /**
    * Default options used when calling `network()`.
    * These are merged with options passed to each network() call.
