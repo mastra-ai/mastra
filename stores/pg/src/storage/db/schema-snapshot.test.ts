@@ -360,15 +360,11 @@ describe('init catalog snapshot', () => {
     expect(count(statements, /COUNT\(\*\)/i)).toBe(10);
     expect(count(statements, INFORMATION_SCHEMA_COLUMN_PROBE)).toBe(0);
 
-    // DDL through the store's own paths still invalidates the cache.
+    // A cached positive is dropped when the store's own DDL removes the table.
     const db = new PgDB({ client: store.db, schemaName: schema });
-    expect(await db.hasColumn('mastra_threads', 'cache_probe')).toBe(false);
-    await db.alterTable({
-      tableName: 'mastra_threads' as TABLE_NAMES,
-      schema: { ...TABLE_SCHEMAS['mastra_threads' as TABLE_NAMES], cache_probe: { type: 'text', nullable: true } },
-      ifNotExists: ['cache_probe'],
-    });
-    expect(await db.hasColumn('mastra_threads', 'cache_probe')).toBe(true);
+    expect(await db.hasColumn('mastra_threads', 'resourceId')).toBe(true);
+    await db.dropTable({ tableName: 'mastra_threads' as TABLE_NAMES });
+    expect(await db.hasColumn('mastra_threads', 'resourceId')).toBe(false);
   }, 60000);
 
   it('migrates a legacy flat agents schema with the snapshot live', async () => {
