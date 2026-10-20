@@ -8587,7 +8587,10 @@ export class Agent<
       resolvedModel !== null &&
       'gatewayId' in resolvedModel &&
       resolvedModel.gatewayId === 'mastra';
-    if (resourceId && threadFromArgs && !this.hasOwnMemory() && !isGatewayModel) {
+    // Only warn for ids the caller passed in `memory` args. Reserved request-context ids are set
+    // per request (auth middleware, AgentController) and inherited by every agent in that request,
+    // including internal memory-less agents such as the OM Observer and Reflector.
+    if (options.memory?.resource && options.memory?.thread && !this.hasOwnMemory() && !isGatewayModel) {
       this.logger.warn('No memory is configured but resourceId and threadId were passed in args', { agent: this.name });
     }
 

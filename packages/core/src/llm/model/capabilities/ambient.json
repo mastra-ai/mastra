@@ -67,10 +67,9 @@
         "values": ["high", "max"]
       }
     ],
-    "z-ai/glm-5.2": [
+    "minimax/minimax-m3": [
       {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "toggle"
       }
     ],
     "qwen/qwen3.8-27b": [
@@ -87,13 +86,7 @@
         "type": "toggle"
       }
     ],
-    "stepfun/step-3.7-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "minimax/minimax-m3": [
+    "xiaomi/mimo-v2.5": [
       {
         "type": "toggle"
       }
@@ -104,9 +97,16 @@
         "values": ["high", "max"]
       }
     ],
-    "xiaomi/mimo-v2.5": [
+    "z-ai/glm-5.2": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "stepfun/step-3.7-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

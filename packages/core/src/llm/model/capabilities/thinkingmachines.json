@@ -2,7 +2,7 @@
   "attachment": ["thinkingmachines/Inkling", "thinkingmachines/Inkling:peft:262144"],
   "temperature": ["thinkingmachines/Inkling", "thinkingmachines/Inkling:peft:262144"],
   "reasoning": {
-    "thinkingmachines/Inkling": [
+    "thinkingmachines/Inkling:peft:262144": [
       {
         "type": "toggle"
       },
@@ -11,7 +11,7 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "thinkingmachines/Inkling:peft:262144": [
+    "thinkingmachines/Inkling": [
       {
         "type": "toggle"
       },
