@@ -688,7 +688,15 @@ async function realPaths(
 async function readFilePrefix(sandbox: ExecutableSandbox, path: string, bytes: number): Promise<Buffer> {
   const result = await sandbox.executeCommand(
     'sh',
-    ['-c', 'head -c "$1" -- "$2" | base64', 'sh', String(bytes), path],
+    // Not a pipe: sh reports only the last command's status, so a failed head
+    // would read as an empty file.
+    [
+      '-c',
+      't=$(mktemp) && trap \'rm -f "$t"\' EXIT && head -c "$1" -- "$2" >"$t" && base64 <"$t"',
+      'sh',
+      String(bytes),
+      path,
+    ],
     { timeout: 30_000, maxRetainedBytes: Infinity },
   );
   if (result.exitCode !== 0) throw new Error(`Unable to read file: ${result.stderr.trim() || 'failed'}`);

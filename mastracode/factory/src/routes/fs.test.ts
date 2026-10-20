@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdir, realpath, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -447,6 +447,15 @@ describe('live session file tree', () => {
     });
     expect(readFile).not.toHaveBeenCalled();
     readFile.mockRestore();
+  });
+
+  it('reports a large file it cannot read instead of showing it empty', async () => {
+    const { parent } = await seedHostCheckouts();
+    const path = join(parent, 'repo', 'locked.log.txt');
+    await writeFile(path, 'a'.repeat(512 * 1024 + 1));
+    await chmod(path, 0o000);
+
+    await expect(readSessionWorkspaceFile(makeSession(), 'locked.log.txt')).rejects.toThrow('Unable to read file');
   });
 
   it('keeps leading and trailing spaces in listed names', async () => {
