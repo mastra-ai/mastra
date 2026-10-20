@@ -61,9 +61,13 @@ export async function listUserSessions(
   return body.sessions.map(normalizeUserSession);
 }
 
-export type CreateUserSessionOptions =
+export type CreateUserSessionOptions = (
   | { branch: string; baseBranch?: string; sessionId?: never; title?: never }
-  | { sessionId: string; title: string; branch?: never; baseBranch?: never };
+  | { sessionId: string; title: string; branch?: never; baseBranch?: never }
+) & {
+  /** Defaults to `private`. Sessions that run work for a shared card are created `org`. */
+  visibility?: 'private' | 'org';
+};
 
 export async function createUserSession(
   baseUrl: string,

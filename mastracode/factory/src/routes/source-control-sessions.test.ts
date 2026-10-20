@@ -385,6 +385,27 @@ describe('source-control session routes', () => {
     ).resolves.toEqual([]);
   });
 
+  it('creates a run session shared with the org when asked, and rejects unknown visibility', async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const app = buildApp([sourceControl], seed);
+    const create = (body: Record<string, unknown>) =>
+      app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const shared = await create({ branch: 'factory/card-7', visibility: 'org' });
+    expect(shared.status).toBe(200);
+    const { session } = (await shared.json()) as { session: { sessionId: string; visibility: string } };
+    expect(session.visibility).toBe('org');
+    await expect(
+      sourceControl.sessions.list({ projectRepositoryId: projectRepository.id, viewerUserId: 'user-2' }),
+    ).resolves.toEqual([expect.objectContaining({ sessionId: session.sessionId })]);
+
+    expect((await create({ branch: 'factory/card-8', visibility: 'public' })).status).toBe(400);
+  });
+
   it('starts the conversation on the session thread so the first prompt can be sent right away', async () => {
     const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
     const controller = new AgentController<MastraCodeState>({

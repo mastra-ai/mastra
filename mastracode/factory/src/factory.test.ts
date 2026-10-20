@@ -1317,7 +1317,8 @@ describe('MastraFactory.prepare', () => {
     it("wakes a run session on the Factory's resource through its thread's session stamp", async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });
-      const project = await seedUserSession(storage);
+      // Run sessions are created shared with the org.
+      const project = await seedUserSession(storage, { visibility: 'org' });
       const prepareWake = config.prepareWakeRequestContext as (args: {
         requestContext: RequestContext;
         resourceId: string;

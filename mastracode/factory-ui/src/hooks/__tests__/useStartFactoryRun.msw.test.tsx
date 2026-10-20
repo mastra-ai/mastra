@@ -25,6 +25,7 @@ function stubEndpoints(
   repositories: Array<{ id: string; externalId: string; slug: string; provider?: 'github' | 'gitlab' }>,
 ) {
   const sessionsCreatedFor: string[] = [];
+  const sessionBodies: Record<string, unknown>[] = [];
   const patches: Array<Record<string, unknown>> = [];
   let started: Record<string, unknown> | undefined;
   server.use(
@@ -70,16 +71,20 @@ function stubEndpoints(
         },
       });
     }),
-    http.post(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, ({ params }) => {
-      sessionsCreatedFor.push(String(params.projectRepositoryId));
-      return HttpResponse.json({ session: { sessionId: 'session-1', branch: 'factory/item-1', title: null } });
-    }),
+    http.post(
+      `${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`,
+      async ({ params, request }) => {
+        sessionsCreatedFor.push(String(params.projectRepositoryId));
+        sessionBodies.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ session: { sessionId: 'session-1', branch: 'factory/item-1', title: null } });
+      },
+    ),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async ({ request }) => {
       started = (await request.json()) as Record<string, unknown>;
       return HttpResponse.json({ prepared: { threadId: 'thread-1' } });
     }),
   );
-  return { sessionsCreatedFor, patches, started: () => started };
+  return { sessionsCreatedFor, sessionBodies, patches, started: () => started };
 }
 
 const workItem: StartFactoryRunWorkItem = {
@@ -124,6 +129,8 @@ describe.each(['github', 'gitlab'] as const)('useStartFactoryRun with %s', provi
     });
 
     expect(calls.sessionsCreatedFor).toEqual(['repo-1']);
+    // A run on a shared card is visible to the whole org, unlike a session a person opens for themselves.
+    expect(calls.sessionBodies).toEqual([expect.objectContaining({ visibility: 'org' })]);
     expect(calls.patches).toEqual([{ metadata: { ...providerWorkItem.metadata, repository: 'acme/renamed' } }]);
     const startedWorkItem = calls.started()?.workItem as { input: { metadata: Record<string, unknown> } };
     expect(startedWorkItem.input.metadata.repository).toBe('acme/renamed');
