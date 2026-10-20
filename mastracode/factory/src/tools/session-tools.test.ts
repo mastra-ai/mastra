@@ -113,6 +113,7 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
       },
       mode: { resolve: () => ({ defaultModelId: 'openai/gpt-5.5' }) },
       model: { switch: vi.fn(async () => undefined) },
+      stream: { isActive: vi.fn(() => true) },
       subagents: { model: { set: vi.fn(async () => undefined) } },
       thread: {
         requireId: () => id,
@@ -181,7 +182,18 @@ async function setup(
   {
     coordinator: coordinatorOption = 'real',
     wrapPrepare,
-  }: { coordinator?: 'real' | 'none'; wrapPrepare?: (prepare: Prepare) => Prepare } = {},
+    deploymentProviders,
+    tenantCredentials = false,
+    interactive = true,
+  }: {
+    /** False for a turn nobody signed in started: a notification wake, webhook, or rule notice. */
+    interactive?: boolean;
+    coordinator?: 'real' | 'none';
+    wrapPrepare?: (prepare: Prepare) => Prepare;
+    /** Deployed mode: model switches check the target session's stored credentials. */
+    tenantCredentials?: boolean;
+    deploymentProviders?: ReadonlySet<string>;
+  } = {},
 ) {
   const seeded = await seedFactory(parentVisibility);
   const calls: string[] = [];
@@ -225,6 +237,7 @@ async function setup(
     getSessionByResource: async (resourceId: string) =>
       (await controller.getSessionByResource(resourceId)) ?? {
         thread: { getId: () => (resourceId === seeded.scope.sessionId ? seeded.scope.threadId : resourceId) },
+        stream: { isActive: () => false },
       },
     getCurrentAgent: () => ({
       sendNotificationSignal: async (
@@ -254,25 +267,45 @@ async function setup(
   });
   const deps = {
     sessions: seeded.sessions,
-    sessionModel: { projects: seeded.seed.projects, modelDefaults: seeded.seed.modelDefaults },
+    sessionModel: {
+      projects: seeded.seed.projects,
+      modelDefaults: seeded.seed.modelDefaults,
+      ...(tenantCredentials
+        ? {
+            tenantCatalog: {
+              credentials: seeded.seed.credentials,
+              customProviders: seeded.seed.customProviders,
+              deploymentProviders,
+            },
+          }
+        : {}),
+    },
     messaging: async () => ({ controller: deliveryController, notifications }) as never,
     workItems: seeded.seed.workItems,
     boards: createBoardRegistry(),
     auditRecorder: audit,
     startCoordinator: () => (coordinatorOption === 'none' ? undefined : { prepare }),
   };
-  const tools = createFactorySessionTools(seeded.scope, deps);
-  const tool = tools.factory_start_session!;
-  const start = (input: Record<string, unknown>) =>
-    (tool as unknown as { execute: (input: unknown, context: unknown) => Promise<unknown> }).execute(input, {});
-  const switchModel = (input: Record<string, unknown>) =>
-    (
-      tools.factory_switch_session_model! as unknown as {
-        execute: (input: unknown, context: unknown) => Promise<unknown>;
-      }
-    ).execute(input, {});
+  const toolsFor = (scope: FactoryToolScope) => {
+    const tools = createFactorySessionTools(scope, deps);
+    const run = (name: string) => (input: Record<string, unknown>) =>
+      (tools[name] as unknown as { execute: (input: unknown, context: unknown) => Promise<unknown> }).execute(
+        input,
+        {},
+      );
+    return {
+      tool: tools.factory_start_session!,
+      start: run('factory_start_session'),
+      switchModel: run('factory_switch_session_model'),
+    };
+  };
+  const scope = { ...seeded.scope, interactive };
+  const { tool, start, switchModel } = toolsFor(scope);
   return {
     ...seeded,
+    scope,
+    deps,
+    toolsFor,
     calls,
     controller,
     created,
@@ -318,9 +351,11 @@ describe('factory_switch_session_model', () => {
 
     await expect(
       env.switchModel({ sessionId: started.sessionId, modelId: 'anthropic/claude-opus-4-1' }),
-    ).rejects.toThrow('not available');
+    ).rejects.toThrow(
+      "Model anthropic/claude-opus-4-1 exists, but this session's credential scope (server) has no credential for its provider. Models available to it: openai/gpt-5.6, openai/gpt-6.1-sol.",
+    );
     await expect(env.switchModel({ sessionId: started.sessionId, modelId: 'made-up/model' })).rejects.toThrow(
-      'not available',
+      'Unknown model made-up/model. Models available to it: openai/gpt-5.6, openai/gpt-6.1-sol.',
     );
     expect(env.controller.setThreadModel).toHaveBeenCalledTimes(2);
 
@@ -338,6 +373,116 @@ describe('factory_switch_session_model', () => {
       'not owned by you',
     );
     await expect(env.switchModel({ sessionId: 'missing', modelId: 'openai/gpt-5.6' })).rejects.toThrow('not found');
+  });
+});
+
+describe('factory_switch_session_model with stored credentials', () => {
+  // The server holds only Bedrock credentials; Anthropic and DeepSeek access comes from stored rows.
+  const serverModels = [
+    { id: 'anthropic/claude-opus-5-5', provider: 'anthropic', modelName: 'claude-opus-5-5', hasApiKey: false },
+    { id: 'deepseek/deepseek-flash', provider: 'deepseek', modelName: 'deepseek-flash', hasApiKey: false },
+    { id: 'amazon-bedrock/claude-sonnet', provider: 'amazon-bedrock', modelName: 'claude-sonnet', hasApiKey: true },
+  ];
+
+  async function tenantSetup(modelScope: 'user' | 'factory' | 'hybrid', deploymentProviders?: ReadonlySet<string>) {
+    const env = await setup('org', { tenantCredentials: true, deploymentProviders });
+    env.controller.listAvailableModels.mockResolvedValue(serverModels);
+    await env.seed.projects.update({ orgId: 'org-1', id: env.project.id, input: { modelScope } });
+    // The session owner's personal Anthropic key, the Factory's DeepSeek key, and someone else's personal key.
+    await env.seed.credentials.setCredential({ orgId: 'org-1', userId: 'user-1' }, 'anthropic', {
+      type: 'api_key',
+      key: 'user-secret',
+    });
+    await env.seed.credentials.setCredential({ orgId: 'org-1' }, 'deepseek', { type: 'api_key', key: 'org-secret' });
+    const started = (await env.start({ prompt: 'Investigate the build.' })) as { sessionId: string };
+    return { ...env, sessionId: started.sessionId };
+  }
+
+  it('lets a user-scoped session switch to a model its owner holds a credential for, and nothing else', async () => {
+    const env = await tenantSetup('user');
+
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-opus-5-5' })).resolves.toEqual({
+      sessionId: env.sessionId,
+      threadId: env.sessionId,
+      modelId: 'anthropic/claude-opus-5-5',
+      live: true,
+    });
+    expect(env.created[0]!.session.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5-5');
+
+    // The Factory's org credential belongs to the other scope.
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'deepseek/deepseek-flash' })).rejects.toThrow(
+      "Model deepseek/deepseek-flash exists, but this session's credential scope (session owner) has no credential for its provider. Models available to it: anthropic/claude-opus-5-5.",
+    );
+    // A server key alone does not open a deployment provider the operator never opted in to.
+    await expect(
+      env.switchModel({ sessionId: env.sessionId, modelId: 'amazon-bedrock/claude-sonnet' }),
+    ).rejects.toThrow('exists, but');
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-made-up' })).rejects.toThrow(
+      'Unknown model anthropic/claude-made-up. Models available to it: anthropic/claude-opus-5-5.',
+    );
+    expect(env.controller.setThreadModel).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a Factory-scoped session use the Factory credentials and its custom providers, not the owner credentials', async () => {
+    const env = await tenantSetup('factory');
+    await env.seed.customProviders.upsert({
+      orgId: 'org-1',
+      userId: 'owner',
+      input: { providerId: 'acme', name: 'Acme', url: 'https://llm.acme.test/v1', apiKey: 'acme', models: ['acme-1'] },
+    });
+    env.controller.getSessionByResource.mockResolvedValue(null);
+
+    await expect(
+      env.switchModel({ sessionId: env.sessionId, modelId: 'deepseek/deepseek-flash' }),
+    ).resolves.toMatchObject({ modelId: 'deepseek/deepseek-flash', live: false });
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'acme/acme-1' })).resolves.toMatchObject({
+      modelId: 'acme/acme-1',
+    });
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-opus-5-5' })).rejects.toThrow(
+      "Model anthropic/claude-opus-5-5 exists, but this session's credential scope (Factory) has no credential for its provider. Models available to it: acme/acme-1, deepseek/deepseek-flash.",
+    );
+  });
+
+  it('resolves the credential scope from the target session, not from a calling work-item run', async () => {
+    const env = await tenantSetup('hybrid');
+    // The caller is a work-item run, which a hybrid Factory bills to the Factory credentials.
+    await env.seed.workItems.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: env.project.id,
+      workItem: {
+        input: {
+          title: 'Task',
+          stages: ['intake'],
+          sessions: {},
+          metadata: {},
+          externalSource: { integrationId: 'github', type: 'issue', externalId: '1' },
+        },
+      },
+      role: 'work',
+      session: { sessionId: env.scope.sessionId, branch: 'user/session-parent-session', threadId: env.scope.threadId },
+      resourceId: env.scope.sessionId,
+      kickoffKey: 'run-1',
+      kickoffMessage: null,
+    });
+
+    // The target is an unbound side session, so it runs on its owner credentials.
+    await expect(
+      env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-opus-5-5' }),
+    ).resolves.toMatchObject({
+      modelId: 'anthropic/claude-opus-5-5',
+    });
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'deepseek/deepseek-flash' })).rejects.toThrow(
+      "this session's credential scope (session owner) has no credential for its provider",
+    );
+  });
+
+  it('opens a deployment provider only when the operator opted in and the server holds its credentials', async () => {
+    const env = await tenantSetup('user', new Set(['amazon-bedrock']));
+
+    await expect(
+      env.switchModel({ sessionId: env.sessionId, modelId: 'amazon-bedrock/claude-sonnet' }),
+    ).resolves.toMatchObject({ modelId: 'amazon-bedrock/claude-sonnet' });
   });
 });
 
@@ -1062,5 +1207,93 @@ describe('factory_start_session in work-item mode', () => {
     );
     expect(rules.tools.factory_message_origin).toBe('allow');
     expect(FACTORY_TOOLS_WITHOUT_APPROVAL).toContain('factory_message_origin');
+  });
+});
+
+describe('session tools on a turn nobody signed in started', () => {
+  // A notification wake runs as the session owner but carries other people's text.
+  const wake = { interactive: false };
+
+  it('switches the model of a side session it started', async () => {
+    const env = await setup('org', wake);
+    const started = (await env.start({ prompt: 'Review PR 1.' })) as { sessionId: string };
+
+    await expect(env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' })).resolves.toMatchObject({
+      sessionId: started.sessionId,
+      modelId: 'openai/gpt-5.6',
+      live: true,
+    });
+    expect(env.created[0]!.session.model.switch).toHaveBeenCalledWith('openai/gpt-5.6');
+  });
+
+  it("refuses the owner's sessions it did not start, which a person's turn could switch", async () => {
+    const env = await setup('org', wake);
+    const started = (await env.start({ prompt: 'Review PR 1.' })) as { sessionId: string };
+    // Another of user-1's sessions, woken by a notification, reaching for this side session.
+    await env.sourceControl.sessions.create({
+      sessionId: 'other-session',
+      projectRepositoryId: env.projectRepository.id,
+      factoryProjectId: env.project.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-other-session',
+      baseBranch: 'main',
+    });
+    const other = { ...env.scope, sessionId: 'other-session', resourceId: 'other-session', threadId: 'other-thread' };
+
+    await expect(
+      env.toolsFor(other).switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' }),
+    ).rejects.toThrow('only this session and the side sessions it started can switch models');
+    expect(env.controller.setThreadModel).not.toHaveBeenCalled();
+
+    await expect(
+      env
+        .toolsFor({ ...other, interactive: true })
+        .switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' }),
+    ).resolves.toMatchObject({ modelId: 'openai/gpt-5.6' });
+  });
+
+  it('switches its own model', async () => {
+    const env = await setup('org', wake);
+    const started = (await env.start({ prompt: 'Review PR 1.' })) as { sessionId: string; threadId: string };
+    // The side session, on a woken turn of its own, switching its own model.
+    const self = {
+      ...env.scope,
+      sessionId: started.sessionId,
+      resourceId: started.sessionId,
+      threadId: started.threadId,
+    };
+
+    await expect(
+      env.toolsFor(self).switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' }),
+    ).resolves.toMatchObject({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' });
+    expect(env.created[0]!.session.model.switch).toHaveBeenCalledWith('openai/gpt-5.6');
+  });
+
+  it('refuses to seat a role on a work item, which records a run as the person', async () => {
+    const env = await setup('org', wake);
+    await expect(env.start({ prompt: 'Plan it.', workItem: '#1', role: 'plan' })).rejects.toThrow(
+      'Starting a role on a work item needs a person in this turn',
+    );
+    expect(env.prepare).not.toHaveBeenCalled();
+    expect(env.created).toHaveLength(0);
+  });
+
+  it('mounts every user tool but refuses to answer an approval', async () => {
+    const env = await setup('org', wake);
+    const deps = { ...env.deps, comments: {} } as unknown as FactoryToolDependencies;
+    const answer = (scope: FactoryToolScope) =>
+      (
+        createFactoryTools({ scope, deps }).factory_answer_approval as unknown as {
+          execute: (input: unknown, context: unknown) => Promise<unknown>;
+        }
+      ).execute({ sessionId: crypto.randomUUID(), toolCallId: 'call-1', decision: 'approve' }, {});
+
+    const woken = createFactoryTools({ scope: env.scope, deps });
+    for (const name of ['factory_answer_approval', 'factory_start_session', 'factory_switch_session_model'])
+      expect(woken).toHaveProperty(name);
+    await expect(answer(env.scope)).rejects.toThrow('Only a person can answer an approval');
+    // A person's turn gets past the gate and fails on the lookup instead.
+    await expect(answer({ ...env.scope, interactive: true })).rejects.toThrow('was not found in this Factory');
   });
 });

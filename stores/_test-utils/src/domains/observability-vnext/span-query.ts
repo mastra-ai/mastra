@@ -1,5 +1,5 @@
 import { SpanType } from '@mastra/core/observability';
-import { planSpanQuery, PREVIEW_MAX_LENGTH } from '@mastra/core/storage';
+import { planSpanQuery, PREVIEW_MAX_LENGTH, TraceQueryCursorError } from '@mastra/core/storage';
 import type { ObservabilityStorage, SpanQueryRequest, SpanQueryRow } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { makeSpan } from './data';
@@ -195,6 +195,61 @@ export function createSpanQueryTests(
     describe('time to first chunk', () => {
       const ids = async (where: SpanQueryRequest['where']) =>
         (await query({ where })).spans.map(row => row.spanId).sort();
+
+      describe('sort', () => {
+        // Ties break by identity; empty values sort last in both directions.
+        const expected = {
+          asc: ['zero', 'fast', 'fraction', 'tie-a', 'tie-b', 'empty', 'missing'],
+          desc: ['tie-a', 'tie-b', 'fraction', 'fast', 'zero', 'empty', 'missing'],
+        };
+        const orderBy = (direction: 'asc' | 'desc') => [{ field: 'timeToFirstChunkMs' as const, direction }];
+
+        beforeEach(async () => {
+          await getStorage().batchCreateSpans({
+            records: [
+              span('tie-b', { timeToFirstChunkMs: 300 }),
+              span('empty', { timeToFirstChunkMs: null }),
+              span('fraction', { timeToFirstChunkMs: 120.5 }),
+              span('tie-a', { timeToFirstChunkMs: 300 }),
+              span('zero', { timeToFirstChunkMs: 0 }),
+              span('missing'),
+              span('fast', { timeToFirstChunkMs: 50 }),
+            ],
+          });
+        });
+
+        it('advertises the sort', () => {
+          expect(getStorage().getFeatures()).toContain('trace-query-time-to-first-chunk-sort');
+        });
+
+        it.each(['asc', 'desc'] as const)('pages %s with empty values last at every page size', async direction => {
+          for (const limit of [1, 2, 3, 7]) {
+            const rows: SpanQueryRow[] = [];
+            let after: string | undefined;
+            do {
+              const page = await query({ orderBy: orderBy(direction), page: { limit, after } });
+              rows.push(...page.spans);
+              after = page.page.next ?? undefined;
+              expect(rows.length).toBeLessThanOrEqual(expected[direction].length);
+            } while (after);
+            expect(
+              rows.map(row => row.spanId),
+              `limit ${limit}`,
+            ).toEqual(expected[direction]);
+          }
+        });
+
+        it('resumes after an empty value and rejects the cursor once the sort changes', async () => {
+          const first = await query({ orderBy: orderBy('desc'), page: { limit: 6 } });
+          expect(first.spans.at(-1)).toMatchObject({ spanId: 'empty', timeToFirstChunkMs: null });
+          const after = first.page.next!;
+          const rest = await query({ orderBy: orderBy('desc'), page: { limit: 6, after } });
+          expect(rest.spans.map(row => row.spanId)).toEqual(['missing']);
+          for (const changed of [orderBy('asc'), [{ field: 'startedAt' as const, direction: 'desc' as const }]]) {
+            expect(() => query({ orderBy: changed, page: { limit: 6, after } })).toThrowError(TraceQueryCursorError);
+          }
+        });
+      });
 
       it('returns the stored value, keeping zero and leaving missing values empty', async () => {
         await getStorage().batchCreateSpans({

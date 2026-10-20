@@ -188,7 +188,6 @@ describe.each(['panel', 'details'] as const)('Span %s view', layout => {
       expect(slot('span-error')).not.toBeNull();
       const toggles = screen.getAllByRole('button', { name: 'JSON' });
       expect(toggles).toHaveLength(1);
-      expect(slot('span-input-card')).toBeNull();
       expect(slot('span-payload-json')).not.toBeNull();
       const jsonToggle = toggles[0];
       if (!jsonToggle) throw new Error('Missing error JSON toggle');

@@ -577,7 +577,8 @@ type InputShared_Type_15 =
   | 'tool'
   | 'mcp_server'
   | 'workflow_run'
-  | 'memory';
+  | 'memory'
+  | 'classifier';
 
 type InputShared_Type_16 = {
   /** Filter by timestamp range */
@@ -3413,7 +3414,8 @@ type Shared_Type_60 =
   | 'tool'
   | 'mcp_server'
   | 'workflow_run'
-  | 'memory';
+  | 'memory'
+  | 'classifier';
 
 type Shared_Type_61 = {
   /** Unique trace identifier */
@@ -3726,6 +3728,8 @@ type Shared_Type_67 = {
   traceQueryTimeToFirstChunk: boolean;
   /** Root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct` */
   traceQueryRootSpanFields: boolean;
+  /** Sorting trace and span queries by `timeToFirstChunkMs` */
+  traceQueryTimeToFirstChunkSort: boolean;
   /** Trace query field discovery (POST /observability/traces/query/fields and /values) */
   traceQueryDiscovery: boolean;
   /** Trusted tenant scoping of trace and thread queries */
@@ -3738,6 +3742,8 @@ type Shared_Type_67 = {
   threadQueryRows: boolean;
   /** Span queries (POST /observability/spans/query) */
   spanQuery: boolean;
+  /** Additional identity, context and parent/root entity predicates in span queries. Treat a missing value as unavailable. */
+  spanQueryContextFields: boolean;
   /** Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit. */
   traceRetentionDays?: number | undefined;
   /** Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501. */
@@ -5586,6 +5592,11 @@ export type PostAgentsAgentIdApproveToolCall_Body = {
       }
     | undefined;
   modelSettings?: unknown | undefined;
+  clientTools?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
 };
 
 export type PostAgentsAgentIdApproveToolCall_Response = {
@@ -5735,6 +5746,11 @@ export type PostAgentsAgentIdDeclineToolCall_Body = {
       }
     | undefined;
   modelSettings?: unknown | undefined;
+  clientTools?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   reason?: string | undefined;
 };
 
@@ -10496,7 +10512,7 @@ export type PostObservabilityTracesQuery_Body = {
     | undefined;
   orderBy?:
     | {
-        field: 'startedAt' | 'endedAt';
+        field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs';
         direction: 'asc' | 'desc';
       }[]
     | undefined;
@@ -10798,7 +10814,7 @@ export type PostObservabilitySpansQuery_Body = {
   };
   where?: InputShared_Auxiliary_230 | undefined;
   orderBy?: {
-    field: 'startedAt' | 'endedAt';
+    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs';
     direction: 'asc' | 'desc';
   }[];
   page?: {

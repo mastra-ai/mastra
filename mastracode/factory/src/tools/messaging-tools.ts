@@ -21,7 +21,9 @@ import {
 import type { FactoryDeliveryController, FactoryDeliveryResult } from './deliver.js';
 import { workItemNumber } from './read-tools.js';
 import { reportNotification, workItemReportAttributes, workItemReportRecipients } from './reports.js';
+import { requirePerson } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
+import { listSideSessions, sessionModel } from './side-sessions.js';
 
 /** Messages plus replies, per sender session, per target thread, per window. */
 export const SIGNAL_RATE_LIMIT = 10;
@@ -36,7 +38,7 @@ export interface FactoryMessaging {
 }
 
 export interface FactoryMessagingToolDependencies {
-  sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'listByOrigin'>;
+  sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'listByOrigin' | 'setOriginMuted'>;
   workItems: Pick<
     WorkItemsStorage,
     | 'findActiveRunBindingForSession'
@@ -147,6 +149,7 @@ export function createFactoryMessagingTools(
       'Send a message to another session in this Factory: a work item role session, or a teammate session you can see.',
       'Replies come back to this session as `factory-session` notifications with kind `reply` and an `in-reply-to` attribute naming your message.',
       'Priority `medium` (default) wakes an idle session and waits for a busy one to finish its step; use `urgent` only to make it stop and change course.',
+      '`delivered` is `woken` when the session was idle and is now running, `mid-run` when it was already busy and will read the message when its run next checks in.',
       ...(scope.interactive
         ? []
         : ['On this turn you can only message your side sessions and sessions working on items this session follows.']),
@@ -295,6 +298,12 @@ export function createFactoryMessagingTools(
     let recipients: Array<{ sessionId: string; threadId: string }>;
     let attributes: Record<string, string> = {};
     if (scope.origin) {
+      // The origin can mute this side session; the session keeps working, its reports just stop.
+      // Blocked reports still go through, since the session cannot go on until the origin answers.
+      const row = await deps.sessions.getBySessionId(scope.sessionId);
+      if (row?.originMutedAt && status !== 'blocked') {
+        return { delivered: 0, recipients: [], muted: true, note: 'Your origin muted your reports; keep working.' };
+      }
       recipients = [scope.origin];
     } else {
       const binding = await deps.workItems.findActiveRunBindingForSession({
@@ -346,6 +355,95 @@ export function createFactoryMessagingTools(
     return { delivered, recipients: results };
   }
 
+  const listSide = createTool({
+    id: 'factory_list_side_sessions',
+    description: [
+      'List the side sessions this session started with factory_start_session: state (running, parked waiting on an answer, idle), last report, whether you muted it, its model, and the work item it works on.',
+      'Use the session ids with factory_signal_session and factory_switch_session_model. On a turn a person started, also with factory_answer_approval, factory_unsubscribe_session and factory_subscribe_session.',
+    ].join(' '),
+    inputSchema: z
+      .object({
+        state: z.enum(['running', 'parked', 'idle']).optional().describe('Only sessions in this state.'),
+        muted: z.boolean().optional().describe('true for only muted sessions, false for only unmuted ones.'),
+      })
+      .strict(),
+    execute: async ({ state, muted }) => {
+      const messaging = await deps.messaging();
+      const sessions = await listSideSessions(
+        {
+          sessions: deps.sessions,
+          workItems: deps.workItems,
+          notifications: messaging?.notifications ?? null,
+          isRunning: async sessionId =>
+            (await messaging?.controller.getSessionByResource(sessionId))?.stream.isActive() ?? false,
+          model: messaging
+            ? sessionId => sessionModel(messaging.controller, deps.sessions, deps.workItems, sessionId)
+            : undefined,
+        },
+        scope,
+      );
+      return {
+        sessions: sessions.filter(
+          row => (!state || row.state === state) && (muted === undefined || (row.mutedAt !== null) === muted),
+        ),
+      };
+    },
+  });
+
+  /** A side session this session started, or an error naming why it isn't one. */
+  const ownSideSession = async (sessionId: string) => {
+    const row = await deps.sessions.getBySessionId(sessionId);
+    if (
+      !row ||
+      row.orgId !== scope.orgId ||
+      row.factoryProjectId !== scope.factoryProjectId ||
+      row.originSessionId !== scope.sessionId
+    ) {
+      throw new Error(`Session ${sessionId} is not a side session you started; see factory_list_side_sessions.`);
+    }
+    return row;
+  };
+  const sideSessionId = z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .describe('The side session, from factory_list_side_sessions.');
+
+  const unsubscribe = createTool({
+    id: 'factory_unsubscribe_session',
+    description:
+      "Mute a side session you started: its reports and run-end notices stop reaching you, but it keeps working. Approval requests and blocked reports still arrive, since the session can't go on without an answer. Undo with factory_subscribe_session. Only on a turn a person started.",
+    inputSchema: z.object({ sessionId: sideSessionId }).strict(),
+    execute: async ({ sessionId }) => {
+      requirePerson(scope, 'mute a side session');
+      const row = await ownSideSession(sessionId);
+      if (row.originMutedAt) return { sessionId, muted: true, mutedAt: row.originMutedAt.toISOString() };
+      await deps.sessions.setOriginMuted({ sessionId, muted: true });
+      const updated = await deps.sessions.getBySessionId(sessionId);
+      return { sessionId, muted: true, mutedAt: updated?.originMutedAt?.toISOString() ?? null };
+    },
+  });
+
+  const subscribe = createTool({
+    id: 'factory_subscribe_session',
+    description:
+      'Unmute a side session you muted with factory_unsubscribe_session, so its reports reach you again. Reports it sent while muted are not replayed. Only on a turn a person started.',
+    inputSchema: z.object({ sessionId: sideSessionId }).strict(),
+    execute: async ({ sessionId }) => {
+      requirePerson(scope, 'unmute a side session');
+      const row = await ownSideSession(sessionId);
+      if (row.originMutedAt) await deps.sessions.setOriginMuted({ sessionId, muted: false });
+      return { sessionId, muted: false };
+    },
+  });
+
   if (scope.kind === 'worker') return { factory_message_origin: reply };
-  return { factory_signal_session: signal, factory_message_origin: reply };
+  return {
+    factory_signal_session: signal,
+    factory_message_origin: reply,
+    factory_list_side_sessions: listSide,
+    factory_unsubscribe_session: unsubscribe,
+    factory_subscribe_session: subscribe,
+  };
 }

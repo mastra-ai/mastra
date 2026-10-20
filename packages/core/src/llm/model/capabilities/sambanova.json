@@ -15,10 +15,9 @@
         "type": "toggle"
       }
     ],
-    "gpt-oss-120b": [
+    "DeepSeek-V3.1": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
       }
     ],
     "DeepSeek-V3.2": [
@@ -31,9 +30,10 @@
         "type": "toggle"
       }
     ],
-    "DeepSeek-V3.1": [
+    "gpt-oss-120b": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

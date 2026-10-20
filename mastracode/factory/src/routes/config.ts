@@ -7,6 +7,7 @@ import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
 import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
 import { getModelReasoningOptions } from '@mastra/core/llm';
+import type { ModelReasoningOption } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
@@ -33,6 +34,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import {
+  credentialLabel,
   getAuthProviderId,
   listTenantCredentialsForRequest,
   resolveCredentialContext,
@@ -109,9 +111,9 @@ export interface OMSession {
 }
 
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
-interface ModelCatalog {
+export interface ModelCatalog {
   listAvailableModels: () => Promise<
-    Array<{ id?: string; modelName?: string; provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }>
+    Array<{ id?: string; modelName: string; provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }>
   >;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
   getSessionByResource?: (resourceId: string, scope?: string) => Promise<OMSession | undefined>;
@@ -319,6 +321,29 @@ export function resolveDeploymentModelProviders(providers: readonly string[] | u
   return resolved;
 }
 
+function grantingTenantRecord(records: CredentialRecord[], authProviderId: string) {
+  return (
+    records.find(r => r.scope === 'user' && r.provider === authProviderId) ??
+    records.find(r => r.scope === 'org' && r.provider === authProviderId)
+  );
+}
+
+export type ModelCredentialHolder = 'personal' | 'organization' | 'deployment';
+
+function tenantModelCredential(
+  records: CredentialRecord[] | undefined,
+  provider: string,
+): { credentialLabel?: string; credentialHolder?: ModelCredentialHolder } {
+  if (!records) return {};
+  if (isDeploymentModelProvider(provider)) return { credentialHolder: 'deployment' };
+  const record = grantingTenantRecord(records, getAuthProviderId(provider));
+  if (!record) return {};
+  return {
+    credentialLabel: credentialLabel(provider, record.credential.type),
+    credentialHolder: record.scope === 'user' ? 'personal' : 'organization',
+  };
+}
+
 /**
  * Compute which providers the user can reach, mirroring the TUI's
  * `/models-pack` access derivation: OAuth/api-key from the credential store for
@@ -345,9 +370,7 @@ export async function buildProviderAccess({
       if (isDeploymentModelProvider(provider)) {
         return deploymentProviders?.has(provider) && hasModelKey(provider) ? 'apikey' : false;
       }
-      const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
-      const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
-      const credential = userRec?.credential ?? orgRec?.credential;
+      const credential = grantingTenantRecord(tenantCredentials, authProviderId)?.credential;
       if (credential?.type === 'oauth') return 'oauth';
       if (credential?.type === 'api_key' && credential.key.trim().length > 0) return 'apikey';
       return false;
@@ -380,6 +403,109 @@ export async function buildProviderAccess({
 
 function canUseModelProvider(access: ProviderAccess, provider: string): boolean {
   return Boolean(access[provider]);
+}
+
+/** A model the caller can pick or switch to. */
+export interface ModelCatalogEntry {
+  id: string;
+  provider: string;
+  modelName: string;
+  hasApiKey: true;
+  reasoningOptions?: ModelReasoningOption[];
+  credentialLabel?: string;
+  credentialHolder?: ModelCredentialHolder;
+}
+
+/**
+ * Models usable with the given credentials: built-in models whose provider the
+ * credentials reach, then the org's custom provider models. The Settings model
+ * picker and `factory_switch_session_model` both use this so they cannot drift.
+ */
+export async function buildModelCatalog({
+  controller,
+  authStorage,
+  tenantCredentials,
+  deploymentProviders,
+  listCustomProviders,
+}: {
+  controller: ModelCatalog;
+  authStorage?: AuthStorage;
+  /** Tenant rows in deployed mode; absent in local mode, where `authStorage` and server keys govern. */
+  tenantCredentials?: CredentialRecord[];
+  deploymentProviders?: ReadonlySet<string>;
+  listCustomProviders?: () => Promise<CustomProviderRecord[]>;
+}): Promise<ModelCatalogEntry[]> {
+  const [models, access] = await Promise.all([
+    controller.listAvailableModels(),
+    buildProviderAccess({
+      controller,
+      authStorage: tenantCredentials ? undefined : authStorage,
+      tenantCredentials,
+      deploymentProviders,
+    }),
+  ]);
+  const catalog: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName }) =>
+    typeof id === 'string' && canUseModelProvider(access, provider)
+      ? [
+          {
+            id,
+            provider,
+            modelName,
+            hasApiKey: true as const,
+            reasoningOptions: getModelReasoningOptions(id),
+            ...tenantModelCredential(tenantCredentials, provider),
+          },
+        ]
+      : [],
+  );
+  // The boot-time gateway catalog only carries the local custom providers, so
+  // tenant callers get their org's rows here. Dedupe against ids already present.
+  if (listCustomProviders) {
+    try {
+      const known = new Set(catalog.map(m => m.id));
+      const customProviderCredential: { credentialHolder?: ModelCredentialHolder } = tenantCredentials
+        ? { credentialHolder: 'organization' }
+        : {};
+      for (const record of await listCustomProviders()) {
+        for (const model of record.models) {
+          const id = `${record.providerId}/${model}`;
+          if (known.has(id)) continue;
+          known.add(id);
+          catalog.push({
+            id,
+            provider: record.providerId,
+            modelName: model,
+            hasApiKey: true,
+            ...customProviderCredential,
+          });
+        }
+      }
+    } catch {
+      // Fail soft: the catalog still serves the built-in models.
+    }
+  }
+  return catalog.sort((a, b) =>
+    a.provider === b.provider ? a.id.localeCompare(b.id) : a.provider.localeCompare(b.provider),
+  );
+}
+
+/**
+ * The tenant credentials a session's model policy allows: the Factory's (org
+ * rows) for Factory-scoped sessions, the session owner's for user-scoped ones.
+ */
+export async function listSessionScopedCredentials({
+  credentials,
+  orgId,
+  userId,
+  modelScope,
+}: {
+  credentials: Pick<ModelCredentialsStorage, 'listCredentials'>;
+  orgId: string;
+  userId: string;
+  modelScope: 'factory' | 'user';
+}): Promise<CredentialRecord[]> {
+  const storageScope = modelScope === 'factory' ? 'org' : 'user';
+  return (await credentials.listCredentials(orgId, userId)).filter(record => record.scope === storageScope);
 }
 
 /** Per-user default model context for the current request. */
@@ -932,10 +1058,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 if (!policy) return c.json({ error: 'unauthorized' }, 401);
                 const orgId = policy.tenant.orgId ?? tenantOrgId(tenant);
                 const modelScope = policy.tenant.credentialScope ?? 'user';
-                const storageScope = modelScope === 'factory' ? 'org' : 'user';
-                tenantCredentials = (
-                  await options.modelCredentials.listCredentials(orgId, policy.tenant.userId)
-                ).filter(record => record.scope === storageScope);
+                tenantCredentials = await listSessionScopedCredentials({
+                  credentials: options.modelCredentials,
+                  orgId,
+                  userId: policy.tenant.userId,
+                  modelScope,
+                });
                 let defaultModelId = policy.factoryDefaultModelId ?? null;
                 if (modelScope === 'user') {
                   if (!options.modelDefaults) return c.json({ error: 'model_defaults_unavailable' }, 503);
@@ -958,58 +1086,21 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               const credentialScope = project.modelScope === 'user' ? 'user' : 'org';
               tenantCredentials = allTenantCredentials.filter(record => record.scope === credentialScope);
             }
-            const [models, access] = await Promise.all([
-              controller.listAvailableModels(),
-              buildProviderAccess({
-                controller,
-                authStorage: tenantCredentials ? undefined : authStorage,
-                tenantCredentials,
-                deploymentProviders,
-              }),
-            ]);
-            const catalog = models.flatMap(({ id, provider, modelName }) =>
-              typeof id === 'string' && canUseModelProvider(access, provider)
-                ? [{ id, provider, modelName, hasApiKey: true, reasoningOptions: getModelReasoningOptions(id) }]
-                : [],
-            );
-            // Append the caller's custom provider models (DB-backed, org rows in
-            // tenant mode / sentinel `local` org in no-auth mode). The boot-time
-            // gateway catalog only carries the local list, so tenant callers get
-            // theirs here. Dedupe against ids already present.
-            if (options.customProviders) {
-              try {
-                const ctx = await resolveCustomProvidersContext({
-                  c: loose(c),
-                  auth,
-                  customProviders: options.customProviders,
-                });
-                if (!('response' in ctx)) {
-                  const known = new Set(catalog.map(m => m.id));
-                  for (const record of await ctx.storage.list({ orgId: ctx.orgId })) {
-                    for (const model of record.models) {
-                      const id = `${record.providerId}/${model}`;
-                      if (known.has(id)) continue;
-                      known.add(id);
-                      catalog.push({
-                        id,
-                        provider: record.providerId,
-                        modelName: model,
-                        hasApiKey: true,
-                        reasoningOptions: undefined,
-                      });
-                    }
-                  }
+            const customProviders = options.customProviders;
+            const listCustomProviders = customProviders
+              ? async () => {
+                  const ctx = await resolveCustomProvidersContext({ c: loose(c), auth, customProviders });
+                  return 'response' in ctx ? [] : ctx.storage.list({ orgId: ctx.orgId });
                 }
-              } catch {
-                // Fail soft: the catalog still serves the built-in models.
-              }
-            }
-            return c.json({
-              ...sessionPolicy,
-              models: catalog.sort((a, b) =>
-                a.provider === b.provider ? a.id.localeCompare(b.id) : a.provider.localeCompare(b.provider),
-              ),
+              : undefined;
+            const models = await buildModelCatalog({
+              controller,
+              authStorage,
+              tenantCredentials,
+              deploymentProviders,
+              listCustomProviders,
             });
+            return c.json({ ...sessionPolicy, models });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

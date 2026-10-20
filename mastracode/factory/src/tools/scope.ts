@@ -125,3 +125,15 @@ export async function resolveFactoryToolScope({
     ...(origin ? { origin } : {}),
   };
 }
+
+/**
+ * Refuses an action only a signed-in person may take. Turns nobody signed in
+ * started (notification wakes, webhooks, dispatcher notices) carry text other
+ * people wrote, so they can't approve, resolve proposals, or waive plan approval.
+ */
+export function requirePerson(scope: FactoryToolScope, action: string): void {
+  if (scope.interactive) return;
+  throw new Error(
+    `Only a person can ${action}. Nobody signed in started this turn (it came from a notification, webhook or rule); ask the person to do it from the board or by messaging this session.`,
+  );
+}

@@ -137,62 +137,17 @@
     "z-ai/glm-5"
   ],
   "reasoning": {
-    "doubao-seed-1.6": [
+    "qwen3-32b": [
       {
         "type": "toggle"
       }
     ],
-    "doubao-seed-2.0-lite": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-2.0-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-30b-a3b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen-turbo": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-2.0-mini": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-235b-a22b-thinking-2507": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3.5-397b-a17b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-4.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-1.6-flash": [
+    "glm-4.5-air": [
       {
         "type": "toggle"
       }
     ],
     "doubao-seed-2.0-code": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-30b-a3b-thinking-2507": [
       {
         "type": "toggle"
       }
@@ -207,12 +162,57 @@
         "type": "toggle"
       }
     ],
-    "glm-4.5-air": [
+    "doubao-seed-1.6": [
       {
         "type": "toggle"
       }
     ],
-    "qwen3-32b": [
+    "doubao-seed-1.6-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-4.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-30b-a3b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-lite": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen-turbo": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-30b-a3b-thinking-2507": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-235b-a22b-thinking-2507": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.5-397b-a17b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-mini": [
       {
         "type": "toggle"
       }
@@ -227,7 +227,7 @@
         "type": "toggle"
       }
     ],
-    "minimax/minimax-m2.1": [
+    "minimax/minimax-m2": [
       {
         "type": "toggle"
       }
@@ -237,7 +237,7 @@
         "type": "toggle"
       }
     ],
-    "minimax/minimax-m2": [
+    "minimax/minimax-m2.1": [
       {
         "type": "toggle"
       }

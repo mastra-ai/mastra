@@ -23,6 +23,23 @@ export const TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH = 256;
 export const TRACE_QUERY_DEFAULT_TIMEOUT_MS = 15_000;
 export const TRACE_QUERY_MAX_TIMEOUT_MS = 300_000;
 
+/**
+ * Fields trace and span queries can sort by. `timeToFirstChunkMs` is a number that can be empty;
+ * empty values sort last in both directions.
+ */
+export const TRACE_QUERY_ORDER_FIELDS = ['startedAt', 'endedAt', 'timeToFirstChunkMs'] as const;
+export type TraceQueryOrderField = (typeof TRACE_QUERY_ORDER_FIELDS)[number];
+/** A keyset cursor's sort value: an ISO timestamp, or a number or `null` for `timeToFirstChunkMs`. */
+export type TraceQuerySortValue = string | number | null;
+
+/** @internal Whether a decoded cursor's sort value has the kind its order field produces. */
+export function isTraceQuerySortValueFor(field: TraceQueryOrderField, value: TraceQuerySortValue): boolean {
+  return field === 'timeToFirstChunkMs' ? value === null || typeof value === 'number' : typeof value === 'string';
+}
+
+/** @internal Cursor sort values: ISO timestamps, or finite numbers and `null` for numeric fields. */
+export const traceQuerySortValueSchema = z.union([z.string().datetime({ offset: true }), z.number(), z.null()]);
+
 /** @internal Shared with the trace-aggregate request schema so both report identical complexity issues. */
 export const TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE = `Predicates are limited to ${TRACE_QUERY_MAX_NODES} nodes and ${TRACE_QUERY_MAX_DEPTH} levels`;
 const PREDICATE_COMPLEXITY_MESSAGE = TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE;
@@ -53,6 +70,13 @@ const literalSchema = z.union([literalStringSchema, z.number(), z.boolean(), z.n
 const pathRefSchema = z.object({ path: predicatePathSchema }).strict();
 const literalRefSchema = z.object({ literal: literalSchema }).strict();
 const pathOrLiteralSchema = z.union([pathRefSchema, literalRefSchema]);
+// Not `.max()`: zod >=4.6.7 aborts oversized arrays before parsing them, which makes every predicate
+// union branch fail as aborted and collapses the issue to `where` instead of `where.set`.
+const membershipSetSchema = z
+  .array(literalSchema)
+  .min(1)
+  .refine(set => set.length <= TRACE_QUERY_MAX_SET_VALUES, 'Membership set is too large')
+  .meta({ maxItems: TRACE_QUERY_MAX_SET_VALUES });
 
 export const traceQueryScalarPredicateSchema: z.ZodType<TraceQueryScalarPredicate> = z.lazy(() =>
   z.union([
@@ -67,7 +91,7 @@ export const traceQueryScalarPredicateSchema: z.ZodType<TraceQueryScalarPredicat
       .object({
         op: z.enum(['in', 'notIn']),
         value: pathOrLiteralSchema,
-        set: z.array(literalSchema).min(1).max(TRACE_QUERY_MAX_SET_VALUES),
+        set: membershipSetSchema,
       })
       .strict(),
     z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),
@@ -98,7 +122,7 @@ export const traceQueryPredicateSchema: z.ZodType<TraceQueryPredicate> = z.lazy(
       .object({
         op: z.enum(['in', 'notIn']),
         value: pathOrLiteralSchema,
-        set: z.array(literalSchema).min(1).max(TRACE_QUERY_MAX_SET_VALUES),
+        set: membershipSetSchema,
       })
       .strict(),
     z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),
@@ -327,7 +351,7 @@ const traceQueryRequestObjectSchema = z
       .array(
         z
           .object({
-            field: z.enum(['startedAt', 'endedAt']),
+            field: z.enum(TRACE_QUERY_ORDER_FIELDS),
             direction: z.enum(['asc', 'desc']),
           })
           .strict(),
@@ -809,14 +833,15 @@ export interface TrustedTraceQueryPagePlan {
 
 interface TrustedTraceQueryTracesBasePlan extends TrustedTraceQueryBasePlan {
   result: 'traces';
+  /** Empty `timeToFirstChunkMs` values sort last in both directions; ties break by ascending `traceId`. */
   orderBy: {
-    field: 'startedAt' | 'endedAt';
+    field: TraceQueryOrderField;
     direction: 'asc' | 'desc';
   };
 }
 
 export type TrustedTraceQueryKeysetTracesPlan = TrustedTraceQueryTracesBasePlan &
-  TrustedTraceQueryKeysetPlan & { cursor?: { sortValue: string; traceId: string } };
+  TrustedTraceQueryKeysetPlan & { cursor?: { sortValue: TraceQuerySortValue; traceId: string } };
 export type TrustedTraceQueryPaginatedTracesPlan = TrustedTraceQueryTracesBasePlan & TrustedTraceQueryPagePlan;
 export type TrustedTraceQueryDeltaTracesPlan = TrustedTraceQueryTracesBasePlan & {
   paginationMode: 'delta';
@@ -877,7 +902,7 @@ export type TraceQueryCursorPlan =
   | TrustedTraceQueryGroupsPlan
   | TrustedThreadQueryPlan;
 export type TraceQueryCursorValues =
-  | { result: 'traces'; sortValue: string; traceId: string }
+  | { result: 'traces'; sortValue: TraceQuerySortValue; traceId: string }
   | { result: 'groups'; threadId: string }
   | { result: 'threads'; threadId: string };
 
@@ -1123,8 +1148,30 @@ export function normalizeTraceQueryTenantScope(
     : { organizationId: scope.organizationId, resourceId: scope.resourceId };
 }
 
+const STRUCTURAL_ISSUE_CODES = new Set<string>([
+  'invalid_type',
+  'invalid_value',
+  'invalid_union',
+  'invalid_key',
+  'invalid_element',
+  'unrecognized_keys',
+]);
+
+/**
+ * Reports the issues of the one union branch whose shape matched and that failed only checks
+ * (sizes, formats, refinements). Zod did this itself until 4.6.7 made an oversized array fail its
+ * size check before parsing the elements, which aborts the branch, so zod now reports only the union.
+ */
+function narrowUnionIssue(issue: z.core.$ZodIssue): z.core.$ZodIssue[] {
+  if (issue.code !== 'invalid_union') return [issue];
+  const matching = issue.errors
+    .map(branch => branch.flatMap(inner => narrowUnionIssue({ ...inner, path: [...issue.path, ...inner.path] })))
+    .filter(branch => branch.length > 0 && branch.every(inner => !STRUCTURAL_ISSUE_CODES.has(inner.code)));
+  return matching.length === 1 ? matching[0]! : [issue];
+}
+
 export function formatTraceQuerySchemaIssues(error: z.ZodError): TraceQueryIssue[] {
-  return error.issues.map(issue => {
+  return error.issues.flatMap(narrowUnionIssue).map(issue => {
     const customIssueCode =
       issue.code === 'custom'
         ? issue.message === PREDICATE_COMPLEXITY_MESSAGE
@@ -1258,6 +1305,9 @@ export function planTraceQuery(
     scope,
   });
   const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
+  if (cursor?.result === 'traces' && !isTraceQuerySortValueFor(orderBy.field, cursor.sortValue)) {
+    throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+  }
   return {
     result,
     timeRange,
@@ -1404,7 +1454,7 @@ const cursorEnvelopeSchema = z
       z
         .object({
           result: z.literal('traces'),
-          sortValue: z.string().datetime({ offset: true }),
+          sortValue: traceQuerySortValueSchema,
           traceId: z.string().min(1),
         })
         .strict(),
