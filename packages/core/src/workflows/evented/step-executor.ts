@@ -4,6 +4,9 @@ import { MastraBase } from '../../base';
 import type { RequestContext } from '../../di';
 import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
+import { CachingPubSub } from '../../events/caching-pubsub';
+import type { PubSub } from '../../events/pubsub';
+import { isRunLocalTopic } from '../../events/topics';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { TracingContext, TracingPolicy } from '../../observability';
@@ -26,6 +29,7 @@ import {
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
+  #stepPubsub?: PubSub;
   constructor({ mastra }: { mastra?: Mastra }) {
     super({ name: 'StepExecutor', component: RegisteredLogger.WORKFLOW });
     this.mastra = mastra;
@@ -37,6 +41,43 @@ export class StepExecutor extends MastraBase {
     if (logger) {
       this.__setLogger(logger);
     }
+  }
+
+  /**
+   * The PubSub handed to step execution contexts as `[PUBSUB_SYMBOL]`.
+   *
+   * The evented engine runs each step on whichever worker claims the event, and
+   * durable agent steps publish their `agent.stream.<runId>` frames on that
+   * context pubsub. When it is `mastra.pubsub` directly, those frames bypass the
+   * agent's own `CachingPubSub` and reach the transport without an `index`, so a
+   * retaining transport replays them as unnumbered copies that `observe({ offset })`
+   * cannot reconcile — the duplicates COR-1474 reports.
+   *
+   * Wrapping the bus in a `CachingPubSub` that shares `mastra.serverCache` numbers
+   * each frame before it is published. That requires an atomic allocate+append
+   * (see `MastraServerCache.supportsAtomicCounters`): a cache that allocates and
+   * appends in two steps can hand two workers the same index or land a lower
+   * index behind a higher one, which is worse than a duplicate because the
+   * receiving offset/dedupe would drop the frame.
+   */
+  #getStepPubsub(): PubSub {
+    if (this.#stepPubsub) return this.#stepPubsub;
+    const inner = this.mastra!.pubsub;
+    const cache = this.mastra?.serverCache;
+    this.#stepPubsub =
+      cache?.supportsAtomicCounters === true
+        ? new CachingPubSub(inner, cache, {
+            // Run-local watch events are per-process fan-out (often megabytes of
+            // cumulative step results) and must never land in a shared cache.
+            shouldCache: topic => !isRunLocalTopic(topic),
+            // The counter behind these indices is shared across processes, so a
+            // lower index can be a live frame another worker published out of
+            // order. Subscribers must dedupe exactly, not by watermark.
+            indexMode: 'exact',
+            logger: this.logger,
+          })
+        : inner;
+    return this.#stepPubsub;
   }
 
   /**
@@ -250,7 +291,7 @@ export class StepExecutor extends MastraBase {
               abort: () => {
                 abortController?.abort();
               },
-              [PUBSUB_SYMBOL]: this.mastra!.pubsub,
+              [PUBSUB_SYMBOL]: this.#getStepPubsub(),
               [STREAM_FORMAT_SYMBOL]: params.format,
               engine: {},
               abortSignal: abortController?.signal,
@@ -505,7 +546,7 @@ export class StepExecutor extends MastraBase {
           abort: () => {
             abortController?.abort();
           },
-          [PUBSUB_SYMBOL]: this.mastra!.pubsub,
+          [PUBSUB_SYMBOL]: this.#getStepPubsub(),
           [STREAM_FORMAT_SYMBOL]: undefined, // TODO
           engine: {},
           abortSignal: abortController?.signal,
@@ -587,7 +628,7 @@ export class StepExecutor extends MastraBase {
               },
               outputWriter,
             ),
-            [PUBSUB_SYMBOL]: this.mastra!.pubsub,
+            [PUBSUB_SYMBOL]: this.#getStepPubsub(),
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,
@@ -672,7 +713,7 @@ export class StepExecutor extends MastraBase {
               },
               outputWriter,
             ),
-            [PUBSUB_SYMBOL]: this.mastra!.pubsub,
+            [PUBSUB_SYMBOL]: this.#getStepPubsub(),
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,

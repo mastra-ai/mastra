@@ -21,6 +21,18 @@ export interface RedisServerCacheOptions {
   keyPrefix?: string;
   ttlSeconds?: number;
   /**
+   * Lifetime of an index counter key, in seconds, refreshed on every
+   * allocation. Defaults to 24 hours; `0` means no expiry.
+   *
+   * Deliberately separate from {@link ttlSeconds}: a stream can sit silent
+   * inside a long tool call for longer than the list's TTL. If the counter
+   * expired with it, the next allocation would restart at 0 while a live
+   * subscriber has already delivered 0..k, and every new frame would be
+   * dropped as a duplicate. The counter outlives the list and is deleted
+   * together with it when a run finishes (`CachingPubSub.clearTopic`).
+   */
+  counterTtlSeconds?: number;
+  /**
    * Run a Lua script with the given KEYS and ARGV. Defaults to the ioredis
    * calling convention (`eval(script, numKeys, ...keys, ...args)`); use
    * `nodeRedisPreset` / `upstashPreset` for those clients.
@@ -72,7 +84,8 @@ const defaultEvalScript = (client: RedisClient, script: string, keys: string[], 
  *
  * KEYS[1] = list key, KEYS[2] = counter key
  * ARGV[1] = JSON-serialized object WITHOUT an `index` property
- * ARGV[2] = TTL in seconds (0 = no expiry)
+ * ARGV[2] = list TTL in seconds (0 = no expiry)
+ * ARGV[3] = counter TTL in seconds (0 = no expiry)
  *
  * The index is spliced into the JSON text as the first property rather than
  * decoded/re-encoded with cjson, which would silently alter large integers
@@ -92,7 +105,10 @@ redis.call('RPUSH', KEYS[1], doc)
 local ttl = tonumber(ARGV[2])
 if ttl > 0 then
   redis.call('EXPIRE', KEYS[1], ttl)
-  redis.call('EXPIRE', KEYS[2], ttl)
+end
+local counterTtl = tonumber(ARGV[3])
+if counterTtl > 0 then
+  redis.call('EXPIRE', KEYS[2], counterTtl)
 end
 return i
 `.trim();
@@ -101,6 +117,7 @@ export class RedisServerCache extends MastraServerCache {
   private client: RedisClient;
   private keyPrefix: string;
   private ttlSeconds: number;
+  private counterTtlSeconds: number;
   private setWithExpiry: (client: RedisClient, key: string, value: unknown, seconds: number) => Promise<unknown>;
   private scanKeys: (
     client: RedisClient,
@@ -121,6 +138,7 @@ export class RedisServerCache extends MastraServerCache {
     this.client = config.client;
     this.keyPrefix = options.keyPrefix ?? 'mastra:cache:';
     this.ttlSeconds = options.ttlSeconds ?? 300;
+    this.counterTtlSeconds = options.counterTtlSeconds ?? 86_400;
     this.setWithExpiry = options.setWithExpiry ?? defaultSetWithExpiry;
     this.scanKeys = options.scanKeys ?? defaultScanKeys;
     this.getListLength = options.getListLength ?? defaultGetListLength;
@@ -132,6 +150,15 @@ export class RedisServerCache extends MastraServerCache {
 
   private getKey(key: string): string {
     return `${this.keyPrefix}${key}`;
+  }
+
+  /**
+   * True only while the Lua script is known to be usable. Clients without
+   * `eval`, and Cluster connections that rejected the multi-key script with
+   * CROSSSLOT, fall back to the composed non-atomic path.
+   */
+  get supportsAtomicCounters(): boolean {
+    return !this.scriptingDisabled;
   }
 
   private serialize(value: unknown): string {
@@ -215,8 +242,12 @@ export class RedisServerCache extends MastraServerCache {
     const fullKey = this.getKey(key);
     const value = await this.client.incr(fullKey);
 
-    if (this.ttlSeconds > 0) {
-      await this.client.expire(fullKey, this.ttlSeconds);
+    // Counters index streams, so they follow the counter TTL, not the list TTL:
+    // a list may expire between two frames while its counter must keep the
+    // sequence monotonic (see `counterTtlSeconds`). This is the non-Lua
+    // fallback for `listPushIndexed`; the scripting path applies the same TTL.
+    if (this.counterTtlSeconds > 0) {
+      await this.client.expire(fullKey, this.counterTtlSeconds);
     }
 
     return value;
@@ -238,7 +269,7 @@ export class RedisServerCache extends MastraServerCache {
         this.client,
         LIST_PUSH_INDEXED_SCRIPT,
         [this.getKey(listKey), this.getKey(counterKey)],
-        [this.serialize(body), String(this.ttlSeconds)],
+        [this.serialize(body), String(this.ttlSeconds), String(this.counterTtlSeconds)],
       );
       return Number(result);
     } catch (error) {

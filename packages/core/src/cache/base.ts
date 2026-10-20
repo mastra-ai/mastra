@@ -40,6 +40,20 @@ export abstract class MastraServerCache extends MastraBase {
   abstract increment(key: string): Promise<number>;
 
   /**
+   * Whether `listPushIndexed` allocates the index and appends the value as one
+   * atomic operation, so list position and `event.index` agree even when
+   * several processes publish concurrently.
+   *
+   * Defaults to `false`: the composed `increment()` + `listPush()` below
+   * allocates and appends in two steps, so two processes can interleave and
+   * leave entries out of index order. Caches that perform both server-side in
+   * one operation must override this.
+   */
+  get supportsAtomicCounters(): boolean {
+    return false;
+  }
+
+  /**
    * Atomically allocate the next index from `counterKey` and append `value`
    * (with `index` set to the 0-based allocated index) to the list at `listKey`.
    * Returns the assigned index.

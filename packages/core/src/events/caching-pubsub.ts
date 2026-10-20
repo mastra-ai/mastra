@@ -46,6 +46,22 @@ export interface CachingPubSubOptions {
    * into `inner` for live delivery. See {@link CachingPubSub.__setSource}.
    */
   source?: PubSub;
+  /**
+   * How the indices this instance allocates are meant to be deduplicated.
+   *
+   * `'watermark'` (default) matches every existing caller: the index comes
+   * from this instance's own counter, so a lower index arriving after a higher
+   * one is a stale frame and subscribers drop it with a single high-water mark.
+   * Per-process counters can hand the same index to two processes, but an
+   * event that never reaches a subscriber is not a frame this layer can
+   * recover — that is the pre-existing behaviour.
+   *
+   * `'exact'` is for publishers whose index comes from a counter shared across
+   * processes (see `MastraServerCache.supportsAtomicCounters`). Two workers can
+   * allocate 5 and 6 and publish them in the other order, so a watermark would
+   * drop a live frame; subscribers track exact indices instead.
+   */
+  indexMode?: 'watermark' | 'exact';
 }
 
 /**
@@ -81,10 +97,62 @@ export interface CachingPubSubOptions {
  * });
  * ```
  */
+
+/**
+ * True when `events` is exactly the cache list slice starting at `offset`:
+ * every entry is numbered and its index is the list position it was read from.
+ *
+ * A list whose numbering allocation is not atomic with its append can hold
+ * entries out of position, in which case `listFromTo(key, offset)` is a slice of
+ * the list, not of the index range.
+ */
+function isContiguousFrom(events: Event[], offset: number): boolean {
+  for (let i = 0; i < events.length; i++) {
+    const index = events[i]?.index;
+    // Unnumbered entries carry no positional claim to check against; treat the
+    // slice as authoritative rather than paying for a full re-read.
+    if (typeof index !== 'number') return true;
+    if (index !== offset + i) return false;
+  }
+  return true;
+}
+
+/**
+ * True when the event's sequence must be deduplicated exactly rather than with a
+ * watermark. Cache entries carry `indexMode` next to their numeric `index`;
+ * transport copies carry `streamSeq` instead of `index` (see `Event.streamSeq`).
+ */
+function isExactSequenced(event: Event): boolean {
+  return event.indexMode === 'exact' || event.streamSeq !== undefined;
+}
+
+/** The sequence number of an event, whichever field carries it. */
+function sequenceOf(event: Event): number | undefined {
+  return isExactSequenced(event) ? (event.index ?? event.streamSeq) : event.index;
+}
+
+/**
+ * The copy of `event` to hand to the transport.
+ *
+ * Watermark-kind events keep their numeric `index`: subscribers have always
+ * read it, and dropping it would turn today's dropped-stale-frame behaviour
+ * into extra deliveries. Exact-kind events instead carry `streamSeq`, so a
+ * subscriber running pre-#27352 code sees no `index` and delivers the frame
+ * unnumbered — the pre-change behaviour — while new code reads `streamSeq` and
+ * applies exact dedupe.
+ */
+function transportCopy(event: Event, indexMode: 'watermark' | 'exact'): Event {
+  const { index, streamSeq: _streamSeq, ...rest } = event;
+  if (index === undefined) return rest;
+  if (indexMode === 'exact') return { ...rest, indexMode: 'exact', streamSeq: index };
+  return { ...rest, index };
+}
+
 export class CachingPubSub extends PubSub {
   private readonly keyPrefix: string;
   private readonly logger?: IMastraLogger;
   private readonly shouldCache?: (topic: string) => boolean;
+  private readonly indexMode: 'watermark' | 'exact';
   /** Maps original callbacks to their wrapped versions for proper unsubscribe */
   private callbackMap = new Map<EventCallback, EventCallback>();
   /** Bus this cache follows for externally-published events. See {@link __setSource}. */
@@ -101,6 +169,7 @@ export class CachingPubSub extends PubSub {
     this.keyPrefix = options.keyPrefix ?? 'pubsub:';
     this.logger = options.logger;
     this.shouldCache = options.shouldCache;
+    this.indexMode = options.indexMode ?? 'watermark';
     if (options.source) this.__setSource(options.source);
   }
 
@@ -166,6 +235,7 @@ export class CachingPubSub extends PubSub {
    * duplicated — falling back to `id` for them is safe.
    */
   private dedupKey(event: Event): string {
+    if (isExactSequenced(event)) return `s:${event.index ?? event.streamSeq}`;
     return event.index !== undefined ? `i:${event.index}` : `id:${event.id}`;
   }
 
@@ -197,23 +267,45 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
+   * Whether this cache already holds the frame published under {@link sequence}.
+   *
+   * Entries are appended in allocation order, so a sequence is also its list
+   * position and one positional read answers it. Used to recognise a frame that
+   * another caching tier over the same cache already stored, which must not be
+   * stored a second time under a fresh index.
+   */
+  private async holdsSequence(topic: string, sequence: number): Promise<boolean> {
+    try {
+      const [entry] = (await this.cache.listFromTo(this.getCacheKey(topic), sequence, sequence)) as Event[];
+      return entry?.index === sequence;
+    } catch {
+      // An unreadable cache falls back to storing the copy, as before.
+      return false;
+    }
+  }
+
+  /**
    * Start following {@link source} for a topic (idempotent, refcounted).
    * Called on every local subscription entry point; released on unsubscribe
    * and torn down on {@link clearTopic}.
    *
    * The follower's contract:
-   * - On an aliased source, events that carry an `index` are this cache's own
-   *   publish echo (or its own republish) — ack and ignore them. This is both
-   *   the dedup and the republish loop guard.
+   * - On an aliased source, events that carry a transport sequence (`index` for
+   *   watermark-kind events, `streamSeq` for exact-kind ones) are this cache's
+   *   own publish echo (or its own republish) — ack and ignore them. This is
+   *   both the dedup and the republish loop guard.
    * - On a non-aliased source, an `index` means the event passed through a
    *   *foreign* caching tier (e.g. a user-supplied `CachingPubSub` handed to
    *   `new Mastra({ pubsub })` while this agent runs its own cache tier).
-   *   That tier's cache is not the one this instance replays from, so the
-   *   event is treated like an un-indexed one: cached here under a fresh
-   *   index (replacing the foreign index) and republished into `inner`.
-   *   Dropping it instead would lose the event for local subscribers entirely
-   *   — the exact stream-loss failure `source` following exists to prevent
-   *   (#20646).
+   *   That tier's cache is not necessarily the one this instance replays
+   *   from: if this cache already holds the frame at that sequence (the two
+   *   tiers share one `serverCache` but not a bus), re-caching would put the
+   *   same frame in the history twice, so the follower only republishes it.
+   *   Otherwise the event is treated like an un-indexed one: cached here under
+   *   a fresh index (replacing the foreign index) and republished into
+   *   `inner`. Dropping it instead would lose the event for local subscribers
+   *   entirely — the exact stream-loss failure `source` following exists to
+   *   prevent (#20646).
    * - Un-indexed events were published directly on the source bus (e.g. by
    *   the evented workflow engine, possibly from another process). Assign an
    *   index, cache them (subject to `shouldCache`), and — only when source and
@@ -238,25 +330,39 @@ export class CachingPubSub extends PubSub {
     const followerCb: EventCallback = async (event, ack) => {
       try {
         const aliased = this.isSourceAliased(source);
-        if (event.index !== undefined && aliased) {
+        // Any transport sequence means this event already passed through a
+        // caching tier — `index` for watermark-kind events, `streamSeq` for
+        // exact-kind ones. On an aliased bus that is this cache's own publish
+        // echo (or its own republish): ack and ignore.
+        if ((event.index !== undefined || event.streamSeq !== undefined) && aliased) {
           return await ack?.();
         }
         let outbound: Event = event;
-        if (this.shouldCache?.(topic) !== false) {
+        // An exact-sequenced frame names the index it was cached under by its
+        // publisher. When that entry is in this same cache, the frame is already
+        // in the history: store it again and every replay would carry it twice.
+        const alreadyCached = event.streamSeq !== undefined && (await this.holdsSequence(topic, event.streamSeq));
+        if (!alreadyCached && this.shouldCache?.(topic) !== false) {
           // Same single-round-trip op as publish() (#22477): the follower sits
           // on the identical per-chunk hot path for engine-originated events.
           // The stored copy carries the allocated index, preserving the
-          // "indexed ⇒ already cached" dedup contract.
+          // "indexed ⇒ already cached" dedup contract. Strip any sequence the
+          // event already carried: a foreign tier's numbering must not be
+          // mistaken for one of ours.
+          const { index: _foreignIndex, streamSeq: _foreignSeq, indexMode: _foreignMode, ...body } = event;
           try {
-            const index = await this.cache.listPushIndexed(this.getCacheKey(topic), this.getCounterKey(topic), event);
-            outbound = { ...event, index };
+            const index = await this.cache.listPushIndexed(this.getCacheKey(topic), this.getCounterKey(topic), body);
+            outbound = transportCopy(
+              { ...body, index, ...(this.indexMode === 'exact' ? { indexMode: 'exact' as const } : {}) },
+              this.indexMode,
+            );
           } catch (error) {
             this.logError(`[CachingPubSub] Failed to cache followed event for ${topic}`, error);
           }
         }
         if (!aliased) {
-          // Inner implementations regenerate `id` but preserve `index`, same
-          // as the publish() path — live and cached copies dedup by index.
+          // Inner implementations regenerate `id` but preserve the sequence,
+          // same as the publish() path — live and cached copies dedup by it.
           await this.inner.publish(topic, outbound);
         }
         await ack?.();
@@ -336,6 +442,9 @@ export class CachingPubSub extends PubSub {
       ...event,
       id: crypto.randomUUID(),
       createdAt: new Date(),
+      // Only stamped for exact mode: the default watermark path stays
+      // byte-identical to what every existing deployment publishes.
+      ...(this.indexMode === 'exact' ? { indexMode: 'exact' as const } : {}),
     };
 
     // Cache BEFORE live publish so late-joining observers never miss events.
@@ -356,8 +465,10 @@ export class CachingPubSub extends PubSub {
       ...(index !== undefined ? { index } : {}),
     };
 
-    // Always publish to inner PubSub — cache failure must not block live delivery
-    await this.inner.publish(topic, fullEvent, options);
+    // Always publish to inner PubSub — cache failure must not block live delivery.
+    // Exact-mode frames go out as `streamSeq` so pre-#27352 subscribers keep
+    // delivering them as unnumbered frames instead of dropping them by watermark.
+    await this.inner.publish(topic, transportCopy(fullEvent, this.indexMode), options);
   }
 
   /**
@@ -384,7 +495,7 @@ export class CachingPubSub extends PubSub {
    * 1. Subscribe to live events FIRST — buffer deliveries during bootstrap
    * 2. Fetch and deliver cached history in order
    * 3. Drain the buffer, skipping events already delivered via history
-   * 4. Switch to passthrough with an index watermark for steady-state dedup
+   * 4. Switch to passthrough with per-discipline dedupe (watermark or exact)
    *
    * @param topic - The topic to subscribe to
    * @param offset - Start replaying from this index (0-based)
@@ -403,13 +514,84 @@ export class CachingPubSub extends PubSub {
       ack?: Parameters<EventCallback>[1];
       nack?: Parameters<EventCallback>[2];
     }> = [];
-    let lastDelivered = -1;
+
+    // Dedupe state is kept per discipline, because the two answer different
+    // questions about a lower index that arrives late.
+    //
+    // Watermark (default): the index comes from one publisher's own counter, so
+    // a lower index after a higher one is a stale frame from a discarded
+    // attempt — the pre-#27352 behaviour, unchanged.
+    let lastDelivered = offset - 1;
+
+    // Exact: `floor` is the highest index such that every index at or below it
+    // has been delivered; `delivered` holds the holes above it. A single
+    // high-water mark would drop a live frame — two processes sharing an atomic
+    // counter can allocate 5 and 6 and have them reach the transport as 6 then
+    // 5 — so indices above the floor are tracked individually and delivered in
+    // arrival order. The set holds only holes; if it ever fills, eviction can
+    // re-deliver an event but never drop one.
+    let floor = offset - 1;
+    const delivered = new Set<number>();
+    const MAX_DELIVERED_INDICES = 10_000;
+    const markExactDelivered = (seq: number) => {
+      delivered.add(seq);
+      while (delivered.has(floor + 1)) {
+        delivered.delete(floor + 1);
+        floor += 1;
+      }
+      if (delivered.size > MAX_DELIVERED_INDICES) {
+        const oldest = delivered.values().next();
+        if (!oldest.done) delivered.delete(oldest.value);
+      }
+    };
+
+    /** Record an event as delivered under the discipline its publisher used. */
+    const markDelivered = (event: Event) => {
+      const seq = sequenceOf(event);
+      if (seq === undefined) return;
+      if (isExactSequenced(event)) markExactDelivered(seq);
+      else lastDelivered = Math.max(lastDelivered, seq);
+    };
+
+    /**
+     * Whether an already-delivered event is a duplicate under its own
+     * discipline. Nack-redeliveries are always passed through: they carry the
+     * same sequence but `deliveryAttempt > 1`, and the consumer must see them
+     * to retry processing.
+     */
+    const isDuplicate = (event: Event, isRetry: boolean): boolean => {
+      if (isRetry) return false;
+      const seq = sequenceOf(event);
+      if (seq === undefined) return false;
+      return isExactSequenced(event) ? seq <= floor || delivered.has(seq) : seq <= lastDelivered;
+    };
+
+    // `seen` records the index-based dedup key AND the event id. The id matters
+    // in two places: on an aliased source bus the follower caches an indexed
+    // COPY of an event whose original live delivery carries no index, so the
+    // two only correlate by id (same emitter delivery → same id); and when
+    // numbering is unavailable (an unshared cache) retained transport copies
+    // arrive unnumbered and are only identifiable by id.
+    const seen = new Set<string>();
+    const MAX_SEEN_IDS = 10_000;
+    const rememberId = (id: string) => {
+      seen.add(`id:${id}`);
+      if (seen.size > MAX_SEEN_IDS) {
+        for (const key of seen) {
+          if (key.startsWith('id:')) {
+            seen.delete(key);
+            break;
+          }
+        }
+      }
+    };
 
     const wrappedCb: EventCallback = (event, ack, nack) => {
       // Drop events strictly before the requested offset on the live path.
       // Dropped deliveries are still acknowledged: the consumer will never see
       // them, so leaving them unacknowledged would strand them on the backend.
-      if (typeof event.index === 'number' && event.index < offset) {
+      const liveSeq = sequenceOf(event);
+      if (liveSeq !== undefined && liveSeq < offset) {
         return ack?.();
       }
 
@@ -419,40 +601,52 @@ export class CachingPubSub extends PubSub {
       }
 
       // Steady-state: skip events we already delivered via history or buffer drain.
-      // Allow nack-redelivered messages through — they carry the same index but
-      // deliveryAttempt > 1, and the consumer must see them to retry processing.
       const isRetry = typeof event.deliveryAttempt === 'number' && event.deliveryAttempt > 1;
-      if (typeof event.index === 'number' && event.index <= lastDelivered && !isRetry) {
-        // Already delivered via history or the buffer drain. Acknowledge the
-        // duplicate so it doesn't stay pending on the backend.
-        return ack?.();
-      }
-
-      if (typeof event.index === 'number' && event.index > lastDelivered) {
-        lastDelivered = event.index;
+      if (liveSeq !== undefined) {
+        if (isDuplicate(event, isRetry)) {
+          // Already delivered, possibly out of order. Acknowledge the duplicate
+          // so it doesn't stay pending on the backend.
+          return ack?.();
+        }
+        markDelivered(event);
+      } else if (event.id) {
+        // Unnumbered publisher: the sequence checks above can't recognise
+        // duplicates, so fall back to the id the event was cached with — a
+        // retained transport replays the stored copy, which keeps that id.
+        if (!isRetry && seen.has(`id:${event.id}`)) return ack?.();
+        rememberId(event.id);
       }
       // Hand the consumer's outcome back to the backend so it can ack or nack.
       return cb(event, ack, nack);
     };
 
     this.callbackMap.set(cb, wrappedCb);
+    // Plain subscribe: replay is served from the cache below. Retaining
+    // transports (Redis Streams, …) replay from `startFrom: 'earliest'` by
+    // default, which is deliberate — their retained copies now carry the index
+    // they were published with, so the offset and dedupe checks below reconcile
+    // them with the cache instead of discarding a prefix an empty cache still
+    // needs after a restart.
     await this.inner.subscribe(topic, wrappedCb);
 
     try {
       // --- Phase 2: fetch and deliver cached history ---
-      // `seen` records the index-based dedup key AND the event id. The id
-      // matters on an aliased source bus: the follower caches an indexed COPY
-      // of an event whose original live delivery carries no index, so the two
-      // only correlate by id (same emitter delivery → same id). Distinct
-      // events never share ids, so the extra key can't over-suppress.
-      const seen = new Set<string>();
+      // Seed the ids of the prefix the caller skipped, without delivering it.
+      // A retaining transport replays its copies of those events, and once
+      // numbering is unavailable they carry no index for the offset filter to
+      // compare — their id is the only stable correlation, and it only exists in
+      // the entries the cache itself holds.
+      if (offset > 0) {
+        const skipped = (await this.cache.listFromTo(this.getCacheKey(topic), 0, offset - 1)) as Event[];
+        for (const event of skipped) {
+          if (event.id) rememberId(event.id);
+        }
+      }
       const history = await this.getHistory(topic, offset);
       for (const event of history) {
         seen.add(this.dedupKey(event));
-        if (event.id) seen.add(`id:${event.id}`);
-        if (typeof event.index === 'number') {
-          lastDelivered = event.index;
-        }
+        if (event.id) rememberId(event.id);
+        markDelivered(event);
         // Awaited so history is delivered in order before the buffer drain.
         // History comes from storage, not the transport, so there is nothing
         // to acknowledge.
@@ -467,10 +661,8 @@ export class CachingPubSub extends PubSub {
           continue;
         }
         seen.add(this.dedupKey(event));
-        if (event.id) seen.add(`id:${event.id}`);
-        if (typeof event.index === 'number') {
-          lastDelivered = event.index;
-        }
+        if (event.id) rememberId(event.id);
+        markDelivered(event);
         // The consumer settles these itself through the ack/nack it was handed
         // on the live path. Awaited so a rejection can still reach nack, which
         // the backend would otherwise have routed.
@@ -508,8 +700,35 @@ export class CachingPubSub extends PubSub {
    */
   async getHistory(topic: string, offset: number = 0): Promise<Event[]> {
     const cacheKey = this.getCacheKey(topic);
-    const events = await this.cache.listFromTo(cacheKey, offset);
-    return events as Event[];
+    let events = (await this.cache.listFromTo(cacheKey, offset)) as Event[];
+
+    // An empty slice at a non-zero offset proves nothing: it is what a list that
+    // has legitimately ended looks like, and also what a list that expired
+    // mid-run and restarted at a non-zero index looks like (the index counter
+    // outlives the list). Only the second case has events to deliver, and its
+    // first entry gives it away.
+    if (events.length === 0 && offset > 0) {
+      const head = (await this.cache.listFromTo(cacheKey, 0, 0)) as Event[];
+      if (head.length > 0 && head[0]?.index !== 0) {
+        events = (await this.cache.listFromTo(cacheKey, 0)) as Event[];
+      }
+    }
+
+    if (isContiguousFrom(events, offset)) return events;
+
+    // List position and `index` disagree, so the slice is not "events from
+    // `offset`": a cache whose index allocation and append are not one atomic
+    // step (two publishers can allocate 5 and 6 and push them in the other
+    // order) leaves entries out of position. Re-read the whole history and order
+    // it by index. Re-delivering is recoverable by the subscriber's dedupe;
+    // dropping an event is not.
+    const all = (await this.cache.listFromTo(cacheKey, 0)) as Event[];
+    return all
+      .filter(event => typeof event.index !== 'number' || event.index >= offset)
+      .sort((a, b) => {
+        if (typeof a.index !== 'number' || typeof b.index !== 'number') return 0;
+        return a.index - b.index;
+      });
   }
 
   /**

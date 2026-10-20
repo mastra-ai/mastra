@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { AGENT_STREAM_TOPIC } from '../../agent/durable/constants';
 import type { ActorSignal } from '../../auth/ee';
+import { InMemoryServerCache } from '../../cache/inmemory';
 import { MastraError } from '../../error';
+import { CachingPubSub } from '../../events/caching-pubsub';
+import type { PubSub } from '../../events/pubsub';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
+import { PUBSUB_SYMBOL } from '../constants';
 import type { StepFlowEntry, StepResult } from '../types';
 import { createStep } from '../workflow';
 import { StepExecutor } from './step-executor';
@@ -479,6 +484,92 @@ describe('StepExecutor', () => {
         },
       ]);
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('step pubsub numbering', () => {
+    /**
+     * A cache whose allocate+append pair is atomic (Redis with the
+     * `LIST_PUSH_INDEXED` Lua script). Only these caches can number events
+     * safely: two-step allocation lets concurrent processes reuse an index.
+     */
+    class AtomicCounterCache extends InMemoryServerCache {
+      get supportsAtomicCounters(): boolean {
+        return true;
+      }
+    }
+
+    async function captureStepPubsub(target: Mastra): Promise<Record<PropertyKey, any>> {
+      let captured: Record<PropertyKey, any> | undefined;
+      const step = createStep({
+        id: 'capture-pubsub',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async params => {
+          captured = params as unknown as Record<PropertyKey, any>;
+          return {};
+        },
+      });
+
+      const result = await new StepExecutor({ mastra: target }).execute({
+        workflowId: 'test-workflow',
+        entry: { type: 'step', step } as Extract<StepFlowEntry, { type: 'step' }>,
+        runId: 'test-run',
+        input: {},
+        stepResults: {},
+        state: {},
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.status).toBe('success');
+      if (!captured) throw new Error('step did not receive an execution context');
+      return captured;
+    }
+
+    it('leaves steps on the raw mastra pubsub when the cache cannot allocate atomically', async () => {
+      const context = await captureStepPubsub(mastra);
+
+      // Numbering without a shared atomic counter would hand two processes the
+      // same index, so the in-memory default must keep today's unnumbered path.
+      expect(context[PUBSUB_SYMBOL]).toBe(mastra.pubsub);
+    });
+
+    it('numbers agent-stream events published from a step when the cache is atomic', async () => {
+      const cache = new AtomicCounterCache();
+      const atomicMastra = new Mastra({ cache });
+      const context = await captureStepPubsub(atomicMastra);
+      const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
+
+      // COR-1474: step-published frames used to bypass the agent's
+      // CachingPubSub, so a retaining transport replayed them unnumbered and
+      // `observe({ offset })` could neither skip nor dedupe them.
+      expect(stepPubsub).toBeInstanceOf(CachingPubSub);
+
+      const topic = AGENT_STREAM_TOPIC('run-numbered');
+      for (const n of [0, 1]) {
+        await stepPubsub.publish(topic, {
+          type: 'chunk',
+          runId: 'run-numbered',
+          data: { n },
+        } as any);
+      }
+
+      const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
+      expect(cached.map(event => event.index)).toEqual([0, 1]);
+    });
+
+    it('does not cache run-local step events even when the cache is atomic', async () => {
+      const cache = new AtomicCounterCache();
+      const context = await captureStepPubsub(new Mastra({ cache }));
+      const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
+
+      await stepPubsub.publish('workflow.events.v2.run-numbered', {
+        type: 'watch',
+        runId: 'run-numbered',
+        data: {},
+      } as any);
+
+      expect(await cache.listLength('pubsub:workflow.events.v2.run-numbered')).toBe(0);
     });
   });
 });
