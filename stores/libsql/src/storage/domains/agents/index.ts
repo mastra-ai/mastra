@@ -63,6 +63,7 @@ export class AgentsLibSQL extends AgentsStorage {
         'durable',
         'browser',
         'toolProviders',
+        'modelList',
       ],
     });
 

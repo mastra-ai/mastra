@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { z } from 'zod';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
@@ -92,6 +93,40 @@ describe('applyStoredOverrides', () => {
       { id: 'fallback', model: { modelId: 'gpt-4.1' }, enabled: true, maxRetries: 4 },
       { id: 'primary', model: { modelId: 'gpt-4o' }, enabled: false, maxRetries: 0 },
     ]);
+  });
+
+  it('preserves a configured code model instance when the stored selection is unchanged', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const configuredModel = new MockLanguageModelV2({
+      provider: 'openai',
+      modelId: 'gpt-4o',
+    });
+    const codeAgent = new Agent({
+      id: 'my-agent',
+      name: 'Code Agent',
+      instructions: 'Code instructions',
+      model: [{ id: 'primary', model: configuredModel }],
+      editor: { model: true },
+    });
+    new Mastra({ storage, editor, agents: { 'my-agent': codeAgent } });
+
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'my-agent',
+        name: 'Stored Agent',
+        instructions: 'Stored instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        modelList: [{ id: 'primary', provider: 'openai', modelId: 'gpt-4o', enabled: true, maxRetries: 0 }],
+      } as never,
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+    const modelList = await result.getModelList();
+
+    expect(modelList?.[0]?.model).toMatchObject({ provider: 'openai', modelId: 'gpt-4o' });
+    expect(modelList?.[0]?.model).not.toHaveProperty('gatewayId', 'models.dev');
   });
 
   it('does not override anything when code agent disables editor overrides', async () => {

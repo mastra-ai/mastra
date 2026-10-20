@@ -1069,6 +1069,53 @@ describe('Agent Handlers', () => {
   });
 
   describe('model list edits', () => {
+    it('should resolve stored-only agents before reordering or updating their model lists', async () => {
+      const agent = makeMockAgent({
+        id: 'stored-only-agent',
+        model: [
+          { id: 'primary', model: 'openai/gpt-4o' },
+          { id: 'fallback', model: 'openai/gpt-4o-mini' },
+        ],
+        editor: { model: true },
+      });
+      const mastra = makeMastraMock({ agents: {} });
+      const getById = vi.fn().mockResolvedValue(agent);
+      const update = vi.fn().mockResolvedValue(agent);
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({
+        agent: {
+          applyStoredOverrides: vi.fn(),
+          getById,
+          update,
+        },
+      } as never);
+      vi.spyOn(mastra, 'getStorage').mockReturnValue({
+        getStore: vi.fn().mockResolvedValue({ getById: vi.fn().mockResolvedValue({ id: 'stored-only-agent' }) }),
+      } as never);
+
+      await REORDER_AGENT_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'stored-only-agent',
+        reorderedModelIds: ['fallback', 'primary'],
+        requestContext,
+      });
+      await UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'stored-only-agent',
+        modelConfigId: 'fallback',
+        enabled: false,
+        requestContext,
+      });
+
+      expect(getById).toHaveBeenCalledTimes(2);
+      expect(getById).toHaveBeenNthCalledWith(1, 'stored-only-agent', { status: 'draft' });
+      expect(getById).toHaveBeenNthCalledWith(2, 'stored-only-agent', { status: 'draft' });
+      expect(update).toHaveBeenCalledTimes(2);
+      expect(await agent.getModelList()).toMatchObject([
+        { id: 'fallback', enabled: false },
+        { id: 'primary', enabled: true },
+      ]);
+    });
+
     it('should return 409 for function-valued model lists and leave the function in place', async () => {
       const modelFn = () => [{ model: openaiV5('gpt-4o-mini') }, { model: openaiV5('gpt-4o') }];
       const mastra = makeMastraMock({

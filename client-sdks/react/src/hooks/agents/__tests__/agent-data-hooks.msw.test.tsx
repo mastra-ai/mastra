@@ -9,7 +9,7 @@ import type {
 } from '@mastra/client-js';
 import { act, cleanup, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../test/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../test/render';
@@ -200,11 +200,13 @@ describe('useAgentVersions', () => {
       http.post(`${API}/agents/agent-1/models/fallback`, () => HttpResponse.json({ success: true })),
     );
 
+    const reorderOnSuccess = vi.fn();
+    const updateOnSuccess = vi.fn();
     const { result } = renderHookWithProviders(() => ({
       versions: useAgentVersions({ agentId: 'agent-1' }),
       storedAgent: useStoredAgent({ agentId: 'agent-1' }),
-      reorder: useReorderModelList({ agentId: 'agent-1' }),
-      update: useUpdateModelInModelList({ agentId: 'agent-1' }),
+      reorder: useReorderModelList({ agentId: 'agent-1', queryOptions: { onSuccess: reorderOnSuccess } }),
+      update: useUpdateModelInModelList({ agentId: 'agent-1', queryOptions: { onSuccess: updateOnSuccess } }),
     }));
 
     await waitFor(() => {
@@ -216,12 +218,14 @@ describe('useAgentVersions', () => {
     await waitFor(() => {
       expect(versionsRequests).toBe(2);
       expect(storedAgentRequests).toBe(2);
+      expect(reorderOnSuccess).toHaveBeenCalledOnce();
     });
 
     await act(() => result.current.update.mutateAsync({ modelConfigId: 'fallback', enabled: false }));
     await waitFor(() => {
       expect(versionsRequests).toBe(3);
       expect(storedAgentRequests).toBe(3);
+      expect(updateOnSuccess).toHaveBeenCalledOnce();
     });
   });
 });

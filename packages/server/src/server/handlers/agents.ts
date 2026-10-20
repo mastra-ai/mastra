@@ -3739,13 +3739,16 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, reorderedModelIds, requestContext }) => {
     try {
-      const codeAgent = mastra.getAgentById(agentId);
-      const editorConfig = codeAgent.__getEditorConfig?.();
+      let versionStatus: 'draft' | 'published' = 'draft';
+      try {
+        const editorConfig = mastra.getAgentById(agentId).__getEditorConfig?.();
+        versionStatus = editorConfig !== false && editorConfig?.model === true ? 'draft' : 'published';
+      } catch {}
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
         requestContext,
-        ...(editorConfig && editorConfig.model === true ? { versionOptions: { status: 'draft' as const } } : {}),
+        versionOptions: { status: versionStatus },
       });
 
       if (typeof agent.model === 'function') {
@@ -3789,13 +3792,16 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled, requestContext }) => {
     try {
-      const codeAgent = mastra.getAgentById(agentId);
-      const editorConfig = codeAgent.__getEditorConfig?.();
+      let versionStatus: 'draft' | 'published' = 'draft';
+      try {
+        const editorConfig = mastra.getAgentById(agentId).__getEditorConfig?.();
+        versionStatus = editorConfig !== false && editorConfig?.model === true ? 'draft' : 'published';
+      } catch {}
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
         requestContext,
-        ...(editorConfig && editorConfig.model === true ? { versionOptions: { status: 'draft' as const } } : {}),
+        versionOptions: { status: versionStatus },
       });
 
       if (typeof agent.model === 'function') {

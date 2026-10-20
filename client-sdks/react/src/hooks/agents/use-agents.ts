@@ -62,17 +62,21 @@ export const useReorderModelList = ({
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
+  const { onSuccess, onError, ...mutationOptions } = queryOptions ?? {};
+
   return useMutation({
     mutationFn: async (payload: ReorderModelListParams) => client.getAgent(agentId).reorderModelList(payload),
-    onSuccess: () => {
+    ...mutationOptions,
+    onSuccess: (...args) => {
       void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
       void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
       void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+      return onSuccess?.(...args);
     },
-    onError: err => {
-      console.error('Error reordering model list', err);
+    onError: (...args) => {
+      console.error('Error reordering model list', args[0]);
+      return onError?.(...args);
     },
-    ...queryOptions,
   });
 };
 
@@ -86,18 +90,22 @@ export const useUpdateModelInModelList = ({
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
+  const { onSuccess, onError, ...mutationOptions } = queryOptions ?? {};
+
   return useMutation({
     mutationFn: async (payload: UpdateModelInModelListParams) =>
       client.getAgent(agentId).updateModelInModelList(payload),
-    onSuccess: () => {
+    ...mutationOptions,
+    onSuccess: (...args) => {
       void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
       void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
       void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+      return onSuccess?.(...args);
     },
-    onError: err => {
-      console.error('Error updating model in model list', err);
+    onError: (...args) => {
+      console.error('Error updating model in model list', args[0]);
+      return onError?.(...args);
     },
-    ...queryOptions,
   });
 };
 

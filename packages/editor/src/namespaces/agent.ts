@@ -628,10 +628,23 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           );
         }
 
+        const codeModelRef =
+          typeof codeModelEntry.model === 'string'
+            ? codeModelEntry.model
+            : 'id' in codeModelEntry.model && typeof codeModelEntry.model.id === 'string'
+              ? codeModelEntry.model.id
+              : 'provider' in codeModelEntry.model &&
+                  'modelId' in codeModelEntry.model &&
+                  typeof codeModelEntry.model.provider === 'string' &&
+                  typeof codeModelEntry.model.modelId === 'string'
+                ? `${codeModelEntry.model.provider}/${codeModelEntry.model.modelId}`
+                : undefined;
+        const storedModelRef = `${storedModel.provider}/${storedModel.modelId}`;
+
         return {
           ...codeModelEntry,
           id: storedModel.id,
-          model: `${storedModel.provider}/${storedModel.modelId}`,
+          model: codeModelRef === storedModelRef ? codeModelEntry.model : storedModelRef,
           enabled: storedModel.enabled,
           maxRetries: storedModel.maxRetries,
           maxRetriesConfigured: true,
