@@ -207,6 +207,12 @@ function loadTokenizerFromDir(modelDir: PathLike, maxLength: number): Tokenizer 
   return tokenizer;
 }
 
+function assertValidBatchSize(batchSize: number): void {
+  if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
+    throw new RangeError(`batchSize must be a positive safe integer, received ${String(batchSize)}`);
+  }
+}
+
 export class FlagEmbedding extends Embedding {
   private constructor(
     private tokenizer: Tokenizer,
@@ -261,6 +267,7 @@ export class FlagEmbedding extends Embedding {
    * Counts texts longer than the model's token window. `embed()` silently truncates these to `maxLength`.
    */
   async countTruncated(textStrings: string[], batchSize: number = 256): Promise<{ count: number; maxLength: number }> {
+    assertValidBatchSize(batchSize);
     let count = 0;
     let maxLength = 0;
     for (let i = 0; i < textStrings.length; i += batchSize) {
@@ -327,6 +334,7 @@ export class FlagEmbedding extends Embedding {
   }
 
   async *embed(textStrings: string[], batchSize: number = 256) {
+    assertValidBatchSize(batchSize);
     for (let i = 0; i < textStrings.length; i += batchSize) {
       const batchTexts = textStrings.slice(i, i + batchSize);
 
@@ -511,6 +519,7 @@ export class SparseTextEmbedding extends SparseEmbedding {
   }
 
   async *embed(textStrings: string[], batchSize: number = 256) {
+    assertValidBatchSize(batchSize);
     for (let i = 0; i < textStrings.length; i += batchSize) {
       const batchTexts = textStrings.slice(i, i + batchSize);
 
