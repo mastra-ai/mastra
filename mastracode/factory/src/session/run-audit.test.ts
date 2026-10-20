@@ -260,6 +260,55 @@ describe('Factory run lifecycle audit', () => {
       expect((await ended(events))[0]?.usage).toMatchObject({ status: 'recorded', totals: { totalTokens: 10 } });
     });
 
+    it('does not bill an earlier conversation turn to a run that ended without usage before its ledger entry', async () => {
+      const { emit, step, start, events } = await setup();
+      step(500, 500);
+      emit('complete');
+      // The run's turn fails before any usage arrives, and its end is written before its start.
+      emit('error');
+      await start(OPEN_RUN, 'error');
+
+      await vi.waitFor(async () => expect(await ended(events)).toHaveLength(1));
+      expect((await ended(events))[0]?.usage).toEqual({ status: 'unreported' });
+    });
+
+    it('does not bill an earlier conversation turn to a run whose start is written before its usage-less end', async () => {
+      const { emit, step, start, events } = await setup();
+      step(500, 500);
+      emit('complete');
+      const started = start(OPEN_RUN, 'error');
+      emit('error');
+      await started;
+
+      await vi.waitFor(async () => expect(await ended(events)).toHaveLength(1));
+      expect((await ended(events))[0]?.usage).toEqual({ status: 'unreported' });
+    });
+
+    it('bills each queued end the turn it closed, not a later turn', async () => {
+      const { start, emit, step, events } = await setup();
+      await start();
+      step(7, 3);
+      emit('complete');
+      step(400, 100);
+      emit('complete');
+
+      await vi.waitFor(async () => expect(await ended(events)).toHaveLength(1));
+      expect((await ended(events))[0]?.usage).toMatchObject({ status: 'recorded', totals: { totalTokens: 10 } });
+    });
+
+    it('bills a turn to only one run when two ledger entries land after it ended', async () => {
+      const { start, emit, step, events } = await setup();
+      step(7, 3);
+      emit('complete');
+      await start(OPEN_RUN, 'complete');
+      await start({ ...OPEN_RUN, kickoffId: 'kickoff-2' }, 'complete');
+
+      await vi.waitFor(async () => expect(await ended(events)).toHaveLength(2));
+      const byKickoff = Object.fromEntries((await ended(events)).map(meta => [meta?.kickoffId, meta?.usage]));
+      expect(byKickoff['kickoff-1']).toMatchObject({ status: 'recorded', totals: { totalTokens: 10 } });
+      expect(byKickoff['kickoff-2']).toEqual({ status: 'unreported' });
+    });
+
     it('warns when a run end cannot persist its usage, and persists the same usage on the retry', async () => {
       const { start, emit, step, events, audit, settings } = await setup();
       await start();

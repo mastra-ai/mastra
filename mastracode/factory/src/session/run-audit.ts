@@ -125,13 +125,16 @@ function runUsage(steps: UsageCounts[]): FactoryRunUsage {
   };
 }
 
+interface EndedTurn {
+  steps: UsageCounts[];
+  claimed: boolean;
+}
+
 interface SessionUsage {
   /** Steps of the turn in progress; a suspended turn keeps accumulating into its resume. */
   current: UsageCounts[];
-  /** Steps of turns that have ended but are not yet attributed to a run. */
-  closed: UsageCounts[];
-  /** Steps of the last turn that ended with no open run, for a run whose ledger entry lands after it ended. */
-  unattributed: UsageCounts[];
+  /** The most recently ended turn, which a run whose ledger entry lands after that end may still claim. */
+  lastTurn?: EndedTurn;
   /** Usage of runs whose end record failed to persist, kept for the retry. */
   held: Map<string, FactoryRunUsage>;
 }
@@ -141,7 +144,7 @@ const sessionUsage = new WeakMap<RunEndCaptureSession, SessionUsage>();
 function usageFor(session: RunEndCaptureSession): SessionUsage {
   let usage = sessionUsage.get(session);
   if (!usage) {
-    usage = { current: [], closed: [], unattributed: [], held: new Map() };
+    usage = { current: [], held: new Map() };
     sessionUsage.set(session, usage);
   }
   return usage;
@@ -183,23 +186,18 @@ async function recordRunEnds(
   audit: AuditRecorder,
   reason: RunEndReason,
   kickoffId?: string,
+  endedTurn?: EndedTurn,
 ): Promise<void> {
   if (!reason || reason === 'suspended') return;
   const usage = usageFor(session);
   const runs = await listSessionOpenRuns(session);
-  if (runs.length === 0) {
-    if (usage.closed.length > 0) usage.unattributed = usage.closed;
-    usage.closed = [];
-    return;
-  }
+  if (runs.length === 0) return;
   const ending = runs.filter(run => !kickoffId || run.kickoffId === kickoffId);
-  let steps = usage.closed;
-  // A run whose ledger entry lands after its turn ended claims that turn here.
-  if (kickoffId && steps.length === 0) steps = usage.unattributed;
-  if (ending.length > 0) {
-    usage.closed = [];
-    usage.unattributed = [];
-  }
+  // An end event bills the turn it closed. A run whose ledger entry lands after its turn ended
+  // bills the latest ended turn, unless an open run already claimed it.
+  const turn = endedTurn ?? usage.lastTurn;
+  const steps = turn && !turn.claimed ? turn.steps : [];
+  if (turn && ending.length > 0) turn.claimed = true;
   const turnUsage = runUsage(steps);
   const remaining = [];
   for (const run of runs) {
@@ -291,8 +289,9 @@ export function observeSessionRunEnd(session: RunEndCaptureSession, { audit }: {
     }
     if (event.type !== 'agent_end' || !event.reason || event.reason === 'suspended') return;
     // Close the turn now so a following turn's steps never land in this run.
-    usage.closed.push(...usage.current);
+    const turn: EndedTurn = { steps: usage.current, claimed: false };
     usage.current = [];
-    void serializeRunAudit(session, () => recordRunEnds(session, audit, event.reason));
+    usage.lastTurn = turn;
+    void serializeRunAudit(session, () => recordRunEnds(session, audit, event.reason, undefined, turn));
   });
 }
