@@ -83,6 +83,7 @@ import {
 import {
   createDurableAgentStream,
   createRunGenerationFilter,
+  emitAbortEvent,
   emitChunkEvent,
   emitErrorEvent,
   emitFinishEvent,
@@ -2731,7 +2732,8 @@ export class DurableAgent<
    * A durable run parked on a suspension has no prepared run in this process, so the
    * base abort cannot tell it was parked and never deletes its snapshot. Once a resume
    * is rejected by the abort fence the run can never continue; delete its snapshot rows
-   * if they are still suspended so it drops out of `listSuspendedRuns()` (#27619).
+   * if they are still suspended so it drops out of `listSuspendedRuns()` (#27619), and
+   * publish the abort terminal so observers still attached to the parked run close.
    * Done here rather than at abort time: a run still executing in this process unwinds
    * through its own abort path, which reads the snapshot.
    */
@@ -2745,6 +2747,7 @@ export class DurableAgent<
           : persisted?.snapshot;
       if (snapshot?.status !== 'suspended') return;
       await this.deleteRunSnapshots(runId);
+      await emitAbortEvent(this.pubsub, runId, { steps: [], text: '' });
     } catch (error) {
       this.#mastra?.getLogger?.()?.warn?.(`Failed to delete snapshot of aborted suspended run ${runId}`, {
         runId,
