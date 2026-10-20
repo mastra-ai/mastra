@@ -57,6 +57,25 @@ async function isPending(promise: Promise<unknown>): Promise<boolean> {
 }
 
 describe('ObservationalMemory.settled', () => {
+  it('scoped to a thread, waits for that thread only and not for other threads on the same engine', async () => {
+    const om = createOm();
+    const mine = deferred();
+    const other = deferred();
+    void om.trackBackgroundWork(mine.promise, om.buffering.getLockKey('t-mine', 'r'));
+    void om.trackBackgroundWork(other.promise, om.buffering.getLockKey('t-other', 'r'));
+
+    const scoped = om.settled({ threadId: 't-mine', resourceId: 'r' });
+    const all = om.settled();
+    expect(await isPending(scoped)).toBe(true);
+
+    mine.resolve();
+    await scoped; // resolves although t-other is still busy
+    expect(await isPending(all)).toBe(true);
+
+    other.resolve();
+    await all;
+  });
+
   it('resolves immediately when no background work is in flight', async () => {
     const om = createOm();
 
@@ -67,7 +86,7 @@ describe('ObservationalMemory.settled', () => {
     const om = createOm();
     const gate = deferred();
 
-    void om.trackBackgroundWork(gate.promise);
+    void om.trackBackgroundWork(gate.promise, 'thread:t');
 
     const settled = om.settled();
     expect(await isPending(settled)).toBe(true);
@@ -88,8 +107,9 @@ describe('ObservationalMemory.settled', () => {
         // A buffered observation can trigger a reflection, which spawns nested agent
         // runs — settled() must drain those too, not just the first snapshot.
         secondStarted = true;
-        void om.trackBackgroundWork(second.promise);
+        void om.trackBackgroundWork(second.promise, 'thread:t');
       }),
+      'thread:t',
     );
 
     const settled = om.settled();
@@ -109,7 +129,7 @@ describe('ObservationalMemory.settled', () => {
 
     // Callers keep their own rejection handling; the tracker must not swallow or
     // re-surface it, and settled() must not hang on a failed cycle.
-    void om.trackBackgroundWork(gate.promise).catch(() => {});
+    void om.trackBackgroundWork(gate.promise, 'thread:t').catch(() => {});
 
     const settled = om.settled();
     gate.reject(new Error('background cycle failed'));
@@ -204,5 +224,66 @@ describe('ObservationalMemory.settled', () => {
     gate.resolve();
     await settled;
     expect((await om.getRecord(`flag-${value}`, 'r1'))?.isBufferingReflection).toBe(false);
+  });
+
+  it('scoped to a thread, waits for a buffered observation through its flag-clear write', async () => {
+    const storage = createInMemoryStorage();
+    const clearGate = deferred();
+    const setFlag = storage.setBufferingObservationFlag.bind(storage);
+    storage.setBufferingObservationFlag = async (id, value, ...rest) => {
+      if (value === false) await clearGate.promise;
+      return setFlag(id, value, ...rest);
+    };
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: { model: createNoopModel('mock-observer'), messageTokens: 1000, bufferTokens: 100 },
+      reflection: { model: createNoopModel('mock-reflector'), observationTokens: 40000 },
+    });
+    const record = await om.getOrCreateRecord('obs', 'r1');
+    const message = {
+      id: 'm1',
+      role: 'user' as const,
+      threadId: 'obs',
+      resourceId: 'r1',
+      createdAt: new Date(),
+      content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'hello '.repeat(200) }] },
+    };
+    const triggered = await om.triggerAsyncBuffering({
+      threadId: 'obs',
+      resourceId: 'r1',
+      record,
+      pendingTokens: 500,
+      unbufferedPendingTokens: 500,
+      unobservedMessages: [message],
+      threshold: 1000,
+    });
+    expect(triggered).toBe(true);
+
+    const settled = om.settled({ threadId: 'obs', resourceId: 'r1' });
+    expect(await isPending(settled)).toBe(true);
+    clearGate.resolve();
+    await settled;
+    expect((await om.getRecord('obs', 'r1'))?.isBufferingObservation).toBe(false);
+  });
+
+  it.each([
+    ['no ids', 'thread', {}],
+    ['only resourceId on a thread-scoped engine', 'thread', { resourceId: 'r' }],
+    ['only threadId on a resource-scoped engine', 'resource', { threadId: 't' }],
+  ] as const)('waits for all work when the scope has %s', async (_label, engineScope, scope) => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: engineScope,
+      observation: { model: createNoopModel('mock-observer'), messageTokens: 1000, bufferTokens: false },
+      reflection: { model: createNoopModel('mock-reflector'), observationTokens: 40000 },
+    });
+    const gate = deferred();
+    void om.trackBackgroundWork(gate.promise, { threadId: 't', resourceId: 'r' });
+
+    const settled = om.settled(scope);
+    expect(await isPending(settled)).toBe(true);
+    gate.resolve();
+    await settled;
   });
 });

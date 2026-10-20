@@ -1,5 +1,32 @@
 # mastra
 
+## 1.35.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`41b7f34`](https://github.com/mastra-ai/mastra/commit/41b7f3422a97f1385a285002b7e6f898eb5c7b06), [`3454f90`](https://github.com/mastra-ai/mastra/commit/3454f90a1d33b4061fd4e584430308e6c8ce8c6a), [`179964b`](https://github.com/mastra-ai/mastra/commit/179964b95aacac31763a4a1aa2f2d1c652aa529d), [`ba7b0ea`](https://github.com/mastra-ai/mastra/commit/ba7b0eac045755d39d20dcf3a943ea5f8270b009), [`e8d7f8e`](https://github.com/mastra-ai/mastra/commit/e8d7f8e52da32b05f2e8501c1127128ae1a5d450), [`92034fa`](https://github.com/mastra-ai/mastra/commit/92034fa2a46a4f45af416c3201752342ead71d89)]:
+  - @mastra/core@1.79.0-alpha.6
+  - @mastra/loggers@1.3.9-alpha.2
+  - @mastra/deployer@1.79.0-alpha.6
+
+## 1.35.0-alpha.5
+
+### Minor Changes
+
+- Added the `mastra api trace aggregate` command for grouped observability trace measures such as counts, error rates, duration percentiles, tokens, and cost, optionally bucketed by time. ([#27683](https://github.com/mastra-ai/mastra/pull/27683))
+
+  ```bash
+  mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"groupBy":["entityName"],"measures":["count","errorRate"]}'
+  ```
+
+### Patch Changes
+
+- Fixed the dataset item version diff in Studio hiding a field from one column when only the other version had it. The field now shows "Not set in this version" there, so both columns list the same fields. ([#27681](https://github.com/mastra-ai/mastra/pull/27681))
+
+- Updated dependencies [[`ec84d93`](https://github.com/mastra-ai/mastra/commit/ec84d93cda24d56a0812086fcaace9e68ce8e089), [`79fd3b0`](https://github.com/mastra-ai/mastra/commit/79fd3b06a7cf59f7acb4591b9ba0f388d548fd17), [`f28b72f`](https://github.com/mastra-ai/mastra/commit/f28b72f255a460746f08c73b2a1d336bfc57757b), [`6c67158`](https://github.com/mastra-ai/mastra/commit/6c67158a10406adae195887167862d632bb54d64), [`ad8e752`](https://github.com/mastra-ai/mastra/commit/ad8e75217bcbb12986e7e77a30cb4af1be93c0fd), [`85a26af`](https://github.com/mastra-ai/mastra/commit/85a26af75fe62b7f2d8ac0b56d322798e5ae0616), [`e0077c3`](https://github.com/mastra-ai/mastra/commit/e0077c34070037ac77c264a9d5000a69c0dd2095)]:
+  - @mastra/core@1.79.0-alpha.5
+  - @mastra/deployer@1.79.0-alpha.5
+
 ## 1.34.3-alpha.4
 
 ### Patch Changes

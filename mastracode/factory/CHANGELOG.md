@@ -1,5 +1,44 @@
 # @mastra/factory
 
+## 0.24.0-alpha.7
+
+### Patch Changes
+
+- Fixed `factory_switch_session_model` rejecting models that a session can use through stored credentials. Switching to a model like `anthropic/claude-opus-5-5` with a personal Anthropic key used to fail with "Model … is not available on this server". The tool now checks the same credentials as the Settings model picker: the owner's credentials for a user-scoped session, or the Factory's credentials (including custom providers) for a Factory-scoped one. Deployment-only providers still need operator opt-in. Error messages now say whether a model id is unknown or has no credential in the session's scope, and list the models the session can use. ([#27712](https://github.com/mastra-ai/mastra/pull/27712))
+
+- Updated dependencies [[`41b7f34`](https://github.com/mastra-ai/mastra/commit/41b7f3422a97f1385a285002b7e6f898eb5c7b06), [`179964b`](https://github.com/mastra-ai/mastra/commit/179964b95aacac31763a4a1aa2f2d1c652aa529d), [`ba7b0ea`](https://github.com/mastra-ai/mastra/commit/ba7b0eac045755d39d20dcf3a943ea5f8270b009), [`e8d7f8e`](https://github.com/mastra-ai/mastra/commit/e8d7f8e52da32b05f2e8501c1127128ae1a5d450), [`92034fa`](https://github.com/mastra-ai/mastra/commit/92034fa2a46a4f45af416c3201752342ead71d89)]:
+  - @mastra/core@1.79.0-alpha.6
+  - @mastra/code-sdk@1.15.0-alpha.7
+
+## 0.24.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`2ceedd7`](https://github.com/mastra-ai/mastra/commit/2ceedd7a69502474bbf43910351772747493ef88)]:
+  - @mastra/code-sdk@1.15.0-alpha.6
+
+## 0.24.0-alpha.5
+
+### Minor Changes
+
+- Treat linked Slack conversations as User Sessions, with interactive User Session tools authorized as the linked sender, including other participants in an organization-visible session. Private sessions remain owner-only. ([#27685](https://github.com/mastra-ai/mastra/pull/27685))
+
+  Before: a linked teammate replying in a Slack session could not use User Session management tools without acting as the session owner. After: they can ask, for example, “Switch my other session to openai/gpt-6-luna,” and `factory_switch_session_model` checks their own session ownership rather than the Slack session owner's.
+
+- Added **Apply to running sessions** for your saved default model. It switches your running user sessions right away and reports which sessions were updated and which were skipped (stopped, Factory-billed, or failed). ([#27591](https://github.com/mastra-ai/mastra/pull/27591))
+
+  Interactive sessions can also call `factory_switch_session_model` to change the model of a side, work item, or review session you own in the same Factory. It only accepts models this server can run:
+
+  ```json
+  { "sessionId": "session-1", "modelId": "openai/gpt-5.6" }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ec84d93`](https://github.com/mastra-ai/mastra/commit/ec84d93cda24d56a0812086fcaace9e68ce8e089), [`f28b72f`](https://github.com/mastra-ai/mastra/commit/f28b72f255a460746f08c73b2a1d336bfc57757b), [`79fd3b0`](https://github.com/mastra-ai/mastra/commit/79fd3b06a7cf59f7acb4591b9ba0f388d548fd17), [`f28b72f`](https://github.com/mastra-ai/mastra/commit/f28b72f255a460746f08c73b2a1d336bfc57757b), [`6c67158`](https://github.com/mastra-ai/mastra/commit/6c67158a10406adae195887167862d632bb54d64), [`ad8e752`](https://github.com/mastra-ai/mastra/commit/ad8e75217bcbb12986e7e77a30cb4af1be93c0fd), [`85a26af`](https://github.com/mastra-ai/mastra/commit/85a26af75fe62b7f2d8ac0b56d322798e5ae0616), [`79fd3b0`](https://github.com/mastra-ai/mastra/commit/79fd3b06a7cf59f7acb4591b9ba0f388d548fd17), [`e0077c3`](https://github.com/mastra-ai/mastra/commit/e0077c34070037ac77c264a9d5000a69c0dd2095)]:
+  - @mastra/core@1.79.0-alpha.5
+  - @mastra/code-sdk@1.15.0-alpha.5
+
 ## 0.24.0-alpha.4
 
 ### Patch Changes

@@ -43,7 +43,12 @@ export function ChatSessionConfigProvider({
   const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
   const owner = useMemo(
-    () => storedSession && { id: storedSession.userId, name: storedSession.owner?.name },
+    () =>
+      storedSession && {
+        id: storedSession.userId,
+        name: storedSession.owner?.name,
+        avatarUrl: storedSession.owner?.avatarUrl,
+      },
     [storedSession],
   );
 

@@ -981,7 +981,9 @@ describe('TraceDataPanelView — side column views', () => {
 
     const tabs = screen.getAllByRole('tab');
     expect(tabs.every(tab => sideColumn()?.contains(tab))).toBe(true);
-    expect(tabs[0]?.closest('[role="tablist"]')?.parentElement?.parentElement?.className).toContain('border-b');
+    const bordered = tabs[0]?.closest('.border-b');
+    expect(bordered).not.toBeNull();
+    expect(sideColumn()?.contains(bordered ?? null)).toBe(true);
   });
 
   it('renders no side column when no slot is provided', () => {

@@ -1,5 +1,58 @@
 # @mastra/core
 
+## 1.79.0-alpha.6
+
+### Minor Changes
+
+- Support embedding specification v4 models from AI SDK v7. Core accepts v4 embedding models and exports `embedV4`; Memory and RAG use the matching SDK to generate embeddings while preserving v1, v2, and v3 behavior. ([#27710](https://github.com/mastra-ai/mastra/pull/27710))
+
+### Patch Changes
+
+- Fixed live scorers passed at call time (`agent.stream(..., { scorers })`) or through `defaultOptions.scorers` never running unless the same scorer was also registered on the agent or on Mastra. Such scorers now run and save their scores on every agent engine, including durable and evented agents. ([#27714](https://github.com/mastra-ai/mastra/pull/27714))
+
+- Fixed live scorers passed to `stream()`/`generate()` via `scorers`, or set in an agent's `defaultOptions.scorers`, being skipped on the Inngest engine when they are not registered on the agent or on Mastra. They now run after the call, as they already do on the default and evented engines. ([#27719](https://github.com/mastra-ai/mastra/pull/27719))
+
+- Fixed experiment comparisons when item, scorer, or experiment IDs match built-in object property names such as `constructor`, `toString`, or `__proto__`. Comparisons previously threw or dropped those entries; they now group and report them like any other ID. ([#27718](https://github.com/mastra-ai/mastra/pull/27718))
+
+- Fix experiment comparisons to average repeated trial scores per item instead of keeping only the last score. Items retain equal weight when experiments have different numbers of trials. ([#27705](https://github.com/mastra-ai/mastra/pull/27705))
+
+## 1.79.0-alpha.5
+
+### Minor Changes
+
+- Fixed workspace search and file listing ignoring `.gitignore` files below the workspace root. Content search and the file tree now apply every `.gitignore` relative to its own directory (for example, each repository in a multi-repo workspace) and skip `node_modules` unless the path points inside it. This keeps search from reading dependency files one by one on remote filesystems, and keeps file listings free of ignored and dependency files. ([#27687](https://github.com/mastra-ai/mastra/pull/27687))
+
+  Filesystems that implement `walk` can now honor two new options: `includeGitignoreFiles` returns `.gitignore` files even when hidden entries are excluded, and `skipDirectoryNames` skips directories such as `node_modules` entirely.
+
+  ```ts
+  const entries = await filesystem.walk('.', {
+    includeGitignoreFiles: true,
+    skipDirectoryNames: ['node_modules'],
+  });
+  ```
+
+### Patch Changes
+
+- Fixed agent runs that kept calling the model and tools after losing their thread lease. When lease renewal fails, the run is now aborted instead of running beside the run that took over the thread on another process. Applies to regular, durable and evented agents. ([#27581](https://github.com/mastra-ai/mastra/pull/27581))
+
+- Fixed workspace search and file listing so a deeper `.gitignore` can re-include what a parent ignores (for example `!keep.log` in a subdirectory overriding `*.log`), matching git. Search results from a filesystem's native `grep` now also apply `.gitignore` files in subdirectories of the search path. ([#27695](https://github.com/mastra-ai/mastra/pull/27695))
+
+- Fixed DurableAgent ignoring the reserved `mastra__threadId` and `mastra__resourceId` request-context keys. Durable and evented agents now route memory to the thread and resource set on the request context, as the regular Agent does, instead of to the thread or resource named in the call's `memory` options. ([#27575](https://github.com/mastra-ai/mastra/pull/27575))
+
+- Fixed durable and evented agents ignoring `generateTitle.emitEvent` and `onTitleGenerated`. Streams from these agents now include the transient `data-thread-title` chunk before `finish`, and `memory.onTitleGenerated` is called with the saved title, matching the standard agent. ([#27606](https://github.com/mastra-ai/mastra/pull/27606))
+
+- Fixed output stream processors that hold parts (such as `BatchPartsProcessor` and `PIIDetector`) re-emitting or leaking text when a model call failed. When a call is retried, the dropped attempt's text is no longer repeated before the retry's reply. When a call errors or is aborted, the text it was holding is dropped instead of being sent, and the error or abort still reaches the caller. Parts a processor holds back and sends again now reach the stream instead of getting stuck, so the reply's `text-end` is no longer lost. ([#27615](https://github.com/mastra-ai/mastra/pull/27615))
+
+- Added `AgentController.setThreadModel` to change a session thread's model without recreating the session. A running session bound to the thread switches immediately; otherwise the model is saved for its next run. ([#27591](https://github.com/mastra-ai/mastra/pull/27591))
+
+  ```ts
+  const { live } = await controller.setThreadModel({
+    resourceId: 'session-1',
+    threadId: 'thread-1',
+    modelId: 'openai/gpt-5.6',
+  });
+  ```
+
 ## 1.79.0-alpha.4
 
 ### Minor Changes

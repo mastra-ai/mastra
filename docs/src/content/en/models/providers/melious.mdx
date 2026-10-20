@@ -7,7 +7,7 @@ description: "Browse Melious model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/melious.svg" alt="Melious logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Melious
 
-Access 12 Melious models through Mastra's model router. Authentication is handled automatically using the `MELIOUS_API_KEY` environment variable.
+Access 13 Melious models through Mastra's model router. Authentication is handled automatically using the `MELIOUS_API_KEY` environment variable.
 
 Learn more in the [Melious documentation](https://melious.ai/docs/reference/models).
 
@@ -92,6 +92,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 0.23184,
     "outputCost": 1.1592
+  },
+  {
+    "model": "melious/deepseek-v4.1-flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": 0.33675,
+    "outputCost": 1.347
   },
   {
     "model": "melious/glm-5",

@@ -88,7 +88,7 @@ export const ErrorRenderer: StoryObj = {
   render: () => (
     <Grid>
       <Cell title="errorSpan" tag="error">
-        <SpanPayloadSection title="Error" raw={ALL_SPAN_FIXTURES.errorSpan.error}>
+        <SpanPayloadSection title="Error" raw={ALL_SPAN_FIXTURES.errorSpan.error} framed={false}>
           <SpanErrorRenderer span={ALL_SPAN_FIXTURES.errorSpan} />
         </SpanPayloadSection>
       </Cell>

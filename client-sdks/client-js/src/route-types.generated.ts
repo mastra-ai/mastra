@@ -5586,6 +5586,11 @@ export type PostAgentsAgentIdApproveToolCall_Body = {
       }
     | undefined;
   modelSettings?: unknown | undefined;
+  clientTools?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
 };
 
 export type PostAgentsAgentIdApproveToolCall_Response = {
@@ -5735,6 +5740,11 @@ export type PostAgentsAgentIdDeclineToolCall_Body = {
       }
     | undefined;
   modelSettings?: unknown | undefined;
+  clientTools?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   reason?: string | undefined;
 };
 
