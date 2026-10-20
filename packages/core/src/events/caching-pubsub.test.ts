@@ -1799,6 +1799,38 @@ describe('CachingPubSub', () => {
       expect(replayed.map(event => event.data)).toEqual([{ n: 0 }]);
     });
 
+    it('replays one frame when the list expired before another tier cached it', async () => {
+      // Same shared cache across two buses, but the list TTL elapsed first: the
+      // surviving counter hands the next frame index 4 into a list that starts at
+      // position 0. Recognising that entry must not assume index == position, or
+      // the follower stores it again and replay carries it twice.
+      const stepBus = new RetainingPubSub();
+      const agentBus = new RetainingPubSub();
+      const stepPubsub = new CachingPubSub(stepBus, cache, { indexMode: 'exact' });
+      const agentPubsub = new CachingPubSub(agentBus, cache, { source: stepBus });
+
+      const live: Event[] = [];
+      await agentPubsub.subscribeFromOffset(topic, 0, event => {
+        live.push(event);
+      });
+      for (let n = 0; n < 4; n++) {
+        await stepPubsub.publish(topic, { type: 'chunk', runId: 'run-1', data: { n } });
+      }
+      await flush();
+
+      await cache.delete(`pubsub:${topic}`);
+      await stepPubsub.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 4 } });
+      await flush();
+
+      expect(live.map(event => event.data.n)).toEqual([0, 1, 2, 3, 4]);
+
+      const history = await agentPubsub.getHistory(topic, 0);
+      expect(history.map(event => event.data.n)).toEqual([4]);
+      expect(history.map(event => event.index)).toEqual([4]);
+      // One allocation for the frame: the follower forwarded it, not re-stored it.
+      expect(await cache.get(`pubsub:${topic}:counter`)).toBe(5);
+    });
+
     it('is seen as unnumbered by a subscriber running the pre-#27352 dedupe', async () => {
       /**
        * Rollout compatibility: an older API process may observe a run while a

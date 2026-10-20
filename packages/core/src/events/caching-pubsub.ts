@@ -269,14 +269,26 @@ export class CachingPubSub extends PubSub {
   /**
    * Whether this cache already holds the frame published under {@link sequence}.
    *
-   * Entries are appended in allocation order, so a sequence is also its list
-   * position and one positional read answers it. Used to recognise a frame that
-   * another caching tier over the same cache already stored, which must not be
-   * stored a second time under a fresh index.
+   * Entries are appended in allocation order, so while the list starts at index
+   * 0 a sequence is also its list position. It stops being one when the list TTL
+   * expires while the index counter survives: the next publish allocates a
+   * non-zero index into a fresh list that starts at position 0. The head entry
+   * names that base, so positions are read relative to it. Used to recognise a
+   * frame that another caching tier over the same cache already stored, which
+   * must not be stored a second time under a fresh index.
    */
   private async holdsSequence(topic: string, sequence: number): Promise<boolean> {
     try {
-      const [entry] = (await this.cache.listFromTo(this.getCacheKey(topic), sequence, sequence)) as Event[];
+      const cacheKey = this.getCacheKey(topic);
+      const [head] = (await this.cache.listFromTo(cacheKey, 0, 0)) as Event[];
+      const base = head?.index;
+      // Without a base index the positional read cannot be trusted either.
+      if (base === undefined) return false;
+      if (base === sequence) return true;
+      // The frame predates what survived the expiry, so it is not in the list.
+      if (sequence < base) return false;
+      const position = sequence - base;
+      const [entry] = (await this.cache.listFromTo(cacheKey, position, position)) as Event[];
       return entry?.index === sequence;
     } catch {
       // An unreadable cache falls back to storing the copy, as before.
