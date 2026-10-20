@@ -11,10 +11,11 @@ describeForAllEngines('A stopped approval cannot restart a run (#27617)', engine
     ['stream', 'abort'],
     ['stream', 'stream completion'],
     ['stream', 'stream completion with snapshot cleanup pending'],
+    ['stream', 'stream completion with snapshot cleanup failed'],
     ['generate', 'abort'],
   ] as const) {
-    // Only normal/fs runs own a prepared-run cleanup that deletes the suspended snapshot.
-    if (resumeAfter === 'stream completion with snapshot cleanup pending' && engine !== 'normal' && engine !== 'fs') {
+    // Only normal/fs runs delete the suspended snapshot through the agent cleanup gated below.
+    if (resumeAfter.includes('snapshot cleanup') && engine !== 'normal' && engine !== 'fs') {
       continue;
     }
     // Normal/fs generate runs are not registered for abortRunStream, which returns false.
@@ -43,7 +44,7 @@ describeForAllEngines('A stopped approval cannot restart a run (#27617)', engine
         // Hold the real store's snapshot deletion open so the user responds inside the cleanup window.
         let releaseCleanup = () => {};
         let cleanupStarted: Promise<void> | undefined;
-        if (resumeAfter === 'stream completion with snapshot cleanup pending') {
+        if (resumeAfter.includes('snapshot cleanup')) {
           const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
           const deleteRun = workflows.deleteWorkflowRunById.bind(workflows);
           const gate = new Promise<void>(resolve => (releaseCleanup = resolve));
@@ -53,6 +54,10 @@ describeForAllEngines('A stopped approval cannot restart a run (#27617)', engine
               // Only the aborted segment's loop-snapshot cleanup waits; later deletions run normally.
               workflows.deleteWorkflowRunById = deleteRun;
               started();
+              // A failed delete leaves the suspended snapshot in storage; the fence must stay closed.
+              if (resumeAfter.endsWith('snapshot cleanup failed')) {
+                throw new Error('snapshot store unavailable');
+              }
               await gate;
               return deleteRun(args);
             };
@@ -83,7 +88,18 @@ describeForAllEngines('A stopped approval cannot restart a run (#27617)', engine
         if (resumeAfter === 'abort') {
           aborted = agent.abortRunStream(runId);
         } else if (cleanupStarted) {
-          await cleanupStarted;
+          // Bounded so a run that never starts snapshot cleanup fails by assertion, not by test timeout.
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const cleanup = await Promise.race([
+            cleanupStarted.then(() => 'started'),
+            new Promise<string>(resolve => (timer = setTimeout(resolve, 2_000, 'never started'))),
+          ]);
+          clearTimeout(timer);
+          expect(cleanup).toBe('started');
+          // Let a failed cleanup settle before the user responds.
+          if (resumeAfter.endsWith('snapshot cleanup failed')) {
+            await new Promise<void>(resolve => setImmediate(resolve));
+          }
         } else {
           await new Promise<void>(resolve => setImmediate(resolve));
         }
