@@ -105,7 +105,10 @@ export const FACTORY_SKILL_NAMES = new Set([
   'factory-triage',
 ]);
 
-/** Review skills only sessions with an active review run binding may discover or load. */
+/**
+ * Review skills only sessions with an active review run binding, or unbound
+ * side sessions a user session started, may discover or load.
+ */
 export const REVIEW_ONLY_FACTORY_SKILLS = new Set([
   'factory-gitlab-rereview',
   'factory-gitlab-review',
@@ -910,10 +913,21 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (!binding || !ctx?.threadId) return binding;
       return binding.threadId === ctx.threadId && binding.sessionId === ctx.sessionId ? binding : null;
     };
-    // Fails closed: without a readable active review binding, review skills stay hidden.
+    // Fails closed: review skills need a readable active review binding, or a
+    // side session (started by a user session to run a skill on request) that
+    // holds no active binding at all. A side session bound to another role
+    // follows that role.
     const isReviewSession = async (): Promise<boolean> => {
       if (!workItems) return false;
       try {
+        if (session.originSessionId) {
+          const binding = await workItems.findActiveRunBindingForSession({
+            orgId: session.orgId,
+            factoryProjectId: connection.factoryProjectId,
+            sessionId: session.sessionId,
+          });
+          if (!binding) return true;
+        }
         return isActiveReviewBinding(await findSessionBinding(), session.orgId);
       } catch {
         return false;

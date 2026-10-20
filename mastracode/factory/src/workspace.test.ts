@@ -1279,6 +1279,41 @@ describe('GitHub session workspace preparation', () => {
     expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
   });
 
+  it('exposes review skills to an unbound side session a user session started', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', originSessionId: 'user-session', originThreadId: 'user-thread' });
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect((await workspace.skills?.get('factory-review'))?.instructions).toBeTruthy();
+    expect((await workspace.skills?.get('factory-rereview'))?.instructions).toBeTruthy();
+  });
+
+  it('keeps review skills hidden from a side session bound to a work role', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', originSessionId: 'user-session', originThreadId: 'user-thread' });
+    mocks.runBindingRole = 'work';
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+  });
+
+  it('keeps review skills hidden from an unbound user session', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+  });
+
   it('exposes review skills to a review session before it has a live thread', async () => {
     const { resolver } = await createLocalFactory();
     addProject();
