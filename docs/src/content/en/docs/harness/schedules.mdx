@@ -198,7 +198,7 @@ The hooks are:
 - `onError`: runs after a failure in `prepare` or the signal. For a schedule without a `threadId`, it also runs when the agent run fails with an error that isn't an abort.
 - `onAbort`: runs when the run of a schedule without a `threadId` was aborted.
 
-For a schedule with a `threadId`, the worker hands the prompt to the thread and doesn't wait for the run. Errors and aborts after the run starts surface on that thread's run, not through `onError` or `onAbort`.
+For a schedule with a `threadId`, the worker sends the prompt to the thread and doesn't wait for the run. Errors and aborts after the run starts surface on that thread's run, not through `onError` or `onAbort`.
 
 Every hook context includes `agentId` (the agent the schedule fired for) alongside `schedule` and `trigger`.
 
