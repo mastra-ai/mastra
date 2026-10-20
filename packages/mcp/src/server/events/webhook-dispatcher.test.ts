@@ -253,6 +253,27 @@ describe('WebhookDispatcher verification', () => {
     await expect(h.subscribe({ principal: 'carol' })).resolves.toHaveProperty('id');
   });
 
+  it('counts subscribes still verifying against the caps, so parallel requests cannot exceed them', async () => {
+    const h = create({ maxSubscriptions: 10, maxSubscriptionsPerPrincipal: 2 });
+    const results = await Promise.allSettled(
+      ['a', 'b', 'c', 'd'].map(project => h.subscribe({ arguments: { project } })),
+    );
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(2);
+    const refused = results.filter(result => result.status === 'rejected');
+    expect(refused.map(result => ((result as PromiseRejectedResult).reason as ProtocolError).code)).toEqual([
+      -32025, -32025,
+    ]);
+    expect(await h.store.list('tasks')).toHaveLength(2);
+  });
+
+  it('releases the reserved slot when a new subscribe fails', async () => {
+    const h = create({ maxSubscriptionsPerPrincipal: 1 });
+    h.respond(() => ({ status: 500, body: '' }));
+    expect(((await rejection(h.subscribe())) as ProtocolError).code).toBe(-32027);
+    h.respond(accept);
+    await expect(h.subscribe({ arguments: { project: 'other' } })).resolves.toHaveProperty('id');
+  });
+
   it('forgets expired verified pairs and keeps at most twice maxSubscriptions of them', async () => {
     const h = create({ maxSubscriptions: 2, verificationTtlMs: 60_000 });
     const verified = h.dispatcher['verified'] as Map<string, number>;
@@ -495,6 +516,26 @@ describe('WebhookDispatcher suspension and control envelopes', () => {
 });
 
 describe('WebhookDispatcher unsubscribe', () => {
+  it('does not deliver to a subscription removed while a fan-out was reading the store', async () => {
+    const h = create();
+    await h.subscribe();
+    const list = h.store.list.bind(h.store);
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    vi.spyOn(h.store, 'list').mockImplementationOnce(async name => {
+      const records = await list(name);
+      await gate;
+      return records;
+    });
+    await h.registry.emit('tasks', {});
+    await vi.advanceTimersByTimeAsync(0);
+
+    await h.dispatcher.unsubscribe({ principal: 'alice', url: URL_A, name: 'tasks', arguments: {} });
+    release();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.events()).toEqual([]);
+  });
+
   it('stops delivery and answers the same for unknown keys', async () => {
     const h = create();
     const { id } = await h.subscribe();

@@ -152,6 +152,8 @@ export class WebhookDispatcher {
   private readonly store: WebhookSubscriptionStore;
   private readonly transport: WebhookTransport;
   private readonly states = new Map<string, DeliveryState>();
+  /** New subscriptions that passed the capacity check and are still being set up, by id → principal. */
+  private readonly reserved = new Map<string, string>();
   private readonly verified = new Map<string, number>();
   private readonly fanOutChains = new Map<string, Promise<void>>();
   private readonly unsubscribers: (() => void)[] = [];
@@ -187,7 +189,27 @@ export class WebhookDispatcher {
   ): Promise<SubscribeEventsResult> {
     const url = params.delivery.url;
     const id = WebhookDispatcher.subscriptionId({ principal, url, name: event.name, arguments: args });
-    if (!this.states.has(id)) this.assertCapacity(principal);
+    // Reserve the slot before the first await, so parallel subscribes can't all pass the caps.
+    const reserving = !this.states.has(id) && !this.reserved.has(id);
+    if (reserving) {
+      this.assertCapacity(principal);
+      this.reserved.set(id, principal);
+    }
+    try {
+      return await this.establish(event, args, params, principal, id);
+    } finally {
+      if (reserving) this.reserved.delete(id);
+    }
+  }
+
+  private async establish(
+    event: RegisteredEvent,
+    args: Record<string, unknown>,
+    params: SubscribeEventsRequestParams,
+    principal: string,
+    id: string,
+  ): Promise<SubscribeEventsResult> {
+    const url = params.delivery.url;
     const resolved = await this.resolveUrl(url);
 
     const grantMs = this.grantTtl(params.ttlMs);
@@ -252,9 +274,15 @@ export class WebhookDispatcher {
 
   private assertCapacity(principal: string): void {
     const { maxSubscriptions, maxSubscriptionsPerPrincipal } = this.settings;
+    let total = this.states.size;
     let held = 0;
     for (const state of this.states.values()) if (state.record.principal === principal) held++;
-    if (this.states.size >= maxSubscriptions || held >= maxSubscriptionsPerPrincipal) {
+    for (const [id, owner] of this.reserved) {
+      if (this.states.has(id)) continue;
+      total++;
+      if (owner === principal) held++;
+    }
+    if (total >= maxSubscriptions || held >= maxSubscriptionsPerPrincipal) {
       throw new ProtocolError(EVENTS_ERROR_CODES.ResourceExhausted, 'Too many webhook subscriptions');
     }
   }
@@ -375,8 +403,13 @@ export class WebhookDispatcher {
       }
       let state = this.states.get(record.id);
       if (!state) {
+        // The list can be stale: skip a subscription removed while this fan-out awaited.
+        if (!(await this.store.get(record.id))) continue;
+        if (this.closed) return;
         // A stored subscription with no in-memory state (for example after a restart): deliver from here on.
-        state = this.createState(record, event, event.buffer!.cursorFor(entry.seq - 1), entry.seq - 1);
+        state =
+          this.states.get(record.id) ??
+          this.createState(record, event, event.buffer!.cursorFor(entry.seq - 1), entry.seq - 1);
       }
       if (entry.seq <= state.horizon) continue;
       if (this.matches(event, record.arguments, entry.occurrence.data))
