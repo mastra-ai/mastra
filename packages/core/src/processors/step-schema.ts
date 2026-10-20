@@ -207,8 +207,7 @@ export type ProcessorStepOutputType = {
   part?: unknown | null;
   streamParts?: unknown[];
   state?: Record<string, unknown>;
-  // SerializableOutputResult in the outputResult phase; the raw tool value in toolResult workflow inputs
-  result?: unknown;
+  result?: SerializableOutputResult;
   finishReason?: string;
   /** Provider-specific metadata for the step (e.g. Bedrock guardrail trace). */
   providerMetadata?: Record<string, unknown>;
@@ -222,7 +221,7 @@ export type ProcessorStepOutputType = {
   args?: unknown;
   toolResultValue?: unknown;
   providerExecuted?: boolean;
-  model?: ProcessorStepModelConfig;
+  model?: MastraLanguageModel;
   tools?: ProcessorStepToolsConfig;
   toolChoice?: ToolChoice<ToolSet>;
   activeTools?: string[];
@@ -730,7 +729,7 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   retryCount: z.number().optional(),
 
   // Model and tools configuration (for inputStep phase)
-  model: z.custom<ProcessorStepModelConfig>().optional(),
+  model: z.custom<MastraLanguageModel>().optional(),
   tools: z.custom<ProcessorStepToolsConfig>().optional(),
   toolChoice: z.custom<ToolChoice<ToolSet>>().optional(),
   activeTools: z.array(z.string()).optional(),

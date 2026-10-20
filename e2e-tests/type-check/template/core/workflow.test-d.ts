@@ -4,7 +4,7 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Step, DefaultEngineType } from '@mastra/core/workflows';
 import { Agent, MastraDBMessage } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
-import type { Processor, ProcessorStepOutputSchema } from '@mastra/core/processors';
+import type { Processor, ProcessorStepInputSchema, ProcessorStepOutputSchema } from '@mastra/core/processors';
 
 describe('workflow', () => {
   describe('createStep', () => {
@@ -266,7 +266,7 @@ describe('workflow', () => {
           Step<
             'processor:test',
             unknown,
-            zv3.infer<typeof ProcessorStepOutputSchema>,
+            zv3.infer<typeof ProcessorStepInputSchema>,
             zv3.infer<typeof ProcessorStepOutputSchema>,
             unknown,
             unknown,
@@ -286,7 +286,7 @@ describe('workflow', () => {
           Step<
             'processor:stream-processor',
             unknown,
-            zv3.infer<typeof ProcessorStepOutputSchema>,
+            zv3.infer<typeof ProcessorStepInputSchema>,
             zv3.infer<typeof ProcessorStepOutputSchema>,
             unknown,
             unknown,
