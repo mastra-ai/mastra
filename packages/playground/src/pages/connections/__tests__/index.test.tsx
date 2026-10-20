@@ -75,6 +75,27 @@ describe('ConnectionsPage', () => {
     });
   });
 
+  describe('when the connections request fails', () => {
+    it('shows the error in both sections instead of fake empty states', async () => {
+      server.use(
+        http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
+        http.get(`${BASE_URL}/connect/connections`, () =>
+          HttpResponse.json({ error: { code: 'internal', message: 'Connections lookup failed' } }, { status: 500 }),
+        ),
+      );
+
+      renderPage();
+
+      const userSection = await screen.findByRole('region', { name: 'Your connections' });
+      expect(await within(userSection).findByRole('alert')).not.toBeNull();
+      const globalSection = screen.getByRole('region', { name: 'Global connections' });
+      expect(await within(globalSection).findByRole('alert')).not.toBeNull();
+      // The server never answered, so neither section may claim emptiness.
+      expect(screen.queryByText("You haven't connected any accounts yet.")).toBeNull();
+      expect(screen.queryByText('No global connections are linked to this project.')).toBeNull();
+    });
+  });
+
   describe('when the surface is ready with global and user connections', () => {
     it('splits the connections into separate tables with disconnect only on yours', async () => {
       server.use(
