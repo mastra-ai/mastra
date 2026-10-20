@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import ConnectionsPage from '../index';
 import {
   globalOnlyConnectionsResponse,
+  launchTokenUnavailable,
   mixedConnectionsResponse,
   providersResponse,
   sessionResponse,
@@ -186,6 +187,8 @@ describe('ConnectionsPage', () => {
       let statusPolls = 0;
       server.use(
         http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
+        // No token released: the flow falls back to the hosted popup.
+        http.get(`${BASE_URL}${sessionResponse.launchUrl}`, () => HttpResponse.json(launchTokenUnavailable)),
         http.get(`${BASE_URL}/connect/connections`, () =>
           HttpResponse.json(
             connected
@@ -221,10 +224,15 @@ describe('ConnectionsPage', () => {
       const dialog = await pickProvider('Slack');
 
       await waitFor(() => expect(onSession).toHaveBeenCalled());
-      expect(openSpy).toHaveBeenCalled();
       // The popup is sent to the launch gate (resolved against the server base
       // URL), never to a raw vendor connect URL.
-      await waitFor(() => expect(popup.location.href).toBe(`${BASE_URL}${sessionResponse.launchUrl}`));
+      await waitFor(() =>
+        expect(openSpy).toHaveBeenCalledWith(
+          `${BASE_URL}${sessionResponse.launchUrl}`,
+          'mastra-connect',
+          expect.any(String),
+        ),
+      );
 
       expect(await within(dialog).findByText('Waiting for authorization')).not.toBeNull();
 
@@ -245,6 +253,7 @@ describe('ConnectionsPage', () => {
         http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
         http.get(`${BASE_URL}/connect/connections`, () => HttpResponse.json(mixedConnectionsResponse)),
         http.post(`${BASE_URL}/connect/slack/sessions`, () => HttpResponse.json(sessionResponse, { status: 201 })),
+        http.get(`${BASE_URL}${sessionResponse.launchUrl}`, () => HttpResponse.json(launchTokenUnavailable)),
         http.get(`${BASE_URL}/connect/connections/${sessionResponse.connectionId}/status`, () =>
           HttpResponse.json(statusPending),
         ),

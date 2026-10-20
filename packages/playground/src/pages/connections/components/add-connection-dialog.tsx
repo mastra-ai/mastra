@@ -65,7 +65,7 @@ export function AddConnectionDialog({ providers, open, onOpenChange }: AddConnec
 
   const startConnect = (provider: UserConnectProvider) => {
     setAttempt(provider);
-    connect(provider.id);
+    connect(provider);
   };
 
   return (

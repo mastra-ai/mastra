@@ -8,12 +8,29 @@
 
 export interface UserConnectAuthField {
   name: string;
+  /**
+   * Where the value goes in a headless auth call: `credentials` are
+   * exchanged with the provider, `params` configure the flow (e.g. an MCP
+   * server URL). Missing (older servers) is treated as `credentials`.
+   */
+  target?: 'credentials' | 'params' | null;
   label?: string | null;
   description?: string | null;
   placeholder?: string | null;
   secret?: boolean | null;
   required?: boolean | null;
   order?: number | null;
+}
+
+/** JSON redemption of the launch gate (`Accept: application/json`). */
+export interface UserConnectLaunchTokenResponse {
+  /**
+   * Nango connect session token for headless authorization, or null when the
+   * server could not extract one — the client then falls back to the hosted
+   * popup through the same gate's 302 flow.
+   */
+  sessionToken: string | null;
+  expiresAt: string;
 }
 
 export interface UserConnectProvider {

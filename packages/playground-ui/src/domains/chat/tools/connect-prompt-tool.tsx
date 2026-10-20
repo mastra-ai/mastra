@@ -68,7 +68,7 @@ const ConnectPromptCard = ({ payload, readOnly }: { payload: ConnectPromptPayloa
                     Connected
                   </Txt>
                 ) : (
-                  <Button size="sm" disabled={readOnly || isCreating || isPending} onClick={() => connect(provider.id)}>
+                  <Button size="sm" disabled={readOnly || isCreating || isPending} onClick={() => connect(provider)}>
                     Connect
                   </Button>
                 )}
