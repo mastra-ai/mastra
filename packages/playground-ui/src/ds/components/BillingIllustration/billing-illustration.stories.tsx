@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Badge } from '../Badge/Badge';
 import { Button } from '../Button/Button';
+import { Card } from '../Card/Card';
 import { Table } from '../Table/Table';
 import { Txt } from '../Txt/Txt';
 import { BillingIllustration, billingIllustrationHoverGroup } from './billing-illustration';
@@ -17,7 +19,7 @@ const meta = {
     tone: 'ink',
   },
   argTypes: {
-    name: { control: 'inline-radio', options: ['serverless', 'small', 'medium', 'large'] },
+    name: { control: 'inline-radio', options: ['serverless', 'small', 'medium', 'large', 'credits'] },
     tone: { control: 'inline-radio', options: ['ink', 'muted', 'faded'] },
   },
 } satisfies Meta<typeof BillingIllustration>;
@@ -116,5 +118,49 @@ export const ProjectRows: Story = {
         </Table.Body>
       </Table>
     </div>
+  ),
+};
+
+export const CreditsCard: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story: 'Hovering or focusing the card drops a coin onto the short stack.',
+      },
+    },
+  },
+  render: () => (
+    <Card className={cn(billingIllustrationHoverGroup, 'relative flex w-126 flex-col gap-4 overflow-clip p-5')}>
+      <BillingIllustration
+        name="credits"
+        tone="muted"
+        className="absolute top-1 right-1 h-21.5 w-auto mask-b-from-50% mask-l-from-50%"
+      />
+      <div className="flex flex-col gap-1">
+        <Txt variant="label" tone="muted">
+          Credits
+        </Txt>
+        <div className="flex items-baseline gap-2">
+          <Txt variant="display" className="tabular-nums">
+            $2.96
+          </Txt>
+          <Txt variant="body-sm" tone="muted">
+            $2.04 spent this month
+          </Txt>
+        </div>
+        <Txt variant="caption" tone="muted">
+          Use with Mastra Gateway or usage beyond your allowance.
+        </Txt>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <Button variant="primary">Add credits</Button>
+        <div className="flex items-center gap-1.5">
+          <Txt variant="body-sm" tone="muted">
+            Auto top-up
+          </Txt>
+          <Badge>Off</Badge>
+        </div>
+      </div>
+    </Card>
   ),
 };
