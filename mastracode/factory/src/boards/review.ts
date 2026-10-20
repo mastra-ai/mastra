@@ -58,6 +58,43 @@ function isSafeBranchName(value: string): boolean {
   );
 }
 
+function commitSha(value: unknown): string | undefined {
+  return typeof value === 'string' && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(value) ? value.toLowerCase() : undefined;
+}
+
+/**
+ * Names the head this pass covers. Without it every pass on a pull request
+ * opens with the same text, so a reviewer reading a re-review kickoff in the
+ * session that recorded the last verdict can take it for a repeat and restate
+ * that verdict instead of reviewing what was pushed since.
+ */
+function headLine(item: FactoryRuleItemContext, priorReviewCompleted: boolean): string {
+  const head = commitSha(item.metadata?.pullRequestHeadSha);
+  const reviewed = priorReviewCompleted ? commitSha(item.metadata?.reviewedHeadSha) : undefined;
+  const recorded = item.metadata?.reviewVerdict;
+  const verdict = recorded === 'approve' || recorded === 'request changes' ? ` "${recorded}"` : '';
+  if (head && reviewed && head !== reviewed) {
+    return (
+      `\n\nThis is a new review pass for head \`${head}\`. The previous pass recorded${verdict} on \`${reviewed}\`; ` +
+      `that verdict does not cover this head. Review the changes since \`${reviewed}\` and record a verdict for \`${head}\`.`
+    );
+  }
+  if (head && reviewed) {
+    return (
+      `\n\nThis is a new review pass for head \`${head}\`, which the previous pass already reviewed${verdict}. ` +
+      `It was requested again: check the head and the change request for anything new, then record a verdict for \`${head}\`.`
+    );
+  }
+  if (head) return `\n\nThis review pass covers head \`${head}\`. Record your verdict for that head.`;
+  if (reviewed) {
+    return (
+      `\n\nThis is a new review pass. The previous pass recorded${verdict} on \`${reviewed}\`. ` +
+      `Read the current head first; if it moved, review the changes since \`${reviewed}\` and record a verdict for the new head.`
+    );
+  }
+  return '';
+}
+
 export function hasRecordedVerdict(item: FactoryRuleItemContext): boolean {
   return typeof item.metadata?.reviewVerdict === 'string';
 }
@@ -95,7 +132,7 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
     idempotencyKey: `${context.ingress.id}:${skillName}`,
     role: 'review',
     skillName,
-    arguments: `${sourceRef(context.item)}\n\n${checkoutHint(context.item)}`,
+    arguments: `${sourceRef(context.item)}\n\n${checkoutHint(context.item)}${headLine(context.item, priorReviewCompleted)}`,
     // Same-stage re-entry mid-pass: the skill is already live in the card's
     // session, so continue it with a compact kickoff. After a recorded verdict
     // the next pass is a re-review, which needs its full skill delivered.
