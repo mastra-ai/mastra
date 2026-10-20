@@ -106,6 +106,23 @@ describe('useTracesListSource', () => {
     });
   });
 
+  describe('when a rolling tick returns the same data', () => {
+    it('keeps the rows reference', async () => {
+      const requests = handlers();
+      const { result } = renderHook(() => useTracesListSource({ query }), { wrapper });
+      await waitFor(() => expect(result.current.rows).toHaveLength(1));
+      const rowsBefore = result.current.rows;
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+      act(() => result.current.setAutoRefetch(false));
+      act(() => result.current.setAutoRefetch(true));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(requests.post).toHaveBeenCalledTimes(2);
+      expect(result.current.rows).toBe(rowsBefore);
+    });
+  });
+
   describe('when automatic refresh starts disabled', () => {
     it.each([true, false])('does not poll or refetch on focus with rolling=%s', async rolling => {
       const requests = handlers();
