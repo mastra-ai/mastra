@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { InMemoryStore, knowledgeImporterBindingKey } from '../../../storage';
+import { InMemoryStore, knowledgeImporterBindingKey, knowledgeImportNodeAddress } from '../../../storage';
 import { Knowledge } from '../../index';
 import type { KnowledgeCitationEntity, KnowledgeCitationRef, KnowledgeImporterDefinition } from '../types';
 
@@ -16,6 +16,8 @@ const structure = {
     { address: 'feature:knowledge', name: 'Knowledge', parentAddresses: ['repo:mastra'] },
   ],
 } as const;
+/** Stored address of a node the github importer created under a repo binding. */
+const inRepo = (repo: string, address: string) => knowledgeImportNodeAddress(`repo:${repo}`, address);
 const budget = { maxDepth: 4, maxItems: 20, timeoutMs: 5_000 };
 
 type Payload = { readonly refs?: readonly KnowledgeCitationRef[]; readonly cursor?: string; readonly noise?: boolean };
@@ -80,8 +82,14 @@ describe('Knowledge import citation resolution', () => {
 
     await importer.run(mastraRepo, { repo: 'mastra' });
     await importer.run(platformRepo, { repo: 'platform' });
-    const mastra = await storage.getNodeAddress({ source: GITHUB, address: 'mastra-ai/mastra:issue:123' });
-    const platform = await storage.getNodeAddress({ source: GITHUB, address: 'mastra-ai/platform:issue:123' });
+    const mastra = await storage.getNodeAddress({
+      source: GITHUB,
+      address: inRepo('mastra', 'mastra-ai/mastra:issue:123'),
+    });
+    const platform = await storage.getNodeAddress({
+      source: GITHUB,
+      address: inRepo('platform', 'mastra-ai/platform:issue:123'),
+    });
     expect(mastra?.nodeId).toBeDefined();
     expect(platform?.nodeId).toBeDefined();
     expect(mastra!.nodeId).not.toBe(platform!.nodeId);
@@ -90,10 +98,14 @@ describe('Knowledge import citation resolution', () => {
 
     await importer.run(platformRepo, { repo: 'platform' });
     await importer.run(mastraRepo, { repo: 'mastra' });
-    expect(await storage.getNodeAddress({ source: GITHUB, address: 'mastra-ai/mastra:issue:123' })).toMatchObject({
+    expect(
+      await storage.getNodeAddress({ source: GITHUB, address: inRepo('mastra', 'mastra-ai/mastra:issue:123') }),
+    ).toMatchObject({
       nodeId: mastra!.nodeId,
     });
-    expect(await storage.getNodeAddress({ source: GITHUB, address: 'mastra-ai/platform:issue:123' })).toMatchObject({
+    expect(
+      await storage.getNodeAddress({ source: GITHUB, address: inRepo('platform', 'mastra-ai/platform:issue:123') }),
+    ).toMatchObject({
       nodeId: platform!.nodeId,
     });
     expect(await storage.getScopeAddress('github:mastra-ai/mastra:issue:123')).toBeNull();
@@ -122,12 +134,12 @@ describe('Knowledge import citation resolution', () => {
     expect(await cursor(knowledge, 'github', mastraRepo)).toBe('window-1');
 
     const storage = await knowledge.getStorage();
-    const bindingA = await storage.getNodeAddress({ source: GITHUB, address: a.address });
+    const bindingA = await storage.getNodeAddress({ source: GITHUB, address: inRepo('mastra', a.address) });
     await expect(importer.run(mastraRepo, { refs: [a, b], cursor: 'window-2' })).resolves.toMatchObject({
       status: 'succeeded',
     });
     expect(fetched).toEqual([a.address, b.address]);
-    expect(await storage.getNodeAddress({ source: GITHUB, address: a.address })).toEqual(bindingA);
+    expect(await storage.getNodeAddress({ source: GITHUB, address: inRepo('mastra', a.address) })).toEqual(bindingA);
     const repoScope = await storage.getScopeAddress('repo:mastra');
     const records = await knowledge.listRecordsBySource({ source: GITHUB, scopeIds: [repoScope!.scopeNodeId] });
     expect(records.records.map(record => record.text).sort()).toEqual(['pr:1 evidence', 'pr:2 evidence']);
@@ -161,7 +173,9 @@ describe('Knowledge import citation resolution', () => {
     });
     await knowledge.reconcile();
     await knowledge.getImporter('github')!.run(mastraRepo, { refs: [owned] });
-    const ownedNode = await (await knowledge.getStorage()).getNodeAddress({ source: GITHUB, address: owned.address });
+    const ownedNode = await (
+      await knowledge.getStorage()
+    ).getNodeAddress({ source: GITHUB, address: inRepo('mastra', owned.address) });
 
     const distiller = knowledge.getImporter('distiller')!;
     await expect(distiller.run(feature, { refs: [owned] })).resolves.toMatchObject({ status: 'succeeded' });
@@ -212,7 +226,7 @@ describe('Knowledge import citation resolution', () => {
     await github.run(platformRepo, { refs: [privatePr] });
     await github.run(mastraRepo, { refs: [moved] });
     const storage = await knowledge.getStorage();
-    const movedBinding = await storage.getNodeAddress({ source: GITHUB, address: moved.address });
+    const movedBinding = await storage.getNodeAddress({ source: GITHUB, address: inRepo('mastra', moved.address) });
     const movedNode = await knowledge.getNode(movedBinding!.nodeId);
     const platformScope = await storage.getScopeAddress('repo:platform');
     // A curator moves the imported node out of the importer's binding scope.
@@ -241,7 +255,9 @@ describe('Knowledge import citation resolution', () => {
     await expect(github.run(mastraRepo, { refs: [moved] })).resolves.toMatchObject({ status: 'failed' });
     expect(fetched).toEqual([]);
     expect(await storage.getNodeScopeIds(movedNode!.id)).toEqual([platformScope!.scopeNodeId]);
-    expect(await storage.getNodeAddress({ source: GITHUB, address: moved.address })).toEqual(movedBinding);
+    expect(await storage.getNodeAddress({ source: GITHUB, address: inRepo('mastra', moved.address) })).toEqual(
+      movedBinding,
+    );
     expect(await storage.listNodeAddresses({ source: GITHUB })).toHaveLength(2);
   });
 
@@ -294,8 +310,10 @@ describe('Knowledge import citation resolution', () => {
     expect(run.error).toContain('items: 1');
     expect(await cursor(knowledge, 'github', mastraRepo)).toBeUndefined();
     const storage = await knowledge.getStorage();
-    expect(await storage.getNodeAddress({ source: GITHUB, address: chain[1]!.address })).not.toBeNull();
-    expect(await storage.getNodeAddress({ source: GITHUB, address: chain[2]!.address })).toBeNull();
+    expect(
+      await storage.getNodeAddress({ source: GITHUB, address: inRepo('mastra', chain[1]!.address) }),
+    ).not.toBeNull();
+    expect(await storage.getNodeAddress({ source: GITHUB, address: inRepo('mastra', chain[2]!.address) })).toBeNull();
 
     const slowRun = await knowledge.getImporter('github-slow')!.run(platformRepo, { refs: [slow], cursor: 'slow' });
     expect(slowRun).toMatchObject({ status: 'failed' });

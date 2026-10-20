@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryStore, knowledgeImporterBindingKey } from '../../../storage';
+import { InMemoryStore, knowledgeImporterBindingKey, knowledgeImportStoredRecordId } from '../../../storage';
 import { Knowledge } from '../../index';
 import { createStaticKnowledgeImporterOperations } from '../static-importer';
 
@@ -118,8 +118,10 @@ describe('Knowledge importer snapshot upgrades', () => {
       id: firstNode.id,
       metadata: { revision: 2 },
     });
-    await expect(secondReconstruction.getRecord({ id: firstRecord.id })).resolves.toMatchObject({
-      id: firstRecord.id,
+    // The importer names its record; storage holds it under the binding-qualified id.
+    const storedRecordId = knowledgeImportStoredRecordId({ importerId, binding }, firstRecord.id);
+    await expect(secondReconstruction.getRecord({ id: storedRecordId })).resolves.toMatchObject({
+      id: storedRecordId,
       text: '10:00–11:00',
     });
 

@@ -1,13 +1,18 @@
 import { Knowledge } from '@mastra/core/knowledge';
 import type { KnowledgeImporterHandlerContext } from '@mastra/core/knowledge';
-import { KnowledgeConflictError, knowledgeImporterBindingKey } from '@mastra/core/storage';
+import {
+  KnowledgeConflictError,
+  knowledgeImporterBindingKey,
+  knowledgeImportNodeAddress,
+  knowledgeImportStoredRecordId,
+} from '@mastra/core/storage';
 import type { KnowledgeImportClaimant, KnowledgeStorage, MastraCompositeStore } from '@mastra/core/storage';
 import { afterEach, describe, expect, it } from 'vitest';
 
 /**
- * FACT-471: one importer source bound into two project scopes. Node identity is global per
- * `(source, address)`, so both bindings share one node and one record per id, each owning only
- * its own claims, while outside edits are still rejected.
+ * FACT-471: one importer source bound into two project scopes. Imported identity is per destination,
+ * so each binding imports its own copy of an item and can never fail on, overwrite or remove the
+ * other's, while outside edits are still rejected.
  */
 const source = 'fireflies:workspace-1';
 const bindingA = { source, scope: 'project:alpha' } as const;
@@ -82,6 +87,17 @@ async function setup(createStore: () => MastraCompositeStore | Promise<MastraCom
 
 const sorted = (ids: string[]) => [...ids].sort();
 
+type Binding = typeof bindingA | typeof bindingB;
+/** The node a binding stored for a provider address. */
+async function nodeIn(storage: KnowledgeStorage, binding: Binding, address: string): Promise<string> {
+  const entry = await storage.getNodeAddress({ source, address: knowledgeImportNodeAddress(binding.scope, address) });
+  if (!entry) throw new Error(`no node for ${address} in ${binding.scope}`);
+  return entry.nodeId;
+}
+/** The stored id of a record the fireflies importer named in a binding. */
+const recordIn = (binding: Binding, id: string) =>
+  knowledgeImportStoredRecordId({ importerId: 'fireflies', binding: knowledgeImporterBindingKey(binding) }, id);
+
 export function createKnowledgeImporterMultiBindingTests(
   createStore: () => MastraCompositeStore | Promise<MastraCompositeStore>,
 ) {
@@ -90,83 +106,106 @@ export function createKnowledgeImporterMultiBindingTests(
       await Promise.all(openStores.splice(0).map(store => (store as { close?: () => Promise<void> }).close?.()));
     });
 
-    it('lets the second binding import the same item and keeps both memberships', async () => {
+    it('imports the same item into a second binding as its own copy', async () => {
       const { storage, importer, alpha, beta } = await setup(createStore);
       expect((await importer.run(bindingA, { items: [person] })).status).toBe('succeeded');
       const second = await importer.run(bindingB, { items: [person] });
       expect(second.error).toBeUndefined();
-      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
-      expect(sorted(await storage.getNodeScopeIds(nodeId))).toEqual(sorted([alpha, beta]));
-      expect(sorted(await storage.getRecordScopeIds('rec-shane-1'))).toEqual(sorted([alpha, beta]));
+      const [a, b] = [await nodeIn(storage, bindingA, person.address), await nodeIn(storage, bindingB, person.address)];
+      expect(a).not.toBe(b);
+      expect(await storage.getNodeScopeIds(a)).toEqual([alpha]);
+      expect(await storage.getNodeScopeIds(b)).toEqual([beta]);
+      expect(await storage.getRecordScopeIds(recordIn(bindingA, 'rec-shane-1'))).toEqual([alpha]);
+      expect(await storage.getRecordScopeIds(recordIn(bindingB, 'rec-shane-1'))).toEqual([beta]);
       // Replays by either binding are no-ops, never "changed outside importer".
       for (const binding of [bindingA, bindingB, bindingA]) {
         expect((await importer.run(binding, { items: [person] })).error).toBeUndefined();
       }
-      expect(sorted(await storage.getNodeScopeIds(nodeId))).toEqual(sorted([alpha, beta]));
     });
 
-    it("isolates each binding's records, removal and run history", async () => {
-      const { knowledge, storage, importer, alpha, beta } = await setup(createStore);
-      const withAlphaNote = { ...person, records: [...person.records, { id: 'rec-alpha-only', text: 'Alpha note' }] };
+    it("never lets one binding change the other binding's node or records", async () => {
+      const { storage, importer } = await setup(createStore);
+      const withAlphaNote = { ...person, records: [{ id: 'rec-alpha-only', text: 'Alpha note' }] };
       await importer.run(bindingA, { items: [withAlphaNote] });
+      const a = (await storage.getNode(await nodeIn(storage, bindingA, person.address)))!;
+      const alphaNote = (await storage.getRecord({ id: recordIn(bindingA, 'rec-alpha-only') }))!;
+
+      const run = await importer.run(bindingB, { items: [{ ...person, name: 'Shane (from beta)' }] });
+      expect(run.error).toBeUndefined();
+      expect(await storage.getNode(a.id)).toEqual(a);
+      expect(await storage.getRecord({ id: alphaNote.id })).toEqual(alphaNote);
+      expect((await storage.getNode(await nodeIn(storage, bindingB, person.address)))!.name).toBe('Shane (from beta)');
+    });
+
+    it('shows each project reader only its own copy', async () => {
+      const { storage, importer, alpha, beta, org } = await setup(createStore);
+      await importer.run(bindingA, { items: [person] });
       await importer.run(bindingB, { items: [person] });
-      expect(await storage.getRecordScopeIds('rec-alpha-only')).toEqual([alpha]);
+      const [a, b] = [await nodeIn(storage, bindingA, person.address), await nodeIn(storage, bindingB, person.address)];
+      for (const [reader, own, other] of [
+        [[alpha, org], a, b],
+        [[beta, org], b, a],
+      ] as const) {
+        const ids = (await storage.listNodes({ scopeIds: [...reader] })).map(node => node.id);
+        expect(ids).toContain(own);
+        expect(ids).not.toContain(other);
+        expect((await storage.listRecords({ node: other, scopeIds: [...reader] })).records).toEqual([]);
+        expect((await storage.listRecords({ node: own, scopeIds: [...reader] })).records).toHaveLength(1);
+      }
+    });
 
+    it("keeps each binding's removal and run history to itself", async () => {
+      const { knowledge, storage, importer } = await setup(createStore);
+      await importer.run(bindingA, { items: [person] });
+      await importer.run(bindingB, { items: [person] });
       expect((await importer.run(bindingA, { items: [], removed: [person.address] })).error).toBeUndefined();
-      expect(await storage.getRecord({ id: 'rec-alpha-only' })).toBeNull();
-      expect(await storage.getRecordScopeIds('rec-shane-1')).toEqual([beta]);
-      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
-
-      expect((await importer.run(bindingB, { items: [], removed: [person.address] })).error).toBeUndefined();
-      expect(await storage.getRecord({ id: 'rec-shane-1' })).toBeNull();
-      expect(await storage.getNode(nodeId)).toMatchObject({ id: nodeId });
+      expect(await storage.getRecord({ id: recordIn(bindingA, 'rec-shane-1') })).toBeNull();
+      expect(await storage.getRecord({ id: recordIn(bindingB, 'rec-shane-1') })).not.toBeNull();
+      expect(await storage.getNode(await nodeIn(storage, bindingA, person.address))).not.toBeNull();
 
       for (const binding of [bindingA, bindingB]) {
         const key = knowledgeImporterBindingKey(binding);
         const { runs } = await knowledge.listImportRuns({ importerId: 'fireflies', binding: key });
-        expect(runs).toHaveLength(2);
+        expect(runs.length).toBeGreaterThan(0);
         expect(runs.every(run => run.binding === key)).toBe(true);
       }
     });
 
-    it('still rejects a real outside edit for both bindings', async () => {
+    it("rejects an outside edit to one binding's node and leaves the other binding working", async () => {
       const { knowledge, storage, importer } = await setup(createStore);
       await importer.run(bindingA, { items: [person] });
       await importer.run(bindingB, { items: [person] });
-      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
+      const nodeId = await nodeIn(storage, bindingA, person.address);
       const node = (await storage.getNode(nodeId))!;
       await knowledge.updateNode({ id: nodeId, version: node.version, name: 'Renamed by a person' });
-      for (const binding of [bindingA, bindingB]) {
-        const run = await importer.run(binding, { items: [{ ...person, name: 'Shane (updated)' }] });
-        expect(run.status).toBe('failed');
-        expect(run.error).toMatch(/changed outside importer/);
-      }
+      const renamed = { ...person, name: 'Shane (updated)' };
+      const run = await importer.run(bindingA, { items: [renamed] });
+      expect(run.status).toBe('failed');
+      expect(run.error).toMatch(/changed outside importer/);
       expect((await storage.getNode(nodeId))!.name).toBe('Renamed by a person');
+      expect((await importer.run(bindingB, { items: [renamed] })).error).toBeUndefined();
     });
 
     it("does not let a different importer naming the same source rewrite or claim the first one's data", async () => {
       const { knowledge, storage, importer, alpha } = await setup(createStore);
       await importer.run(bindingA, { items: [person] });
-      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
+      const nodeId = await nodeIn(storage, bindingA, person.address);
       const before = (await storage.getNode(nodeId))!;
-
       const other = knowledge.getImporter('other-importer')!;
-      const renamed = {
-        ...person,
-        name: 'Mallory',
-        records: [{ id: 'rec-shane-1', text: 'Shane runs the Thursday sync.' }],
-      };
-      const run = await other.run(bindingB, { items: [renamed] });
-      expect(run.error).toMatch(/changed outside importer other-importer/);
+      const renamed = { ...person, name: 'Mallory' };
 
-      const after = (await storage.getNode(nodeId))!;
-      expect(after).toMatchObject({ name: 'Shane', version: before.version });
+      // Into the same destination: the address is taken, so it fails without writing.
+      const sameScope = await other.run(bindingA, { items: [renamed] });
+      expect(sameScope.error).toMatch(/changed outside importer other-importer/);
+      // Into another destination it gets its own copy and still cannot touch the first one's.
+      expect((await other.run(bindingB, { items: [renamed] })).error).toBeUndefined();
+
+      expect(await storage.getNode(nodeId)).toEqual(before);
       expect(await storage.getNodeScopeIds(nodeId)).toEqual([alpha]);
-      expect(await storage.getRecordScopeIds('rec-shane-1')).toEqual([alpha]);
+      expect(await storage.getRecordScopeIds(recordIn(bindingA, 'rec-shane-1'))).toEqual([alpha]);
       const claims = await storage.listImportClaims({ targetType: 'node', targetId: nodeId });
       expect(claims.map(claim => claim.importerId)).toEqual(['fireflies']);
-      // The first importer's own bindings still work.
-      expect((await importer.run(bindingB, { items: [person] })).error).toBeUndefined();
+      expect((await importer.run(bindingA, { items: [person] })).error).toBeUndefined();
     });
 
     it('shows a node in the binding scope and an imported container to project readers only', async () => {
@@ -176,8 +215,8 @@ export function createKnowledgeImporterMultiBindingTests(
         items: [{ ...person, container: 'teamspace:eng' }],
       });
       expect(run.error).toBeUndefined();
-      const teamspace = (await storage.getNodeAddress({ source, address: 'teamspace:eng' }))!.nodeId;
-      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
+      const teamspace = await nodeIn(storage, bindingA, 'teamspace:eng');
+      const nodeId = await nodeIn(storage, bindingA, person.address);
       expect(sorted(await storage.getNodeScopeIds(nodeId))).toEqual(sorted([alpha, teamspace]));
       expect(await storage.getNodeScopeIds(teamspace)).toEqual([alpha]);
 
@@ -185,7 +224,7 @@ export function createKnowledgeImporterMultiBindingTests(
       const projectReader = [alpha, org];
       expect((await storage.listNodes({ scopeIds: projectReader })).map(node => node.id)).toContain(nodeId);
       const visible = await storage.listRecords({ node: nodeId, scopeIds: projectReader });
-      expect(visible.records.map(record => record.id)).toEqual(['rec-shane-1']);
+      expect(visible.records.map(record => record.id)).toEqual([recordIn(bindingA, 'rec-shane-1')]);
 
       // A reader holding only an unrelated scope sees neither the node nor its records.
       for (const unrelated of [[beta], [org]]) {
@@ -196,60 +235,49 @@ export function createKnowledgeImporterMultiBindingTests(
       }
     });
 
-    it('releases one binding, then the last, without ever deleting a node', async () => {
-      const { knowledge, storage, importer, alpha, beta } = await setup(createStore);
-      const withAlphaNote = { ...person, records: [...person.records, { id: 'rec-alpha-only', text: 'Alpha note' }] };
-      await importer.run(bindingA, { items: [withAlphaNote] });
+    it('releases a binding without deleting its nodes or touching the other binding', async () => {
+      const { knowledge, storage, importer } = await setup(createStore);
+      await importer.run(bindingA, { items: [person] });
       await importer.run(bindingB, { items: [person] });
-      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
+      const a = await nodeIn(storage, bindingA, person.address);
 
       await knowledge.releaseImportBinding({ importerId: 'fireflies', binding: knowledgeImporterBindingKey(bindingA) });
-      expect(await storage.getNode(nodeId)).toMatchObject({ id: nodeId });
-      expect(await storage.getNodeScopeIds(nodeId)).toEqual([beta]);
-      expect(await storage.getRecord({ id: 'rec-alpha-only' })).toBeNull();
-      expect(await storage.getRecordScopeIds('rec-shane-1')).toEqual([beta]);
-      expect((await storage.listRecords({ node: nodeId, scopeIds: [alpha] })).records).toEqual([]);
-      // The remaining binding still owns its data: a replay is a no-op, not an outside edit.
+      expect(await storage.getNode(a)).toMatchObject({ id: a });
+      // Releasing the last claim on a record removes it (pending a retention decision); the other copy stays.
+      expect(await storage.getRecord({ id: recordIn(bindingA, 'rec-shane-1'), includeDeleted: true })).toBeNull();
+      expect(await storage.getRecord({ id: recordIn(bindingB, 'rec-shane-1') })).not.toBeNull();
+      const left = await storage.listImportClaims({ targetType: 'node', targetId: a });
+      expect(left.flatMap(claim => claim.scopeIds)).toEqual([]);
       expect((await importer.run(bindingB, { items: [person] })).error).toBeUndefined();
 
-      await knowledge.releaseImportBinding({ importerId: 'fireflies', binding: knowledgeImporterBindingKey(bindingB) });
-      expect(await storage.getNode(nodeId)).toMatchObject({ id: nodeId });
-      expect(await storage.getRecord({ id: 'rec-shane-1', includeDeleted: true })).toBeNull();
-      // Only a scope-less marker of the node's version is left, so it contributes no membership.
-      const left = await storage.listImportClaims({ targetType: 'node', targetId: nodeId });
-      expect(left.flatMap(claim => claim.scopeIds)).toEqual([]);
-
-      // Moving the source to a binding that never held it adopts the node instead of failing.
+      // Re-adding the released binding adopts its node again instead of failing.
       expect((await importer.run(bindingA, { items: [person] })).error).toBeUndefined();
-      expect(await storage.getRecordScopeIds('rec-shane-1')).toEqual([alpha]);
-      expect(sorted(await storage.getNodeScopeIds(nodeId))).toContain(alpha);
+      expect(await nodeIn(storage, bindingA, person.address)).toBe(a);
     });
 
     it('does not let a release turn an earlier outside edit into importer-owned data', async () => {
       const { knowledge, storage, importer } = await setup(createStore);
       await importer.run(bindingA, { items: [person] });
-      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
+      const nodeId = await nodeIn(storage, bindingA, person.address);
       const node = (await storage.getNode(nodeId))!;
       await knowledge.updateNode({ id: nodeId, version: node.version, name: 'Curator title' });
       const sync = { items: [{ ...person, name: 'Shane (updated)' }] };
       expect((await importer.run(bindingA, sync)).status).toBe('failed');
       await knowledge.releaseImportBinding({ importerId: 'fireflies', binding: knowledgeImporterBindingKey(bindingA) });
-      for (const binding of [bindingA, bindingB]) {
-        const run = await importer.run(binding, sync);
-        expect(run.status).toBe('failed');
-        expect(run.error).toMatch(/changed outside importer/);
-      }
+      const run = await importer.run(bindingA, sync);
+      expect(run.status).toBe('failed');
+      expect(run.error).toMatch(/changed outside importer/);
       expect((await storage.getNode(nodeId))!.name).toBe('Curator title');
     });
 
-    it('still treats an outside edit made after every binding was released as an outside edit', async () => {
+    it('still treats an outside edit made after release as an outside edit', async () => {
       const { knowledge, storage, importer } = await setup(createStore);
       await importer.run(bindingA, { items: [person] });
       await knowledge.releaseImportBinding({ importerId: 'fireflies', binding: knowledgeImporterBindingKey(bindingA) });
-      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
+      const nodeId = await nodeIn(storage, bindingA, person.address);
       const node = (await storage.getNode(nodeId))!;
       await knowledge.updateNode({ id: nodeId, version: node.version, name: 'Curated by a person' });
-      const run = await importer.run(bindingB, { items: [{ ...person, name: 'Shane (updated)' }] });
+      const run = await importer.run(bindingA, { items: [{ ...person, name: 'Shane (updated)' }] });
       expect(run.status).toBe('failed');
       expect(run.error).toMatch(/changed outside importer/);
       expect((await storage.getNode(nodeId))!.name).toBe('Curated by a person');
@@ -263,21 +291,15 @@ export function createKnowledgeImporterMultiBindingTests(
         records: [{ id: `rec-${index}`, text: `Fact ${index}` }],
       }));
       const runs = await Promise.all([importer.run(bindingA, { items }), importer.run(bindingB, { items })]);
-      for (const [index, run] of runs.entries()) {
-        if (run.status === 'succeeded') continue;
-        // A run may lose a write race; it must never mistake the other binding for an outside edit.
-        expect(run.error).not.toMatch(/changed outside importer/);
-        expect((await importer.run(index === 0 ? bindingA : bindingB, { items })).error).toBeUndefined();
-      }
+      for (const run of runs) expect(run.error).toBeUndefined();
       for (const item of items) {
-        const nodeId = (await storage.getNodeAddress({ source, address: item.address }))!.nodeId;
-        expect(sorted(await storage.getNodeScopeIds(nodeId))).toEqual(sorted([alpha, beta]));
-        expect(sorted(await storage.getRecordScopeIds(item.records[0]!.id))).toEqual(sorted([alpha, beta]));
+        expect(await storage.getNodeScopeIds(await nodeIn(storage, bindingA, item.address))).toEqual([alpha]);
+        expect(await storage.getNodeScopeIds(await nodeIn(storage, bindingB, item.address))).toEqual([beta]);
       }
     });
 
     it('recovers when a run is interrupted between its node and record writes', async () => {
-      const { storage, importer, alpha, beta } = await setup(createStore);
+      const { storage, importer, beta } = await setup(createStore);
       await importer.run(bindingA, { items: [person] });
       const betaItem = { ...person, records: [{ id: 'rec-beta-only', text: 'Beta note' }] };
       const createRecord = storage.createRecord.bind(storage);
@@ -290,10 +312,7 @@ export function createKnowledgeImporterMultiBindingTests(
         storage.createRecord = createRecord;
       }
       expect((await importer.run(bindingB, { items: [betaItem] })).error).toBeUndefined();
-      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
-      expect(sorted(await storage.getNodeScopeIds(nodeId))).toEqual(sorted([alpha, beta]));
-      expect(await storage.getRecordScopeIds('rec-beta-only')).toEqual([beta]);
-      expect(await storage.getRecordScopeIds('rec-shane-1')).toEqual([alpha]);
+      expect(await storage.getRecordScopeIds(recordIn(bindingB, 'rec-beta-only'))).toEqual([beta]);
     });
   });
 }

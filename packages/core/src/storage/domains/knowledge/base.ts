@@ -771,6 +771,57 @@ export function canonicalizeKnowledgeImporterBindingKey(binding: string): string
   return knowledgeImporterBindingKey(parseKnowledgeImporterBindingKey(binding));
 }
 
+/**
+ * Stored address of a node an importer binding created. Imported identity is per destination: the same provider
+ * item bound into two scopes becomes two nodes, so no binding can rewrite another destination's node. The source
+ * stays the provider's, so source-wide listings and provenance are unchanged.
+ */
+export function knowledgeImportNodeAddress(scope: string, address: string): string {
+  return JSON.stringify([scope, address]);
+}
+
+/** The binding scope and provider address of a stored importer node address, or `null` for any other address. */
+export function parseKnowledgeImportNodeAddress(stored: string): { scope: string; address: string } | null {
+  if (!stored.startsWith('["')) return null;
+  try {
+    const value = JSON.parse(stored) as unknown;
+    if (Array.isArray(value) && value.length === 2 && typeof value[0] === 'string' && typeof value[1] === 'string') {
+      return { scope: value[0], address: value[1] };
+    }
+  } catch {
+    // not an importer address
+  }
+  return null;
+}
+
+/** Suffix that qualifies an importer's own record ids with its binding (FNV-1a, 2 × 32 bits). */
+function knowledgeImportRecordTag(input: { importerId: string; binding: string }): string {
+  const text = JSON.stringify([input.importerId, canonicalizeKnowledgeImporterBindingKey(input.binding)]);
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193 ^ text.length;
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    h1 = Math.imul(h1 ^ code, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ code, 0x5bd1e995) >>> 0;
+  }
+  return `${h1.toString(16).padStart(8, '0')}${h2.toString(16).padStart(8, '0')}`;
+}
+
+/**
+ * Stored id for a record an importer names with its own id. Two bindings that import the same item store
+ * separate records; the importer still sees and passes its own id (see {@link knowledgeImporterRecordId}).
+ */
+export function knowledgeImportStoredRecordId(input: { importerId: string; binding: string }, id: string): string {
+  const suffix = `~${knowledgeImportRecordTag(input)}`;
+  return id.endsWith(suffix) ? id : `${id}${suffix}`;
+}
+
+/** The importer's own id for a stored record of this binding, or the stored id when it isn't one. */
+export function knowledgeImporterRecordId(input: { importerId: string; binding: string }, storedId: string): string {
+  const suffix = `~${knowledgeImportRecordTag(input)}`;
+  return storedId.endsWith(suffix) ? storedId.slice(0, -suffix.length) : storedId;
+}
+
 export function isKnowledgeScopeVisible(
   recordScopeIds: KnowledgeScopeIds,
   visibleScopeIds: KnowledgeScopeIds,

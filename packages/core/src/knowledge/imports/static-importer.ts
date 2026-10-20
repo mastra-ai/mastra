@@ -2,7 +2,11 @@ import {
   canonicalizeKnowledgeScopeIds,
   isKnowledgeTargetImporterOwned,
   KnowledgeConflictError,
+  knowledgeImportNodeAddress,
   knowledgeImporterBindingKey,
+  knowledgeImporterRecordId,
+  knowledgeImportStoredRecordId,
+  parseKnowledgeImportNodeAddress,
   knowledgeScopeIdsKey,
 } from '../../storage/domains/knowledge';
 import type {
@@ -60,7 +64,7 @@ export interface StaticKnowledgeImporterOperations {
   removeNode(address: string): Promise<{ node: KnowledgeNode; recordsRemoved: number } | null>;
 }
 
-/** Concurrent writers to one shared node retry this many times on a version race before giving up. */
+/** Concurrent writers to one node retry this many times on a version race before giving up. */
 const MAX_CLAIM_ATTEMPTS = 5;
 
 /** @internal */
@@ -134,6 +138,8 @@ interface ImporterContext {
   readonly storage: KnowledgeStorage;
   readonly importer: KnowledgeImporterBindingHandle;
   readonly claimant: KnowledgeImportClaimant;
+  /** Stored address of this binding's node for a provider address: identity is per destination, never shared. */
+  nodeAddress(address: string): string;
   readonly importRunId: string;
   assertRunActive(): Promise<void>;
 }
@@ -157,8 +163,9 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     const nodeClaim = await this.#assertMutationAllowed();
     const { storage, importer, claimant, importRunId } = this.#context;
     const scopeIds = narrowRecordScopes(nodeClaim.scopeIds, await this.#recordScopeIds(input.scopes));
-    if (input.id !== undefined) {
-      const existing = await storage.getRecord({ id: input.id, includeDeleted: true });
+    const storedId = input.id === undefined ? undefined : knowledgeImportStoredRecordId(claimant, input.id);
+    if (storedId !== undefined) {
+      const existing = await storage.getRecord({ id: storedId, includeDeleted: true });
       if (existing) {
         if (existing.nodeId !== this.node.id || existing.source !== importer.source) {
           throw new Error(
@@ -166,7 +173,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
           );
         }
         // Someone deleted this importer's record; a re-run must not resurrect it.
-        if (existing.deletedAt) return existing;
+        if (existing.deletedAt) return this.#asImported(existing);
         const sameContent =
           existing.text === input.text &&
           // jsonb (pg) does not preserve key order, so compare metadata structurally.
@@ -176,11 +183,11 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
             `Knowledge record ${input.id} already exists with different content; importer ${importer.importerId} will not overwrite it`,
           );
         }
-        return this.#claimExistingRecord(existing, scopeIds);
+        return this.#asImported(await this.#claimExistingRecord(existing, scopeIds));
       }
     }
     const created = this.#context.knowledge.createRecord({
-      ...(input.id !== undefined ? { id: input.id } : {}),
+      ...(storedId !== undefined ? { id: storedId } : {}),
       text: input.text,
       metadata: input.metadata,
       node: this.node.id,
@@ -191,17 +198,24 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
       importRunId,
       claimant,
     });
-    if (input.id === undefined) return created;
-    // Another binding of this source may create the same stable id concurrently; then claim theirs.
-    return created.catch(async error => {
-      if (!(error instanceof KnowledgeConflictError)) throw error;
-      const existing = await storage.getRecord({ id: input.id! });
-      if (!existing) throw error;
-      return this.appendKnowledge(input);
-    });
+    if (storedId === undefined) return created;
+    // A concurrent run of this binding may create the same record first; then the retry finds it.
+    return created.then(
+      record => this.#asImported(record),
+      async error => {
+        if (!(error instanceof KnowledgeConflictError)) throw error;
+        if (!(await storage.getRecord({ id: storedId }))) throw error;
+        return this.appendKnowledge(input);
+      },
+    );
   }
 
-  /** A second binding importing the same record adds its claim; the record's scopes become their union. */
+  /** The record as the importer sees it: under the id it named, not the binding-qualified stored id. */
+  #asImported(record: KnowledgeRecord): KnowledgeRecord {
+    return { ...record, id: knowledgeImporterRecordId(this.#context.claimant, record.id) };
+  }
+
+  /** Re-imports this binding's record, updating its claim when the importer narrowed or widened its scopes. */
   async #claimExistingRecord(record: KnowledgeRecord, scopeIds: KnowledgeScopeIds): Promise<KnowledgeRecord> {
     const { storage, importer, claimant, importRunId } = this.#context;
     for (let attempt = 0; attempt < MAX_CLAIM_ATTEMPTS; attempt++) {
@@ -231,6 +245,11 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
   }
 
   async listKnowledge(): Promise<KnowledgeRecord[]> {
+    return (await this.ownedRecords()).map(record => this.#asImported(record));
+  }
+
+  /** @internal This binding's records under their stored ids. */
+  async ownedRecords(): Promise<KnowledgeRecord[]> {
     await this.#context.assertRunActive();
     const nodeClaim = await this.#nodeClaim();
     if (!nodeClaim) return [];
@@ -259,11 +278,14 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
 
   async removeKnowledge(id: string): Promise<KnowledgeRecord | null> {
     await this.#assertMutationAllowed();
-    const { storage, importer } = this.#context;
+    const { storage, importer, claimant } = this.#context;
     if (importer.role !== 'owner') {
       throw new Error(`Knowledge importer ${importer.importerId} requires owner authority to remove knowledge`);
     }
-    const record = await storage.getRecord({ id, includeDeleted: true });
+    // An id that isn't this binding's own still resolves, so removing someone else's record is refused, not ignored.
+    const record =
+      (await storage.getRecord({ id: knowledgeImportStoredRecordId(claimant, id), includeDeleted: true })) ??
+      (await storage.getRecord({ id, includeDeleted: true }));
     if (!record) return null;
     const claims = await storage.listImportClaims({ targetType: 'record', targetId: record.id });
     if (
@@ -273,13 +295,14 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     ) {
       throw new Error(`Knowledge importer ${importer.importerId} cannot remove knowledge owned by another binding`);
     }
-    return releaseRecord(this.#context, record, claims);
+    const released = await releaseRecord(this.#context, record, claims);
+    return released && this.#asImported(released);
   }
 
   /** This binding's claim on the node, while nothing outside the importer has changed the node since. */
   async #nodeClaim(): Promise<KnowledgeImportClaim | undefined> {
-    const { storage, importer, claimant } = this.#context;
-    const binding = await storage.getNodeAddress({ source: importer.source, address: this.#address });
+    const { storage, importer, claimant, nodeAddress } = this.#context;
+    const binding = await storage.getNodeAddress({ source: importer.source, address: nodeAddress(this.#address) });
     if (binding?.nodeId !== this.node.id) return undefined;
     const node = await storage.getNode(this.node.id);
     if (!node || node.deletedAt) return undefined;
@@ -326,6 +349,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
         binding: input.importer.binding,
         source: input.importer.source,
       },
+      nodeAddress: address => knowledgeImportNodeAddress(input.importer.scopeAddress, address),
       importRunId: input.importRunId,
       assertRunActive: () => this.#assertRunActive(),
     };
@@ -346,8 +370,11 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
    */
   async citationTarget(ref: KnowledgeCitationRef): Promise<KnowledgeCitationTarget> {
     await this.#assertRunActive();
-    const { storage, importer, claimant } = this.#context;
-    const binding = await storage.getNodeAddress({ source: ref.source, address: normalizeAddress(ref.address) });
+    const { storage, importer, claimant, nodeAddress } = this.#context;
+    const binding =
+      ref.source === importer.source
+        ? await storage.getNodeAddress({ source: ref.source, address: nodeAddress(normalizeAddress(ref.address)) })
+        : await this.#visibleNodeAddress(ref.source, normalizeAddress(ref.address));
     if (!binding) return { status: 'unbound' };
     const node = await this.#context.knowledge.getNode(binding.nodeId);
     if (!node || node.deletedAt) return { status: 'unusable' };
@@ -372,8 +399,8 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
   async getNode(address: string): Promise<StaticKnowledgeNodeHandle | null> {
     await this.#assertRunActive();
     const normalized = normalizeAddress(address);
-    const { storage, importer, claimant } = this.#context;
-    const binding = await storage.getNodeAddress({ source: importer.source, address: normalized });
+    const { storage, importer, claimant, nodeAddress } = this.#context;
+    const binding = await storage.getNodeAddress({ source: importer.source, address: nodeAddress(normalized) });
     if (!binding) return null;
     const node = await this.#context.knowledge.getNode(binding.nodeId);
     if (!node) return null;
@@ -383,8 +410,11 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
 
   async listNodes(): Promise<StaticKnowledgeNodeHandle[]> {
     await this.#assertRunActive();
-    const { storage, importer, claimant } = this.#context;
-    const bindings = await storage.listNodeAddresses({ source: importer.source });
+    const { storage, importer, claimant, nodeAddress } = this.#context;
+    const bindings = (await storage.listNodeAddresses({ source: importer.source })).flatMap(binding => {
+      const parsed = parseKnowledgeImportNodeAddress(binding.address);
+      return parsed?.scope === importer.scopeAddress ? [{ address: parsed.address, nodeId: binding.nodeId }] : [];
+    });
     const handles = await Promise.all(
       bindings.map(async binding => {
         const node = await this.#context.knowledge.getNode(binding.nodeId);
@@ -399,7 +429,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
   async upsertNode(address: string, input: StaticKnowledgeNodeInput): Promise<StaticKnowledgeNodeHandle> {
     await this.#assertRunActive();
     const normalized = normalizeAddress(address);
-    const { knowledge, storage, importer, claimant, importRunId } = this.#context;
+    const { knowledge, storage, importer, claimant, importRunId, nodeAddress } = this.#context;
     if (!Array.isArray(input.scopes) || input.scopes.length === 0) {
       throw new Error(`Knowledge importer ${importer.importerId} must name at least one scope for node ${normalized}`);
     }
@@ -409,12 +439,12 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
     // collision falls back to a deterministic address-derived name rather than coalescing.
     const fallbackName = disambiguatedNodeName(input.name, normalized);
 
-    const binding = await storage.getNodeAddress({ source: importer.source, address: normalized });
+    const binding = await storage.getNodeAddress({ source: importer.source, address: nodeAddress(normalized) });
     if (!binding) {
       const createNode = (nodeName: string) =>
         storage.createNodeWithAddress({
           source: importer.source,
-          address: normalized,
+          address: nodeAddress(normalized),
           node: {
             name: nodeName,
             metadata: input.metadata,
@@ -430,14 +460,16 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
         return createNode(fallbackName);
       });
       const claims = await storage.listImportClaims({ targetType: 'node', targetId: created.id });
-      // Another binding may have created the node first; then this binding claims it below like any re-import.
+      // A concurrent run (or another importer with this source and scope) may have created it first; the loop below
+      // re-reads it and either treats it as a re-import or rejects it as changed outside this importer.
       if (claims.some(claim => isClaimant(claim, claimant) && claim.version === created.version)) {
         return this.#handle(normalized, created);
       }
     }
 
     for (let attempt = 0; attempt < MAX_CLAIM_ATTEMPTS; attempt++) {
-      const nodeId = (await storage.getNodeAddress({ source: importer.source, address: normalized }))?.nodeId;
+      const nodeId = (await storage.getNodeAddress({ source: importer.source, address: nodeAddress(normalized) }))
+        ?.nodeId;
       const existing = nodeId ? await knowledge.getNode(nodeId) : null;
       if (!existing) throw new Error(`Knowledge node address points to a missing node: ${normalized}`);
       const claims = await storage.listImportClaims({ targetType: 'node', targetId: existing.id });
@@ -517,7 +549,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
         }
         return this.#handle(normalized, node);
       } catch (error) {
-        // Another binding of this source wrote the shared node first; re-read and merge with its claim.
+        // A concurrent run of this binding wrote the node first; re-read and retry.
         if (!(error instanceof KnowledgeConflictError) || !(await isStale(storage, existing))) throw error;
       }
     }
@@ -526,12 +558,12 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
 
   async removeNode(address: string): Promise<{ node: KnowledgeNode; recordsRemoved: number } | null> {
     await this.#assertRunActive();
-    const { knowledge, storage, importer, claimant, importRunId } = this.#context;
+    const { knowledge, storage, importer, claimant, importRunId, nodeAddress } = this.#context;
     if (importer.role !== 'owner') {
       throw new Error(`Knowledge importer ${importer.importerId} requires owner authority to remove nodes`);
     }
     const normalized = normalizeAddress(address);
-    const binding = await storage.getNodeAddress({ source: importer.source, address: normalized });
+    const binding = await storage.getNodeAddress({ source: importer.source, address: nodeAddress(normalized) });
     if (!binding) return null;
     const node = await knowledge.getNode(binding.nodeId);
     if (!node) return null;
@@ -549,11 +581,30 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
     }
     // Nodes are never deleted: only this binding's records go, and every scope membership stays.
     let recordsRemoved = 0;
-    for (const record of await this.#handle(normalized, node).listKnowledge()) {
+    for (const record of await this.#handle(normalized, node).ownedRecords()) {
       const recordClaims = await storage.listImportClaims({ targetType: 'record', targetId: record.id });
       if (await releaseRecord(this.#context, record, recordClaims)) recordsRemoved += 1;
     }
     return { node, recordsRemoved };
+  }
+
+  /**
+   * Another source's node for a provider address, as stored by whichever binding of that source this binding can
+   * read. Several destinations may hold their own copy; the one in this binding's own scope wins, then the first
+   * visible one by id.
+   */
+  async #visibleNodeAddress(source: string, address: string) {
+    const { storage, importer } = this.#context;
+    const candidates = (await storage.listNodeAddresses({ source })).filter(
+      entry => (parseKnowledgeImportNodeAddress(entry.address)?.address ?? entry.address) === address,
+    );
+    const visible = [];
+    for (const entry of candidates) {
+      const scopeIds = await storage.getNodeScopeIds(entry.nodeId);
+      if (scopeIds.some(scopeId => importer.resolutionScopeIds.includes(scopeId))) visible.push(entry);
+    }
+    const own = visible.find(entry => parseKnowledgeImportNodeAddress(entry.address)?.scope === importer.scopeAddress);
+    return own ?? visible.sort((a, b) => a.nodeId.localeCompare(b.nodeId))[0] ?? null;
   }
 
   async #assertRunActive(): Promise<void> {
@@ -612,12 +663,12 @@ async function resolveImporterScopes(
   scopes: readonly string[],
   access?: Readonly<Record<string, string>>,
 ): Promise<KnowledgeScopeIds> {
-  const { knowledge, storage, importer } = context;
+  const { knowledge, storage, importer, nodeAddress } = context;
   const resolved: string[] = [];
   for (const entry of scopes) {
     const address = normalizeAddress(entry);
     let scopeId: string | undefined;
-    const imported = await storage.getNodeAddress({ source: importer.source, address });
+    const imported = await storage.getNodeAddress({ source: importer.source, address: context.nodeAddress(address) });
     if (imported) {
       const node = await knowledge.getNode(imported.nodeId);
       if (node?.isScope && !node.deletedAt) scopeId = node.id;

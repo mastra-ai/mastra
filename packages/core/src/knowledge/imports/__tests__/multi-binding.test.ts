@@ -1,17 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryStore, knowledgeImporterBindingKey } from '../../../storage';
+import {
+  InMemoryStore,
+  knowledgeImporterBindingKey,
+  knowledgeImportNodeAddress,
+  knowledgeImportStoredRecordId,
+} from '../../../storage';
 import type { MastraCompositeStore } from '../../../storage';
 import { Knowledge } from '../../index';
 import type { KnowledgeImporterHandlerContext } from '../types';
 
 /**
- * FACT-471: one importer source bound into two project scopes. Node identity is global per
- * `(source, address)`, so both bindings must share one node, each owning only its own claims.
+ * FACT-471: one importer source bound into two project scopes. Imported identity is per destination, so each
+ * binding imports its own copy of an item: neither can fail on, overwrite or remove the other's.
  */
 
 const source = 'fireflies:workspace-1';
 const bindingA = { source, scope: 'project:alpha' } as const;
 const bindingB = { source, scope: 'project:beta' } as const;
+type Binding = typeof bindingA | typeof bindingB;
 
 interface Item {
   address: string;
@@ -36,10 +42,9 @@ export function createMultiBindingKnowledge(storage: MastraCompositeStore = new 
         id: 'fireflies',
         access: { 'project:$projectId': 'owner' },
         handler: async (ctx: KnowledgeImporterHandlerContext<Payload>) => {
-          const scope = JSON.parse(ctx.run.binding)[1] as string;
           const importer = await ctx.importer();
           for (const item of ctx.payload?.items ?? []) {
-            const node = await importer.upsertNode(item.address, { name: item.name, scopes: [scope] });
+            const node = await importer.upsertNode(item.address, { name: item.name, scopes: [importer.scope] });
             const existing = new Set((await node.listKnowledge()).map(record => record.id));
             for (const record of item.records) {
               if (!existing.has(record.id)) await node.appendKnowledge(record);
@@ -58,140 +63,107 @@ const person: Item = {
   records: [{ id: 'rec-shane-1', text: 'Shane runs the Thursday sync.' }],
 };
 
-async function scopeIds(knowledge: Knowledge) {
+const recordId = (binding: Binding, id: string) =>
+  knowledgeImportStoredRecordId({ importerId: 'fireflies', binding: knowledgeImporterBindingKey(binding) }, id);
+
+async function setup(createStorage: () => MastraCompositeStore) {
+  const knowledge = createMultiBindingKnowledge(createStorage());
+  await knowledge.reconcile();
   const storage = await knowledge.getStorage();
-  const alpha = (await storage.getScopeAddress('project:alpha'))!.scopeNodeId;
-  const beta = (await storage.getScopeAddress('project:beta'))!.scopeNodeId;
-  return { alpha, beta };
+  return {
+    knowledge,
+    storage,
+    importer: knowledge.getImporter<Payload>('fireflies')!,
+    alpha: (await storage.getScopeAddress('project:alpha'))!.scopeNodeId,
+    beta: (await storage.getScopeAddress('project:beta'))!.scopeNodeId,
+    nodeId: async (binding: Binding, address: string) =>
+      (await storage.getNodeAddress({ source, address: knowledgeImportNodeAddress(binding.scope, address) }))?.nodeId,
+  };
 }
 
 export function describeMultiBindingImports(name: string, createStorage: () => MastraCompositeStore) {
   describe(`${name}: one importer source bound into two scopes (FACT-471)`, () => {
-    it('lets a second binding import the same item without a "changed outside importer" failure', async () => {
-      const knowledge = createMultiBindingKnowledge(createStorage());
-      await knowledge.reconcile();
-      const importer = knowledge.getImporter<Payload>('fireflies')!;
-      const { alpha, beta } = await scopeIds(knowledge);
-
-      const first = await importer.run(bindingA, { items: [person] });
-      expect(first).toMatchObject({ status: 'succeeded' });
+    it('imports the same item into a second binding as its own copy', async () => {
+      const { storage, importer, alpha, beta, nodeId } = await setup(createStorage);
+      expect((await importer.run(bindingA, { items: [person] })).status).toBe('succeeded');
       const second = await importer.run(bindingB, { items: [person] });
       expect(second.error).toBeUndefined();
-      expect(second.status).toBe('succeeded');
 
-      const storage = await knowledge.getStorage();
-      const address = await storage.getNodeAddress({ source, address: person.address });
-      expect(address).not.toBeNull();
-      expect((await storage.getNodeScopeIds(address!.nodeId)).sort()).toEqual([alpha, beta].sort());
-      expect((await storage.getRecordScopeIds('rec-shane-1')).sort()).toEqual([alpha, beta].sort());
-
-      // Re-running either binding is a no-op: neither sees the other's write as an outside edit.
-      expect((await importer.run(bindingA, { items: [person] })).status).toBe('succeeded');
-      expect((await importer.run(bindingB, { items: [person] })).status).toBe('succeeded');
-      expect((await storage.getNodeScopeIds(address!.nodeId)).sort()).toEqual([alpha, beta].sort());
+      const [a, b] = [await nodeId(bindingA, person.address), await nodeId(bindingB, person.address)];
+      expect(a).toBeDefined();
+      expect(b).toBeDefined();
+      expect(a).not.toBe(b);
+      expect(await storage.getNodeScopeIds(a!)).toEqual([alpha]);
+      expect(await storage.getNodeScopeIds(b!)).toEqual([beta]);
+      expect(await storage.getRecordScopeIds(recordId(bindingA, 'rec-shane-1'))).toEqual([alpha]);
+      expect(await storage.getRecordScopeIds(recordId(bindingB, 'rec-shane-1'))).toEqual([beta]);
+      for (const binding of [bindingA, bindingB, bindingA]) {
+        expect((await importer.run(binding, { items: [person] })).error).toBeUndefined();
+      }
     });
 
-    it("keeps each binding's records, removal and state isolated", async () => {
-      const knowledge = createMultiBindingKnowledge(createStorage());
-      await knowledge.reconcile();
-      const importer = knowledge.getImporter<Payload>('fireflies')!;
-      const { alpha, beta } = await scopeIds(knowledge);
-      const storage = await knowledge.getStorage();
+    it("never lets one binding change the other's node or records", async () => {
+      const { storage, importer, nodeId } = await setup(createStorage);
+      await importer.run(bindingA, { items: [{ ...person, records: [{ id: 'rec-a', text: 'A only' }] }] });
+      const a = (await storage.getNode((await nodeId(bindingA, person.address))!))!;
+      const recordA = (await storage.getRecord({ id: recordId(bindingA, 'rec-a') }))!;
 
-      const onlyAlpha = { ...person, records: [...person.records, { id: 'rec-alpha-only', text: 'Alpha note' }] };
-      expect((await importer.run(bindingA, { items: [onlyAlpha] })).status).toBe('succeeded');
-      expect((await importer.run(bindingB, { items: [person] })).status).toBe('succeeded');
-
-      // A record claimed only by A is visible only in A.
-      expect(await storage.getRecordScopeIds('rec-alpha-only')).toEqual([alpha]);
-
-      // Provider-confirmed removal through A drops only A's claims; B keeps the shared record and the node.
-      expect((await importer.run(bindingA, { items: [], removed: [person.address] })).status).toBe('succeeded');
-      expect(await storage.getRecord({ id: 'rec-alpha-only' })).toBeNull();
-      expect(await storage.getRecordScopeIds('rec-shane-1')).toEqual([beta]);
-      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
-      expect(await storage.getNode(nodeId)).toMatchObject({ id: nodeId });
-      expect(await storage.getNodeScopeIds(nodeId)).toEqual(expect.arrayContaining([beta]));
-
-      // Removal through B releases the last claim: the record goes, the node stays.
-      expect((await importer.run(bindingB, { items: [], removed: [person.address] })).status).toBe('succeeded');
-      expect(await storage.getRecord({ id: 'rec-shane-1' })).toBeNull();
-      expect(await storage.getNode(nodeId)).toMatchObject({ id: nodeId });
-
-      // Runs and run history stay per binding.
-      const runsA = await knowledge.listImportRuns({
-        importerId: 'fireflies',
-        binding: knowledgeImporterBindingKey(bindingA),
-      });
-      const runsB = await knowledge.listImportRuns({
-        importerId: 'fireflies',
-        binding: knowledgeImporterBindingKey(bindingB),
-      });
-      expect(runsA.runs.every(run => run.binding === knowledgeImporterBindingKey(bindingA))).toBe(true);
-      expect(runsB.runs.every(run => run.binding === knowledgeImporterBindingKey(bindingB))).toBe(true);
-      expect(runsA.runs).toHaveLength(2);
-      expect(runsB.runs).toHaveLength(2);
+      await importer.run(bindingB, { items: [{ ...person, name: 'Shane (from B)' }] });
+      expect(await storage.getNode(a.id)).toEqual(a);
+      expect(await storage.getRecord({ id: recordA.id })).toEqual(recordA);
+      expect((await storage.getNode((await nodeId(bindingB, person.address))!))!.name).toBe('Shane (from B)');
     });
 
-    it('still rejects a real outside edit for both bindings', async () => {
-      const knowledge = createMultiBindingKnowledge(createStorage());
-      await knowledge.reconcile();
-      const importer = knowledge.getImporter<Payload>('fireflies')!;
-      const storage = await knowledge.getStorage();
-
+    it("keeps each binding's removal and run history to itself", async () => {
+      const { knowledge, storage, importer, nodeId } = await setup(createStorage);
       await importer.run(bindingA, { items: [person] });
       await importer.run(bindingB, { items: [person] });
-      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
-      const node = (await storage.getNode(nodeId))!;
-      await knowledge.updateNode({ id: nodeId, version: node.version, name: 'Renamed by a person' });
 
-      const renamed = { ...person, name: 'Shane (updated)' };
+      expect((await importer.run(bindingA, { items: [], removed: [person.address] })).status).toBe('succeeded');
+      expect(await storage.getRecord({ id: recordId(bindingA, 'rec-shane-1') })).toBeNull();
+      expect(await storage.getRecord({ id: recordId(bindingB, 'rec-shane-1') })).not.toBeNull();
+      expect(await storage.getNode((await nodeId(bindingA, person.address))!)).not.toBeNull();
+
       for (const binding of [bindingA, bindingB]) {
-        const run = await importer.run(binding, { items: [renamed] });
-        expect(run.status).toBe('failed');
-        expect(run.error).toMatch(/changed outside importer/);
+        const key = knowledgeImporterBindingKey(binding);
+        const { runs } = await knowledge.listImportRuns({ importerId: 'fireflies', binding: key });
+        expect(runs.every(run => run.binding === key)).toBe(true);
       }
-      expect((await storage.getNode(nodeId))!.name).toBe('Renamed by a person');
     });
 
-    it('keeps both claims when the two bindings import concurrently', async () => {
-      const knowledge = createMultiBindingKnowledge(createStorage());
-      await knowledge.reconcile();
-      const importer = knowledge.getImporter<Payload>('fireflies')!;
-      const { alpha, beta } = await scopeIds(knowledge);
+    it("rejects an outside edit to one binding's node without affecting the other", async () => {
+      const { knowledge, storage, importer, nodeId } = await setup(createStorage);
+      await importer.run(bindingA, { items: [person] });
+      await importer.run(bindingB, { items: [person] });
+      const a = (await storage.getNode((await nodeId(bindingA, person.address))!))!;
+      await knowledge.updateNode({ id: a.id, version: a.version, name: 'Renamed by a person' });
+
+      const renamed = { ...person, name: 'Shane (updated)' };
+      const runA = await importer.run(bindingA, { items: [renamed] });
+      expect(runA.status).toBe('failed');
+      expect(runA.error).toMatch(/changed outside importer/);
+      expect((await storage.getNode(a.id))!.name).toBe('Renamed by a person');
+      expect((await importer.run(bindingB, { items: [renamed] })).error).toBeUndefined();
+    });
+
+    it('converges when both bindings import concurrently', async () => {
+      const { storage, importer, alpha, beta, nodeId } = await setup(createStorage);
       const items = Array.from({ length: 8 }, (_, index) => ({
         address: `person:${index}`,
         name: `Person ${index}`,
         records: [{ id: `rec-${index}`, text: `Fact ${index}` }],
       }));
-
       const runs = await Promise.all([importer.run(bindingA, { items }), importer.run(bindingB, { items })]);
-      // A run may lose a version race; retrying it must converge without outside-edit errors.
-      for (const [index, run] of runs.entries()) {
-        if (run.status !== 'succeeded') {
-          expect(run.error).not.toMatch(/changed outside importer/);
-          const retry = await importer.run(index === 0 ? bindingA : bindingB, { items });
-          expect(retry.error).toBeUndefined();
-        }
-      }
-      const storage = await knowledge.getStorage();
+      for (const run of runs) expect(run.error).toBeUndefined();
       for (const item of items) {
-        const nodeId = (await storage.getNodeAddress({ source, address: item.address }))!.nodeId;
-        expect((await storage.getNodeScopeIds(nodeId)).sort()).toEqual([alpha, beta].sort());
-        expect((await storage.getRecordScopeIds(item.records[0]!.id)).sort()).toEqual([alpha, beta].sort());
+        expect(await storage.getNodeScopeIds((await nodeId(bindingA, item.address))!)).toEqual([alpha]);
+        expect(await storage.getNodeScopeIds((await nodeId(bindingB, item.address))!)).toEqual([beta]);
       }
     });
 
     it('recovers when a run is interrupted after its first write', async () => {
-      const storageInstance = createStorage();
-      const knowledge = createMultiBindingKnowledge(storageInstance);
-      await knowledge.reconcile();
-      const importer = knowledge.getImporter<Payload>('fireflies')!;
-      const { alpha, beta } = await scopeIds(knowledge);
-
+      const { storage, importer, beta } = await setup(createStorage);
       await importer.run(bindingA, { items: [person] });
-      // Interrupt B between the node write and its record write.
-      const storage = await knowledge.getStorage();
       const original = storage.createRecord.bind(storage);
       let failed = false;
       storage.createRecord = async input => {
@@ -201,20 +173,12 @@ export function describeMultiBindingImports(name: string, createStorage: () => M
         }
         return original(input);
       };
-      const crashed = await importer.run(bindingB, {
-        items: [{ ...person, records: [{ id: 'rec-beta-only', text: 'Beta note' }] }],
-      });
-      expect(crashed.status).toBe('failed');
+      const item = { ...person, records: [{ id: 'rec-beta-only', text: 'Beta note' }] };
+      expect((await importer.run(bindingB, { items: [item] })).status).toBe('failed');
       storage.createRecord = original;
 
-      const retried = await importer.run(bindingB, {
-        items: [{ ...person, records: [{ id: 'rec-beta-only', text: 'Beta note' }] }],
-      });
-      expect(retried.error).toBeUndefined();
-      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
-      expect((await storage.getNodeScopeIds(nodeId)).sort()).toEqual([alpha, beta].sort());
-      expect(await storage.getRecordScopeIds('rec-beta-only')).toEqual([beta]);
-      expect(await storage.getRecordScopeIds('rec-shane-1')).toEqual([alpha]);
+      expect((await importer.run(bindingB, { items: [item] })).error).toBeUndefined();
+      expect(await storage.getRecordScopeIds(recordId(bindingB, 'rec-beta-only'))).toEqual([beta]);
     });
   });
 }

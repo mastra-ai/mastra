@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryStore, knowledgeImporterBindingKey } from '../../../storage';
+import {
+  InMemoryStore,
+  knowledgeImporterBindingKey,
+  knowledgeImportNodeAddress,
+  knowledgeImportStoredRecordId,
+} from '../../../storage';
 import { Knowledge } from '../../index';
 import { createStaticKnowledgeImporterOperations } from '../static-importer';
 
 const source = 'google-calendar:primary';
 const scopeAddress = 'project:mastra';
 const binding = knowledgeImporterBindingKey({ source, scope: scopeAddress });
+/** Imported identity is per destination: storage holds this binding's node address and record ids. */
+const address = (value: string) => knowledgeImportNodeAddress(scopeAddress, value);
+const stored = (id: string) => knowledgeImportStoredRecordId({ importerId: 'calendar', binding }, id);
 
 async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit') {
   const knowledge = new Knowledge({
@@ -121,7 +129,7 @@ describe('static Knowledge importer operations', () => {
     expect(await node.listKnowledge()).toEqual([expect.objectContaining({ id: imported.id, source })]);
     const broadened = await node.appendKnowledge({ id: 'record-broadened', text: 'Shared with another scope' });
     await knowledge.setRecordScopes({
-      id: broadened.id,
+      id: stored(broadened.id),
       version: broadened.version,
       scopeIds: [projectScopeId, orgScopeId],
     });
@@ -132,16 +140,16 @@ describe('static Knowledge importer operations', () => {
     expect(await node.removeKnowledge(broadened.id)).toBeNull();
     expect(await node.removeKnowledge(imported.id)).toEqual(imported);
     expect(await node.removeKnowledge(imported.id)).toBeNull();
-    expect(await knowledge.getRecord({ id: imported.id, includeDeleted: true })).toBeNull();
+    expect(await knowledge.getRecord({ id: stored(imported.id), includeDeleted: true })).toBeNull();
     expect(await knowledge.getRecord({ id: foreign.id })).toEqual(foreign);
 
     const externallyEdited = await node.appendKnowledge({ id: 'record-edited', text: 'Importer-owned before edit' });
     const edited = await knowledge.setRecordScopes({
-      id: externallyEdited.id,
+      id: stored(externallyEdited.id),
       version: externallyEdited.version,
       scopeIds: [projectScopeId],
     });
-    expect(await node.removeKnowledge(edited.id)).toBeNull();
+    expect(await node.removeKnowledge(externallyEdited.id)).toBeNull();
     expect(await knowledge.getRecord({ id: edited.id })).toEqual(edited);
     expect(await knowledge.listActivity({ scopeIds: [projectScopeId], importRunId: run.id })).toContainEqual(
       expect.objectContaining({
@@ -159,7 +167,7 @@ describe('static Knowledge importer operations', () => {
     const owned = await node.appendKnowledge({ id: 'record-owned', text: 'Revision one' });
     const externallyEdited = await node.appendKnowledge({ id: 'record-edited', text: 'Importer-owned before edit' });
     const edited = await knowledge.setRecordScopes({
-      id: externallyEdited.id,
+      id: stored(externallyEdited.id),
       version: externallyEdited.version,
       scopeIds: [projectScopeId],
     });
@@ -167,8 +175,8 @@ describe('static Knowledge importer operations', () => {
     const updated = await operations.upsertNode('event:42', { scopes: [operations.scope], name: 'Planning updated' });
 
     expect(await updated.removeKnowledge(owned.id)).toMatchObject({ id: owned.id });
-    expect(await knowledge.getRecord({ id: owned.id, includeDeleted: true })).toBeNull();
-    expect(await updated.removeKnowledge(edited.id)).toBeNull();
+    expect(await knowledge.getRecord({ id: stored(owned.id), includeDeleted: true })).toBeNull();
+    expect(await updated.removeKnowledge(externallyEdited.id)).toBeNull();
     expect(await knowledge.getRecord({ id: edited.id })).toMatchObject({ id: edited.id });
   });
 
@@ -188,7 +196,7 @@ describe('static Knowledge importer operations', () => {
     knowledge.setImportState = setImportState;
     expect(separateWrites).toBe(0);
     expect(await updated.removeKnowledge(owned.id)).toMatchObject({ id: owned.id });
-    expect(await knowledge.getRecord({ id: owned.id, includeDeleted: true })).toBeNull();
+    expect(await knowledge.getRecord({ id: stored(owned.id), includeDeleted: true })).toBeNull();
   });
 
   it('keeps reads scoped to the runtime destination binding', async () => {
@@ -265,9 +273,11 @@ describe('static Knowledge importer operations', () => {
       }),
     ).rejects.toThrow('changed outside importer calendar');
     expect(await operations.removeNode('event:42')).toEqual({ node: moved, recordsRemoved: 0 });
-    expect(await (await knowledge.getStorage()).getNodeAddress({ source, address: 'event:42' })).toMatchObject({
-      nodeId: handle.id,
-    });
+    expect(await (await knowledge.getStorage()).getNodeAddress({ source, address: address('event:42') })).toMatchObject(
+      {
+        nodeId: handle.id,
+      },
+    );
     expect(await knowledge.listActivity({ scopeIds: [projectScopeId, movedScopeId] })).toContainEqual(
       expect.objectContaining({
         action: 'skip',
@@ -311,7 +321,7 @@ describe('static Knowledge importer operations', () => {
       const first = await node.appendKnowledge(input);
 
       await expect(node.appendKnowledge(input)).resolves.toEqual(first);
-      expect(await knowledge.getRecord({ id: input.id })).toEqual(first);
+      expect(await knowledge.getRecord({ id: stored(input.id) })).toEqual({ ...first, id: stored(input.id) });
     });
 
     it('compares re-emitted metadata independent of key order', async () => {
@@ -336,12 +346,12 @@ describe('static Knowledge importer operations', () => {
       const { knowledge, operations } = await createFixture();
       const node = await operations.upsertNode('event:42', { scopes: [operations.scope], name: 'Planning' });
       await node.appendKnowledge({ id: 'event-42-time', text: '10:00-11:00' });
-      await knowledge.deleteRecord({ id: 'event-42-time', deletedBy: 'reviewer' });
+      await knowledge.deleteRecord({ id: stored('event-42-time'), deletedBy: 'reviewer' });
 
       await node.appendKnowledge({ id: 'event-42-time', text: '10:00-11:00' });
 
-      expect(await knowledge.getRecord({ id: 'event-42-time' })).toBeNull();
-      expect(await knowledge.getRecord({ id: 'event-42-time', includeDeleted: true })).toMatchObject({
+      expect(await knowledge.getRecord({ id: stored('event-42-time') })).toBeNull();
+      expect(await knowledge.getRecord({ id: stored('event-42-time'), includeDeleted: true })).toMatchObject({
         deletedAt: expect.any(Date),
       });
     });
@@ -354,7 +364,10 @@ describe('static Knowledge importer operations', () => {
       await expect(node.appendKnowledge({ id: 'event-42-time', text: '14:00-15:00' })).rejects.toThrow(
         'Knowledge record event-42-time already exists with different content',
       );
-      expect(await knowledge.getRecord({ id: 'event-42-time' })).toEqual(first);
+      expect(await knowledge.getRecord({ id: stored('event-42-time') })).toEqual({
+        ...first,
+        id: stored('event-42-time'),
+      });
     });
   });
 
@@ -402,9 +415,11 @@ describe('static Knowledge importer operations', () => {
       const node = await operations.upsertNode('event:1', { name: 'Launch', scopes: [scopeAddress, 'area:docs'] });
       expect(await storage.getNodeScopeIds(node.id)).toEqual([scopes[scopeAddress]!, scopes['area:docs']!].sort());
       const record = await node.appendKnowledge({ id: 'launch-1', text: 'Launch is Tuesday' });
-      expect(await storage.getRecordScopeIds(record.id)).toEqual([scopes[scopeAddress]!, scopes['area:docs']!].sort());
+      expect(await storage.getRecordScopeIds(stored(record.id))).toEqual(
+        [scopes[scopeAddress]!, scopes['area:docs']!].sort(),
+      );
       const narrow = await node.appendKnowledge({ id: 'launch-2', text: 'Docs freeze Monday', scopes: ['area:docs'] });
-      expect(await storage.getRecordScopeIds(narrow.id)).toEqual([scopes['area:docs']!]);
+      expect(await storage.getRecordScopeIds(stored(narrow.id))).toEqual([scopes['area:docs']!]);
     });
 
     it('rejects scopes outside the binding before writing anything', async () => {
@@ -417,7 +432,7 @@ describe('static Knowledge importer operations', () => {
       await expect(operations.upsertNode('event:1', { name: 'Launch', scopes: [] })).rejects.toThrow(
         'must name at least one scope',
       );
-      expect(await storage.getNodeAddress({ source, address: 'event:1' })).toBeNull();
+      expect(await storage.getNodeAddress({ source, address: address('event:1') })).toBeNull();
       const node = await operations.upsertNode('event:1', { name: 'Launch', scopes: [scopeAddress] });
       await expect(node.appendKnowledge({ text: 'Widened', scopes: ['area:docs'] })).rejects.toThrow(
         'subset of the node scopes',
@@ -448,12 +463,12 @@ describe('static Knowledge importer operations', () => {
       const moved = await operations.upsertNode('event:1', { name: 'Launch', scopes: ['area:docs'] });
       expect(await storage.getNodeScopeIds(moved.id)).toEqual([scopes['area:docs']!]);
       // A membership change never bumps record versions, so the binding still owns its record.
-      expect((await knowledge.getRecord({ id: record.id }))!.version).toBe(record.version);
+      expect((await knowledge.getRecord({ id: stored(record.id) }))!.version).toBe(record.version);
 
       expect(await operations.removeNode('event:1')).toMatchObject({ recordsRemoved: 1 });
-      expect(await knowledge.getRecord({ id: record.id })).toBeNull();
+      expect(await knowledge.getRecord({ id: stored(record.id) })).toBeNull();
       expect((await knowledge.getNode(node.id))?.deletedAt).toBeUndefined();
-      expect(await storage.getNodeAddress({ source, address: 'event:1' })).toMatchObject({ nodeId: node.id });
+      expect(await storage.getNodeAddress({ source, address: address('event:1') })).toMatchObject({ nodeId: node.id });
     });
 
     it('rejects an outside membership edit instead of overwriting it', async () => {
