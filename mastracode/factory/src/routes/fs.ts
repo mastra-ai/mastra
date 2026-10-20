@@ -528,7 +528,9 @@ async function sessionSandbox(session: SourceControlSession): Promise<SessionSan
   const sandbox = requireExec(entry.sandbox);
   return {
     sandbox,
-    filesystem: new SandboxFilesystem({ sandbox, workdir: layout.root }),
+    // Session viewers read these files over HTTP, so a symlink must not lead
+    // them outside the checkout.
+    filesystem: new SandboxFilesystem({ sandbox, workdir: layout.root, verifySymlinks: true }),
     layout,
     baseBranches: repositoryBaseBranches(session, layout, entry.ownRepo),
   };

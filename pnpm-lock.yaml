@@ -3804,6 +3804,12 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../_types-builder
+      '@internal/workspace-test-utils':
+        specifier: workspace:*
+        version: link:../../../workspaces/_test-utils
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
