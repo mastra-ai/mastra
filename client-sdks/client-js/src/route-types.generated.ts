@@ -577,7 +577,8 @@ type InputShared_Type_15 =
   | 'tool'
   | 'mcp_server'
   | 'workflow_run'
-  | 'memory';
+  | 'memory'
+  | 'classifier';
 
 type InputShared_Type_16 = {
   /** Filter by timestamp range */
@@ -3413,7 +3414,8 @@ type Shared_Type_60 =
   | 'tool'
   | 'mcp_server'
   | 'workflow_run'
-  | 'memory';
+  | 'memory'
+  | 'classifier';
 
 type Shared_Type_61 = {
   /** Unique trace identifier */
