@@ -1,9 +1,11 @@
 ---
 '@mastra/core': minor
 '@mastra/deployer': minor
+'@mastra/deployer-netlify': patch
+mastra: patch
 ---
 
-Add opt-in `bundler.pnpmWorkspaceSettings` to write custom pnpm install-policy and dependency-resolution settings to generated deployment workspaces. Explicit values override copied source settings, while deployer-managed keys, credentials, and execution settings are rejected. Existing behavior is unchanged when omitted.
+Add opt-in `bundler.pnpmWorkspaceSettings` to write pnpm install-policy settings to generated deployment workspaces, including the Netlify deployer and the CLI experiment bundler. Supported keys are `allowBuilds`, `onlyBuiltDependencies`, `ignoredBuiltDependencies`, `neverBuiltDependencies`, `minimumReleaseAge`, `minimumReleaseAgeExclude`, `trustPolicy`, `trustPolicyExclude`, `trustPolicyIgnoreAfter`, and `blockExoticSubdeps`; explicit values override copied source settings and any other key is rejected before pnpm runs. Existing behavior is unchanged when omitted.
 
 ```ts
 import { Mastra } from '@mastra/core/mastra';

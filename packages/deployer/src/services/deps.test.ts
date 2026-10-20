@@ -161,7 +161,6 @@ describe('DepsService custom pnpm workspace settings', () => {
         blockExoticSubdeps: false,
         minimumReleaseAge: 0,
         minimumReleaseAgeExclude: ['@internal/*'],
-        peerDependencyRules: { allowedVersions: { react: '19' } },
       },
       pnpmOverrides: { '@internal/package': 'file:./workspace-module/package.tgz' },
       pnpmNodeLinker: 'hoisted',
@@ -173,10 +172,30 @@ describe('DepsService custom pnpm workspace settings', () => {
       blockExoticSubdeps: false,
       minimumReleaseAge: 0,
       minimumReleaseAgeExclude: ['@internal/*'],
-      peerDependencyRules: { allowedVersions: { react: '19' } },
       overrides: { '@internal/package': 'file:./workspace-module/package.tgz' },
       nodeLinker: 'hoisted',
     });
+  });
+
+  it('accepts every supported install-policy setting', async () => {
+    const settings = {
+      allowBuilds: { esbuild: true, bcrypt: false },
+      onlyBuiltDependencies: ['esbuild'],
+      ignoredBuiltDependencies: ['core-js'],
+      neverBuiltDependencies: ['fsevents'],
+      minimumReleaseAge: 60,
+      minimumReleaseAgeExclude: ['@internal/*'],
+      trustPolicy: 'no-downgrade',
+      trustPolicyExclude: ['legacy-package'],
+      trustPolicyIgnoreAfter: 525600,
+      blockExoticSubdeps: false,
+    };
+    await new DepsService(sourceRoot).install({ dir: outputDir, pnpmWorkspaceSettings: settings });
+    expect(parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'))).toEqual({
+      packages: ['.'],
+      ...settings,
+    });
+    expect(runChildProcess).toHaveBeenCalled();
   });
 
   it('writes explicit settings even when the source has no workspace file', async () => {
@@ -199,37 +218,46 @@ describe('DepsService custom pnpm workspace settings', () => {
     });
   });
 
-  it.each([
-    'packages',
-    'overrides',
-    'patchedDependencies',
-    'allowUnusedPatches',
-    'supportedArchitectures',
-    'nodeLinker',
-    '//registry.example/:_authToken',
-    'authToken',
-    'registry',
-    'httpsProxy',
-    'scriptShell',
-    'ignoreScripts',
-    'pnpmfile',
-    'configDependencies',
-    'useNodeVersion',
-    'managePackageManagerVersions',
-    '--offline',
-    'registries',
-    'onlyBuiltDependenciesFile',
-    'nodeOptions',
-    'unsafePerm',
-    'dangerouslyAllowAllBuilds',
-    'blockExoticSubdeps:\npackages',
-  ])('rejects reserved or unsafe setting %s before running pnpm', async key => {
+  it.each<[string, unknown]>([
+    ['packages', ['../outside']],
+    ['overrides', { lodash: '4.17.21' }],
+    ['patchedDependencies', { lodash: '../lodash.patch' }],
+    ['allowUnusedPatches', true],
+    ['supportedArchitectures', { os: ['darwin'] }],
+    ['nodeLinker', 'isolated'],
+    ['//registry.example/:_authToken', 'secret'],
+    ['registry', 'https://registry.example'],
+    ['httpsProxy', 'http://proxy.example'],
+    ['strictSsl', false],
+    ['ca', '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----'],
+    ['verifyStoreIntegrity', false],
+    ['packageExtensions', { lodash: { dependencies: { evil: 'https://attacker.example/evil.tgz' } } }],
+    ['strictDepBuilds', false],
+    ['localAddress', '10.0.0.5'],
+    ['gitShallowHosts', ['git.attacker.example']],
+    ['catalog', { react: '19.0.0' }],
+    ['catalogs', { legacy: { react: '17.0.0' } }],
+    ['peerDependencyRules', { allowAny: ['*'] }],
+    ['preferFrozenLockfile', true],
+    ['scriptShell', '/bin/sh'],
+    ['pnpmfile', '.pnpmfile.cjs'],
+    ['configDependencies', { evil: '1.0.0' }],
+    ['managePackageManagerVersions', true],
+    ['useNodeVersion', '18.0.0'],
+    ['modulesDir', '../node_modules'],
+    ['dangerouslyAllowAllBuilds', true],
+    ['--offline', true],
+    ['blockExoticSubdeps:\npackages', 'unsupported'],
+  ])('rejects setting %s outside the install-policy allowlist before running pnpm', async (key, value) => {
     await expect(
       new DepsService(sourceRoot).install({
         dir: outputDir,
-        pnpmWorkspaceSettings: { [key]: 'unsupported' },
+        pnpmWorkspaceSettings: { [key]: value } as Record<string, never>,
       }),
-    ).rejects.toMatchObject({ id: 'DEPLOYER_INVALID_PNPM_WORKSPACE_SETTING' });
+    ).rejects.toMatchObject({
+      id: 'DEPLOYER_INVALID_PNPM_WORKSPACE_SETTING',
+      message: expect.stringContaining('Supported settings: allowBuilds,'),
+    });
     expect(runChildProcess).not.toHaveBeenCalled();
     expect(fs.existsSync(join(outputDir, 'pnpm-workspace.yaml'))).toBe(false);
   });
@@ -259,11 +287,11 @@ describe('DepsService custom pnpm workspace settings', () => {
   it('quotes multiline values without creating additional workspace keys', async () => {
     await new DepsService(sourceRoot).install({
       dir: outputDir,
-      pnpmWorkspaceSettings: { resolutionMode: 'lowest-direct\npackages: ["../outside"]' },
+      pnpmWorkspaceSettings: { trustPolicy: 'no-downgrade\npackages: ["../outside"]' },
     });
     const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
     expect(workspace.packages).toEqual(['.']);
-    expect(workspace.resolutionMode).toBe('lowest-direct\npackages: ["../outside"]');
+    expect(workspace.trustPolicy).toBe('no-downgrade\npackages: ["../outside"]');
   });
 });
 

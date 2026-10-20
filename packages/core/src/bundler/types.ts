@@ -57,7 +57,7 @@ export type BundlerConfig = {
   /**
    * Explicit pnpm workspace settings to write to the deployment workspace.
    * Overrides copied source settings. Only applies to pnpm installs.
-   * Credentials, execution settings, and deployer-managed workspace keys are not supported.
+   * Supports install-policy keys only (build approvals, minimumReleaseAge, trustPolicy, blockExoticSubdeps).
    */
   pnpmWorkspaceSettings?: Record<string, PnpmWorkspaceValue>;
 

@@ -192,30 +192,19 @@ const PNPM_CONFIG_KEYS_TO_COPY = new Set([
   'supportedArchitectures',
 ]);
 
-const PNPM_MANAGED_KEYS = new Set([
-  'packages',
-  'overrides',
-  'patchedDependencies',
-  'allowUnusedPatches',
-  'supportedArchitectures',
-  'nodeLinker',
-]);
+// supportedArchitectures is generated from deployer architecture targets, so it can't be set explicitly.
+const PNPM_EXPLICIT_SETTING_KEYS = new Set(
+  [...PNPM_CONFIG_KEYS_TO_COPY, 'blockExoticSubdeps'].filter(key => key !== 'supportedArchitectures'),
+);
 
 function serializePnpmWorkspaceSettings(settings: BundlerConfig['pnpmWorkspaceSettings']) {
   return Object.entries(settings ?? {}).map(([key, value]) => {
-    if (
-      !/^[a-z][a-zA-Z0-9]*$/.test(key) ||
-      PNPM_MANAGED_KEYS.has(key) ||
-      key === 'permissions' ||
-      /auth|token|password|secret|registr|proxy|cert|key|script|shell|exec|hook|file|config|global|dir|path|node|packageManager|unsafePerm|dangerously/i.test(
-        key,
-      )
-    ) {
+    if (!PNPM_EXPLICIT_SETTING_KEYS.has(key)) {
       throw new MastraError({
         id: 'DEPLOYER_INVALID_PNPM_WORKSPACE_SETTING',
         domain: ErrorDomain.DEPLOYER,
         category: ErrorCategory.USER,
-        text: `pnpm workspace setting "${key}" is reserved or unsupported. Use install-policy and dependency-resolution settings only.`,
+        text: `pnpm workspace setting ${JSON.stringify(key)} isn't supported in bundler.pnpmWorkspaceSettings. Supported settings: ${[...PNPM_EXPLICIT_SETTING_KEYS].join(', ')}.`,
       });
     }
     const block = stringify({ [key]: value }).trimEnd();
