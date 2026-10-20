@@ -367,6 +367,22 @@ describe('init catalog snapshot', () => {
     expect(await db.hasColumn('mastra_threads', 'resourceId')).toBe(false);
   }, 60000);
 
+  it('resolves case-variant columns to the exact-case match outside init', async () => {
+    const schema = uniqueSchema('case_variant');
+    await admin(`CREATE SCHEMA "${schema}"`);
+    await admin(`CREATE TABLE "${schema}".case_variant (resourceid TEXT, "resourceId" JSONB, other TEXT)`);
+
+    const store = await newStore(schema);
+    await store.init();
+    const db = new PgDB({ client: store.db, schemaName: schema });
+
+    expect(await db.hasColumn('case_variant', 'resourceId')).toBe(true);
+    expect(await db.getColumnType('case_variant', 'resourceId')).toBe('jsonb');
+    expect(await db.getColumnType('case_variant', 'resourceid')).toBe('text');
+    // Lowercase fallback still applies when only the folded name exists.
+    expect(await db.getColumnType('case_variant', 'Other')).toBe('text');
+  }, 60000);
+
   it('migrates a legacy flat agents schema with the snapshot live', async () => {
     const schema = uniqueSchema('snapshot_legacy');
     await admin(`CREATE SCHEMA "${schema}"`);
