@@ -17,7 +17,7 @@ intake + service-area check, general callback).
 - [x] Require the intended SIP caller in a dedicated room; reject overlapping sequences and speculative generation. Honor turn cancellation between native publishes.
 - [x] Verify local, remote, and standard-worker paths with 24 native-room integration tests, including real Mastra server authentication, tool continuation, and Memory persistence.
 - [x] Repeat cancellation and simultaneous-call isolation 20 times. Removing native publishing fails all three packet-delivery cases; restoring it passes them.
-- [x] Verify the existing client SDK minimum (1.51.2), both supported Zod majors, build, lint, source/test types, and public documentation examples. All 385 enabled package tests pass; the PostgreSQL check below remains deferred.
+- [x] Verify the existing client SDK minimum (1.51.2), both supported Zod majors, build, lint, source/test types, and public documentation examples. Initial DTMF verification passed 385 enabled package tests. PostgreSQL verification below brings the full suite to 386 passing tests with none skipped.
 - [ ] Verify actual carrier/phone-menu acceptance: single digits, multi-digit sequences, `*`/`#`, interrupted sequences, and hang-up. Native packet delivery does not prove that a remote menu accepted the keys.
 - [ ] Migrate Loadsmart's worker-side DTMF interception to the call-bound tool and remove only overlapping wrapper logic. Menu strategy and application-specific prompts remain with Loadsmart.
 
@@ -46,9 +46,16 @@ See `telephony-orchestration-prd.md` for the approved boundary, verification com
 
 ## Release verification — transcript persistence (2026-10-15)
 
-- [ ] **PostgreSQL verification.** Run `src/transcript-pg.test.ts` against a disposable
-      PostgreSQL database using `LIVEKIT_TEST_PG_URL`. Verify message upserts, interrupted-message
-      revisions, and equal-timestamp ordering through Mastra Memory recall before release.
+- [x] **PostgreSQL verification (2026-10-20).** Passed against disposable PostgreSQL 16.15
+      (`postgres:16-alpine`, localhost-only port, temporary in-memory data). Verified initial
+      interrupted text/metadata, an update to the already-stored message, duplicate-event replay,
+      stable IDs, equal-timestamp ordering, and shutdown flushing through a separate PostgreSQL
+      connection using real Mastra Memory recall. Discarding revisions makes the test fail on the
+      saved text; restoring the implementation passes. No production-code changes were required.
+      Tested workspace `@mastra/pg` 1.31.2-alpha.1 and `@mastra/memory` 1.38.0-alpha.0 on Node 22.22.3.
+      Semantic recall was off; embeddings/vector search and production-database latency were not
+      part of this check. With PostgreSQL and native LiveKit room tests enabled, all 386 package
+      tests pass with none skipped. Focused test types and lint pass.
 - [ ] **Controlled live voice-call check.** Verify greeting persistence, normal turns,
       barge-in and resumed speech, tool history, and final transcript flushing on hang-up.
       Compare committed LiveKit conversation items with saved Memory messages and measure

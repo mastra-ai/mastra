@@ -92,11 +92,11 @@ Exercise inbound routing through the worker's public API with native participant
 
 Run focused telephony tests, then the LiveKit package suite, source type checking, package build/lint, and canonical documentation checks. Add a package changeset for the new opt-in behavior.
 
-Keep a controlled real SIP call check pending until a test trunk and destination are explicitly selected. Automated tests must never place a real phone call. PostgreSQL verification and the previously requested live voice-call check remain pending separately.
+Keep a controlled real SIP call check pending until a test trunk and destination are explicitly selected. Automated tests must never place a real phone call. PostgreSQL verification is recorded below. The previously requested live voice-call check remains pending.
 
 ## Implementation verification
 
-- All 361 enabled LiveKit package tests pass; the PostgreSQL test remains skipped without its database URL.
+- Initial telephony verification passed all 361 enabled LiveKit package tests. Subsequent DTMF and PostgreSQL verification brings the full suite to 386 passing tests with none skipped.
 - The 24 new telephony tests exercise native server SDK requests over local HTTP and inbound worker startup against a real local LiveKit server (1.13.10), with native RTC participants and real LibSQL-backed Memory. The SIP service boundary is simulated; no telephone network was contacted.
 - Removing native answer waiting makes the test observe an early greeting. Removing explicit caller binding makes the native room test receive the unrelated participant's text. Both mutations were restored after confirming failure.
 - Caller isolation passed 20 consecutive native-room runs.
@@ -112,7 +112,7 @@ LIVEKIT_TEST_ROOM_URL=ws://127.0.0.1:17880 pnpm --filter @mastra/livekit test sr
 
 The suite defaults to the development key/secret and accepts `LIVEKIT_TEST_ROOM_API_KEY` and `LIVEKIT_TEST_ROOM_API_SECRET` for a differently configured local server. It rejects non-local server URLs and never provisions or dials a real SIP trunk. Without the URL, these five native-room tests are skipped; the 19 HTTP SDK tests still run.
 
-A real carrier/audio call and PostgreSQL verification remain separate release checks. Loadsmart's deployed worker has not been migrated.
+PostgreSQL verification passed on October 20, 2026; see `transcript-persistence-prd.md` for coverage and tested versions. A real carrier/audio call remains a release check. Loadsmart's deployed worker has not been migrated.
 
 ## Sources
 

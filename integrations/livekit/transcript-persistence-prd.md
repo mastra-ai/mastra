@@ -1,6 +1,7 @@
 # LiveKit transcript persistence with Mastra Memory
 
-**Status:** Implemented; PostgreSQL and voice-call release checks pending  
+**Status:** Implemented; PostgreSQL verified; controlled voice-call check pending
+
 **Date:** October 13, 2026  
 **Package:** `@mastra/livekit`  
 **Audience:** Mastra maintainers and the Loadsmart integration team
@@ -215,13 +216,21 @@ Before implementation, confirm the supported first-release Memory configurations
 
 ## Implementation verification
 
-The package suite passes 337 tests. Source and focused test type checks, package lint, ESM/CommonJS builds with declarations, and documentation checks pass. Storage-backed tests use real Memory with LibSQL; remote tests use the actual authenticated Mastra Hono routes through an in-process HTTP transport. A native LiveKit text session verifies committed events without provider credentials.
+Initial transcript implementation verification passed 337 tests, source and focused test type checks, package lint, ESM/CommonJS builds with declarations, and documentation checks. Storage-backed tests use real Memory with LibSQL; remote tests use the actual authenticated Mastra Hono routes through an in-process HTTP transport. A native LiveKit text session verifies committed events without provider credentials.
 
 Initial implementation verification used `@livekit/agents` 1.7.1, `@mastra/memory` 1.37.1-alpha.2, `@mastra/libsql` 1.26.1-alpha.0, and `@mastra/client-js` 1.54.0-alpha.2. The release now requires Agents and installed LiveKit/Silero plugins `^1.9.3`, with RTC `^1.1.0` required by LiveKit. See the stable dependency audit in `TODO.md` for the subsequent verification results.
 
 A local 1,000-message benchmark measured event-enqueue overhead at approximately 0.016 ms at the 99th percentile and the next-generation check after all writes finished at under 0.002 ms. These figures exclude network, storage, embedding, and real audio latency. Tests independently verify that blocked writes don't block the current reply and that the next generation waits for preceding writes.
 
-The PostgreSQL test is included but skipped without `LIVEKIT_TEST_PG_URL`; no local test database or running Docker service was available. Before release, run it against a disposable PostgreSQL database and complete the controlled voice-call check for greeting, interruption/resumption, and shutdown. No Loadsmart worker migration has been performed.
+PostgreSQL verification completed on October 20, 2026, using a disposable PostgreSQL 16.15 container, workspace `@mastra/pg` 1.31.2-alpha.1, and `@mastra/memory` 1.38.0-alpha.0. The test reads through an independent database connection and verifies committed interrupted text, in-place revisions, duplicate native events, stable message IDs, equal-timestamp order, and shutdown flushing. A temporary mutation that discarded revisions failed on the saved text, and the restored implementation passes. No production-code fix was needed. Semantic recall was disabled; this check does not measure embeddings or production-storage latency.
+
+Run the PostgreSQL test with a disposable localhost database:
+
+```sh
+LIVEKIT_TEST_PG_URL=postgresql://USER:PASSWORD@127.0.0.1:PORT/DATABASE pnpm --filter @mastra/livekit test src/transcript-pg.test.ts
+```
+
+With both `LIVEKIT_TEST_PG_URL` and `LIVEKIT_TEST_ROOM_URL` configured, the full package suite passes all 386 tests with none skipped. The PostgreSQL test remains opt-in when no database URL is supplied. Before release, complete the controlled voice-call check for greeting, interruption/resumption, latency, and shutdown. No Loadsmart worker migration has been performed.
 
 ## Implementation references
 
