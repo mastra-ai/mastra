@@ -9,6 +9,7 @@ import {
   viewerSidebarCapabilities,
 } from './fixtures/sidebar-permissions';
 import { authHandler, BASE_URL, builderHandler, renderSidebar, systemPackagesHandler } from './render-sidebar';
+import { providersResponse } from '@/pages/connections/__tests__/fixtures/user-connect';
 import { server } from '@/test/msw-server';
 
 beforeEach(() => {
@@ -19,6 +20,9 @@ beforeEach(() => {
     systemPackagesHandler(),
     http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(noMcpServers)),
     http.get(`${BASE_URL}/api/workspaces`, () => HttpResponse.json(noWorkspaces)),
+    // Mounted connect surface, so the Connections entry is available and these
+    // tests exercise RBAC gating alone.
+    http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
   );
 });
 
