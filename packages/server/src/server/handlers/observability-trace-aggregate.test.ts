@@ -253,6 +253,31 @@ describe('AGGREGATE_TRACES', () => {
     );
   });
 
+  it('gates time to first chunk predicates on the store advertising support', async () => {
+    const request = {
+      timeRange: TIME_RANGE,
+      where: { op: 'gt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 500 } },
+      measures: ['count'],
+    };
+    const older = createHarness(['trace-aggregate']);
+    const error = await captureHttpException(AGGREGATE_TRACES.handler(params(older.mastra, request)));
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'TRACE_AGGREGATE_UNSUPPORTED',
+      message: 'Time to first chunk predicates are not supported by the configured observability store',
+    });
+    expect(older.observabilityStore.aggregateTraces).not.toHaveBeenCalled();
+
+    const supported = createHarness(['trace-aggregate', 'trace-query-time-to-first-chunk']);
+    await AGGREGATE_TRACES.handler(params(supported.mastra, request));
+    expect(supported.observabilityStore.aggregateTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { type: 'comparison', field: 'timeToFirstChunkMs', operator: 'gt', value: 500 },
+      }),
+    );
+  });
+
   it('returns 501 before calling an older store for context identifier predicates', async () => {
     const wheres = [
       { op: 'eq', left: { path: 'userId' }, right: { literal: 'user-1' } },
@@ -295,6 +320,61 @@ describe('AGGREGATE_TRACES', () => {
         },
       }),
     );
+  });
+
+  it('rejects root span name and type with 422 when the store does not support them', async () => {
+    const cases = [
+      {
+        request: {
+          timeRange: TIME_RANGE,
+          where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'workflow_run' } },
+          measures: ['count'],
+        },
+        path: ['where'],
+      },
+      {
+        request: { timeRange: TIME_RANGE, groupBy: ['entityName', 'name'], measures: ['count'] },
+        path: ['groupBy', 1],
+      },
+      { request: { timeRange: TIME_RANGE, measures: ['count', 'countDistinct.spanType'] }, path: ['measures', 1] },
+    ];
+    for (const { request, path } of cases) {
+      const { mastra, observabilityStore } = createHarness(['trace-aggregate']);
+      const error = await captureHttpException(AGGREGATE_TRACES.handler(params(mastra, request)));
+
+      expect(error.status).toBe(422);
+      const body = getDeclaredErrorSchema(422).parse(await error.getResponse().json());
+      expect(body).toMatchObject({ code: 'TRACE_QUERY_INVALID', issues: [{ code: 'field_not_allowed', path }] });
+      expect(observabilityStore.aggregateTraces).not.toHaveBeenCalled();
+    }
+  });
+
+  it('passes root span name and type to stores that advertise support, and span-scope ones to any store', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-aggregate', 'trace-query-root-span-fields']);
+    await AGGREGATE_TRACES.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: { op: 'eq', left: { path: 'name' }, right: { literal: 'nightly-sync' } },
+        groupBy: ['spanType'],
+        measures: ['count', 'countDistinct.name'],
+      }),
+    );
+    expect(observabilityStore.aggregateTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { type: 'comparison', field: 'name', operator: 'eq', value: 'nightly-sync' },
+        dimensions: ['spanType'],
+      }),
+    );
+
+    const legacy = createHarness(['trace-aggregate']);
+    await AGGREGATE_TRACES.handler(
+      params(legacy.mastra, {
+        timeRange: TIME_RANGE,
+        where: { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } } },
+        measures: ['count'],
+      }),
+    );
+    expect(legacy.observabilityStore.aggregateTraces).toHaveBeenCalledOnce();
   });
 
   it('scopes the plan to the trusted tenant and never runs a scoped request unscoped', async () => {

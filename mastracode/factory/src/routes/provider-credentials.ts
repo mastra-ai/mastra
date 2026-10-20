@@ -17,6 +17,7 @@
 import type { Context } from 'hono';
 
 import { factoryUserOrgId } from '../auth.js';
+import { providerDisplayName } from '../provider-display-name.js';
 import type {
   CredentialRecord,
   LoginSessionKind,
@@ -37,7 +38,7 @@ export { getCredentialProviderId as getAuthProviderId } from '@mastra/code-sdk/p
  * *catalog* provider id (what the routes and settings UI use). All flows need
  * no inbound connection to the server: Anthropic uses paste-code PKCE, the
  * rest use RFC 8628-style device codes. `subscription` names the plan the
- * sign-in bills, as shown under a reply.
+ * sign-in bills, as shown under a reply and in the composer.
  */
 export const WEB_OAUTH_PROVIDERS: Readonly<Record<string, { flow: LoginSessionKind; subscription: string }>> = {
   anthropic: { flow: 'paste-code', subscription: 'Claude Pro/Max' },
@@ -45,6 +46,12 @@ export const WEB_OAUTH_PROVIDERS: Readonly<Record<string, { flow: LoginSessionKi
   'github-copilot': { flow: 'device-code', subscription: 'GitHub Copilot' },
   xai: { flow: 'device-code', subscription: 'SuperGrok/X Premium+' },
 };
+
+export function credentialLabel(provider: string, credentialType: CredentialRecord['credential']['type']) {
+  return credentialType === 'api_key'
+    ? `${providerDisplayName(provider)} API key`
+    : WEB_OAUTH_PROVIDERS[provider]?.subscription;
+}
 
 export type CredentialContext =
   | { mode: 'local' }

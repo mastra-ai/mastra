@@ -1,6 +1,10 @@
 import {
+  countTraceAggregateBuckets,
+  parseTraceAggregateRequest,
   parseTraceQueryRequest,
+  planTraceAggregate,
   planTraceQuery,
+  TRACE_AGGREGATE_MAX_ROWS,
   traceAggregateResponseSchema,
   type TraceQueryPredicate,
 } from '@mastra/core/storage';
@@ -13,6 +17,8 @@ import {
   TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES,
   TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
   TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
+  TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_YEAR_FIXTURE_DATA,
   traceAggregatePercentile,
   traceAggregateResponseMismatch,
 } from './trace-aggregate';
@@ -39,6 +45,8 @@ describe('trace-aggregate reference evaluator', () => {
       undefined,
       { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
       { spans: { some: { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } } } },
+      { op: 'eq', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
+      { op: 'ne', left: { path: 'name' }, right: { literal: 'root-a' } },
     ];
     for (const where of predicates) {
       const plan = planTraceQuery(parseTraceQueryRequest({ timeRange: fullRange, where }));
@@ -385,5 +393,85 @@ describe('trace-aggregate token and cost conformance cases', () => {
     });
     // sup-1 has two `sup-1-in` rows (1000 each) and sup-2 has no metric rows in this slice.
     expect(response.rows).toEqual([{ measures: { 'tokens.input.sum': 1000 } }]);
+  });
+});
+
+describe('trace-aggregate 365-day conformance cases', () => {
+  it('uses case names unique across every suite', () => {
+    const names = [
+      ...TRACE_AGGREGATE_CONFORMANCE_CASES,
+      ...TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES,
+      ...TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES,
+      ...TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES,
+    ].map(testCase => testCase.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it.each(TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES)('$name', testCase => {
+    const actual = evaluateTraceAggregateRequest(TRACE_AGGREGATE_YEAR_FIXTURE_DATA, testCase.request, testCase.scope);
+    expect(actual).toEqual(testCase.expected);
+    expect(traceAggregateResponseMismatch(actual, testCase)).toBeNull();
+  });
+
+  it('hand-written expectations satisfy the response contract and project exactly the requested measures', () => {
+    for (const testCase of TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES) {
+      expect(() => traceAggregateResponseSchema.parse(testCase.expected), testCase.name).not.toThrow();
+      const groupBy = testCase.request.groupBy ?? [];
+      for (const row of testCase.expected.rows) {
+        expect(Object.keys(row.measures), testCase.name).toEqual(testCase.request.measures);
+        expect(Object.keys(row.dimensions ?? {}), testCase.name).toEqual(groupBy);
+        expect('bucket' in row, testCase.name).toBe(testCase.request.interval !== undefined);
+      }
+    }
+  });
+
+  it('spans the widest window the planner accepts, at 365 daily buckets, up to the row cap', () => {
+    for (const testCase of TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES) {
+      const { from, to } = testCase.request.timeRange;
+      expect(Date.parse(to) - Date.parse(from), testCase.name).toBe(365 * 24 * 60 * 60 * 1000);
+      // Every case plans: the window and limit are within bounds.
+      expect(() => planTraceAggregate(parseTraceAggregateRequest(testCase.request)), testCase.name).not.toThrow();
+    }
+    const { from, to } = TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES[0]!.request.timeRange;
+    const buckets = countTraceAggregateBuckets(Date.parse(from), Date.parse(to), '1d');
+    expect(buckets).toBe(365);
+    const maxLimit = Math.max(...TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES.map(testCase => testCase.request.limit ?? 0));
+    expect(maxLimit * buckets).toBeLessThanOrEqual(TRACE_AGGREGATE_MAX_ROWS);
+    expect((maxLimit + 1) * buckets).toBeGreaterThan(TRACE_AGGREGATE_MAX_ROWS);
+  });
+
+  it('includes a group whose single bucket outranks every other bucket but that loses on the whole window', () => {
+    const limited = TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES.find(
+      testCase => testCase.request.interval === '1d' && testCase.request.limit === 2,
+    )!;
+    const all = evaluateTraceAggregateRequest(TRACE_AGGREGATE_YEAR_FIXTURE_DATA, {
+      ...limited.request,
+      limit: 27,
+    });
+    const largest = all.rows.reduce((max, row) => (row.measures.count! > max.measures.count! ? row : max));
+    const kept = new Set(limited.expected.rows.map(row => row.dimensions!.entityName));
+    expect(kept.has(largest.dimensions!.entityName!)).toBe(false);
+    // Each kept series is longer than the limit, so a row-based LIMIT would cut it mid-series.
+    for (const name of kept) {
+      expect(limited.expected.rows.filter(row => row.dimensions!.entityName === name).length).toBeGreaterThan(2);
+    }
+  });
+
+  it('aggregates exactly the population evaluateTraceQuery selects for every case', () => {
+    for (const testCase of TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES) {
+      const { timeRange, where } = testCase.request;
+      const plan = planTraceQuery(parseTraceQueryRequest({ timeRange, where, page: { limit: 1000 } }), {
+        scope: testCase.scope,
+      });
+      const traces = evaluateTraceQuery(TRACE_AGGREGATE_YEAR_FIXTURE_DATA, plan);
+      if (!('traces' in traces)) throw new Error('Expected traces');
+      const aggregate = evaluateTraceAggregateRequest(
+        TRACE_AGGREGATE_YEAR_FIXTURE_DATA,
+        { timeRange, where, measures: ['count'] },
+        testCase.scope,
+      );
+      expect(aggregate.rows).toEqual([{ measures: { count: traces.traces.length } }]);
+      expect(traces.traces.length, testCase.name).toBe(41);
+    }
   });
 });

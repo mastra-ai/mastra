@@ -4,11 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { MemorySettingsRecord } from '../storage/domains/memory-settings/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
-import {
-  hydrateSessionMemorySettings,
-  layerPersonalMemorySettings,
-  type MemorySettingsHydrationDependencies,
-  type MemorySettingsHydrationSession,
+import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './memory-settings-hydration.js';
+import type {
+  MemorySettingsHydrationDependencies,
+  MemorySettingsHydrationSession,
 } from './memory-settings-hydration.js';
 
 function createSession(state: MastraCodeState = {}) {

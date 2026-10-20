@@ -304,6 +304,7 @@ export function TraceDataPanelView({
     () => (anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : spans?.find(s => s.parentSpanId == null)),
     [spans, anchorSpanId],
   );
+  const rootError = getSpanError(rootSpan?.error);
   const handleSpanClick = (id: string) => {
     const newId = selectedSpanId === id ? undefined : id;
     setSelectedSpanId(newId);
@@ -365,16 +366,20 @@ export function TraceDataPanelView({
           </DataPanel.Header>
         ) : (
           <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
-            <DataPanel.Header className="border-b border-border">
-              <TabList variant="pill-ghost" size="sm">
-                {sideViews.map(view => (
-                  <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
-                    {view.label}
-                  </Tab>
-                ))}
-              </TabList>
+            {/* `flex-nowrap` + a shrinkable tab column: the tab list's scroll wrapper is full-width,
+                so in a wrapping row it would push the actions onto a second line. */}
+            <DataPanel.Header className="flex-nowrap border-b border-border">
+              <div className="min-w-0 flex-1">
+                <TabList variant="pill-ghost" size="sm">
+                  {sideViews.map(view => (
+                    <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
+                      {view.label}
+                    </Tab>
+                  ))}
+                </TabList>
+              </div>
               {sideHeaderActions && (
-                <div className="ml-auto flex shrink-0 items-center whitespace-nowrap">
+                <div className="flex shrink-0 items-center whitespace-nowrap">
                   {sideHeaderActions({ compact: compactSide })}
                 </div>
               )}
@@ -470,7 +475,7 @@ export function TraceDataPanelView({
                       size="sm"
                       value={query}
                       onValueChange={setQuery}
-                      className="w-full"
+                      className="min-w-0 flex-1"
                     />
                     <ButtonsGroup size="sm" className="shrink-0">
                       <Button
@@ -525,6 +530,26 @@ export function TraceDataPanelView({
                           </Notice>
                         )}
 
+                      {rootSpan && rootError && (
+                        <Notice
+                          variant="destructive"
+                          title={rootError.name ?? 'Error'}
+                          action={
+                            <Notice.Button
+                              onClick={() => {
+                                setSelectedSpanId(rootSpan.spanId);
+                                onSpanSelect?.(rootSpan.spanId);
+                              }}
+                            >
+                              View details
+                            </Notice.Button>
+                          }
+                          className="mb-4"
+                        >
+                          <Notice.Message className="line-clamp-3">{rootError.message}</Notice.Message>
+                        </Notice>
+                      )}
+
                       {/* Both views share selection + expansion state, and stay mounted with no
                     results because they host the search field: unmounting would strand the
                     user with a query they can no longer clear. */}
@@ -540,6 +565,15 @@ export function TraceDataPanelView({
       )}
     </DataPanel>
   );
+}
+
+/** The error a span recorded, when it has the `{ name?, message }` shape spans store. */
+function getSpanError(error: unknown): { name?: string; message: string } | undefined {
+  if (typeof error !== 'object' || error === null || !('message' in error) || typeof error.message !== 'string') {
+    return undefined;
+  }
+  const name = 'name' in error && typeof error.name === 'string' ? error.name : undefined;
+  return { name, message: error.message };
 }
 
 /**

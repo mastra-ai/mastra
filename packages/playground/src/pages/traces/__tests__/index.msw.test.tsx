@@ -593,7 +593,7 @@ describe('Traces side panel Scores view', () => {
       const longReason = 'a'.repeat(200);
       await openScoresTab({
         ...traceSpanScores,
-        scores: [{ ...traceSpanScores.scores[0]!, reason: longReason }],
+        scores: [{ ...traceSpanScores.scores[0], reason: longReason }],
       });
 
       const preview = await screen.findByText(new RegExp(`^${'a'.repeat(100)}…`));
@@ -664,13 +664,13 @@ describe('Traces page columns menu', () => {
               devicePixelContentBoxSize: [{ inlineSize: 800, blockSize: 600 }],
             },
           ],
-          this as unknown as ResizeObserver,
+          this,
         );
       }
       unobserve() {}
       disconnect() {}
     }
-    globalThis.ResizeObserver = LayoutResizeObserver as unknown as typeof ResizeObserver;
+    globalThis.ResizeObserver = LayoutResizeObserver;
     layoutStubs = {
       rect: vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600)),
       resizeObserver: originalResizeObserver,
@@ -818,8 +818,8 @@ describe('Traces page filter bar', () => {
       const chips = [...getFilterChips()];
       expect(chips).toHaveLength(1);
       expect(chips[0]?.textContent).toContain('Time');
-      expect(within(chips[0]!).getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
-      expect(within(chips[0]!).queryByRole('button', { name: /remove/i })).toBeNull();
+      expect(within(chips[0]).getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+      expect(within(chips[0]).queryByRole('button', { name: /remove/i })).toBeNull();
       expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
     });
   });
@@ -1317,7 +1317,7 @@ describe('Traces page filter bar', () => {
 
       const chip = getFilterChips()[1];
       expect(chip?.textContent).toBe('Span errorexists');
-      expect(within(chip!).queryByRole('combobox', { name: /^Value/ })).toBeNull();
+      expect(within(chip).queryByRole('combobox', { name: /^Value/ })).toBeNull();
     });
 
     it('sends an exists predicate inside spans.some', async () => {
@@ -1438,7 +1438,7 @@ describe('Agent traces page opened from a conversation', () => {
 
       const chips = [...getFilterChips()].slice(1);
       expect(chips.map(chip => chip.textContent)).toEqual(['Thread IDisthread-1']);
-      expect(within(chips[0]!).getByRole('button', { name: /remove/i })).toBeTruthy();
+      expect(within(chips[0]).getByRole('button', { name: /remove/i })).toBeTruthy();
       expect(screen.getByTestId('location').textContent).not.toContain('status=');
     });
   });
@@ -1447,7 +1447,7 @@ describe('Agent traces page opened from a conversation', () => {
     it('lists all of the agent traces', async () => {
       await renderFromConversation();
 
-      fireEvent.click(within([...getFilterChips()][1]!).getByRole('button', { name: /remove/i }));
+      fireEvent.click(within([...getFilterChips()][1]).getByRole('button', { name: /remove/i }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('filterThreadId'));
       expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent');
@@ -1458,7 +1458,7 @@ describe('Agent traces page opened from a conversation', () => {
     it('does not remember the conversation for the next visit', async () => {
       await renderFromConversation();
 
-      fireEvent.click(within([...getFilterChips()][0]!).getByRole('button', { name: 'Value: Last 7 days' }));
+      fireEvent.click(within([...getFilterChips()][0]).getByRole('button', { name: 'Value: Last 7 days' }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('datePreset=last-24h'));

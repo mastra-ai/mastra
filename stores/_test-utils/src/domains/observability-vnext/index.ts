@@ -13,6 +13,7 @@ import {
   planTraceQuery,
   planTraceQueryObservedFields,
   planTraceQueryValues,
+  TraceQueryCursorError,
 } from '@mastra/core/storage';
 import type {
   TraceQueryTenantScope,
@@ -31,6 +32,7 @@ import {
   TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE,
 } from './trace-query-discovery';
 import {
+  collectTraceQueryPages,
   normalizeTraceQueryResponse,
   THREAD_QUERY_CONFORMANCE_CASES,
   THREAD_QUERY_FIXTURE_DATA,
@@ -100,15 +102,6 @@ export interface CreateObservabilityVNextTestsOptions {
    * inline (InMemory upsert-by-id, DuckDB `INSERT OR IGNORE`) can omit this.
    */
   flushPendingMerges?: (storage: ObservabilityStorage) => Promise<void> | void;
-  /**
-   * Optional raw read of the stored `timeToFirstChunkMs` column for one span,
-   * taken from the row that reads resolve that span to. Adapters that persist
-   * the column pass this so the suite can check what the write path stored.
-   */
-  readTimeToFirstChunkMs?: (
-    storage: ObservabilityStorage,
-    span: { traceId: string; spanId: string },
-  ) => Promise<number | null>;
 }
 
 /**
@@ -299,7 +292,7 @@ async function waitFor<T>(
 }
 
 export function createObservabilityVNextTests(options: CreateObservabilityVNextTestsOptions) {
-  const { capabilities, getStorage, cleanup, refreshDiscovery, flushPendingMerges, readTimeToFirstChunkMs } = options;
+  const { capabilities, getStorage, cleanup, refreshDiscovery, flushPendingMerges } = options;
 
   describe(`observability vNext shared suite — ${capabilities.label}`, () => {
     let storage: ObservabilityStorage;
@@ -418,6 +411,18 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         await expect(values({ predicateScope: 'trace', path: 'environment', limit: 1 })).resolves.toEqual({
           values: [{ value: 'production', count: 2 }],
           valuesTruncated: true,
+        });
+        // Root span name/type come from current qualified roots only: no superseded, pending, or child spans.
+        await expect(values({ predicateScope: 'trace', path: 'spanType' })).resolves.toEqual({
+          values: [
+            { value: 'agent_run', count: 2 },
+            { value: 'workflow_run', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'name', search: 'SYNC' })).resolves.toEqual({
+          values: [{ value: 'nightly-sync', count: 1 }],
+          valuesTruncated: false,
         });
         await expect(values({ predicateScope: 'spans', path: 'model' })).resolves.toEqual({
           values: [
@@ -2306,35 +2311,182 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       });
     });
 
-    if (readTimeToFirstChunkMs) {
-      describe('timeToFirstChunkMs column', () => {
-        it('stores the time to first chunk from the span record, keeping zero and leaving missing values empty', async () => {
+    if (capabilities.traceQuery) {
+      describe('time to first chunk on traces', () => {
+        const at = (ms: number) => new Date(VNEXT_BASE_DATE.getTime() + ms);
+        const timeRange = { from: at(-60_000).toISOString(), to: at(60_000).toISOString() };
+        const traceTtfc = async (where?: TraceQueryRequest['where']) => {
+          const response = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange, where })));
+          if (!('traces' in response)) throw new Error('Expected traces');
+          return Object.fromEntries(response.traces.map(trace => [trace.traceId, trace.timeToFirstChunkMs]));
+        };
+
+        beforeEach(async () => {
+          const span = (traceId: string, spanId: string, timeToFirstChunkMs: number | null, extra = {}) =>
+            makeSpan({ traceId, spanId, timeToFirstChunkMs, ...extra });
           await storage.batchCreateSpans({
             records: [
-              makeSpan({ traceId: 'ttfc', spanId: 'present', timeToFirstChunkMs: 250 }),
-              makeSpan({ traceId: 'ttfc', spanId: 'zero', timeToFirstChunkMs: 0 }),
-              makeSpan({ traceId: 'ttfc', spanId: 'empty', timeToFirstChunkMs: null }),
-              // Records built by a core version that predates the field leave it out.
-              makeSpan({ traceId: 'ttfc', spanId: 'missing' }),
+              // The root agent answers at 300 ms; its own generation and a nested agent never replace that.
+              span('ttfc-agent', 'agent-root', 300),
+              span('ttfc-agent', 'agent-generation', 320, {
+                parentSpanId: 'agent-root',
+                spanType: SpanType.MODEL_GENERATION,
+              }),
+              span('ttfc-agent', 'nested-agent', 50, { parentSpanId: 'agent-root' }),
+              // A workflow root never streams, even when an agent inside it does.
+              span('ttfc-workflow', 'workflow-root', null, { spanType: SpanType.WORKFLOW_RUN }),
+              span('ttfc-workflow', 'workflow-agent', 200, { parentSpanId: 'workflow-root' }),
+              span('ttfc-zero', 'zero-root', 0),
             ],
           });
           if (flushPendingMerges) await flushPendingMerges(storage);
-
-          const read = (spanId: string) => readTimeToFirstChunkMs(storage, { traceId: 'ttfc', spanId });
-          expect(await read('present')).toBe(250);
-          expect(await read('zero')).toBe(0);
-          expect(await read('empty')).toBeNull();
-          expect(await read('missing')).toBeNull();
         });
 
-        it('reads the ended value when the span started before its first chunk', async () => {
-          await storage.createSpan({ span: makeSpan({ traceId: 'ttfc', spanId: 'lifecycle', endedAt: null }) });
+        it("returns the root span's value, null when the root never streamed", async () => {
+          expect(await traceTtfc()).toEqual({ 'ttfc-agent': 300, 'ttfc-workflow': null, 'ttfc-zero': 0 });
+        });
+
+        it('filters by the root value, counting zero as a value and missing as empty', async () => {
+          const field = { path: 'timeToFirstChunkMs' } as const;
+          expect(Object.keys(await traceTtfc({ op: 'gt', left: field, right: { literal: 100 } }))).toEqual([
+            'ttfc-agent',
+          ]);
+          expect(Object.keys(await traceTtfc({ op: 'eq', left: field, right: { literal: 0 } }))).toEqual(['ttfc-zero']);
+          expect(Object.keys(await traceTtfc({ op: 'exists', path: 'timeToFirstChunkMs' })).sort()).toEqual([
+            'ttfc-agent',
+            'ttfc-zero',
+          ]);
+          expect(Object.keys(await traceTtfc({ op: 'notExists', path: 'timeToFirstChunkMs' }))).toEqual([
+            'ttfc-workflow',
+          ]);
+        });
+
+        it('returns the value in numbered pages and delta polls', async () => {
+          const page = await storage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 10 } })),
+          );
+          if (!('traces' in page)) throw new Error('Expected traces');
+          expect(Object.fromEntries(page.traces.map(trace => [trace.traceId, trace.timeToFirstChunkMs]))).toEqual({
+            'ttfc-agent': 300,
+            'ttfc-workflow': null,
+            'ttfc-zero': 0,
+          });
+
+          const feature = 'observability-delta-polling';
+          const wasEnabled = coreFeatures.has(feature);
+          coreFeatures.add(feature);
+          try {
+            const request = { timeRange, mode: 'delta' as const, limit: 10 };
+            const bootstrap = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest(request)));
+            if (!('delta' in bootstrap)) throw new Error('Expected delta');
+            await storage.batchCreateSpans({
+              records: [makeSpan({ traceId: 'ttfc-late', spanId: 'late-root', timeToFirstChunkMs: 75 })],
+            });
+            if (flushPendingMerges) await flushPendingMerges(storage);
+            const polled = await waitFor(
+              async () => {
+                const batch = await storage.queryTraces(
+                  planTraceQuery(parseTraceQueryRequest({ ...request, after: bootstrap.deltaCursor })),
+                );
+                if (!('delta' in batch)) throw new Error('Expected delta');
+                return batch.traces.map(trace => [trace.traceId, trace.timeToFirstChunkMs]);
+              },
+              rows => rows.length > 0,
+            );
+            expect(polled).toEqual([['ttfc-late', 75]]);
+          } finally {
+            if (!wasEnabled) coreFeatures.delete(feature);
+          }
+        });
+
+        it("filters by any span's value", async () => {
+          const fast = await traceTtfc({
+            spans: { some: { op: 'lt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 100 } } },
+          });
+          expect(Object.keys(fast).sort()).toEqual(['ttfc-agent', 'ttfc-zero']);
+        });
+      });
+
+      describe('sort by time to first chunk on traces', () => {
+        const at = (ms: number) => new Date(VNEXT_BASE_DATE.getTime() + ms);
+        const timeRange = { from: at(-60_000).toISOString(), to: at(60_000).toISOString() };
+        // Ties break by traceId; empty values sort last in both directions.
+        const expected = {
+          asc: ['sort-zero', 'sort-fast', 'sort-fraction', 'sort-tie-a', 'sort-tie-b', 'sort-empty-a', 'sort-empty-b'],
+          desc: ['sort-tie-a', 'sort-tie-b', 'sort-fraction', 'sort-fast', 'sort-zero', 'sort-empty-a', 'sort-empty-b'],
+        };
+        const orderBy = (direction: 'asc' | 'desc') => [{ field: 'timeToFirstChunkMs' as const, direction }];
+
+        beforeEach(async () => {
+          const root = (traceId: string, timeToFirstChunkMs: number | null, offsetMs: number) =>
+            makeSpan({ traceId, spanId: `${traceId}-root`, timeToFirstChunkMs, startedAt: at(offsetMs) });
           await storage.batchCreateSpans({
-            records: [makeSpan({ traceId: 'ttfc', spanId: 'lifecycle', timeToFirstChunkMs: 400 })],
+            records: [
+              root('sort-tie-b', 300, 1000),
+              root('sort-empty-b', null, 2000),
+              root('sort-fraction', 120.5, 3000),
+              root('sort-tie-a', 300, 4000),
+              root('sort-zero', 0, 5000),
+              root('sort-empty-a', null, 6000),
+              root('sort-fast', 50, 7000),
+              // Only the root's value counts, never a child's.
+              makeSpan({
+                traceId: 'sort-empty-a',
+                spanId: 'sort-empty-a-child',
+                parentSpanId: 'sort-empty-a-root',
+                timeToFirstChunkMs: 1,
+                startedAt: at(6000),
+              }),
+            ],
           });
           if (flushPendingMerges) await flushPendingMerges(storage);
+        });
 
-          expect(await readTimeToFirstChunkMs(storage, { traceId: 'ttfc', spanId: 'lifecycle' })).toBe(400);
+        it('advertises the sort', () => {
+          expect(storage.getFeatures()).toContain('trace-query-time-to-first-chunk-sort');
+        });
+
+        it.each(['asc', 'desc'] as const)('pages %s with empty values last at every page size', async direction => {
+          for (const limit of [1, 2, 3, 7]) {
+            const pages = await collectTraceQueryPages(request => storage.queryTraces(planTraceQuery(request)), {
+              timeRange,
+              orderBy: orderBy(direction),
+              page: { limit },
+            });
+            expect(pages, `limit ${limit}`).toEqual(expected[direction].map(traceId => ({ traceId })));
+          }
+        });
+
+        it.each(['asc', 'desc'] as const)('numbers pages %s in the same order', async direction => {
+          const traceIds: string[] = [];
+          for (let page = 0; page < 4; page++) {
+            const response = await storage.queryTraces(
+              planTraceQuery(
+                parseTraceQueryRequest({ timeRange, orderBy: orderBy(direction), pagination: { page, perPage: 2 } }),
+              ),
+            );
+            if (!('traces' in response)) throw new Error('Expected traces');
+            traceIds.push(...response.traces.map(trace => trace.traceId));
+          }
+          expect(traceIds).toEqual(expected[direction]);
+        });
+
+        it('resumes after an empty value and rejects the cursor once the sort changes', async () => {
+          const request = { timeRange, orderBy: orderBy('asc'), page: { limit: 6 } };
+          const first = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest(request)));
+          if (!('page' in first) || !('traces' in first)) throw new Error('Expected a keyset trace page');
+          expect(first.traces.at(-1)).toMatchObject({ traceId: 'sort-empty-a', timeToFirstChunkMs: null });
+          const after = first.page.next!;
+          const rest = await storage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ ...request, page: { limit: 6, after } })),
+          );
+          expect('traces' in rest && rest.traces.map(trace => trace.traceId)).toEqual(['sort-empty-b']);
+
+          for (const changed of [orderBy('desc'), [{ field: 'startedAt' as const, direction: 'asc' as const }]]) {
+            expect(() =>
+              planTraceQuery(parseTraceQueryRequest({ ...request, orderBy: changed, page: { limit: 6, after } })),
+            ).toThrowError(TraceQueryCursorError);
+          }
         });
       });
     }

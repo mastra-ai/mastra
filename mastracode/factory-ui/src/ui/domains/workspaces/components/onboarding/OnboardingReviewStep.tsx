@@ -5,12 +5,8 @@ import { Building2, GitBranch, Sparkles, UserRound } from 'lucide-react';
 import { CONNECTION_METHOD_LABEL } from '../../hooks/useProviderConnection';
 import { SETUP_LABELS } from '../../services/onboardingSteps';
 import { isGitLabRepository } from '../../services/github';
-import {
-  completeOnboardingSchema,
-  type OnboardingDraft,
-  type OnboardingModelScope,
-  type OnboardingStep,
-} from '../../services/onboardingFlow';
+import { completeOnboardingSchema } from '../../services/onboardingFlow';
+import type { OnboardingDraft, OnboardingModelScope, OnboardingStep } from '../../services/onboardingFlow';
 
 import { OnboardingReviewRow } from './OnboardingReviewRow';
 import { OnboardingWorkReviewRow } from './OnboardingWorkReviewRow';

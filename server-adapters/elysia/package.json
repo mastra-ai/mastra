@@ -1,6 +1,6 @@
 {
   "name": "@mastra/elysia",
-  "version": "0.1.19-alpha.3",
+  "version": "0.1.19-alpha.8",
   "description": "Mastra Elysia adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
     "fetch-to-node": "^2.1.0"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.62",
+    "@ai-sdk/openai": "^2.0.135",
     "@elysiajs/cors": "^1.4.1",
     "@elysiajs/openapi": "^1.4.14",
     "@internal/lint": "workspace:*",

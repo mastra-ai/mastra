@@ -165,7 +165,14 @@ export const API_ROUTE_METADATA = {
       "agentId"
     ],
     "queryParams": [],
-    "bodyParams": [],
+    "bodyParams": [
+      "ifActive",
+      "ifIdle",
+      "message",
+      "resourceId",
+      "runId",
+      "threadId"
+    ],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {
@@ -179,7 +186,14 @@ export const API_ROUTE_METADATA = {
       "agentId"
     ],
     "queryParams": [],
-    "bodyParams": [],
+    "bodyParams": [
+      "ifActive",
+      "ifIdle",
+      "message",
+      "resourceId",
+      "runId",
+      "threadId"
+    ],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {
@@ -193,7 +207,14 @@ export const API_ROUTE_METADATA = {
       "agentId"
     ],
     "queryParams": [],
-    "bodyParams": [],
+    "bodyParams": [
+      "ifActive",
+      "ifIdle",
+      "resourceId",
+      "runId",
+      "signal",
+      "threadId"
+    ],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {
@@ -207,7 +228,14 @@ export const API_ROUTE_METADATA = {
       "agentId"
     ],
     "queryParams": [],
-    "bodyParams": [],
+    "bodyParams": [
+      "ifActive",
+      "ifIdle",
+      "resourceId",
+      "runId",
+      "signal",
+      "threadId"
+    ],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {
@@ -324,6 +352,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "clientTools",
       "format",
       "model",
       "modelSettings",
@@ -346,6 +375,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "clientTools",
       "format",
       "model",
       "modelSettings",
@@ -2089,7 +2119,9 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
+      "orderBy",
       "page",
+      "timeRange",
       "traces",
       "where"
     ],
@@ -5703,7 +5735,10 @@ export const API_ROUTE_METADATA = {
       "datasetId"
     ],
     "queryParams": [],
-    "bodyParams": [],
+    "bodyParams": [
+      "baselineId",
+      "experimentIds"
+    ],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {
@@ -6178,7 +6213,27 @@ export const API_ROUTE_METADATA = {
     "path": "/schedules",
     "pathParams": [],
     "queryParams": [],
-    "bodyParams": [],
+    "bodyParams": [
+      "agentId",
+      "attributes",
+      "cron",
+      "id",
+      "ifActive",
+      "ifIdle",
+      "initialState",
+      "inputData",
+      "metadata",
+      "name",
+      "prompt",
+      "providerOptions",
+      "requestContext",
+      "resourceId",
+      "signalType",
+      "tagName",
+      "threadId",
+      "timezone",
+      "workflowId"
+    ],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {

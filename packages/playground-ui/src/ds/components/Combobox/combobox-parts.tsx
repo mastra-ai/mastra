@@ -13,20 +13,10 @@ import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { menuLabelClass, menuSeparatorClass } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
+import { usePopupAnchor } from '@/ds/primitives/popup-anchor';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import type { PortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
-
-/**
- * The field the list opens under, set by ComboboxInput or ComboboxChips. Without one (a compact
- * ComboboxTrigger with ComboboxSearch in the popup) the popup anchors to the trigger.
- */
-type FieldAnchor = {
-  field?: HTMLElement;
-  /** A ref callback: React passes `null` when the field unmounts. */
-  setField: (field: HTMLElement | null) => void;
-};
-const FieldAnchorContext = React.createContext<FieldAnchor | undefined>(undefined);
 
 /**
  * Root. Same props as Base UI's `Combobox.Root` (`items`, `value`, `onValueChange`, `multiple`,
@@ -39,13 +29,7 @@ const FieldAnchorContext = React.createContext<FieldAnchor | undefined>(undefine
 function ComboboxRoot<Value, Multiple extends boolean | undefined = false>(
   props: BaseCombobox.Root.Props<Value, Multiple>,
 ) {
-  // Set through a ref callback, which reports `null` on detach; read as `undefined` below.
-  const [field, setField] = React.useState<HTMLElement | null>(null);
-  return (
-    <FieldAnchorContext.Provider value={{ field: field ?? undefined, setField }}>
-      <BaseCombobox.Root {...props} />
-    </FieldAnchorContext.Provider>
-  );
+  return <BaseCombobox.Root {...props} />;
 }
 
 /**
@@ -57,8 +41,7 @@ const fieldClass = (size: TextButtonSize = 'md') =>
     comboboxTriggerClass({ variant: 'default', size }),
     // The Button recipe brightens icons on hover; a field's chevron stays muted.
     'cursor-text gap-2 focus-within:[--surface-rim:var(--field-rim-focus)] not-disabled:hover:[&_svg]:text-muted-foreground',
-    // Disabled like other form elements (muted text, not-allowed cursor). Keyed off the input because
-    // Base UI marks the input group, not the chips field, with `data-disabled`.
+    // Disabled like other form elements (muted text, not-allowed cursor), keyed off the input.
     'has-[input:disabled]:cursor-not-allowed has-[input:disabled]:bg-field-disabled has-[input:disabled]:[&_*]:cursor-not-allowed has-[input:disabled]:[&_*]:text-muted-foreground',
     // The input inside carries `aria-invalid`; the field shows it like other invalid fields.
     'has-[[aria-invalid=true]]:[--field-rim-focus:var(--destructive-indicator)] has-[[aria-invalid=true]]:[--field-rim:var(--destructive-indicator)]',
@@ -221,14 +204,8 @@ function ComboboxInput({
   onFocus,
   ...props
 }: ComboboxInputProps) {
-  const anchor = React.useContext(FieldAnchorContext);
   return (
-    <BaseCombobox.InputGroup
-      ref={anchor?.setField}
-      data-slot="combobox-input"
-      className={cn(fieldClass(size), className)}
-      style={fieldStyle}
-    >
+    <BaseCombobox.InputGroup data-slot="combobox-input" className={cn(fieldClass(size), className)} style={fieldStyle}>
       {start ? <span className="flex shrink-0 items-center">{start}</span> : null}
       <BaseCombobox.Input
         onFocus={event => {
@@ -284,7 +261,7 @@ function ComboboxContent({
   container,
   ...props
 }: ComboboxContentProps) {
-  const field = React.useContext(FieldAnchorContext)?.field;
+  const popupAnchor = usePopupAnchor();
   const resolvedContainer = usePortalContainer(container);
   return (
     <BaseCombobox.Portal container={resolvedContainer}>
@@ -293,19 +270,16 @@ function ComboboxContent({
         sideOffset={sideOffset}
         align={align}
         alignOffset={alignOffset}
-        // Base UI anchors to the input (or the trigger when the input is in the popup); chips need
-        // the whole field instead.
-        anchor={anchor ?? field}
+        // Base UI anchors to the field (the InputGroup of ComboboxInput or ComboboxChips), or to the
+        // trigger when the input is in the popup; a crumb switcher anchors to the whole crumb.
+        anchor={anchor ?? popupAnchor}
         positionMethod={FLOATING_POSITION_METHOD}
         className={comboboxStyles.positioner}
       >
         <BaseCombobox.Popup
           data-slot="combobox-content"
-          className={cn(
-            comboboxStyles.popup,
-            field ? 'w-(--anchor-width)' : 'w-[max(11rem,var(--anchor-width))]',
-            className,
-          )}
+          // With the popup's `min-w-[max(11rem,var(--anchor-width))]`: the anchor's width, at least 11rem.
+          className={cn(comboboxStyles.popup, 'w-(--anchor-width)', className)}
           {...props}
         />
       </BaseCombobox.Positioner>
@@ -315,7 +289,7 @@ function ComboboxContent({
 
 /** The scrolling list. Children: a render function per item (or per group), like Base UI's List. */
 function ComboboxList({ className, ...props }: BaseCombobox.List.Props) {
-  const menu = useFluidMenu<HTMLDivElement>();
+  const menu = useFluidMenu();
   return (
     <ScrollArea maxHeight="var(--spacing-dropdown)">
       <ScrollAreaViewport className="scroll-py-8">
@@ -415,12 +389,13 @@ function ComboboxSeparator({ className, ...props }: BaseCombobox.Separator.Props
  * inside their own area so the chevron keeps its place on the first row. While the field is one
  * line it keeps the pill shape of every other field; once chips wrap it takes the Textarea corner.
  */
-function ComboboxChips({ className, children, ...props }: BaseCombobox.Chips.Props) {
-  const anchor = React.useContext(FieldAnchorContext);
-  const field = anchor?.field;
+function ComboboxChips({ className, children, 'aria-label': ariaLabel, ...props }: BaseCombobox.InputGroup.Props) {
+  // On the inner chips area, so a caller's `ref` reaches the field without merging refs.
+  const chipsRef = React.useRef<HTMLDivElement>(null);
   const [multiline, setMultiline] = React.useState(false);
 
   React.useLayoutEffect(() => {
+    const field = chipsRef.current?.parentElement;
     // No observer (e.g. jsdom in tests): the field keeps its one-row shape.
     if (!field || typeof ResizeObserver === 'undefined') return;
     // One row is the control height (the field's `min-height`); anything taller means the chips wrapped.
@@ -429,23 +404,33 @@ function ComboboxChips({ className, children, ...props }: BaseCombobox.Chips.Pro
     const observer = new ResizeObserver(() => setMultiline(field.offsetHeight > rowHeight + 1));
     observer.observe(field);
     return () => observer.disconnect();
-  }, [field]);
+  }, []);
 
+  // Chips inside an InputGroup, like Base UI's multi-select example: the popup anchors to the group.
   return (
-    <BaseCombobox.Chips
-      ref={anchor?.setField}
+    <BaseCombobox.InputGroup
       data-slot="combobox-chips"
       data-multiline={multiline ? '' : undefined}
       style={chipsFieldStyle}
-      className={cn(fieldClass(), 'h-auto min-h-control-md items-start data-multiline:rounded-xl', className)}
+      className={cn(
+        fieldClass(),
+        'h-auto min-h-control-md items-start data-multiline:rounded-xl',
+        // The chips field keeps its resting look: no open tint, no placeholder color. InputGroup sets those
+        // attributes, which the trigger recipe styles.
+        'data-[placeholder]:text-foreground data-[popup-open]:[--surface-tint:transparent]',
+        className,
+      )}
       {...props}
     >
-      <span className="flex min-w-0 flex-1 flex-wrap gap-[3px]">{children}</span>
+      {/* The label names the chips toolbar, as it did when Chips was the outer element. */}
+      <BaseCombobox.Chips ref={chipsRef} aria-label={ariaLabel} className="flex min-w-0 flex-1 flex-wrap gap-[3px]">
+        {children}
+      </BaseCombobox.Chips>
       {/* Same height as a chip, so the chevron centers on the first row. */}
       <span className="flex h-5.5 shrink-0 items-center">
         <ComboboxFieldTrigger />
       </span>
-    </BaseCombobox.Chips>
+    </BaseCombobox.InputGroup>
   );
 }
 

@@ -4,26 +4,20 @@
   "reasoning": {
     "k3": [
       {
-        "type": "toggle"
-      },
-      {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "kimi-for-coding": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "k3-256k": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "kimi-for-coding": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }

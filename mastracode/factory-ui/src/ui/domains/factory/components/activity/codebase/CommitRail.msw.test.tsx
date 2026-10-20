@@ -47,7 +47,7 @@ describe('CommitRail', () => {
     renderRail(REPOSITORY_ID);
 
     const rows = await screen.findAllByRole('link');
-    expect(rows.map(row => row.getAttribute('href'))).toEqual([COMMITS[0]!.url, COMMITS[1]!.url]);
+    expect(rows.map(row => row.getAttribute('href'))).toEqual([COMMITS[0].url, COMMITS[1].url]);
     expect(rows[0]).toHaveTextContent('Merge revised EBITDA into the base model');
     expect(rows[0]).toHaveTextContent('abcdef1');
   });
@@ -60,13 +60,13 @@ describe('CommitRail', () => {
   });
 
   it('cuts the history by day, newest day first', async () => {
-    stubCommits([COMMITS[0], { ...COMMITS[1]!, committedAt: '2026-08-29T12:00:00.000Z' }]);
+    stubCommits([COMMITS[0], { ...COMMITS[1], committedAt: '2026-08-29T12:00:00.000Z' }]);
     renderRail(REPOSITORY_ID);
 
     const days = await screen.findAllByRole('region');
     expect(days.map(day => within(day).getByRole('link').textContent)).toEqual([
-      expect.stringContaining(COMMITS[0]!.message),
-      expect.stringContaining(COMMITS[1]!.message),
+      expect.stringContaining(COMMITS[0].message),
+      expect.stringContaining(COMMITS[1].message),
     ]);
   });
 

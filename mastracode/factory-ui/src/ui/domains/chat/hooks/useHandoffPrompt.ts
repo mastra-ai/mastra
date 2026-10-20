@@ -5,8 +5,8 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { useSendAgentControllerMessageMutation } from '../../../../hooks/useAgentControllerRunMutations';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
-import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatCommands } from '../context/ChatCommandsProvider';
+import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useComposerImagesState } from '../context/useComposerImagesState';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -129,7 +129,16 @@ export function useHandoffPrompt(): void {
       prefillComposer(prompt);
       setImages(current => [...files, ...current]);
       clearPending();
-      pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
+      const reason = error instanceof Error ? error.message : 'The message could not be sent.';
+      // A 4xx means the server refused the message. Anything else (network
+      // failure, 5xx) can come after the server accepted it, so warn before a
+      // retry posts it twice.
+      pushNotice(
+        isRejectedRequest(error)
+          ? reason
+          : `${reason} The message may have been sent. Check the transcript before retrying.`,
+        'error',
+      );
     });
   }, [
     clearPending,
@@ -148,4 +157,9 @@ export function useHandoffPrompt(): void {
     switchModel,
     thinkingLevel,
   ]);
+}
+
+function isRejectedRequest(error: unknown): boolean {
+  const status = typeof error === 'object' && error !== null ? (error as { status?: unknown }).status : undefined;
+  return typeof status === 'number' && status >= 400 && status < 500;
 }

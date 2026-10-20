@@ -1,3 +1,11 @@
+type PnpmWorkspaceValue =
+  | null
+  | boolean
+  | number
+  | string
+  | PnpmWorkspaceValue[]
+  | { [key: string]: PnpmWorkspaceValue };
+
 export type BundlerConfig = {
   /**
    * Controls which dependencies are excluded from the bundle and installed separately.
@@ -46,6 +54,12 @@ export type BundlerConfig = {
    * ```
    */
   dynamicPackages?: string[];
+  /**
+   * Explicit pnpm workspace settings to write to the deployment workspace.
+   * Overrides copied source settings. Only applies to pnpm installs.
+   * Supports install-policy keys only (build approvals, minimumReleaseAge, trustPolicy, blockExoticSubdeps).
+   */
+  pnpmWorkspaceSettings?: Record<string, PnpmWorkspaceValue>;
 
   [key: symbol]: boolean | undefined;
 };

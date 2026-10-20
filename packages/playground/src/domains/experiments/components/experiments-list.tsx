@@ -7,6 +7,7 @@ import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { Trash2 } from 'lucide-react';
 import type { MouseEvent, ReactNode, SyntheticEvent } from 'react';
 import { useMemo, useRef, useState } from 'react';
+import { columnLabel, sideVariant } from './comparison/constants';
 import { DeleteExperimentDialog } from './delete-experiment-dialog';
 import {
   EXPERIMENT_DATASET_COLUMN,
@@ -51,7 +52,7 @@ export interface ExperimentsListSelection {
   onToggleSelection: (experimentId: string) => void;
   /** Receives the ids currently listed (after filtering), in display order. */
   onToggleAll: (visibleExperimentIds: string[]) => void;
-  /** Highlights the rows of this dataset: the experiments that can be compared with the selection. */
+  /** Only experiments of this dataset can join the selection; the others get a disabled checkbox. */
   comparableDatasetId?: string;
 }
 
@@ -84,7 +85,6 @@ function ExperimentRow({
   rowProps,
   onSelect,
   featured,
-  comparable,
   onDelete,
   leadingCell,
   children,
@@ -93,8 +93,6 @@ function ExperimentRow({
   rowProps: ReturnType<ReturnType<typeof useDataListKeyboard>['getRowProps']>;
   onSelect?: () => void;
   featured?: boolean;
-  /** Tints the row as comparable with the current selection. */
-  comparable?: boolean;
   onDelete: () => void;
   /** Rendered in the first column (e.g. a selection checkbox); shifts the row content one column right. */
   leadingCell?: ReactNode;
@@ -112,7 +110,6 @@ function ExperimentRow({
           colStart={colStart}
           colEnd={-2}
           featured={featured}
-          variant={comparable ? 'info' : 'default'}
           tabIndex={-1}
           onClick={(e: MouseEvent) => {
             e.stopPropagation();
@@ -127,7 +124,6 @@ function ExperimentRow({
           colStart={colStart}
           colEnd={-2}
           featured={featured}
-          variant={comparable ? 'info' : 'default'}
           to={paths.experimentLink(exp.id)}
           LinkComponent={Link}
           tabIndex={-1}
@@ -269,13 +265,27 @@ export function ExperimentsList({
         const dsName = exp.datasetId
           ? (datasetMap.get(exp.datasetId) ?? getShortId(exp.datasetId) ?? exp.datasetId)
           : '—';
+        const selectionIndex = selection?.selectedExperimentIds.indexOf(exp.id) ?? -1;
+        const isSelected = selectionIndex !== -1;
+        const isDisabled =
+          !isSelected &&
+          selection?.comparableDatasetId !== undefined &&
+          exp.datasetId !== selection.comparableDatasetId;
         const rowCells = (
-          <ExperimentRowCells experiment={exp} datasetName={dsName} review={reviewByExperiment?.get(exp.id)} />
+          <ExperimentRowCells
+            experiment={exp}
+            datasetName={dsName}
+            review={reviewByExperiment?.get(exp.id)}
+            selectionRole={
+              isSelected
+                ? {
+                    label: columnLabel(selectionIndex),
+                    variant: selectionIndex === 0 ? sideVariant.baseline : sideVariant.contender,
+                  }
+                : undefined
+            }
+          />
         );
-
-        const isSelected = selection?.selectedExperimentIds.includes(exp.id) ?? false;
-        const isComparable =
-          selection?.comparableDatasetId !== undefined && exp.datasetId === selection.comparableDatasetId;
 
         return (
           <ExperimentRow
@@ -284,12 +294,12 @@ export function ExperimentsList({
             rowProps={getRowProps(index)}
             onSelect={onSelectExperiment ? () => onSelectExperiment(exp) : undefined}
             featured={isSelected || selectedExperimentId === exp.id}
-            comparable={isComparable}
             onDelete={() => setExperimentToDelete(exp)}
             leadingCell={
               selection && (
                 <DataList.SelectCell
                   checked={isSelected}
+                  disabled={isDisabled}
                   onToggle={() => selection.onToggleSelection(exp.id)}
                   aria-label={`Select experiment ${exp.id}`}
                 />

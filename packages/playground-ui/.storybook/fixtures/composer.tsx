@@ -7,11 +7,10 @@ import {
   ComposerActions,
   ComposerBox,
   ComposerInput,
-  type ComposerInputProps,
-  type ComposerTone,
   ComposerToneLabel,
   ComposerRing,
 } from '@/ds/components/Composer';
+import type { ComposerInputProps, ComposerTone } from '@/ds/components/Composer';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/ds/components/Select';
 
 const modes = [

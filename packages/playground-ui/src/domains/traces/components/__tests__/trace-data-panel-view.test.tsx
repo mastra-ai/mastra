@@ -268,6 +268,34 @@ describe('TraceDataPanelView — trace summary description', () => {
   });
 });
 
+describe('TraceDataPanelView — trace error', () => {
+  const failedSpans = [
+    { ...rootSpanFixture[0], error: { name: 'AI_APICallError', message: 'Invalid reasoning effort' } },
+  ];
+
+  it("shows the root span's error without opening the span", () => {
+    render(<TraceDataPanelView {...baseProps} spans={failedSpans} />);
+
+    expect(screen.getByText('AI_APICallError')).toBeTruthy();
+    expect(screen.getByText('Invalid reasoning effort')).toBeTruthy();
+  });
+
+  it('opens the failed span from the error', () => {
+    const onSpanSelect = vi.fn();
+    render(<TraceDataPanelView {...baseProps} spans={failedSpans} onSpanSelect={onSpanSelect} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'View details' }));
+
+    expect(onSpanSelect).toHaveBeenLastCalledWith('root');
+  });
+
+  it('shows no error when the trace succeeded', () => {
+    render(<TraceDataPanelView {...baseProps} />);
+
+    expect(screen.queryByRole('button', { name: 'View details' })).toBeNull();
+  });
+});
+
 describe('TraceDataPanelView — span selected from the URL', () => {
   describe('when the trace is still loading', () => {
     it('keeps the requested span instead of clearing it', () => {
@@ -722,7 +750,7 @@ describe('TraceDataPanelView — following the spans it is given', () => {
       <TraceDataPanelView {...baseProps} spans={rootSpanFixture} onSaveAsDatasetItem={onSaveAsDatasetItem} />,
     );
 
-    const otherRoot = [{ ...(rootSpanFixture[0] as (typeof rootSpanFixture)[number]), spanId: 'other-root' }];
+    const otherRoot = [{ ...rootSpanFixture[0], spanId: 'other-root' }];
     rerender(<TraceDataPanelView {...baseProps} spans={otherRoot} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
     openTraceActions();
@@ -953,7 +981,9 @@ describe('TraceDataPanelView — side column views', () => {
 
     const tabs = screen.getAllByRole('tab');
     expect(tabs.every(tab => sideColumn()?.contains(tab))).toBe(true);
-    expect(tabs[0]?.closest('[role="tablist"]')?.parentElement?.parentElement?.className).toContain('border-b');
+    const bordered = tabs[0]?.closest('.border-b');
+    expect(bordered).not.toBeNull();
+    expect(sideColumn()?.contains(bordered ?? null)).toBe(true);
   });
 
   it('renders no side column when no slot is provided', () => {
