@@ -1,8 +1,5 @@
 ---
-'@mastra/client-js': patch
-'@mastra/react': patch
-'@mastra/server': patch
 'mastra': patch
 ---
 
-`mastra api` now knows the `POST /observability/spans/aggregate` route.
+Updated the CLI route metadata for `POST /observability/spans/aggregate`. This does not add a `mastra api` command for span aggregation.

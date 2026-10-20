@@ -1,8 +1,5 @@
 ---
 '@mastra/client-js': minor
-'@mastra/react': patch
-'@mastra/server': patch
-'mastra': patch
 ---
 
 Added `aggregateSpans()` for grouped span measures, such as agent-run counts by status per day, including nested agent runs.
