@@ -19,6 +19,10 @@ export type TracesExplorerPanelProps = {
   renderCreateDatasetDialog?: ComponentProps<typeof TraceAsItemDialog>['renderCreateDatasetDialog'];
   /** Host integration actions rendered alongside the trace controls. */
   headerActionsSlot?: (args: { traceId: string; spans: TraceSpanPanelProps['spans'] }) => ReactNode;
+  /** Shows "Add full trace to dataset" in the trace actions menu. Defaults to `true`. */
+  withAddTraceToDataset?: boolean;
+  /** Shows "Add tool mocks to item" in the trace actions menu for agent traces. Defaults to `true`. */
+  withAddToolMocksToItem?: boolean;
 };
 
 type DatasetDialogTarget = { traceId: string; rootSpanId: string | undefined };
@@ -27,6 +31,8 @@ export function TracesExplorerPanel({
   onOpenScore,
   renderCreateDatasetDialog,
   headerActionsSlot,
+  withAddTraceToDataset = true,
+  withAddToolMocksToItem = true,
 }: TracesExplorerPanelProps) {
   const { withQueryTrace, withFeedback } = useTracesConfig();
   const { rows, autoRefetch, isLoading: isListLoading } = useTracesList();
@@ -109,8 +115,8 @@ export function TracesExplorerPanel({
         onOpenScore={onOpenScore}
         onFullThreadOpenChange={open => setFullThreadTraceId(open ? (traceId ?? null) : null)}
         onSpanSelect={id => selectSpan(id ?? null)}
-        onSaveAsDatasetItem={setDatasetDialogTarget}
-        onAddTraceMocksToItem={isAgentTrace ? setAddMocksTarget : undefined}
+        onSaveAsDatasetItem={withAddTraceToDataset ? setDatasetDialogTarget : undefined}
+        onAddTraceMocksToItem={withAddToolMocksToItem && isAgentTrace ? setAddMocksTarget : undefined}
         initialSpanId={spanId}
         onPrevious={handlePreviousTrace}
         onNext={handleNextTrace}
@@ -137,18 +143,22 @@ export function TracesExplorerPanel({
         headerActionsSlot={traceId && headerActionsSlot ? headerActionsSlot({ traceId, spans }) : undefined}
       />
       <ScoreDataPanel depth={depth} score={featuredScore} onClose={() => selectScore(null)} />
-      <TraceAsItemDialog
-        rootSpanId={datasetDialogTarget?.rootSpanId}
-        traceId={datasetDialogTarget?.traceId}
-        isOpen={!!datasetDialogTarget}
-        onClose={() => setDatasetDialogTarget(null)}
-        renderCreateDatasetDialog={renderCreateDatasetDialog}
-      />
-      <AddTraceMocksToItemDialog
-        traceId={addMocksTarget?.traceId}
-        isOpen={!!addMocksTarget}
-        onClose={() => setAddMocksTarget(null)}
-      />
+      {withAddTraceToDataset && (
+        <TraceAsItemDialog
+          rootSpanId={datasetDialogTarget?.rootSpanId}
+          traceId={datasetDialogTarget?.traceId}
+          isOpen={!!datasetDialogTarget}
+          onClose={() => setDatasetDialogTarget(null)}
+          renderCreateDatasetDialog={renderCreateDatasetDialog}
+        />
+      )}
+      {withAddToolMocksToItem && (
+        <AddTraceMocksToItemDialog
+          traceId={addMocksTarget?.traceId}
+          isOpen={!!addMocksTarget}
+          onClose={() => setAddMocksTarget(null)}
+        />
+      )}
     </>
   );
 }

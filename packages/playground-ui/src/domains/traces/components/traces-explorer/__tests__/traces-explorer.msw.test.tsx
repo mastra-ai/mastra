@@ -17,6 +17,7 @@ import type {
   TracesSortDirection,
 } from '../traces-explorer-actions';
 import type { TracesExplorerFeatures } from '../traces-explorer-context';
+import type { TracesExplorerPanelProps } from '../traces-explorer-panel';
 import {
   emptyDatasets,
   emptyEntityNames,
@@ -127,6 +128,7 @@ type HarnessProps = {
   baselineFilters?: TracesFilters;
   filterBar?: ReactNode;
   onChange?: (next: TracesExplorerState) => void;
+  panelProps?: Partial<TracesExplorerPanelProps>;
 };
 
 // Plain React state stands in for the host: no router, no search params.
@@ -139,6 +141,7 @@ function Harness({
   baselineFilters,
   filterBar = <TracesExplorer.FilterBar />,
   onChange,
+  panelProps,
 }: HarnessProps) {
   const [selection, setSelection] = useState(initialSelection);
   const [filters, setFilters] = useState(initialFilters);
@@ -170,7 +173,7 @@ function Harness({
         }
       >
         <TracesExplorer.List />
-        <TracesExplorer.Panel onOpenScore={() => {}} />
+        <TracesExplorer.Panel onOpenScore={() => {}} {...panelProps} />
       </TracesExplorer.Layout>
     </TracesExplorer>
   );
@@ -619,6 +622,42 @@ describe('TracesExplorer', () => {
         expect.stringContaining('Time'),
         expect.stringContaining('trace-a'),
       ]);
+    });
+  });
+
+  describe('the trace actions menu of an agent trace', () => {
+    const openTraceActions = async (panelProps?: Partial<TracesExplorerPanelProps>) => {
+      setExplorerHandlers();
+      const { queryClient } = renderExplorer({
+        panelProps,
+        initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
+      });
+      const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
+      await settle(queryClient);
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Open trace actions' }));
+      await screen.findByRole('menuitem', { name: 'Download trace JSON' });
+    };
+
+    it('offers adding the trace and its tool mocks to a dataset by default', async () => {
+      await openTraceActions();
+
+      expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).toBeTruthy();
+      expect(screen.getByRole('menuitem', { name: 'Add tool mocks to item' })).toBeTruthy();
+    });
+
+    it('hides "Add full trace to dataset" when the host turns it off', async () => {
+      await openTraceActions({ withAddTraceToDataset: false });
+
+      expect(screen.queryByRole('menuitem', { name: 'Add full trace to dataset' })).toBeNull();
+      expect(screen.getByRole('menuitem', { name: 'Add tool mocks to item' })).toBeTruthy();
+      expect(screen.getByRole('menuitem', { name: 'Download trace JSON' })).toBeTruthy();
+    });
+
+    it('hides "Add tool mocks to item" when the host turns it off', async () => {
+      await openTraceActions({ withAddToolMocksToItem: false });
+
+      expect(screen.queryByRole('menuitem', { name: 'Add tool mocks to item' })).toBeNull();
+      expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).toBeTruthy();
     });
   });
 

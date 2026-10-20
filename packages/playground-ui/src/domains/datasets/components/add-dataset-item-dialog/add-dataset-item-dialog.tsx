@@ -290,7 +290,7 @@ function AddDatasetItemForm({
             />
           )}
 
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid items-start gap-5 sm:grid-cols-2">
             <Field invalid={isInvalid('input')}>
               <FieldLabel required>Input</FieldLabel>
               <FieldDescription>What the target receives when this item runs.</FieldDescription>
@@ -300,7 +300,7 @@ function AddDatasetItemForm({
                 aria-label="Input JSON"
                 showCopyButton={hasContent(draft.input)}
                 showFormatButton={hasContent(draft.input)}
-                className="min-h-[220px]"
+                className="h-[220px]"
               />
               <FieldError>{errorOf('input')}</FieldError>
               <DatasetFieldErrors field="input" errors={apiErrorsOf('input')} />
@@ -315,7 +315,7 @@ function AddDatasetItemForm({
                 placeholder={GROUND_TRUTH_PLACEHOLDER}
                 showCopyButton={hasContent(draft.groundTruth)}
                 showFormatButton={hasContent(draft.groundTruth)}
-                className="min-h-[220px]"
+                className="h-[220px]"
               />
               <FieldError>{errorOf('groundTruth')}</FieldError>
               <DatasetFieldErrors field="groundTruth" errors={apiErrorsOf('groundTruth')} />
@@ -332,7 +332,7 @@ function AddDatasetItemForm({
               placeholder={TOOL_MOCKS_PLACEHOLDER}
               showCopyButton={hasContent(draft.toolMocks)}
               showFormatButton={hasContent(draft.toolMocks)}
-              className="min-h-[220px]"
+              className="h-80"
             />
             <FieldError>{errorOf('toolMocks')}</FieldError>
             <DatasetFieldErrors field="toolMocks" errors={apiErrorsOf('toolMocks')} />
