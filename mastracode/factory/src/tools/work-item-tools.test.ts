@@ -33,7 +33,9 @@ async function setup({
   transition,
   feed,
   actorProfile,
+  interactive = true,
 }: {
+  interactive?: boolean;
   transition?: Transition;
   feed?: Pick<CommentsDomain, 'createComment'>;
   actorProfile?: FactoryToolScope['actorProfile'];
@@ -84,14 +86,17 @@ async function setup({
     ),
   };
   const auditRecorder = { record: vi.fn(async () => null) };
-  const tools = createFactoryWorkItemTools(actorProfile ? { ...scope, actorProfile } : scope, {
-    workItems: seed.workItems,
-    boards,
-    transitionService,
-    auditRecorder,
-    feed: feed ?? commentsDomain,
-    sessions: { getSourceControlBySessionId: async () => sourceControl },
-  }) as Record<string, { requireApproval?: boolean; execute: (input: unknown, context: unknown) => Promise<unknown> }>;
+  const tools = createFactoryWorkItemTools(
+    { ...scope, interactive, ...(actorProfile ? { actorProfile } : {}) },
+    {
+      workItems: seed.workItems,
+      boards,
+      transitionService,
+      auditRecorder,
+      feed: feed ?? commentsDomain,
+      sessions: { getSourceControlBySessionId: async () => sourceControl },
+    },
+  ) as Record<string, { requireApproval?: boolean; execute: (input: unknown, context: unknown) => Promise<unknown> }>;
   const run = <T>(name: string, input: unknown) => tools[name]!.execute(input, {}) as Promise<T>;
   const fileItem = (factoryProjectId: string, title: string) =>
     seed.workItems.upsert({
@@ -418,6 +423,9 @@ describe('approval', () => {
         'factory_start_session',
         'factory_answer_approval',
         'factory_switch_session_model',
+        'factory_list_side_sessions',
+        'factory_subscribe_session',
+        'factory_unsubscribe_session',
       ].sort(),
     );
   });
@@ -583,5 +591,57 @@ describe('another Factory', () => {
     await expect(
       run('factory_resolve_proposal', { decisionId: FOREIGN_DECISION_ID, action: 'approve' }),
     ).rejects.toThrow('belongs to another Factory');
+  });
+});
+
+describe('on a turn nobody signed in started', () => {
+  it("moves the item as this session's agent, so the plan and done gates apply and nothing is armed", async () => {
+    const { run, fileItem, transitionService } = await setup({ interactive: false });
+    const { item } = await fileItem('project-1', 'Move me');
+
+    await run('factory_transition_work_item', { workItem: item.id, stage: 'triage' });
+
+    expect(transitionService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: { type: 'agent', bindingId: 'session:session-1', role: 'session' },
+        ingress: expect.objectContaining({ type: 'agent', identity: expect.stringMatching(/^session:session-1:/) }),
+      }),
+    );
+  });
+
+  it('edits a card, audited as the session rather than the person', async () => {
+    const { run, fileItem, auditRecorder } = await setup({ interactive: false });
+    const { item } = await fileItem('project-1', 'Rename me');
+
+    await expect(run('factory_update_work_item', { workItem: item.id, title: 'Renamed' })).resolves.toMatchObject({
+      workItem: { title: 'Renamed' },
+      updated: ['title'],
+    });
+    expect(auditRecorder.record).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'agent:session:session-1', actorType: 'agent' }),
+    );
+  });
+
+  it('refuses to pre-approve plans, approve or dismiss proposals, and changes nothing', async () => {
+    const { run, workItems, fileItem, auditRecorder } = await setup({ interactive: false });
+    const { item } = await fileItem('project-1', 'Keep my gate');
+    const approve = vi.spyOn(workItems, 'approveDeferredDecision');
+    const dismiss = vi.spyOn(workItems, 'dismissDeferredDecision');
+
+    await expect(run('factory_update_work_item', { workItem: item.id, plansPreapproved: true })).rejects.toThrow(
+      'Only a person can pre-approve plans',
+    );
+    await expect(run('factory_resolve_proposal', { decisionId: DECISION_ID, action: 'approve' })).rejects.toThrow(
+      'Only a person can approve or dismiss a proposed run',
+    );
+    await expect(run('factory_dismiss_decision', { decisionId: DECISION_ID })).rejects.toThrow(
+      'Only a person can dismiss a proposed run',
+    );
+
+    expect(approve).not.toHaveBeenCalled();
+    expect(dismiss).not.toHaveBeenCalled();
+    expect(auditRecorder.record).not.toHaveBeenCalled();
+    const stored = await workItems.get({ orgId: 'org-1', id: item.id });
+    expect(stored?.plansPreapprovedAt).toBeNull();
   });
 });

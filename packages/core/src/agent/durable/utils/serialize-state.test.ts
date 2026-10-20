@@ -5,9 +5,13 @@
  * no mocking required. The suite covers every exported utility that can be
  * exercised without a live LLM or message-list object.
  */
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
+import { MessageList } from '../../message-list';
+import type { TripwireData } from '../../trip-wire';
 
 import {
+  createWorkflowInput,
   deserializeDate,
   serializeDate,
   serializeDurableOptions,
@@ -20,6 +24,65 @@ import {
   serializeToolMetadata,
   serializeToolsMetadata,
 } from './serialize-state';
+
+describe('createWorkflowInput input tripwires (COR-1481)', () => {
+  function serializeTripwire(inputTripwire: TripwireData) {
+    return createWorkflowInput({
+      runId: 'blocked-run',
+      agentId: 'preflight-agent',
+      messageId: 'blocked-message',
+      messageList: new MessageList(),
+      tools: {},
+      model: new MockLanguageModelV2(),
+      options: {},
+      state: {},
+      inputTripwire,
+    });
+  }
+
+  const rejection = { reason: 'Invalid deploy target', retry: false, processorId: 'preflight' };
+
+  it('detaches JSON metadata from the live registry payload before crossing processes', () => {
+    const metadata = { target: { environment: 'staging' }, failures: ['not-authorized'] };
+    const liveTripwire = { ...rejection, metadata };
+    const input = serializeTripwire(liveTripwire);
+    const persisted = JSON.parse(JSON.stringify(input));
+    metadata.target.environment = 'production';
+    metadata.failures.push('later-mutation');
+
+    expect(input.inputTripwire).toEqual({
+      ...rejection,
+      metadata: { target: { environment: 'staging' }, failures: ['not-authorized'] },
+    });
+    expect(persisted.inputTripwire).toEqual(input.inputTripwire);
+    expect(liveTripwire.metadata).toBe(metadata);
+    expect(liveTripwire.metadata.target.environment).toBe('production');
+  });
+
+  it.each(['cyclic', 'bigint'] as const)('keeps the rejection when %s metadata cannot cross processes', kind => {
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    const metadata = kind === 'cyclic' ? cyclic : { value: 1n };
+    const liveTripwire = { ...rejection, metadata };
+    const input = serializeTripwire(liveTripwire);
+
+    expect(JSON.parse(JSON.stringify(input)).inputTripwire).toEqual(rejection);
+    expect(input.inputTripwire).not.toHaveProperty('metadata');
+    expect(liveTripwire.metadata).toBe(metadata);
+  });
+
+  it('snapshots metadata once even when toJSON returns different values on subsequent reads', () => {
+    let reads = 0;
+    const metadata = { toJSON: () => ({ read: ++reads }) };
+    const liveTripwire = { ...rejection, metadata };
+    const input = serializeTripwire(liveTripwire);
+
+    expect(JSON.parse(JSON.stringify(input)).inputTripwire).toEqual({ ...rejection, metadata: { read: 1 } });
+    expect(JSON.parse(JSON.stringify(input)).inputTripwire?.metadata).toEqual({ read: 1 });
+    expect(reads).toBe(1);
+    expect(liveTripwire.metadata).toBe(metadata);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // serializeError

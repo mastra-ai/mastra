@@ -100,7 +100,7 @@ function titleFrom(prompt: string): string {
   return firstLine.trim().slice(0, TITLE_LENGTH);
 }
 
-/** Tools that start sessions on the caller's behalf. Interactive user turns only. */
+/** Tools that start sessions on the caller's behalf, or switch their models. User sessions only. */
 export function createFactorySessionTools(
   scope: FactoryToolScope,
   deps: FactorySessionToolDependencies,
@@ -172,6 +172,12 @@ export function createFactorySessionTools(
       ) {
         throw new Error('Session not found or not owned by you in this Factory.');
       }
+      // A turn nobody signed in started reaches only this session and the side sessions it started.
+      if (!scope.interactive && sessionId !== scope.sessionId && row.originSessionId !== scope.sessionId) {
+        throw new Error(
+          'Without a person in this turn, only this session and the side sessions it started can switch models.',
+        );
+      }
       const messaging = await deps.messaging();
       if (!messaging) throw new Error('Session model switching is not available on this server.');
       const threadId = await resolveSessionThread({
@@ -218,7 +224,15 @@ export function createFactorySessionTools(
         path: ['role'],
       }),
     execute: async ({ prompt, title, workItem, role }) => {
-      if (workItem !== undefined) return startWorkItemRole({ prompt, title, workItem, role });
+      if (workItem !== undefined) {
+        // A role start records a run as the person, so it waits for a turn the person started.
+        if (!scope.interactive) {
+          throw new Error(
+            'Starting a role on a work item needs a person in this turn; start a side session, or ask the person to use the board.',
+          );
+        }
+        return startWorkItemRole({ prompt, title, workItem, role });
+      }
 
       const parent = await deps.sessions.getBySessionId(scope.sessionId);
       const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);
