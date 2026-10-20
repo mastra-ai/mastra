@@ -39,7 +39,7 @@ function createGatewayFetch(
     failToolsListForConnectionIds?: Set<string>;
   } = {},
 ) {
-  const protocolRequests: Array<{ body: Record<string, unknown>; headers: Headers; method: string }> = [];
+  const protocolRequests: Array<{ body: Record<string, unknown>; headers: Headers; method: string; path: string }> = [];
   let initializeCount = 0;
   const initializeCountByConnectionId = new Map<string, number>();
   const connections = options.connections ?? [
@@ -82,7 +82,7 @@ function createGatewayFetch(
 
     const body = requestBody(init);
     const headers = new Headers(init?.headers);
-    protocolRequests.push({ body, headers, method: init?.method ?? 'GET' });
+    protocolRequests.push({ body, headers, method: init?.method ?? 'GET', path: url.pathname });
     const method = body.method;
     if (method === 'initialize') {
       initializeCount += 1;
@@ -652,12 +652,19 @@ describe('resource-scoped MCP resolution', () => {
       'request_connection',
     ]);
 
-    // Every MCP protocol request under the scope carries the assertion header;
-    // the platform enforces it on the resource-scoped connection and ignores
-    // it on the global one.
-    expect(gateway.protocolRequests.length).toBeGreaterThan(0);
-    for (const request of gateway.protocolRequests) {
+    // The scoped connection's MCP requests carry the assertion header. The
+    // global connection's MCP client is shared across every resource scope,
+    // so its transport is resource-free: it must not be stamped with whichever
+    // scope's resource header resolved it first.
+    const scopedRequests = gateway.protocolRequests.filter(request => request.path.includes(USER_CONNECTION_ID));
+    const globalRequests = gateway.protocolRequests.filter(request => request.path.includes(CONNECTION_ID));
+    expect(scopedRequests.length).toBeGreaterThan(0);
+    expect(globalRequests.length).toBeGreaterThan(0);
+    for (const request of scopedRequests) {
       expect(request.headers.get('x-mastra-resource-id')).toBe('end-user-1');
+    }
+    for (const request of globalRequests) {
+      expect(request.headers.get('x-mastra-resource-id')).toBeNull();
     }
   });
 

@@ -505,6 +505,10 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
             "connect-src 'self'",
             "base-uri 'none'",
             "form-action 'none'",
+            // The page only works with cookie-based auth, which is exactly
+            // the setup where framing applies: block embedding so another
+            // site cannot clickjack an authenticated Connect button.
+            "frame-ancestors 'none'",
           ].join('; '),
         );
         return c.html(
