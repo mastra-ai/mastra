@@ -609,23 +609,24 @@ export async function listSessionRenderedPath(
 const HIDDEN_TREE_ENTRIES = new Set(['.git']);
 
 /**
- * Where a tree path lives: its checkout and the path inside it. Unlike
- * `resolveLayoutPath`, a bare repository directory (`platform` in a
- * multi-repository session) resolves to that checkout's root.
+ * Where a tree path lives. Inside a checkout: that checkout and the path within
+ * it (a bare repository directory resolves to its root). Elsewhere in the
+ * working directory (a multi-repository session's root, `.artifacts`): no
+ * checkout, so no ignore rules apply.
  */
-function treeLocation(layout: SessionLayout, path: string): { repo: SessionLayoutRepository; relative: string } {
-  const location =
-    layout.repos.length === 1
-      ? { repo: layout.repos[0]!, relative: path ? assertRelativePath(path, 'path') : '' }
-      : (() => {
-          const safePath = assertRelativePath(path, 'path');
-          const root = layout.repos.find(repo => repo.prefix === `${safePath}/`);
-          return root ? { repo: root, relative: '' } : resolveLayoutPath(layout, safePath, 'path');
-        })();
-  if (location.relative.split('/').some(segment => HIDDEN_TREE_ENTRIES.has(segment))) {
+function treeLocation(
+  layout: SessionLayout,
+  path: string,
+): { repo: SessionLayoutRepository; relative: string } | { repo: undefined; relative: string } {
+  const safePath = path ? assertRelativePath(path, 'path') : '';
+  if (safePath.split('/').some(segment => HIDDEN_TREE_ENTRIES.has(segment))) {
     throw new Error('Path is not available in this session');
   }
-  return location;
+  if (layout.repos.length === 1) return { repo: layout.repos[0]!, relative: safePath };
+  const repo = layout.repos
+    .filter(candidate => `${safePath}/`.startsWith(candidate.prefix))
+    .toSorted((a, b) => b.prefix.length - a.prefix.length)[0];
+  return repo ? { repo, relative: safePath.slice(repo.prefix.length) } : { repo: undefined, relative: safePath };
 }
 
 /**
@@ -650,10 +651,10 @@ async function ignoredPaths(sandbox: ExecutableSandbox, repoDir: string, paths: 
 }
 
 /**
- * List one directory of a session's checkouts from its sandbox, without git
- * internals or ignored entries. A multi-repository session's top level lists
- * its checkouts. Passive like every session read: a session with no sandbox in
- * this process comes back `available: false` instead of starting one.
+ * List one directory of a session's working directory from its sandbox,
+ * without git internals or entries a checkout ignores. Passive like every
+ * session read: a session with no sandbox in this process comes back
+ * `available: false` instead of starting one.
  */
 export async function listSessionWorkspaceTree(
   session: SourceControlSession,
@@ -665,34 +666,28 @@ export async function listSessionWorkspaceTree(
   if (!handle) return { ...listing, available: false, entries: [] };
 
   const { layout, sandbox, filesystem } = handle;
-  if (!requested && layout.repos.length > 1) {
-    return {
-      ...listing,
-      available: true,
-      entries: layout.repos.map(repo => {
-        const name = repo.prefix.slice(0, -1);
-        return { name, path: name, type: 'directory' as const };
-      }),
-    };
+  const location = treeLocation(layout, requested);
+  const dir = location.repo ? location.repo.prefix + location.relative : location.relative;
+  const children = (await filesystem.readdir(dir || '.')).filter(entry => !HIDDEN_TREE_ENTRIES.has(entry.name));
+  const childPath = (name: string) => (dir ? `${dir}/${name}` : name);
+
+  let visible = children;
+  if (location.repo) {
+    const { repo, relative } = location;
+    const inRepo = (name: string) => (relative ? `${relative}/${name}` : name);
+    const ignored = await ignoredPaths(sandbox, repo.dir, [
+      ...(relative ? [relative] : []),
+      ...children.map(entry => inRepo(entry.name)),
+    ]);
+    if (ignored.has(relative)) throw new Error('Path is not available in this session');
+    visible = children.filter(entry => !ignored.has(inRepo(entry.name)));
   }
 
-  const { repo, relative } = treeLocation(layout, requested);
-  const children = (await filesystem.readdir(posixPath.join(repo.prefix, relative) || '.')).filter(
-    entry => !HIDDEN_TREE_ENTRIES.has(entry.name),
-  );
-  const inRepo = (name: string) => (relative ? `${relative}/${name}` : name);
-  const ignored = await ignoredPaths(sandbox, repo.dir, [
-    ...(relative ? [relative] : []),
-    ...children.map(entry => inRepo(entry.name)),
-  ]);
-  if (ignored.has(relative)) throw new Error('Path is not available in this session');
-
-  const entries = children
-    .filter(entry => !ignored.has(inRepo(entry.name)))
+  const entries = visible
     .map(
       (entry): WorkspaceTreeEntry => ({
         name: entry.name,
-        path: repo.prefix + inRepo(entry.name),
+        path: childPath(entry.name),
         type: entry.type,
         ...(entry.type === 'file' && entry.size !== undefined && { size: entry.size }),
       }),
@@ -703,17 +698,18 @@ export async function listSessionWorkspaceTree(
 
 /**
  * Read a file inside a session's sandbox: anything under an approved rendered
- * root, or any checkout file the tree would list (not git internals, not
- * ignored).
+ * root, or anything the tree would list (not git internals, not ignored by its
+ * checkout).
  */
 export async function readSessionWorkspaceFile(session: SourceControlSession, path: string): Promise<WorkspaceFile> {
   const safePath = assertRelativePath(path, 'path');
 
   const handle = await sessionSandbox(session);
   if (!handle) throw new Error('Session workspace is not available');
+  // Rendered roots (plans, reports) are served even when a checkout ignores them.
   if (!APPROVED_RENDERED_ROOTS.has(safePath.split('/')[0] ?? '')) {
     const { repo, relative } = treeLocation(handle.layout, safePath);
-    if (!relative || (await ignoredPaths(handle.sandbox, repo.dir, [relative])).has(relative)) {
+    if (repo && relative && (await ignoredPaths(handle.sandbox, repo.dir, [relative])).has(relative)) {
       throw new Error('Path is not available in this session');
     }
   }

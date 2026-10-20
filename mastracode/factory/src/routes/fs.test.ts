@@ -426,14 +426,26 @@ describe('live session file tree', () => {
     await expect(readSessionWorkspaceFile(makeSession(), 'src/link.txt')).rejects.toThrow('symlink');
   });
 
-  it('lists the checkouts at the top of a multi-repository session, then each checkout', async () => {
-    await seedHostCheckouts(['acme/repo', 'acme/docs']);
+  it('lists the whole working directory of a multi-repository session, then each checkout', async () => {
+    const { parent, executeCommand } = await seedHostCheckouts(['acme/repo', 'acme/docs']);
+    await mkdir(join(parent, 'notes'));
+    await writeFile(join(parent, 'notes', 'setup.log'), 'installed');
+    await mkdir(join(parent, '.git'));
 
     const top = await listSessionWorkspaceTree(makeSession());
     expect(top.entries).toEqual([
-      { name: 'repo', path: 'repo', type: 'directory' },
       { name: 'docs', path: 'docs', type: 'directory' },
+      { name: 'notes', path: 'notes', type: 'directory' },
+      { name: 'repo', path: 'repo', type: 'directory' },
     ]);
+    // Outside a checkout there is no .gitignore to apply.
+    executeCommand.mockClear();
+    expect(names(await listSessionWorkspaceTree(makeSession(), 'notes'))).toEqual(['f setup.log']);
+    await expect(readSessionWorkspaceFile(makeSession(), 'notes/setup.log')).resolves.toMatchObject({
+      content: 'installed',
+    });
+    expect(executeCommand.mock.calls.some(([, args]) => String(args?.[1]).includes('check-ignore'))).toBe(false);
+    await expect(listSessionWorkspaceTree(makeSession(), '.git')).rejects.toThrow('not available');
     expect(names(await listSessionWorkspaceTree(makeSession(), 'docs'))).toEqual([
       'd src',
       'f .gitignore',
