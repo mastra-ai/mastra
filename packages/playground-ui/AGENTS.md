@@ -38,8 +38,9 @@ committed as `src/bones/<name>.bones.json`:
 - After adding or changing a `Bones/` story or the UI it mirrors, run
   `pnpm --filter ./packages/playground-ui bones:capture` (needs
   `pnpm exec playwright install chromium`). Never hand-edit the JSON.
-- `bones:check` (CI job `bones-check`) fails when committed bones are stale;
-  a unit test fails when a `<BoneSkeleton name>` has no committed bones.
+- `bones:check` fails when committed bones are stale; run it before pushing
+  (no CI job runs it yet). A unit test fails when a `<BoneSkeleton name>`
+  has no committed bones.
 - Capture fixtures use `DataList.RowStatic`: boneyard captures a `<button>` as
   one bone, so `RowButton` rows lose their per-cell bones.
 - Keep the ds `Skeleton` / `SkeletonText` for small one-off placeholders.
