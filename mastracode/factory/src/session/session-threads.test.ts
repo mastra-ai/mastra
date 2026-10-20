@@ -109,4 +109,19 @@ describe('listFactorySessionThreads', () => {
 
     expect(threads.map(thread => thread.id)).toEqual(['dm-thread']);
   });
+
+  it("keeps a private side session's threads under its owner, not its Factory", async () => {
+    const controller = await controllerWith([
+      { id: 'side-thread', resourceId: 'user-1', metadata: { factorySessionId: 'session-1' } },
+      { id: 'forged', resourceId: 'project-1', metadata: { factorySessionId: 'session-1' } },
+    ]);
+
+    const threads = await listFactorySessionThreads(
+      controller,
+      { ...SESSION, originSessionId: 'parent-1', visibility: 'private' },
+      NO_RUN,
+    );
+
+    expect(threads.map(thread => thread.id)).toEqual(['side-thread']);
+  });
 });

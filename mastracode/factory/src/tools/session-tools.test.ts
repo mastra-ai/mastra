@@ -542,6 +542,13 @@ describe('factory_start_session in side mode', () => {
     await expect(sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({ visibility: 'private' });
   });
 
+  it("runs a private side session on its owner's memory resource, not the Factory's", async () => {
+    const { start, created, scope } = await setup('private');
+    await start({ prompt: 'Look into it.' });
+    expect(created[0]!.options).toMatchObject({ resourceId: scope.userId });
+    expect(created[0]!.options.resourceId).not.toBe(scope.factoryProjectId);
+  });
+
   it("gives the kickoff a fresh request context carrying only the caller, so the child's first turn is not interactive", async () => {
     const { start, created } = await setup();
     await start({ prompt: 'Go.' });

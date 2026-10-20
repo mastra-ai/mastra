@@ -1128,7 +1128,10 @@ describe('MastraFactory.prepare', () => {
   });
 
   describe('Factory tools in user sessions', () => {
-    async function seedUserSession(storage: ReturnType<typeof fakeStorage>) {
+    async function seedUserSession(
+      storage: ReturnType<typeof fakeStorage>,
+      session: { visibility?: 'org' | 'private'; origin?: { sessionId: string; threadId: string } } = {},
+    ) {
       await storage.init();
       const sourceControl = storage.getDomain<SourceControlStorage>('source-control').forIntegration('github');
       const project = await storage
@@ -1165,6 +1168,7 @@ describe('MastraFactory.prepare', () => {
         userId: 'user-1',
         branch: 'user/session-1',
         baseBranch: 'main',
+        ...session,
       });
       return project;
     }
@@ -1344,6 +1348,32 @@ describe('MastraFactory.prepare', () => {
         threadId: string;
       }) => Promise<void>;
       // user-1's session runs under user-1; any org member can stamp a Factory thread.
+      threadsById({
+        'session-1': { id: 'session-1', resourceId: 'user-1', metadata: {} },
+        'thread-atk': { id: 'thread-atk', resourceId: project.id, metadata: { factorySessionId: 'session-1' } },
+      });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      await expect(
+        prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'thread-atk' }),
+      ).rejects.toThrow("can't be woken as its owner");
+      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+    });
+
+    it("refuses a wake on a thread under the Factory stamped with a private side session's id", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage, {
+        visibility: 'private',
+        origin: { sessionId: 'parent-1', threadId: 'parent-1' },
+      });
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      // A private side session runs under its owner; any org member can stamp a Factory thread.
       threadsById({
         'session-1': { id: 'session-1', resourceId: 'user-1', metadata: {} },
         'thread-atk': { id: 'thread-atk', resourceId: project.id, metadata: { factorySessionId: 'session-1' } },

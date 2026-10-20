@@ -20,8 +20,8 @@ type ThreadLookup = Pick<AgentController<any>, 'queryThreadById'>;
 
 /**
  * The one memory resource a Factory session runs under. A Slack session uses
- * its Factory's, or its sender's for a DM; a side session uses its Factory's;
- * any other session uses its owner's. A session's own thread can say otherwise
+ * its Factory's, or its sender's for a DM; a side session uses its Factory's,
+ * or its owner's when private; any other session uses its owner's. A session's own thread can say otherwise
  * only within what the server recorded for it: its own id (created before
  * resources were shared, or a run kept on its own resource), and the Factory's
  * only for a session with a run binding. A client can create a thread under the
@@ -55,12 +55,12 @@ function memoryResourceOf(
 ) {
   const factoryProjectId = session.factoryProjectId ?? undefined;
   const slack = session.branch?.startsWith('slack/') ?? false;
-  const shared = slack
-    ? session.visibility === 'private'
-      ? session.userId
-      : factoryProjectId
-    : session.originSessionId
-      ? factoryProjectId
+  // A private Slack DM or side session stays with its owner.
+  const shared =
+    slack || session.originSessionId
+      ? session.visibility === 'private'
+        ? session.userId
+        : factoryProjectId
       : undefined;
   const allowed = shared
     ? [session.sessionId, shared]
