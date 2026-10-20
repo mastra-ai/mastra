@@ -1127,7 +1127,7 @@ If the subscription ends, for example because the server terminates it, each sub
     isOptional: true,
     defaultValue: 'InMemoryMCPEventCursorStore',
     description:
-      'Stores the resume cursor for each subscription. Implement `get(key)`, `set(key, cursor)` and `delete(key)` with durable storage to resume after a restart. Only non-null cursors are stored.',
+      'Stores the resume cursor for each subscription. Implement `get(key)`, `set(key, cursor)` and `delete(key)` with durable storage so a subscription continues from its last cursor when a thread is subscribed again after a restart. Only cursors are stored, not which threads are subscribed. Only non-null cursors are stored.',
   },
   {
     name: 'subscribeOptions',
@@ -1156,7 +1156,7 @@ If the subscription ends, for example because the server terminates it, each sub
     isOptional: true,
     defaultValue: 'false',
     description:
-      'Gives the agent the `mcp_events_list`, `mcp_events_subscribe` and `mcp_events_unsubscribe` tools, which act on the current thread and require memory. Event descriptions and error messages from the server reach the model inside the same untrusted-data block as event data. Pass `servers` to limit them to those servers.',
+      'Gives the agent the `mcp_events_list`, `mcp_events_subscribe` and `mcp_events_unsubscribe` tools, which act on the current thread and require memory. Event descriptions and error messages from the server reach the model inside the same untrusted-data block as event data. Subscriptions made through the tools are lost on restart. Pass `servers` to limit them to those servers.',
   },
   {
     name: 'onError',
@@ -1169,12 +1169,12 @@ If the subscription ends, for example because the server terminates it, each sub
 
 The provider has these methods:
 
-- `subscribeThread(thread, { server, event, args? })`: Subscribes a thread and resolves once the MCP subscription is confirmed. It resumes from the stored cursor. If the server rejects the subscription, the thread isn't subscribed and the promise rejects.
+- `subscribeThread(thread, { server, event, args? })`: Subscribes a thread and resolves once the MCP subscription is confirmed. It resumes from the stored cursor. If the server rejects the subscription, the thread isn't subscribed and the promise rejects. Thread subscriptions are kept in memory only: after a restart, call `subscribeThread()` again for each thread that should keep receiving events.
 - `unsubscribeThread(thread, { server, event, args? })`: Resolves to `true` when the thread was subscribed. When the last thread leaves, the MCP subscription is cancelled and its stored cursor is deleted.
 - `stop()`: Cancels every MCP subscription and keeps the stored cursors, so a new provider with the same `cursorStore` resumes where this one stopped.
 - `MCPEventsSignalProvider.key({ server, event, args? })`: Returns the subscription key used by the cursor store.
 
-Delivery is at least once. The provider stores the cursor after it notifies the threads, and the notification's `dedupeKey` includes the event id, so an occurrence replayed after a restart isn't stored twice.
+Delivery is at least once. The provider stores the cursor after it notifies the threads, so an occurrence notified right before a crash is replayed after the restart. The notification's `dedupeKey` includes the event id: if the first notification is still pending, the replay merges into it. If it was already delivered, the thread is notified again.
 
 To start a workflow run for each occurrence, iterate a subscription directly:
 
