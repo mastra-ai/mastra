@@ -4,7 +4,7 @@ import {
   configureBoneyard,
   registerBones,
 } from 'boneyard-js/react';
-import type { ComponentProps, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { bones } from '@/bones';
 
 // Bones read the theme tokens directly, so `.dark` flips them with the rest of the UI. The
@@ -25,16 +25,24 @@ configureBoneyard({
 
 // Registered here, in the module that defines the components, so any bundle that renders a bone
 // also ships the bones — no side-effect-only import to keep alive through tree-shaking.
-registerBones(bones);
+// The captured JSON is boneyard's own output, so it is the shape registerBones expects.
+registerBones(bones as Parameters<typeof registerBones>[0]);
 
-type BoneyardSkeletonProps = ComponentProps<typeof BoneyardSkeleton>;
-
-export interface BoneSkeletonProps extends Omit<
-  BoneyardSkeletonProps,
-  'name' | 'children' | 'color' | 'darkColor' | 'animate'
-> {
+// Declared here rather than derived from boneyard's types: boneyard-js is bundled, not a
+// dependency, so consumers don't have it and an inferred props type would leak an unresolvable
+// `boneyard-js/react` import into the published declarations.
+interface BoneProps {
   /** Bone name. It must have a committed `src/bones/<name>.bones.json`; `pnpm bones:capture` writes it. */
   name: string;
+  className?: string;
+  /** Rendered instead of the children while `bones:capture` snapshots the layout. */
+  fixture?: ReactNode;
+  /** Pick the captured breakpoint by container width (default) or viewport width. */
+  select?: 'container' | 'viewport';
+}
+
+export interface BoneSkeletonProps extends BoneProps {
+  loading: boolean;
   /** The real content, shown once loaded. Omit it for a skeleton that is only rendered while loading. */
   children?: ReactNode;
   /** Announced to assistive tech while loading, e.g. "Loading traces". */
@@ -61,11 +69,9 @@ export function BoneSkeleton({ label, loading, children = null, ...props }: Bone
   );
 }
 
-export interface BoneSuspenseProps extends Omit<
-  ComponentProps<typeof BoneyardSuspense>,
-  'name' | 'color' | 'darkColor' | 'animate'
-> {
-  name: string;
+export interface BoneSuspenseProps extends BoneProps {
+  /** Components that suspend, e.g. via `useSuspenseQuery` or `React.lazy`. */
+  children: ReactNode;
 }
 
 /** Suspense boundary whose fallback is the captured skeleton for `name`. */
