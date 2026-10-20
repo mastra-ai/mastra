@@ -46,6 +46,11 @@ export interface SessionResourceMigrationReport {
   skipped: string[];
   /** Sessions whose move threw; the next startup retries them. */
   failed: string[];
+  /**
+   * Moved sessions whose subscriptions couldn't move because the integrations
+   * domain wasn't ready; left unmarked so a later startup moves them.
+   */
+  subscriptionsPending: string[];
   threads: number;
   runBindings: number;
   subscriptions: number;
@@ -107,6 +112,7 @@ export async function migrateSessionResources(
     isolatedSessions: 0,
     skipped: [],
     failed: [],
+    subscriptionsPending: [],
     threads: 0,
     runBindings: 0,
     subscriptions: 0,
@@ -168,6 +174,10 @@ export async function migrateSessionResources(
             `it stays under resource ${sessionId} and is not carried into ${resourceId}`,
         );
       }
+      if (!deps.integrations) {
+        report.subscriptionsPending.push(sessionId);
+        continue;
+      }
       await deps.sessions.markResourcesMigrated(sessionId);
     } catch (error) {
       report.failed.push(sessionId);
@@ -177,11 +187,20 @@ export async function migrateSessionResources(
     }
   }
 
-  if (report.threads + report.runBindings + report.subscriptions + report.skipped.length + report.failed.length > 0) {
+  if (
+    report.threads +
+      report.runBindings +
+      report.subscriptions +
+      report.skipped.length +
+      report.failed.length +
+      report.subscriptionsPending.length >
+    0
+  ) {
     console.info(
       `[factory] session resource migration: ${report.threads} threads, ${report.runBindings} run bindings, ` +
         `${report.subscriptions} subscriptions moved; ${report.skipped.length} Factory sessions without a Factory skipped; ` +
-        `${report.failed.length} sessions failed`,
+        `${report.failed.length} sessions failed; ${report.subscriptionsPending.length} sessions wait for integrations ` +
+        `to move their subscriptions`,
     );
   }
   return report;

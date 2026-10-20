@@ -208,11 +208,11 @@ async function seedLegacyFactory() {
   });
 
   const sessionMemory = getDynamicMemory(memoryStore, vector.store as never)({ requestContext: new RequestContext() });
-  const migrate = () =>
+  const migrate = ({ integrationsReady = true } = {}) =>
     migrateSessionResources({
       sessions: seed.sourceControl,
       workItems: seed.workItems,
-      integrations: seed.integrations,
+      ...(integrationsReady ? { integrations: seed.integrations } : {}),
       memory,
       threads: sessionMemory,
     });
@@ -361,6 +361,26 @@ describe('migrateSessionResources', () => {
     expect(listThreads).not.toHaveBeenCalled();
   });
 
+  it("moves a session's subscriptions on a later start when integrations weren't ready", async () => {
+    const { ops, migrate } = await seedLegacyFactory();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const first = await migrate({ integrationsReady: false });
+
+    expect(first.subscriptionsPending).toContain(USER_SESSION);
+    expect(await ops.findMany('integration_subscriptions', {})).toEqual([
+      expect.objectContaining({ session_id: USER_SESSION, resource_id: USER_SESSION }),
+    ]);
+
+    const second = await migrate();
+
+    expect(second).toMatchObject({ subscriptions: 1, subscriptionsPending: [], failed: [] });
+    expect(await ops.findMany('integration_subscriptions', {})).toEqual([
+      expect.objectContaining({ session_id: USER_SESSION, resource_id: 'user-1' }),
+    ]);
+  });
+
   it('resumes a session after a crash between tagging and moving a thread', async () => {
     const { memory, migrate } = await seedLegacyFactory();
     vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -407,7 +427,7 @@ describe('migrateSessionResources', () => {
   });
 
   it('opens a migrated session by its id with its old conversation', async () => {
-    const { memoryStore, migrate } = await seedLegacyFactory();
+    const { seed, memoryStore, migrate } = await seedLegacyFactory();
     vi.spyOn(console, 'info').mockImplementation(() => {});
     await migrate();
     const controller = new AgentController({
@@ -434,11 +454,11 @@ describe('migrateSessionResources', () => {
     expect(messages.map(message => message.id)).toEqual([`message-${RUN_SESSION}`]);
     expect(
       (
-        await listFactorySessionThreads(controller, {
-          sessionId: RUN_SESSION,
-          userId: 'user-1',
-          factoryProjectId: FACTORY_ID,
-        })
+        await listFactorySessionThreads(
+          controller,
+          { sessionId: RUN_SESSION, orgId: 'org-1', userId: 'user-1', factoryProjectId: FACTORY_ID },
+          seed.workItems,
+        )
       ).map(thread => thread.id),
     ).toEqual([RUN_SESSION]);
   });
