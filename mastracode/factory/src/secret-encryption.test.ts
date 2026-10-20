@@ -147,4 +147,24 @@ describe('createFactorySecretEncryption nested envelopes', () => {
       needsReencryption: true,
     });
   });
+
+  it('keeps secrets that only look like envelopes as literal values', async () => {
+    const encryption = createFactorySecretEncryption({ primary: { id: 'v1', key: key(1) } });
+    const other = createFactorySecretEncryption({ primary: { id: 'other', key: key(2) } });
+    for (const lookalike of ['mastra:factory-secret:v1:not-a-real-envelope', await other.encrypt('foreign')]) {
+      await expect(encryption.decrypt(await encryption.encrypt(lookalike))).resolves.toEqual({
+        value: lookalike,
+        needsReencryption: false,
+      });
+    }
+  });
+
+  it('stops unwrapping after a bounded number of nested envelopes', async () => {
+    const encryption = createFactorySecretEncryption({ primary: { id: 'v1', key: key(1) } });
+    let value: unknown = 'secret';
+    for (let i = 0; i < 10; i++) value = await encryption.encrypt(value);
+
+    const { value: result } = await encryption.decrypt<string>(value);
+    expect(result).toMatch(/^mastra:factory-secret:v1:/);
+  });
 });

@@ -3,6 +3,7 @@ import { createCipheriv, createDecipheriv } from 'node:crypto';
 const ENVELOPE_PREFIX = 'mastra:factory-secret:v1:';
 const ALGORITHM = 'aes-256-gcm';
 const IV_BYTES = 12;
+const MAX_NESTED_ENVELOPES = 4;
 
 interface SecretEnvelopeV1 {
   keyId: string;
@@ -91,7 +92,7 @@ export function createFactorySecretEncryption(config: FactorySecretEncryptionCon
     decrypt,
   };
 
-  async function decrypt<T>(value: unknown): Promise<DecryptedFactorySecret<T>> {
+  async function decrypt<T>(value: unknown, depth = 0): Promise<DecryptedFactorySecret<T>> {
     if (typeof value !== 'string') {
       return { value: structuredClone(value) as T, needsReencryption: true };
     }
@@ -105,7 +106,7 @@ export function createFactorySecretEncryption(config: FactorySecretEncryptionCon
       } catch {
         return { value: value as T, needsReencryption: true };
       }
-      return { value: (await unwrapNestedEnvelope<T>(parsed)) ?? (parsed as T), needsReencryption: true };
+      return { value: (await unwrapNestedEnvelope<T>(parsed, depth)) ?? (parsed as T), needsReencryption: true };
     }
 
     const envelope = parseEnvelope(value);
@@ -124,7 +125,7 @@ export function createFactorySecretEncryption(config: FactorySecretEncryptionCon
     } catch {
       throw new Error('[FactorySecretEncryption] Unable to decrypt encrypted value.');
     }
-    const nested = await unwrapNestedEnvelope<T>(decoded);
+    const nested = await unwrapNestedEnvelope<T>(decoded, depth);
     if (nested !== undefined) return { value: nested, needsReencryption: true };
     return { value: decoded as T, needsReencryption: envelope.keyId !== config.primary.id };
   }
@@ -133,10 +134,17 @@ export function createFactorySecretEncryption(config: FactorySecretEncryptionCon
    * Older plaintext encryptors treated an envelope as a raw legacy secret and
    * rewrote it as JSON text, which a keyed boot then re-encrypted. Peel those
    * layers back to the real value so the row is repaired on the next write.
+   * A user-supplied secret can also look like an envelope, so anything that
+   * does not decrypt with our keys is kept as the literal value.
    */
-  async function unwrapNestedEnvelope<T>(value: unknown): Promise<T | undefined> {
+  async function unwrapNestedEnvelope<T>(value: unknown, depth: number): Promise<T | undefined> {
     if (typeof value !== 'string' || !value.startsWith(ENVELOPE_PREFIX)) return undefined;
-    return (await decrypt<T>(value)).value;
+    if (depth >= MAX_NESTED_ENVELOPES) return undefined;
+    try {
+      return (await decrypt<T>(value, depth + 1)).value;
+    } catch {
+      return undefined;
+    }
   }
 }
 
