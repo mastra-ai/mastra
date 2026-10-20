@@ -409,6 +409,15 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           initialResult.stepResult.isContinued = false;
         }
 
+        // A run aborted while its tools ran ends here with those calls left incomplete. Report it
+        // as aborted, as an abort seen by the model step does, rather than as a finished turn.
+        if (rest.options?.abortSignal?.aborted && inputData.some(tc => tc.aborted)) {
+          initialResult.stepResult.reason = 'abort';
+          initialResult.stepResult.isContinued = false;
+          await rest.options?.onAbort?.({ steps: initialResult.output?.steps ?? [], text: '' });
+          safeEnqueue(rest.controller, { type: 'abort', runId: rest.runId, from: ChunkFrom.AGENT, payload: {} });
+        }
+
         // Update messages field to include any error messages we added to messageList
         return bail({
           ...initialResult,
