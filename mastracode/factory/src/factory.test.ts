@@ -1154,6 +1154,8 @@ describe('MastraFactory.prepare', () => {
       'factory_start_session',
       'factory_answer_approval',
       'factory_switch_session_model',
+      'factory_subscribe_session',
+      'factory_unsubscribe_session',
     ];
     const ALLOWED_TOOLS = [
       ...READ_TOOLS,

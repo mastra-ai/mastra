@@ -435,11 +435,8 @@ export function createFactoryMessagingTools(
   });
 
   if (scope.kind === 'worker') return { factory_message_origin: reply };
-  return {
-    factory_signal_session: signal,
-    factory_message_origin: reply,
-    factory_list_side_sessions: listSide,
-    factory_unsubscribe_session: unsubscribe,
-    factory_subscribe_session: subscribe,
-  };
+  const tools = { factory_signal_session: signal, factory_message_origin: reply, factory_list_side_sessions: listSide };
+  // Muting acts as the owner and needs no approval, so wake turns (where other people's text arrives) can't use it.
+  if (!scope.interactive) return tools;
+  return { ...tools, factory_unsubscribe_session: unsubscribe, factory_subscribe_session: subscribe };
 }

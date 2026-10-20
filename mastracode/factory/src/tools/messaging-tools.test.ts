@@ -835,8 +835,6 @@ describe('Factory toolset composition', () => {
         'factory_signal_session',
         'factory_message_origin',
         'factory_list_side_sessions',
-        'factory_unsubscribe_session',
-        'factory_subscribe_session',
       ].sort(),
     );
   });
