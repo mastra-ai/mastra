@@ -195,6 +195,14 @@ export const mastra = new Mastra({
       'How long the agentic loop waits for a background task to complete before moving on. If a task has not finished within this time, the loop proceeds without setting isContinued. Default: undefined (do not wait). Can be overridden per-agent or per-tool.',
   },
   {
+    name: 'untilIdleMaxIdleMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '300000',
+    description:
+      'Default idle timeout, in milliseconds, for `agent.stream(..., { untilIdle: true })` calls that do not set `maxIdleMs`. The stream closes when background tasks are still running but no event has arrived for this long. Set it above your longest expected background task so its completion still triggers a continuation turn. A per-call `untilIdle: { maxIdleMs }` takes precedence. Default: 5 minutes.',
+  },
+  {
     name: 'onTaskComplete',
     type: '(task: BackgroundTask) => void | Promise<void>',
     isOptional: true,

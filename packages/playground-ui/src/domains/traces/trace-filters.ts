@@ -80,6 +80,7 @@ export const ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Workflow', entityType: ROOT_ENTITY_TYPES.WORKFLOW },
   { label: 'Scorer', entityType: ROOT_ENTITY_TYPES.SCORER },
   { label: 'Ingest', entityType: ROOT_ENTITY_TYPES.INGEST },
+  { label: 'Classifier', entityType: ROOT_ENTITY_TYPES.CLASSIFIER },
 ] as const satisfies readonly EntityOptions[];
 
 export type TraceStatusFilter = 'running' | 'success' | 'error';

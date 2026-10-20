@@ -16,6 +16,7 @@ export const LOGS_ROOT_ENTITY_TYPES = {
   WORKFLOW: 'workflow_run',
   SCORER: 'scorer',
   INGEST: 'rag_ingestion',
+  CLASSIFIER: 'classifier',
 } as const satisfies Record<string, EntityTypeValue>;
 
 export const LOGS_ROOT_ENTITY_TYPE_OPTIONS = [
@@ -23,6 +24,7 @@ export const LOGS_ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Workflow', entityType: LOGS_ROOT_ENTITY_TYPES.WORKFLOW },
   { label: 'Scorer', entityType: LOGS_ROOT_ENTITY_TYPES.SCORER },
   { label: 'Ingest', entityType: LOGS_ROOT_ENTITY_TYPES.INGEST },
+  { label: 'Classifier', entityType: LOGS_ROOT_ENTITY_TYPES.CLASSIFIER },
 ] as const satisfies readonly LogsEntityOptions[];
 
 export const LOG_LEVEL_VALUES: readonly LogLevel[] = ['debug', 'info', 'warn', 'error', 'fatal'] as const;

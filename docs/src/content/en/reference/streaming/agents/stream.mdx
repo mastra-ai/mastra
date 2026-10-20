@@ -938,7 +938,7 @@ const stream = await agent.stream('message for agent')
                     isOptional: true,
                     defaultValue: '300000',
                     description:
-                      'Closes the outer stream after this many ms of idleness between turns. The timer only runs while the wrapper is between turns. Default: 5 minutes.',
+                      'Closes the outer stream after this many ms of idleness between turns. The timer only runs while the wrapper is between turns. Default: `backgroundTasks.untilIdleMaxIdleMs` from the Mastra config, or 5 minutes.',
                   },
                 ],
               },
