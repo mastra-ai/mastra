@@ -34,7 +34,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { E2BFiles } from './e2b-exec.js';
 import { PlatformSandboxFilesystem } from './sandbox-filesystem.js';
-import { PlatformSandbox, SandboxDestroyedError } from './sandbox.js';
+import { PlatformSandbox, SandboxDestroyedError, SandboxExecTransportError } from './sandbox.js';
 
 const code = (error: unknown) => (error as NodeJS.ErrnoException).code;
 
@@ -440,6 +440,36 @@ describe('PlatformSandbox.filesystem', () => {
     expect(timeouts).toEqual([10 * 60_000]);
     expect(commands[0]).toMatch(/^sh -c .*cp "\$src" "\$dest"/s);
     expect(fetchMock.mock.calls.filter(isLeaseCall)).toHaveLength(1);
+  });
+
+  it('sends a file command once, while ordinary commands retry a dropped connection', async () => {
+    const fetchMock: ReturnType<typeof vi.fn> = vi
+      .fn()
+      .mockResolvedValueOnce(created())
+      .mockResolvedValueOnce(e2bLease('first'))
+      .mockResolvedValueOnce(e2bLease('second'))
+      .mockResolvedValueOnce(e2bLease('third'));
+    const commands: string[] = [];
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock as unknown as typeof fetch,
+      // The socket closes without an exit frame: the command may already have run.
+      e2bExecRunner: async (_lease, options) => {
+        commands.push(options.command);
+        return { exitCode: null, stdout: '', stderr: '', truncated: false, timedOut: false };
+      },
+      e2bFilesFactory: () => new FakeFiles(root),
+    });
+
+    await expect(sandbox.filesystem!.appendFile('/a.txt', 'more')).rejects.toBeInstanceOf(SandboxExecTransportError);
+    expect(commands).toHaveLength(1);
+    expect(await readFile(join(root, 'a.txt'), 'utf-8')).toBe('hello');
+
+    commands.length = 0;
+    await expect(sandbox.executeCommand('true')).rejects.toBeInstanceOf(SandboxExecTransportError);
+    expect(commands).toEqual(['true', 'true']);
   });
 
   it.each([

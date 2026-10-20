@@ -1208,6 +1208,21 @@ export class PlatformSandbox extends MastraSandbox {
    * execution on the remote sandbox.
    */
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
+    return this._executeCommand(command, args, options, { once: false });
+  }
+
+  /**
+   * `executeCommand`, optionally sent at most once. With `once`, a transport
+   * failure after the command may have started is thrown instead of retried
+   * (on the lease or over the private network), so a script that changes files
+   * never runs twice.
+   */
+  private async _executeCommand(
+    command: string,
+    args: string[] | undefined,
+    options: ExecuteCommandOptions | undefined,
+    { once }: { once: boolean },
+  ): Promise<CommandResult> {
     await this.ensureRunning();
     if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
 
@@ -1243,7 +1258,7 @@ export class PlatformSandbox extends MastraSandbox {
     // path — application-level failures (sidecar returns 5xx) still fall
     // back for this call but do NOT invalidate the entry. See
     // `.scratch/factory-deploy/issue-platform-sandbox-exec-via-private-network.md`.
-    const instanceUrl = this._addressRegistry?.get(this._sandboxId);
+    const instanceUrl = once ? undefined : this._addressRegistry?.get(this._sandboxId);
     if (instanceUrl) {
       const privateNet = await this._tryExecViaPrivateNetwork(
         instanceUrl,
@@ -1275,7 +1290,7 @@ export class PlatformSandbox extends MastraSandbox {
     // `PlatformApiError` for other `/exec-lease` errors (404/500/501).
     // See ./direct-exec.ts and `docs/factory/direct-sandbox-connection.md`
     // in the Platform repo.
-    const result = await this._runDirectExec(fullCommand, effectiveTimeout, execCallOptions);
+    const result = await this._runDirectExec(fullCommand, effectiveTimeout, execCallOptions, once ? 1 : 2);
     // `_runDirectExec` throws on transport failure (see its jsdoc), so a
     // `null` exitCode here can only mean `timedOut: true` — the sandbox
     // never got to send an exit frame because we cut the command short.
@@ -1333,19 +1348,20 @@ export class PlatformSandbox extends MastraSandbox {
     fullCommand: string,
     effectiveTimeout: number | undefined,
     options: ExecuteCommandOptions | undefined,
+    attempts = 2,
   ): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }> {
     const filteredEnv = this._execEnv(options);
 
     let lastResult: Awaited<ReturnType<typeof execViaLease>> | undefined;
     let lastLease: CachedExecLease | undefined;
     let attemptsMade = 0;
-    // Two attempts: initial + one retry. On the second attempt we drop the
+    // Two attempts by default: initial + one retry. On the second attempt we drop the
     // cached lease so we don't reuse a JWT that may itself be the cause of
     // the transport failure — but only if the cache still holds the same
     // lease we just failed against. A concurrent exec sharing this instance
     // may have already cached a fresh, unrelated lease in between, and we
     // must not discard that.
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < attempts; attempt++) {
       if (attempt > 0 && lastLease && this._lease === lastLease) this._lease = null;
       let lease: CachedExecLease;
       try {
@@ -1570,12 +1586,14 @@ export class PlatformSandbox extends MastraSandbox {
     this._filesystem ??= new PlatformSandboxFilesystem({
       id: this.id,
       withFiles: (operation, fn) => this._withE2BFiles(operation, fn),
+      // Sent once: a replayed append or no-clobber move would change files twice.
       // A sandbox without a configured timeout would let a hung `cp` block forever.
       runCommand: script =>
-        this.executeCommand(
+        this._executeCommand(
           'sh',
           ['-c', script],
           this._timeout === undefined ? { timeout: FILE_COMMAND_TIMEOUT_MS } : {},
+          { once: true },
         ),
     });
     return this._filesystem;
