@@ -21,6 +21,7 @@ import {
 import type { FactoryDeliveryController, FactoryDeliveryResult } from './deliver.js';
 import { workItemNumber } from './read-tools.js';
 import { reportNotification, workItemReportAttributes, workItemReportRecipients } from './reports.js';
+import { requirePerson } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
 import { listSideSessions, sessionModel } from './side-sessions.js';
 
@@ -357,7 +358,7 @@ export function createFactoryMessagingTools(
     id: 'factory_list_side_sessions',
     description: [
       'List the side sessions this session started with factory_start_session: state (running, parked waiting on an answer, idle), last report, whether you muted it, its model, and the work item it works on.',
-      'Use the session ids with factory_signal_session, factory_switch_session_model, factory_answer_approval, factory_unsubscribe_session and factory_subscribe_session.',
+      'Use the session ids with factory_signal_session and factory_switch_session_model. On a turn a person started, also with factory_answer_approval, factory_unsubscribe_session and factory_subscribe_session.',
     ].join(' '),
     inputSchema: z
       .object({
@@ -411,9 +412,10 @@ export function createFactoryMessagingTools(
   const unsubscribe = createTool({
     id: 'factory_unsubscribe_session',
     description:
-      "Mute a side session you started: its reports and run-end notices stop reaching you, but it keeps working. Approval requests and blocked reports still arrive, since the session can't go on without an answer. Undo with factory_subscribe_session.",
+      "Mute a side session you started: its reports and run-end notices stop reaching you, but it keeps working. Approval requests and blocked reports still arrive, since the session can't go on without an answer. Undo with factory_subscribe_session. Only on a turn a person started.",
     inputSchema: z.object({ sessionId: sideSessionId }).strict(),
     execute: async ({ sessionId }) => {
+      requirePerson(scope, 'mute a side session');
       const row = await ownSideSession(sessionId);
       if (row.originMutedAt) return { sessionId, muted: true, mutedAt: row.originMutedAt.toISOString() };
       await deps.sessions.setOriginMuted({ sessionId, muted: true });
@@ -425,9 +427,10 @@ export function createFactoryMessagingTools(
   const subscribe = createTool({
     id: 'factory_subscribe_session',
     description:
-      'Unmute a side session you muted with factory_unsubscribe_session, so its reports reach you again. Reports it sent while muted are not replayed.',
+      'Unmute a side session you muted with factory_unsubscribe_session, so its reports reach you again. Reports it sent while muted are not replayed. Only on a turn a person started.',
     inputSchema: z.object({ sessionId: sideSessionId }).strict(),
     execute: async ({ sessionId }) => {
+      requirePerson(scope, 'unmute a side session');
       const row = await ownSideSession(sessionId);
       if (row.originMutedAt) await deps.sessions.setOriginMuted({ sessionId, muted: false });
       return { sessionId, muted: false };
@@ -435,8 +438,11 @@ export function createFactoryMessagingTools(
   });
 
   if (scope.kind === 'worker') return { factory_message_origin: reply };
-  const tools = { factory_signal_session: signal, factory_message_origin: reply, factory_list_side_sessions: listSide };
-  // Muting acts as the owner and needs no approval, so wake turns (where other people's text arrives) can't use it.
-  if (!scope.interactive) return tools;
-  return { ...tools, factory_unsubscribe_session: unsubscribe, factory_subscribe_session: subscribe };
+  return {
+    factory_signal_session: signal,
+    factory_message_origin: reply,
+    factory_list_side_sessions: listSide,
+    factory_unsubscribe_session: unsubscribe,
+    factory_subscribe_session: subscribe,
+  };
 }
