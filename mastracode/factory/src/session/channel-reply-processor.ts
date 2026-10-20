@@ -50,7 +50,12 @@ export interface SessionLinkTarget {
  * falls back to the factory-agnostic /threads/ redirect, which forwards the
  * query through.
  */
-export function sessionLink({ threadId, sessionId, resourceId, factoryProjectId }: SessionLinkTarget): string | undefined {
+export function sessionLink({
+  threadId,
+  sessionId,
+  resourceId,
+  factoryProjectId,
+}: SessionLinkTarget): string | undefined {
   const origin = process.env.MASTRACODE_PUBLIC_URL;
   if (!origin) return undefined;
   const isChatOnly = resourceId.startsWith('channel:');

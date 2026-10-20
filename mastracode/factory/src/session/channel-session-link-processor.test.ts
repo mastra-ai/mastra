@@ -17,7 +17,11 @@ const LINK = 'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uui
 // Own paragraph, so it closes the message rather than tailing the last sentence.
 const LINK_SUFFIX = `\n\n[Open session ↗](${LINK})`;
 
-function newSessionContext({ factoryProjectId = 'fp-1' as string | null, sessionId = 'us-42', resourceId = 'fp-1' } = {}) {
+function newSessionContext({
+  factoryProjectId = 'fp-1' as string | null,
+  sessionId = 'us-42',
+  resourceId = 'fp-1',
+} = {}) {
   const requestContext = new RequestContext();
   requestContext.set('controller', {
     threadId: 'uuid-thread-1',
@@ -159,10 +163,10 @@ describe('FactoryChannelSessionLinkProcessor', () => {
   });
 
   it('a chat-only thread links with its resource in the query', async () => {
-    const out = await render(newSessionContext({ sessionId: 'channel:slack:C-1:1700.42', resourceId: 'channel:slack:C-1:1700.42' }), [
-      ...textBlock('Hi'),
-      stepFinish(),
-    ]);
+    const out = await render(
+      newSessionContext({ sessionId: 'channel:slack:C-1:1700.42', resourceId: 'channel:slack:C-1:1700.42' }),
+      [...textBlock('Hi'), stepFinish()],
+    );
     expect(texts(out)).toEqual([
       `Hi\n\n[Open session ↗](https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1?sessionId=${encodeURIComponent('channel:slack:C-1:1700.42')})`,
     ]);
