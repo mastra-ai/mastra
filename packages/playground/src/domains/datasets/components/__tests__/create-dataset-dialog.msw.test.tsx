@@ -89,6 +89,13 @@ describe('CreateDatasetDialog', () => {
 
       expect(screen.queryByText('Target type')).toBeNull();
     });
+
+    it('does not offer schema configuration', async () => {
+      setupHandlers();
+      await renderDialog();
+
+      expect(screen.queryByText(/Schema Configuration/)).toBeNull();
+    });
   });
 
   describe('when the dataset is created without a target', () => {
@@ -126,6 +133,18 @@ describe('CreateDatasetDialog', () => {
       expect(createBodies[0]).not.toHaveProperty('description');
       expect(createBodies[0]).not.toHaveProperty('scorerIds');
     });
+
+    it('sends no schemas', async () => {
+      const { createBodies } = setupHandlers();
+      await renderDialog();
+
+      submit();
+
+      await waitFor(() => expect(createBodies).toHaveLength(1));
+      expect(createBodies[0]).not.toHaveProperty('inputSchema');
+      expect(createBodies[0]).not.toHaveProperty('groundTruthSchema');
+      expect(createBodies[0]).not.toHaveProperty('requestContextSchema');
+    });
   });
 
   describe('when the dialog is scoped to a target', () => {
@@ -145,6 +164,13 @@ describe('CreateDatasetDialog', () => {
       await renderDialog({ targetType: 'agent', targetIds: ['weather-agent'] });
 
       expect(screen.queryByText('Target type')).toBeNull();
+    });
+
+    it('does not offer a custom schema', async () => {
+      setupHandlers();
+      await renderDialog({ targetType: 'agent', targetIds: ['weather-agent'] });
+
+      expect(screen.queryByRole('button', { name: '+ Custom schema' })).toBeNull();
     });
   });
 

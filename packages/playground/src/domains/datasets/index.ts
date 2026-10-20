@@ -28,6 +28,7 @@ export { AddItemsToDatasetDialog } from './components/add-items-to-dataset-dialo
 export { DuplicateDatasetDialog } from './components/duplicate-dataset-dialog';
 export { EditDatasetForm } from './components/edit-dataset-form';
 export { DeleteDatasetDialog } from './components/delete-dataset-dialog';
+export { DatasetSchemaDialog } from './components/schema-settings';
 export { EmptyDatasetsTable } from './components/empty-datasets-table';
 export { DatasetCombobox } from './components/dataset-combobox';
 export type { DatasetComboboxProps } from './components/dataset-combobox';

@@ -77,6 +77,7 @@ export type TracesListContextValue = Pick<
   | 'hasNextPage'
   | 'setEndOfListElement'
   | 'error'
+  | 'refetch'
   | 'autoRefetch'
   | 'setAutoRefetch'
 > & {
@@ -90,6 +91,8 @@ export const TracesConfigContext = createContext<TracesConfigContextValue | null
 export const TracesFiltersContext = createContext<TracesFiltersContextValue | null>(null);
 export const TracesSelectionContext = createContext<TracesSelectionContextValue | null>(null);
 export const TracesListContext = createContext<TracesListContextValue | null>(null);
+/** Kept out of `TracesListContext` so a poll tick doesn't re-render every list consumer. */
+export const TracesListFetchingContext = createContext<boolean | null>(null);
 export const TracesColumnsContext = createContext<TracesColumnsContextValue | null>(null);
 
 const useRequired = <T>(context: React.Context<T | null>, name: string): T => {
@@ -102,6 +105,12 @@ export const useTracesConfig = () => useRequired(TracesConfigContext, 'useTraces
 export const useTracesFilters = () => useRequired(TracesFiltersContext, 'useTracesFilters');
 export const useTracesSelection = () => useRequired(TracesSelectionContext, 'useTracesSelection');
 export const useTracesList = () => useRequired(TracesListContext, 'useTracesList');
+/** Whether the list query is fetching, including background refetches and retries. */
+export const useTracesListFetching = () => {
+  const value = useContext(TracesListFetchingContext);
+  if (value === null) throw new Error('useTracesListFetching must be used inside <TracesExplorer>');
+  return value;
+};
 export const useTracesColumns = () => useRequired(TracesColumnsContext, 'useTracesColumns');
 
 const CHECKING_USAGE_REASON = 'Checking whether this storage supports usage data.';
