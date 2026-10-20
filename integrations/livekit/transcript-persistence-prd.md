@@ -4,7 +4,7 @@
 
 **Date:** October 13, 2026  
 **Package:** `@mastra/livekit`  
-**Audience:** Mastra maintainers and the Loadsmart integration team
+**Audience:** Mastra maintainers and integration developers
 
 ## Approved implementation adjustments
 
@@ -29,7 +29,7 @@ This is the second step after the shared session contract. That contract remains
 
 Generating an answer and speaking it are different events. An agent can produce a complete answer, speak only part of it, and then be interrupted. LiveKit can also request a speculative answer that is discarded before playback. Automatic persistence of generated output can therefore put unsaid text into the saved conversation.
 
-Applications currently have to coordinate LiveKit events, Mastra's memory settings, message conversion, duplicate handling, greetings, and shutdown themselves. Loadsmart has implemented the server-side portion of this in its wrapper. Its architecture documents disabling automatic generation persistence and forwarding committed conversation items to a custom lifecycle endpoint. The local demos worker inspected during review does not yet match that documented flow, so migration must verify the worker actually deployed.
+Applications currently have to coordinate LiveKit events, Mastra's memory settings, message conversion, duplicate handling, greetings, and shutdown themselves. A shared adapter can replace this repeated integration work while preserving application-specific lifecycle behavior.
 
 The adapter should let an application remove that transcript-specific plumbing while continuing to use its existing Memory implementation, thread identities, authentication, and transcript readers.
 
@@ -43,7 +43,7 @@ The adapter should let an application remove that transcript-specific plumbing w
 - Existing memory history remains readable during generation, and each subsequent turn sees the committed conversation without duplicate inputs.
 - The same persistence semantics work with a local Mastra agent and with `MastraLLM` calling a remote Mastra server.
 - Existing users see no change until they explicitly enable the feature.
-- Loadsmart can remove its conversation-item ingestion and persistence code after migration, without removing its business-specific lifecycle handling.
+- Applications can remove overlapping conversation-item ingestion and persistence code after adoption, while retaining business-specific lifecycle handling.
 
 ## Release scope
 
@@ -206,7 +206,7 @@ Use native SDK events and public session APIs in integration tests, plus storage
 2. **Implement the shared adapter and local worker opt-in.** Add message mapping, one-writer coordination, real storage validation, and flush/error behavior entirely within `@mastra/livekit`.
 3. **Bind custom sessions and remote workers.** Reuse the same mapping and sequencing logic with the existing Mastra client and authenticated Memory API. Demonstrate the complete supported setup without a custom lifecycle endpoint.
 4. **Document and release compatibly.** Provide API documentation, migration guidance, limitations, and a minor-release changeset. Run the focused tests and the full LiveKit package suite, build, typecheck, and lint.
-5. **Migrate one Loadsmart worker.** Verify the deployed worker version. Enable the adapter for that worker, remove its overlapping transcript/greeting writers, and compare saved messages and next-turn context before removing the wrapper's transcript endpoint path. Keep Loadsmart's call records, outcomes, and business callbacks.
+5. **Validate adoption in an existing worker.** Verify the deployed worker version. Enable the adapter, remove overlapping transcript/greeting writers, and compare saved messages and next-turn context before removing any superseded transcript endpoint. Preserve application-owned call records, outcomes, and business callbacks.
 
 ## Review decisions
 
@@ -230,7 +230,7 @@ Run the PostgreSQL test with a disposable localhost database:
 LIVEKIT_TEST_PG_URL=postgresql://USER:PASSWORD@127.0.0.1:PORT/DATABASE pnpm --filter @mastra/livekit test src/transcript-pg.test.ts
 ```
 
-With both `LIVEKIT_TEST_PG_URL` and `LIVEKIT_TEST_ROOM_URL` configured, the full package suite passes all 386 tests with none skipped. The PostgreSQL test remains opt-in when no database URL is supplied. Before release, complete the controlled voice-call check for greeting, interruption/resumption, latency, and shutdown. No Loadsmart worker migration has been performed.
+With both `LIVEKIT_TEST_PG_URL` and `LIVEKIT_TEST_ROOM_URL` configured, the full package suite passes all 386 tests with none skipped. The PostgreSQL test remains opt-in when no database URL is supplied. Before release, complete the controlled voice-call check for greeting, interruption/resumption, latency, and shutdown. Validation in an existing production deployment remains pending.
 
 ## Implementation references
 
@@ -241,4 +241,3 @@ With both `LIVEKIT_TEST_PG_URL` and `LIVEKIT_TEST_ROOM_URL` configured, the full
 - Current playback observer and greeting writer: [speech.ts](src/speech.ts), [voice-thread.ts](src/voice-thread.ts).
 - Memory save implementation and read-only configuration: [Memory](../../packages/memory/src/index.ts), [memory types](../../packages/core/src/memory/types.ts).
 - Existing remote Memory client and server handlers: [client.ts](../../client-sdks/client-js/src/client.ts), [memory handlers](../../packages/server/src/server/handlers/memory.ts).
-- Loadsmart's adapter inspiration: [conversation persistence](/Users/michael/client-work/loadsmart/mastra-voice-capability/src/services/voice-call-thread.ts), [lifecycle ingestion](/Users/michael/client-work/loadsmart/mastra-voice-capability/src/routes/voice-lifecycle.ts), and [documented worker design](/Users/michael/client-work/loadsmart/mastra-voice-capability/docs/architecture.md).

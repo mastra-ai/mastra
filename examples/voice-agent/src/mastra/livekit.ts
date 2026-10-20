@@ -1,9 +1,20 @@
+import { LiveKitSessionConfigSchema } from '@mastra/livekit';
 import type { LiveKitRecordingOptions } from '@mastra/livekit';
 import { EncodedFileType } from 'livekit-server-sdk';
 import { z } from 'zod';
 
 // Use the same name in the server and the worker. Override it to isolate a local test worker.
 export const liveKitAgentName = process.env.LIVEKIT_AGENT_NAME || 'mastra-voice';
+
+// Trusted server settings, shared with the worker through dispatch metadata.
+// Keep credentials and plugin instances in the worker, outside this JSON contract.
+export const liveKitSessionConfig = LiveKitSessionConfigSchema.parse({
+  version: 1,
+  options: {
+    stt: 'deepgram/nova-3',
+    tts: 'cartesia/sonic-3',
+  },
+});
 
 const recordingEnabledSchema = z.enum(['true', 'false']).default('false');
 const storageSchema = z.object({

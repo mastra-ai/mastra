@@ -5,6 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  zod: link:../../packages/memory/node_modules/zod
+  '@livekit/rtc-node': link:../../integrations/livekit/node_modules/@livekit/rtc-node
+  '@mastra/client-js': link:../../client-sdks/client-js
   '@livekit/agents': link:../../integrations/livekit/node_modules/@livekit/agents
   '@livekit/agents-plugin-livekit': link:../../integrations/livekit/node_modules/@livekit/agents-plugin-livekit
   '@livekit/agents-plugin-silero': link:../../integrations/livekit/node_modules/@livekit/agents-plugin-silero
@@ -58,6 +61,12 @@ importers:
       '@livekit/agents-plugin-silero':
         specifier: link:../../integrations/livekit/node_modules/@livekit/agents-plugin-silero
         version: link:../../integrations/livekit/node_modules/@livekit/agents-plugin-silero
+      '@livekit/rtc-node':
+        specifier: link:../../integrations/livekit/node_modules/@livekit/rtc-node
+        version: link:../../integrations/livekit/node_modules/@livekit/rtc-node
+      '@mastra/client-js':
+        specifier: link:../../client-sdks/client-js
+        version: link:../../client-sdks/client-js
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
@@ -80,8 +89,8 @@ importers:
         specifier: link:../../packages/cli
         version: link:../../packages/cli
       zod:
-        specifier: 4.6.5
-        version: 4.6.5
+        specifier: link:../../packages/memory/node_modules/zod
+        version: link:../../packages/memory/node_modules/zod
     devDependencies:
       concurrently:
         specifier: ^9.1.2
@@ -474,9 +483,6 @@ packages:
   yargs@18.2.0:
     resolution: {integrity: sha512-9OpKOLeaoNFecEp7P6iYbzze/5CqWoH7N3SMs/6y1XF4nMvFMspEGZzJ6uFi9MmQwXhyzqYoSEKO3tvA3Z/o2w==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=23}
-
-  zod@4.6.5:
-    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
 
 snapshots:
 
@@ -902,5 +908,3 @@ snapshots:
       string-width: 8.3.0
       y18n: 5.0.8
       yargs-parser: 22.0.0
-
-  zod@4.6.5: {}

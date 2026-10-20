@@ -32,59 +32,86 @@ Customer lookup results are reused throughout a call. The agent should only retr
 
 ## Agent vs. workflow entrypoint
 
-Both workers wire the same audio pipeline and the same brand; they differ only in how a turn becomes a reply.
+Both workers use the same audio pipeline and business tools. Their generation and persistence paths differ.
 
-The **agent worker** (`src/mastra/voice-worker.ts`) passes a Mastra agent to `createLiveKitWorker`. The agent runs its own loop each turn, calls tools, and persists the conversation to a Mastra memory thread. The worker scopes memory per call — `thread` is the call, `resource` is the caller — so memory carries the caller's details across calls: hang up, call back, and Jordan recalls who you are (see [Memory and latency](#memory-and-latency)). This is the richer, primary path and the one the four scenarios above run on.
+The **agent worker** (`src/mastra/voice-worker.ts`) passes a Mastra agent to `createLiveKitWorker`. The agent runs its own loop each turn and calls tools. With `transcriptPersistence: 'memory'`, the worker saves LiveKit's committed conversation items to the existing Mastra Memory thread. The worker scopes memory per call — `thread` is the call, `resource` is the caller — so memory carries the caller's details across calls: hang up, call back, and Jordan recalls who you are (see [Memory and latency](#memory-and-latency)). This is the richer, primary path and the one the four scenarios above run on.
 
 The **workflow worker** (`src/mastra/voice-worker-workflow.ts`) passes a `workflow` plus a `workflowInput` mapper. LiveKit owns the turn boundary, so the `phoneConversation` workflow (`src/mastra/workflows/phone-conversation.ts`) runs once to completion per turn — there is no suspend/resume. Each turn it:
 
 1. **Classifies the caller's intent** (`classifyIntent` step, using the small `triage` agent) into a constrained enum — `lead`, `inspection`, `callback`, `existing_job`, or `general`. This is the workflow's value over instructions-only routing: an explicit, inspectable step pins the scenario _before_ the reply, instead of the agent discovering it mid-sentence.
 2. **Generates the spoken reply** (`generateResponse` step) with the full `callCenter` agent and that intent's focus in front. It calls `@mastra/livekit`'s `pipeAgentReplyToWriter(stream, writer)` helper, which forwards the agent's text deltas (so text-to-speech starts early) _and_ its tool-call chunks (so `toolFeedback` fires and the `onTurnComplete` tool list is populated) — unlike piping only `.textStream`, which silently drops tool calls.
 
-The reworked workflow worker is at **feature parity** with the agent worker. It shares the same `callCenterMemory` (`src/mastra/memory.ts`): the worker's `memoryInstance` bootstraps the call thread and persists the greeting, and the reply step's memory-backed `agent.stream(..., { memory })` backfills prior turns from the thread, persists this turn, and engages all three memory layers — so a returning caller is recognized on the workflow path too. The same `toolFeedback` and post-turn `onTurnComplete` CRM log run here as well. Conversation state lives in memory (thread = call, resource = caller), not in the workflow, so the workflow stays stateless between turns.
+The workflow worker shares `callCenterMemory`, tools, service-area checks, and post-turn logging. It retains generation-driven Memory writes and greeting persistence through `memoryInstance`. Managed transcript persistence does not support workflow or custom-generator reply sources, so this path does not provide the agent worker's final interrupted-turn persistence guarantee.
 
 ## Plugin worker: own the session, keep Mastra's brain
 
-The plugin worker (`src/mastra/voice-worker-plugin.ts`) inverts the ownership model. The other workers hand the session to `createLiveKitWorker` and configure it through Mastra options; here the file builds the LiveKit `voice.AgentSession` itself — every session option, lifecycle hook, and node override belongs to this file — and Mastra occupies only the `llm` slot:
+The plugin worker (`src/mastra/voice-worker-plugin.ts`) owns a native `voice.AgentSession` and calls the Mastra server over HTTP. It now uses the same managed transcript persistence as the agent worker:
 
 ```ts
-import { MastraLLM } from '@mastra/livekit/plugin';
+import { MastraClient } from '@mastra/client-js';
+import { createLiveKitTranscriptPersistence, MastraLLM } from '@mastra/livekit/plugin';
 
+const persistence = await createLiveKitTranscriptPersistence({
+  remote: { client: new MastraClient({ baseUrl: MASTRA_URL }), agentId: 'callCenter' },
+  sessionId: ctx.job.id,
+  memory: { thread, resource },
+});
 const session = new voice.AgentSession({
-  llm: new MastraLLM({
-    remote: { baseUrl: process.env.MASTRA_URL!, agentId: 'callCenter' },
-    memory: { thread, resource },
-  }),
-  stt: 'deepgram/nova-3',
-  tts: 'cartesia/sonic-3',
-  // ...
+  llm: new MastraLLM({ transcriptPersistence: persistence }),
+  // Configure STT, TTS, VAD, and turn handling as shown in the worker.
+});
+persistence.attach(session); // Before session.start().
+ctx.addShutdownCallback(async () => {
+  const status = await persistence.close();
+  console.info('Transcript status', status);
 });
 ```
 
-The Mastra app — agent loop, tools, all three memory layers, observability — runs on the **server** (`pnpm dev`), reached over HTTP/SSE. The worker process carries no Mastra app, no database, and no model-provider keys, so it can be deployed anywhere that can reach the server (set `MASTRA_URL`). Barge-in still aborts the in-flight server generation, and interrupted turns self-heal into the memory thread on the following turn.
+The binding supplies the generation source and memory mapping. Do not also pass separate `remote` or `memory` options to `MastraLLM`. The worker validates dispatch metadata with `parseSessionMetadata(..., { validate: true })` and applies its shared session options.
 
-Because the customer owns the session, the wrapper's conveniences are rebuilt in a few lines each — which is exactly what this entrypoint demonstrates: the greeting is spoken with `speakGreeting` (or plain `session.say`), and agent-initiated hang-up pairs `MastraLLM`'s `onToolCall` with `runEndCall` — when the server-side agent calls its `endCall` tool, the worker waits for the goodbye to finish playing and disconnects. Note the `voice.Agent` instructions in this file never reach the Mastra agent; the server-side agent's instructions are authoritative.
+Greetings, committed replies, interrupted-item revisions, and structured tool history are saved through the existing Memory endpoints. The worker needs LiveKit credentials and access to the Mastra server; model credentials and the database remain on the server. Set `MASTRA_API_TOKEN` if that server uses bearer authentication, including permission for the intended Memory thread/resource.
+
+The greeting uses `speakGreeting`, and agent-initiated hang-up uses `runEndCall`. The binding closes the session and flushes final items on shutdown. Unlike the in-process agent worker, this entrypoint does not run the application's `summarizeCall` hook or working-memory extraction; add application completion handling separately if needed.
+
+## Shared settings and available phone APIs
+
+`src/mastra/livekit.ts` defines a validated `liveKitSessionConfig`. The connection route places it in dispatch metadata, and the standard workers opt in with `sessionConfigFromMetadata: true`. Change speech model strings there to configure browser calls. Worker-level models remain fallbacks for jobs without this metadata.
+
+Version 1 also accepts `userAwayTimeout` in seconds and native endpointing/interruption options with durations in milliseconds. It does not replace greeting policies, plugins, credentials, or business metadata. The server selects these settings; the browser cannot supply arbitrary session configuration through this demo's route.
+
+The browser demo does not dial a phone or publish keypad tones. These package APIs are available when extending it to a SIP call:
+
+| Capability      | Standard worker                                                                                                    | Custom/remote worker                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Outbound setup  | `telephony: { direction: 'outbound', sipClient, sipTrunkId, phoneNumber }` waits for an answer before the greeting | Use native LiveKit SIP APIs with answer waiting before starting the conversation                                 |
+| Inbound routing | `telephony: { direction: 'inbound', resolveMetadata }` supplies the native caller to your trusted resolver         | Resolve the native SIP participant before choosing the agent and memory scope                                    |
+| Keypad input    | Add `dtmf: true` to a telephony worker                                                                             | Create a per-call `createDtmfTool({ room, session, participantIdentity })` and pass it through `MastraLLM.tools` |
+
+Use a dedicated room per call and one dialing owner. DTMF accepts `{ digits: '123#' }`; `{ published: '123#', complete: true }` means LiveKit acknowledged publication, not that the phone menu accepted it. Keep preemptive generation disabled for DTMF, remove overlapping keypad interceptors, and do not automatically replay a partial sequence. Menu choices remain agent instructions; the adapter adds no custom timing, retries, or menu engine.
+
+See the branch's [LiveKit guide](../../docs/src/content/en/integrations/voice/livekit.mdx) for full telephony, remote tools, configuration precedence, cleanup, and error behavior.
 
 ## Memory and latency
 
-The agent (`src/mastra/agents/call-center-agent.ts`) uses three layers of memory, all scoped to the caller (`resource`) so they carry across calls:
+The agent and plugin workers use managed transcript persistence. Generation reads existing history, semantic recall, working memory, and observations without automatically writing them. LiveKit's committed conversation items become the saved transcript; discarded speech drafts do not.
 
-1. **Working memory** — the structured fields collected during _this_ call (name, number, trade, address, zip, which path it is), so Jordan never asks twice.
-2. **Semantic recall** — pulls the most relevant snippets of the caller's _prior_ calls into context. Backed by a `LibSQLVector` index in the same `voice-agent.db` and an embedder.
-3. **Observational memory** — a background Observer agent distills durable facts about the caller and injects them into later calls.
+Storage writes run asynchronously outside the current audio/reply stream. The next generation waits for preceding writes, so slow storage or embedding work can delay the next reply. Both workers log `transcript wait` with `durationMs`, report persistence errors, and log final saved/pending/failed status. A failed write blocks the next generation boundary until addressed; it does not itself hang up.
 
-On a phone call latency is the product, so each layer is tuned for it:
+The demo's `callCenterMemory` enables semantic recall and an embedder. Measure with this configuration: indexing can affect persistence time. Automatic working-memory updates and observational-memory processing do not run during managed read-only generation. The in-process agent worker runs `summarizeCall` after final transcript flushing to save the business summary and extract working-memory fields; it skips that summary when persistence reports an incomplete transcript.
 
-- **Recall runs before the reply, so it's kept small.** Semantic recall is synchronous — it happens before the model generates — so `topK` is `3` with a tight message range. Every extra hit is time the caller waits through. The embedder is the OpenAI router the agent model already uses (one small, cached call per turn); swap in a local embedder such as `@mastra/fastembed` to drop that network round-trip.
-- **Observational memory runs _inline_ — so it's kept cheap and flushed at call end.** Despite the "background" framing, the OM observer runs as an input-step processor _inside_ the agent loop: it blocks the turn while it distills. Measured on a reasoning model (gpt-5-mini) it stalled a turn ~25s. Two things keep it off the caller's clock: a **fast, non-reasoning observer model** (`gpt-4.1-mini`), and — the real fix — the **`onCallEnd` hook**, which distills the whole call into durable memory _once, after the caller hangs up_ (`flushObservationalMemory` in `src/mastra/memory.ts`), entirely off the audio path. The inline `messageTokens` threshold is a backstop; `observe()` still respects it, so the end-of-call flush distills once the call accumulated enough unobserved tokens to be worth it. (Future direction: a `force` option on `observe()` would let the flush distill regardless of length, so even a very short call is captured and the inline threshold could be raised high for zero in-call OM cost — see the `@mastra/livekit` TODO.)
-- **Working-memory writes never touch the audio path.** The memory config sets `workingMemory.agentManaged: false`, so the main agent gets working memory as **read-only context** — no `updateWorkingMemory` tool is injected at all — and `summarizeCall` runs a `WorkingMemoryExtractor` once at call end to write the caller's collected fields. Compared to the in-loop tool this removes two failure modes measured on live calls — models re-stating the reply after the tool result (the caller hears the answer twice) and writing memory _before_ replying (seconds of dead air) — and it drops the extra model step from every memory-writing turn. (The fuller form, `observationalMemory.observation.manageWorkingMemory: true`, also updates the fields whenever the Observer fires mid-call; it currently crashes with resource-scoped working memory — core bug, tracked in the package TODO.)
-- **Everything else post-turn runs off the audio path.** `createLiveKitWorker` takes an `onTurnComplete` hook that fires _after_ the reply has streamed to text-to-speech, fire-and-forget — the worker never awaits it, so it can't add to the caller's latency or delay the next turn. This worker uses it to log every turn to the contact "CRM" (`recordContact` in `src/mastra/backend.ts`); it's also the right place for a fully-backgrounded `memory.updateWorkingMemory(...)`. The hook receives the produced reply (`result.text`, `result.toolCalls`, `result.interrupted`) and the call's `memory` mapping.
+Use one active writer per thread. Do not add another transcript listener or greeting writer. Existing messages are retained. The default shutdown budget is 10 seconds; the hosting worker must allow enough additional time for application completion work. Pending in-process writes cannot be recovered after a process crash.
 
-> The trade-off: working memory updates on the Observer's cadence (or at call end), not per turn. Mid-call, "never ask twice" is covered by `lastMessages` keeping the whole call in context; working memory's job is carrying the fields to the _next_ call.
+The workflow and regulated entrypoints retain their existing persistence behavior. The regulated worker's consent controls are independent of audio recording and transcript storage; this update does not add managed transcript persistence to that entrypoint.
 
 ## Setup
 
-1. Create a free LiveKit Cloud project at [cloud.livekit.io](https://cloud.livekit.io), then copy the URL, API key, and secret from **Settings → API Keys**. The free tier includes inference credit, so the Deepgram/Cartesia model strings work without separate accounts.
+Use Node.js 22.18 or newer for this development project. The tested stable LiveKit combination is Agents, LiveKit plugin, and Silero plugin **1.9.3**, RTC **1.1.0**, and Server SDK **2.19.1**. The demo declares these newer minimums, Zod **4.6.5**, and client SDK **1.55.0**. Its workspace overrides intentionally load the local Mastra branch builds, which may have alpha version labels; these are not published release guarantees.
+
+Zod is intentionally linked to the workspace Memory package. Mixing its 4.6.5 public schema types with Zod 4.6.7 causes TypeScript incompatibilities in the summary extractor. Upgrade those together; the LiveKit dependencies above use the latest stable versions verified for this update.
+
+Keep Agents and installed plugins aligned, and ensure one physical Agents/RTC installation. `pnpm-workspace.yaml` links the integration's native dependencies so runtime class checks use the same instances. After installing, inspect `pnpm list --depth 0`. The lockfile records the installed resolution; changing a range alone does not upgrade it.
+
+1. Create a free LiveKit Cloud project at [cloud.livekit.io](https://cloud.livekit.io), then copy the URL, API key, and secret from **Settings → API Keys**. Enable LiveKit inference for the configured Deepgram/Cartesia model strings; usage depends on the project plan.
 
 2. Copy `.env.example` to `.env` and fill in the LiveKit credentials and your `OPENAI_API_KEY`.
 
@@ -103,7 +130,7 @@ Three processes. Pick **one** worker (agent or workflow):
 
 ```bash
 # 1. Mastra server (API on :4111)
-pnpm dev
+pnpm mastra dev
 
 # 2a. Agent worker — answers each turn with the callCenter agent loop
 pnpm worker
@@ -136,9 +163,20 @@ Things to try (the four scenarios run on the **agent worker**):
 - **Returning caller / scheduling:** "Hi, it's Shane Thomas, five five five, zero one four two." — account lookup plus scheduling, with filler speech while tools run.
 - Pause mid-sentence ("I was wondering if… hmm…") — the semantic turn detector should wait for you to finish.
 - Interrupt Jordan while it's speaking — playback stops and it listens (barge-in).
-- Hang up, then call again from the same caller: because all three memory layers are scoped to the caller (`resource`), Jordan greets you by name and recalls what the earlier call was about (via semantic recall) instead of starting over.
+- With the agent worker, let the end-of-call summary finish, then call again using the same `resourceId`. Check that saved history and extracted working-memory details are available. Automatic observational-memory updates are disabled on the managed-persistence path.
 
-The same calls work against either worker. The agent worker discovers the scenario from its instructions mid-call; the workflow worker classifies the intent in an explicit step first, then replies with the full agent. Both share the same tools, service-area gate, reconciliation, and caller-scoped memory, so cross-call recognition and the post-turn CRM log work on either path.
+The agent worker discovers the scenario from its instructions; the workflow worker classifies intent explicitly. Use the agent or plugin worker for committed-transcript verification. The workflow worker retains its existing generation-driven persistence.
+
+## Verify managed transcripts in a live call
+
+1. Run the agent worker and open a fresh front-desk thread. Note the thread and room printed by `session started`.
+2. Hear the greeting, exchange a normal turn, and trigger a tool, for example by asking to look up Shane Thomas.
+3. Interrupt a reply, then hang up immediately. Repeat with an interruption followed by another turn.
+4. Inspect the thread after shutdown. Check the greeting, committed interrupted text, revisions without duplicates, and structured tool history.
+5. Confirm `transcript closed` reports no pending or failed items, and review `transcript wait` durations. Compare next-turn response time with a baseline under the same models and storage configuration.
+6. Stop the agent worker, start `pnpm worker:plugin`, and repeat to verify the remote Memory path.
+
+Server readiness alone does not complete this check. This browser call does not verify carrier answer behavior or DTMF acceptance; those require a controlled SIP call and phone menu.
 
 ## Record calls (optional)
 

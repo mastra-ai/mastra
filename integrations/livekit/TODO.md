@@ -19,7 +19,7 @@ intake + service-area check, general callback).
 - [x] Repeat cancellation and simultaneous-call isolation 20 times. Removing native publishing fails all three packet-delivery cases; restoring it passes them.
 - [x] Verify the existing client SDK minimum (1.51.2), both supported Zod majors, build, lint, source/test types, and public documentation examples. Initial DTMF verification passed 385 enabled package tests. PostgreSQL verification below brings the full suite to 386 passing tests with none skipped.
 - [ ] Verify actual carrier/phone-menu acceptance: single digits, multi-digit sequences, `*`/`#`, interrupted sequences, and hang-up. Native packet delivery does not prove that a remote menu accepted the keys.
-- [ ] Migrate Loadsmart's worker-side DTMF interception to the call-bound tool and remove only overlapping wrapper logic. Menu strategy and application-specific prompts remain with Loadsmart.
+- [ ] Validate adoption in an existing worker, replacing overlapping DTMF interception with the call-bound tool. Menu strategy and application-specific prompts remain application responsibilities.
 
 Run the native tests against a disposable local LiveKit server (no SIP trunk or phone number needed):
 
@@ -40,7 +40,7 @@ The fixture uses real native rooms and audio publications with SIP-kind test par
 - [x] Prove the answer-wait and caller-selection regressions fail when those behaviors are removed; repeat native caller isolation 20 times.
 - [x] Check supported Zod 3/4, package build/lint/types, and canonical documentation examples.
 - [ ] Verify a controlled carrier/audio call: answer-before-greeting, busy/no-answer behavior, interruptions, and shutdown. No real phone call has been placed by automated tests.
-- [ ] Migrate a Loadsmart worker and remove only its overlapping dialing/startup and inbound metadata glue.
+- [ ] Validate adoption in an existing worker and remove only overlapping dialing/startup and inbound metadata glue.
 
 See `telephony-orchestration-prd.md` for the approved boundary, verification commands, and limitations. DTMF is covered by the follow-up above. Call records, durable completion delivery, and project resolution remain outside this change.
 

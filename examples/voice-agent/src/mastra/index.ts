@@ -1,12 +1,12 @@
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
-import { liveKitConnectionRoute, liveKitRecordingRoute } from '@mastra/livekit';
+import { liveKitConnectionRoute, liveKitRecordingRoute, LiveKitSessionMetadataSchema } from '@mastra/livekit';
 import { Observability, MastraStorageExporter, SensitiveDataFilter } from '@mastra/observability';
 import { callCenterAgent } from './agents/call-center-agent';
 import { superRegulatedAgent } from './agents/super-regulated-agent';
 import { triageAgent } from './agents/triage-agent';
 import { voiceAgentDbUrl } from './db';
-import { getRecordingOptions, liveKitAgentName } from './livekit';
+import { getRecordingOptions, liveKitAgentName, liveKitSessionConfig } from './livekit';
 import { resolveCallRecording } from './recording-playback';
 import { phoneConversationWorkflow } from './workflows/phone-conversation';
 
@@ -43,6 +43,15 @@ export const mastra = new Mastra({
     apiRoutes: [
       liveKitConnectionRoute({
         agentName: liveKitAgentName,
+        metadata: ({ body }) =>
+          LiveKitSessionMetadataSchema.parse({
+            // Local demo: preserve Studio's thread/resource selection. In production,
+            // authorize the agent and derive memory scope from the authenticated user.
+            agentId: typeof body.agentId === 'string' ? body.agentId : undefined,
+            threadId: typeof body.threadId === 'string' && body.threadId ? body.threadId : undefined,
+            resourceId: typeof body.resourceId === 'string' && body.resourceId ? body.resourceId : undefined,
+            sessionConfig: liveKitSessionConfig,
+          }),
         // Auto recording starts before joining, so it cannot wait for in-call consent.
         // Enable it only for the Meridian agent, never the regulated consent demo.
         recording: ({ body }) => {

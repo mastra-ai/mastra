@@ -10,7 +10,7 @@
 
 An application can dispatch an outbound phone job or receive an inbound SIP job with the existing Mastra worker. LiveKit owns dialing, SIP status, timeouts, audio transport, and room lifecycle. Mastra supplies agent selection, request context, memory, and conversation behavior.
 
-This is the next step after shared session configuration and committed transcript persistence. It does not introduce a separate call database or replace Loadsmart's business lifecycle and outcome handling.
+This is the next step after shared session configuration and committed transcript persistence. It does not introduce a separate call database or replace application-specific business lifecycle and outcome handling.
 
 ## Verified native capabilities
 
@@ -80,7 +80,7 @@ Retain `dispatchVoiceSession` and its native return value. Do not create a new s
 - Custom call records, call-history endpoints, billing, business outcomes, or completion callbacks.
 - Dynamic LiveKit project registries, provider provisioning, or tenant credential policy.
 - DTMF tools, answering-machine policy, silence reprompts, and new greeting modes.
-- Changes to `@mastra/core`, `@mastra/server`, examples, or Loadsmart's repositories.
+- Changes to `@mastra/core`, `@mastra/server`, examples, or downstream application repositories.
 
 If an acceptance requirement cannot be met through native functionality and the approved sequencing adapter, return for a separate scope decision rather than adding a workaround.
 
@@ -112,7 +112,7 @@ LIVEKIT_TEST_ROOM_URL=ws://127.0.0.1:17880 pnpm --filter @mastra/livekit test sr
 
 The suite defaults to the development key/secret and accepts `LIVEKIT_TEST_ROOM_API_KEY` and `LIVEKIT_TEST_ROOM_API_SECRET` for a differently configured local server. It rejects non-local server URLs and never provisions or dials a real SIP trunk. Without the URL, these five native-room tests are skipped; the 19 HTTP SDK tests still run.
 
-PostgreSQL verification passed on October 20, 2026; see `transcript-persistence-prd.md` for coverage and tested versions. A real carrier/audio call remains a release check. Loadsmart's deployed worker has not been migrated.
+PostgreSQL verification passed on October 20, 2026; see `transcript-persistence-prd.md` for coverage and tested versions. A real carrier/audio call remains a release check. Validation in an existing production deployment remains pending.
 
 ## Sources
 
@@ -120,4 +120,3 @@ PostgreSQL verification passed on October 20, 2026; see `transcript-persistence-
 - [LiveKit inbound dispatch rules](https://docs.livekit.io/telephony/accepting-calls/dispatch-rule/)
 - [LiveKit job lifecycle](https://docs.livekit.io/agents/server/job/)
 - Installed `livekit-server-sdk/src/SipClient.ts` and `@livekit/agents/src/job.ts` / `src/voice/room_io`.
-- Loadsmart `src/services/dial.ts`, `src/services/sip.ts`, `src/routes/voice-calls.ts`, and `src/routes/voice-inbound.ts`.
