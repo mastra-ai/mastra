@@ -6,9 +6,10 @@
  * provider-executed result that arrives without a final call, input streams that fail and are
  * retried with the same ID, and an ID reused by a later step.
  *
- * The `__proto__` and cross-step cases run through HTTP aimock fixtures. The fallback and retry
- * cases use the in-process recording model: an HTTP fixture cannot inject an error part mid-stream
- * or end a tool input stream without the provider's final `tool-call`.
+ * The `__proto__` and streamed cross-step cases run through HTTP aimock fixtures. The fallback,
+ * retry and final-only cross-step cases use the in-process recording model: an HTTP fixture cannot
+ * inject an error part mid-stream, end a tool input stream without the provider's final
+ * `tool-call`, or send a `tool-call` with no input stream before it.
  */
 
 import { stepCountIs } from '@internal/ai-sdk-v5';
@@ -49,7 +50,7 @@ describeForAllEngines('AIMock loop scenario: streamed tool call fallback', engin
   const run = async (tapes: ModelTape[], extra: Record<string, unknown> = {}) => {
     executed.length = 0;
     const recording = createRecordingModel({ tapes });
-    const { chunks } = await runLoopScenario({
+    const { chunks, output } = await runLoopScenario({
       engine,
       llm: getMock(),
       prompt: 'go',
@@ -60,7 +61,7 @@ describeForAllEngines('AIMock loop scenario: streamed tool call fallback', engin
       fixtures: () => {},
       ...extra,
     } as any);
-    return (chunks ?? []) as any[];
+    return { chunks: (chunks ?? []) as any[], output };
   };
 
   it('handles a streamed tool call whose id is "__proto__"', async () => {
@@ -89,7 +90,7 @@ describeForAllEngines('AIMock loop scenario: streamed tool call fallback', engin
   });
 
   it('emits the fallback call before a result that arrives without a final tool-call', async () => {
-    const chunks = await run([
+    const { chunks } = await run([
       [
         ...head,
         { type: 'tool-input-start', id: 'call-x', toolName: 'lookup', providerExecuted: true },
@@ -106,7 +107,7 @@ describeForAllEngines('AIMock loop scenario: streamed tool call fallback', engin
   });
 
   it('runs only the retried call when a no-args input stream fails and is retried with the same id', async () => {
-    const chunks = await run(
+    const { chunks } = await run(
       [
         [
           ...head,
@@ -131,7 +132,7 @@ describeForAllEngines('AIMock loop scenario: streamed tool call fallback', engin
   });
 
   it('emits the real call after a partial-args call from a failed attempt with the same id', async () => {
-    const chunks = await run(
+    const { chunks } = await run(
       [
         [
           ...head,
@@ -184,6 +185,19 @@ describeForAllEngines('AIMock loop scenario: streamed tool call fallback', engin
 
     const toolCalls = (await output.toolCalls) as any[];
     expect(toolCalls.map(c => c.payload.args)).toEqual([{ q: 'one' }, { q: 'two' }]);
+    expect(executed).toEqual([{ q: 'one' }, { q: 'two' }]);
+  });
+
+  it('keeps both calls when a later step reuses a final-only tool call id', async () => {
+    const step = (args: string): ModelTape => [
+      ...head,
+      { type: 'tool-call', toolCallId: 'call_0', toolName: 'lookup', input: args },
+      { type: 'finish', finishReason: 'tool-calls', usage },
+    ];
+    const { chunks, output } = await run([step('{"q":"one"}'), step('{"q":"two"}'), textTape]);
+
+    expect(chunks.filter(c => c.type === 'tool-call').map(c => c.payload.args)).toEqual([{ q: 'one' }, { q: 'two' }]);
+    expect(((await output.toolCalls) as any[]).map(c => c.payload.args)).toEqual([{ q: 'one' }, { q: 'two' }]);
     expect(executed).toEqual([{ q: 'one' }, { q: 'two' }]);
   });
 });
