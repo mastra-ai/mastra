@@ -33,6 +33,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import {
+  credentialLabel,
   getAuthProviderId,
   listTenantCredentialsForRequest,
   resolveCredentialContext,
@@ -319,6 +320,29 @@ export function resolveDeploymentModelProviders(providers: readonly string[] | u
   return resolved;
 }
 
+function grantingTenantRecord(records: CredentialRecord[], authProviderId: string) {
+  return (
+    records.find(r => r.scope === 'user' && r.provider === authProviderId) ??
+    records.find(r => r.scope === 'org' && r.provider === authProviderId)
+  );
+}
+
+type ModelCredentialHolder = 'personal' | 'organization' | 'deployment';
+
+function tenantModelCredential(
+  records: CredentialRecord[] | undefined,
+  provider: string,
+): { credentialLabel?: string; credentialHolder?: ModelCredentialHolder } {
+  if (!records) return {};
+  if (isDeploymentModelProvider(provider)) return { credentialHolder: 'deployment' };
+  const record = grantingTenantRecord(records, getAuthProviderId(provider));
+  if (!record) return {};
+  return {
+    credentialLabel: credentialLabel(provider, record.credential.type),
+    credentialHolder: record.scope === 'user' ? 'personal' : 'organization',
+  };
+}
+
 /**
  * Compute which providers the user can reach, mirroring the TUI's
  * `/models-pack` access derivation: OAuth/api-key from the credential store for
@@ -345,9 +369,7 @@ export async function buildProviderAccess({
       if (isDeploymentModelProvider(provider)) {
         return deploymentProviders?.has(provider) && hasModelKey(provider) ? 'apikey' : false;
       }
-      const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
-      const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
-      const credential = userRec?.credential ?? orgRec?.credential;
+      const credential = grantingTenantRecord(tenantCredentials, authProviderId)?.credential;
       if (credential?.type === 'oauth') return 'oauth';
       if (credential?.type === 'api_key' && credential.key.trim().length > 0) return 'apikey';
       return false;
@@ -389,6 +411,8 @@ export interface ModelCatalogEntry {
   modelName?: string;
   hasApiKey: true;
   reasoningOptions: ReturnType<typeof getModelReasoningOptions> | undefined;
+  credentialLabel?: string;
+  credentialHolder?: ModelCredentialHolder;
 }
 
 /**
@@ -421,7 +445,16 @@ export async function buildModelCatalog({
   ]);
   const catalog: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName }) =>
     typeof id === 'string' && canUseModelProvider(access, provider)
-      ? [{ id, provider, modelName, hasApiKey: true as const, reasoningOptions: getModelReasoningOptions(id) }]
+      ? [
+          {
+            id,
+            provider,
+            modelName,
+            hasApiKey: true as const,
+            reasoningOptions: getModelReasoningOptions(id),
+            ...tenantModelCredential(tenantCredentials, provider),
+          },
+        ]
       : [],
   );
   // The boot-time gateway catalog only carries the local custom providers, so
@@ -429,6 +462,9 @@ export async function buildModelCatalog({
   if (listCustomProviders) {
     try {
       const known = new Set(catalog.map(m => m.id));
+      const customProviderCredential: { credentialHolder?: ModelCredentialHolder } = tenantCredentials
+        ? { credentialHolder: 'organization' }
+        : {};
       for (const record of await listCustomProviders()) {
         for (const model of record.models) {
           const id = `${record.providerId}/${model}`;
@@ -440,6 +476,7 @@ export async function buildModelCatalog({
             modelName: model,
             hasApiKey: true,
             reasoningOptions: undefined,
+            ...customProviderCredential,
           });
         }
       }

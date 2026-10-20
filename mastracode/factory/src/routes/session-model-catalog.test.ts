@@ -128,7 +128,9 @@ describe('session-owner model catalog', () => {
       const body = await response.json();
       expect(body.modelScope).toBe('user');
       expect(body.defaultModelId).toBe('anthropic/claude-opus-4-6');
-      expect(body.models.map((m: { id: string }) => m.id)).toEqual(['anthropic/claude-opus-4-6']);
+      expect(body.models).toEqual([
+        expect.objectContaining({ id: 'anthropic/claude-opus-4-6', credentialLabel: 'Anthropic API key' }),
+      ]);
       expect(JSON.stringify(body)).not.toContain('secret');
     },
   );
@@ -155,7 +157,9 @@ describe('session-owner model catalog', () => {
       const body = await response.json();
       expect(body.modelScope).toBe('factory');
       expect(body.defaultModelId).toBe('deepseek/deepseek-flash');
-      expect(body.models.map((m: { id: string }) => m.id)).toEqual(['deepseek/deepseek-flash']);
+      expect(body.models).toEqual([
+        expect.objectContaining({ id: 'deepseek/deepseek-flash', credentialLabel: 'Deepseek API key' }),
+      ]);
     },
   );
 

@@ -2336,6 +2336,62 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
 
     expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
   });
+
+  it.each(['intake', 'triage'])(
+    'blocks a triage agent skipping Planning from %s into Building when plans are not auto-approved',
+    async stage => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const service = new FactoryTransitionService({
+        configVersion: 'plan-gate-v1',
+        storage,
+        autoApprovePlans: async () => false,
+      });
+      const item = await createItem(storage, {
+        stages: [stage],
+        sourceKey: `skip-${stage}`,
+        metadata: { authorTrusted: true },
+      });
+
+      const result = await service.transition({
+        ...request(item, { stage: 'execute', identity: `skip-${stage}` }),
+        actor: { type: 'agent', bindingId: 'triage-binding', role: 'triage' },
+        ingress: { type: 'agent', identity: `skip-${stage}` },
+        triageType: 'bug',
+      });
+
+      expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+      expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+        revision: item.revision,
+        stages: [stage],
+      });
+    },
+  );
+
+  it('lets a triage agent route a bug from triage straight into Building when plans are auto-approved', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({
+      configVersion: 'plan-gate-v1',
+      storage,
+      autoApprovePlans: async () => true,
+    });
+    const item = await createItem(storage, {
+      stages: ['triage'],
+      sourceKey: 'fast-route',
+      metadata: { authorTrusted: true },
+    });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'execute', identity: 'fast-route' }),
+      actor: { type: 'agent', bindingId: 'triage-binding', role: 'triage' },
+      ingress: { type: 'agent', identity: 'fast-route' },
+      triageType: 'bug',
+    });
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect((result as { decisions: unknown[] }).decisions).toContainEqual(
+      expect.objectContaining({ type: 'invokeSkill', role: 'work' }),
+    );
+  });
 });
 
 describe('onTransitionCommitted', () => {

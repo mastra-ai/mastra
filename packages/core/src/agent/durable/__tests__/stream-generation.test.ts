@@ -17,17 +17,19 @@ import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { Agent } from '../../agent';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
-import { ExecutionFence } from '../execution-fence';
+import { ExecutionFence, executionLeaseKey } from '../execution-fence';
 import { runInRunFenceScope } from '../run-fence-scope';
+import { getRunRegistryEntry } from '../run-registry';
 import {
   createDurableAgentStream,
   emitChunkEvent,
   emitErrorEvent,
   emitFinishEvent,
   emitOwnershipClaimedEvent,
+  emitSuspendedEvent,
 } from '../stream-adapter';
 import type { DurableAgentStreamResult } from '../stream-adapter';
 
@@ -320,6 +322,287 @@ describe('observe() from an offset', () => {
     observed.cleanup();
     await transport.close();
   });
+});
+
+describe('__subscribeToRunStream() lifecycle', () => {
+  it('completes an unknown run without inserting a registry entry or clearing shared history', async () => {
+    const { durable, transport } = await observedAgent();
+    const runId = crypto.randomUUID();
+    const onComplete = vi.fn();
+    const onEvent = vi.fn();
+    const clearTopic = vi.spyOn(durable.pubsub, 'clearTopic');
+    const started = performance.now();
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, onEvent);
+    try {
+      expect(performance.now() - started).toBeLessThan(1000);
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      expect(onEvent).not.toHaveBeenCalled();
+      expect(getRunRegistryEntry(runId)).toBeUndefined();
+      expect(clearTopic).not.toHaveBeenCalled();
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('replays and completes a finished run whose last event is an error', async () => {
+    const { durable, pubsub, transport } = await observedAgent();
+    const runId = crypto.randomUUID();
+    await emitChunkEvent(pubsub, runId, textChunk('partial'));
+    await emitErrorEvent(pubsub, runId, new Error('model failed'));
+    const onComplete = vi.fn();
+    const events: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, event => {
+      events.push(event);
+    });
+    try {
+      expect(events.map(event => event.type)).toEqual([AgentStreamEventTypes.CHUNK, AgentStreamEventTypes.ERROR]);
+      expect(onComplete).toHaveBeenCalledTimes(1);
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('keeps a run suspended for approval observed until its resumed segment finishes', async () => {
+    const { durable, pubsub, transport } = await observedAgent();
+    const runId = crypto.randomUUID();
+    await emitChunkEvent(pubsub, runId, textChunk('before approval'));
+    await emitSuspendedEvent(pubsub, runId, { type: 'approval', toolCallId: 'call-1', toolName: 'deploy' });
+    const onComplete = vi.fn();
+    const events: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, event => {
+      events.push(event);
+    });
+    try {
+      await delay(50);
+      expect(onComplete).not.toHaveBeenCalled();
+      await emitChunkEvent(pubsub, runId, textChunk('after approval'));
+      await emitFinishEvent(pubsub, runId, finishData);
+      await vi.waitFor(() => expect(events.at(-1)?.type).toBe(AgentStreamEventTypes.FINISH));
+      expect(
+        texts(events.filter(event => event.type === AgentStreamEventTypes.CHUNK).map(event => event.data)),
+      ).toEqual(['before approval', 'after approval']);
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('keeps observing when the only terminal event belongs to a superseded execution', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'untagged-progress-stale-finish';
+    const { stale, current } = await takeOver(workflows, runId);
+    // The successor is between leases: its claim is the newest one but not live.
+    await workflows.releaseRunOwnership({ runId, generation: current, ownerId: 'successor' });
+    await emitChunkEvent(pubsub, runId, textChunk('still running'));
+    await runInRunFenceScope(scopeAt(runId, stale), () => emitFinishEvent(pubsub, runId, finishData));
+    const onComplete = vi.fn();
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset: 100, onComplete }, vi.fn());
+    try {
+      expect(onComplete).not.toHaveBeenCalled();
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('keeps an empty topic observable while a remote storage claim is live', async () => {
+    const { durable, transport, workflows } = await observedAgent();
+    const runId = 'quiet-remote-claim';
+    await workflows.claimRunOwnership({ runId, ownerId: 'remote', leaseMs: 30_000 });
+    const onComplete = vi.fn();
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, vi.fn());
+    try {
+      expect(onComplete).not.toHaveBeenCalled();
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('checks the agent transport for a quiet remote lease, not the separate Mastra bus', async () => {
+    const { durable, transport } = await observedAgent();
+    const runId = 'quiet-remote-lease';
+    await transport.acquireLease(executionLeaseKey(durable.id, runId), 'remote', 30_000);
+    const onComplete = vi.fn();
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, vi.fn());
+    try {
+      expect(onComplete).not.toHaveBeenCalled();
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('does not complete from a stale terminal event when a newer remote execution is active', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'old-terminal-new-owner';
+    const { stale } = await takeOver(workflows, runId);
+    await runInRunFenceScope(scopeAt(runId, stale), () => emitFinishEvent(pubsub, runId, finishData));
+    const onComplete = vi.fn();
+    const onEvent = vi.fn();
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset: 100, onComplete }, onEvent);
+    try {
+      expect(onComplete).not.toHaveBeenCalled();
+      expect(onEvent).not.toHaveBeenCalled();
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('keeps a newer nonterminal segment observable during an ownership outage', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'mixed-history-outage';
+    await runInRunFenceScope(scopeAt(runId, 1), () => emitFinishEvent(pubsub, runId, finishData));
+    await runInRunFenceScope(scopeAt(runId, 2), () => emitChunkEvent(pubsub, runId, textChunk('current')));
+    vi.spyOn(workflows, 'getRunOwnership').mockRejectedValue(new Error('storage unavailable'));
+    const onComplete = vi.fn();
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset: 100, onComplete }, vi.fn());
+    try {
+      expect(onComplete).not.toHaveBeenCalled();
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('does not close over a live event arriving during the final absence check', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'activity-during-reconciliation';
+    const original = workflows.getWorkflowRunById.bind(workflows);
+    let reads = 0;
+    vi.spyOn(workflows, 'getWorkflowRunById').mockImplementation(async params => {
+      const record = await original(params);
+      if (++reads === 4) await emitChunkEvent(pubsub, runId, textChunk('just started'));
+      return record;
+    });
+    const onComplete = vi.fn();
+    const onEvent = vi.fn();
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, onEvent);
+    try {
+      expect(onEvent).toHaveBeenCalled();
+      expect(onComplete).not.toHaveBeenCalled();
+    } finally {
+      await unsubscribe();
+      await transport.close();
+    }
+  });
+
+  it('keeps public observation attached when a hidden takeover marker races the final absence check', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'public-takeover-during-reconciliation';
+    const original = workflows.getWorkflowRunById.bind(workflows);
+    let reads = 0;
+    vi.spyOn(workflows, 'getWorkflowRunById').mockImplementation(async params => {
+      const record = await original(params);
+      if (++reads === 6) await emitOwnershipClaimedEvent(pubsub, runId, 2);
+      return record;
+    });
+    const observation = await durable.observe(runId);
+    const reader = readFullStream(observation.fullStream as ReadableStream<any>);
+    try {
+      expect(reads).toBe(6);
+      await runInRunFenceScope(scopeAt(runId, 2), async () => {
+        await emitChunkEvent(pubsub, runId, textChunk('after takeover'));
+        await emitFinishEvent(pubsub, runId, finishData);
+      });
+      await reader.done;
+      expect(texts(reader.chunks)).toEqual(['after takeover']);
+      expect(reader.chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
+    } finally {
+      observation.detach();
+      await transport.close();
+    }
+  });
+
+  describe.each([DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION])(
+    'retained %s snapshots',
+    workflowName => {
+      it.each([
+        'success',
+        'failed',
+        'tripwire',
+        'canceled',
+        'bailed',
+        'skipped',
+        'running',
+        'pending',
+        'waiting',
+        'suspended',
+        'paused',
+      ] as const)('classifies a retained %s snapshot without replay history', async status => {
+        const { durable, transport, workflows } = await observedAgent();
+        const runId = `retained-${workflowName}-${status}`;
+        const onComplete = vi.fn();
+        const terminal = ['success', 'failed', 'tripwire', 'canceled', 'bailed', 'skipped'].includes(status);
+        await workflows.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          snapshot: {
+            runId,
+            status,
+            value: {},
+            context: {},
+            serializedStepGraph: [],
+            activePaths: [],
+            activeStepsPath: {},
+            suspendedPaths: {},
+            resumeLabels: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          },
+        });
+        try {
+          const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, vi.fn());
+          expect(onComplete).toHaveBeenCalledTimes(terminal ? 1 : 0);
+          const observation = await durable.observe(runId);
+          const reader = readFullStream(observation.fullStream);
+          await delay(20);
+          expect(reader.isClosed()).toBe(terminal);
+          observation.detach();
+          await reader.done;
+          await unsubscribe();
+        } finally {
+          await transport.close();
+        }
+      });
+    },
+  );
+
+  it.each(['ownership', 'fencing', 'snapshot'] as const)(
+    'keeps observing through an unavailable %s read',
+    async boundary => {
+      const { durable, pubsub, transport, workflows } = await observedAgent();
+      const runId = `unknown-with-${boundary}-outage`;
+      const unavailable = new Error('storage unavailable');
+      if (boundary === 'ownership') vi.spyOn(workflows, 'getRunOwnership').mockRejectedValue(unavailable);
+      if (boundary === 'fencing') vi.spyOn(workflows, 'supportsRunFencing').mockRejectedValue(unavailable);
+      const snapshotRead =
+        boundary === 'snapshot' ? vi.spyOn(workflows, 'getWorkflowRunById').mockRejectedValue(unavailable) : undefined;
+      const onComplete = vi.fn();
+      const onEvent = vi.fn();
+      try {
+        const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, onEvent);
+        // Hydration succeeds; only the subsequent completion probe is unavailable.
+        snapshotRead?.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+        const observation = await durable.observe(runId);
+        const reader = readFullStream(observation.fullStream);
+        expect(onComplete).not.toHaveBeenCalled();
+        expect(reader.isClosed()).toBe(false);
+        await emitChunkEvent(pubsub, runId, textChunk('after outage'));
+        await emitFinishEvent(pubsub, runId, finishData);
+        await reader.done;
+        expect(texts(reader.chunks)).toEqual(['after outage']);
+        expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: AgentStreamEventTypes.FINISH }));
+        observation.detach();
+        await unsubscribe();
+      } finally {
+        await transport.close();
+      }
+    },
+  );
 });
 
 describe('__subscribeToRunStream()', () => {

@@ -45,6 +45,7 @@ import type { MemorySettingsStorage } from './storage/domains/memory-settings/ba
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
+import type * as reportsModule from './tools/reports.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
 function fakeStorage(): LibSQLFactoryStorage {
@@ -68,7 +69,26 @@ const secretEncryption = createFactorySecretEncryption({
 const controllerMock = {
   onSessionCreated: vi.fn(),
   setChannels: vi.fn(),
+  queryThreadById: vi.fn(),
+  getSessionByResource: vi.fn(),
+  createSession: vi.fn(),
 };
+
+// Run-end reports the factory's session reporter is asked to send.
+const runEndReports = vi.hoisted(() => [] as unknown[]);
+vi.mock('./tools/reports', async importOriginal => {
+  const actual = await importOriginal<typeof reportsModule>();
+  return {
+    ...actual,
+    createSessionRunEndReporter: (deps: Parameters<typeof actual.createSessionRunEndReporter>[0]) => {
+      const report = actual.createSessionRunEndReporter(deps);
+      return async (args: Parameters<typeof report>[0]) => {
+        runEndReports.push(args);
+        return report(args);
+      };
+    },
+  };
+});
 
 const sessionNotifierStub = {
   onSessionCreated: () => () => {},
@@ -275,6 +295,7 @@ beforeEach(() => {
   terminalCleanups.length = 0;
   transitionServiceOptions.length = 0;
   platformGithubOptions.length = 0;
+  runEndReports.length = 0;
 });
 
 describe('MastraFactory constructor', () => {
@@ -1154,6 +1175,8 @@ describe('MastraFactory.prepare', () => {
       'factory_start_session',
       'factory_answer_approval',
       'factory_switch_session_model',
+      'factory_subscribe_session',
+      'factory_unsubscribe_session',
     ];
     const ALLOWED_TOOLS = [
       ...READ_TOOLS,
@@ -1170,9 +1193,12 @@ describe('MastraFactory.prepare', () => {
       'factory_start_session',
       'factory_answer_approval',
       'factory_switch_session_model',
+      'factory_list_side_sessions',
+      'factory_subscribe_session',
+      'factory_unsubscribe_session',
     ];
 
-    it('gives a user session read tools on every turn, management tools only on person-started turns, and other sessions none', async () => {
+    it('gives a user session every tool on every turn, and other sessions none', async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });
       await seedUserSession(storage);
@@ -1185,13 +1211,41 @@ describe('MastraFactory.prepare', () => {
       expect(Object.keys(interactive)).toEqual(expect.arrayContaining(READ_TOOLS));
       expect(Object.keys(woken)).toEqual(expect.arrayContaining(READ_TOOLS));
       expect(Object.keys(interactive)).toEqual(expect.arrayContaining(MANAGEMENT_TOOLS));
-      for (const name of MANAGEMENT_TOOLS) expect(woken).not.toHaveProperty(name);
+      // Turns nobody signed in started get the same tools; each tool limits what it does on them.
+      expect(Object.keys(woken).sort()).toEqual(Object.keys(interactive).sort());
 
       const stranger = new RequestContext();
       stranger.set('user', { workosId: 'user-2', organizationId: 'org-2' });
       stranger.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
       const none = await extraTools({ requestContext: stranger });
       for (const name of [...READ_TOOLS, ...MANAGEMENT_TOOLS]) expect(none).not.toHaveProperty(name);
+    });
+
+    it('refuses an approval answer on a woken turn, which a person in the same session could give', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const extraTools = config.extraTools as (args: {
+        requestContext: RequestContext;
+      }) => Promise<Record<string, { execute: (input: unknown, context: unknown) => Promise<unknown> }>>;
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+      }) => Promise<void>;
+      const answer = { sessionId: crypto.randomUUID(), toolCallId: 'call-1', decision: 'approve' };
+
+      const wake = new RequestContext();
+      await prepareWake({ requestContext: wake, resourceId: 'session-1' });
+      wake.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
+      const woken = await extraTools({ requestContext: wake });
+      await expect(woken.factory_answer_approval!.execute(answer, {})).rejects.toThrow(
+        'Only a person can answer an approval',
+      );
+
+      const person = await extraTools({ requestContext: sessionContext(true) });
+      await expect(person.factory_answer_approval!.execute(answer, {})).rejects.toThrow(
+        'was not found in this Factory',
+      );
     });
 
     it("wakes a messaged session as that session's owner, not the sender", async () => {
@@ -1210,6 +1264,87 @@ describe('MastraFactory.prepare', () => {
       await prepareWake({ requestContext: wake, resourceId: 'session-1' });
 
       expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    });
+
+    it("fails a wake whose owner can't be resolved, with a failed report, rather than running it as the sender", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+
+      // No Factory session row names session-2's owner; the sender is on the context.
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      const message = "Factory session session-2 can't be woken as its owner: no Factory session row names its owner.";
+      await expect(
+        prepareWake({ requestContext: wake, resourceId: 'session-2', threadId: 'thread-2' }),
+      ).rejects.toThrow(message);
+
+      expect(runEndReports).toEqual([
+        expect.objectContaining({
+          sessionId: 'session-2',
+          threadId: 'thread-2',
+          outcome: { status: 'failed', reason: message, failureCode: 'wake-owner-unresolved' },
+        }),
+      ]);
+    });
+
+    it('keeps the best-effort wake when auth is off', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage, auth: null });
+      await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+
+      await prepareWake({ requestContext: new RequestContext(), resourceId: 'session-2', threadId: 'thread-2' });
+
+      expect(config.resumeWakeSession).toBeUndefined();
+      expect(runEndReports).toEqual([]);
+    });
+
+    it("brings an offline session online as its row's owner before its wake runs", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage);
+      const resumeWake = config.resumeWakeSession as (args: { resourceId: string; threadId: string }) => Promise<void>;
+      controllerMock.queryThreadById.mockResolvedValue({ id: 'thread-1', resourceId: 'session-1' });
+      controllerMock.getSessionByResource.mockResolvedValue(undefined);
+      controllerMock.createSession.mockResolvedValue({});
+
+      await resumeWake({ resourceId: 'session-1', threadId: 'thread-1' });
+
+      expect(controllerMock.createSession).toHaveBeenCalledOnce();
+      const created = controllerMock.createSession.mock.calls[0]![0];
+      expect(created).toMatchObject({
+        id: 'session-1',
+        resourceId: 'session-1',
+        ownerId: 'user-1',
+        threadId: 'thread-1',
+        tags: expect.objectContaining({ factoryProjectId: project.id }),
+      });
+      expect(created.requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(runEndReports).toEqual([]);
+    });
+
+    it("refuses to resume a session on a thread that isn't its own", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const resumeWake = config.resumeWakeSession as (args: { resourceId: string; threadId: string }) => Promise<void>;
+      controllerMock.queryThreadById.mockResolvedValue({ id: 'thread-9', resourceId: 'session-9' });
+
+      await expect(resumeWake({ resourceId: 'session-1', threadId: 'thread-9' })).rejects.toThrow(
+        "Factory session session-1 can't be woken as its owner: thread thread-9 is not the session's.",
+      );
+      expect(controllerMock.createSession).not.toHaveBeenCalled();
+      expect(runEndReports).toHaveLength(1);
     });
 
     it("primes the woken session org's custom providers after resolving its credential policy", async () => {
