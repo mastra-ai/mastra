@@ -92,6 +92,7 @@ Numbers are warm medians on the representative project per bucket, 30-day window
 | X46 | prod       | OBS-390 `aggregateSpans()` contract affordability (`mobs-span-aggregate.ts`): prototype SQL, 10 span shapes, p99 + largest project and largest org × 1–180 d, `querySpans()` collapse vs trace-scope-style collapse                                                  | Projects fit 1 GiB/9 s to 180 d (≤ 860 MiB) with window-bounded usage and spanType prefilter; largest org fits 7 d, fails from 30 d (1.1–1.3 GiB), fits to ~14 d; `model` grouping reads `attributes` (23 GiB at 7 d). Decided: window = retention for all scopes, OBS-392 must fit org scope; model/provider dropped (OBS-693)                                                       | done   |
 | X48 | prod       | OBS-696 Metrics page on `aggregateTraces()` (`mobs-metrics-page.ts`): 7 org card shapes + 5 project card shapes, p99/largest × project/org × 24 h/7 d/30 d, whole-page concurrent loads, `metrics` vs `aggregateTraces()` parity                                     | Every card fits alone (max 452 MiB / 3.8 s). The org page at 30 d on the largest org does not: fired together, the 6 token/cost cards time out at 9 s every load. Project page fits to 30 d, at the edge (6.6–9.3 s). Runs/failure cards stay on `metrics` (nested runs); tokens can move, cost/threads/usage-over-time cannot yet                                                    | done   |
 | X49 | prod       | OBS-696 org Metrics page fit at 30 d (`mobs-org-page-fit.ts`): usageId adoption, fallback statement split + rewrites, fallback off, token/cost from `metrics` by project, shared statement, load shapes, concurrency caps, `mastra_model_usage` back-fill assessment | Fits with `c2m` (token/cost from `metrics` grouped by `projectId`, O3s+O3f merged, KPIs from `metrics`) capped at 3 in flight: 24 h ≤ 0.75 s, 7 d ≤ 2 s, 30 d statements ≤ 3.5 s in 14/16 loads; the rest hit replication fetch bursts on the 3-vCPU bench node. Rewrites/load shapes alone don't fit; fallback off loses ≤ 72% of 30 d tokens. Back-fill `mastra_model_usage` (`'m:' |        | metricId`, + `spanId`) recommended for Platform | done |
+| X50 | prod       | OBS-698 project Metrics page as shipped in mastra#27908–#27910 (`mobs-obs698-page.ts`): 9 `aggregateTraces()` requests through the page's 3-in-flight limiter + the 15 `metrics` requests that stay, p99/largest × 24 h/7 d/30 d, cold ×1 + warm ×3, vs today's page | Memory fits (≤ 404 MiB/statement). 24 h and 7 d fit warm; 30 d does not (3 of 6 warm loads lose cards at 9 s, pages 8–21 s vs ~2 s today). Cold at 7 d it also fails 7 of today's cards. Cause: 6 of 9 requests read the token/cost fallback (~2 GiB each, largest project 30 d). PRs stay drafts                                                                                     |
 
 ## Entries
 
@@ -871,6 +872,57 @@ What makes the collector row safe:
 5. Set a dead-letter policy and alert on the new subscription. A message that never transforms is lost when retention expires; today's ch-writer subscriptions don't show one in the repo, so check prod.
 
 Unverified: the prod ack deadline, message retention and dead-letter settings of `prod.platform.ai-metrics-sub` (managed outside this repo). They affect how often duplicates and losses happen, not whether the per-message row stays correct.
+
+### X50: the project Metrics page as OBS-698 ships it (prod replica, read-only, 2026-10-20)
+
+**Question.** OBS-698 (mastra#27908–#27910, drafts) moves the project page's Tokens KPI to `aggregateTraces()` and adds five `aggregateTraces()` cards. Does one whole page load, fired the way the browser fires it, keep every statement within mobs-query's 1 GiB / 9 s on the p99 and largest project at 24 h / 7 d / 30 d?
+
+**Method.** `mobs-obs698-page.ts` (reuses `mobs-metrics-page.ts`: same guard, project picks, `max_threads=16`, pool of 10 sockets, mobs-query service functions under its read limits) against Platform `main` 9a9bb051d at `/tmp/platform-obs698` (includes OBS-688, root `spanType` grouping). All 60 request bodies plan and compile offline first (`dry`). Per load, the 9 aggregate requests go through a 3-slot FIFO limiter in render order (as `MAX_TRACE_AGGREGATES_IN_FLIGHT` does) and the 15 `metrics` requests that stay (today's 17 minus the tokens KPI pair) fire at once, no page filter:
+
+| Request             | Body                                                                                                                   | Reads the token/cost fallback |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `a:kpi-tokens`      | `tokens.input.sum`, `tokens.output.sum`                                                                                | yes                           |
+| `a:kpi-tokens-prev` | same, previous window                                                                                                  | yes                           |
+| `a:latency`         | `duration.p50/p90/p99` by `spanType`, `interval`, limit 10                                                             | no                            |
+| `a:top-entities`    | `count, errorRate, errorCount, duration.p95, cost.sum` by `entityType × entityName`, limit 500                         | yes                           |
+| `a:breakdown-*`     | `count, errorRate, cost.sum` by `environment` (on load) or `executionSource` (tab, measured alone as `exec`), limit 50 | yes                           |
+| `a:distinct-series` | `countDistinct.userId/sessionId`, `interval`, limit 10                                                                 | no                            |
+| `a:distinct-totals` | same, no interval                                                                                                      | no                            |
+| `a:cost-total`      | `cost.sum`                                                                                                             | yes                           |
+| `a:cost-series`     | `cost.sum`, `interval`, limit 10                                                                                       | yes                           |
+
+Variants: `obs698` (the new page), `today` (main's page, 17 `metrics` requests), `exec` (the breakdown tab alone). Cold ×1 (filesystem cache off) then warm ×3, 72 loads plus one cold recheck (`x50-recheck`). Interval is `1h` to 14 d, else `1d`, as the page picks.
+
+**Results, warm** (3 loads each; page and slowest-statement are median / max):
+
+| Project | Window | New page ms     | Today's page ms | Slowest statement ms | Statements > 6 s | Loads with a failed card | Max MiB | Max concurrent MiB | Read per load |
+| ------- | ------ | --------------- | --------------- | -------------------- | ---------------- | ------------------------ | ------- | ------------------ | ------------- |
+| p99     | 24 h   | 1,058 / 2,690   | 427             | 416 / 1,989          | 0                | 0                        | 96      | 244                | 0.5 GiB       |
+| p99     | 7 d    | 3,409 / 9,688   | 820             | 3,158 / 9,540        | 1                | 1 (warm #1)              | 145     | 366                | 2.3 GiB       |
+| p99     | 30 d   | 11,722 / 13,895 | 2,007           | 9,308 / 9,404        | 5                | 2 (warm #1, #2)          | 187     | 764                | 7.2 GiB       |
+| largest | 24 h   | 1,241 / 2,286   | 539             | 271 / 370            | 0                | 0                        | 80      | 192                | 0.3 GiB       |
+| largest | 7 d    | 2,624 / 3,399   | 936             | 1,758 / 3,250        | 0                | 0                        | 122     | 353                | 1.8 GiB       |
+| largest | 30 d   | 15,624 / 21,329 | 2,383           | 7,590 / 9,457        | 9                | 1 (warm #1)              | 404     | 1,150              | 14.2 GiB      |
+
+Today's page never has a statement over 1.8 s warm. The `exec` tab alone fits warm everywhere (≤ 2.8 s, ≤ 338 MiB).
+
+Largest project, 30 d, per aggregate card (warm median of the slowest statement / read): tokens 5.9 s / 1.9 GiB, tokens previous 7.6 s / 1.9 GiB, top entities 6.3 s / 2.0 GiB, breakdown 5.9 s / 2.0 GiB, cost series 5.0 s / 2.0 GiB, cost total 4.1 s / 2.0 GiB, latency 4.3 s / 111 MiB, distinct series 2.0 s / 120 MiB, distinct totals 1.8 s / 120 MiB. Alone, X48 measured the tokens shape (P2) at 2.3 s on this project and 1.0 s on the p99 one; on the page the six fallback readers (~12 of 14 GiB read per load) slow every card, including the three that don't read it.
+
+**Results, cold.** 24 h: 0–1 of 24 requests fail (excluding the stalled load below). 7 d: 14–16 of 24 fail, 7–9 aggregates (each statement hits 9 s at 17–65 MiB; cold is object-storage time, not memory) **and 7 of today's `metrics` requests, which never fail cold at 7 d on today's page**. 30 d: 24 of 24 fail; today's page also fails all 17 there, as in X43/X48. The first warm load after a failed cold load is part-cold (the aborted statements left the cache partly filled), which is where the p99 7 d and both 30 d warm #1 failures land.
+
+**Unexplained.** The first load of the run (p99, 24 h, cold) stalled client-side: the first three aggregate statements finished on the server in 4.5–9.4 s but their calls hit mobs-query's 20 s deadline (`2 × 9 s + 2 s`, counted from the call, so it includes socket wait), the queued six timed out at 40 s and 60 s without reaching the server, and the `metrics` calls whose statements finished by ~5 s resolved at ~80 s. A fresh-process repeat (`x50-recheck`) loaded every card cold in 20 s (slowest statement 8.7 s). Not reproduced; recorded as a one-off.
+
+**Verdict.** Memory fits with ≥ 2.5× headroom everywhere. 24 h and 7 d fit on time (7 d's one failure follows a failed cold load). **30 d does not fit**: 3 of 6 warm loads lose cards at 9 s; of the other three, the largest project's two have 2–3 statements over 6 s and finish in 15.5 s, and only the p99 project's third stays under 6 s (8.4 s page). Today's page takes ~2 s there. Cold, the new page also takes down existing cards at 7 d. The cause is the token/cost fallback read six times per load, as on the org page in X49. The OBS-698 PRs stay drafts.
+
+**Options (not run; each removes fallback readers from the initial load).**
+
+1. Keep the Tokens KPI on `metrics` (today's `m:kpi-tokens-*` ≤ 1.7 s at 30 d). Removes the two slowest requests; same direction as X49's org-page verdict (KPIs from `metrics`). Reverses part of the X48 decision.
+2. Request `cost.sum` in Top entities only when the "Most expensive" tab opens, and drop the cost column from Trace breakdown (or fetch it on demand). Removes two more.
+3. Back-fill `mastra_model_usage` and turn the fallback off (X49 candidate 6); makes every remaining usage read ~10× cheaper but is a Platform change with its own rollout.
+
+With 1 + 2 the initial load keeps two fallback readers (cost total and cost series). Re-run `mobs-obs698-page.ts page --windows 30d` on the changed page before the PRs leave draft.
+
+Reproduce: `npx tsx mobs-obs698-page.ts dry`, then `page --label x50 --windows 24h,7d,30d --variants obs698,today,exec --reps 3`, then `report --label x50` (results in `results/mobs-obs698-page.jsonl`).
 
 ### X46: `aggregateSpans()` contract affordability (prod replica, read-only, 2026-10-19)
 
