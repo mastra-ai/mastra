@@ -1136,6 +1136,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               delete self.#toolCallStreamingMeta[toolCallId];
               delete self.#toolCallArgsDeltas[toolCallId];
               delete self.#toolCallDeltaIdNameMap[toolCallId];
+              if (self.#options.upstreamEmitsToolCalls) {
+                break;
+              }
               if (meta && !deltaParts?.length) {
                 // No streamed input (e.g. OpenAI Responses, Anthropic PTC): the args only arrive
                 // with the final tool-call. Emitting a synthetic `{}` call now would let eager tool

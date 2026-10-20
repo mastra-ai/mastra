@@ -6,6 +6,7 @@
  * (per-step save queue or the final save) writes the assistant message.
  */
 
+import { createOpenAI } from '@ai-sdk/openai-v5';
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
@@ -13,6 +14,7 @@ import { MockMemory } from '../../../../memory';
 import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
 import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { SCENARIO_MODEL_ID } from '../types';
 
 describeForAllEngines('AIMock loop scenario: tool transform persistence', engine => {
   const getMock = useLoopScenarioAimock();
@@ -74,8 +76,7 @@ describeForAllEngines('AIMock loop scenario: tool transform persistence', engine
     execute: async () => ({ ok: true, secret: 'still-secret' }),
   });
 
-  // Streamed tool-call chunks are re-emitted synthetically without transform metadata (#27494).
-  it.fails('stamps display and transcript transforms on tool-call and tool-result chunks', async () => {
+  it('stamps display and transcript transforms on tool-call and tool-result chunks', async () => {
     const { chunks } = await runLoopScenario({
       engine,
       llm: getMock(),
@@ -108,5 +109,63 @@ describeForAllEngines('AIMock loop scenario: tool transform persistence', engine
     expect(meta('tool-result')?.transcript?.['output-available']?.transformed).toBe(
       '[redacted output-available on transcript]',
     );
+  });
+
+  // The provider streams the tool input but never sends the final tool-call, so the loop
+  // builds the call itself from the streamed args (#27585).
+  it('stamps transforms on the tool-call built when the provider never sends a final tool-call', async () => {
+    const llm = getMock();
+    const provider = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
+    const realModel = provider(SCENARIO_MODEL_ID);
+    // Real provider over AIMock; only the final `tool-call` part is dropped, which no
+    // AIMock fixture can express because the OpenAI provider always pairs it with input-end.
+    const model = {
+      specificationVersion: realModel.specificationVersion,
+      provider: realModel.provider,
+      modelId: realModel.modelId,
+      supportedUrls: realModel.supportedUrls,
+      doGenerate: (options: any) => realModel.doGenerate(options),
+      doStream: async (options: any) => {
+        const result = await realModel.doStream(options);
+        return {
+          ...result,
+          stream: result.stream.pipeThrough(
+            new TransformStream({
+              transform(part, controller) {
+                if (part.type !== 'tool-call') controller.enqueue(part);
+              },
+            }),
+          ),
+        };
+      },
+    };
+
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm,
+      model: model as any,
+      prompt: 'run it',
+      tools: { redactedTool },
+      stopWhen: stepCountIs(3),
+      collectChunks: true,
+      transform: {
+        targets: ['display', 'transcript'],
+        transformToolPayload: (ctx: any) => `[redacted ${ctx.phase} on ${ctx.target}]`,
+      },
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call-r', name: 'redactedTool', arguments: { secret: 'hunter2' } }] },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'done' });
+      },
+    });
+
+    const toolCalls = (chunks ?? []).filter((c: any) => c.type === 'tool-call') as any[];
+    expect(toolCalls).toHaveLength(1);
+    expect(toolCalls[0].payload.args).toEqual({ secret: 'hunter2' });
+    const transform = toolCalls[0].metadata?.mastra?.toolPayloadTransform;
+    expect(transform?.display?.['input-available']?.transformed).toBe('[redacted input-available on display]');
+    expect(transform?.transcript?.['input-available']?.transformed).toBe('[redacted input-available on transcript]');
   });
 });
