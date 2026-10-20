@@ -199,7 +199,7 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     // Default to false for the bridge — assume a local Datadog Agent is
     // present (required for the APM auto-instrumentation the bridge enables)
     const envAgentless = process.env.DD_LLMOBS_AGENTLESS_ENABLED?.toLowerCase();
-    const agentless = config.agentless ?? (envAgentless === 'true' || envAgentless === '1' ? true : false);
+    const agentless = config.agentless ?? (envAgentless === 'true' || envAgentless === '1');
     if (!mlApp) {
       this.setDisabled(`Missing required mlApp. Set DD_LLMOBS_ML_APP environment variable or pass mlApp in config.`);
       this.config = config as any;

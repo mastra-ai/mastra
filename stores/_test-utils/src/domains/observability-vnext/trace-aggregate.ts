@@ -281,7 +281,7 @@ function evaluateHaving(predicate: TrustedTraceAggregateHavingPredicate, measure
   switch (predicate.type) {
     case 'boolean': {
       const results = predicate.args.map(arg => evaluateHaving(arg, measures));
-      const decisive = predicate.operator === 'and' ? false : true;
+      const decisive = predicate.operator !== 'and';
       if (results.includes(decisive)) return decisive;
       return results.includes(null) ? null : !decisive;
     }
