@@ -1,6 +1,6 @@
 import type { MastraError } from '@mastra/core/error';
 import { DEFAULT_EVENTS_HEARTBEAT_INTERVAL_MS, DEFAULT_MIN_POLL_INTERVAL_MS } from '../../shared/events';
-import type { EventOccurrence } from '../../shared/events';
+import type { EventOccurrence, WebhookDeliveryStatus } from '../../shared/events';
 import { eventsError, isFatal, toFatalError, toTransientError } from './errors';
 import type { DeliveryContext, DeliveryDriver, ResolvedDeliveryOptions } from './mode';
 import type {
@@ -31,6 +31,11 @@ export interface EventSubscriptionConfig {
   onClose?: (subscription: EventSubscription) => void;
   /** Source of jitter; tests pin it. */
   random?: () => number;
+  /**
+   * Reported once to the first `onError` handler, or logged as a warning if none is attached by
+   * the time the subscription ends. Used to explain a delivery-mode fallback.
+   */
+  notice?: MastraError;
 }
 
 type Waiter = {
@@ -56,6 +61,7 @@ export class EventSubscription implements MCPEventSubscription {
   private currentTruncated = false;
   /** A gap was reported and the next delivered occurrence is the first one after it. */
   private pendingGap = false;
+  private currentDeliveryStatus?: WebhookDeliveryStatus;
   private readonly port: EventsPort;
   private readonly driver: DeliveryDriver;
   private readonly resolved: ResolvedDeliveryOptions;
@@ -66,6 +72,7 @@ export class EventSubscription implements MCPEventSubscription {
 
   private readonly abort = new AbortController();
   private readonly errorHandlers = new Set<(error: MCPEventSubscriptionError) => void>();
+  private notice?: MastraError;
   private readonly dedupWindow: number;
   private readonly maxBuffered: number;
   /** Set when the buffer dropped occurrences; cleared once the consumer catches up. */
@@ -107,6 +114,7 @@ export class EventSubscription implements MCPEventSubscription {
     this.yieldedCursor = this.resumeCursor;
     this.details = { serverName: config.serverName, eventName: config.name };
     this.onClose = config.onClose;
+    this.notice = config.notice;
     this.random = config.random ?? Math.random;
     this.dedupWindow = options.dedupWindow ?? DEFAULT_DEDUP_WINDOW;
     this.maxBuffered = Math.max(1, options.maxBufferedEvents ?? DEFAULT_MAX_BUFFERED_EVENTS);
@@ -158,8 +166,17 @@ export class EventSubscription implements MCPEventSubscription {
     return this.currentTruncated;
   }
 
+  get deliveryStatus(): WebhookDeliveryStatus | undefined {
+    return this.currentDeliveryStatus;
+  }
+
   onError(handler: (error: MCPEventSubscriptionError) => void): () => void {
     this.errorHandlers.add(handler);
+    const notice = this.notice;
+    if (notice) {
+      this.notice = undefined;
+      this.emitError(notice);
+    }
     return () => {
       this.errorHandlers.delete(handler);
     };
@@ -287,6 +304,10 @@ export class EventSubscription implements MCPEventSubscription {
         waiter.resolve({ value: undefined, done: true });
       }
     }
+    if (this.notice) {
+      this.port.log('warning', this.notice.message, { ...this.details, id: this.notice.id });
+      this.notice = undefined;
+    }
     this.onClose?.(this);
   }
 
@@ -340,6 +361,9 @@ export class EventSubscription implements MCPEventSubscription {
         }
       },
       reportError: error => this.emitError(error),
+      setDeliveryStatus: status => {
+        this.currentDeliveryStatus = status;
+      },
       sleep: ms => this.sleep(ms, false),
     };
   }

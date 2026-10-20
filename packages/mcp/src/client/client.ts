@@ -38,9 +38,19 @@ import {
   ListEventsResultSchema,
   PollEventsResultSchema,
   StreamEventsResultSchema,
+  SubscribeEventsResultSchema,
+  UnsubscribeEventsResultSchema,
   getEventsCapability,
 } from '../shared/events';
-import type { EventsCapability, ListEventsResult, PollEventsRequestParams, PollEventsResult } from '../shared/events';
+import type {
+  EventsCapability,
+  ListEventsResult,
+  PollEventsRequestParams,
+  PollEventsResult,
+  SubscribeEventsRequestParams,
+  SubscribeEventsResult,
+  UnsubscribeEventsRequestParams,
+} from '../shared/events';
 import {
   JSON_SCHEMA_2020_12,
   MAX_JSON_SCHEMA_DEPTH,
@@ -58,7 +68,12 @@ import { isReconnectableMCPError } from './error-utils';
 import type { DeliveryDriver } from './events/mode';
 import { EventStreamRouter } from './events/stream-router';
 import { EventSubscription } from './events/subscription';
-import type { EventsPort, MCPEventSubscribeOptions, MCPEventSubscription } from './events/types';
+import type {
+  EventsPort,
+  EventsWebhookSetup,
+  MCPEventSubscribeOptions,
+  MCPEventSubscription,
+} from './events/types';
 import { getInputSchemaError, loadInputSchemaMetaValidator } from './input-schema-meta-schema';
 import { MCP_CLIENT_PROTOCOL_VERSION } from './types';
 import type {
@@ -503,8 +518,10 @@ export class InternalMastraMCPClient extends MastraBase {
     clientInfo,
     server,
     timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
+    webhook,
   }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
+    this.webhook = webhook;
     // Started early so the sync toolFromDefinition() normally has the input schema check ready.
     void loadInputSchemaMetaValidator();
     this.name = name;
@@ -858,6 +875,8 @@ export class InternalMastraMCPClient extends MastraBase {
   };
   /** Live MCP Events subscriptions, restored after a reconnect and cancelled on disconnect. */
   private readonly eventSubscriptions = new Set<EventSubscription>();
+  /** Webhook settings and receiver shared with the owning `MCPClient`, when configured. */
+  readonly webhook?: EventsWebhookSetup;
 
   /**
    * Connects to the MCP server using the configured transport.
@@ -1401,6 +1420,32 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
+   * Sends one `events/subscribe` request (webhook delivery).
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  async subscribeEvents(params: SubscribeEventsRequestParams, signal?: AbortSignal): Promise<SubscribeEventsResult> {
+    return await this.client.request(
+      { method: EVENTS_METHODS.subscribe, params: { ...params, _meta: this.requestMeta(params._meta) } },
+      SubscribeEventsResultSchema,
+      { timeout: this.timeout, signal },
+    );
+  }
+
+  /**
+   * Sends one `events/unsubscribe` request (webhook delivery).
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  async unsubscribeEvents(params: UnsubscribeEventsRequestParams): Promise<void> {
+    await this.client.request(
+      { method: EVENTS_METHODS.unsubscribe, params: { ...params, _meta: this.requestMeta(params._meta) } },
+      UnsubscribeEventsResultSchema,
+      { timeout: this.timeout },
+    );
+  }
+
+  /**
    * Starts a subscription driven by `driver` and tracks it so reconnects restore it.
    *
    * @internal
@@ -1410,6 +1455,7 @@ export class InternalMastraMCPClient extends MastraBase {
     arguments?: Record<string, unknown>;
     driver: DeliveryDriver;
     options?: MCPEventSubscribeOptions;
+    notice?: MastraError;
   }): Promise<MCPEventSubscription> {
     return await EventSubscription.start({
       port: this.eventsPort,
@@ -1418,6 +1464,7 @@ export class InternalMastraMCPClient extends MastraBase {
       arguments: config.arguments,
       driver: config.driver,
       options: config.options,
+      notice: config.notice,
       defaultStreamOpenTimeoutMs: this.timeout,
       onOpen: opened => {
         this.eventSubscriptions.add(opened);
@@ -1437,6 +1484,9 @@ export class InternalMastraMCPClient extends MastraBase {
   private readonly eventsPort: EventsPort = {
     poll: (params, signal) => this.pollEvents(params, signal),
     openStream: (params, sink, options) => this.eventStreamRouter.open(params, sink, options),
+    subscribe: (params, signal) => this.subscribeEvents(params, signal),
+    unsubscribe: params => this.unsubscribeEvents(params),
+    webhook: () => this.webhook,
     ensureConnected: async () => {
       await this.reconnectPromise?.catch(() => {});
       await this.connect();

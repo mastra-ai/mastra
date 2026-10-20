@@ -9,7 +9,12 @@ import type {
   PollEventsRequestParams,
   PollEventsResult,
   StreamEventsRequestParams,
+  SubscribeEventsRequestParams,
+  SubscribeEventsResult,
+  UnsubscribeEventsRequestParams,
+  WebhookDeliveryStatus,
 } from '../../shared/events';
+import type { WebhookReceiver } from './webhook-receiver';
 
 /**
  * One event occurrence delivered by an MCP Events subscription.
@@ -20,11 +25,38 @@ export type MCPEventOccurrence = EventOccurrence;
 
 /**
  * How occurrences reach the client: `poll` repeats `events/poll`; `push` holds one long-lived
- * `events/stream` request open per subscription.
+ * `events/stream` request open per subscription; `webhook` has the server POST each occurrence to
+ * the client's `webhook.url` (registered with `events/subscribe`).
  *
  * @experimental SEP-3415 is a draft; this API may change.
  */
-export type MCPEventDeliveryMode = 'poll' | 'push';
+export type MCPEventDeliveryMode = 'poll' | 'push' | 'webhook';
+
+/**
+ * Webhook delivery settings for `MCPClient`. With these set, event types whose servers offer
+ * webhook delivery use it in preference to push and poll.
+ *
+ * @experimental SEP-3415 is a draft; this API may change.
+ */
+export interface MCPClientWebhookOptions {
+  /** Public `https` URL that reaches `mcp.events.handleWebhook()`. */
+  url: string;
+  /**
+   * `whsec_` signing secret shared by every subscription. Default: a fresh random secret per
+   * subscription, so one server cannot sign deliveries for another server's subscriptions.
+   */
+  secret?: string;
+  /** Suggested subscription lifetime. `null` asks for no expiry. Default: the server's default. */
+  ttlMs?: number | null;
+  /** How long before `refreshBefore` to refresh. Default: the smaller of 60 seconds and 20% of the grant. */
+  refreshMarginMs?: number;
+}
+
+/** Webhook settings and receiver shared by the subscriptions of one `MCPClient`. */
+export interface EventsWebhookSetup {
+  options: MCPClientWebhookOptions;
+  receiver: WebhookReceiver;
+}
 
 /**
  * Error passed to {@link MCPEventSubscription.onError} for recoverable problems, and thrown by
@@ -37,6 +69,11 @@ export type MCPEventDeliveryMode = 'poll' | 'push';
  * - `MCP_EVENTS_SUBSCRIPTION_TERMINATED` – the server terminated the subscription (`details.code`). Ends it.
  * - `MCP_EVENTS_RETRIES_EXHAUSTED` – `retry.maxAttempts` was reached. Ends the subscription.
  * - `MCP_EVENTS_BUFFER_OVERFLOW` – the consumer fell `maxBufferedEvents` behind and the oldest unread occurrences were dropped; the next one is flagged `truncated`.
+ * - `MCP_EVENTS_WEBHOOK_DELIVERY_FAILING` – the server reports that it cannot deliver to the
+ *   webhook URL (`details.lastError`, `details.active`). Refreshing resumes a suspended subscription.
+ * - `MCP_EVENTS_WEBHOOK_UNAVAILABLE` – the server rejected webhook delivery (`details.code`, e.g. an
+ *   unauthenticated connection or a full webhook subscription cap), so a subscription that did not force a mode fell back to
+ *   `details.fallback`. Reported once, to the first `onError` handler.
  *
  * @experimental SEP-3415 is a draft; this API may change.
  */
@@ -65,7 +102,11 @@ export interface MCPEventRetryOptions {
  * @experimental SEP-3415 is a draft; this API may change.
  */
 export interface MCPEventSubscribeOptions {
-  /** Force a delivery mode. Rejects when the server does not offer it for this event. Default: push, then poll. */
+  /**
+   * Force a delivery mode. Rejects when the server does not offer it for this event, or for
+   * `webhook` when the client has no `webhook` settings. Default: webhook (when configured), then
+   * push, then poll.
+   */
   delivery?: MCPEventDeliveryMode;
   /** Resume from a cursor you persisted earlier. Default `null` (start from now). */
   cursor?: string | null;
@@ -120,6 +161,8 @@ export interface MCPEventSubscription extends AsyncIterable<MCPEventOccurrence> 
    * the gap is being handled, and is false again for the occurrences after it.
    */
   readonly truncated: boolean;
+  /** Webhook only: the server's latest report on delivery to the webhook URL, from the last refresh. */
+  readonly deliveryStatus?: WebhookDeliveryStatus;
   /** Registers a handler for recoverable errors. Returns a function that removes it. */
   onError(handler: (error: MCPEventSubscriptionError) => void): () => void;
   /** Stops delivery and releases the server-side stream. Pending iteration ends with `done`. */
@@ -151,6 +194,12 @@ export interface EventsPort {
     sink: EventStreamSink,
     options: { signal: AbortSignal; openTimeoutMs: number },
   ): Promise<EventStreamHandle>;
+  /** `events/subscribe` (webhook delivery). */
+  subscribe(params: SubscribeEventsRequestParams, signal: AbortSignal): Promise<SubscribeEventsResult>;
+  /** `events/unsubscribe` (webhook delivery). */
+  unsubscribe(params: UnsubscribeEventsRequestParams): Promise<void>;
+  /** The webhook settings and receiver, when the client is configured for webhook delivery. */
+  webhook(): EventsWebhookSetup | undefined;
   /** Resolves once the client is connected, reconnecting if needed. */
   ensureConnected(): Promise<void>;
   log(level: 'debug' | 'warning' | 'error', message: string, details?: Record<string, unknown>): void;

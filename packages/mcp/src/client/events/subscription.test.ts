@@ -220,6 +220,23 @@ describe('selectDeliveryMode', () => {
     );
   });
 
+  it('prefers webhook only when the client has webhook settings', () => {
+    const all = ['poll', 'push', 'webhook'];
+    expect(selectDeliveryMode(all, undefined, details, { webhook: true })).toBe('webhook');
+    expect(selectDeliveryMode(all, undefined, details)).toBe('push');
+    expect(selectDeliveryMode(['poll'], undefined, details, { webhook: true })).toBe('poll');
+  });
+
+  it('rejects forcing webhook without webhook settings', () => {
+    expect(() => selectDeliveryMode(['webhook'], 'webhook', details)).toThrow(
+      expect.objectContaining({ id: 'MCP_EVENTS_WEBHOOK_NOT_CONFIGURED' }),
+    );
+    expect(selectDeliveryMode(['webhook', 'push'], 'webhook', details, { webhook: true })).toBe('webhook');
+    expect(() => selectDeliveryMode(['push'], 'webhook', details, { webhook: true })).toThrow(
+      expect.objectContaining({ id: 'MCP_EVENTS_NO_COMPATIBLE_DELIVERY_MODE' }),
+    );
+  });
+
   it('honors a forced mode only when it is offered', () => {
     expect(selectDeliveryMode(['poll', 'push'], 'poll', details)).toBe('poll');
     expect(() => selectDeliveryMode(['poll'], 'push', details)).toThrow(

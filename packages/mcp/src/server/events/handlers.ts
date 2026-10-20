@@ -13,6 +13,10 @@ import {
   PollEventsResultSchema,
   StreamEventsRequestParamsSchema,
   StreamEventsResultSchema,
+  SubscribeEventsRequestParamsSchema,
+  SubscribeEventsResultSchema,
+  UnsubscribeEventsRequestParamsSchema,
+  UnsubscribeEventsResultSchema,
 } from '../../shared/events';
 import type {
   EventDeliveryMode,
@@ -20,10 +24,13 @@ import type {
   ListEventsResult,
   PollEventsResult,
   StreamEventsResult,
+  SubscribeEventsRequestParams,
 } from '../../shared/events';
+import { principalOf } from '../request';
 import { toDescriptor, toTimestamp } from './registry';
 import type { RegisteredEvent, ServerEventRegistry } from './registry';
 import { EventStream } from './stream';
+import type { WebhookDispatcher } from './webhook-dispatcher';
 
 const DEFAULT_MAX_EVENTS = 100;
 const DEFAULT_LIST_PAGE_SIZE = 100;
@@ -35,6 +42,8 @@ export interface EventHandlerDeps {
   listPageSize?: number;
   maxStreams?: number;
   getLogger: () => IMastraLogger;
+  /** Serves `events/subscribe` and `events/unsubscribe` when webhook delivery is configured. */
+  webhooks?: WebhookDispatcher;
   jsonSchema: (schema: unknown, options: { io: 'input' | 'output' }) => Record<string, unknown> | undefined;
   /** Runs one request under the server's request span with its resolved request context. */
   trace: <T>(
@@ -46,7 +55,10 @@ export interface EventHandlerDeps {
   ) => Promise<T>;
 }
 
-/** Registers `events/list`, `events/poll` and `events/stream` on one protocol instance. */
+/**
+ * Registers `events/list`, `events/poll` and `events/stream` on one protocol instance, plus
+ * `events/subscribe` and `events/unsubscribe` when webhook delivery is configured.
+ */
 export function registerEventHandlers(server: Server, deps: EventHandlerDeps): void {
   const { registry } = deps;
 
@@ -179,6 +191,52 @@ export function registerEventHandlers(server: Server, deps: EventHandlerDeps): v
         return { _meta: { [EVENTS_SUBSCRIPTION_ID_META_KEY]: subscriptionId } };
       }),
   );
+
+  const { webhooks } = deps;
+  if (!webhooks) return;
+
+  server.setRequestHandler(
+    EVENTS_METHODS.subscribe,
+    { params: SubscribeEventsRequestParamsSchema, result: SubscribeEventsResultSchema },
+    (params, ctx) =>
+      // The signing secret must not reach span input and the exporters behind it.
+      deps.trace(server, EVENTS_METHODS.subscribe, withoutSecret(params), ctx, async requestContext => {
+        const principal = requirePrincipal(ctx, requestContext);
+        const event = registry.resolve(params.name, 'webhook');
+        const args = await registry.validateArguments(event, params.arguments ?? {});
+        try {
+          // Refreshes are repeat subscribes, so a caller who lost access is stopped here.
+          await authorizeOrThrow(event, args, requestContext, 'webhook', deps);
+        } catch (error) {
+          if (error instanceof ProtocolError && error.code === EVENTS_ERROR_CODES.Forbidden) {
+            await webhooks.unsubscribe({ principal, url: params.delivery.url, name: event.name, arguments: args });
+          }
+          throw error;
+        }
+        return webhooks.subscribe(event, args, params, principal);
+      }),
+  );
+
+  server.setRequestHandler(
+    EVENTS_METHODS.unsubscribe,
+    { params: UnsubscribeEventsRequestParamsSchema, result: UnsubscribeEventsResultSchema },
+    (params, ctx) =>
+      deps.trace(server, EVENTS_METHODS.unsubscribe, params, ctx, async requestContext => {
+        const principal = requirePrincipal(ctx, requestContext);
+        const event = registry.resolve(params.name, 'webhook');
+        const args = await registry.validateArguments(event, params.arguments ?? {});
+        await webhooks.unsubscribe({ principal, url: params.delivery.url, name: event.name, arguments: args });
+        return {};
+      }),
+  );
+}
+
+/** Webhook subscriptions are keyed by the caller, so they need an authenticated one. */
+function requirePrincipal(ctx: ServerContext, requestContext: RequestContext): string {
+  if (!ctx.http?.authInfo) {
+    throw new ProtocolError(EVENTS_ERROR_CODES.Forbidden, 'Webhook subscriptions require an authenticated caller');
+  }
+  return principalOf(ctx, requestContext);
 }
 
 /** Runs the definition's `authorize`; rejects with -32024 when it denies the caller. */
@@ -201,6 +259,10 @@ export async function authorizeOrThrow(
   if (allowed !== true) {
     throw new ProtocolError(EVENTS_ERROR_CODES.Forbidden, `Not allowed to subscribe to event "${event.name}"`);
   }
+}
+
+function withoutSecret(params: SubscribeEventsRequestParams): Record<string, unknown> {
+  return { ...params, delivery: { ...params.delivery, secret: '[redacted]' } };
 }
 
 function bufferOf(event: RegisteredEvent) {

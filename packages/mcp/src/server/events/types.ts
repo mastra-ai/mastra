@@ -1,7 +1,9 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 
-import type { EventDeliveryMode } from '../../shared/events';
+import type { EventDeliveryMode, WebhookUrlPolicyOptions } from '../../shared/events';
+import type { WebhookSubscriptionStore } from './webhook-store';
+import type { WebhookTransport } from './webhook-transport';
 
 /** Subscription arguments of an event type. @experimental SEP-3415 is a draft; this API may change. */
 export type MCPServerEventArgs = Record<string, unknown>;
@@ -96,8 +98,10 @@ export interface MCPServerEventDefinition<
   match?(args: TArgs, data: TData): boolean;
   /**
    * Decides whether the caller may receive this event type with these arguments. Runs on every
-   * `events/poll` and on every `events/stream` open; returning `false` rejects the request with
-   * -32024. An open stream isn't checked again until it reconnects. Defaults to allowing everyone.
+   * `events/poll`, every `events/stream` open and every webhook `events/subscribe`, including
+   * refreshes; returning `false` rejects the request with -32024 and, for a webhook, removes the
+   * existing subscription. An open stream isn't checked again until it reconnects, and a webhook
+   * until its next refresh. Defaults to allowing everyone.
    */
   authorize?(context: MCPServerEventAuthorizeContext<TArgs>): boolean | Promise<boolean>;
   /** Pull source serving `events/poll`. */
@@ -129,6 +133,78 @@ export interface MCPServerEventsOptions {
    * requests are rejected with -32025 until a stream closes. Defaults to 1024.
    */
   maxStreams?: number;
+  /**
+   * Enables webhook delivery (`events/subscribe`, `events/unsubscribe`) for event types fed by
+   * `server.events.emit()`. Types with a `poll` source stay poll-only. Webhook subscriptions need an
+   * authenticated caller, so serve the server over HTTP with authentication.
+   */
+  webhook?: MCPServerWebhookOptions;
+}
+
+/**
+ * Webhook delivery settings.
+ *
+ * @experimental SEP-3415 is a draft; this API may change.
+ */
+export interface MCPServerWebhookOptions {
+  /** Subscription lifetimes granted for the client's `ttlMs` suggestion. */
+  ttl?: {
+    /** Granted when the client suggests none. Defaults to 30 minutes. */
+    defaultMs?: number;
+    /** Shorter suggestions are raised to this. Defaults to 60 seconds. */
+    minMs?: number;
+    /** Longer suggestions are lowered to this. Defaults to 24 hours. */
+    maxMs?: number;
+  };
+  /**
+   * Grant `ttlMs: null` (no expiry) when a client asks for it. Defaults to `false`, which grants
+   * `ttl.maxMs` instead. No-expiry subscriptions must survive restarts, so enable this only with a
+   * durable `store`.
+   */
+  allowNoExpiry?: boolean;
+  /** Where subscriptions are kept. Defaults to an in-memory store. */
+  store?: WebhookSubscriptionStore;
+  /** Callback URL policy. By default only `https` URLs that resolve to public addresses are accepted. */
+  url?: WebhookUrlPolicyOptions;
+  /** Callback URLs that count as verified without a challenge handshake. */
+  allowedUrls?: (url: URL) => boolean;
+  /** How long a successful handshake verifies a `(principal, url)` pair. Defaults to 24 hours. */
+  verificationTtlMs?: number;
+  /** Time allowed for one POST. Defaults to 5 seconds. */
+  timeoutMs?: number;
+  /** Retries of one delivery after a failure. Exponential backoff with jitter. */
+  retry?: {
+    /** Attempts per event, including the first. Defaults to 5. */
+    maxAttempts?: number;
+    /** Defaults to 1 second. */
+    initialDelayMs?: number;
+    /** Defaults to 5 minutes. */
+    maxDelayMs?: number;
+    /** Time after the first attempt after which an event is abandoned. Suspended time does not count. Defaults to 15 minutes. */
+    maxWindowMs?: number;
+  };
+  /** When delivery to an endpoint is suspended (`deliveryStatus.active: false`) until the client refreshes. */
+  suspend?: {
+    /** Rolling window the failure rate is measured over. Defaults to 60 minutes. */
+    windowMs?: number;
+    /** Attempts in the window needed before suspending. Defaults to 100. */
+    minAttempts?: number;
+    /** Failure ratio that suspends. Defaults to 0.95. */
+    failureRate?: number;
+  };
+  /** Undelivered events held per subscription before the oldest are dropped and a `gap` is sent. Defaults to 1000. */
+  maxPending?: number;
+  /**
+   * Most webhook subscriptions this process keeps, across all callers. A new subscription past
+   * the limit is rejected with -32025; refreshing an existing one is not. Defaults to 1000.
+   */
+  maxSubscriptions?: number;
+  /** Most webhook subscriptions one authenticated caller can hold. Defaults to 100. */
+  maxSubscriptionsPerPrincipal?: number;
+  /** How long deliveries are signed with both the old and the new secret after a rotation. Defaults to 5 minutes. */
+  secretGraceMs?: number;
+  /** Sends one POST. Defaults to `node:http`/`node:https`, connecting to the validated address. */
+  transport?: WebhookTransport;
 }
 
 /** @experimental SEP-3415 is a draft; this API may change. */
