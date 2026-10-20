@@ -25,6 +25,7 @@ import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThr
 import { useWiderThan } from '../domains/workspace-viewer/hooks/useWiderThan';
 import { chatColumnClass, RAIL_MIN_REM } from '../domains/workspace-viewer/layout';
 import { useInvalidateWorkspaceChangesOnRunCompletion } from '../domains/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion';
+import { useRefreshWorkspaceFilesOnToolCalls } from '../domains/workspace-viewer/useRefreshWorkspaceFilesOnToolCalls';
 
 import '../domains/chat/components/chat-enter.css';
 
@@ -80,7 +81,7 @@ function ThreadPageMain({
   const { wider: railFits } = useWiderThan(railBoxRef, RAIL_MIN_REM);
 
   return (
-    <ThreadSessionEffects workspacePath={workspacePath} threadId={threadId}>
+    <ThreadSessionEffects workspacePath={workspacePath}>
       <FactorySessionPage>
         <SessionChatSurface
           secondaryBar={<GoalPanel />}
@@ -97,16 +98,9 @@ function ThreadPageMain({
   );
 }
 
-function ThreadSessionEffects({
-  workspacePath,
-  threadId,
-  children,
-}: {
-  workspacePath: string | undefined;
-  threadId: string | undefined;
-  children: ReactNode;
-}) {
-  const { busy } = useChatTranscript();
-  useInvalidateWorkspaceChangesOnRunCompletion(workspacePath, threadId, busy);
+function ThreadSessionEffects({ workspacePath, children }: { workspacePath: string | undefined; children: ReactNode }) {
+  const { busy, transcript } = useChatTranscript();
+  useInvalidateWorkspaceChangesOnRunCompletion(workspacePath, busy);
+  useRefreshWorkspaceFilesOnToolCalls(workspacePath, transcript.entries);
   return children;
 }

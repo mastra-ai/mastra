@@ -213,14 +213,15 @@ async function resolveSession(
 async function startUserSessionConversation(
   controller: SourceControlSessionRoutesOptions['controller'],
   session: SourceControlSession,
-): Promise<void> {
-  if (!controller) return;
+  // Its owner's resource while private, its Factory's when created shared (a run from a board card).
+  resourceId: string = userSessionResourceFor(session, session.visibility === 'org' ? 'org' : 'private'),
+) {
+  if (!controller) return undefined;
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: session.userId, organizationId: session.orgId });
   const live = await controller.createSession({
     id: session.sessionId,
-    // Its owner's resource while private, its Factory's when created shared (a run from a board card).
-    resourceId: userSessionResourceFor(session, session.visibility === 'org' ? 'org' : 'private'),
+    resourceId,
     threadId: session.sessionId,
     ownerId: session.userId,
     requestContext,
@@ -234,6 +235,7 @@ async function startUserSessionConversation(
       ...(session.projectRepositoryId ? { projectRepositoryId: session.projectRepositoryId } : {}),
     });
   }
+  return live;
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
@@ -501,6 +503,44 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         return c.json({
           session: { ...withCapabilities(withOwnerProfile(session, owners), recreateSandbox), resourceId },
         });
+      },
+    }),
+    // Start a session's sandbox without sending it a message, for the Files tab.
+    // Brings the controller session online as the row's owner, as a delivered
+    // message would, then starts its sandbox; a running sandbox returns at once.
+    registerApiRoute('/web/user-sessions/:sessionId/sandbox/start', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const match = await resolveSession(options.sourceControls, c.req.param('sessionId'));
+        const session = match?.session;
+        if (!session) return c.json({ error: 'Session not found' }, 404);
+        const permission = await sessionManagePermission(loose(c), options.auth, resolved.tenant, session);
+        if (permission === 'not-found') return c.json({ error: 'Session not found' }, 404);
+        if (permission === 'forbidden') {
+          return c.json({ error: "Only the session's owner or an organization admin can start its sandbox." }, 403);
+        }
+        const controller = options.controller;
+        if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
+
+        try {
+          const live =
+            (await controller.getSession(session.sessionId)) ??
+            (await startUserSessionConversation(
+              controller,
+              session,
+              await sessionMemoryResourceId(controller, session, options.workItems),
+            ));
+          const sandbox = live?.getWorkspace()?.sandbox;
+          if (!sandbox?.start) return c.json({ error: 'This session has no sandbox to start.' }, 409);
+          await sandbox.start();
+          return c.json({ started: true });
+        } catch (error) {
+          console.error('[Factory Sessions] Failed to start session sandbox', { sessionId: session.sessionId, error });
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId/sandbox/recreate', {
