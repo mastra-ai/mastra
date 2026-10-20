@@ -1,9 +1,10 @@
+import { createDurableLLMExecutionStep, globalRunRegistry } from '@mastra/core/agent/durable';
 import { MessageList } from '@mastra/core/agent/message-list';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import { Inngest } from 'inngest';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createInngestDurableAgenticWorkflow } from './create-inngest-agentic-workflow';
+import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
 
 const tripwire = { reason: 'rejected by gate', processorId: 'gate', retry: false };
 
@@ -34,6 +35,55 @@ function findEntry(steps: any[], predicate: (entry: any) => boolean): any {
   }
   return undefined;
 }
+
+// COR-1481: Inngest's schema and mapping must not discard an API-side input rejection on a cold worker.
+describe('createInngestDurableAgenticWorkflow input tripwire transport', () => {
+  it.each([true, false])(
+    'preserves the input rejection through cold schemas and mapping (blocked: %s)',
+    async blocked => {
+      const runId = `inngest-cold-input-tripwire-${blocked}`;
+      const inputTripwire = blocked
+        ? { ...tripwire, metadata: { code: 'invalid-target', target: { environment: 'staging' } } }
+        : undefined;
+      const workflow = createInngestDurableAgenticWorkflow({ inngest: new Inngest({ id: runId }) });
+      const iteration = workflow.steps[InngestDurableStepIds.AGENTIC_EXECUTION];
+      const mapping = findEntry(
+        (workflow as any).executionGraph.steps,
+        entry => entry.type === 'mapping' && entry.id === 'map-to-llm-input',
+      );
+      const roundTrip = (value: unknown) => JSON.parse(JSON.stringify(value));
+      expect(globalRunRegistry.get(runId)).toBeUndefined();
+
+      const input = workflow.inputSchema.parse(
+        roundTrip({
+          runId,
+          agentId: 'deploy-preflight',
+          messageId: 'input-tripwire-message',
+          messageListState: new MessageList().serialize(),
+          toolsMetadata: [],
+          modelConfig: { provider: 'test', modelId: 'mock' },
+          options: {},
+          state: {},
+          inputTripwire,
+        }),
+      );
+      expect(input.inputTripwire).toEqual(inputTripwire);
+      const state = iteration.inputSchema.parse(
+        roundTrip({
+          ...input,
+          iterationCount: 0,
+          stepIndex: 0,
+          accumulatedSteps: [],
+          accumulatedUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        }),
+      );
+      const mapped = await mapping.mapConfig({ inputData: state });
+      const workerInput = createDurableLLMExecutionStep().inputSchema.parse(roundTrip(mapped));
+      expect(workerInput.inputTripwire).toEqual(inputTripwire);
+      expect(globalRunRegistry.get(runId)).toBeUndefined();
+    },
+  );
+});
 
 // #25996: a processOutputResult abort must surface as a tripwire on the Inngest engine too.
 describe('createInngestDurableAgenticWorkflow processOutputResult tripwire', () => {

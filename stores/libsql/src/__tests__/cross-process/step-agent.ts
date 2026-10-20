@@ -38,6 +38,7 @@ export interface StepAgentOptions {
   finalText?: string;
   onToolEvent?: (event: StepToolEvent) => void;
   onModelCall?: (call: number) => void;
+  inputProcessors?: AgentConfig['inputProcessors'];
   outputProcessors?: AgentConfig['outputProcessors'];
 }
 
@@ -71,6 +72,7 @@ export function createStepAgent({
   memory,
   onToolEvent,
   onModelCall,
+  inputProcessors,
   outputProcessors,
 }: StepAgentOptions) {
   let calls = 0;
@@ -146,6 +148,7 @@ export function createStepAgent({
     model,
     tools: { step },
     ...(memory ? { memory } : {}),
+    ...(inputProcessors ? { inputProcessors } : {}),
     ...(outputProcessors ? { outputProcessors } : {}),
   });
   return { agent, model, modelCalls: () => calls };

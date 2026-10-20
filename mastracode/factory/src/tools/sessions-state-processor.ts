@@ -1,25 +1,30 @@
 import { createHash } from 'node:crypto';
-import type { NotificationRecord, NotificationsStorage } from '@mastra/core/notifications';
+import type { NotificationsStorage } from '@mastra/core/notifications';
 import type { ComputeStateSignalArgs, ComputeStateSignalResult, Processor } from '@mastra/core/processors';
 
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { FACTORY_SESSION_NOTIFICATION_SOURCE } from './deliver.js';
-import { workItemNumber } from './read-tools.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { resolveFactoryToolScope } from './scope.js';
 import type { FactoryToolScope, ResolveFactoryToolScopeOptions } from './scope.js';
+import {
+  itemLabel,
+  lastReport as report,
+  listSessionNotifications,
+  listSideSessions,
+  newestNotification as newest,
+} from './side-sessions.js';
+import type { FactorySessionRunState, LastReport } from './side-sessions.js';
 
 const STATE_ID = 'factory-sessions';
 /** Finished side sessions and items that reached a terminal stage drop out after this long. */
 export const FACTORY_SESSIONS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 /** Rows shown before the rest collapse into "+N more". */
 export const FACTORY_SESSIONS_MAX_ROWS = 20;
-const NOTIFICATION_SCAN = 100;
 const EMPTY_CACHE_KEY = 'empty';
 
-export type FactorySessionRunState = 'running' | 'idle' | 'parked';
+export type { FactorySessionRunState } from './side-sessions.js';
 
 export interface FactorySessionsStateDependencies {
   authEnabled: boolean;
@@ -41,16 +46,12 @@ export interface FactorySessionsStateDependencies {
   now?: () => number;
 }
 
-interface LastReport {
-  kind: string;
-  at: string;
-}
-
 interface SideSessionRow {
   sessionId: string;
   title: string;
   state: FactorySessionRunState;
   lastReport: LastReport | null;
+  muted: boolean;
 }
 
 interface FollowedRow {
@@ -74,23 +75,6 @@ function escapeText(value: string): string {
 
 function cacheKeyFor(value: unknown): string {
   return `sessions:${createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16)}`;
-}
-
-function report(record: NotificationRecord | undefined): LastReport | null {
-  return record ? { kind: record.kind, at: record.createdAt.toISOString() } : null;
-}
-
-function newest(records: NotificationRecord[], match: (record: NotificationRecord) => boolean) {
-  let found: NotificationRecord | undefined;
-  for (const record of records) {
-    if (match(record) && (!found || record.createdAt > found.createdAt)) found = record;
-  }
-  return found;
-}
-
-function itemLabel(item: WorkItemRow): string {
-  const number = workItemNumber(item);
-  return number === null ? item.id : `#${number}`;
 }
 
 /**
@@ -190,29 +174,28 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
   async #userState(scope: FactoryToolScope): Promise<SessionsState> {
     const now = this.#deps.now?.() ?? Date.now();
     const notifications = await this.#deps.notifications();
-    const records = notifications
-      ? await notifications.listNotifications({
-          threadId: scope.threadId,
-          source: FACTORY_SESSION_NOTIFICATION_SOURCE,
-          limit: NOTIFICATION_SCAN,
-        })
-      : [];
+    const records = await listSessionNotifications(notifications, scope.threadId);
 
-    const sideRows = await this.#deps.sessions.listByOrigin({ orgId: scope.orgId, originSessionId: scope.sessionId });
     const sideSessions: Array<SideSessionRow & { active: boolean }> = [];
-    for (const row of sideRows) {
-      if (row.factoryProjectId !== scope.factoryProjectId) continue;
-      const last = newest(records, record => record.attributes?.['from-session'] === row.sessionId);
-      const running = await this.#deps.isRunning(row.sessionId);
-      const lastActivity = last?.createdAt.getTime() ?? row.updatedAt.getTime();
-      if (!running && now - lastActivity > FACTORY_SESSIONS_MAX_AGE_MS) continue;
-      const state: FactorySessionRunState = running ? 'running' : last?.kind === 'blocked' ? 'parked' : 'idle';
+    const listed = await listSideSessions(
+      {
+        sessions: this.#deps.sessions,
+        workItems: this.#deps.workItems,
+        isRunning: this.#deps.isRunning,
+        notifications,
+      },
+      scope,
+      { records },
+    );
+    for (const row of listed) {
+      if (row.state !== 'running' && now - Date.parse(row.lastActivityAt) > FACTORY_SESSIONS_MAX_AGE_MS) continue;
       sideSessions.push({
         sessionId: row.sessionId,
-        title: row.title ?? row.sessionId,
-        state,
-        lastReport: report(last),
-        active: state !== 'idle',
+        title: row.title,
+        state: row.state,
+        lastReport: row.lastReport,
+        muted: row.mutedAt !== null,
+        active: row.state !== 'idle',
       });
     }
 
@@ -286,7 +269,7 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
       lines.push('Side sessions you started:');
       for (const row of state.sideSessions) {
         lines.push(
-          `- "${escapeText(row.title)}" (session ${row.sessionId}): ${row.state}${lastReport(row.lastReport)}`,
+          `- "${escapeText(row.title)}" (session ${row.sessionId}): ${row.state}${row.muted ? ' (muted)' : ''}${lastReport(row.lastReport)}`,
         );
       }
     }
@@ -302,7 +285,9 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
       }
     }
     if (state.more > 0) lines.push(`+${state.more} more`);
-    lines.push('Message any of these sessions with factory_signal_session; read full reports with notification_inbox.');
+    lines.push(
+      'Message any of these sessions with factory_signal_session; read full reports with notification_inbox; list side sessions with factory_list_side_sessions; on a turn a person started, mute one with factory_unsubscribe_session.',
+    );
     return lines.join('\n');
   }
 }

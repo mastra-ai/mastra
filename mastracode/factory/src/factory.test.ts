@@ -1175,6 +1175,8 @@ describe('MastraFactory.prepare', () => {
       'factory_start_session',
       'factory_answer_approval',
       'factory_switch_session_model',
+      'factory_subscribe_session',
+      'factory_unsubscribe_session',
     ];
     const ALLOWED_TOOLS = [
       ...READ_TOOLS,
@@ -1191,9 +1193,12 @@ describe('MastraFactory.prepare', () => {
       'factory_start_session',
       'factory_answer_approval',
       'factory_switch_session_model',
+      'factory_list_side_sessions',
+      'factory_subscribe_session',
+      'factory_unsubscribe_session',
     ];
 
-    it('gives a user session read tools on every turn, management tools only on person-started turns, and other sessions none', async () => {
+    it('gives a user session every tool on every turn, and other sessions none', async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });
       await seedUserSession(storage);
@@ -1206,13 +1211,41 @@ describe('MastraFactory.prepare', () => {
       expect(Object.keys(interactive)).toEqual(expect.arrayContaining(READ_TOOLS));
       expect(Object.keys(woken)).toEqual(expect.arrayContaining(READ_TOOLS));
       expect(Object.keys(interactive)).toEqual(expect.arrayContaining(MANAGEMENT_TOOLS));
-      for (const name of MANAGEMENT_TOOLS) expect(woken).not.toHaveProperty(name);
+      // Turns nobody signed in started get the same tools; each tool limits what it does on them.
+      expect(Object.keys(woken).sort()).toEqual(Object.keys(interactive).sort());
 
       const stranger = new RequestContext();
       stranger.set('user', { workosId: 'user-2', organizationId: 'org-2' });
       stranger.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
       const none = await extraTools({ requestContext: stranger });
       for (const name of [...READ_TOOLS, ...MANAGEMENT_TOOLS]) expect(none).not.toHaveProperty(name);
+    });
+
+    it('refuses an approval answer on a woken turn, which a person in the same session could give', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const extraTools = config.extraTools as (args: {
+        requestContext: RequestContext;
+      }) => Promise<Record<string, { execute: (input: unknown, context: unknown) => Promise<unknown> }>>;
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+      }) => Promise<void>;
+      const answer = { sessionId: crypto.randomUUID(), toolCallId: 'call-1', decision: 'approve' };
+
+      const wake = new RequestContext();
+      await prepareWake({ requestContext: wake, resourceId: 'session-1' });
+      wake.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
+      const woken = await extraTools({ requestContext: wake });
+      await expect(woken.factory_answer_approval!.execute(answer, {})).rejects.toThrow(
+        'Only a person can answer an approval',
+      );
+
+      const person = await extraTools({ requestContext: sessionContext(true) });
+      await expect(person.factory_answer_approval!.execute(answer, {})).rejects.toThrow(
+        'was not found in this Factory',
+      );
     });
 
     it("wakes a messaged session as that session's owner, not the sender", async () => {

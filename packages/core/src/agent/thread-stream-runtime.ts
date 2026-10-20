@@ -1084,8 +1084,13 @@ export class AgentThreadStreamRuntime {
           state.threadKeysByRunId.get(data.runId) === key &&
           state.activeThreadRunIds.get(key) === data.runId &&
           state.activeThreadStreamIds.get(key) === data.streamId;
-        if (ownsRun() && (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId)) && ownsRun()) {
-          if (data.clearPendingSignals) this.#cancelPendingSignals(state, key);
+        // Queued input is cleared only while this run still holds the lease: after a
+        // handover it may belong to the successor. The run itself is stopped either way,
+        // since one that lost its lease keeps running until its renewal or deadline notices.
+        const clearPendingSignals =
+          ownsRun() && data.clearPendingSignals && (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId));
+        if (ownsRun()) {
+          if (clearPendingSignals) this.#cancelPendingSignals(state, key);
           if (state.preparedRunsById.has(data.runId) || this.#isParkedRun(state, data.runId)) {
             // A parked (suspended) run has no prepared run left, but abortRun's
             // parked branch releases it so the thread stops blocking on it.
@@ -1094,7 +1099,7 @@ export class AgentThreadStreamRuntime {
             // Durable runs own their controller outside the thread runtime.
             state.threadRunsById.get(data.runId)?.agent.abortRunStream(data.runId);
           }
-          if (data.clearPendingSignals) this.#notifyThreadEvents(state);
+          if (clearPendingSignals) this.#notifyThreadEvents(state);
         }
       } else if (data?.type === 'run-registered') {
         // Recorded whether or not the local run has parked yet: a run that starts

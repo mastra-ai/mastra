@@ -74,6 +74,7 @@ const durableAgenticInputSchema = z.object({
   // steps on a separate worker process, so this snapshot is the only way the
   // rebuild path can recover request-scoped configuration.
   requestContextEntries: z.record(z.string(), z.any()).optional(),
+  inputTripwire: baseIterationStateSchema.shape.inputTripwire,
   // Observability fields (Inngest-specific)
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),
@@ -194,6 +195,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // Pass the request context snapshot so dynamic model/tool resolvers
           // see the caller's context on every iteration, not just the first.
           requestContextEntries: state.requestContextEntries,
+          inputTripwire: state.inputTripwire,
           // Pass agent span data so model spans can use it as parent
           agentSpanData: state.agentSpanData,
           // Pass model span data (ONE span for entire agent run)

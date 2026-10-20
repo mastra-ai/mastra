@@ -202,4 +202,40 @@ describe('waking a Factory-style session that is not live in this process', () =
     expect(resolvedTenants).toEqual([]);
     expect(storeTenants).toEqual([]);
   });
+
+  it('keeps a notification sent while the owner cannot be resolved due for retry', async () => {
+    const { code, storage, ownerContext } = await start({ resume: 'unresolvable' });
+    const session = await code.controller.createSession({
+      id: SESSION_ID,
+      resourceId: SESSION_ID,
+      ownerId: OWNER.workosId,
+      requestContext: ownerContext(),
+    });
+    const threadId = session.thread.getId()!;
+    await code.controller.deleteSession({ resourceId: SESSION_ID });
+
+    // The delivery policy, and so resumeWakeSession, already runs when the
+    // notification is sent, not only when the dispatcher delivers it.
+    const sent = await code.codeAgent.sendNotificationSignal(
+      { source: 'github', kind: 'pr-comment', summary: 'review landed', priority: 'high' },
+      { resourceId: SESSION_ID, threadId },
+    );
+
+    const error = `No session owns resource ${SESSION_ID} to run its wake on thread ${threadId}.`;
+    expect(sent.signal).toBeUndefined();
+    expect(sent.record).toMatchObject({ status: 'pending', deliveryAttempts: 1, lastDeliveryError: error });
+    expect(sent.record.deliverAt).toBeInstanceOf(Date);
+
+    const notifications = (await storage.getStore('notifications'))!;
+    const later = await dispatchDueNotifications({
+      mastra: code.controller.getMastra()!,
+      storage: notifications,
+      resourceId: SESSION_ID,
+      now: new Date(Date.now() + 60_000),
+    });
+    expect(later.failed.map(failure => failure.error)).toEqual([error]);
+    const [record] = await notifications.listNotifications({ threadId, resourceId: SESSION_ID });
+    expect(record).toMatchObject({ status: 'pending', deliveryAttempts: 2 });
+    expect(mock.getRequests()).toEqual([]);
+  });
 });
