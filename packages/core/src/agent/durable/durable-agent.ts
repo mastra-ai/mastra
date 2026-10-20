@@ -3153,6 +3153,40 @@ export class DurableAgent<
     }
   }
 
+  /**
+   * A resume claims the run by marking it `running` (#27619). When the process holding
+   * that claim dies, nothing else moves the run on, so the run would stay unresumable.
+   * Recover the run once the claim's lease has lapsed: when no running progress was
+   * checkpointed (the default snapshot policy) recovery parks it at its suspension
+   * again and this resume goes on; otherwise recovery finishes it.
+   */
+  async #takeOverResumeClaim(runId: string, workflowsStore: WorkflowsStorage): Promise<WorkflowRunState> {
+    const outcome = (await this.recoverActiveRuns({ runId })).recovered[0];
+    if (outcome?.status === 'skipped') {
+      throw new MastraError({
+        id: 'AGENT_RESUME_ALREADY_CLAIMED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because another resume of it is still running.`,
+        details: { agentName: this.name, runId, reason: outcome.reason ?? '', retryAt: outcome.retryAt ?? '' },
+      });
+    }
+    if (outcome?.status === 'failed' && outcome.error) throw outcome.error;
+    const persisted = await workflowsStore.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+    if (!persisted) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_RUN_FINISHED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because it already finished: recovery completed it after the process running its previous resume stopped.`,
+        details: { agentName: this.name, runId },
+      });
+    }
+    return typeof persisted.snapshot === 'string'
+      ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
+      : persisted.snapshot;
+  }
+
   async #resumeRun(
     runId: string,
     resumeData: unknown,
@@ -3178,10 +3212,13 @@ export class DurableAgent<
         throw new Error(`No registry entry found for run ${runId}. Cannot resume.`);
       }
 
-      const snapshot =
+      let snapshot =
         typeof persisted.snapshot === 'string'
           ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
           : persisted.snapshot;
+      if (snapshot?.status === 'running' && workflowsStore) {
+        snapshot = await this.#takeOverResumeClaim(runId, workflowsStore);
+      }
       coldSnapshot = snapshot;
       if (snapshot?.status !== 'suspended') {
         throw new MastraError({
@@ -3765,7 +3802,12 @@ export class DurableAgent<
             // being suspended means a concurrent resume ran it first. The run, its topic and
             // its spans belong to that resume: release the claim without writing run state
             // and report the lost race to this caller only.
-            if (error instanceof MastraError && error.id === 'WORKFLOW_RUN_NOT_SUSPENDED') {
+            // When the resume claim is persisted (`persistResumeClaim`), the losing CAS reports the
+            // race as WORKFLOW_RESUME_ALREADY_CLAIMED instead.
+            if (
+              error instanceof MastraError &&
+              (error.id === 'WORKFLOW_RUN_NOT_SUSPENDED' || error.id === 'WORKFLOW_RESUME_ALREADY_CLAIMED')
+            ) {
               const lost = new MastraError({
                 id: 'AGENT_RESUME_ALREADY_CLAIMED',
                 domain: ErrorDomain.AGENT,
