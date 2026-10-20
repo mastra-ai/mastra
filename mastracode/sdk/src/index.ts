@@ -1131,7 +1131,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         {
           ...target,
           ifActive: { behavior: 'deliver' },
-          ifIdle: { behavior: 'wake', ...(streamOptions ? { streamOptions } : {}) },
+          ifIdle: {
+            behavior: 'wake',
+            ...(streamOptions ? { streamOptions } : {}),
+            // Another process owns this thread: hand the wake to it, or refuse
+            // it, rather than run it here with no owner identity.
+            ...(owner === FOREIGN_THREAD ? { requireClaimedOwner: true } : {}),
+          },
         },
       ).accepted;
       if (accepted.action === 'blocked' || accepted.action === 'discard') {
