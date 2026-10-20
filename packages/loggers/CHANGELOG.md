@@ -1,5 +1,14 @@
 # @mastra/loggers
 
+## 1.3.9-alpha.2
+
+### Patch Changes
+
+- Fixed scripts and command-line tools hanging after their work is done when they use `HttpTransport` or `UpstashTransport`. An idle transport no longer keeps the process alive, so it exits without calling `destroy()`. Buffered logs still keep the process running until they are sent. ([#27704](https://github.com/mastra-ai/mastra/pull/27704))
+
+- Updated dependencies [[`41b7f34`](https://github.com/mastra-ai/mastra/commit/41b7f3422a97f1385a285002b7e6f898eb5c7b06), [`179964b`](https://github.com/mastra-ai/mastra/commit/179964b95aacac31763a4a1aa2f2d1c652aa529d), [`ba7b0ea`](https://github.com/mastra-ai/mastra/commit/ba7b0eac045755d39d20dcf3a943ea5f8270b009), [`e8d7f8e`](https://github.com/mastra-ai/mastra/commit/e8d7f8e52da32b05f2e8501c1127128ae1a5d450), [`92034fa`](https://github.com/mastra-ai/mastra/commit/92034fa2a46a4f45af416c3201752342ead71d89)]:
+  - @mastra/core@1.79.0-alpha.6
+
 ## 1.3.9-alpha.1
 
 ### Patch Changes

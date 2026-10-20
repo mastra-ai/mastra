@@ -1,5 +1,16 @@
 # @mastra/memory
 
+## 1.39.0-alpha.5
+
+### Minor Changes
+
+- Support embedding specification v4 models from AI SDK v7. Core accepts v4 embedding models and exports `embedV4`; Memory and RAG use the matching SDK to generate embeddings while preserving v1, v2, and v3 behavior. ([#27710](https://github.com/mastra-ai/mastra/pull/27710))
+
+### Patch Changes
+
+- Updated dependencies [[`41b7f34`](https://github.com/mastra-ai/mastra/commit/41b7f3422a97f1385a285002b7e6f898eb5c7b06), [`179964b`](https://github.com/mastra-ai/mastra/commit/179964b95aacac31763a4a1aa2f2d1c652aa529d), [`ba7b0ea`](https://github.com/mastra-ai/mastra/commit/ba7b0eac045755d39d20dcf3a943ea5f8270b009), [`e8d7f8e`](https://github.com/mastra-ai/mastra/commit/e8d7f8e52da32b05f2e8501c1127128ae1a5d450), [`92034fa`](https://github.com/mastra-ai/mastra/commit/92034fa2a46a4f45af416c3201752342ead71d89)]:
+  - @mastra/core@1.79.0-alpha.6
+
 ## 1.39.0-alpha.4
 
 ### Patch Changes
