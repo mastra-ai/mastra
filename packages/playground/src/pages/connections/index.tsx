@@ -109,7 +109,12 @@ export default function ConnectionsPage() {
           <Txt as="h2" variant="subheading">
             Global connections
           </Txt>
-          {globalConnections.length === 0 && !connectionsQuery.isLoading ? (
+          {connectionsQuery.isError ? (
+            // A failed fetch must not masquerade as "no global connections".
+            <Txt as="p" variant="body" className="text-destructive-foreground" role="alert">
+              {connectionsQuery.error.message}
+            </Txt>
+          ) : globalConnections.length === 0 && !connectionsQuery.isLoading ? (
             <Txt as="p" variant="body" tone="muted">
               No global connections are linked to this project.
             </Txt>
