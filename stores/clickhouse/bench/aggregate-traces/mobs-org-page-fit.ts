@@ -77,6 +77,7 @@ const OUT = {
   page: join(RESULTS_DIR, 'mobs-org-page-fit-load.jsonl'),
   c2check: join(RESULTS_DIR, 'mobs-org-page-fit-c2-check.jsonl'),
   c6: join(RESULTS_DIR, 'mobs-org-page-fit-c6.jsonl'),
+  collector: join(RESULTS_DIR, 'mobs-org-page-fit-collector.jsonl'),
 };
 const USAGE_NAMES = [
   'mastra_model_total_input_tokens',
@@ -930,6 +931,83 @@ const TOKEN_ROW = `name IN {names:Array(String)} AND organizationId IS NOT NULL 
 const NO_ID = `(usageId IS NULL OR trimBoth(usageId) = '')`;
 const DERIVED_KEY = `if(${NO_ID}, concat('m:', metricId), usageId)`;
 
+// X49 addendum: can mobs-collector derive one usageId per model call for older SDKs? Rows with a real
+// usageId are ground truth for "one call": they show whether a (traceId, spanId, timestamp) key ever
+// merges two calls (which max()-per-key would turn into silently lost tokens).
+async function collectorKey(options: { platform: string; label: string }) {
+  const { raw } = await connect(options.platform, 2);
+  const names = USAGE_NAMES;
+  const since = '2026-09-20 00:00:00';
+  const log = (what: string, value: unknown) => {
+    appendFileSync(OUT.collector, `${JSON.stringify({ label: options.label, what, value })}\n`);
+    console.log(`${what}: ${JSON.stringify(value)}`);
+  };
+  const q = (sql: string) => rows(raw, sql, { names, since }, { max_execution_time: 300 });
+  const base = `FROM mastra_metric_events WHERE name IN {names:Array(String)} AND timestamp >= {since:String}`;
+  log(
+    'timestamp column type',
+    await rows(
+      raw,
+      `SELECT type FROM system.columns WHERE database = currentDatabase() AND table = 'mastra_metric_events' AND name = 'timestamp'`,
+      {},
+    ),
+  );
+  // Tagged rows: does one call keep one (trace, span, timestamp)? Does a (trace, span, timestamp) hold >1 call?
+  log(
+    'tagged: calls per (trace, span, ts) key',
+    await q(`SELECT count() AS keys, countIf(calls > 1) AS mergedKeys, sumIf(calls, calls > 1) AS callsInMergedKeys,
+                    sum(calls) AS totalCalls, countIf(dupName) AS keysWithRepeatedName
+             FROM (SELECT traceId, spanId, timestamp, uniqExact(usageId) AS calls,
+                          count() > uniqExact(name) AS dupName
+                   ${base} AND NOT ${NO_ID} GROUP BY traceId, spanId, timestamp)`),
+  );
+  log(
+    'tagged: calls per (trace, span) key',
+    await q(`SELECT count() AS keys, countIf(calls > 1) AS multiCallSpans, sum(calls) AS totalCalls, max(calls) AS maxCalls
+             FROM (SELECT traceId, spanId, uniqExact(usageId) AS calls ${base} AND NOT ${NO_ID} GROUP BY traceId, spanId)`),
+  );
+  log(
+    'tagged: keys per call',
+    await q(`SELECT count() AS totalCalls, countIf(ts > 1) AS callsSpanningTimestamps, countIf(spans > 1) AS callsSpanningSpans,
+                    max(spreadMs) AS maxSpreadMs
+             FROM (SELECT usageId, uniqExact(timestamp) AS ts, uniqExact(spanId) AS spans,
+                          dateDiff('millisecond', min(timestamp), max(timestamp)) AS spreadMs
+                   ${base} AND NOT ${NO_ID} GROUP BY usageId)`),
+  );
+  // Tokens a (trace, span, ts) key would drop under max() per (key, name), on tagged rows (where we know the truth).
+  log(
+    'tagged: tokens lost by (trace, span, ts) key',
+    await q(`SELECT sum(total) AS tokens, sum(total - kept) AS lostTokens, sum(rowsIn) AS totalRows, sum(rowsIn - 1) AS lostRows
+             FROM (SELECT sum(value) AS total, max(value) AS kept, count() AS rowsIn
+                   ${base} AND NOT ${NO_ID} GROUP BY traceId, spanId, timestamp, name)`),
+  );
+  // Untagged rows: the same keys, where no ground truth exists.
+  log(
+    'untagged: (trace, span, ts) keys',
+    await q(`SELECT count() AS keys, countIf(dupName) AS keysWithRepeatedName, sum(n) AS totalRows
+             FROM (SELECT traceId, spanId, timestamp, count() AS n, count() > uniqExact(name) AS dupName
+                   ${base} AND ${NO_ID} GROUP BY traceId, spanId, timestamp)`),
+  );
+  log(
+    'untagged: tokens lost by (trace, span, ts) key',
+    await q(`SELECT sum(total) AS tokens, sum(total - kept) AS lostTokens, sum(rowsIn - 1) AS lostRows
+             FROM (SELECT sum(value) AS total, max(value) AS kept, count() AS rowsIn
+                   ${base} AND ${NO_ID} GROUP BY traceId, spanId, timestamp, name)`),
+  );
+  log(
+    'untagged: (trace, span) keys',
+    await q(`SELECT count() AS keys, countIf(n > uniqName) AS spansWithRepeatedName, sum(n) AS totalRows
+             FROM (SELECT traceId, spanId, count() AS n, uniqExact(name) AS uniqName
+                   ${base} AND ${NO_ID} GROUP BY traceId, spanId)`),
+  );
+  log(
+    'untagged: rows missing ids',
+    await q(`SELECT count() AS rows, countIf(traceId IS NULL OR traceId = '') AS noTrace,
+                    countIf(spanId IS NULL OR spanId = '') AS noSpan, countIf(projectId IS NULL) AS noProject
+             ${base} AND ${NO_ID}`),
+  );
+}
+
 async function c6(options: { platform: string; label: string; reps: number }) {
   const project = largest();
   const { raw, client, mods } = await connect(options.platform, 2);
@@ -1237,6 +1315,9 @@ switch (positionals[0]) {
   case 'c2check':
     await c2check({ platform: values.platform, label: values.label, windows: values.windows.split(',') });
     break;
+  case 'collector':
+    await collectorKey({ platform: values.platform, label: values.label });
+    break;
   case 'c6':
     await c6({ platform: values.platform, label: values.label, reps: Number(values.reps) });
     break;
@@ -1244,6 +1325,6 @@ switch (positionals[0]) {
     await nodes({ platform: values.platform, label: values.label });
     break;
   default:
-    console.error('usage: mobs-org-page-fit.ts facts|stmt|c2|c2check|page|c6|nodes');
+    console.error('usage: mobs-org-page-fit.ts facts|stmt|c2|c2check|page|c6|collector|nodes');
     process.exit(1);
 }
