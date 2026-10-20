@@ -13,7 +13,7 @@ export interface McpEventDrawerBodyProps {
 
 /** What the event is (Overview: delivery and schemas) apart from watching it (Playground). */
 export function McpEventDrawerBody({ serverId, eventName }: McpEventDrawerBodyProps) {
-  const { canExecute } = usePermissions();
+  const { canExecute, canEdit } = usePermissions();
   const { data, isLoading } = useMcpServerEvents(serverId);
   const event = data?.events.find(candidate => candidate.name === eventName);
 
@@ -36,7 +36,9 @@ export function McpEventDrawerBody({ serverId, eventName }: McpEventDrawerBodyPr
         </div>
       }
       canRun={canExecute('mcp')}
-      playground={<McpEventLivePanel serverId={serverId} event={event} testEmit={data.testEmit} />}
+      playground={
+        <McpEventLivePanel serverId={serverId} event={event} testEmit={data.testEmit} canEmit={canEdit('mcp')} />
+      }
     />
   );
 }

@@ -14,7 +14,7 @@ import {
   occurrence,
   sseChunk,
 } from './fixtures/mcp-events';
-import { authDisabled, emptyToolList, v2Server } from './fixtures/mcp-servers';
+import { authDisabled, emptyToolList, rbacUser, v2Server } from './fixtures/mcp-servers';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -36,9 +36,9 @@ function sseStream() {
   return { body, push, cancelled };
 }
 
-const useEventHandlers = ({ testEmit = false } = {}) => {
+const useEventHandlers = ({ testEmit = false, auth = authDisabled } = {}) => {
   server.use(
-    http.get(`${TEST_BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authDisabled)),
+    http.get(`${TEST_BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(auth)),
     http.get(EVENTS_URL, () => HttpResponse.json(eventList(testEmit))),
   );
 };
@@ -255,6 +255,25 @@ describe('MCP event drawer', () => {
 
       await screen.findByRole('button', { name: 'Start' });
       expect(screen.queryByRole('region', { name: 'Send test event' })).toBeNull();
+    });
+  });
+
+  describe('when the user can run MCP servers but not write to them', () => {
+    it('hides Send test event, which needs mcp:write', async () => {
+      useEventHandlers({ testEmit: true, auth: rbacUser(['mcp:read', 'mcp:execute']) });
+      renderDrawer();
+      await openPlayground();
+
+      await screen.findByRole('button', { name: 'Start' });
+      expect(screen.queryByRole('region', { name: 'Send test event' })).toBeNull();
+    });
+
+    it('shows Send test event once the user also has mcp:write', async () => {
+      useEventHandlers({ testEmit: true, auth: rbacUser(['mcp:read', 'mcp:execute', 'mcp:write']) });
+      renderDrawer();
+      await openPlayground();
+
+      expect(await screen.findByRole('region', { name: 'Send test event' })).not.toBeNull();
     });
   });
 

@@ -13,10 +13,12 @@ export interface McpEventLivePanelProps {
   event: McpServerEventInfo;
   /** The server serves test emit (under `mastra dev`). */
   testEmit: boolean;
+  /** The user may send test events; the emit route requires `mcp:write`. */
+  canEmit: boolean;
 }
 
 /** Watch an event type: stream it (push types) or poll it, and send test events under `mastra dev`. */
-export function McpEventLivePanel({ serverId, event, testEmit }: McpEventLivePanelProps) {
+export function McpEventLivePanel({ serverId, event, testEmit, canEmit }: McpEventLivePanelProps) {
   const [args, setArgs] = useState<Record<string, unknown>>({});
   const feed = useMcpEventFeed(serverId, event.name);
   const canStream = event.delivery.includes('push');
@@ -44,7 +46,7 @@ export function McpEventLivePanel({ serverId, event, testEmit }: McpEventLivePan
       {feed.error && <Notice variant="destructive">{feed.error}</Notice>}
       {feed.warning && <Notice variant="warning">{feed.warning}</Notice>}
 
-      {testEmit && event.emittable && (
+      {testEmit && event.emittable && canEmit && (
         <McpEventTestEmit
           serverId={serverId}
           event={event}
