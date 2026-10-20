@@ -8127,7 +8127,7 @@ export class Agent<
         await workflowsStore.updateWorkflowState({
           workflowName: AGENTIC_LOOP_WORKFLOW_ID,
           runId,
-          opts: { status: 'running', expectedStatus: 'suspended' },
+          opts: { status: 'running', expectedStatus: 'suspended', resumeLeaseRenewedAt: Date.now() },
         });
         throwAlreadyClaimed();
       }
@@ -8141,8 +8141,10 @@ export class Agent<
     let released = false;
 
     // Renew the claim while the resumed run executes, so later resumes can tell this live
-    // claimant from one whose process died. Stops once the row is no longer this running claim
-    // (the run re-suspended, finished, or a later resume took it over).
+    // claimant from one whose process died. Stops once the row is no longer this claim (the run
+    // finished, re-suspended with a new snapshot, or a later resume took it over). A row that is
+    // briefly not `running` but still carries this claim is a concurrent taker's mistaken
+    // hand-back that it is about to put back, so keep renewing.
     let renewTimer: ReturnType<typeof setInterval> | undefined;
     let renewing = false;
     const stopRenewing = () => {
@@ -8154,16 +8156,16 @@ export class Agent<
       renewing = true;
       try {
         const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
-        if (current?.status !== 'running' || current.resumeClaimedAt !== claimedAt) {
+        if (!current || current.resumeClaimedAt !== claimedAt) {
           stopRenewing();
           return;
         }
-        const renewed = await workflowsStore.updateWorkflowState({
+        if (current.status !== 'running') return;
+        await workflowsStore.updateWorkflowState({
           workflowName: AGENTIC_LOOP_WORKFLOW_ID,
           runId,
           opts: { status: 'running', expectedStatus: 'running', resumeLeaseRenewedAt: Date.now() },
         });
-        if (!renewed) stopRenewing();
       } catch (error) {
         this.logger.warn(`[Agent ${this.name}] Failed to renew resume claim for run ${runId}`, { error });
       } finally {

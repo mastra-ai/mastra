@@ -23,7 +23,17 @@ describe('AIMock loop scenario: resume claim after the claimant dies', () => {
     vi.useRealTimers();
   });
 
-  function createWorker(storage: InMemoryStore, name: string, runResumedTool: () => Promise<void>) {
+  function createWorker(
+    storage: InMemoryStore,
+    name: string,
+    runResumedTool: () => Promise<void>,
+    // Lets a test hold one of this process's workflow-state writes before it reaches the store or
+    // before its result comes back, to model a slow store call.
+    holdWrite?: (
+      opts: { status?: string; expectedStatus?: string },
+      phase: 'before' | 'after',
+    ) => Promise<void> | undefined,
+  ) {
     let dead = false;
     const executions: string[] = [];
     // The process's view of the shared store; once dead, its calls never complete.
@@ -37,7 +47,16 @@ describe('AIMock loop scenario: resume claim after the claimant dies', () => {
               get(storeTarget, storeProp) {
                 const value = Reflect.get(storeTarget, storeProp, storeTarget);
                 if (typeof value !== 'function') return value;
-                return (...args: unknown[]) => (dead ? new Promise(() => {}) : value.apply(storeTarget, args));
+                return (...args: any[]) => {
+                  if (dead) return new Promise(() => {});
+                  if (storeProp !== 'updateWorkflowState' || !holdWrite) return value.apply(storeTarget, args);
+                  return (async () => {
+                    await holdWrite(args[0].opts, 'before');
+                    const result = await value.apply(storeTarget, args);
+                    await holdWrite(args[0].opts, 'after');
+                    return result;
+                  })();
+                };
               },
             });
           };
@@ -114,7 +133,7 @@ describe('AIMock loop scenario: resume claim after the claimant dies', () => {
     resumeA.catch(() => {});
     await aEntered;
 
-    return { runId, workerA, workerB, resumeA, finishA };
+    return { storage, runId, workerA, workerB, resumeA, finishA };
   }
 
   it('lets a later resume take over the claim of a resume whose process died', async () => {
@@ -144,4 +163,80 @@ describe('AIMock loop scenario: resume claim after the claimant dies', () => {
     expect(resumed.text).toBe('Found Ada.');
     expect(workerA.executions).toEqual(['A']);
   }, 30_000);
+
+  it('keeps a live takeover renewed when a slower concurrent taker hands it back by mistake', async () => {
+    const { storage, runId, workerA } = await setup();
+    const deferred = () => {
+      let resolve!: () => void;
+      const promise = new Promise<void>(r => (resolve = r));
+      return { promise, resolve };
+    };
+
+    // C took the stale row for abandoned at the same time as B, but its hand-back is slow both to
+    // reach the store and to come back.
+    const cHandBackSent = deferred();
+    const cHandBackArrive = deferred();
+    const cHandBackLanded = deferred();
+    const cHandBackReturn = deferred();
+    const workerC = createWorker(
+      storage,
+      'C',
+      async () => {},
+      (opts, phase) => {
+        if (opts.status !== 'suspended' || opts.expectedStatus !== 'running') return undefined;
+        if (phase === 'before') {
+          cHandBackSent.resolve();
+          return cHandBackArrive.promise;
+        }
+        cHandBackLanded.resolve();
+        return cHandBackReturn.promise;
+      },
+    );
+    const bEntered = deferred();
+    const bFinish = deferred();
+    const workerB = createWorker(storage, 'B', () => {
+      bEntered.resolve();
+      return bFinish.promise;
+    });
+    const workerE = createWorker(storage, 'E', async () => {});
+
+    workerA.die();
+    await vi.advanceTimersByTimeAsync(AGENT_RESUME_CLAIM_STALE_MS + 1);
+
+    // C reads A's lapsed claim; its hand-back is stuck in flight.
+    const resumeC = workerC.agent.resumeGenerate({ name: 'Ada' }, { runId });
+    resumeC.catch(() => {});
+    await cHandBackSent.promise;
+
+    // B takes over normally and is executing the tool.
+    const resumeB = workerB.agent.resumeGenerate({ name: 'Ada' }, { runId });
+    resumeB.catch(() => {});
+    await bEntered.promise;
+
+    // C's hand-back lands on B's running claim and is slow to come back, so B's renewal ticks
+    // see the row handed back for longer than the stale window before C puts it back.
+    cHandBackArrive.resolve();
+    await cHandBackLanded.promise;
+    await vi.advanceTimersByTimeAsync(AGENT_RESUME_CLAIM_STALE_MS + 1);
+    cHandBackReturn.resolve();
+    await expect(resumeC).rejects.toMatchObject({ id: 'AGENT_RESUME_ALREADY_CLAIMED' });
+
+    // Right after the put-back, before B's next renewal: the restored claim must not look stale.
+    await expect(workerE.agent.resumeGenerate({ name: 'Ada' }, { runId })).rejects.toMatchObject({
+      id: 'AGENT_RESUME_ALREADY_CLAIMED',
+    });
+
+    // B is still alive well past the stale window, so a later resume must not take it over.
+    await vi.advanceTimersByTimeAsync(AGENT_RESUME_CLAIM_STALE_MS * 2);
+    await expect(workerE.agent.resumeGenerate({ name: 'Ada' }, { runId })).rejects.toMatchObject({
+      id: 'AGENT_RESUME_ALREADY_CLAIMED',
+    });
+
+    bFinish.resolve();
+    expect((await resumeB).text).toBe('Found Ada.');
+    expect([...workerA.executions, ...workerB.executions, ...workerC.executions, ...workerE.executions]).toEqual([
+      'A',
+      'B',
+    ]);
+  }, 60_000);
 });
