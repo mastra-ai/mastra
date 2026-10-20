@@ -301,7 +301,7 @@ function ExperimentResultPanelBody({
     <>
       <DataPanel.Header>
         {canFlag && (
-          <Button size="sm" variant="primary" onClick={() => onFlagForReview!(result.id)} icon={<ClipboardPlus />}>
+          <Button size="sm" variant="primary" onClick={() => onFlagForReview(result.id)} icon={<ClipboardPlus />}>
             Request review
           </Button>
         )}

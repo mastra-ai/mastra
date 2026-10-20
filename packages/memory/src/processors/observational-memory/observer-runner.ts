@@ -27,7 +27,7 @@ import {
   parseMultiThreadObserverOutput,
   describeDegenerateOutput,
 } from './observer-agent';
-import { assertCompleteModelResponse, withRetry } from './retry';
+import { assertCompleteModelResponse, RETRY_CONFIG, withRetry } from './retry';
 import { createTemporaryOmMemoryContext } from './temporary-memory';
 import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
@@ -352,7 +352,7 @@ export class ObserverRunner {
 
     const doGenerate = async () => {
       return withRetry(
-        () =>
+        (attemptSignal, onActivity) =>
           withOmTracingSpan({
             phase: 'observer',
             model: resolvedModel.model,
@@ -382,7 +382,8 @@ export class ObserverRunner {
                     modelSettings: { ...this.observationConfig.modelSettings },
                     providerOptions: this.observationConfig.providerOptions as any,
                     ...(attemptMemory ? { memory: attemptMemory } : {}),
-                    ...(abortSignal ? { abortSignal } : {}),
+                    abortSignal: attemptSignal,
+                    onChunk: onActivity,
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
@@ -409,6 +410,7 @@ export class ObserverRunner {
         {
           label: 'observer',
           abortSignal,
+          idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
           maxRetries: this.observationConfig.maxRetries,
         },
       );
@@ -684,7 +686,7 @@ export class ObserverRunner {
 
     const doGenerate = async () => {
       return withRetry(
-        () =>
+        (attemptSignal, onActivity) =>
           withOmTracingSpan({
             phase: 'observer-multi-thread',
             model: resolvedModel.model,
@@ -712,7 +714,8 @@ export class ObserverRunner {
                     maxSteps: 1,
                     modelSettings: { ...this.observationConfig.modelSettings },
                     providerOptions: this.observationConfig.providerOptions as any,
-                    ...(abortSignal ? { abortSignal } : {}),
+                    abortSignal: attemptSignal,
+                    onChunk: onActivity,
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
@@ -741,6 +744,7 @@ export class ObserverRunner {
         {
           label: 'observer-multi-thread',
           abortSignal,
+          idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
           maxRetries: this.observationConfig.maxRetries,
         },
       );

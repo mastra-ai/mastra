@@ -44,11 +44,14 @@ function number(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-/** GitLab sends `2024-01-02T03:04:05Z` or `2024-01-02 03:04:05 UTC`. */
+/** GitLab sends `2024-01-02T03:04:05Z`, `2024-01-02 03:04:05 UTC` or `2024-01-02 03:04:05 +0000`. */
 function timestamp(value: unknown): number | undefined {
   const text = string(value);
   if (!text) return undefined;
-  const parsed = Date.parse(text.replace(' UTC', 'Z').replace(' ', 'T'));
+  const spaced = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d+)?) (?:UTC|([+-]\d{2}):?(\d{2}))$/.exec(text);
+  const parsed = Date.parse(
+    spaced ? `${spaced[1]}T${spaced[2]}${spaced[3] ? `${spaced[3]}:${spaced[4]}` : 'Z'}` : text,
+  );
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
@@ -340,6 +343,39 @@ export class GitLabRules {
       factoryAuthored: false,
     };
 
+    // A push moves the head a recorded review verdict was given on. Recording
+    // the new head lets the verdict badge show that it is outdated, while the
+    // verdict itself stays so the next pass still runs as a re-review. It is
+    // recorded before the push is evaluated: the dispatcher can apply the
+    // re-review transition as soon as it commits, and the pass it starts names
+    // the head it covers, which must be the pushed one.
+    const lastCommit = object(mergeRequest?.last_commit);
+    const headSha = string(lastCommit?.id)?.toLowerCase();
+    // Without an update time the commit time still orders the push; dropping
+    // the write would leave the pass naming the head the last verdict covered.
+    const headAt = timestamp(mergeRequest?.updated_at) ?? timestamp(lastCommit?.timestamp);
+    let pushedReviewItem = reviewItem;
+    if (event === 'mergeRequestUpdated' && headSha && reviewItem) {
+      const parent = items.find(item => item.id === reviewItem.parentWorkItemId);
+      // The authoring Work item mirrors the verdict of the merge request it has
+      // out; a push to an older one must not mark its successor's verdict.
+      await recordPullRequestHead(this.options.storage, {
+        orgId: reviewItem.orgId,
+        id: reviewItem.id,
+        headSha,
+        headAt,
+      });
+      if (parent) {
+        await recordPullRequestHead(this.options.storage, {
+          orgId: parent.orgId,
+          id: parent.id,
+          headSha,
+          headAt,
+          ownedPullRequestNumber: mergeRequestIid,
+        });
+      }
+      pushedReviewItem = (await this.options.storage.get({ orgId: reviewItem.orgId, id: reviewItem.id })) ?? reviewItem;
+    }
     const candidates: Array<WorkItemRow | undefined> =
       event === 'mergeRequestMerged'
         ? [...new Map([reviewItem, authoringItem].filter(Boolean).map(item => [item!.id, item!])).values()]
@@ -348,7 +384,7 @@ export class GitLabRules {
           : event === 'mergeRequestOpened'
             ? [authoringItem, ...(authoringItem ? [authoringItem] : [])]
             : event.startsWith('mergeRequest')
-              ? [reviewItem ?? authoringItem]
+              ? [pushedReviewItem ?? authoringItem]
               : [issueItem];
     const results = [];
     for (const [index, item] of candidates.entries()) {
@@ -407,31 +443,6 @@ export class GitLabRules {
         opened: string(mergeRequest?.state) === 'opened' && (actorTrusted || mergeRequestAuthorTrusted),
         headSha: string(object(mergeRequest?.last_commit)?.id)?.toLowerCase(),
       });
-    }
-    // A push moves the head a recorded review verdict was given on. Recording
-    // the new head lets the verdict badge show that it is outdated, while the
-    // verdict itself stays so the next pass still runs as a re-review.
-    const headSha = string(object(mergeRequest?.last_commit)?.id)?.toLowerCase();
-    const headAt = timestamp(mergeRequest?.updated_at);
-    if (event === 'mergeRequestUpdated' && headSha && reviewItem) {
-      const parent = items.find(item => item.id === reviewItem.parentWorkItemId);
-      // The authoring Work item mirrors the verdict of the merge request it has
-      // out; a push to an older one must not mark its successor's verdict.
-      await recordPullRequestHead(this.options.storage, {
-        orgId: reviewItem.orgId,
-        id: reviewItem.id,
-        headSha,
-        headAt,
-      });
-      if (parent) {
-        await recordPullRequestHead(this.options.storage, {
-          orgId: parent.orgId,
-          id: parent.id,
-          headSha,
-          headAt,
-          ownedPullRequestNumber: mergeRequestIid,
-        });
-      }
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };

@@ -2,6 +2,8 @@ import type { SpanType } from '@mastra/core/observability';
 import type {
   QueryThreadsInput,
   QueryThreadsResult,
+  ThreadQueryRequest,
+  ThreadQueryResponse,
   SpanQueryRequest,
   SpanQueryResponse,
   TraceQueryPredicate,
@@ -187,8 +189,12 @@ export type QueryTracesGroupedInput = QueryTracesBaseInput & {
 
 export type QueryTracesUngroupedInput = QueryTracesKeysetInput | QueryTracesPaginatedInput | QueryTracesDeltaInput;
 export type QueryTracesInput = QueryTracesUngroupedInput | QueryTracesGroupedInput;
-export type QueryTraceThreadsInput = QueryThreadsInput;
-export type QueryTraceThreadsResult = QueryThreadsResult;
+export type QueryTraceThreadsInput = ThreadQueryRequest | QueryThreadsInput;
+export type QueryTraceThreadsResult<T extends QueryTraceThreadsInput = ThreadQueryRequest> = T extends {
+  timeRange: unknown;
+}
+  ? ThreadQueryResponse
+  : QueryThreadsResult;
 export type QuerySpansInput = SpanQueryRequest;
 export type QuerySpansResult = SpanQueryResponse;
 
@@ -355,12 +361,12 @@ export class Observability extends BaseResource {
   }
 
   /**
-   * Queries thread identities using eligible-trace and cross-trace predicates.
+   * Queries full-history thread rows using a trace or thread activity window.
    *
-   * @param params - Thread query with its eligible trace selection
-   * @returns Matching thread identities
+   * @param params - Thread query with its qualification window, filters and pagination
+   * @returns Matching thread rows. Legacy requests retain their identity-only response.
    */
-  queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
+  queryTraceThreads<T extends QueryTraceThreadsInput>(params: T): Promise<QueryTraceThreadsResult<T>> {
     return this.request('/observability/threads/query', { method: 'POST', body: params });
   }
 

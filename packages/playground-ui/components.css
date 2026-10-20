@@ -149,14 +149,57 @@
 }
 
 @layer utilities {
-  .shiki-token {
-    color: var(--shiki-light, var(--foreground));
-    background-color: var(--shiki-light-bg, transparent);
+  /* Syntax roles from `syntaxHighlighter`, shared by the <Code> viewer and every CodeMirror editor. */
+  .syntax-comment {
+    color: var(--placeholder);
   }
 
-  .dark .shiki-token {
-    color: var(--shiki-dark, var(--foreground));
-    background-color: var(--shiki-dark-bg, transparent);
+  .syntax-string {
+    color: var(--syntax-string);
+  }
+
+  .syntax-literal {
+    color: var(--syntax-literal);
+  }
+
+  .syntax-keyword {
+    color: var(--syntax-keyword);
+  }
+
+  .syntax-name {
+    color: var(--syntax-name);
+  }
+
+  .syntax-definition {
+    color: var(--syntax-link);
+  }
+
+  .syntax-link {
+    color: var(--syntax-link);
+    text-decoration: underline;
+  }
+
+  .syntax-heading {
+    color: var(--syntax-link);
+    font-weight: bold;
+  }
+
+  .syntax-emphasis {
+    color: var(--foreground);
+    font-style: italic;
+  }
+
+  .syntax-strong {
+    color: var(--foreground);
+    font-weight: bold;
+  }
+
+  .syntax-strike {
+    text-decoration: line-through;
+  }
+
+  .syntax-invalid {
+    color: var(--destructive-foreground);
   }
 }
 
@@ -171,6 +214,13 @@
 
   kbd {
     font-size-adjust: none;
+  }
+
+  /* Every lucide icon draws its line from one token instead of lucide's default
+     `stroke-width="2"`. The value is in the icon's 24-unit grid, so the line still
+     thickens a little as the icon grows. Components size icons; none sets a stroke. */
+  :where(svg.lucide) {
+    stroke-width: var(--icon-stroke-width);
   }
 
   :focus-visible {

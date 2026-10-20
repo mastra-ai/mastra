@@ -2,13 +2,12 @@ import type { ModelReasoningOption } from '@mastra/core/llm';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
-import { queryKeys, type AvailableModelsFilter } from '../api/keys';
-import {
-  fetchSessionModelCatalog,
-  sessionModelCatalogQueryOptions,
-  type SessionModelCatalog,
-  type SessionModelCatalogTarget,
-} from './useSessionModelCatalog';
+import { queryKeys } from '../api/keys';
+import type { AvailableModelsFilter } from '../api/keys';
+import { fetchSessionModelCatalog, sessionModelCatalogQueryOptions } from './useSessionModelCatalog';
+import type { SessionModelCatalog, SessionModelCatalogTarget } from './useSessionModelCatalog';
+
+export type ModelCredentialHolder = 'personal' | 'organization' | 'deployment';
 
 /** One selectable model from `GET /web/config/models` (credentialed providers only). */
 export interface AvailableModelOption {
@@ -17,6 +16,8 @@ export interface AvailableModelOption {
   modelName: string;
   hasApiKey: boolean;
   reasoningOptions?: ModelReasoningOption[];
+  credentialLabel?: string;
+  credentialHolder?: ModelCredentialHolder;
 }
 
 export interface AvailableModelsTarget extends AvailableModelsFilter {

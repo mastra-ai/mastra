@@ -1342,7 +1342,7 @@ export interface DurableAgentLike {
    */
   __subscribeToRunStream?(
     runId: string,
-    options: { offset?: number },
+    options: { offset?: number; onComplete?: () => void },
     onEvent: (event: AgentStreamEvent) => void,
   ): Promise<() => Promise<void>>;
   /**

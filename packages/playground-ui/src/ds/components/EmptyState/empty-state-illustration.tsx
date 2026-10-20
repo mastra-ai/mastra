@@ -8,6 +8,7 @@ import { DisconnectedArt } from './illustrations/disconnected-art';
 import { EnvironmentsArt } from './illustrations/environments-art';
 import { LockedArt } from './illustrations/locked-art';
 import { LogsArt } from './illustrations/logs-art';
+import { NoChargesArt } from './illustrations/no-charges-art';
 import { NotAMemberArt } from './illustrations/not-a-member-art';
 import { RateLimitedArt } from './illustrations/rate-limited-art';
 import { RequestsArt } from './illustrations/requests-art';
@@ -24,6 +25,7 @@ export type EmptyStateIllustrationName =
   | 'databases'
   | 'threads'
   | 'deploys'
+  | 'no-charges'
   | 'disconnected'
   | 'locked'
   | 'rate-limited'
@@ -39,6 +41,7 @@ const artByName: Record<EmptyStateIllustrationName, (props: { id: string }) => R
   databases: DatabasesArt,
   threads: ThreadsArt,
   deploys: DeploysArt,
+  'no-charges': NoChargesArt,
   disconnected: DisconnectedArt,
   locked: LockedArt,
   'rate-limited': RateLimitedArt,

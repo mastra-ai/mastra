@@ -131,22 +131,22 @@ export async function compareExperiments(mastra: Mastra, config: CompareExperime
   const scoresMapB = groupScoresByScorerAndItem(scoresB.scores);
 
   // 9. Find all unique scorers
-  const allScorerIds = new Set([...Object.keys(scoresMapA), ...Object.keys(scoresMapB)]);
+  const allScorerIds = new Set([...scoresMapA.keys(), ...scoresMapB.keys()]);
 
-  // 10. Build per-scorer comparison
-  const scorers: Record<string, ScorerComparison> = {};
+  // 10. Build per-scorer comparison.
+  // Scorer and item IDs are user data, so key them with Maps and build output records with
+  // Object.fromEntries; IDs like "constructor" or "__proto__" must stay ordinary own keys.
+  const scorerEntries: [string, ScorerComparison][] = [];
   let hasRegression = false;
 
   for (const scorerId of allScorerIds) {
-    const scorerScoresA = scoresMapA[scorerId] ?? {};
-    const scorerScoresB = scoresMapB[scorerId] ?? {};
-
     // Get scores as arrays for stats computation
-    const scoresArrayA = Object.values(scorerScoresA);
-    const scoresArrayB = Object.values(scorerScoresB);
+    const scoresArrayA = [...(scoresMapA.get(scorerId)?.values() ?? [])];
+    const scoresArrayB = [...(scoresMapB.get(scorerId)?.values() ?? [])];
 
     // Get threshold config for this scorer
-    const thresholdConfig = thresholds[scorerId] ?? DEFAULT_THRESHOLD;
+    const thresholdConfig =
+      (Object.hasOwn(thresholds, scorerId) ? thresholds[scorerId] : undefined) ?? DEFAULT_THRESHOLD;
     const threshold = thresholdConfig.value;
     const direction = thresholdConfig.direction ?? 'higher-is-better';
 
@@ -162,14 +162,9 @@ export async function compareExperiments(mastra: Mastra, config: CompareExperime
       hasRegression = true;
     }
 
-    scorers[scorerId] = {
-      statsA,
-      statsB,
-      delta,
-      regressed,
-      threshold,
-    };
+    scorerEntries.push([scorerId, { statsA, statsB, delta, regressed, threshold }]);
   }
+  const scorers: Record<string, ScorerComparison> = Object.fromEntries(scorerEntries);
 
   // 11. Build per-item comparison
   const allItemIds = new Set([...itemIdsA, ...itemIdsB]);
@@ -179,22 +174,17 @@ export async function compareExperiments(mastra: Mastra, config: CompareExperime
     const inBothExperiments = itemIdsA.has(itemId) && itemIdsB.has(itemId);
 
     // Build scores for this item
-    const itemScoresA: Record<string, number | null> = {};
-    const itemScoresB: Record<string, number | null> = {};
-
-    for (const scorerId of allScorerIds) {
-      const scoreA = scoresMapA[scorerId]?.[itemId];
-      const scoreB = scoresMapB[scorerId]?.[itemId];
-
-      itemScoresA[scorerId] = scoreA?.score ?? null;
-      itemScoresB[scorerId] = scoreB?.score ?? null;
-    }
+    const scorerIds = [...allScorerIds];
 
     items.push({
       itemId,
       inBothExperiments,
-      scoresA: itemScoresA,
-      scoresB: itemScoresB,
+      scoresA: Object.fromEntries(
+        scorerIds.map(scorerId => [scorerId, scoresMapA.get(scorerId)?.get(itemId)?.score ?? null]),
+      ),
+      scoresB: Object.fromEntries(
+        scorerIds.map(scorerId => [scorerId, scoresMapB.get(scorerId)?.get(itemId)?.score ?? null]),
+      ),
     });
   }
 
@@ -218,17 +208,40 @@ export async function compareExperiments(mastra: Mastra, config: CompareExperime
 /**
  * Group scores by scorer ID, then by item ID.
  */
-function groupScoresByScorerAndItem(scores: ScoreRowData[]): Record<string, Record<string, ScoreRowData>> {
-  const result: Record<string, Record<string, ScoreRowData>> = {};
+function groupScoresByScorerAndItem(scores: ScoreRowData[]): Map<string, Map<string, ScoreRowData>> {
+  const grouped = new Map<string, Map<string, ScoreRowData[]>>();
 
   for (const score of scores) {
-    const scorerId = score.scorerId;
     const itemId = score.entityId; // entityId is the item ID for experiment scores
-
-    if (!result[scorerId]) {
-      result[scorerId] = {};
+    let items = grouped.get(score.scorerId);
+    if (!items) {
+      items = new Map();
+      grouped.set(score.scorerId, items);
     }
-    result[scorerId][itemId] = score;
+    const attempts = items.get(itemId);
+    if (attempts) {
+      attempts.push(score);
+    } else {
+      items.set(itemId, [score]);
+    }
+  }
+
+  const result = new Map<string, Map<string, ScoreRowData>>();
+  for (const [scorerId, items] of grouped) {
+    const averaged = new Map<string, ScoreRowData>();
+    result.set(scorerId, averaged);
+    for (const [itemId, attempts] of items) {
+      // Average trials per item so items with more attempts do not get extra weight.
+      const first = attempts[0]!;
+      const validScores = attempts.map(attempt => attempt.score).filter(score => score !== null && score !== undefined);
+      averaged.set(itemId, {
+        ...first,
+        score:
+          validScores.length > 0
+            ? validScores.reduce((sum, score) => sum + score, 0) / validScores.length
+            : first.score,
+      });
+    }
   }
 
   return result;

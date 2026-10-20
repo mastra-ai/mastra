@@ -67,6 +67,9 @@ function countUnfilteredCandidates({
   return participantCandidates.filter(candidate => !isPersistedCandidate(knownSourceKeys, candidate)).length;
 }
 
+// One item can sit in several stages; each copy is its own card.
+const workItemCardKey = (stageId: string, itemId: string) => `${stageId}/${itemId}`;
+
 export function BoardContent({
   factory,
   repository,
@@ -86,8 +89,6 @@ export function BoardContent({
   const currentUserId = auth.data?.user?.userId;
   const view = useBoardView({ factoryProjectId, kind, currentUserId });
   const { searchParams, filters, sort, layout } = view;
-  const cardMatchesViewSearch = (card: Parameters<typeof cardMatchesSearch>[0]) =>
-    cardMatchesSearch(card, filters.search) && cardMatchesSearch(card, view.search);
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
 
@@ -166,7 +167,7 @@ export function BoardContent({
     if (!candidateMatchesRelevance(candidate, filters.participantIds, filters.relevanceTypes)) return false;
     if (!candidateMatchesLabels(candidate, filters.labels)) return false;
     if (!cardMatchesSourceFilters(candidate, filters)) return false;
-    return cardMatchesViewSearch(candidate);
+    return cardMatchesSearch(candidate, view.search);
   };
   const filteredCandidates = intake.candidates.filter(candidateMatchesView);
   const unfilteredWorkItemsForStage = (stage: (typeof stages)[number]['id']) =>
@@ -177,7 +178,7 @@ export function BoardContent({
       return false;
     if (!workItemMatchesLabels(item, filters.labels, liveCandidate)) return false;
     if (!cardMatchesSourceFilters(item, filters, liveCandidate)) return false;
-    return cardMatchesViewSearch(item);
+    return cardMatchesSearch(item, view.search);
   };
   const workItemsForStage = (stage: (typeof stages)[number]['id']) => {
     const matchingItems = unfilteredWorkItemsForStage(stage).filter(workItemMatchesView);
@@ -307,15 +308,14 @@ export function BoardContent({
         >
           <VirtualBoardItems
             items={stageWorkItems}
-            itemKey={item => item.id}
+            itemKey={item => workItemCardKey(stage.id, item.id)}
             layout={layout}
-            pinnedKey={targetItemId}
+            pinnedKey={targetItemId && workItemCardKey(stage.id, targetItemId)}
             renderItem={item => (
               <WorkItemCard
                 layout={layout}
                 item={item}
                 deepLinkRef={registerDeepLinkedCard(item.id)}
-                deepLinkCommentId={targetItemId === item.id ? targetCommentId : undefined}
                 highlighted={targetItemId === item.id}
                 columnStage={stage.id}
                 relatedItems={relatedItemsFor(item)}
@@ -394,6 +394,11 @@ export function BoardContent({
         layout={layout}
         stages={stageViews}
         totalTaskCount={totalTaskCount}
+        linkedComment={
+          targetItemId !== undefined && targetCommentId !== undefined && targetStages[0] !== undefined
+            ? { cardKey: workItemCardKey(targetStages[0], targetItemId), commentId: targetCommentId }
+            : undefined
+        }
         onDrop={dropWithRepository}
         toolbar={
           <BoardViewControls

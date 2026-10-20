@@ -27,15 +27,15 @@
     "@mastra/auth-workos": "link:../../auth/workos",
     "@mastra/code-sdk": "link:../sdk",
     "@mastra/core": "link:../../packages/core",
+    "@mastra/e2b": "link:../../workspaces/e2b",
     "@mastra/factory": "link:../factory",
     "@mastra/libsql": "link:../../stores/libsql",
     "@mastra/pg": "link:../../stores/pg",
-    "@mastra/e2b": "link:../../workspaces/e2b",
     "@mastra/platform-workspace": "link:../../workspaces/platform-workspace",
     "@mastra/redis-streams": "link:../../pubsub/redis-streams"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^3.0.88",
+    "@ai-sdk/openai": "^3.0.130",
     "@copilotkit/aimock": "^1.29.0",
     "@mastra/client-js": "link:../../client-sdks/client-js",
     "@mastra/hono": "link:../../server-adapters/hono",
@@ -46,7 +46,7 @@
     "typescript": "^7.0.2",
     "varlock": "^1.9.0",
     "vitest": "4.1.11",
-    "zod": "^4.3.6"
+    "zod": "^4.6.7"
   },
   "engines": {
     "node": ">=22.19.0"

@@ -753,11 +753,14 @@ export class AgentChannels {
                 adapterConfig?.formatToolCall,
               );
               const useCards = toolDisplay === 'cards';
+              // Name of the user who clicked, shown on the resolved card. Omitted in
+              // DMs, where the only possible clicker is obvious.
+              const byUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
               // Let a function-form `toolDisplay` own the resolved card. Only
               // non-blank `post` results are honored; anything else (or a
               // throwing renderer) falls back to the default formatter.
               const renderResolved = (
-                decision: { kind: 'approved' } | { kind: 'denied'; byUser?: string },
+                decision: { kind: 'approved'; byUser?: string } | { kind: 'denied'; byUser?: string },
               ): PostableMessage | undefined => {
                 if (!toolDisplayFn) return undefined;
                 try {
@@ -789,7 +792,6 @@ export class AgentChannels {
               };
 
               if (!approved) {
-                const byUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
                 try {
                   await adapter.editMessage(
                     chatThread.id,
@@ -848,7 +850,8 @@ export class AgentChannels {
                 await adapter.editMessage(
                   chatThread.id,
                   messageId,
-                  renderResolved({ kind: 'approved' }) ?? formatToolApproved(displayName, argsSummary, useCards),
+                  renderResolved({ kind: 'approved', byUser }) ??
+                    formatToolApproved(displayName, argsSummary, useCards, byUser),
                 );
               } catch (err) {
                 this.log('debug', 'Failed to edit approved card', { ...actionEventContext, error: err });
