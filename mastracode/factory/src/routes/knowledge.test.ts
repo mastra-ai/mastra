@@ -2339,6 +2339,7 @@ describe('KnowledgeRoutes', () => {
       const byName = await linked(h, owner, 'by name', [{ name: 'Org Doc' }]);
       const after = (await graph(h, lens)).body;
       expect(nodeIdsOf(after, byAddress.id)).toEqual([owner.id]);
+      // Name-only assertions last: these are the ones a link-unaware graph fails.
       expect(after.outOfWindow).toEqual([{ id: outside.id, name: 'Org Doc', scope: h.orgScope, rung: 'org' }]);
       expect(nodeIdsOf(after, byName.id)).toEqual([owner.id, outside.id]);
     });
@@ -2351,7 +2352,7 @@ describe('KnowledgeRoutes', () => {
       vi.useFakeTimers({ toFake: ['Date'], now: tick });
       const step = () => vi.setSystemTime((tick += 1000));
       try {
-        await addressed(h, 'Overflow One');
+        await addressed(h, 'Overflow One', { address: 'p:overflow' });
         step();
         await addressed(h, 'Overflow Two');
         step();
@@ -2359,24 +2360,25 @@ describe('KnowledgeRoutes', () => {
         step();
         const deploy = await addressed(h, 'Deploy Runbook', { address: 'p:deploy' });
         step();
-        const train = await addressed(h, 'Release Train', { address: 'p:train' });
+        await addressed(h, 'Release Train', { address: 'p:train' });
         step();
         await addressed(h, 'Org Doc', { address: 'o:doc' }, h.orgScope);
         step();
         const pin = await record(h.knowledge, pinned, 'Always check [[Deploy Runbook]].', h.projectScope, 't-1', {
-          links: [{ address: 'p:train' }, { address: 'o:doc' }, { name: 'Org Doc' }],
+          links: [{ address: 'p:overflow' }, { name: 'Overflow Two' }, { address: 'o:doc' }, { name: 'Org Doc' }],
         });
         const lens = await projectLens(h);
 
         const { body } = await graph(h, lens);
         expect(body.truncated).toBe(true);
         expect(body.nodes.map(node => node.name)).toEqual(expect.arrayContaining(['Deploy Runbook', 'Release Train']));
+        expect(body.nodes).toHaveLength(3);
+        // Every structured target is outside the window, so a pinned record adds none of them.
         expect(body.records.find(entry => entry.id === pin.id)).toMatchObject({
-          nodeIds: [deploy.id, train.id],
+          nodeIds: [deploy.id],
           pinned: true,
         });
         expect(body.nodes.find(node => node.id === deploy.id)?.pinned).toBe(true);
-        expect(body.nodes.find(node => node.id === train.id)?.pinned).toBe(false);
         expect(body.edges.filter(edge => edge.type !== 'contains')).toEqual([]);
         expect(body.outOfWindow).toEqual([]);
       } finally {
