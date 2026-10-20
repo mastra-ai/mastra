@@ -846,7 +846,6 @@ export class AgentController<TState = {}> {
    * `undefined` when no live session has that id. Used by notification
    * delivery to run woken signals as the session that owns the target thread,
    * rather than an arbitrary session.
->>>>>>> eaba032cb0d (feat(agent-controller): address sessions by sessionId and remove session scope)
    */
   async getSession(sessionId: string, requestContext?: RequestContext): Promise<Session<TState> | undefined> {
     const session = await this.#sessionsById.get(sessionId);

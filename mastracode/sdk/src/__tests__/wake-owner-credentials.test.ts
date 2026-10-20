@@ -132,7 +132,7 @@ async function dispatchToEvictedSession(resume: 'owner' | 'unresolvable', priori
   });
   const threadId = session.thread.getId()!;
   expect(threadId).toBeTruthy();
-  await code.controller.deleteSession({ resourceId: SESSION_ID });
+  await code.controller.deleteSession({ sessionId: SESSION_ID });
   await code.controller.createSession({
     id: 'session-b',
     resourceId: 'session-b',
@@ -212,7 +212,7 @@ describe('waking a Factory-style session that is not live in this process', () =
       requestContext: ownerContext(),
     });
     const threadId = session.thread.getId()!;
-    await code.controller.deleteSession({ resourceId: SESSION_ID });
+    await code.controller.deleteSession({ sessionId: SESSION_ID });
 
     // The delivery policy, and so resumeWakeSession, already runs when the
     // notification is sent, not only when the dispatcher delivers it.

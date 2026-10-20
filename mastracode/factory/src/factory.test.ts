@@ -1248,7 +1248,12 @@ describe('MastraFactory.prepare', () => {
 
       const wake = new RequestContext();
       await prepareWake({ requestContext: wake, resourceId: 'session-1' });
-      wake.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
+      wake.set('controller', {
+        sessionId: 'session-1',
+        resourceId: 'session-1',
+        threadId: 'thread-1',
+        getState: () => ({}),
+      });
       const woken = await extraTools({ requestContext: wake });
       await expect(woken.factory_answer_approval!.execute(answer, {})).rejects.toThrow(
         'Only a person can answer an approval',
