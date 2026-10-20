@@ -120,10 +120,16 @@ async function seedLegacyFactory() {
     revoked_at: now,
   });
 
+  const issue = await seed.workItems.upsert({
+    orgId: 'org-1',
+    userId: 'user-1',
+    factoryProjectId: FACTORY_ID,
+    input: { title: 'Issue 7', stages: ['execute'], sessions: {} },
+  });
   await ops.insertOne('factory_run_bindings', {
     org_id: 'org-1',
     factory_project_id: FACTORY_ID,
-    work_item_id: 'work-item-1',
+    work_item_id: issue.item.id,
     role: 'work',
     thread_id: RUN_SESSION,
     resource_id: RUN_SESSION,
@@ -323,6 +329,36 @@ describe('migrateSessionResources', () => {
     });
     expect(await snapshot()).toEqual(before);
     expect(vector.store.updateVector).not.toHaveBeenCalled();
+  });
+
+  it('keeps a run whose bound work item no longer loads on its own resource', async () => {
+    const { memory, ops, migrate } = await seedLegacyFactory();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    await ops.updateMany('factory_run_bindings', { session_id: RUN_SESSION }, { work_item_id: 'deleted-item' });
+
+    const report = await migrate();
+
+    expect(report).toMatchObject({ isolatedSessions: 2, failed: [] });
+    expect((await memory.getThreadById({ threadId: RUN_SESSION }))?.resourceId).toBe(RUN_SESSION);
+    expect(await ops.findOne('factory_run_bindings', { session_id: RUN_SESSION })).toMatchObject({
+      resource_id: RUN_SESSION,
+    });
+  });
+
+  it('reads only sessions it has not finished on later starts', async () => {
+    const { seed, memory, migrate } = await seedLegacyFactory();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await migrate();
+    const listThreads = vi.spyOn(memory, 'listThreads');
+    const listRunBoundItems = vi.spyOn(seed.workItems, 'listRunBoundItems');
+
+    const second = await migrate();
+
+    // Only the session without a Factory is left; it is skipped again before any thread is read.
+    expect(second).toMatchObject({ sessions: 1, skipped: [ORPHAN_SESSION], threads: 0 });
+    expect(listRunBoundItems.mock.calls).toEqual([[ORPHAN_SESSION]]);
+    expect(listThreads).not.toHaveBeenCalled();
   });
 
   it('resumes a session after a crash between tagging and moving a thread', async () => {

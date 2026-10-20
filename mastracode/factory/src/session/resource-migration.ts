@@ -11,14 +11,17 @@ const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
 /**
  * Set on a thread while it moves and turned off once the move, vectors included, is done. A
  * crash in between leaves the thread moved in storage but no longer listed under its
- * session id, so the next start finds it by this flag and finishes the move.
+ * session id, so the next start finds it by this flag and its session stamp and finishes the move.
  */
 const MOVE_PENDING_KEY = 'factoryResourceMovePending';
 
 export interface SessionResourceMigrationDeps {
-  sessions: { listAllSessions(): Promise<SourceControlSession[]> };
+  sessions: {
+    listSessionsAwaitingResourceMigration(): Promise<SourceControlSession[]>;
+    markResourcesMigrated(sessionId: string): Promise<void>;
+  };
   workItems: {
-    listRunBoundSessions(): Promise<Map<string, Pick<WorkItemRow, 'externalSource' | 'metadata'>[]>>;
+    listRunBoundItems(sessionId: string): Promise<(Pick<WorkItemRow, 'externalSource' | 'metadata'> | null)[]>;
     moveRunBindingsToResource(input: { sessionId: string; resourceId: string }): Promise<number>;
   };
   /** Absent when the integrations domain is not ready; subscriptions then stay where they are. */
@@ -55,17 +58,20 @@ export interface SessionResourceMigrationReport {
  * sessions and Slack channel threads, its owner for sessions a person opened
  * and for Slack DMs. A run on untrusted content (a pull request, or a card
  * written outside the write-access circle) keeps its own resource, like a new
- * run would. `null` when a Factory-owned session has no Factory recorded —
- * guessing would merge it into the wrong resource.
+ * run would; so does a run whose work item no longer loads, since nothing then
+ * shows its content was trusted. `null` when a Factory-owned session has no
+ * Factory recorded — guessing would merge it into the wrong resource.
  */
 export function sessionMemoryResource(
   session: SourceControlSession,
-  boundItems: Pick<WorkItemRow, 'externalSource' | 'metadata'>[] | undefined,
+  boundItems: (Pick<WorkItemRow, 'externalSource' | 'metadata'> | null)[],
 ): { owner: 'factory' | 'user' | 'isolated'; resourceId: string | null } {
-  if (boundItems?.some(untrustedWorkItem)) return { owner: 'isolated', resourceId: session.sessionId };
+  if (boundItems.some(item => item === null || untrustedWorkItem(item))) {
+    return { owner: 'isolated', resourceId: session.sessionId };
+  }
   // A Slack DM is private to its sender, so it belongs with their own sessions.
   const slackChannelThread = session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) && session.visibility !== 'private';
-  const factoryOwned = boundItems !== undefined || session.originSessionId !== null || slackChannelThread;
+  const factoryOwned = boundItems.length > 0 || session.originSessionId !== null || slackChannelThread;
   return factoryOwned
     ? { owner: 'factory', resourceId: session.factoryProjectId }
     : { owner: 'user', resourceId: session.userId };
@@ -83,7 +89,9 @@ function untrustedWorkItem(item: Pick<WorkItemRow, 'externalSource' | 'metadata'
  * Threads move through the sessions' `Memory`, so their observation vectors
  * follow them and recall search finds their past observations under the new
  * resource. Every write only touches values still equal to the session id, so
- * a rerun is a no-op and a crash leaves a state the next run resumes from.
+ * a rerun is a no-op and a crash leaves a state the next run resumes from. A
+ * session is marked once moved, so later starts only read sessions that are not
+ * (new sessions are created marked).
  * Nothing is deleted. Thread-scoped observational memory is keyed by thread id
  * and keeps working. Resource-scoped observational memory written under
  * `resource:<sessionId>` stays under that key and is no longer read: several
@@ -104,43 +112,35 @@ export async function migrateSessionResources(
     subscriptions: 0,
     resourceObservationsLeft: [],
   };
-  // Finish moves a crash interrupted after storage moved the thread.
-  const { threads: interrupted } = await deps.memory.listThreads({
-    filter: { metadata: { [MOVE_PENDING_KEY]: true } },
-    perPage: false,
-  });
-  for (const thread of interrupted) {
-    if (thread.resourceId === thread.metadata?.factorySessionId) continue; // the session loop below moves it
-    try {
-      await moveThread(deps, thread, thread.resourceId);
-      report.threads += 1;
-    } catch (error) {
-      report.failed.push(String(thread.metadata?.factorySessionId ?? thread.id));
-      console.warn(
-        `[factory] session resource migration: thread ${thread.id} not finished: ${error instanceof Error ? error.message : error}`,
-      );
-    }
-  }
-
-  const [sessions, runBound] = await Promise.all([
-    deps.sessions.listAllSessions(),
-    deps.workItems.listRunBoundSessions(),
-  ]);
+  const sessions = await deps.sessions.listSessionsAwaitingResourceMigration();
 
   for (const session of sessions) {
     report.sessions += 1;
     const { sessionId } = session;
-    const { owner, resourceId } = sessionMemoryResource(session, runBound.get(sessionId));
-    if (!resourceId) {
-      report.skipped.push(sessionId);
-      continue;
-    }
-    if (owner === 'factory') report.factorySessions += 1;
-    else if (owner === 'isolated') report.isolatedSessions += 1;
-    else report.userSessions += 1;
-    if (resourceId === sessionId) continue;
-
     try {
+      const { owner, resourceId } = sessionMemoryResource(session, await deps.workItems.listRunBoundItems(sessionId));
+      if (!resourceId) {
+        report.skipped.push(sessionId);
+        continue;
+      }
+      if (owner === 'factory') report.factorySessions += 1;
+      else if (owner === 'isolated') report.isolatedSessions += 1;
+      else report.userSessions += 1;
+      if (resourceId === sessionId) {
+        await deps.sessions.markResourcesMigrated(sessionId);
+        continue;
+      }
+
+      // Finish moves a crash interrupted after storage moved the thread.
+      const { threads: interrupted } = await deps.memory.listThreads({
+        filter: { metadata: { factorySessionId: sessionId, [MOVE_PENDING_KEY]: true } },
+        perPage: false,
+      });
+      for (const thread of interrupted) {
+        if (thread.resourceId === sessionId) continue; // listed under the session id below
+        await moveThread(deps, thread, thread.resourceId);
+        report.threads += 1;
+      }
       const { threads } = await deps.memory.listThreads({ filter: { resourceId: sessionId }, perPage: false });
       for (const thread of threads) {
         // Tag before moving: once moved, the thread is no longer found under the session id.
@@ -168,6 +168,7 @@ export async function migrateSessionResources(
             `it stays under resource ${sessionId} and is not carried into ${resourceId}`,
         );
       }
+      await deps.sessions.markResourcesMigrated(sessionId);
     } catch (error) {
       report.failed.push(sessionId);
       console.warn(
