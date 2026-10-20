@@ -14,7 +14,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
-import { useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
 import { SchemaEditorPane } from './schema-editor-pane';
 
 export interface DatasetSchemaDialogProps {
@@ -25,6 +25,7 @@ export interface DatasetSchemaDialogProps {
 
 type SchemaKey = 'inputSchema' | 'groundTruthSchema' | 'requestContextSchema';
 type SchemaValue = Record<string, unknown> | null;
+type DatasetSchemaFormValues = Record<SchemaKey, SchemaValue>;
 
 const SCHEMA_TABS: Array<{ key: SchemaKey; label: string }> = [
   { key: 'inputSchema', label: 'Input' },
@@ -63,30 +64,27 @@ function getFailingItemsCount(error: unknown): number {
 }
 
 function DatasetSchemaForm({ dataset, updateDataset, onSaved }: DatasetSchemaFormProps) {
-  const [schemas, setSchemas] = useState<Record<SchemaKey, SchemaValue>>(() => ({
-    inputSchema: dataset.inputSchema ?? null,
-    groundTruthSchema: dataset.groundTruthSchema ?? null,
-    requestContextSchema: dataset.requestContextSchema ?? null,
-  }));
-  const [invalidTabs, setInvalidTabs] = useState<ReadonlySet<SchemaKey>>(() => new Set());
-  const [validationError, setValidationError] = useState<string | null>(null);
-
-  const setSchema = (key: SchemaKey, schema: SchemaValue) => {
-    setSchemas(previous => ({ ...previous, [key]: schema }));
-    setValidationError(null);
-  };
+  const {
+    control,
+    handleSubmit,
+    setError,
+    clearErrors,
+    formState: { errors },
+  } = useForm<DatasetSchemaFormValues>({
+    defaultValues: {
+      inputSchema: dataset.inputSchema ?? null,
+      groundTruthSchema: dataset.groundTruthSchema ?? null,
+      requestContextSchema: dataset.requestContextSchema ?? null,
+    },
+  });
+  const hasInvalidSchema = SCHEMA_TABS.some(({ key }) => errors[key]);
 
   const setValidity = (key: SchemaKey, valid: boolean) => {
-    setInvalidTabs(previous => {
-      const next = new Set(previous);
-      if (valid) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+    if (valid) clearErrors(key);
+    else setError(key, { type: 'invalid' });
   };
 
-  const handleSave = async () => {
-    setValidationError(null);
+  const onSave = handleSubmit(async schemas => {
     try {
       await updateDataset.mutateAsync({ datasetId: dataset.id, ...schemas });
       toast.success('Dataset schema saved');
@@ -94,12 +92,14 @@ function DatasetSchemaForm({ dataset, updateDataset, onSaved }: DatasetSchemaFor
     } catch (error) {
       const failingCount = getFailingItemsCount(error);
       if (failingCount > 0) {
-        setValidationError(`${failingCount} existing item(s) fail validation. Fix items or adjust schema.`);
+        setError('root.server', {
+          message: `${failingCount} existing item(s) fail validation. Fix items or adjust schema.`,
+        });
       } else {
         toast.error(`Failed to save schema: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
-  };
+  });
 
   return (
     <>
@@ -114,25 +114,34 @@ function DatasetSchemaForm({ dataset, updateDataset, onSaved }: DatasetSchemaFor
           </TabList>
           {SCHEMA_TABS.map(({ key, label }) => (
             <TabContent key={key} value={key} keepMounted className="min-h-0 flex-1">
-              <SchemaEditorPane
-                label={label}
-                value={schemas[key]}
-                onChange={schema => setSchema(key, schema)}
-                onValidityChange={valid => setValidity(key, valid)}
+              <Controller
+                control={control}
+                name={key}
+                render={({ field }) => (
+                  <SchemaEditorPane
+                    label={label}
+                    value={field.value}
+                    onChange={schema => {
+                      field.onChange(schema);
+                      clearErrors('root.server');
+                    }}
+                    onValidityChange={valid => setValidity(key, valid)}
+                  />
+                )}
               />
             </TabContent>
           ))}
         </Tabs>
 
-        {validationError ? (
+        {errors.root?.server ? (
           <div role="alert">
-            <Notice variant="destructive">{validationError}</Notice>
+            <Notice variant="destructive">{errors.root.server.message}</Notice>
           </div>
         ) : null}
       </DialogBody>
       <DialogFooter>
         <DialogCancel>Cancel</DialogCancel>
-        <DialogAction onConfirm={handleSave} disabled={invalidTabs.size > 0 || updateDataset.isPending}>
+        <DialogAction onConfirm={onSave} disabled={hasInvalidSchema || updateDataset.isPending}>
           {updateDataset.isPending ? 'Saving...' : 'Save schema'}
         </DialogAction>
       </DialogFooter>
