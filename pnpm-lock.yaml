@@ -94,7 +94,7 @@ overrides:
   path-to-regexp@<0.1.13: 0.1.13
   joi@>=17.0.0 <17.13.8: 17.13.8
   svgo@>=3.0.0 <3.3.5: 3.3.5
-  e2b>undici8: npm:undici@8.11.2
+  e2b>undici8: npm:undici@8.12.2
   multer@<2.3.0: 2.4.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.10.0
@@ -132,6 +132,13 @@ overrides:
   toml@<4.1.2: 4.2.0
   postcss-selector-parser@>=6.1.0 <6.1.3: 6.1.3
   postcss-selector-parser@>=7.1.0 <7.1.6: 7.1.6
+  '@tailwindcss/typography>postcss-selector-parser': 7.1.6
+  postcss-calc>postcss-selector-parser: 7.1.6
+  postcss-discard-unused>postcss-selector-parser: 7.1.6
+  postcss-merge-rules>postcss-selector-parser: 7.1.6
+  postcss-minify-selectors>postcss-selector-parser: 7.1.6
+  postcss-unique-selectors>postcss-selector-parser: 7.1.6
+  stylehacks>postcss-selector-parser: 7.1.6
   source-map-js@>=1.0.0 <1.2.2: 1.2.2
   '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   '@modelcontextprotocol/client@>=2.0.0 <2.2.0': 2.2.0
@@ -250,8 +257,8 @@ overrides:
   which-collection: npm:@socketregistry/which-collection@^1
   which-typed-array: npm:@socketregistry/which-typed-array@^1
   yocto-spinner: npm:@socketregistry/yocto-spinner@^1
-  undici@<8.11.2: 8.11.2
-  '@qdrant/js-client-rest>undici': 6.29.0
+  undici@<8.12.2: 8.12.2
+  '@qdrant/js-client-rest>undici': 6.29.1
   yargs@<18.1.0: 18.2.0
   raw-body@<4.0.0: 4.0.0
   protobufjs@<8.8.0: 8.8.0
@@ -1130,8 +1137,8 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
       undici:
-        specifier: ^8.11.2
-        version: 8.11.2
+        specifier: ^8.12.2
+        version: 8.12.2
       vitest:
         specifier: 4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@30.1.1(@noble/hashes@2.4.0))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.1))
@@ -1180,8 +1187,8 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
       undici:
-        specifier: ^8.11.2
-        version: 8.11.2
+        specifier: ^8.12.2
+        version: 8.12.2
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@30.1.1(@noble/hashes@2.4.0))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.1))
@@ -1205,8 +1212,8 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
       undici:
-        specifier: ^8.11.2
-        version: 8.11.2
+        specifier: ^8.12.2
+        version: 8.12.2
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(jsdom@30.1.1(@noble/hashes@2.4.0))(msw@2.14.6(@types/node@22.19.15)(typescript@7.0.2))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.1))
@@ -3235,7 +3242,7 @@ importers:
         version: link:../mastra
       langsmith:
         specifier: ^0.8.7
-        version: 0.8.9(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.11.0(@opentelemetry/api@1.9.1))(openai@7.23.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(undici@8.11.2)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.7))(ws@8.21.3(bufferutil@4.1.0))
+        version: 0.8.9(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.11.0(@opentelemetry/api@1.9.1))(openai@7.23.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(undici@8.12.2)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.7))(ws@8.21.3(bufferutil@4.1.0))
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.135
@@ -27867,7 +27874,7 @@ packages:
       '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
       '@smithy/hash-node': '>=4.3.0 <5'
       '@smithy/signature-v4': '>=5.4.0 <6'
-      undici: 8.11.2
+      undici: 8.12.2
       ws: 8.21.3
       zod: 4.6.7
     peerDependenciesMeta:
@@ -28758,14 +28765,6 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       postcss: 8.5.23
-
-  postcss-selector-parser@6.0.10:
-    resolution: {integrity: sha512-IQ7TZdoaqbT+LCpShg46jnZVlhWD2w6iQYAcYXfHARZ7X1t/UGhhceQDs5X0cGqKvYlHNOuv7Oa1xmb0oQuA3w==}
-    engines: {node: '>=4'}
-
-  postcss-selector-parser@6.1.3:
-    resolution: {integrity: sha512-cDoO18VWCIWRsSaws3C23b0HXRxlUknttfdNcbXnf3IGHAPRNLlXPHc6dYiatOkxW0W4uZh524Plaaw5a7WEtQ==}
-    engines: {node: '>=4'}
 
   postcss-selector-parser@7.1.6:
     resolution: {integrity: sha512-7qASPzhKF2l2KLboRZux8CCTRMdGiV08vWmyKzPz22qZ7ZjQBOeY7rNzNoCLSUiftJ7HUq0GERHmxw/t0dCdMw==}
@@ -31135,12 +31134,12 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  undici@6.29.0:
-    resolution: {integrity: sha512-R+RODBqp6i2pPflGdq+xIOUkl+RNfGgHwoinecKu/JCuf2uO06cOKoDbI2P7Dn6KcswdKwrczbU6IYJ6K8X+wg==}
+  undici@6.29.1:
+    resolution: {integrity: sha512-EvRlUt/QqAEvXdQeRMYUfwOQsfzpDztykrG2owGEE/rBOBoYv9uF39ZzsNDh4lTFHhTr2XOZjKkYgueD12ZmGA==}
     engines: {node: '>=18.17'}
 
-  undici@8.11.2:
-    resolution: {integrity: sha512-u4UB2/IrKdU6lFxumHmmo1a3fCQO5tzQllRorfoRS63txhrB7xTpSn1PftwC4qEHkOaqP95fCWW4lJzwErwzhQ==}
+  undici@8.12.2:
+    resolution: {integrity: sha512-XtuDWVdqTLr3NAxm2ly9/hU6kUsJOgGh1RASzMBbsw6aWCOaQzHdW+QQDfdERjfJ2V5vL5pRPa4RetO9UfivDg==}
     engines: {node: '>=22.19.0'}
 
   unenv@2.0.0-rc.24:
@@ -32498,7 +32497,7 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.8
-      undici: 8.11.2
+      undici: 8.12.2
       zod: 3.25.76
 
   '@ai-sdk/provider-utils@3.0.40(zod@4.6.7)':
@@ -32506,7 +32505,7 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.8
-      undici: 8.11.2
+      undici: 8.12.2
       zod: 4.6.7
     optional: true
 
@@ -32515,7 +32514,7 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.8
-      undici: 8.11.2
+      undici: 8.12.2
       zod: 3.25.76
 
   '@ai-sdk/provider-utils@3.0.41(zod@4.6.7)':
@@ -32523,7 +32522,7 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.8
-      undici: 8.11.2
+      undici: 8.12.2
       zod: 4.6.7
 
   '@ai-sdk/provider-utils@4.0.61(zod@4.6.7)':
@@ -32531,7 +32530,7 @@ snapshots:
       '@ai-sdk/provider': 3.0.19
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.8
-      undici: 8.11.2
+      undici: 8.12.2
       zod: 4.6.7
 
   '@ai-sdk/provider-utils@5.0.62(zod@4.6.7)':
@@ -32540,7 +32539,7 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.0.8
-      undici: 8.11.2
+      undici: 8.12.2
       zod: 4.6.7
 
   '@ai-sdk/provider@1.1.3':
@@ -35267,11 +35266,11 @@ snapshots:
       '@composio/json-schema-to-zod': 0.3.2(zod@3.25.76)
       '@types/json-schema': 7.0.15
       is-fs-case-sensitive: 2.0.0
-      openai: 7.23.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(undici@8.11.2)(ws@8.21.3(bufferutil@4.1.0))(zod@3.25.76)
+      openai: 7.23.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(undici@8.12.2)(ws@8.21.3(bufferutil@4.1.0))(zod@3.25.76)
       picocolors: 1.1.1
       pusher-js: 8.6.0
       semver: 7.8.5
-      undici: 8.11.2
+      undici: 8.12.2
       zod: 3.25.76
       zod-to-json-schema: 3.25.2(zod@3.25.76)
     transitivePeerDependencies:
@@ -35297,7 +35296,7 @@ snapshots:
     dependencies:
       '@bufbuild/protobuf': 1.10.0
       '@connectrpc/connect': 1.7.0(@bufbuild/protobuf@1.10.0)
-      undici: 8.11.2
+      undici: 8.12.2
 
   '@connectrpc/connect-web@1.7.0(@bufbuild/protobuf@1.10.0)(@connectrpc/connect@1.7.0(@bufbuild/protobuf@1.10.0))':
     dependencies:
@@ -35896,7 +35895,7 @@ snapshots:
       discord-api-types: 0.38.55
       magic-bytes.js: 1.13.1
       tslib: 2.8.1
-      undici: 8.11.2
+      undici: 8.12.2
 
   '@discordjs/util@1.2.0':
     dependencies:
@@ -37050,7 +37049,7 @@ snapshots:
       ms: 2.1.3
       secure-json-parse: 3.0.2
       tslib: 2.8.1
-      undici: 8.11.2
+      undici: 8.12.2
     transitivePeerDependencies:
       - supports-color
 
@@ -39399,7 +39398,7 @@ snapshots:
       eventsource-parser: 3.0.8
       express: 5.2.1(supports-color@10.2.2)
       jose: 6.2.12
-      undici: 8.11.2
+      undici: 8.12.2
       yaml: 2.9.1
       zod: 4.6.7
     transitivePeerDependencies:
@@ -42047,7 +42046,7 @@ snapshots:
     dependencies:
       '@qdrant/openapi-typescript-fetch': 1.2.6
       typescript: 7.0.2
-      undici: 6.29.0
+      undici: 6.29.1
 
   '@qdrant/openapi-typescript-fetch@1.2.6': {}
 
@@ -44045,7 +44044,7 @@ snapshots:
 
   '@tailwindcss/typography@0.5.19(tailwindcss@4.3.3)':
     dependencies:
-      postcss-selector-parser: 6.0.10
+      postcss-selector-parser: 7.1.6
       tailwindcss: 4.3.3
 
   '@tailwindcss/vite@4.3.3(vite@6.4.3(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.1))':
@@ -44312,7 +44311,7 @@ snapshots:
   '@turbopuffer/turbopuffer@0.10.18':
     dependencies:
       pako: 2.1.0
-      undici: 8.11.2
+      undici: 8.12.2
 
   '@tursodatabase/database-common@0.4.4': {}
 
@@ -45229,7 +45228,7 @@ snapshots:
       ms: 2.1.3
       picocolors: 1.1.1
       tar-stream: 3.1.7
-      undici: 8.11.2
+      undici: 8.12.2
       xdg-app-paths: 5.1.0
       zod: 4.6.7
     transitivePeerDependencies:
@@ -48184,7 +48183,7 @@ snapshots:
       lodash.snakecase: 4.1.1
       magic-bytes.js: 1.13.1
       tslib: 2.8.1
-      undici: 8.11.2
+      undici: 8.12.2
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -48346,9 +48345,9 @@ snapshots:
       openapi-fetch: 0.14.1
       platform: 1.3.6
       tar: 7.5.21
-      undici: 8.11.2
+      undici: 8.12.2
     optionalDependencies:
-      undici8: undici@8.11.2
+      undici8: undici@8.12.2
 
   eastasianwidth@0.2.0: {}
 
@@ -50807,7 +50806,7 @@ snapshots:
       parse5: 8.0.1
       saxes: 6.0.0
       tough-cookie: 6.0.2
-      undici: 8.11.2
+      undici: 8.12.2
       w3c-xmlserializer: 6.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
@@ -51046,14 +51045,14 @@ snapshots:
       openai: 4.104.0(encoding@0.1.13)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.7)
       ws: 8.21.3(bufferutil@4.1.0)
 
-  langsmith@0.8.9(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.11.0(@opentelemetry/api@1.9.1))(openai@7.23.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(undici@8.11.2)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.7))(ws@8.21.3(bufferutil@4.1.0)):
+  langsmith@0.8.9(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.222.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.11.0(@opentelemetry/api@1.9.1))(openai@7.23.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(undici@8.12.2)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.7))(ws@8.21.3(bufferutil@4.1.0)):
     dependencies:
       p-queue: 6.6.2
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/exporter-trace-otlp-proto': 0.222.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.11.0(@opentelemetry/api@1.9.1)
-      openai: 7.23.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(undici@8.11.2)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.7)
+      openai: 7.23.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(undici@8.12.2)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.7)
       ws: 8.21.3(bufferutil@4.1.0)
 
   latest-version@7.0.0:
@@ -52184,7 +52183,7 @@ snapshots:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.35.5(@types/node@22.19.15)
-      undici: 8.11.2
+      undici: 8.12.2
       workerd: 1.20260714.1
       ws: 8.21.3(bufferutil@4.1.0)
       youch: 4.1.0-beta.10
@@ -52197,7 +52196,7 @@ snapshots:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.35.5(@types/node@22.19.15)
-      undici: 8.11.2
+      undici: 8.12.2
       workerd: 1.20261001.1
       ws: 8.21.3(bufferutil@4.1.0)
       youch: 4.1.0-beta.10
@@ -53028,21 +53027,21 @@ snapshots:
       ws: 8.21.3(bufferutil@4.1.0)
       zod: 4.6.7
 
-  openai@7.23.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(undici@8.11.2)(ws@8.21.3(bufferutil@4.1.0))(zod@3.25.76):
+  openai@7.23.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(undici@8.12.2)(ws@8.21.3(bufferutil@4.1.0))(zod@3.25.76):
     optionalDependencies:
       '@aws-sdk/credential-provider-node': 3.972.78
       '@smithy/hash-node': 4.4.6
       '@smithy/signature-v4': 5.6.12
-      undici: 8.11.2
+      undici: 8.12.2
       ws: 8.21.3(bufferutil@4.1.0)
       zod: 3.25.76
 
-  openai@7.23.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(undici@8.11.2)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.7):
+  openai@7.23.0(@aws-sdk/credential-provider-node@3.972.78)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(undici@8.12.2)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.7):
     optionalDependencies:
       '@aws-sdk/credential-provider-node': 3.972.78
       '@smithy/hash-node': 4.4.6
       '@smithy/signature-v4': 5.6.12
-      undici: 8.11.2
+      undici: 8.12.2
       ws: 8.21.3(bufferutil@4.1.0)
       zod: 4.6.7
     optional: true
@@ -53731,13 +53730,13 @@ snapshots:
   postcss-calc@9.0.1(postcss@8.5.23):
     dependencies:
       postcss: 8.5.23
-      postcss-selector-parser: 6.1.3
+      postcss-selector-parser: 7.1.6
       postcss-value-parser: 4.2.0
 
   postcss-calc@9.0.1(postcss@8.5.30):
     dependencies:
       postcss: 8.5.30
-      postcss-selector-parser: 6.1.3
+      postcss-selector-parser: 7.1.6
       postcss-value-parser: 4.2.0
     optional: true
 
@@ -53866,7 +53865,7 @@ snapshots:
   postcss-discard-unused@6.0.5(postcss@8.5.23):
     dependencies:
       postcss: 8.5.23
-      postcss-selector-parser: 6.1.3
+      postcss-selector-parser: 7.1.6
 
   postcss-double-position-gradients@6.0.4(postcss@8.5.23):
     dependencies:
@@ -53948,7 +53947,7 @@ snapshots:
       caniuse-api: 3.0.0
       cssnano-utils: 4.0.2(postcss@8.5.23)
       postcss: 8.5.23
-      postcss-selector-parser: 6.1.3
+      postcss-selector-parser: 7.1.6
 
   postcss-merge-rules@6.1.1(postcss@8.5.30):
     dependencies:
@@ -53956,7 +53955,7 @@ snapshots:
       caniuse-api: 3.0.0
       cssnano-utils: 4.0.2(postcss@8.5.30)
       postcss: 8.5.30
-      postcss-selector-parser: 6.1.3
+      postcss-selector-parser: 7.1.6
     optional: true
 
   postcss-minify-font-values@6.1.0(postcss@8.5.23):
@@ -54003,12 +54002,12 @@ snapshots:
   postcss-minify-selectors@6.0.4(postcss@8.5.23):
     dependencies:
       postcss: 8.5.23
-      postcss-selector-parser: 6.1.3
+      postcss-selector-parser: 7.1.6
 
   postcss-minify-selectors@6.0.4(postcss@8.5.30):
     dependencies:
       postcss: 8.5.30
-      postcss-selector-parser: 6.1.3
+      postcss-selector-parser: 7.1.6
     optional: true
 
   postcss-modules-extract-imports@3.1.0(postcss@8.5.23):
@@ -54287,16 +54286,6 @@ snapshots:
       postcss: 8.5.23
       postcss-selector-parser: 7.1.6
 
-  postcss-selector-parser@6.0.10:
-    dependencies:
-      cssesc: 3.0.0
-      util-deprecate: 1.0.2
-
-  postcss-selector-parser@6.1.3:
-    dependencies:
-      cssesc: 3.0.0
-      util-deprecate: 1.0.2
-
   postcss-selector-parser@7.1.6:
     dependencies:
       cssesc: 3.0.0
@@ -54323,12 +54312,12 @@ snapshots:
   postcss-unique-selectors@6.0.4(postcss@8.5.23):
     dependencies:
       postcss: 8.5.23
-      postcss-selector-parser: 6.1.3
+      postcss-selector-parser: 7.1.6
 
   postcss-unique-selectors@6.0.4(postcss@8.5.30):
     dependencies:
       postcss: 8.5.30
-      postcss-selector-parser: 6.1.3
+      postcss-selector-parser: 7.1.6
     optional: true
 
   postcss-value-parser@4.2.0: {}
@@ -56613,13 +56602,13 @@ snapshots:
     dependencies:
       browserslist: 4.28.7
       postcss: 8.5.23
-      postcss-selector-parser: 6.1.3
+      postcss-selector-parser: 7.1.6
 
   stylehacks@6.1.1(postcss@8.5.30):
     dependencies:
       browserslist: 4.28.7
       postcss: 8.5.30
-      postcss-selector-parser: 6.1.3
+      postcss-selector-parser: 7.1.6
     optional: true
 
   stylis@4.4.0: {}
@@ -57297,9 +57286,9 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  undici@6.29.0: {}
+  undici@6.29.1: {}
 
-  undici@8.11.2: {}
+  undici@8.12.2: {}
 
   unenv@2.0.0-rc.24:
     dependencies:
@@ -58171,7 +58160,7 @@ snapshots:
       '@wdio/utils': 9.27.1(supports-color@10.2.2)
       deepmerge-ts: 8.0.0
       https-proxy-agent: 7.0.6(supports-color@10.2.2)
-      undici: 8.11.2
+      undici: 8.12.2
       ws: 8.21.3(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bare-abort-controller

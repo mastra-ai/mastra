@@ -38,7 +38,7 @@ overrides:
   yargs@<18.1.0: 18.2.0
   '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
   '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.52
-  undici@<8.11.2: 8.11.2
+  undici@<8.12.2: 8.12.2
 
 importers:
 
@@ -386,8 +386,8 @@ packages:
   undici-types@8.3.0:
     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
 
-  undici@8.11.2:
-    resolution: {integrity: sha512-u4UB2/IrKdU6lFxumHmmo1a3fCQO5tzQllRorfoRS63txhrB7xTpSn1PftwC4qEHkOaqP95fCWW4lJzwErwzhQ==}
+  undici@8.12.2:
+    resolution: {integrity: sha512-XtuDWVdqTLr3NAxm2ly9/hU6kUsJOgGh1RASzMBbsw6aWCOaQzHdW+QQDfdERjfJ2V5vL5pRPa4RetO9UfivDg==}
     engines: {node: '>=22.19.0'}
 
   until-async@3.0.2:
@@ -444,7 +444,7 @@ snapshots:
       '@ai-sdk/provider': 3.0.18
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.0
-      undici: 8.11.2
+      undici: 8.12.2
       zod: 4.6.7
 
   '@ai-sdk/provider@3.0.14':
@@ -664,7 +664,7 @@ snapshots:
 
   undici-types@8.3.0: {}
 
-  undici@8.11.2: {}
+  undici@8.12.2: {}
 
   until-async@3.0.2: {}
 
