@@ -1390,6 +1390,35 @@ describe('channel session creation context (resolveSession)', () => {
     expect(controller.createSession).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'session-1' }));
   });
 
+  it("doesn't resolve a thread under the Factory to a private run it is stamped with", async () => {
+    const run = {
+      sessionId: 'session-1',
+      orgId: 'org-1',
+      userId: 'user-1',
+      projectRepositoryId: 'pr-1',
+      factoryProjectId: 'fp-1',
+      branch: 'factory/run-1',
+      visibility: 'private',
+    };
+    const sourceControl = {
+      sessions: { getBySessionId: vi.fn(async (sessionId: string) => (sessionId === 'session-1' ? run : null)) },
+    };
+    // The run is bound and its own thread is under the Factory, so only the stamp's trust decides.
+    const workItems = { hasRunBindingForSession: vi.fn(async () => true) };
+    const forged = { id: 'thread-atk', resourceId: 'fp-1', metadata: { factorySessionId: 'session-1' } };
+    const controller = {
+      id: 'code',
+      queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) =>
+        threadId === 'session-1' ? { id: 'session-1', resourceId: 'fp-1' } : null,
+      ),
+      createSession: vi.fn().mockResolvedValue({}),
+    };
+
+    await createChannelSessionResolver({ sourceControl, workItems } as any)({ controller, thread: forged } as any);
+
+    expect(controller.createSession).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'session-1' }));
+  });
+
   it('leaves ownership off a session row whose factory the backfill could not resolve', async () => {
     const sourceControl = {
       sessions: {

@@ -29,7 +29,7 @@ import {
   resolvePrimaryEnvironmentRepository,
 } from '../../session/factory-session.js';
 import { readRequestContextOrgId, seedSessionOrg } from '../../session/org-seed.js';
-import { isRunBound, memoryResourceOf } from '../../session/session-threads.js';
+import { isRunBound, memoryResourceOf, sessionStampCounts } from '../../session/session-threads.js';
 import type { SessionRunBindings } from '../../session/session-threads.js';
 import type {
   ChannelAccountLink,
@@ -511,6 +511,8 @@ async function slackThreadSessionId(
   const claims = async (sessionId: string) => {
     const row = await sessions.getBySessionId(sessionId);
     if (!row) return false;
+    // A stamp only counts where the session's stamps are trusted.
+    if (sessionId !== thread.id && !sessionStampCounts(row, thread.resourceId)) return false;
     const own = sessionId === thread.id ? thread : await loadThread(sessionId);
     return thread.resourceId === memoryResourceOf(row, own, await isRunBound(row, runs));
   };
