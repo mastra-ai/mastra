@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { noMcpServers, noWorkspaces, oneMcpServer, oneWorkspace } from './fixtures/nav-more';
 import { authHandler, BASE_URL, builderHandler, renderSidebar, systemPackagesHandler } from './render-sidebar';
+import { providersResponse } from '@/pages/connections/__tests__/fixtures/user-connect';
 import { server } from '@/test/msw-server';
 
 const authDisabledCapabilities = {
@@ -41,6 +42,8 @@ beforeEach(() => {
     systemPackagesHandler(),
     mcpServersHandler(noMcpServers),
     workspacesHandler(noWorkspaces),
+    // Mounted connect surface so the Connections entry participates in the menu.
+    http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
   );
 });
 
@@ -54,7 +57,7 @@ describe('AppSidebar More menu', () => {
     it('keeps them reachable in a menu without inserting navigation rows', async () => {
       renderSidebar();
       // Wait for the permission-gated rows so the captured row text reflects
-      // the settled sidebar (Connections is ungated and renders More earlier).
+      // the settled sidebar (Connections renders once the surface probe lands).
       await screen.findByRole('link', { name: 'Agents' });
       const more = await screen.findByRole('button', { name: 'More' });
       const list = more.closest('ul');
