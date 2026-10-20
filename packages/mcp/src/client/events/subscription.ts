@@ -83,6 +83,7 @@ export class EventSubscription implements MCPEventSubscription {
   private readonly waiters: Waiter[] = [];
   private ending?: { error?: MastraError };
   private endingDelivered = false;
+  private detachSignal?: () => void;
 
   private isEstablished = false;
   private sessionHealthy = false;
@@ -109,7 +110,13 @@ export class EventSubscription implements MCPEventSubscription {
     this.random = config.random ?? Math.random;
     this.dedupWindow = options.dedupWindow ?? DEFAULT_DEDUP_WINDOW;
     this.maxBuffered = Math.max(1, options.maxBufferedEvents ?? DEFAULT_MAX_BUFFERED_EVENTS);
-    this.retry = { ...DEFAULT_RETRY, ...options.retry };
+    const retry = options.retry ?? {};
+    this.retry = {
+      initialDelayMs: retry.initialDelayMs ?? DEFAULT_RETRY.initialDelayMs,
+      maxDelayMs: retry.maxDelayMs ?? DEFAULT_RETRY.maxDelayMs,
+      factor: retry.factor ?? DEFAULT_RETRY.factor,
+      maxAttempts: retry.maxAttempts ?? DEFAULT_RETRY.maxAttempts,
+    };
     this.resolved = {
       maxAgeMs: options.maxAgeMs,
       maxEvents: options.maxEvents,
@@ -126,7 +133,11 @@ export class EventSubscription implements MCPEventSubscription {
     const signal = options.signal;
     if (signal) {
       if (signal.aborted) this.abort.abort();
-      else signal.addEventListener('abort', () => void this.cancel(), { once: true });
+      else {
+        const onAbort = () => void this.cancel();
+        signal.addEventListener('abort', onAbort, { once: true });
+        this.detachSignal = () => signal.removeEventListener('abort', onAbort);
+      }
     }
   }
 
@@ -265,6 +276,7 @@ export class EventSubscription implements MCPEventSubscription {
   private end(error?: MastraError): void {
     if (this.ending) return;
     this.ending = { error };
+    this.detachSignal?.();
     if (!this.isEstablished) this.rejectReady(error ?? this.cancelledError());
     const waiters = this.waiters.splice(0);
     for (const [index, waiter] of waiters.entries()) {

@@ -1059,7 +1059,7 @@ The returned `MCPEventSubscription` is an async iterable of occurrences (`eventI
 - `onError(handler)`: Receives recoverable errors, such as a dropped stream that the client is reopening. Returns a function that removes the handler.
 - `cancel()`: Stops the subscription and ends the iterator. Breaking out of a `for await` loop also cancels it.
 
-The iterator throws a `MastraError` directly (not wrapped) when the subscription can't continue: `MCP_EVENTS_SUBSCRIPTION_FAILED` for a non-retryable server error, or `MCP_EVENTS_SUBSCRIPTION_TERMINATED` when the server ends a push subscription. The client reopens dropped streams and resumes polling from the last cursor after a reconnect, including after `reconnectServer()`. `disconnect()` ends all subscriptions.
+The iterator throws a `MastraError` directly (not wrapped) when the subscription can't continue: `MCP_EVENTS_SUBSCRIPTION_FAILED` for a non-retryable server error, `MCP_EVENTS_SUBSCRIPTION_TERMINATED` when the server ends a push subscription, or `MCP_EVENTS_RETRIES_EXHAUSTED` after `retry.maxAttempts` failed attempts in a row. The client reopens dropped streams and resumes polling from the last cursor after a reconnect, including after `reconnectServer()`. `disconnect()` ends all subscriptions.
 
 ## Answering input requests
 

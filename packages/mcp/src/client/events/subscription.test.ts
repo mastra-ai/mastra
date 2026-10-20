@@ -111,6 +111,39 @@ describe('EventSubscription', () => {
     await sub.cancel();
   });
 
+  it('keeps the default backoff when a retry field is passed as undefined', async () => {
+    const port = new FakePort().queuePoll(
+      pollResult({ cursor: 'a' }),
+      new Error('connection closed'),
+      pollResult({ cursor: 'b' }),
+    );
+    const sub = await startPoll(port, {
+      options: { minPollIntervalMs: 100, retry: { initialDelayMs: undefined, maxAttempts: undefined } },
+    });
+    sub.onError(() => {});
+    await vi.advanceTimersByTimeAsync(100);
+    expect(port.pollCalls).toHaveLength(2);
+
+    // The default initial delay is 1000 ms (random() is 1 here), not a ~1 ms NaN timeout.
+    await vi.advanceTimersByTimeAsync(500);
+    expect(port.pollCalls).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(port.pollCalls).toHaveLength(3);
+    await sub.cancel();
+  });
+
+  it("removes its abort listener from the caller's signal when it ends", async () => {
+    const port = new FakePort().queuePoll(pollResult({ cursor: 'a' }));
+    const controller = new AbortController();
+    const added = vi.spyOn(controller.signal, 'addEventListener');
+    const removed = vi.spyOn(controller.signal, 'removeEventListener');
+    const sub = await startPoll(port, { options: { signal: controller.signal } });
+    expect(added).toHaveBeenCalledWith('abort', expect.any(Function), { once: true });
+
+    await sub.cancel();
+    expect(removed).toHaveBeenCalledWith('abort', added.mock.calls[0]![1]);
+  });
+
   it('onError returns an unsubscribe function, and errors without a handler are logged', async () => {
     const port = new FakePort().queuePoll(pollResult({ cursor: 'a' }), new Error('one'), new Error('two'));
     const sub = await startPoll(port, { options: { minPollIntervalMs: 100, retry: { initialDelayMs: 10 } } });
