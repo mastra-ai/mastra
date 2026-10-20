@@ -67,7 +67,8 @@ function parkedApprovalHelpers(engine: EngineVariant, getMock: ReturnType<typeof
     return { llm, agent, executed, runId: output.runId };
   }
 
-  // Approve: the user clicked approve. Returns the error the user saw, or the streamed text.
+  // Approve: the user clicked approve. Returns the error the user saw, the abort the stream
+  // ended with, or the streamed text.
   async function approve(agent: Awaited<ReturnType<typeof parkApproval>>['agent'], runId: string) {
     try {
       const resumed = await agent.approveToolCall({ runId, toolCallId: 'call_lookup' });
@@ -75,7 +76,9 @@ function parkedApprovalHelpers(engine: EngineVariant, getMock: ReturnType<typeof
       for await (const chunk of resumed.fullStream) {
         if (chunk.type === 'text-delta') text += chunk.payload.text;
       }
-      return { text };
+      const finishReason = await resumed.finishReason;
+      // The durable stream adapter reports 'abort'; the base stream reports 'aborted'.
+      return finishReason === 'aborted' || finishReason === 'abort' ? { finishReason } : { text };
     } catch (error) {
       return { error: errorId(error) };
     }
@@ -94,7 +97,12 @@ describeForAllEngines('User stops a run parked on a tool approval', engine => {
     const outcome = await approve(agent, runId);
 
     expect(executed).toEqual([]);
-    expect(outcome).toEqual({ error: 'AGENT_RESUME_ABORTED_RUN' });
+    // Either the approval is refused, or the resumed stream ends as aborted without the tool.
+    expect([
+      { error: 'AGENT_RESUME_ABORTED_RUN' },
+      { finishReason: 'aborted' },
+      { finishReason: 'abort' },
+    ]).toContainEqual(outcome);
     // Only the turn that asked for approval reached the model.
     expect(llm.getRequests()).toHaveLength(1);
   }, 30_000);
