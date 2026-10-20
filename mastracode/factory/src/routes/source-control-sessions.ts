@@ -28,7 +28,7 @@ import type {
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteAuth } from './route.js';
-import { canViewSourceControlSession } from './session-access.js';
+import { canReadSessionResource, canViewSourceControlSession } from './session-access.js';
 
 type RouteContext = Context;
 
@@ -489,12 +489,15 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if (!session || !canViewSourceControlSession(session, resolved.tenant)) {
           return c.json({ error: 'Session not found' }, 404);
         }
+        // The client opens the session by its id and creates it under this resource.
+        const resourceId = await sessionMemoryResourceId(options.controller, session, options.workItems);
+        if (!canReadSessionResource(session, resourceId, resolved.tenant)) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
         const owners = await resolveOwnerProfiles([session.userId]);
         const recreateSandbox =
           canRecreateSandbox(options) &&
           (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
-        // The client opens the session by its id and creates it under this resource.
-        const resourceId = await sessionMemoryResourceId(options.controller, session, options.workItems);
         return c.json({
           session: { ...withCapabilities(withOwnerProfile(session, owners), recreateSandbox), resourceId },
         });
@@ -662,9 +665,17 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if (controller?.listActiveThreadRuns().some(run => threadIds.includes(run.threadId))) {
           return c.json({ error: 'Wait for the session to finish its run before changing visibility' }, 409);
         }
+        // Write in the order that fails closed: threads leave the Factory before the
+        // row says private, and the row says shared before threads reach the Factory.
+        // A failed move then leaves the session less visible, never more, and a retry
+        // moves what is left.
+        const moveThreads = async () => {
+          for (const threadId of threadIds) await options.moveThread!({ threadId, resourceId });
+        };
+        if (visibility === 'private') await moveThreads();
         const updated = await match.sourceControl.sessions.setVisibility({ sessionId, visibility });
         if (!updated) return c.json({ error: 'Session not found' }, 404);
-        for (const threadId of threadIds) await options.moveThread!({ threadId, resourceId });
+        if (visibility === 'org') await moveThreads();
         // A live session keeps the resource it started on. Drop it so the next
         // request resumes on its moved thread, or point it at the new resource
         // when it has no thread to resume from yet.

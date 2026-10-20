@@ -311,6 +311,15 @@ describe('source-control session routes', () => {
       });
     await create('session-new');
     await create('session-run');
+    await sourceControl.sessions.create({
+      sessionId: 'session-private',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-session-private',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
     const threads: Record<string, { id: string; resourceId: string }> = {
       'session-run': { id: 'session-run', resourceId: project.id },
     };
@@ -324,12 +333,53 @@ describe('source-control session routes', () => {
     };
     const app = buildApp([sourceControl], seed, controller, workItems);
 
-    // A session with no thread yet is a new user session: it starts under its owner.
+    // A session with no thread yet starts where its visibility puts it: a shared one under its Factory,
+    // a private one under its owner.
     const fresh = await app.request('/web/user-sessions/session-new');
-    await expect(fresh.json()).resolves.toMatchObject({ session: { sessionId: 'session-new', resourceId: 'user-1' } });
+    await expect(fresh.json()).resolves.toMatchObject({
+      session: { sessionId: 'session-new', resourceId: project.id },
+    });
+    const personal = await app.request('/web/user-sessions/session-private');
+    await expect(personal.json()).resolves.toMatchObject({
+      session: { sessionId: 'session-private', resourceId: 'user-1' },
+    });
     // A run's thread already names its Factory.
     const run = await app.request('/web/user-sessions/session-run');
     await expect(run.json()).resolves.toMatchObject({ session: { sessionId: 'session-run', resourceId: project.id } });
+  });
+
+  it("hides a shared-looking session from teammates while its conversation is on its owner's memory", async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    for (const sessionId of ['legacy-shared', 'moved-shared']) {
+      await sourceControl.sessions.create({
+        sessionId,
+        projectRepositoryId: projectRepository.id,
+        factoryProjectId: project.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: `user/session-${sessionId}`,
+        baseBranch: 'main',
+        visibility: 'org',
+      });
+    }
+    // Created before sharing moved threads: still on its owner's resource.
+    const threads: Record<string, { id: string; resourceId: string }> = {
+      'legacy-shared': { id: 'legacy-shared', resourceId: 'user-1' },
+      'moved-shared': { id: 'moved-shared', resourceId: project.id },
+    };
+    const controller = {
+      queryThreadById: async ({ threadId }: { threadId: string }) => threads[threadId] ?? null,
+    } as unknown as RouteOptions['controller'];
+    const noRuns = { clearSessionReferences: async () => 0, hasRunBindingForSession: async () => false };
+    const owner = buildApp([sourceControl], seed, controller, noRuns);
+    const teammate = buildApp([sourceControl], seed, controller, noRuns, {
+      workosId: 'user-2',
+      organizationId: 'org-1',
+    });
+
+    expect((await teammate.request('/web/user-sessions/legacy-shared')).status).toBe(404);
+    expect((await owner.request('/web/user-sessions/legacy-shared')).status).toBe(200);
+    expect((await teammate.request('/web/user-sessions/moved-shared')).status).toBe(200);
   });
 
   it("names the owner when a teammate opens someone else's session", async () => {
@@ -760,6 +810,22 @@ describe('source-control session routes', () => {
       expect(await controller.getSession(sessionId)).toBeUndefined();
 
       expect((await putVisibility(owner, sessionId, { visibility: 'private' })).status).toBe(200);
+      expect(await resources()).toEqual({ [sessionId]: 'user-1', 'opened-thread': 'user-1', unrelated: 'user-1' });
+
+      // Share again, then fail making it private halfway: the row must not say private while a thread
+      // is still on the Factory, and a retry finishes the move.
+      expect((await putVisibility(owner, sessionId, { visibility: 'org' })).status).toBe(200);
+      let moves = 0;
+      const failing = buildApp([sourceControl], seed, controller, noRuns, user, async input => {
+        if (++moves === 2) throw new Error('storage unavailable');
+        return memory.updateThreadResourceId(input);
+      });
+      expect((await putVisibility(failing, sessionId, { visibility: 'private' })).status).toBe(500);
+      await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ visibility: 'org' });
+      expect(Object.values(await resources()).filter(resource => resource === project.id)).toHaveLength(1);
+
+      expect((await putVisibility(owner, sessionId, { visibility: 'private' })).status).toBe(200);
+      await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ visibility: 'private' });
       expect(await resources()).toEqual({ [sessionId]: 'user-1', 'opened-thread': 'user-1', unrelated: 'user-1' });
     });
 

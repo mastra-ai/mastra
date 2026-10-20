@@ -775,6 +775,20 @@ export class SourceControlStorage extends FactoryStorageDomain {
     return (await this.ops.findMany<SessionDbRow>(SESSIONS, { resources_migrated_at: null })).map(toSession);
   }
 
+  /** Sessions, across providers and organizations, that teammates can see (`org` or legacy `NULL`). */
+  async listSharedSessions(): Promise<SourceControlSession[]> {
+    const [org, legacy] = await Promise.all([
+      this.ops.findMany<SessionDbRow>(SESSIONS, { visibility: 'org' }),
+      this.ops.findMany<SessionDbRow>(SESSIONS, { visibility: null }),
+    ]);
+    return [...org, ...legacy].map(toSession);
+  }
+
+  /** Make a session private without touching anything else on it. */
+  async markSessionPrivate(sessionId: string): Promise<void> {
+    await this.ops.updateMany(SESSIONS, { session_id: sessionId }, { visibility: 'private', updated_at: new Date() });
+  }
+
   /** Record that a session's threads are on their memory resource, so later starts skip it. */
   async markResourcesMigrated(sessionId: string): Promise<void> {
     await this.ops.updateMany(SESSIONS, { session_id: sessionId }, { resources_migrated_at: new Date() });

@@ -213,6 +213,43 @@ export async function migrateSessionResources(
   return report;
 }
 
+export interface SessionVisibilityBackfillDeps {
+  sessions: {
+    listSharedSessions(): Promise<SourceControlSession[]>;
+    markSessionPrivate(sessionId: string): Promise<void>;
+  };
+  workItems: Pick<SessionResourceMigrationDeps['workItems'], 'listRunBoundItems'>;
+  memory: Pick<MemoryStorage, 'getThreadById'>;
+}
+
+/**
+ * Mark shared user sessions private when their conversation lives on their owner's resource.
+ * The resource already keeps teammates out of such a session; this makes lists agree, so they
+ * stop seeing a session they can't open. Sessions shared since sharing moves threads live on
+ * their Factory and are left alone, as are runs, Slack threads and side sessions. Safe to rerun.
+ */
+export async function privatizeOwnerResourceSessions(deps: SessionVisibilityBackfillDeps): Promise<number> {
+  let privatized = 0;
+  for (const session of await deps.sessions.listSharedSessions()) {
+    try {
+      const { owner } = sessionMemoryResource(session, await deps.workItems.listRunBoundItems(session.sessionId));
+      if (owner !== 'user') continue;
+      const thread = await deps.memory.getThreadById({ threadId: session.sessionId });
+      if (thread?.resourceId !== session.userId) continue;
+      await deps.sessions.markSessionPrivate(session.sessionId);
+      privatized += 1;
+    } catch (error) {
+      console.warn(
+        `[factory] session visibility backfill: session ${session.sessionId} not checked: ${error instanceof Error ? error.message : error}`,
+      );
+    }
+  }
+  if (privatized > 0) {
+    console.info(`[factory] session visibility backfill: ${privatized} sessions on their owner's memory made private`);
+  }
+  return privatized;
+}
+
 async function moveThread(
   deps: SessionResourceMigrationDeps,
   thread: StorageThreadType,

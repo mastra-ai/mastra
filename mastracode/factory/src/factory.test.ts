@@ -1298,13 +1298,14 @@ describe('MastraFactory.prepare', () => {
     it('wakes a user session under its owner resource through its own thread', async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });
-      await seedUserSession(storage);
+      // A New session: private, on its owner's resource.
+      await seedUserSession(storage, { visibility: 'private' });
       const prepareWake = config.prepareWakeRequestContext as (args: {
         requestContext: RequestContext;
         resourceId: string;
         threadId: string;
       }) => Promise<void>;
-      controllerMock.queryThreadById.mockResolvedValueOnce({ id: 'session-1', resourceId: 'user-1', metadata: {} });
+      controllerMock.queryThreadById.mockResolvedValue({ id: 'session-1', resourceId: 'user-1', metadata: {} });
 
       const wake = new RequestContext();
       wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });

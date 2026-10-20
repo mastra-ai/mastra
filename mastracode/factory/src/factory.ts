@@ -121,7 +121,7 @@ import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
-import { migrateSessionResources } from './session/resource-migration.js';
+import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
@@ -792,6 +792,7 @@ export class MastraFactory {
             threads: sessionMemory({ requestContext: new RequestContext() }),
           });
           await sessionMemory.settled();
+          await privatizeOwnerResourceSessions({ sessions: sourceControlStorage, workItems: workItemsStorage, memory });
         } catch (error) {
           // Unmoved sessions keep working under their own id; the next start retries.
           console.warn(

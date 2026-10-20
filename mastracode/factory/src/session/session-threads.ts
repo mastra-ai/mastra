@@ -78,7 +78,8 @@ export function memoryResourceOf(
     ...((runBound || session.visibility === 'org') && factoryProjectId ? [factoryProjectId] : []),
   ];
   if (own?.resourceId && allowed.includes(own.resourceId)) return own.resourceId;
-  return session.userId;
+  // No thread yet: where a session with this visibility starts.
+  return userSessionResourceFor(session, session.visibility === 'org' ? 'org' : 'private');
 }
 
 /** The resource a person's session belongs on for a visibility: its Factory's once shared, its owner's while private. */

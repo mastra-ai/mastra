@@ -8,7 +8,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { migrateSessionResources, sessionMemoryResource } from './resource-migration.js';
+import {
+  migrateSessionResources,
+  privatizeOwnerResourceSessions,
+  sessionMemoryResource,
+} from './resource-migration.js';
 import { listFactorySessionThreads, sessionMemoryResourceId } from './session-threads.js';
 
 const FACTORY_ID = '11111111-2222-4333-8444-555555555555';
@@ -526,5 +530,72 @@ describe('migrateSessionResources', () => {
         )
       ).map(thread => thread.id),
     ).toEqual([RUN_SESSION]);
+  });
+});
+
+describe('privatizeOwnerResourceSessions', () => {
+  it("makes shared user sessions on their owner's memory private, and leaves everything else alone", async () => {
+    const { seed, memory, ops, now, migrate } = await seedLegacyFactory();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await migrate();
+    // Shared since sharing moves threads: its conversation is on the Factory, so it stays shared.
+    const SHARED_SESSION = 'aaaaaaaa-0000-4000-8000-000000000008';
+    await ops.insertOne('source_control_sessions', {
+      session_id: SHARED_SESSION,
+      project_repository_id: 'project-repository-1',
+      factory_project_id: FACTORY_ID,
+      org_id: 'org-1',
+      user_id: 'user-1',
+      branch: `user/session-${SHARED_SESSION}`,
+      base_branch: 'main',
+      title: null,
+      visibility: 'org',
+      sandbox_id: null,
+      sandbox_workdir: null,
+      materialized_at: null,
+      first_message_at: null,
+      first_meaningful_exec_at: null,
+      resources_migrated_at: now,
+      created_at: now,
+      updated_at: now,
+    });
+    await memory.saveThread({
+      thread: {
+        id: SHARED_SESSION,
+        resourceId: FACTORY_ID,
+        title: '',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const backfill = () =>
+      privatizeOwnerResourceSessions({ sessions: seed.sourceControl, workItems: seed.workItems, memory });
+    const visibilities = async () =>
+      Object.fromEntries(
+        await Promise.all(
+          [USER_SESSION, RUN_SESSION, SLACK_SESSION, SIDE_SESSION, SLACK_DM_SESSION, PR_SESSION, SHARED_SESSION].map(
+            async id => [
+              id,
+              (await ops.findMany<{ visibility: string }>('source_control_sessions', { session_id: id }))[0]
+                ?.visibility,
+            ],
+          ),
+        ),
+      );
+
+    expect(await backfill()).toBe(1);
+    expect(await visibilities()).toEqual({
+      [USER_SESSION]: 'private',
+      [RUN_SESSION]: 'org',
+      [SLACK_SESSION]: 'org',
+      [SIDE_SESSION]: 'org',
+      [SLACK_DM_SESSION]: 'private',
+      [PR_SESSION]: 'org',
+      [SHARED_SESSION]: 'org',
+    });
+    // Safe to rerun on every start.
+    expect(await backfill()).toBe(0);
   });
 });

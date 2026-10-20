@@ -8,6 +8,18 @@ import type { SourceControlSession } from '../storage/domains/source-control/bas
 import type { RouteAuth } from './route.js';
 
 /** Whether a viewer may read or drive a session: same org, and the owner when it is private. */
+/**
+ * Whether the viewer may read a visible session's conversation. A session on its owner's memory is
+ * the owner's alone, whatever its row says.
+ */
+export function canReadSessionResource(
+  session: Pick<SourceControlSession, 'userId'>,
+  resourceId: string,
+  viewer: { userId: string },
+): boolean {
+  return viewer.userId === session.userId || resourceId !== session.userId;
+}
+
 export function canViewSourceControlSession(
   session: Pick<SourceControlSession, 'orgId' | 'userId' | 'visibility'>,
   viewer: { orgId?: string; userId: string },
