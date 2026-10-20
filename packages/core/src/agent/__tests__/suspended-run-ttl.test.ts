@@ -91,6 +91,11 @@ function createFakeRun(runId: string) {
     emitFinishPart() {
       streamController.enqueue({ type: 'finish', finishReason: 'stop' });
     },
+    /** Park the way a durable run does: suspended, with its stream left open. */
+    parkWithStreamOpen() {
+      status = 'suspended';
+      finish();
+    },
     settle(finalStatus: 'suspended' | 'success') {
       status = finalStatus;
       streamController.close();
@@ -487,6 +492,58 @@ describe('suspended run in-memory TTL', () => {
       } finally {
         subscription.unsubscribe();
         await reading;
+      }
+    });
+
+    it('moves a subscriber that queued the dropped run before reading it on to the next run', async () => {
+      const watcher = await watchThread(pubsub, 'thread-1');
+      const run1 = createFakeRun('run-1');
+      await runtime.registerRun(
+        fakeAgent,
+        run1.output,
+        { memory: { thread: 'thread-1', resource: RESOURCE_ID } },
+        pubsub,
+        { continuation: 'across-suspension' },
+      );
+      run1.emitSuspendPart();
+      await watcher.waitFor('stream-part', 'run-1');
+      run1.parkWithStreamOpen();
+      await watcher.waitFor('run-suspended', 'run-1');
+      const { agent } = createWakeableAgent('run-2');
+
+      // The subscriber queues the parked run but does not start reading until after the sweep.
+      const subscription = await runtime.subscribeToThread(
+        agent,
+        { resourceId: RESOURCE_ID, threadId: 'thread-1' },
+        pubsub,
+      );
+      let finished = false;
+      try {
+        await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+        await pubsub.releaseLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+        const reading = (async () => {
+          for await (const part of subscription.stream as AsyncIterable<any>) {
+            if (part?.runId === 'run-2' && part.type === 'finish') {
+              finished = true;
+              return;
+            }
+          }
+        })();
+        const run2 = createFakeRun('run-2');
+        await runtime.registerRun(
+          fakeAgent,
+          run2.output,
+          { memory: { thread: 'thread-1', resource: RESOURCE_ID } },
+          pubsub,
+        );
+        run2.emitFinishPart();
+        run2.settle('success');
+
+        await vi.waitFor(() => expect(finished).toBe(true));
+        subscription.unsubscribe();
+        await reading;
+      } finally {
+        subscription.unsubscribe();
       }
     });
 

@@ -536,6 +536,11 @@ type AgentThreadRuntimeState = {
    * runs queued behind it.
    */
   runStreamReaders: Map<string, Set<{ streamId: string; stop: () => void }>>;
+  /**
+   * Records the TTL sweep dropped. A subscriber that queued one before reading it
+   * skips it instead of waiting on its open stream.
+   */
+  sweptRecords: WeakSet<AgentThreadRunRecord<any>>;
 };
 
 export type AgentThreadState = 'active' | 'idle';
@@ -728,6 +733,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     threadEventListeners: new Set(),
     threadControlSubscriptions: new Map(),
     runStreamReaders: new Map(),
+    sweptRecords: new WeakSet(),
   };
 }
 
@@ -3219,6 +3225,7 @@ export class AgentThreadStreamRuntime {
       this.#clearSuspendedRun(state, record.runId);
       this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
       state.sweptLeasedRunIds.set(record.runId, now);
+      state.sweptRecords.add(record);
       // A run parked across its suspension keeps its stream open, so subscribers
       // reading it would never reach the runs queued behind it. Only this record's
       // stream: a subscriber may be reading another instance's resume of the run.
@@ -5448,7 +5455,7 @@ export class AgentThreadStreamRuntime {
               continue;
             }
             const run = pendingRuns.shift()!;
-            if (isSuperseded(run.runId, run.generation)) continue;
+            if (isSuperseded(run.runId, run.generation) || state.sweptRecords.has(run)) continue;
             // A local run can be read before its `run-registered` event arrives.
             noteGeneration(run.runId, run.streamId, run.generation, run.supersedes);
             noteRunHalf(run.runId, { streamId: run.streamId, streamSeq: run.streamSeq });
