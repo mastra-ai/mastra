@@ -462,7 +462,6 @@ export class GithubRules {
     );
     if (!item || item.externalSource?.type !== 'issue') return { status: 'ignored' };
     const assignees = actorLogins(issue?.assignees);
-    if (sameStrings(item.metadata?.assignees, assignees)) return { status: 'ignored' };
     // GitHub can deliver webhooks out of order; drop payloads older than the last applied one.
     // Timestamps have one-second resolution, so equal timestamps still apply.
     const updatedAt = string(issue?.updated_at);
@@ -471,6 +470,10 @@ export class GithubRules {
     if (payloadTime !== undefined && storedTime !== undefined && payloadTime < storedTime) {
       return { status: 'ignored' };
     }
+    // A newer payload with unchanged assignees still advances the stored time, so a delayed older
+    // payload cannot slip in behind it.
+    const advancesTime = payloadTime !== undefined && (storedTime === undefined || payloadTime > storedTime);
+    if (sameStrings(item.metadata?.assignees, assignees) && !advancesTime) return { status: 'ignored' };
     try {
       const updated = await this.options.storage.update({
         orgId: item.orgId,

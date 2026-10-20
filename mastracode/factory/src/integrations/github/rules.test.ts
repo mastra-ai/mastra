@@ -3457,6 +3457,28 @@ describe('GithubRules label routes', () => {
     });
   });
 
+  it('advances the stored time on a newer no-op so a delayed older unassigned cannot overwrite it', async () => {
+    const { service, workItems, project } = await setupRoutes('release');
+    const created = await createLinkedIssue(workItems, project.id);
+    await workItems.update({
+      orgId: 'org-1',
+      id: created.id,
+      userId: 'user-1',
+      patch: { metadata: { assignees: ['alice'], githubAssigneesUpdatedAt: '2030-01-01T00:00:01Z' } },
+    });
+    const newerNoop = issueAssignees('assigned', ['alice'], 'assignee-t3');
+    (newerNoop.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:03Z';
+    const delayed = issueAssignees('unassigned', [], 'assignee-t2');
+    (delayed.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:02Z';
+
+    await expect(service.ingest(newerNoop)).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(delayed)).resolves.toEqual({ status: 'ignored' });
+    expect((await workItems.get({ orgId: 'org-1', id: created.id }))?.metadata).toMatchObject({
+      assignees: ['alice'],
+      githubAssigneesUpdatedAt: '2030-01-01T00:00:03Z',
+    });
+  });
+
   it('ignores assignee changes for issues without a card and on pull requests', async () => {
     const { service, workItems, project } = await setupRoutes('release');
     await expect(service.ingest(issueAssignees('assigned', ['alice']))).resolves.toEqual({ status: 'ignored' });
