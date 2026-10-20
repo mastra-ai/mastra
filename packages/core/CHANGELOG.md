@@ -1,5 +1,21 @@
 # @mastra/core
 
+## 1.79.0-alpha.10
+
+### Patch Changes
+
+- Fixed session messages starting while another agent runs on the same thread. When an `AgentController` uses an application's agent and has no `pubsub` of its own, its agents without their own `pubsub` now share the application's event bus. Session messages now wait for the other run to finish. A `pubsub` passed to the controller still takes precedence. ([#27631](https://github.com/mastra-ai/mastra/pull/27631))
+
+- Fixed an agent run that had lost its thread lease running tools next to the run that took over the thread. Lease renewals run every third of the lease TTL, so a run whose lease was taken over could keep calling tools until its next renewal. A run that holds a thread lease now checks the lease owner before each tool call. If another run owns the lease, the run is aborted and the tool does not run. If the lease backend can't answer, the local lease deadline decides as before. ([#27749](https://github.com/mastra-ai/mastra/pull/27749))
+
+- Fixed the goal judge reading the `TrailingAssistantGuard`'s synthetic `Continue.` turn as the latest user message. On models that reject a trailing assistant turn (Claude 4.6+, Gemini 3+), the judge was told the user had said `Continue.` when they had not, hiding the real latest user message and miscounting assistant steps since it. The guard now marks its continuation, and the goal judge skips it. ([#27503](https://github.com/mastra-ai/mastra/pull/27503))
+
+- Fixed replies being saved as a separate assistant message on Gemini 3+ (and Anthropic 4.6+ with structured output) when the input ends on an assistant message. The reply is now saved into that assistant message, the same as with other providers. The synthetic user turn ("Continue." or "Generate the structured response.") Mastra sends to these providers is also no longer kept in the run's message list after the request is built. ([#27503](https://github.com/mastra-ai/mastra/pull/27503))
+
+- Fixed durable agent runs losing user input when a worker stops before the run finishes. ([#27835](https://github.com/mastra-ai/mastra/pull/27835))
+
+  Durable runs now stop before calling the model when the accepted input cannot be saved — for example when the storage write fails or the caller has no write permission on the thread — instead of answering without persisting it. Memory configured with `readOnly` still runs without writing.
+
 ## 1.79.0-alpha.9
 
 ### Minor Changes
