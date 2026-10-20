@@ -308,6 +308,11 @@ function issueLabelChange(parsed: ParsedGithubWebhook): boolean {
   return parsed.event === 'issues' && (action === 'labeled' || action === 'unlabeled');
 }
 
+function issueAssigneeChange(parsed: ParsedGithubWebhook): boolean {
+  const action = string(parsed.payload.action);
+  return parsed.event === 'issues' && (action === 'assigned' || action === 'unassigned');
+}
+
 /**
  * Whether a login is Factory itself. Prefers the resolved identity, which is
  * observed from Factory's own writes, and falls back to the configured slug.
@@ -432,9 +437,52 @@ export class GithubRules {
     return { status: changed || outcome === 'moved' ? 'committed' : 'ignored' };
   }
 
+  /**
+   * `assigned` / `unassigned` are not rule events either: an existing issue card only mirrors the
+   * issue's full assignee list. No card is created, moved, or handed to a run.
+   */
+  async #syncIssueAssignees(
+    parsed: ParsedGithubWebhook,
+    repositoryId: number,
+    repositoryName: string,
+    project: ExternalRepositoryProjectTarget,
+  ): Promise<{ status: 'ignored' | 'committed' }> {
+    const issue = object(parsed.payload.issue);
+    const issueNumber = issue?.pull_request === undefined ? number(issue?.number) : undefined;
+    if (!issueNumber) return { status: 'ignored' };
+    const item = await this.#relatedItem(
+      project.orgId,
+      project.factoryProjectId,
+      repositoryId,
+      repositoryName,
+      issueNumber,
+      undefined,
+      undefined,
+      null,
+    );
+    if (!item || item.externalSource?.type !== 'issue') return { status: 'ignored' };
+    const assignees = actorLogins(issue?.assignees);
+    if (sameStrings(item.metadata?.assignees, assignees)) return { status: 'ignored' };
+    try {
+      const updated = await this.options.storage.update({
+        orgId: item.orgId,
+        id: item.id,
+        userId: LABEL_ROUTE_USER_ID,
+        patch: { metadata: { ...(item.metadata ?? {}), assignees } },
+        expectedRevision: item.revision,
+      });
+      return { status: updated ? 'committed' : 'ignored' };
+    } catch (error) {
+      // As with labels: the next delivery or reconcile pass carries the same assignees.
+      if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+      return { status: 'ignored' };
+    }
+  }
+
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
     const labelChange = issueLabelChange(parsed);
+    const assigneeChange = issueAssigneeChange(parsed);
     const repository = object(parsed.payload.repository);
     const installationId = number(object(parsed.payload.installation)?.id);
     const repositoryId = number(repository?.id);
@@ -444,7 +492,7 @@ export class GithubRules {
       await this.#handOffPush(parsed, installationId, repositoryId);
       return { status: 'ignored' };
     }
-    if ((!event && !labelChange) || !installationId || !repositoryId || !repositoryName || !login) {
+    if ((!event && !labelChange && !assigneeChange) || !installationId || !repositoryId || !repositoryName || !login) {
       return { status: 'ignored' };
     }
 
@@ -458,7 +506,9 @@ export class GithubRules {
       results.push(
         event
           ? await this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project)
-          : await this.#relocateLabeledIssue(parsed, repositoryId, repositoryName, project),
+          : labelChange
+            ? await this.#relocateLabeledIssue(parsed, repositoryId, repositoryName, project)
+            : await this.#syncIssueAssignees(parsed, repositoryId, repositoryName, project),
       );
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };

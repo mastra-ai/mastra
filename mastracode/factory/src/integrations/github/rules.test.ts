@@ -3401,6 +3401,48 @@ describe('GithubRules label routes', () => {
     (onPullRequest.payload.issue as Record<string, unknown>).pull_request = { url: 'x' };
     await expect(service.ingest(onPullRequest)).resolves.toEqual({ status: 'ignored' });
   });
+
+  function issueAssignees(action: 'assigned' | 'unassigned', assignees: string[], deliveryId = `assignee-${action}`) {
+    const ingress = issueLabels('labeled', [], deliveryId);
+    (ingress.payload as Record<string, unknown>).action = action;
+    (ingress.payload.issue as Record<string, unknown>).assignees = assignees.map(login => ({ login }));
+    return ingress;
+  }
+
+  it.each([
+    { action: 'assigned', before: [], after: ['alice', 'bob'] },
+    { action: 'unassigned', before: ['alice', 'bob'], after: ['bob'] },
+    { action: 'unassigned', before: ['bob'], after: [] },
+  ] as const)(
+    'mirrors $action from $before to $after onto the linked issue card without moving it or proposing runs',
+    async ({ action, before, after }) => {
+      const { service, workItems, project } = await setupRoutes('release');
+      const created = await createLinkedIssue(workItems, project.id);
+      const item = (await workItems.update({
+        orgId: 'org-1',
+        id: created.id,
+        userId: 'user-1',
+        patch: { metadata: { assignees: [...before] } },
+      }))!.item;
+
+      await expect(service.ingest(issueAssignees(action, [...after]))).resolves.toEqual({ status: 'committed' });
+      expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+        board: item.board,
+        stages: ['planning'],
+        metadata: { assignees: [...after] },
+      });
+      expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    },
+  );
+
+  it('ignores assignee changes for issues without a card and on pull requests', async () => {
+    const { service, workItems, project } = await setupRoutes('release');
+    await expect(service.ingest(issueAssignees('assigned', ['alice']))).resolves.toEqual({ status: 'ignored' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    const onPullRequest = issueAssignees('assigned', ['alice'], 'pr-assigned');
+    (onPullRequest.payload.issue as Record<string, unknown>).pull_request = { url: 'x' };
+    await expect(service.ingest(onPullRequest)).resolves.toEqual({ status: 'ignored' });
+  });
 });
 
 describe('polledPullRequestEvent', () => {
