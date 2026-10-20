@@ -39,11 +39,7 @@ export function createMultiBindingKnowledge(storage: MastraCompositeStore = new 
           const scope = JSON.parse(ctx.run.binding)[1] as string;
           const importer = await ctx.importer();
           for (const item of ctx.payload?.items ?? []) {
-            const node = await importer.upsertNode(item.address, {
-              scopes: [importer.scope],
-              name: item.name,
-              scopes: [scope],
-            });
+            const node = await importer.upsertNode(item.address, { name: item.name, scopes: [scope] });
             const existing = new Set((await node.listKnowledge()).map(record => record.id));
             for (const record of item.records) {
               if (!existing.has(record.id)) await node.appendKnowledge(record);

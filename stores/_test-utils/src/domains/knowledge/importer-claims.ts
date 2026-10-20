@@ -17,8 +17,10 @@ interface Item {
   address: string;
   name: string;
   records: Array<{ id: string; text: string }>;
+  /** Address of an imported container scope (under the binding scope) the item also belongs in. */
+  container?: string;
 }
-type Payload = { items: Item[]; removed?: string[] };
+type Payload = { items: Item[]; removed?: string[]; containers?: string[] };
 
 function createKnowledge(storage: MastraCompositeStore) {
   return new Knowledge({
@@ -37,8 +39,12 @@ function createKnowledge(storage: MastraCompositeStore) {
         handler: async (ctx: KnowledgeImporterHandlerContext) => {
           const payload = ctx.payload as Payload | undefined;
           const importer = await ctx.importer();
+          for (const address of payload?.containers ?? []) {
+            await importer.upsertNode(address, { name: address, isScope: true, scopes: [importer.scope] });
+          }
           for (const item of payload?.items ?? []) {
-            const node = await importer.upsertNode(item.address, { name: item.name, scopes: [importer.scope] });
+            const scopes = item.container ? [importer.scope, item.container] : [importer.scope];
+            const node = await importer.upsertNode(item.address, { name: item.name, scopes });
             const existing = new Set((await node.listKnowledge()).map(record => record.id));
             for (const record of item.records) {
               if (!existing.has(record.id)) await node.appendKnowledge(record);
@@ -71,6 +77,7 @@ async function setup(createStore: () => MastraCompositeStore | Promise<MastraCom
     importer: knowledge.getImporter('fireflies')!,
     alpha: (await storage.getScopeAddress('project:alpha'))!.scopeNodeId,
     beta: (await storage.getScopeAddress('project:beta'))!.scopeNodeId,
+    org: (await storage.getScopeAddress('org:acme'))!.scopeNodeId,
   };
 }
 
@@ -136,6 +143,75 @@ export function createKnowledgeImporterMultiBindingTests(
         expect(run.error).toMatch(/changed outside importer/);
       }
       expect((await storage.getNode(nodeId))!.name).toBe('Renamed by a person');
+    });
+
+    it('shows a node in the binding scope and an imported container to project readers only', async () => {
+      const { storage, importer, alpha, beta, org } = await setup(createStore);
+      const run = await importer.run(bindingA, {
+        containers: ['teamspace:eng'],
+        items: [{ ...person, container: 'teamspace:eng' }],
+      });
+      expect(run.error).toBeUndefined();
+      const teamspace = (await storage.getNodeAddress({ source, address: 'teamspace:eng' }))!.nodeId;
+      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
+      expect(sorted(await storage.getNodeScopeIds(nodeId))).toEqual(sorted([alpha, teamspace]));
+      expect(await storage.getNodeScopeIds(teamspace)).toEqual([alpha]);
+
+      // A project reader holds the project and its parent chain; it sees the node through the binding scope.
+      const projectReader = [alpha, org];
+      expect((await storage.listNodes({ scopeIds: projectReader })).map(node => node.id)).toContain(nodeId);
+      const visible = await storage.listRecords({ node: nodeId, scopeIds: projectReader });
+      expect(visible.records.map(record => record.id)).toEqual(['rec-shane-1']);
+
+      // A reader holding only an unrelated scope sees neither the node nor its records.
+      for (const unrelated of [[beta], [org]]) {
+        const ids = (await storage.listNodes({ scopeIds: unrelated })).map(node => node.id);
+        expect(ids).not.toContain(nodeId);
+        expect(ids).not.toContain(teamspace);
+        expect((await storage.listRecords({ node: nodeId, scopeIds: unrelated })).records).toEqual([]);
+      }
+    });
+
+    it('releases one binding, then the last, without ever deleting a node', async () => {
+      const { knowledge, storage, importer, alpha, beta } = await setup(createStore);
+      const withAlphaNote = { ...person, records: [...person.records, { id: 'rec-alpha-only', text: 'Alpha note' }] };
+      await importer.run(bindingA, { items: [withAlphaNote] });
+      await importer.run(bindingB, { items: [person] });
+      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
+
+      await knowledge.releaseImportBinding({ importerId: 'fireflies', binding: knowledgeImporterBindingKey(bindingA) });
+      expect(await storage.getNode(nodeId)).toMatchObject({ id: nodeId });
+      expect(await storage.getNodeScopeIds(nodeId)).toEqual([beta]);
+      expect(await storage.getRecord({ id: 'rec-alpha-only' })).toBeNull();
+      expect(await storage.getRecordScopeIds('rec-shane-1')).toEqual([beta]);
+      expect((await storage.listRecords({ node: nodeId, scopeIds: [alpha] })).records).toEqual([]);
+      // The remaining binding still owns its data: a replay is a no-op, not an outside edit.
+      expect((await importer.run(bindingB, { items: [person] })).error).toBeUndefined();
+
+      await knowledge.releaseImportBinding({ importerId: 'fireflies', binding: knowledgeImporterBindingKey(bindingB) });
+      expect(await storage.getNode(nodeId)).toMatchObject({ id: nodeId });
+      expect(await storage.getRecord({ id: 'rec-shane-1', includeDeleted: true })).toBeNull();
+      // Only a scope-less marker of the node's version is left, so it contributes no membership.
+      const left = await storage.listImportClaims({ targetType: 'node', targetId: nodeId });
+      expect(left.flatMap(claim => claim.scopeIds)).toEqual([]);
+
+      // Moving the source to a binding that never held it adopts the node instead of failing.
+      expect((await importer.run(bindingA, { items: [person] })).error).toBeUndefined();
+      expect(await storage.getRecordScopeIds('rec-shane-1')).toEqual([alpha]);
+      expect(sorted(await storage.getNodeScopeIds(nodeId))).toContain(alpha);
+    });
+
+    it('still treats an outside edit made after every binding was released as an outside edit', async () => {
+      const { knowledge, storage, importer } = await setup(createStore);
+      await importer.run(bindingA, { items: [person] });
+      await knowledge.releaseImportBinding({ importerId: 'fireflies', binding: knowledgeImporterBindingKey(bindingA) });
+      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
+      const node = (await storage.getNode(nodeId))!;
+      await knowledge.updateNode({ id: nodeId, version: node.version, name: 'Curated by a person' });
+      const run = await importer.run(bindingB, { items: [{ ...person, name: 'Shane (updated)' }] });
+      expect(run.status).toBe('failed');
+      expect(run.error).toMatch(/changed outside importer/);
+      expect((await storage.getNode(nodeId))!.name).toBe('Curated by a person');
     });
 
     it('converges when both bindings import the same items concurrently', async () => {

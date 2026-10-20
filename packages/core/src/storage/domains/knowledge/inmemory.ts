@@ -602,10 +602,17 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         this.#deleteClaim(claim, 'node', claim.targetId);
         if (!node || node.deletedAt) continue;
         const current = this.#nodeScopeIds(node.id);
-        const others = this.#claims('node', node.id).flatMap(other => other.scopeIds);
+        const remaining = this.#claims('node', node.id);
+        const others = remaining.flatMap(other => other.scopeIds);
         const scopeIds = reconcileKnowledgeClaimScopes({ current, previous: claim.scopeIds, next: [], others });
+        // With no sibling left to vouch for the node, a scope-less claim keeps the node's version on record so the
+        // source can adopt it again (a moved or re-added binding) while an outside edit is still detected.
+        const keepsVersion = remaining.every(other => other.source !== claim.source);
         // A node keeps at least one membership; one only this binding held stays rather than orphaning it.
-        if (scopeIds.length === 0 || knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) continue;
+        if (scopeIds.length === 0 || knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) {
+          if (keepsVersion) this.#writeClaim(claim, 'node', node.id, [], node.version);
+          continue;
+        }
         const updated: KnowledgeNode = { ...node, version: node.version + 1, updatedAt: new Date() };
         this.#db.knowledgeNodeKeys.delete(recordKey(node.name, current));
         this.#db.knowledgeNodeKeys.set(recordKey(node.name, scopeIds), node.id);
@@ -615,6 +622,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         this.#enqueue('node', node.id, 'delete', updated.version, current);
         this.#enqueue('node', node.id, 'upsert', updated.version, scopeIds);
         this.#advanceClaims('node', node.id, node.version, updated.version);
+        if (keepsVersion) this.#writeClaim(claim, 'node', node.id, [], updated.version);
       }
     });
   }

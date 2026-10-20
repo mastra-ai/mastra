@@ -409,6 +409,16 @@ export class Knowledge extends MastraBase {
     return (await this.getStorage()).setImportState(input);
   }
 
+  /**
+   * Removes one importer binding's contribution: its claims, the scope memberships only it held and the records
+   * only it claimed. Nodes are never deleted, and a record shared with another binding stays with that binding's
+   * scopes. Use it to retire or move a binding without resetting the importer.
+   */
+  async releaseImportBinding(input: { importerId: string; binding: string }): Promise<void> {
+    this.#assertImporter(input.importerId);
+    await (await this.getStorage()).releaseImportClaims(input);
+  }
+
   async createImportRun(input: CreateKnowledgeImportRunInput) {
     const importer = this.#assertImporter(input.importerId);
     if (input.triggerKind === 'cron' && !importer.triggers.cron) {

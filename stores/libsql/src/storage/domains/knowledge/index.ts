@@ -1614,10 +1614,17 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         const node = await this.#getNode(tx, claim.targetId);
         if (!node) continue;
         const current = await this.#getNodeScopeIds(tx, node.id);
-        const others = (await this.#claims(tx, 'node', node.id)).flatMap(other => other.scopeIds);
+        const remaining = await this.#claims(tx, 'node', node.id);
+        const others = remaining.flatMap(other => other.scopeIds);
         const scopeIds = reconcileKnowledgeClaimScopes({ current, previous: claim.scopeIds, next: [], others });
+        // With no sibling left to vouch for the node, a scope-less claim keeps the node's version on record so the
+        // source can adopt it again (a moved or re-added binding) while an outside edit is still detected.
+        const keepsVersion = remaining.every(other => other.source !== claim.source);
         // A node keeps at least one membership; one only this binding held stays rather than orphaning it.
-        if (scopeIds.length === 0 || knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) continue;
+        if (scopeIds.length === 0 || knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) {
+          if (keepsVersion) await this.#writeClaim(tx, claim, 'node', node.id, [], node.version);
+          continue;
+        }
         const now = new Date();
         await tx.execute({
           sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET version=version+1,updatedAt=? WHERE id=?`,
@@ -1628,6 +1635,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         await this.#outbox(tx, 'node', node.id, 'delete', node.version + 1, current);
         await this.#outbox(tx, 'node', node.id, 'upsert', node.version + 1, scopeIds);
         await this.#advanceClaims(tx, 'node', node.id, node.version, node.version + 1);
+        if (keepsVersion) await this.#writeClaim(tx, claim, 'node', node.id, [], node.version + 1);
       }
     });
   }

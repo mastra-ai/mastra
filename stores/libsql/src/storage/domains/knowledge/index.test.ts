@@ -28,6 +28,7 @@ describe('InMemory canonical parity', () => {
     return (await storage.getStore('knowledge'))!;
   });
   createKnowledgeImportClaimStorageTests(async () => (await new InMemoryStore().getStore('knowledge'))!);
+  createKnowledgeImporterMultiBindingTests(() => new InMemoryStore());
 });
 
 const fixtures: { client: ReturnType<typeof createClient>; path: string }[] = [];
