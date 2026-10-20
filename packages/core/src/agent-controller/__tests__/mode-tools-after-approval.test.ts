@@ -410,5 +410,6 @@ describe('mode-level tools when the mode changes while a tool call is paused', (
     expect(env.executed).toEqual(['lookup']);
     expect(tools).toContain('lookup');
     expect(tools).not.toContain('ops_extra');
+    expect(tools).not.toContain('deploy');
   }, 30_000);
 });
