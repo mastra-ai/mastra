@@ -1,3 +1,4 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -7,10 +8,11 @@ import {
   useDisconnectUserConnection,
   useUserConnections,
 } from '@mastra/playground-ui/domains/connect';
-import { useMemo } from 'react';
+import { PlusIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
-import { AddConnectionSection } from './components/add-connection-section';
-import { ConnectionsList } from './components/connections-list';
+import { AddConnectionDialog } from './components/add-connection-dialog';
+import { ConnectionsTable } from './components/connections-table';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 
@@ -35,10 +37,14 @@ export default function ConnectionsPage() {
   const surface = useConnectSurface();
   const connectionsQuery = useUserConnections({ enabled: surface.data?.status === 'ready' });
   const disconnect = useDisconnectUserConnection();
+  const [addOpen, setAddOpen] = useState(false);
 
   const connections = useMemo(() => connectionsQuery.data ?? [], [connectionsQuery.data]);
   const globalConnections = useMemo(() => connections.filter(c => c.scope === 'global'), [connections]);
   const userConnections = useMemo(() => connections.filter(c => c.scope === 'user'), [connections]);
+  const surfaceData = surface.data;
+  const providers = useMemo(() => (surfaceData?.status === 'ready' ? surfaceData.providers : []), [surfaceData]);
+  const providersById = useMemo(() => new Map(providers.map(provider => [provider.id, provider])), [providers]);
 
   let content: React.ReactNode;
 
@@ -79,21 +85,25 @@ export default function ConnectionsPage() {
     content = (
       <div className="max-w-4xl space-y-8">
         <section aria-label="Your connections" className="space-y-3">
-          <Txt as="h2" variant="subheading">
-            Your connections
-          </Txt>
+          <div className="flex items-center justify-between gap-4">
+            <Txt as="h2" variant="subheading">
+              Your connections
+            </Txt>
+            <Button variant="default" size="sm" onClick={() => setAddOpen(true)}>
+              <PlusIcon /> Add connection
+            </Button>
+          </div>
           {connectionsQuery.isError ? (
             <Txt as="p" variant="body" className="text-destructive-foreground" role="alert">
               {connectionsQuery.error.message}
             </Txt>
-          ) : userConnections.length === 0 && !connectionsQuery.isLoading ? (
-            <Txt as="p" variant="body" tone="muted">
-              You haven't connected any accounts yet.
-            </Txt>
           ) : (
-            <ConnectionsList
+            <ConnectionsTable
               label="Your connections"
               connections={userConnections}
+              providersById={providersById}
+              emptyMessage="You haven't connected any accounts yet."
+              loading={connectionsQuery.isLoading}
               onDisconnect={connectionId => disconnect.mutate({ connectionId })}
               disconnectPendingId={disconnect.isPending ? (disconnect.variables?.connectionId ?? null) : null}
             />
@@ -114,21 +124,18 @@ export default function ConnectionsPage() {
             <Txt as="p" variant="body" className="text-destructive-foreground" role="alert">
               {connectionsQuery.error.message}
             </Txt>
-          ) : globalConnections.length === 0 && !connectionsQuery.isLoading ? (
-            <Txt as="p" variant="body" tone="muted">
-              No global connections are linked to this project.
-            </Txt>
           ) : (
-            <ConnectionsList label="Global connections" connections={globalConnections} />
+            <ConnectionsTable
+              label="Global connections"
+              connections={globalConnections}
+              providersById={providersById}
+              emptyMessage="No global connections are linked to this project."
+              loading={connectionsQuery.isLoading}
+            />
           )}
         </section>
 
-        <section aria-label="Add a connection" className="space-y-3">
-          <Txt as="h2" variant="subheading">
-            Add a connection
-          </Txt>
-          <AddConnectionSection providers={surface.data.providers} />
-        </section>
+        <AddConnectionDialog providers={providers} open={addOpen} onOpenChange={setAddOpen} />
       </div>
     );
   }

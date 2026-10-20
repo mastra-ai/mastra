@@ -203,6 +203,16 @@ export interface UsePendingConnectOptions {
 }
 
 /**
+ * Outcome of the most recently settled flow: `active` when the connection
+ * activated, `failed` for everything else (non-active settle, poll failure,
+ * abandoned popup, poll budget). Cleared when a new flow starts.
+ */
+export interface SettledConnect {
+  provider: string;
+  status: 'active' | 'failed';
+}
+
+/**
  * Drives one add-connection flow end to end: opens the popup synchronously in
  * the click gesture (so popup blockers allow it), creates the connect session,
  * sends the popup through the server's launch gate, and polls the connection
@@ -215,6 +225,7 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
   const session = useCreateConnectSession();
   const resolveLaunchHref = useConnectLaunchHref();
   const [pending, setPending] = useState<PendingConnect | null>(null);
+  const [settled, setSettled] = useState<SettledConnect | null>(null);
   const [connectedProviders, setConnectedProviders] = useState<ReadonlySet<string>>(new Set());
   const popupRef = useRef<Pick<Window, 'closed'> | null>(null);
   const status = useConnectionStatus({ connectionId: pending?.connectionId ?? null });
@@ -229,13 +240,16 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
     if (statusData.status === 'active') {
       setConnectedProviders(previous => (previous.has(provider) ? previous : new Set([...previous, provider])));
     }
+    setSettled({ provider, status: statusData.status === 'active' ? 'active' : 'failed' });
     setPending(null);
   }, [pending, statusData]);
 
   // A failed poll hands the Connect action back instead of leaving it stuck.
   useEffect(() => {
-    if (status.isError) setPending(null);
-  }, [status.isError]);
+    if (!status.isError || !pending) return;
+    setSettled({ provider: pending.provider, status: 'failed' });
+    setPending(null);
+  }, [status.isError, pending]);
 
   // Abandonment: the popup closed without the flow settling (grace period for
   // the trailing webhook) or the poll budget ran out.
@@ -248,7 +262,10 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
       if (popupRef.current?.closed) closedAt ??= Date.now();
       const abandoned = closedAt !== null && Date.now() - closedAt >= popupCloseGraceMs;
       const timedOut = Date.now() - startedAt >= pendingTimeoutMs;
-      if (abandoned || timedOut) setPending(null);
+      if (abandoned || timedOut) {
+        setSettled({ provider: pending.provider, status: 'failed' });
+        setPending(null);
+      }
     }, tickMs);
     return () => window.clearInterval(timer);
   }, [pending, popupCloseGraceMs, pendingTimeoutMs]);
@@ -258,6 +275,7 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
       // Opened synchronously in the click handler so popup blockers allow it.
       const popup = window.open('', 'mastra-connect', 'popup,width=600,height=720');
       popupRef.current = popup;
+      setSettled(null);
       session.mutate(
         { provider: providerId },
         {
@@ -288,6 +306,8 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
   return {
     pending,
     connect,
+    /** Outcome of the most recently settled flow; null while none settled or a flow is in progress. */
+    settled,
     /** Providers whose connection settled `active` during this hook's lifetime. */
     connectedProviders,
     isCreating: session.isPending,
