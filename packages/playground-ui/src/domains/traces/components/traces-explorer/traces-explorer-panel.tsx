@@ -138,7 +138,6 @@ export function TracesExplorerPanel({
       />
       <ScoreDataPanel depth={depth} score={featuredScore} onClose={() => selectScore(null)} />
       <TraceAsItemDialog
-        depth={depth}
         rootSpanId={datasetDialogTarget?.rootSpanId}
         traceId={datasetDialogTarget?.traceId}
         isOpen={!!datasetDialogTarget}
