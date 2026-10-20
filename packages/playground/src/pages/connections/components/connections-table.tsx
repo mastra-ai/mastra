@@ -70,13 +70,16 @@ export function ConnectionsTable({
           </Table.Row>
         ) : (
           connections.map(connection => {
+            // Row metadata first (resolved server-side from the full catalog);
+            // the policy-filtered provider list is only a fallback for older
+            // servers that don't send it.
             const provider = providersById.get(connection.integrationId);
-            const displayName = provider?.displayName ?? connection.integrationId;
+            const displayName = connection.displayName ?? provider?.displayName ?? connection.integrationId;
             return (
               <Table.Row key={connection.id}>
                 <Table.Cell>
                   <span className="flex items-center gap-2">
-                    <ProviderLogo logoUrl={provider?.logoUrl} />
+                    <ProviderLogo logoUrl={connection.logoUrl ?? provider?.logoUrl} />
                     <Txt as="span" variant="body">
                       {displayName}
                     </Txt>

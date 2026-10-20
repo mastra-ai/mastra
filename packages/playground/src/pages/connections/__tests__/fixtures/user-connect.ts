@@ -29,7 +29,12 @@ export const mixedConnectionsResponse: UserConnectionsResponse = {
   connections: [
     {
       id: 'conn-global-1',
+      // Outside providersResponse: display metadata comes from the row itself
+      // (the server resolves it against the full catalog, not the
+      // policy-filtered provider list).
       integrationId: 'notion',
+      displayName: 'Notion',
+      logoUrl: 'https://logos.example.com/notion.svg',
       status: 'active',
       accountLabel: 'Acme workspace',
       scope: 'global',
@@ -37,6 +42,8 @@ export const mixedConnectionsResponse: UserConnectionsResponse = {
     {
       id: 'conn-user-1',
       integrationId: 'linear',
+      displayName: 'Linear',
+      logoUrl: 'https://logos.example.com/linear.svg',
       status: 'active',
       accountLabel: 'you@example.com',
       scope: 'user',

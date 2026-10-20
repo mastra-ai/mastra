@@ -82,7 +82,7 @@ All routes are gated on the caller's resource ID and respond with `Cache-Control
 | Route | Description |
 | - | - |
 | `GET /connect/providers` | The connectable providers (the platform catalog, filtered to the allowlist when one is configured): `{ providers: [{ id, displayName, logoUrl, authType, authFields }] }`. |
-| `GET /connect/connections` | Global connections plus the caller's own: `{ connections: [{ id, integrationId, status, accountLabel, scope }] }` where `scope` is `'global'` or `'user'`. Not filtered to the allowlist — the provider policy gates new connects, not existing connections. |
+| `GET /connect/connections` | Global connections plus the caller's own: `{ connections: [{ id, integrationId, displayName, logoUrl, status, accountLabel, scope }] }` where `scope` is `'global'` or `'user'`. Not filtered to the allowlist — the provider policy gates new connects, not existing connections. `displayName` and `logoUrl` are resolved from the full catalog so rows for providers outside the allowlist still render. |
 | `POST /connect/:provider/sessions` | Creates a connect session owned by the caller: `{ connectionId, integrationId, launchUrl, expiresAt }`. `launchUrl` is a server-relative path to the launch route; neither the provider's authorization URL nor the vendor session token is returned to the browser. Providers outside the allowlist (or unknown to the catalog when no allowlist is configured) return 404. |
 | `GET /connect/connections/:id/status` | Poll target for a visible (global or own) connection: `{ id, status, scope }`. An invisible connection returns the same 404 as an unknown ID. |
 | `DELETE /connect/connections/:id` | Disconnects the caller's own connection (204). Global connections return 403. |
