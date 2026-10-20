@@ -40,7 +40,7 @@ const TITLE_LENGTH = 120;
 export const FACTORY_TOOLS_OWNER_ID = `factory-tools:${globalThis.crypto.randomUUID()}`;
 
 export interface FactorySessionToolDependencies {
-  sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'getSourceControlBySessionId' | 'listByOrigin'>;
+  sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'getSourceControlBySessionId'>;
   sessionModel: {
     projects: FactoryProjectsStorage;
     modelDefaults: ModelDefaultsStorage;
@@ -77,14 +77,6 @@ export interface FactorySessionToolDependencies {
 }
 
 const LISTED_MODELS = 8;
-
-/**
- * How many of its side sessions may be running when a turn nobody signed in
- * started (a notification wake, a webhook) starts another. Those turns carry
- * other people's text, so this caps how many sandboxes a prompt injection keeps
- * busy at once. Side sessions that went idle don't count, so it is not a total.
- */
-export const UNATTENDED_SIDE_SESSION_LIMIT = 10;
 
 function ambiguousRepository(candidates: readonly string[]): string {
   return `This item has several repositories (${candidates.join(', ')}); v1 can't choose one.`;
@@ -247,19 +239,6 @@ export function createFactorySessionTools(
       if (!parent || !sourceControl) throw new Error('This session has no Factory session row to start from.');
       const messaging = await deps.messaging();
       if (!messaging) throw new Error('Starting sessions is not available on this server.');
-      if (!scope.interactive) {
-        const sideSessions = await deps.sessions.listByOrigin({ orgId: scope.orgId, originSessionId: scope.sessionId });
-        const running = await Promise.all(
-          sideSessions.map(
-            async row => (await messaging.controller.getSessionByResource(row.sessionId))?.stream.isActive() ?? false,
-          ),
-        );
-        if (running.filter(Boolean).length >= UNATTENDED_SIDE_SESSION_LIMIT) {
-          throw new Error(
-            `${UNATTENDED_SIDE_SESSION_LIMIT} side sessions started here are already running; without a person in this turn, wait for one to finish.`,
-          );
-        }
-      }
 
       const sessionId = globalThis.crypto.randomUUID();
       const ensured = await ensureFactorySourceSession({

@@ -25,7 +25,7 @@ import { createSessionRunEndReporter } from './reports.js';
 import { observeSessionRunReports } from './run-watch.js';
 import { FACTORY_INTERACTIVE_KEY, resolveFactoryToolScope } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
-import { FACTORY_TOOLS_OWNER_ID, UNATTENDED_SIDE_SESSION_LIMIT, createFactorySessionTools } from './session-tools.js';
+import { FACTORY_TOOLS_OWNER_ID, createFactorySessionTools } from './session-tools.js';
 import { createFactoryTools } from './index.js';
 import type { FactoryToolDependencies } from './index.js';
 
@@ -1252,24 +1252,21 @@ describe('session tools on a turn nobody signed in started', () => {
     ).resolves.toMatchObject({ modelId: 'openai/gpt-5.6' });
   });
 
-  it(`starts side sessions until ${UNATTENDED_SIDE_SESSION_LIMIT} it started are running, and another once one stops`, async () => {
+  it('switches its own model', async () => {
     const env = await setup('org', wake);
-    for (let i = 0; i < UNATTENDED_SIDE_SESSION_LIMIT; i++) await env.start({ prompt: `Review PR ${i}.` });
+    const started = (await env.start({ prompt: 'Review PR 1.' })) as { sessionId: string; threadId: string };
+    // The side session, on a woken turn of its own, switching its own model.
+    const self = {
+      ...env.scope,
+      sessionId: started.sessionId,
+      resourceId: started.sessionId,
+      threadId: started.threadId,
+    };
 
-    await expect(env.start({ prompt: 'One more.' })).rejects.toThrow(
-      `${UNATTENDED_SIDE_SESSION_LIMIT} side sessions started here are already running`,
-    );
-    expect(env.created).toHaveLength(UNATTENDED_SIDE_SESSION_LIMIT);
-
-    vi.mocked(env.created[0]!.session.stream.isActive).mockReturnValue(false);
-    await expect(env.start({ prompt: 'One more.' })).resolves.toMatchObject({ sessionId: expect.any(String) });
-    expect(env.created).toHaveLength(UNATTENDED_SIDE_SESSION_LIMIT + 1);
-  });
-
-  it('does not cap side sessions a person starts', async () => {
-    const env = await setup();
-    for (let i = 0; i <= UNATTENDED_SIDE_SESSION_LIMIT; i++) await env.start({ prompt: `Review PR ${i}.` });
-    expect(env.created).toHaveLength(UNATTENDED_SIDE_SESSION_LIMIT + 1);
+    await expect(
+      env.toolsFor(self).switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' }),
+    ).resolves.toMatchObject({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' });
+    expect(env.created[0]!.session.model.switch).toHaveBeenCalledWith('openai/gpt-5.6');
   });
 
   it('refuses to seat a role on a work item, which records a run as the person', async () => {
