@@ -369,7 +369,25 @@ export const useChat = ({
   const [subscriptionHistory, setSubscriptionHistory] = useState<
     { key: string; messages: MastraDBMessage[] } | undefined
   >(undefined);
+  // `hasMore` from the initial `thread-history` chunk, keyed by the subscription
+  // that delivered it so a stale page never describes a different thread or config.
+  const [subscriptionPagination, setSubscriptionPagination] = useState<
+    { key: string; pagination: { hasMore: boolean } } | undefined
+  >(undefined);
   const historyKey = `${agentId}:${resourceId ?? ''}:${threadId ?? ''}`;
+  const historyConfigKey = !withInitialHistory
+    ? ''
+    : withInitialHistory === true
+      ? 'history'
+      : `history:${withInitialHistory.perPage ?? ''}`;
+  const initialHistoryPagination: { hasMore: boolean } | undefined =
+    withInitialHistory &&
+    !threadSignalsDisabled &&
+    threadId &&
+    subscriptionPagination?.key ===
+      `${agentId}:${resourceId || agentId}:${threadId}:${streamPath ?? ''}:${historyConfigKey}`
+      ? subscriptionPagination.pagination
+      : undefined;
   const hydratedMessages =
     withInitialHistory && subscriptionHistory?.key === historyKey ? subscriptionHistory.messages : initialMessages;
 
@@ -510,6 +528,7 @@ export const useChat = ({
     _threadSubscriptionAbortRef.current = null;
     _threadSubscriptionKeyRef.current = undefined;
     _threadSubscriptionPromiseRef.current = null;
+    setSubscriptionPagination(undefined);
   }, []);
 
   const processStreamChunk = useCallback(
@@ -605,7 +624,7 @@ export const useChat = ({
 
   const ensureThreadSubscription = useCallback(
     async ({ threadId, resourceId }: { threadId: string; resourceId?: string }) => {
-      const subscriptionKey = `${agentId}:${resourceId ?? ''}:${threadId}:${streamPath ?? ''}`;
+      const subscriptionKey = `${agentId}:${resourceId ?? ''}:${threadId}:${streamPath ?? ''}:${historyConfigKey}`;
       if (_threadSubscriptionKeyRef.current === subscriptionKey && _threadSubscriptionPromiseRef.current) {
         await _threadSubscriptionPromiseRef.current;
         return;
@@ -624,6 +643,7 @@ export const useChat = ({
         _threadSubscriptionAbortRef.current = null;
         _threadSubscriptionKeyRef.current = undefined;
         _threadSubscriptionPromiseRef.current = null;
+        setSubscriptionPagination(undefined);
       };
 
       const clientWithAbort = new MastraClient({
@@ -646,6 +666,12 @@ export const useChat = ({
             .processDataStream({
               onChunk: chunk => {
                 if (chunk.type === 'thread-history') {
+                  if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
+                    const { hasMore } = chunk.payload;
+                    setSubscriptionPagination(
+                      typeof hasMore === 'boolean' ? { key: subscriptionKey, pagination: { hasMore } } : undefined,
+                    );
+                  }
                   // Merge history into `messages` now, as a queued update, so the
                   // live chunks right behind it accumulate onto the stored parts.
                   const history = resolveInitialMessages(chunk.payload.messages);
@@ -699,6 +725,7 @@ export const useChat = ({
       agentId,
       baseClient,
       closeThreadSubscription,
+      historyConfigKey,
       markThreadSignalsUnsupported,
       processStreamChunk,
       streamPath,
@@ -1447,6 +1474,13 @@ export const useChat = ({
     activeRunId: isRunning || isAwaitingToolApproval ? _currentRunId.current : undefined,
     isAwaitingToolApproval,
     messages,
+    /**
+     * Pagination of the initial `thread-history` page from `withInitialHistory`:
+     * `hasMore: true` when older messages exist, `false` when the page reached the
+     * start of the thread, and `undefined` while history is disabled, pending, or
+     * the subscription for the current agent/resource/thread/config has ended.
+     */
+    initialHistoryPagination,
     tasks,
     approveToolCall,
     declineToolCall,

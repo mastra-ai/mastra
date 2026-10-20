@@ -406,6 +406,176 @@ describe('useChat forwards clientTools', () => {
     unmount();
   });
 
+  describe('initialHistoryPagination (#26522)', () => {
+    const historyChunk = (hasMore: boolean, messages: MastraDBMessage[] = []) => ({
+      type: 'thread-history',
+      runId: '',
+      from: 'AGENT',
+      payload: { hasMore, messages },
+    });
+    const storedMessage = (id: string, threadId = 'thread-1'): MastraDBMessage => ({
+      id,
+      role: 'user',
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      threadId,
+      resourceId: 'resource-1',
+      content: { format: 2, parts: [{ type: 'text', text: id }] },
+    });
+    type Props = {
+      agentId?: string;
+      resourceId?: string;
+      threadId?: string;
+      enableThreadSignals?: boolean;
+      withInitialHistory?: boolean | { perPage?: number };
+    };
+    const renderChat = (initialProps: Props) =>
+      renderHook(
+        (props: Props) =>
+          useChat({
+            agentId: props.agentId ?? 'test-agent',
+            resourceId: 'resourceId' in props ? props.resourceId : 'resource-1',
+            threadId: 'threadId' in props ? props.threadId : 'thread-1',
+            enableThreadSignals: props.enableThreadSignals ?? true,
+            withInitialHistory: props.withInitialHistory,
+          }),
+        { wrapper, initialProps },
+      );
+
+    beforeEach(() => {
+      keepSubscriptionOpen = true;
+    });
+
+    it('reports hasMore: true from an empty history page', async () => {
+      nextSubscribeChunks = [historyChunk(true)];
+      const { result, unmount } = renderChat({ withInitialHistory: { perPage: 20 } });
+
+      await waitFor(() => expect(result.current.initialHistoryPagination).toEqual({ hasMore: true }));
+      expect(result.current.messages).toEqual([]);
+      unmount();
+    });
+
+    it('reports hasMore: false from an empty history page', async () => {
+      nextSubscribeChunks = [historyChunk(false)];
+      const { result, unmount } = renderChat({ withInitialHistory: true });
+
+      await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(result.current.initialHistoryPagination).toEqual({ hasMore: false }));
+      unmount();
+    });
+
+    it('stays undefined while the history page is pending', async () => {
+      nextSubscribeChunks = [];
+      const { result, unmount } = renderChat({ withInitialHistory: { perPage: 20 } });
+
+      await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+      await act(async () => {});
+      expect(result.current.initialHistoryPagination).toBeUndefined();
+      unmount();
+    });
+
+    it('stays undefined when initial history or thread signals are disabled', async () => {
+      nextSubscribeChunks = [historyChunk(true)];
+      const withoutHistory = renderChat({});
+      await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+      await act(async () => {});
+      expect(withoutHistory.result.current.initialHistoryPagination).toBeUndefined();
+      withoutHistory.unmount();
+
+      const withoutSignals = renderChat({ enableThreadSignals: false, withInitialHistory: true });
+      await act(async () => {});
+      expect(subscribeToThreadMock).toHaveBeenCalledTimes(1);
+      expect(withoutSignals.result.current.initialHistoryPagination).toBeUndefined();
+      withoutSignals.unmount();
+    });
+
+    it('uses the agent id as the default resource id', async () => {
+      nextSubscribeChunks = [historyChunk(true)];
+      const { result, unmount } = renderChat({ resourceId: undefined, withInitialHistory: true });
+
+      await waitFor(() => expect(result.current.initialHistoryPagination).toEqual({ hasMore: true }));
+      expect(subscribeToThreadMock).toHaveBeenCalledWith(expect.objectContaining({ resourceId: 'test-agent' }));
+      unmount();
+    });
+
+    it.each<[string, Props]>([
+      ['thread', { threadId: 'thread-2' }],
+      ['resource', { resourceId: 'resource-2' }],
+      ['agent', { agentId: 'other-agent' }],
+      ['history config', { withInitialHistory: { perPage: 50 } }],
+    ])('clears on a %s change and repopulates from the fresh history page', async (_label, change) => {
+      const initialProps: Props = { withInitialHistory: { perPage: 20 } };
+      nextSubscribeChunks = [historyChunk(true, [storedMessage('stored-1')])];
+      const { result, rerender, unmount } = renderChat(initialProps);
+      await waitFor(() => expect(result.current.initialHistoryPagination).toEqual({ hasMore: true }));
+
+      // The next subscription stays pending, so nothing may describe the new scope yet.
+      nextSubscribeChunks = [];
+      rerender({ ...initialProps, ...change });
+      await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(2));
+      await act(async () => {});
+      expect(result.current.initialHistoryPagination).toBeUndefined();
+
+      // Returning to the original scope must not resurrect its old page either.
+      rerender(initialProps);
+      await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(3));
+      await act(async () => {});
+      expect(result.current.initialHistoryPagination).toBeUndefined();
+
+      nextSubscribeChunks = [historyChunk(false)];
+      rerender({ ...initialProps, ...change });
+      await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(4));
+      await waitFor(() => expect(result.current.initialHistoryPagination).toEqual({ hasMore: false }));
+      unmount();
+    });
+
+    it('clears when the subscription ends', async () => {
+      keepSubscriptionOpen = false;
+      nextSubscribeChunks = [historyChunk(true, [storedMessage('stored-1')])];
+      const { result, unmount } = renderChat({ withInitialHistory: true });
+
+      await waitFor(() => expect(result.current.messages.map(message => message.id)).toEqual(['stored-1']));
+      await waitFor(() => expect(result.current.initialHistoryPagination).toBeUndefined());
+      unmount();
+    });
+
+    it('is not affected by live chunks or manual setMessages calls', async () => {
+      nextSubscribeChunks = [
+        historyChunk(true, [storedMessage('stored-1')]),
+        { type: 'start', runId: 'run-live', from: 'AGENT', payload: { messageId: 'live-1' } },
+        { type: 'text-delta', runId: 'run-live', from: 'AGENT', payload: { id: 't1', text: 'live' } },
+      ];
+      const { result, unmount } = renderChat({ withInitialHistory: true });
+
+      await waitFor(() => expect(result.current.messages.map(message => message.id)).toContain('live-1'));
+      const pagination = result.current.initialHistoryPagination;
+      expect(pagination).toEqual({ hasMore: true });
+
+      act(() => result.current.setMessages([]));
+      expect(result.current.initialHistoryPagination).toBe(pagination);
+      unmount();
+    });
+
+    it('stays undefined when the history page omits hasMore', async () => {
+      nextSubscribeChunks = [{ type: 'thread-history', runId: '', from: 'AGENT', payload: { messages: [] } }];
+      const { result, unmount } = renderChat({ withInitialHistory: true });
+
+      await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+      await act(async () => {});
+      expect(result.current.initialHistoryPagination).toBeUndefined();
+      unmount();
+    });
+
+    it('clears when thread signals are turned off', async () => {
+      nextSubscribeChunks = [historyChunk(true)];
+      const { result, rerender, unmount } = renderChat({ withInitialHistory: true });
+      await waitFor(() => expect(result.current.initialHistoryPagination).toEqual({ hasMore: true }));
+
+      rerender({ withInitialHistory: true, enableThreadSignals: false });
+      expect(result.current.initialHistoryPagination).toBeUndefined();
+      unmount();
+    });
+  });
+
   it('applies a tool result that arrives right behind thread-history to the stored tool call', async () => {
     keepSubscriptionOpen = true;
     nextSubscribeChunks = [
