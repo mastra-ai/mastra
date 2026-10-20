@@ -209,6 +209,20 @@ describe('DepsService custom pnpm workspace settings', () => {
     });
   });
 
+  it('keeps the copied source setting when an explicit setting is undefined', async () => {
+    // JS configs aren't type-checked by `mastra build`, so `isCI ? 0 : undefined` can reach the deployer.
+    const pnpmWorkspaceSettings = { minimumReleaseAge: undefined, blockExoticSubdeps: false } as unknown as Record<
+      string,
+      boolean
+    >;
+    await new DepsService(sourceRoot).install({ dir: outputDir, pnpmWorkspaceSettings });
+    expect(parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'))).toEqual({
+      packages: ['.'],
+      minimumReleaseAge: 1440,
+      blockExoticSubdeps: false,
+    });
+  });
+
   it('preserves existing behavior when custom settings are omitted', async () => {
     await new DepsService(sourceRoot).install({ dir: outputDir });
     expect(parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'))).toEqual({

@@ -201,7 +201,9 @@ const PNPM_EXPLICIT_SETTING_KEYS = new Set(
 );
 
 function serializePnpmWorkspaceSettings(settings: BundlerConfig['pnpmWorkspaceSettings']) {
-  return Object.entries(settings ?? {}).map(([key, value]) => {
+  // Untyped JS configs can pass undefined; treat it as omitted so the copied source setting survives.
+  const definedSettings = Object.entries(settings ?? {}).filter(([, value]) => value !== undefined);
+  return definedSettings.map(([key, value]) => {
     if (!PNPM_EXPLICIT_SETTING_KEYS.has(key)) {
       throw new MastraError({
         id: 'DEPLOYER_INVALID_PNPM_WORKSPACE_SETTING',
@@ -333,7 +335,7 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
 
     if (
       !PNPM_CONFIG_KEYS_TO_COPY.has(key) ||
-      Object.hasOwn(options.pnpmWorkspaceSettings ?? {}, key) ||
+      options.pnpmWorkspaceSettings?.[key] !== undefined ||
       (key === 'supportedArchitectures' && hasArchitecture)
     ) {
       continue;
