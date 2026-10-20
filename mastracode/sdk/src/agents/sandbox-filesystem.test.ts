@@ -1,3 +1,5 @@
+import type { WorkspaceFilesystem } from '@mastra/core/workspace';
+import { FileNotFoundError } from '@mastra/core/workspace';
 import { describe, expect, it } from 'vitest';
 import { SandboxFilesystem } from './sandbox-filesystem.js';
 import type { SandboxCommandResult, SandboxExec } from './sandbox-filesystem.js';
@@ -855,5 +857,199 @@ describe('SandboxFilesystem.grep', () => {
     });
 
     expect(results.flatMap(r => r.matches)).toHaveLength(2);
+  });
+});
+
+describe('with a native sandbox filesystem', () => {
+  /** Records native calls; returns plausible results. */
+  function makeNative() {
+    const calls: Array<[string, ...unknown[]]> = [];
+    const record =
+      <T>(name: string, result: (...args: any[]) => T) =>
+      async (...args: unknown[]) => {
+        calls.push([name, ...args]);
+        return result(...args);
+      };
+    const native = {
+      id: 'native',
+      name: 'native',
+      provider: 'test',
+      status: 'ready',
+      readFile: record('readFile', () => Buffer.from('hello')),
+      writeFile: record('writeFile', () => undefined),
+      appendFile: record('appendFile', () => undefined),
+      deleteFile: record('deleteFile', () => undefined),
+      copyFile: record('copyFile', () => undefined),
+      moveFile: record('moveFile', () => undefined),
+      mkdir: record('mkdir', () => undefined),
+      rmdir: record('rmdir', () => undefined),
+      readdir: record('readdir', () => [{ name: 'a.ts', type: 'file' }]),
+      exists: record('exists', () => true),
+      stat: record('stat', (abs: string) => ({
+        name: abs.split('/').pop(),
+        path: abs,
+        type: 'file',
+        size: 5,
+        createdAt: new Date(0),
+        modifiedAt: new Date(0),
+      })),
+    } as unknown as WorkspaceFilesystem;
+    return { native, calls };
+  }
+
+  function makeNativeFs(
+    options: { verifySymlinks?: boolean; responder?: (script: string) => SandboxCommandResult } = {},
+  ) {
+    const { native, calls } = makeNative();
+    const sandbox = new FakeSandbox(
+      options.responder ??
+        (script => (isContainmentCheck(script) ? realpathResult(WORKDIR) : { exitCode: 0, stdout: '', stderr: '' })),
+    );
+    Object.assign(sandbox, { filesystem: native });
+    const fs = new SandboxFilesystem({ sandbox, workdir: WORKDIR, verifySymlinks: options.verifySymlinks });
+    return { sandbox, fs, calls };
+  }
+
+  it('runs single-entry operations natively with no shell commands', async () => {
+    const { sandbox, fs, calls } = makeNativeFs();
+    expect(await fs.readFile('/src/a.ts', { encoding: 'utf-8' })).toEqual(Buffer.from('hello'));
+    await fs.writeFile('/src/a.ts', 'x');
+    await fs.stat('/src/a.ts');
+    await fs.exists('/src/a.ts');
+    await fs.readdir('/src', { recursive: true });
+    await fs.mkdir('/src/new');
+    await fs.deleteFile('/src/a.ts', { force: true });
+    await fs.rmdir('/src/new', { recursive: true });
+    expect(sandbox.calls).toEqual([]);
+    expect(calls).toEqual([
+      ['readFile', `${WORKDIR}/src/a.ts`, { encoding: 'utf-8' }],
+      ['writeFile', `${WORKDIR}/src/a.ts`, 'x', undefined],
+      ['stat', `${WORKDIR}/src/a.ts`],
+      ['exists', `${WORKDIR}/src/a.ts`],
+      ['readdir', `${WORKDIR}/src`, { recursive: true }],
+      ['mkdir', `${WORKDIR}/src/new`, undefined],
+      ['deleteFile', `${WORKDIR}/src/a.ts`, { force: true }],
+      ['rmdir', `${WORKDIR}/src/new`, { recursive: true }],
+    ]);
+  });
+
+  it('runs appends, copies, moves and no-overwrite writes natively too', async () => {
+    const { sandbox, fs, calls } = makeNativeFs();
+    await fs.appendFile('/log.txt', 'x');
+    await fs.copyFile('/a.ts', '/b.ts', { recursive: true });
+    await fs.moveFile('/a.ts', '/c.ts', { overwrite: false });
+    await fs.writeFile('/new.ts', 'x', { overwrite: false });
+    expect(sandbox.calls).toEqual([]);
+    expect(calls).toEqual([
+      ['appendFile', `${WORKDIR}/log.txt`, 'x'],
+      ['copyFile', `${WORKDIR}/a.ts`, `${WORKDIR}/b.ts`, { recursive: true }],
+      ['moveFile', `${WORKDIR}/a.ts`, `${WORKDIR}/c.ts`, { overwrite: false }],
+      ['writeFile', `${WORKDIR}/new.ts`, 'x', { overwrite: false }],
+    ]);
+  });
+
+  it('checks both ends of a copy or move for escaping symlinks when asked', async () => {
+    const { fs, calls } = makeNativeFs({
+      verifySymlinks: true,
+      responder: script =>
+        isContainmentCheck(script) && script.includes('/out')
+          ? realpathResult('/etc')
+          : isContainmentCheck(script)
+            ? realpathResult(WORKDIR)
+            : { exitCode: 0, stdout: '', stderr: '' },
+    });
+    await expect(fs.copyFile('/a.ts', '/out/b.ts')).rejects.toThrow(/workspace root/);
+    await expect(fs.moveFile('/out/a.ts', '/b.ts')).rejects.toThrow(/workspace root/);
+    expect(calls).toEqual([]);
+  });
+
+  it('rejects paths that escape the workdir before calling anything', async () => {
+    const { sandbox, fs, calls } = makeNativeFs({ verifySymlinks: true });
+    await expect(fs.readFile('../../etc/passwd')).rejects.toThrow(/escapes workspace root/);
+    await expect(fs.writeFile('/src/../../etc/x', 'x')).rejects.toThrow(/escapes workspace root/);
+    await expect(fs.exists('../outside')).rejects.toThrow(/escapes workspace root/);
+    expect(sandbox.calls).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  it('reports stat paths relative to the workspace', async () => {
+    const { fs } = makeNativeFs();
+    expect(await fs.stat(`${WORKDIR}/src/a.ts`)).toMatchObject({ name: 'a.ts', path: '/src/a.ts', size: 5 });
+  });
+
+  it('passes typed errors through', async () => {
+    const { native } = makeNative();
+    native.readFile = async () => {
+      throw new FileNotFoundError('/workspace/repo/missing');
+    };
+    const sandbox = Object.assign(new FakeSandbox(), { filesystem: native });
+    const fs = new SandboxFilesystem({ sandbox, workdir: WORKDIR });
+    await expect(fs.readFile('/missing')).rejects.toBeInstanceOf(FileNotFoundError);
+  });
+
+  describe('verifySymlinks', () => {
+    it('checks a path once across stat then readFile', async () => {
+      const { sandbox, fs, calls } = makeNativeFs({
+        verifySymlinks: true,
+        responder: () => realpathResult(`${WORKDIR}/src/a.ts`),
+      });
+      await fs.stat('/src/a.ts');
+      await fs.readFile('/src/a.ts');
+      expect(sandbox.calls.filter(isContainmentCheck)).toHaveLength(1);
+      expect(sandbox.calls).toHaveLength(1);
+      expect(calls.map(c => c[0])).toEqual(['stat', 'readFile']);
+    });
+
+    it('rejects a symlink that leads outside the workdir without calling the native filesystem', async () => {
+      const { fs, calls } = makeNativeFs({ verifySymlinks: true, responder: () => realpathResult('/etc/hostname') });
+      await expect(fs.readFile('/escape-link')).rejects.toThrow(/escapes workspace root \(symlink\)/);
+      expect(calls).toEqual([]);
+    });
+
+    it('does not skip shell checks by default', async () => {
+      const { sandbox, fs, calls } = makeNativeFs({ responder: () => realpathResult('/etc/hostname') });
+      expect(await fs.readFile('/escape-link')).toEqual(Buffer.from('hello'));
+      expect(sandbox.calls).toEqual([]);
+      expect(calls).toHaveLength(1);
+    });
+
+    it('rechecks a path that was missing when first checked', async () => {
+      let created = false;
+      const { fs, calls } = makeNativeFs({
+        verifySymlinks: true,
+        responder: () => (created ? realpathResult('/etc/hostname') : { exitCode: 20, stdout: '', stderr: '' }),
+      });
+      await fs.readFile('/later');
+      created = true;
+      await expect(fs.readFile('/later')).rejects.toThrow(/escapes workspace root \(symlink\)/);
+      expect(calls).toHaveLength(1);
+    });
+
+    it("does not let a stat check stand in for a write's parent check", async () => {
+      const { sandbox, fs } = makeNativeFs({
+        verifySymlinks: true,
+        responder: script =>
+          script.includes(`p='${WORKDIR}/src'`) ? realpathResult('/etc') : realpathResult(`${WORKDIR}/src/a.ts`),
+      });
+      await fs.stat('/src/a.ts');
+      await expect(fs.writeFile('/src/a.ts', 'x')).rejects.toThrow(/escapes workspace root \(symlink\)/);
+      expect(sandbox.calls.filter(isContainmentCheck)).toHaveLength(3);
+    });
+
+    it('checks the parent for deleteFile and rmdir, like the shell path', async () => {
+      const { sandbox, fs } = makeNativeFs({ verifySymlinks: true });
+      await fs.deleteFile('/src/a.ts');
+      await fs.rmdir('/src/dir');
+      expect(sandbox.calls.filter(isContainmentCheck).map(c => c.split('\n')[0])).toEqual([
+        `p='${WORKDIR}/src'`,
+        `p='${WORKDIR}/src'`,
+      ]);
+    });
+
+    it('leaves exists unchecked', async () => {
+      const { sandbox, fs } = makeNativeFs({ verifySymlinks: true });
+      await fs.exists('/src/a.ts');
+      expect(sandbox.calls).toEqual([]);
+    });
   });
 });
