@@ -80,6 +80,7 @@ export function serializeModelConfig(model: MastraLanguageModel): SerializableMo
  */
 export function serializeModelListEntry(entry: AgentModelManagerConfig): SerializableModelListEntry {
   const model = entry.model;
+  const settings = serializeModelSettings(entry.modelSettings);
   return {
     id: entry.id,
     config: {
@@ -87,6 +88,7 @@ export function serializeModelListEntry(entry: AgentModelManagerConfig): Seriali
       modelId: model.modelId,
       specificationVersion: model.specificationVersion,
       originalConfig: `${model.provider}/${model.modelId}`,
+      ...(settings ? { settings } : {}),
       providerOptions: entry.providerOptions,
     },
     maxRetries: entry.maxRetries,
