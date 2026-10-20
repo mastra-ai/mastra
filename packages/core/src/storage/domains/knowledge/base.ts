@@ -812,8 +812,8 @@ function knowledgeImportRecordTag(input: { importerId: string; binding: string }
  * separate records; the importer still sees and passes its own id (see {@link knowledgeImporterRecordId}).
  */
 export function knowledgeImportStoredRecordId(input: { importerId: string; binding: string }, id: string): string {
-  const suffix = `~${knowledgeImportRecordTag(input)}`;
-  return id.endsWith(suffix) ? id : `${id}${suffix}`;
+  // Always suffixed, so distinct importer ids never share a stored id, even one that already ends in the suffix.
+  return `${id}~${knowledgeImportRecordTag(input)}`;
 }
 
 /** The importer's own id for a stored record of this binding, or the stored id when it isn't one. */

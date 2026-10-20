@@ -282,10 +282,13 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     if (importer.role !== 'owner') {
       throw new Error(`Knowledge importer ${importer.importerId} requires owner authority to remove knowledge`);
     }
-    // An id that isn't this binding's own still resolves, so removing someone else's record is refused, not ignored.
+    // An id the importer didn't name (generated, or another writer's) still resolves, so removing someone else's
+    // record is refused rather than ignored. A raw id carrying this binding's suffix is a different importer id's
+    // stored record, so it never matches here.
+    const named = await storage.getRecord({ id: knowledgeImportStoredRecordId(claimant, id), includeDeleted: true });
     const record =
-      (await storage.getRecord({ id: knowledgeImportStoredRecordId(claimant, id), includeDeleted: true })) ??
-      (await storage.getRecord({ id, includeDeleted: true }));
+      named ??
+      (knowledgeImporterRecordId(claimant, id) === id ? await storage.getRecord({ id, includeDeleted: true }) : null);
     if (!record) return null;
     const claims = await storage.listImportClaims({ targetType: 'record', targetId: record.id });
     if (

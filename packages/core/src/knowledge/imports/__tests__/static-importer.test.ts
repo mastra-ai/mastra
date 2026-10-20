@@ -369,6 +369,26 @@ describe('static Knowledge importer operations', () => {
         id: stored('event-42-time'),
       });
     });
+
+    it('keeps an importer id that looks like a stored id distinct from the id it resembles', async () => {
+      const { knowledge, operations } = await createFixture('owner');
+      const node = await operations.upsertNode('event:42', { scopes: [operations.scope], name: 'Planning' });
+      const lookalike = stored('item');
+      const plain = await node.appendKnowledge({ id: 'item', text: 'Same text' });
+      const suffixed = await node.appendKnowledge({ id: lookalike, text: 'Same text' });
+
+      expect([plain.id, suffixed.id]).toEqual(['item', lookalike]);
+      expect((await node.listKnowledge()).map(record => record.id).sort()).toEqual(['item', lookalike].sort());
+      expect(await knowledge.getRecord({ id: stored('item') })).toMatchObject({ text: 'Same text' });
+      expect(await knowledge.getRecord({ id: stored(lookalike) })).toMatchObject({ text: 'Same text' });
+
+      // Each id removes only its own record.
+      expect(await node.removeKnowledge(lookalike)).toMatchObject({ id: lookalike });
+      expect((await node.listKnowledge()).map(record => record.id)).toEqual(['item']);
+      expect(await node.removeKnowledge(lookalike)).toBeNull();
+      expect(await node.removeKnowledge('item')).toMatchObject({ id: 'item' });
+      expect(await node.listKnowledge()).toEqual([]);
+    });
   });
 
   describe('node scopes', () => {

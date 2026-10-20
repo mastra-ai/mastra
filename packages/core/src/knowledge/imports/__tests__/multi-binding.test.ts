@@ -161,6 +161,32 @@ export function describeMultiBindingImports(name: string, createStorage: () => M
       }
     });
 
+    it('keeps provider record ids distinct when one ends in the storage suffix (public run)', async () => {
+      const { storage, importer, nodeId } = await setup(createStorage);
+      const lookalike = recordId(bindingA, 'item');
+      const item = {
+        ...person,
+        records: [
+          { id: 'item', text: 'Same text' },
+          { id: lookalike, text: 'Same text' },
+        ],
+      };
+      expect((await importer.run(bindingA, { items: [item] })).error).toBeUndefined();
+      const node = (await nodeId(bindingA, person.address))!;
+      const stored = (
+        await storage.listRecords({ node, scopeIds: [(await storage.getScopeAddress('project:alpha'))!.scopeNodeId] })
+      ).records;
+      expect(stored.map(record => record.id).sort()).toEqual(
+        [recordId(bindingA, 'item'), recordId(bindingA, lookalike)].sort(),
+      );
+
+      // Removing the item drops both of its records and nothing else.
+      expect((await importer.run(bindingA, { items: [], removed: [person.address] })).error).toBeUndefined();
+      for (const id of ['item', lookalike]) {
+        expect(await storage.getRecord({ id: recordId(bindingA, id), includeDeleted: true })).toBeNull();
+      }
+    });
+
     it('recovers when a run is interrupted after its first write', async () => {
       const { storage, importer, beta } = await setup(createStorage);
       await importer.run(bindingA, { items: [person] });
