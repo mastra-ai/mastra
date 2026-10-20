@@ -195,74 +195,65 @@ describeForAllEngines('Processor tripwire retry, metadata and retry budget', eng
 
   // Technical: across tool steps and two retries, every request extends the previous one
   // (prompt-cache friendly) and the feedback is the verbatim system-reminder as the last message.
-  //
-  // Engine gap (durable, evented): on the second retry the request drops the first tool call
-  // and its result (call `a`), so request 5 no longer extends request 4 and the provider prompt
-  // cache misses (#27561). Deterministic, so it.fails until the durable retry path keeps earlier steps.
-  const DROPS_EARLY_TOOL_TURN_ON_SECOND_RETRY = engine === 'durable' || engine === 'evented';
-  (DROPS_EARLY_TOOL_TURN_ON_SECOND_RETRY ? it.fails : it)(
-    'retries only append to the prompt, so every request extends the previous one',
-    async () => {
-      const lookup = createTool({
-        id: 'lookup',
-        description: 'Look up a value',
-        inputSchema: z.object({ key: z.string() }),
-        execute: async ({ key }) => ({ value: key }),
-      });
-      const qualityChecker: OutputProcessor = {
-        id: 'quality-checker',
-        processOutputStep: async ({ text, abort, retryCount, messageList }) => {
-          if (retryCount === 0 && text?.includes('bad response')) {
-            abort('Response quality too low, please improve', { retry: true });
-          }
-          return messageList;
-        },
-      };
+  it('retries only append to the prompt, so every request extends the previous one', async () => {
+    const lookup = createTool({
+      id: 'lookup',
+      description: 'Look up a value',
+      inputSchema: z.object({ key: z.string() }),
+      execute: async ({ key }) => ({ value: key }),
+    });
+    const qualityChecker: OutputProcessor = {
+      id: 'quality-checker',
+      processOutputStep: async ({ text, abort, retryCount, messageList }) => {
+        if (retryCount === 0 && text?.includes('bad response')) {
+          abort('Response quality too low, please improve', { retry: true });
+        }
+        return messageList;
+      },
+    };
 
-      const { output, requests } = await runLoopScenario({
-        engine,
-        llm: getMock(),
-        prompt: 'Hello',
-        tools: { lookup },
-        maxSteps: 10,
-        maxProcessorRetries: 3,
-        outputProcessors: [qualityChecker],
-        fixtures: llm => {
-          llm.on(
-            { endpoint: 'chat', sequenceIndex: 0 },
-            { toolCalls: [{ id: 'a', name: 'lookup', arguments: { key: 'a' } }] },
-          );
-          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'bad response' });
-          llm.on(
-            { endpoint: 'chat', sequenceIndex: 2 },
-            { toolCalls: [{ id: 'b', name: 'lookup', arguments: { key: 'b' } }] },
-          );
-          llm.on({ endpoint: 'chat', sequenceIndex: 3 }, { content: 'bad response' });
-          llm.on({ endpoint: 'chat', sequenceIndex: 4 }, { content: 'good response' });
-        },
-      });
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Hello',
+      tools: { lookup },
+      maxSteps: 10,
+      maxProcessorRetries: 3,
+      outputProcessors: [qualityChecker],
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', sequenceIndex: 0 },
+          { toolCalls: [{ id: 'a', name: 'lookup', arguments: { key: 'a' } }] },
+        );
+        llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'bad response' });
+        llm.on(
+          { endpoint: 'chat', sequenceIndex: 2 },
+          { toolCalls: [{ id: 'b', name: 'lookup', arguments: { key: 'b' } }] },
+        );
+        llm.on({ endpoint: 'chat', sequenceIndex: 3 }, { content: 'bad response' });
+        llm.on({ endpoint: 'chat', sequenceIndex: 4 }, { content: 'good response' });
+      },
+    });
 
-      expect(await output.text).toBe('good response');
-      expect(requests).toHaveLength(5);
-      const prompts = requests.map(messagesOf);
+    expect(await output.text).toBe('good response');
+    expect(requests).toHaveLength(5);
+    const prompts = requests.map(messagesOf);
 
-      const feedback = '<system-reminder>Response quality too low, please improve</system-reminder>';
-      const feedbackCount = (prompt: WireMessage[]) =>
-        prompt.filter(m => m.role === 'user' && textOf(m).includes(feedback)).length;
-      expect(feedbackCount(prompts[2]!)).toBe(1);
-      expect(feedbackCount(prompts[4]!)).toBe(2);
-      expect(prompts[2]!.at(-1)!.role).toBe('user');
-      expect(textOf(prompts[2]!.at(-1)!)).toContain(feedback);
-      expect(prompts[4]!.at(-1)!.role).toBe('user');
-      expect(textOf(prompts[4]!.at(-1)!)).toContain(feedback);
+    const feedback = '<system-reminder>Response quality too low, please improve</system-reminder>';
+    const feedbackCount = (prompt: WireMessage[]) =>
+      prompt.filter(m => m.role === 'user' && textOf(m).includes(feedback)).length;
+    expect(feedbackCount(prompts[2]!)).toBe(1);
+    expect(feedbackCount(prompts[4]!)).toBe(2);
+    expect(prompts[2]!.at(-1)!.role).toBe('user');
+    expect(textOf(prompts[2]!.at(-1)!)).toContain(feedback);
+    expect(prompts[4]!.at(-1)!.role).toBe('user');
+    expect(textOf(prompts[4]!.at(-1)!)).toContain(feedback);
 
-      // Gap-hitting assertion last: see DROPS_EARLY_TOOL_TURN_ON_SECOND_RETRY.
-      for (let i = 1; i < prompts.length; i++) {
-        expect(prompts[i]!.filter(m => m.role === 'system')).toHaveLength(1);
-        expect(prompts[i]!.slice(0, prompts[i - 1]!.length)).toEqual(prompts[i - 1]);
-      }
-    },
-  );
+    for (let i = 1; i < prompts.length; i++) {
+      expect(prompts[i]!.filter(m => m.role === 'system')).toHaveLength(1);
+      expect(prompts[i]!.slice(0, prompts[i - 1]!.length)).toEqual(prompts[i - 1]);
+    }
+  });
 
   // Technical: each retry increments retryCount; the processor sees 0, 1, 2 across three calls.
   it('retryCount increments on each retry until the processor accepts', async () => {

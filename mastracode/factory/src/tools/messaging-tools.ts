@@ -43,6 +43,7 @@ export interface FactoryMessagingToolDependencies {
     WorkItemsStorage,
     | 'findActiveRunBindingForSession'
     | 'getForProject'
+    | 'hasRunBindingForSession'
     | 'listSessionSubscriptions'
     | 'listRunBindings'
     | 'listWorkItemSubscribers'
@@ -149,6 +150,7 @@ export function createFactoryMessagingTools(
       'Send a message to another session in this Factory: a work item role session, or a teammate session you can see.',
       'Replies come back to this session as `factory-session` notifications with kind `reply` and an `in-reply-to` attribute naming your message.',
       'Priority `medium` (default) wakes an idle session and waits for a busy one to finish its step; use `urgent` only to make it stop and change course.',
+      '`delivered` is `woken` when the session was idle and is now running, `mid-run` when it was already busy and will read the message when its run next checks in.',
       ...(scope.interactive
         ? []
         : ['On this turn you can only message your side sessions and sessions working on items this session follows.']),
@@ -188,6 +190,7 @@ export function createFactoryMessagingTools(
       const result = await deliverFactorySessionNotification({
         controller: messaging.controller,
         sessions: deps.sessions,
+        runs: deps.workItems,
         target: { sessionId, threadId },
         notification: {
           kind: 'message',
@@ -271,6 +274,7 @@ export function createFactoryMessagingTools(
       const result = await deliverFactorySessionNotification({
         controller: messaging.controller,
         sessions: deps.sessions,
+        runs: deps.workItems,
         target: { sessionId: fromSession, threadId: fromThread },
         notification: {
           kind: 'reply',
@@ -337,6 +341,7 @@ export function createFactoryMessagingTools(
       const result = await deliverFactorySessionNotification({
         controller: messaging.controller,
         sessions: deps.sessions,
+        runs: deps.workItems,
         target: recipient,
         notification,
       });
@@ -373,8 +378,7 @@ export function createFactoryMessagingTools(
           sessions: deps.sessions,
           workItems: deps.workItems,
           notifications: messaging?.notifications ?? null,
-          isRunning: async sessionId =>
-            (await messaging?.controller.getSessionByResource(sessionId))?.stream.isActive() ?? false,
+          isRunning: async sessionId => (await messaging?.controller.getSession(sessionId))?.stream.isActive() ?? false,
           model: messaging
             ? sessionId => sessionModel(messaging.controller, deps.sessions, deps.workItems, sessionId)
             : undefined,

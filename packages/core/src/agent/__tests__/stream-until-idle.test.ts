@@ -1150,6 +1150,99 @@ describe('Agent.streamUntilIdle', () => {
     expect(elapsed).toBeLessThan(2_000);
   });
 
+  describe('backgroundTasks.untilIdleMaxIdleMs manager default', () => {
+    const publishRunning = (m: Mastra, agentId: string, threadId: string, taskId: string) =>
+      (m.backgroundTaskManager as any).publishLifecycleEvent('task.running', {
+        id: taskId,
+        toolName: 'dummy',
+        toolCallId: taskId,
+        runId: 'run-1',
+        agentId,
+        threadId,
+        resourceId: 'user-1',
+        status: 'running',
+        result: {},
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 60_000,
+        createdAt: new Date(),
+        args: {},
+      });
+
+    const withManagerDefault = async (untilIdleMaxIdleMs: number, run: (m: Mastra) => Promise<void>) => {
+      const configured = new Mastra({
+        logger: false,
+        storage,
+        backgroundTasks: { enabled: true, untilIdleMaxIdleMs },
+      });
+      await configured.startEventEngine();
+      try {
+        await run(configured);
+      } finally {
+        await configured.backgroundTaskManager?.shutdown();
+        await configured.stopEventEngine();
+      }
+    };
+
+    const drainWithin = (stream: ReadableStream<any>, ms: number) =>
+      Promise.race([
+        drain(stream),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`stream did not close within ${ms}ms`)), ms),
+        ),
+      ]);
+
+    it('applies the manager default when untilIdle: true sets no maxIdleMs', async () => {
+      await withManagerDefault(100, async configured => {
+        const { model } = makeScriptedModel([textResponse('initial')]);
+        const agent = new Agent({
+          id: 'a-mgr-idle',
+          name: 'a-mgr-idle',
+          instructions: 'test',
+          model,
+          memory: new MockMemory(),
+        });
+        configured.addAgent(agent, 'a-mgr-idle');
+
+        const start = Date.now();
+        const result = await agent.stream('hi', {
+          memory: { thread: 'thread-mgr-idle', resource: 'user-1' },
+          untilIdle: true,
+        });
+        await publishRunning(configured, 'a-mgr-idle', 'thread-mgr-idle', 'task-1');
+
+        // With only the hard-coded 5-minute fallback this stream stays open.
+        await drainWithin(result.fullStream as ReadableStream<any>, 2_000);
+        expect(Date.now() - start).toBeGreaterThanOrEqual(90);
+      });
+    });
+
+    it('lets a per-call maxIdleMs override the manager default', async () => {
+      await withManagerDefault(100, async configured => {
+        const { model } = makeScriptedModel([textResponse('initial')]);
+        const agent = new Agent({
+          id: 'a-call-idle',
+          name: 'a-call-idle',
+          instructions: 'test',
+          model,
+          memory: new MockMemory(),
+        });
+        configured.addAgent(agent, 'a-call-idle');
+
+        const start = Date.now();
+        const result = await agent.stream('hi', {
+          memory: { thread: 'thread-call-idle', resource: 'user-1' },
+          untilIdle: { maxIdleMs: 600 },
+        });
+        await publishRunning(configured, 'a-call-idle', 'thread-call-idle', 'task-1');
+
+        // Closing near 100ms would mean the manager default beat the per-call value.
+        await drainWithin(result.fullStream as ReadableStream<any>, 3_000);
+        expect(Date.now() - start).toBeGreaterThanOrEqual(590);
+      });
+    });
+  });
+
   it('re-arms maxIdleMs after a completion arrives mid-turn while another task remains running', async () => {
     let finishInitialTurn!: () => void;
     const initialTurnDone = new Promise<void>(resolve => {

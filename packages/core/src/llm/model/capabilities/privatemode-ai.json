@@ -9,6 +9,7 @@
     "whisper-large-v3"
   ],
   "temperature": [
+    "deepseek-ocr-2",
     "glm-5.3",
     "glm-5.3-flash",
     "glm-flash-latest",
@@ -30,10 +31,15 @@
     "kimi-latest"
   ],
   "reasoning": {
-    "gpt-oss-120b": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-k2.6": [
+      {
+        "type": "toggle"
       }
     ],
     "glm-flash-latest": [
@@ -48,10 +54,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3-flash": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "kimi-latest": [
@@ -63,11 +69,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "kimi-k2.6": [
-      {
-        "type": "toggle"
       }
     ]
   }

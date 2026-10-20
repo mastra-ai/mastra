@@ -64,6 +64,7 @@ export interface FactorySessionToolDependencies {
     | 'listRunBindings'
     | 'findActiveRunBindingForSession'
     | 'findRunBindingByThread'
+    | 'hasRunBindingForSession'
     | 'subscribeToWorkItem'
     | 'unsubscribeFromWorkItem'
     | 'listSessionSubscriptions'
@@ -110,6 +111,7 @@ export function createFactorySessionTools(
     controller: FactoryMessaging['controller'],
     sessionId: string,
     threadId: string,
+    resourceId: string,
   ): Promise<{ usable: string[]; known: Set<string>; scopeLabel: string }> {
     const models = await controller.listAvailableModels();
     const known = new Set(models.flatMap(model => (typeof model.id === 'string' ? [model.id] : [])));
@@ -120,7 +122,7 @@ export function createFactorySessionTools(
     }
     const requestContext = new RequestContext();
     requestContext.set('user', { id: scope.userId, organizationId: scope.orgId });
-    requestContext.set('controller', { resourceId: sessionId, threadId });
+    requestContext.set('controller', { sessionId, resourceId, threadId });
     const policy = await resolveFactoryModelPolicy(requestContext, {
       projects: deps.sessionModel.projects,
       sourceControl: deps.sessions,
@@ -187,7 +189,9 @@ export function createFactorySessionTools(
         sessionId,
       });
       if (!threadId) throw new Error('Session has no conversation thread yet.');
-      const catalog = await sessionModelCatalog(messaging.controller, sessionId, threadId);
+      // The thread's resource, not the session id: sessions share their Factory's or owner's resource.
+      const resourceId = (await messaging.controller.queryThreadById({ threadId }))?.resourceId ?? sessionId;
+      const catalog = await sessionModelCatalog(messaging.controller, sessionId, threadId, resourceId);
       if (!catalog.usable.includes(modelId)) {
         const options = catalog.usable.length
           ? ` Models available to it: ${catalog.usable.slice(0, LISTED_MODELS).join(', ')}${catalog.usable.length > LISTED_MODELS ? ', …' : ''}.`
@@ -198,7 +202,7 @@ export function createFactorySessionTools(
             : `Unknown model ${modelId}.${options}`,
         );
       }
-      const { live } = await messaging.controller.setThreadModel({ resourceId: sessionId, threadId, modelId });
+      const { live } = await messaging.controller.setThreadModel({ resourceId, threadId, modelId });
       return { sessionId, threadId, modelId, live };
     },
   });
@@ -272,7 +276,9 @@ export function createFactorySessionTools(
       const session = await messaging.controller.createSession({
         id: ensured.sessionId,
         ownerId: scope.userId,
-        resourceId: ensured.sessionId,
+        // A side session works for the Factory, so it shares the Factory's memory
+        // resource; a private one stays with its owner, like a Slack DM.
+        resourceId: parent.visibility === 'private' ? scope.userId : scope.factoryProjectId,
         threadId: ensured.sessionId,
         requestContext: kickoffContext,
         tags,
@@ -420,7 +426,7 @@ export function createFactorySessionTools(
         binding.revokedAt >= startedAt,
     );
 
-    const session = await messaging.controller.getSessionByResource(prepared.resourceId);
+    const session = await messaging.controller.getSession(prepared.sessionId);
     if (!session) throw new Error(`The ${role} session was bound but is not running; open it from the board.`);
     const kickoffId = globalThis.crypto.randomUUID();
     // Heartbeat from before the kickoff so a fast run's end is seen; the open-run

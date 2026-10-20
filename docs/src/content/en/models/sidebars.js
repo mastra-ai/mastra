@@ -356,11 +356,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/crof',
-          label: 'CrofAI',
-        },
-        {
-          type: 'doc',
           id: 'providers/crossmodel',
           label: 'CrossModel',
         },

@@ -8,7 +8,7 @@
         "type": "toggle"
       }
     ],
-    "google/gemma-4-31b-it": [
+    "minimaxai/minimax-m3": [
       {
         "type": "toggle"
       }
@@ -22,7 +22,7 @@
         "values": ["high", "max"]
       }
     ],
-    "minimaxai/minimax-m3": [
+    "google/gemma-4-31b-it": [
       {
         "type": "toggle"
       }

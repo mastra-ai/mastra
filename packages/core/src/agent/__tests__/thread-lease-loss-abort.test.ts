@@ -32,6 +32,7 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { createDurableAgent, createEventedAgent } from '../durable';
 import { assembleAgentFromFsEntry } from '../fs-routing';
+import { verifyRunLease } from '../run-lease-fence';
 
 const THREAD = 'lease-loss-thread';
 const RESOURCE = 'lease-loss-user';
@@ -102,6 +103,16 @@ class ReplicaPubSub extends EventEmitterPubSub {
   }
 }
 
+/** A pubsub that can't lease, like google-cloud-pubsub or a custom backend. */
+class NoLeasePubSub extends EventEmitterPubSub {
+  constructor() {
+    super();
+    for (const method of ['acquireLease', 'getLeaseOwner', 'releaseLease', 'renewLease', 'transferLease']) {
+      Object.defineProperty(this, method, { value: undefined });
+    }
+  }
+}
+
 describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
   let llm: LLMock;
 
@@ -118,7 +129,7 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     shared: SharedLeases,
     memory: MockMemory,
     tools: Record<string, any> = {},
-    pubsub = new ReplicaPubSub(shared),
+    pubsub: EventEmitterPubSub = new ReplicaPubSub(shared),
   ) {
     const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
     const config = { model: openai('gpt-4o-mini'), memory, tools };
@@ -340,6 +351,386 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(await oldRun.finishReason).toBe('aborted');
   }, 20_000);
 
+  it('runs no tool once a successor holds the lease, even before the next renewal', async () => {
+    const thread = 'lease-takeover-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    for (let i = 0; i < 100; i++) {
+      llm.on(
+        { userMessage: 'fenced run', sequenceIndex: i },
+        { toolCalls: [{ id: `call_fenced_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    for (let i = 0; i < 6; i++) {
+      llm.on(
+        { userMessage: 'fence handover', sequenceIndex: i },
+        { toolCalls: [{ id: `call_handover_${i}`, name: 'write', arguments: {} }] },
+      );
+    }
+    llm.on({ userMessage: 'fence handover', sequenceIndex: 6 }, { content: 'fence handover done' });
+
+    const shared = new SharedLeases();
+    const memory = new MockMemory();
+    let oldOwner: string | undefined;
+    let ticks = 0;
+    const besideSuccessor: Array<string | undefined> = [];
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        const owner = shared.owner(key);
+        if (oldOwner && owner && owner !== oldOwner) besideSuccessor.push(owner);
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return 'ticked';
+      },
+    });
+    const write = createTool({
+      id: 'write',
+      description: 'Write once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return 'written';
+      },
+    });
+    const oldReplica = replica(shared, memory, { tick });
+    const newReplica = replica(shared, memory, { write });
+
+    const { output: oldRun, drain } = await startStream(oldReplica, 'fenced run', {
+      maxSteps: 100,
+      memory: { thread, resource: RESOURCE },
+    });
+    const oldDone = drain().catch(() => undefined);
+
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+    oldOwner = shared.owner(key);
+    expect(oldOwner).toBeDefined();
+    // Take the thread right after a confirmed renewal, so the next one is a full interval away.
+    const renewals = shared.renewals;
+    await vi.waitFor(() => expect(shared.renewals).toBeGreaterThan(renewals), { timeout: 5_000 });
+    shared.drop(key);
+
+    const { output: successor, drain: drainSuccessor } = await startStream(newReplica, 'fence handover', {
+      maxSteps: 10,
+      memory: { thread, resource: RESOURCE },
+    });
+    await drainSuccessor();
+    expect(await successor.text).toBe('fence handover done');
+    await oldDone;
+
+    expect(besideSuccessor).toEqual([]);
+    expect(await oldRun.finishReason).toBe('aborted');
+  }, 30_000);
+
+  // Durable runs also share process-global registries by run id, so two live runs with one id is not a supported
+  // setup there; this covers the thread-runtime engines, where only the tool fence was shared.
+  it.skipIf(isDurableEngineVariant(engine))(
+    'keeps fencing a run when an earlier run with the same id ends in another replica in the process',
+    async () => {
+      const thread = 'lease-shared-id-thread';
+      const otherThread = 'lease-shared-id-other-thread';
+      const key = [RESOURCE, thread].join('\u0000');
+      const runId = `shared-run-${engine}`;
+      for (let i = 0; i < 100; i++) {
+        llm.on(
+          { userMessage: 'shared id long', sequenceIndex: i },
+          { toolCalls: [{ id: `call_shared_long_${i}`, name: 'tick', arguments: {} }] },
+        );
+      }
+      llm.on(
+        { userMessage: 'shared id short', sequenceIndex: 0 },
+        { toolCalls: [{ id: 'call_shared_hold', name: 'hold', arguments: {} }] },
+      );
+      llm.on({ userMessage: 'shared id short', sequenceIndex: 1 }, { content: 'shared id short done' });
+      for (let i = 0; i < 6; i++) {
+        llm.on(
+          { userMessage: 'shared id handover', sequenceIndex: i },
+          { toolCalls: [{ id: `call_shared_handover_${i}`, name: 'write', arguments: {} }] },
+        );
+      }
+      llm.on({ userMessage: 'shared id handover', sequenceIndex: 6 }, { content: 'shared id handover done' });
+
+      const shared = new SharedLeases();
+      const memory = new MockMemory();
+      let oldOwner: string | undefined;
+      let ticks = 0;
+      const besideSuccessor: Array<string | undefined> = [];
+      const tick = createTool({
+        id: 'tick',
+        description: 'Tick once',
+        inputSchema: z.object({}),
+        execute: async () => {
+          ticks++;
+          const owner = shared.owner(key);
+          if (oldOwner && owner && owner !== oldOwner) besideSuccessor.push(owner);
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return 'ticked';
+        },
+      });
+      const write = createTool({
+        id: 'write',
+        description: 'Write once',
+        inputSchema: z.object({}),
+        execute: async () => {
+          await new Promise(resolve => setTimeout(resolve, 20));
+          return 'written';
+        },
+      });
+      let release!: () => void;
+      const released = new Promise<void>(resolve => (release = resolve));
+      let held = false;
+      const hold = createTool({
+        id: 'hold',
+        description: 'Hold until released',
+        inputSchema: z.object({}),
+        execute: async () => {
+          held = true;
+          await released;
+          return 'held';
+        },
+      });
+      const oldReplica = replica(shared, memory, { tick });
+      const otherReplica = replica(shared, memory, { hold });
+      const newReplica = replica(shared, memory, { write });
+
+      // Another Mastra instance in this process starts a run with the same id on another thread first.
+      const { output: other, drain: drainOther } = await startStream(otherReplica, 'shared id short', {
+        runId,
+        maxSteps: 3,
+        memory: { thread: otherThread, resource: RESOURCE },
+      });
+      const otherDone = drainOther();
+      await vi.waitFor(() => expect(held).toBe(true), { timeout: 5_000 });
+
+      const { output: oldRun, drain } = await startStream(oldReplica, 'shared id long', {
+        runId,
+        maxSteps: 100,
+        memory: { thread, resource: RESOURCE },
+      });
+      const oldDone = drain().catch(() => undefined);
+      await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+
+      // The earlier run ends while the later one is still running.
+      release();
+      await otherDone;
+      expect(await other.text).toBe('shared id short done');
+
+      oldOwner = shared.owner(key);
+      expect(oldOwner).toBe(runId);
+      const renewals = shared.renewals;
+      await vi.waitFor(() => expect(shared.renewals).toBeGreaterThan(renewals), { timeout: 5_000 });
+      shared.drop(key);
+
+      const { output: successor, drain: drainSuccessor } = await startStream(newReplica, 'shared id handover', {
+        maxSteps: 10,
+        memory: { thread, resource: RESOURCE },
+      });
+      await drainSuccessor();
+      expect(await successor.text).toBe('shared id handover done');
+      await oldDone;
+
+      expect(besideSuccessor).toEqual([]);
+      expect(await oldRun.finishReason).toBe('aborted');
+    },
+    30_000,
+  );
+
+  it("runs none of the step's remaining tool calls once one of them finds the lease taken", async () => {
+    const thread = 'lease-queued-calls-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    llm.on(
+      { userMessage: 'queued calls', sequenceIndex: 0 },
+      {
+        toolCalls: Array.from({ length: 8 }, (_, i) => ({ id: `call_queued_${i}`, name: 'step', arguments: { n: i } })),
+      },
+    );
+    llm.on({ userMessage: 'queued calls', sequenceIndex: 1 }, { content: 'queued calls done' });
+
+    const shared = new SharedLeases();
+    let runId: string | undefined;
+    const ran: number[] = [];
+    const step = createTool({
+      id: 'step',
+      description: 'Run one step',
+      inputSchema: z.object({ n: z.number() }),
+      execute: async ({ n }) => {
+        ran.push(n);
+        if (ran.length === 5) {
+          // A successor on another replica takes the thread while the fifth call runs.
+          runId = shared.owner(key);
+          shared.leases.set(key, { owner: 'successor-run', expiresAt: Date.now() + 60_000 });
+        }
+        return 'stepped';
+      },
+    });
+    const agent = replica(shared, new MockMemory(), { step });
+
+    const { output, drain } = await startStream(agent, 'queued calls', {
+      maxSteps: 3,
+      toolCallConcurrency: 1,
+      memory: { thread, resource: RESOURCE },
+    });
+    await drain().catch(() => undefined);
+
+    expect(runId).toBeDefined();
+    expect(ran).toHaveLength(5);
+    expect(await output.finishReason).toBe('aborted');
+    // The ended run leaves no fence behind, so a later run with its id can call tools.
+    await vi.waitFor(() => expect(verifyRunLease(runId)).resolves.toBeUndefined());
+  }, 20_000);
+
+  it('runs no tool once its lease deadline has passed, even if the lease backend errors', async () => {
+    const thread = 'stalled-deadline-thread';
+    for (let i = 0; i < 40; i++) {
+      llm.on(
+        { userMessage: 'stalled deadline', sequenceIndex: i },
+        { toolCalls: [0, 1, 2, 3].map(j => ({ id: `call_stalled_${i}_${j}`, name: 'tick', arguments: {} })) },
+      );
+    }
+    const shared = new SharedLeases();
+    let stall = false;
+    /** The event loop stalls past the lease TTL while an owner check is in flight, then the check errors. */
+    class StallingPubSub extends ReplicaPubSub {
+      override async getLeaseOwner(key: string) {
+        if (!stall || !key.startsWith(`${RESOURCE}\u0000`)) return super.getLeaseOwner(key);
+        const until = Date.now() + 400;
+        while (Date.now() < until) {
+          // stall
+        }
+        throw new Error('lease backend unreachable');
+      }
+    }
+    let ticks = 0;
+    const afterStall: number[] = [];
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        if (stall) afterStall.push(ticks);
+        if (ticks === 3) stall = true;
+        return 'ticked';
+      },
+    });
+
+    const pubsub = new StallingPubSub(shared);
+    const { output, drain } = await startStream(
+      replica(shared, new MockMemory(), { tick }, pubsub),
+      'stalled deadline',
+      {
+        maxSteps: 40,
+        toolCallConcurrency: 1,
+        memory: { thread, resource: RESOURCE },
+      },
+    );
+    await drain().catch(() => undefined);
+
+    expect(afterStall).toEqual([]);
+  }, 30_000);
+  it('leaves no fence for an ended run when a renewal settles after it released its lease', async () => {
+    const runId = `late-renewal-run-${engine}`;
+    for (const prompt of ['late renewal first', 'late renewal second']) {
+      llm.on(
+        { userMessage: prompt, sequenceIndex: 0 },
+        { toolCalls: [{ id: `call_${prompt.replaceAll(' ', '_')}`, name: 'tick', arguments: {} }] },
+      );
+      llm.on({ userMessage: prompt, sequenceIndex: 1 }, { content: `${prompt} done` });
+    }
+    const shared = new SharedLeases();
+    const firstKey = [RESOURCE, 'late-renewal-thread'].join('\u0000');
+    let holdRenewal = false;
+    let settle!: () => void;
+    const settled = new Promise<void>(resolve => (settle = resolve));
+    let onHeld!: () => void;
+    const held = new Promise<void>(resolve => (onHeld = resolve));
+    let onLateSettled!: () => void;
+    const lateSettled = new Promise<void>(resolve => (onLateSettled = resolve));
+    /** Holds one renewal of the first run in flight until the run has ended and released its lease. */
+    class LateRenewalPubSub extends ReplicaPubSub {
+      override async renewLease(key: string, owner: string, ttlMs: number) {
+        if (!holdRenewal || key !== firstKey) return super.renewLease(key, owner, ttlMs);
+        holdRenewal = false;
+        onHeld();
+        await settled;
+        const renewed = await super.renewLease(key, owner, ttlMs);
+        setTimeout(onLateSettled, 20);
+        return renewed;
+      }
+    }
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        if (ticks === 1) {
+          holdRenewal = true;
+          await held;
+        } else {
+          // The first run's renewal finds its lease released and reports it lost while this run with the same id is live.
+          settle();
+          await lateSettled;
+        }
+        return 'ticked';
+      },
+    });
+    const agent = replica(shared, new MockMemory(), { tick }, new LateRenewalPubSub(shared));
+
+    const first = await startStream(agent, 'late renewal first', {
+      runId,
+      maxSteps: 3,
+      memory: { thread: 'late-renewal-thread', resource: RESOURCE },
+    });
+    await first.drain();
+    expect(await first.output.finishReason).not.toBe('aborted');
+    await vi.waitFor(() => expect(shared.owner(firstKey)).toBeUndefined());
+
+    const second = await startStream(agent, 'late renewal second', {
+      runId,
+      maxSteps: 3,
+      memory: { thread: 'late-renewal-next-thread', resource: RESOURCE },
+    });
+    await second.drain();
+    expect(ticks).toBe(2);
+    expect(await second.output.finishReason).not.toBe('aborted');
+    await vi.waitFor(() => expect(verifyRunLease(runId)).resolves.toBeUndefined());
+  }, 20_000);
+
+  it('runs tools on a pubsub that cannot lease', async () => {
+    for (let i = 0; i < 2; i++) {
+      llm.on(
+        { userMessage: 'no lease run', sequenceIndex: i },
+        { toolCalls: [{ id: `call_no_lease_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    llm.on({ userMessage: 'no lease run', sequenceIndex: 2 }, { content: 'no lease done' });
+
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        return 'ticked';
+      },
+    });
+    const agent = replica(new SharedLeases(), new MockMemory(), { tick }, new NoLeasePubSub());
+
+    const { output, drain } = await startStream(agent, 'no lease run', {
+      maxSteps: 5,
+      memory: { thread: 'no-lease-thread', resource: RESOURCE },
+    });
+    await drain();
+
+    expect(ticks).toBe(2);
+    expect(await output.text).toBe('no lease done');
+    expect(await output.finishReason).not.toBe('aborted');
+  }, 20_000);
+
   it('never aborts a run whose lease stays healthy across many renewals', async () => {
     for (let i = 0; i < 6; i++) {
       llm.on(
@@ -374,4 +765,175 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(await output.text).toBe('healthy done');
     expect(await output.finishReason).not.toBe('aborted');
   }, 20_000);
+
+  it('keeps running tools while owner checks error inside the last confirmed renewal', async () => {
+    for (let i = 0; i < 6; i++) {
+      llm.on(
+        { userMessage: 'owner check errors', sequenceIndex: i },
+        { toolCalls: [{ id: `call_owner_errors_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    llm.on({ userMessage: 'owner check errors', sequenceIndex: 6 }, { content: 'owner check errors done' });
+
+    const shared = new SharedLeases();
+    /** Renewals still reach the backend, but every owner lookup fails. */
+    class OwnerLookupErrorPubSub extends ReplicaPubSub {
+      override async getLeaseOwner(key: string) {
+        if (key.startsWith(`${RESOURCE}\u0000`)) throw new Error('lease backend unreachable');
+        return super.getLeaseOwner(key);
+      }
+    }
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        // 6 ticks x 100ms outlives the 300ms TTL, so each call relies on a renewal confirmed since the last one.
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return 'ticked';
+      },
+    });
+    const agent = replica(shared, new MockMemory(), { tick }, new OwnerLookupErrorPubSub(shared));
+
+    const { output, drain } = await startStream(agent, 'owner check errors', {
+      maxSteps: 10,
+      memory: { thread: 'owner-check-errors-thread', resource: RESOURCE },
+    });
+    await drain();
+
+    expect(ticks).toBe(6);
+    expect(await output.text).toBe('owner check errors done');
+    expect(await output.finishReason).not.toBe('aborted');
+  }, 20_000);
+
+  it('stops a run within about one TTL of its lease backend going silent', async () => {
+    const thread = 'silent-backend-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    for (let i = 0; i < 100; i++) {
+      llm.on(
+        { userMessage: 'silent backend', sequenceIndex: i },
+        { toolCalls: [{ id: `call_silent_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 40));
+        return 'ticked';
+      },
+    });
+    const pubsub = new ReplicaPubSub(shared);
+    const { output, drain } = await startStream(replica(shared, new MockMemory(), { tick }, pubsub), 'silent backend', {
+      maxSteps: 100,
+      memory: { thread, resource: RESOURCE },
+    });
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+    expect(shared.owner(key)).toBeDefined();
+
+    // Every lease call now hangs, as when the connection to Redis is cut without an error.
+    pubsub.partition = 'hang';
+    const cutAt = Date.now();
+    const finishReason = await output.finishReason;
+    const settledAfter = Date.now() - cutAt;
+    await done;
+
+    expect(finishReason).toBe('aborted');
+    // 100 ticks take over 4s, so only the local lease deadline (TTL 300ms) ends the run this early.
+    expect(settledAfter).toBeLessThan(1_500);
+  }, 20_000);
+
+  // Durable runs share process-global registries by run id, so two live runs with one id is not a supported setup there.
+  it.skipIf(isDurableEngineVariant(engine))(
+    'documents that a run whose id a later live run reuses keeps calling tools after losing its lease',
+    async () => {
+      const runId = `two-live-run-${engine}`;
+      const thread = 'two-live-earlier-thread';
+      const key = [RESOURCE, thread].join('\u0000');
+      llm.on(
+        { userMessage: 'two live earlier', sequenceIndex: 0 },
+        {
+          toolCalls: Array.from({ length: 8 }, (_, i) => ({
+            id: `call_two_live_${i}`,
+            name: 'step',
+            arguments: { n: i },
+          })),
+        },
+      );
+      llm.on({ userMessage: 'two live earlier', sequenceIndex: 1 }, { content: 'two live earlier done' });
+      llm.on(
+        { userMessage: 'two live later', sequenceIndex: 0 },
+        { toolCalls: [{ id: 'call_two_live_hold', name: 'hold', arguments: {} }] },
+      );
+      llm.on({ userMessage: 'two live later', sequenceIndex: 1 }, { content: 'two live later done' });
+
+      const shared = new SharedLeases();
+      const memory = new MockMemory();
+      let release: () => void = () => {};
+      const released = new Promise<void>(resolve => (release = resolve));
+      let onHolding: () => void = () => {};
+      const holding = new Promise<void>(resolve => (onHolding = resolve));
+      const hold = createTool({
+        id: 'hold',
+        description: 'Hold the run open',
+        inputSchema: z.object({}),
+        execute: async () => {
+          onHolding();
+          await released;
+          return 'held';
+        },
+      });
+      const laterReplica = replica(shared, memory, { hold });
+      let later: { output: { text: Promise<string> }; drain: () => Promise<void> } | undefined;
+
+      const ran: number[] = [];
+      const step = createTool({
+        id: 'step',
+        description: 'Run one step',
+        inputSchema: z.object({ n: z.number() }),
+        execute: async ({ n }) => {
+          ran.push(n);
+          if (n === 0) {
+            // Another replica in this process starts a run with the same id and keeps it live.
+            later = await startStream(laterReplica, 'two live later', {
+              runId,
+              maxSteps: 3,
+              memory: { thread: 'two-live-later-thread', resource: RESOURCE },
+            });
+            await holding;
+          }
+          // A successor takes the earlier run's thread while the fifth call runs.
+          if (ran.length === 5) shared.leases.set(key, { owner: 'successor-run', expiresAt: Date.now() + 60_000 });
+          return 'stepped';
+        },
+      });
+      const earlier = await startStream(replica(shared, memory, { step }), 'two live earlier', {
+        runId,
+        maxSteps: 3,
+        toolCallConcurrency: 1,
+        memory: { thread, resource: RESOURCE },
+      });
+      await earlier.drain().catch(() => undefined);
+
+      // Current behaviour (#27364 case 3): the tool fence is keyed by run id alone, so the later run's registration
+      // replaced the earlier run's fence, and the earlier run's remaining calls are checked against the later run's
+      // healthy lease instead of its own. With a fence per registration this would be 5, as when the id is not shared.
+      expect(ran).toHaveLength(8);
+
+      release();
+      expect(later).toBeDefined();
+      if (later) {
+        await later.drain();
+        expect(await later.output.text).toBe('two live later done');
+      }
+    },
+    20_000,
+  );
 });

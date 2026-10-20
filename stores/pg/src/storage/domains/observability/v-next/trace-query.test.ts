@@ -427,7 +427,7 @@ describe('Postgres advanced trace query', () => {
 
     expect(compiled.text).toContain('"endedAt" < $3');
     expect(compiled.text).toContain('"traceId" > $4');
-    expect(compiled.text).toContain('ORDER BY "endedAt" DESC, "traceId" ASC');
+    expect(compiled.text).toContain('ORDER BY "endedAt" DESC NULLS LAST, "traceId" ASC');
     expect(compiled.values.at(-1)).toBe(3);
   });
 
@@ -449,7 +449,7 @@ describe('Postgres advanced trace query', () => {
     const data = compilePostgresTraceQuery('public', pagePlan);
 
     expect(count.text).toContain('SELECT COUNT(*)::text AS count\nFROM candidates');
-    expect(data.text).toContain('ORDER BY "endedAt" ASC, "traceId" ASC');
+    expect(data.text).toContain('ORDER BY "endedAt" ASC NULLS LAST, "traceId" ASC');
     expect(data.text).toContain('LIMIT $3 OFFSET $4');
     expect(data.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 25, 50]);
     expect(count.text.split('candidates AS')[0]).toBe(data.text.split('candidates AS')[0]);

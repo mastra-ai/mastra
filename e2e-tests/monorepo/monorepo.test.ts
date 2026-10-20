@@ -736,6 +736,16 @@ export const environmentRoute = registerApiRoute('/environment', {
       const sourceLockfile = await readFile(sourceLockfilePath, 'utf-8');
       const mastraConfigPath = join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
       const originalMastraConfig = await readFile(mastraConfigPath, 'utf-8');
+      const transitiveOnlyRoutePath = join(
+        fixturePath,
+        'apps',
+        'custom',
+        'src',
+        'mastra',
+        'api',
+        'route',
+        'transitive-only.ts',
+      );
 
       try {
         // Keep the lockfile probe external so optimization cannot remove it from the output manifest.
@@ -753,6 +763,19 @@ export const versionlessRoute = registerApiRoute('/versionless', {
 });
 `,
         );
+        // The app depends on both packages but only imports the dependent, so the leaf is reached only
+        // through the dependent (#27134).
+        await writeFile(
+          transitiveOnlyRoutePath,
+          `import { registerApiRoute } from '@mastra/core/server';
+import { dependent } from '@inner/transitive-only-dependent';
+
+export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
+  method: 'GET',
+  handler: async c => c.json({ value: dependent }),
+});
+`,
+        );
         await writeFile(
           mastraConfigPath,
           originalMastraConfig
@@ -762,9 +785,9 @@ export const versionlessRoute = registerApiRoute('/versionless', {
             )
             .replace(
               "import { testRoute } from '@/api/route/test';",
-              "import { testRoute } from '@/api/route/test';\nimport { versionlessRoute } from '@/api/route/versionless';",
+              "import { testRoute } from '@/api/route/test';\nimport { versionlessRoute } from '@/api/route/versionless';\nimport { transitiveOnlyRoute } from '@/api/route/transitive-only';",
             )
-            .replace(/apiRoutes: \[\s*testRoute,/, 'apiRoutes: [testRoute, versionlessRoute,'),
+            .replace(/apiRoutes: \[\s*testRoute,/, 'apiRoutes: [testRoute, versionlessRoute, transitiveOnlyRoute,'),
         );
         for (const [index, packageJsonPath] of packageJsonPaths.entries()) {
           const packageJson = JSON.parse(originalPackageJsons[index]!);
@@ -827,13 +850,16 @@ export const versionlessRoute = registerApiRoute('/versionless', {
       });
     }, timeout);
 
-    it('should resolve tsconfig paths', async () => {
-      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
+    it('should resolve tsconfig paths with TypeScript 7 installed', async () => {
+      const appDir = join(fixturePath, 'apps', 'custom');
+      const typescriptPackage = JSON.parse(
+        await readFile(join(appDir, 'node_modules', 'typescript', 'package.json'), 'utf-8'),
+      );
+      const inputFile = join(appDir, '.mastra', 'output', 'index.mjs');
       const content = await readFile(inputFile, 'utf-8');
 
-      const hasMappedPkg = content.includes('@/agents');
-
-      expect(hasMappedPkg).toBeFalsy();
+      expect(typescriptPackage.version).toBe('7.0.2');
+      expect(content).not.toContain('@/agents');
     });
 
     it('should resolve workspace package tsconfig paths', async () => {
@@ -1023,6 +1049,12 @@ export const mastra = new Mastra({
         value: 'versionless-workspace-package',
         dependent: 'versionless-workspace-package-dependent',
       });
+    });
+
+    it('should bundle a workspace package reached only through another workspace package (#27134)', async () => {
+      const res = await fetch(`http://localhost:${port}/transitive-only`);
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ value: 'dependent:leaf' });
     });
   });
 

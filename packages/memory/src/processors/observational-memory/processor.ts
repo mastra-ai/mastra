@@ -24,6 +24,7 @@ import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import { insertTemporalGapMarkers } from './temporal-markers';
 import type { TokenCounterModelContext } from './token-counter';
+import type { ObservationModelContext } from './types';
 
 /**
  * Coerce a shared `state.__omTurn` value to a usable live turn.
@@ -521,6 +522,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           sendSignal: args.sendSignal,
           sendStateSignal: args.sendStateSignal,
           requestContext,
+          currentModel: state.__omActorModelContext as ObservationModelContext | undefined,
           writer: args.writer,
           observabilityContext: getOmObservabilityContext(args),
         }),

@@ -71,6 +71,7 @@ function setup({
   subscriptions = [] as WorkItemSubscription[],
   bindings = [] as FactoryRunBindingRecord[],
   threads = 'live' as 'live' | 'gone',
+  busy = [] as string[],
 } = {}) {
   const notifications = new InMemoryNotificationsStorage();
   const sent: Array<{ input: SendNotificationSignalInput; target: { resourceId: string; threadId: string } }> = [];
@@ -85,7 +86,7 @@ function setup({
   };
   const liveSession = (resourceId: string) => ({
     thread: { getId: () => `thread-${resourceId}` },
-    stream: { isActive: () => false },
+    stream: { isActive: () => busy.includes(resourceId) },
     model: { get: () => '' },
   });
   const controller = {
@@ -93,7 +94,7 @@ function setup({
       threads === 'gone' ? undefined : { id: threadId, resourceId: threadId.replace(/^thread-/, '') },
     ),
     queryThreads: vi.fn(async () => []),
-    getSessionByResource: vi.fn(async (resourceId: string) => liveSession(resourceId)),
+    getSession: vi.fn(async (resourceId: string) => liveSession(resourceId)),
     createSession: vi.fn(),
     getCurrentAgent: vi.fn(() => agent),
   };
@@ -186,6 +187,21 @@ describe('factory_signal_session', () => {
     await expect(run(USER, 'factory_signal_session', { sessionId, message: 'hi' })).rejects.toThrow(error);
     expect(sent).toHaveLength(0);
     expect(auditRecorder.record).not.toHaveBeenCalled();
+  });
+
+  it('says mid-run, not woken, when the target was already busy (#27742)', async () => {
+    const busy = setup({ bindings: [binding('item-7', 'session-b')], busy: ['session-b'] });
+    await expect(
+      busy.run(USER, 'factory_signal_session', { sessionId: 'session-b', message: 'status?' }),
+    ).resolves.toEqual({ notificationId: expect.any(String), delivered: 'mid-run' });
+    expect(busy.auditRecorder.record).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ delivery: 'mid-run' }) }),
+    );
+
+    const idle = setup({ bindings: [binding('item-7', 'session-b')] });
+    await expect(
+      idle.run(USER, 'factory_signal_session', { sessionId: 'session-b', message: 'status?' }),
+    ).resolves.toEqual({ notificationId: expect.any(String), delivered: 'woken' });
   });
 
   it('messages a private session its own owner can see', async () => {
@@ -711,10 +727,10 @@ describe('side session tools', () => {
     const env = setup();
     const messaging = (await env.deps.messaging())!;
     const controller = messaging.controller as unknown as {
-      getSessionByResource: ReturnType<typeof vi.fn>;
+      getSession: ReturnType<typeof vi.fn>;
       queryThreadById: ReturnType<typeof vi.fn>;
     };
-    controller.getSessionByResource.mockImplementation(async (resourceId: string) => ({
+    controller.getSession.mockImplementation(async (resourceId: string) => ({
       thread: { getId: () => `thread-${resourceId}` },
       stream: { isActive: () => resourceId === 'session-side' },
       model: { get: () => (resourceId === 'session-side' ? 'openai/gpt-5' : '') },

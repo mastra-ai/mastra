@@ -47,7 +47,10 @@ import { PrepareStepProcessor } from '../../../../processors/processors/prepare-
 import { resolveMaxProcessorRetries } from '../../../../processors/retry-budget';
 import type { ProcessorState } from '../../../../processors/runner';
 import { ProcessorRunner } from '../../../../processors/runner';
-import { needsTrailingAssistantGuard } from '../../../../processors/trailing-assistant-guard';
+import {
+  needsTrailingAssistantGuard,
+  removeTrailingAssistantGuardContinuations,
+} from '../../../../processors/trailing-assistant-guard';
 import { getToolDefinitionsForTracing } from '../../../../stream/aisdk/v5/compat/prepare-tools';
 import { execute, sendsNativeResponseFormat } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput, persistProcessorDataChunk } from '../../../../stream/base/output';
@@ -198,6 +201,7 @@ const durableLLMOutputSchema = z.object({
     signalPreempted: z.boolean().optional(),
     totalUsage: z.any().optional(),
     tripwire: z.any().optional(),
+    messageId: z.string().optional(),
   }),
   metadata: z.any(),
   processorRetryCount: z.number().optional(),
@@ -1032,6 +1036,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 };
               }
             }
+            removeTrailingAssistantGuardContinuations(messageList);
             await persistUnavailableAttachments({
               messageList,
               memory: getRunRegistryEntry(runId, mastra as Mastra | undefined)?.memory,
@@ -2682,6 +2687,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 headers: rawResponse?.headers,
                 request,
                 tripwire: stepTripwire,
+                // The id may have rotated in this step (retry feedback, signals, processors);
+                // the next iteration must continue and roll back that message, not the old one.
+                messageId: currentMessageId,
               },
               metadata: {
                 id: responseMetadata.id,

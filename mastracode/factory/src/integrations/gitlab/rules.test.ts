@@ -682,7 +682,7 @@ describe('GitLabRules', () => {
         })
       ).item;
       const dispatcher = new FactoryDecisionDispatcher({
-        controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+        controller: { getSession: vi.fn(async () => undefined) } as never,
         transitionService: new FactoryTransitionService({
           storage: seeded.workItems,
           configVersion: 'gitlab-test-v1',

@@ -20,6 +20,28 @@ import { consumeText, createRestartScenario, findRow } from './restart-harness';
 
 const RECOVERY_TIMEOUT_MS = 5_000;
 
+// Every simulated process evaluates a fresh module graph, and each graph
+// creates its own module-level AsyncLocalStorage instances. On Node 22, every
+// enabled instance adds work to each promise created afterwards, so a few
+// hundred recoveries slow down until the tests time out. Disabling a dead
+// process's stores keeps each recovery's cost constant.
+const asyncStores = vi.hoisted(() => new Set<{ disable(): void }>());
+vi.mock('node:async_hooks', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:async_hooks')>();
+  class TrackedAsyncLocalStorage<T> extends actual.AsyncLocalStorage<T> {
+    constructor() {
+      super();
+      asyncStores.add(this);
+    }
+  }
+  return { ...actual, AsyncLocalStorage: TrackedAsyncLocalStorage };
+});
+
+function disposeAsyncStores() {
+  for (const store of asyncStores) store.disable();
+  asyncStores.clear();
+}
+
 type SnapshotRow = { workflowName: string; runId: string; resourceId?: string; snapshot: WorkflowRunState };
 type Checkpoint = {
   outer?: WorkflowRunState;
@@ -183,6 +205,7 @@ type AgentKind = 'durable' | 'evented-fallback';
 // A fresh module graph per process keeps module-level state (run registry,
 // local recovery claims) from leaking between the original run and recovery.
 async function startProcess(kind: AgentKind, usages?: TestUsage[], observability?: SpanRecorder) {
+  disposeAsyncStores();
   vi.resetModules();
   const [
     { Mastra },
