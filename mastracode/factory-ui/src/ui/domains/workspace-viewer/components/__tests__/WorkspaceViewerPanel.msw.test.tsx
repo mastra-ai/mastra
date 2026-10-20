@@ -205,6 +205,9 @@ describe('WorkspaceViewerPanel', () => {
       expect(screen.queryByText('.github')).not.toBeInTheDocument();
       expect(screen.queryByText('.env.example')).not.toBeInTheDocument();
 
+      await user.hover(screen.getByRole('button', { name: 'Show hidden files' }));
+      expect(await screen.findByRole('tooltip')).toHaveTextContent('Show hidden files');
+
       await user.click(screen.getByRole('button', { name: 'Show hidden files' }));
       expect(screen.getByText('.github')).toBeInTheDocument();
       expect(screen.getByText('.env.example')).toBeInTheDocument();

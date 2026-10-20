@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
@@ -192,16 +193,23 @@ export function WorkspaceFileBrowser({
         <Txt tone="ink" as="h2" variant="column">
           Files
         </Txt>
-        <Button
-          className="ml-auto"
-          size="icon-sm"
-          variant="ghost"
-          onClick={() => onShowHiddenChange(!showHidden)}
-          aria-pressed={showHidden}
-          aria-label={showHidden ? 'Hide hidden files' : 'Show hidden files'}
-        >
-          {showHidden ? <Eye /> : <EyeOff />}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                className="ml-auto"
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => onShowHiddenChange(!showHidden)}
+                aria-pressed={showHidden}
+                aria-label={showHidden ? 'Hide hidden files' : 'Show hidden files'}
+              >
+                {showHidden ? <Eye /> : <EyeOff />}
+              </Button>
+            }
+          />
+          <TooltipContent>{showHidden ? 'Hide hidden files' : 'Show hidden files'}</TooltipContent>
+        </Tooltip>
         <Button
           size="icon-sm"
           variant="ghost"
