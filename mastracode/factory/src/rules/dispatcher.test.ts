@@ -6753,6 +6753,7 @@ describe('a skill run that ends in error (#27740)', () => {
   it.each([
     ['Incorrect API key provided: sk-proj-abc123SECRET', 'sk-proj-abc123SECRET'],
     ['Authorization: Bearer sk-abcSECRET42', 'sk-abcSECRET42'],
+    ['Authorization: Bearer abc123XYZ789', 'abc123XYZ789'],
     ['x-api-key header is invalid: sk-ant-api03-SECRETxyz', 'sk-ant-api03-SECRETxyz'],
     ['provider rejected token Zm9vYmFyQmF6UXV4MTIzNDU2Nzg5MA', 'Zm9vYmFyQmF6UXV4MTIzNDU2Nzg5MA'],
     ['secret wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY rejected', 'K7MDENG/bPxRfiCYEXAMPLEKEY'],
@@ -6825,7 +6826,9 @@ describe('a skill run that ends in error (#27740)', () => {
     await bindWorkRun(storage, item.id);
     const runError =
       'git checkout 9c34731d508cc586e92194d2e871d00fa7c030eb failed for run 8b065d55-2922-4ae8-915f-ee66aa30d726 ' +
-      'on fix/Parked-snapshot-lease2-loss at Object.run (/Users/RyanH/Projects/mastra2/packages/core/dist/chunk-AB12CD.js:12:3)';
+      'on fix/Parked-snapshot-lease2-loss at Object.run (/Users/RyanH/Projects/mastra2/packages/core/dist/chunk-AB12CD.js:12:3) ' +
+      'after ENOENT at /Users/RyanH/Documents/GitHub/MyAgentWorkspace2025v3/Index.ts:4:1 ' +
+      'while rebasing fix-Lease2Loss-in-replica-handover';
     const { controller } = createSession(undefined, { agentEndReason: 'error', runError });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
