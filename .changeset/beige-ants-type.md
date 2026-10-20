@@ -6,8 +6,8 @@ Added the storage contract for span aggregation. Storage adapters can implement 
 
 ```ts
 class MyObservabilityStore extends ObservabilityStorage {
-  getFeatures() {
-    return [...super.getFeatures(), 'span-aggregate'];
+  getFeatures(): readonly ObservabilityStorageFeature[] {
+    return [...(super.getFeatures() ?? []), 'span-aggregate'];
   }
 
   // `plan` is already validated: tool calls grouped by name, with count and p95 duration

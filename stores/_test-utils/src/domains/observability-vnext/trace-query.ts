@@ -2798,7 +2798,8 @@ export function selectSpanQuerySpans(data: TraceQueryFixtureData, selection: Spa
 
 /**
  * Every value a direct span query or span aggregate can filter or group on. `model` and
- * `provider` are groupable but not filterable, which the planner enforces.
+ * `provider` come through `spanValues` but are not yet filterable or groupable here
+ * (OBS-693); `queryTraces()` filters on them via `spans.some`.
  */
 function spanQueryValues(span: RawTraceQuerySpan): Record<string, unknown> {
   return {
