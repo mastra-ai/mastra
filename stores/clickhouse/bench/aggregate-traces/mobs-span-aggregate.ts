@@ -53,13 +53,36 @@ const USAGE_NAMES = [
 ];
 const COST_NAMES = USAGE_NAMES.slice(0, 2);
 
-type Variant = 'base' | 'pre' | 'copies';
+type Variant =
+  | 'base'
+  | 'pre'
+  | 'copies'
+  | 'stream'
+  | 'branches'
+  | 'branchesHash'
+  | 'streamHash'
+  | 'raw'
+  | 'copiesInOrder'
+  | 'copiesSpill';
+
+/** Span types `mastra_mv_trace_branches` copies into `mastra_trace_branches`. */
+const BRANCH_TYPES = new Set([
+  'agent_run',
+  'workflow_run',
+  'processor_run',
+  'scorer_run',
+  'rag_ingestion',
+  'tool_call',
+  'mcp_tool_call',
+  'mcp_server_request',
+  'provider_tool_call',
+]);
 
 interface Shape {
   where?: Record<string, unknown>;
   groupBy: string[];
   measures: string[];
-  interval?: '1h';
+  interval?: '1h' | '1d';
   limit?: number;
   exactQuantiles?: boolean;
 }
@@ -86,6 +109,9 @@ export const SHAPES: Record<string, Shape> = {
   S7: { groupBy: ['threadId'], measures: ['count', 'duration.p95'] },
   S8: { groupBy: ['name'], measures: ['count', 'errorRate'] },
   S9: { where: spanType('tool_call'), groupBy: ['name'], interval: '1h', measures: ['count'] },
+  // Metrics page agent-run card (OBS-697): every agent run, nested ones included, by status.
+  A1: { where: spanType('agent_run'), groupBy: ['status'], interval: '1d', measures: ['count'] },
+  A2: { where: spanType('agent_run'), groupBy: ['status'], interval: '1h', measures: ['count'] },
 };
 
 interface QueryStat {
@@ -211,21 +237,73 @@ export function compileSpanAggregate(
       ? (shape.where.right as { literal: string }).literal
       : undefined;
   const prefilter = prefilterType ? ` AND e.spanType = ${p.add(prefilterType, 'String')}` : '';
-  const scan = `FROM mastra_span_events e
+  const table =
+    (variant === 'branches' || variant === 'branchesHash') && prefilterType && BRANCH_TYPES.has(prefilterType)
+      ? 'mastra_trace_branches'
+      : 'mastra_span_events';
+  const scan = `FROM ${table} e
     PREWHERE e.endedAt >= ${from}
     WHERE e.startedAt >= ${from} AND e.startedAt < ${to} AND ${tenant.join(' AND ')}${prefilter}`;
+  // `stream` / `branches`: collapse copies with argMax per span, grouped in the table's key order
+  // (span_events: org, project, traceId; trace_branches: org, project, spanType, startedAt, traceId)
+  // so `optimize_aggregation_in_order` flushes each key prefix and memory stays per trace, not per window.
+  const streaming =
+    variant === 'stream' || variant === 'branches' || variant === 'branchesHash' || variant === 'streamHash';
+  // `*Hash`: the same argMax collapse as a plain hash aggregation (no in-order read).
+  const inOrder = variant === 'stream' || variant === 'branches';
+  const groupKeys =
+    table === 'mastra_trace_branches'
+      ? ['organizationId', 'projectId', 'spanType', 'startedAt', 'traceId', 'spanId']
+      : ['organizationId', 'projectId', 'traceId', 'spanId'];
   const eHash = 'cityHash64(e.organizationId, e.projectId, e.traceId, e.spanId)';
-  const ctes =
-    variant === 'copies'
-      ? [
-          `copied AS (
+  const collapsed = columns.map(column => {
+    const [expr, alias] = column.split(/ AS (?=\w+$)/);
+    if (alias === 'endedAt') return `max(e.endedAt) AS c_endedAt`;
+    if (groupKeys.includes(alias!)) return `e.${alias} AS c_${alias}`;
+    // Tuple-wrapped so a NULL in the latest copy wins, as with LIMIT 1 BY (argMax skips NULL args).
+    return `argMax(tuple(${expr}), e.endedAt).1 AS c_${alias}`;
+  });
+  const ctes = streaming
+    ? [
+        `collapsed AS (
+    SELECT ${identity.map(f => `e.${f} AS k_${f}`).join(', ')}, ${collapsed.join(', ')}
+    ${scan}
+    GROUP BY ${groupKeys.map(k => (identity.includes(k) ? `k_${k}` : `c_${k}`)).join(', ')}
+  )`,
+        `candidates AS (
+    SELECT ${identity.map(f => `k_${f} AS ${f}`).join(', ')}, ${columns
+      .map(c => c.split(/ AS (?=\w+$)/)[1])
+      .map(a => `c_${a} AS ${a}`)
+      .join(', ')}
+    FROM collapsed
+  )`,
+      ]
+    : variant === 'raw'
+      ? // I/O floor only (overcounts copies): what the scan costs with no collapse at all.
+        [
+          `candidates AS (
+    SELECT ${identity.map(f => `e.${f} AS ${f}`).join(', ')}, ${columns.join(', ')}
+    ${scan}
+  )`,
+        ]
+      : variant === 'copies' || variant === 'copiesInOrder' || variant === 'copiesSpill'
+        ? [
+            // `copiesInOrder`: detect copies grouped in span_events key order, so the hash set
+            // only ever holds one trace's spans instead of every span in the window.
+            variant === 'copiesInOrder'
+              ? `copied AS (
+    SELECT any(${eHash}) AS span
+    ${scan}
+    GROUP BY e.organizationId, e.projectId, e.traceId, e.spanId HAVING count() > 1
+  )`
+              : `copied AS (
     SELECT ${eHash} AS span
     ${scan}
     GROUP BY span HAVING count() > 1
   )`,
-          // Spans without copies pass straight through; the few with copies (exporter retries,
-          // including byte-identical ones) are collapsed to their latest in order.
-          `candidates AS (
+            // Spans without copies pass straight through; the few with copies (exporter retries,
+            // including byte-identical ones) are collapsed to their latest in order.
+            `candidates AS (
     SELECT ${identity.map(f => `e.${f} AS ${f}`).join(', ')}, ${columns.join(', ')}
     ${scan}
       AND ${eHash} NOT IN (SELECT span FROM copied)
@@ -238,15 +316,15 @@ export function compileSpanAggregate(
       LIMIT 1 BY organizationId, projectId, traceId, spanId
     )
   )`,
-        ]
-      : [
-          `candidates AS (
+          ]
+        : [
+            `candidates AS (
     SELECT ${identity.map(f => `e.${f} AS ${f}`).join(', ')}, ${columns.join(', ')}
     ${scan}
     ORDER BY organizationId, projectId, traceId, spanId, e.endedAt DESC
     LIMIT 1 BY organizationId, projectId, traceId, spanId
   )`,
-        ];
+          ];
   ctes.push(
     `selected AS (
     SELECT *, cityHash64(organizationId, projectId, traceId, spanId) AS spanHash
@@ -275,7 +353,7 @@ export function compileSpanAggregate(
       FROM mastra_metric_events
       WHERE ${mt.join(' AND ')} AND name IN (${names.join(', ')}) AND timestamp >= ${from}
         AND isNotNull(spanId) AND isNotNull(traceId)
-        ${variant === 'copies' ? '' : 'AND cityHash64(organizationId, projectId, traceId, spanId) IN (SELECT spanHash FROM selected)'}
+        ${variant === 'base' || variant === 'pre' ? 'AND cityHash64(organizationId, projectId, traceId, spanId) IN (SELECT spanHash FROM selected)' : ''}
       GROUP BY spanHash, metricId, n
     )
     GROUP BY spanHash
@@ -296,7 +374,9 @@ export function compileSpanAggregate(
   ORDER BY ${order}
   LIMIT ${limit}`;
   } else {
-    const buckets = Math.ceil((Date.parse(timeRange.to) - Date.parse(timeRange.from)) / 3_600_000);
+    const buckets = Math.ceil(
+      (Date.parse(timeRange.to) - Date.parse(timeRange.from)) / (shape.interval === '1d' ? DAY : 3_600_000),
+    );
     const limitN = Math.min(shape.limit ?? 100, Math.floor(MAX_ROWS / buckets));
     const limit = p.add(limitN + 1, 'UInt32');
     const key = `toString(tuple(${dims.join(', ')}))`;
@@ -305,13 +385,26 @@ export function compileSpanAggregate(
     ORDER BY count() DESC, ${dims.map(d => `${d} ASC NULLS LAST`).join(', ')} LIMIT ${limit}
   )`);
     query = `WITH ${ctes.join(',\n  ')}
-  SELECT ${[...dimSelect, 'toStartOfHour(s.startedAt) AS bucket', ...measures].join(', ')}
+  SELECT ${[...dimSelect, `${shape.interval === '1d' ? 'toStartOfDay' : 'toStartOfHour'}(s.startedAt) AS bucket`, ...measures].join(', ')}
   FROM selected s${join}
   WHERE ${key} IN (SELECT k FROM top)
   GROUP BY ${[...dims, 'bucket'].join(', ')}
   ORDER BY ${orderDims.join(', ')}, bucket`;
   }
-  return { query, query_params: { ...p.values, ...predicate.params } };
+  return {
+    query,
+    query_params: { ...p.values, ...predicate.params },
+    settings:
+      inOrder || variant === 'copiesInOrder'
+        ? ({ optimize_aggregation_in_order: 1 } as ClickHouseSettings)
+        : variant === 'copiesSpill'
+          ? // `copiesSpill`: the copies plan with GROUP BY / ORDER BY spilling to disk past 300 MB.
+            ({
+              max_bytes_before_external_group_by: 300_000_000,
+              max_bytes_before_external_sort: 300_000_000,
+            } as ClickHouseSettings)
+          : {},
+  };
 }
 
 export function pickProjects(projects: SelectedProject[]): Array<[Role, SelectedProject]> {
@@ -347,7 +440,7 @@ export async function connect(platform: string) {
 async function exec(
   raw: ClickHouseClient,
   mods: Mods,
-  compiled: { query: string; query_params: Record<string, unknown> },
+  compiled: { query: string; query_params: Record<string, unknown>; settings?: ClickHouseSettings },
   settings: ClickHouseSettings,
   cold: boolean,
   queryId: string,
@@ -362,6 +455,7 @@ async function exec(
       ...mods.obs.CLICKHOUSE_SETTINGS,
       use_query_cache: 0,
       max_threads: 16,
+      ...compiled.settings,
       ...settings,
       log_comment: 'aqa-bench:mobs-span-aggregate',
       ...(cold ? { enable_filesystem_cache: 0 } : {}),
@@ -437,7 +531,7 @@ async function run(options: {
           let overBudget = false;
           for (const window of options.windows) {
             const days = Number.parseInt(window, 10);
-            if (shapeId === 'S9' && days * 24 > 1000) continue; // the planner rejects > 1,000 hourly buckets
+            if (SHAPES[shapeId]!.interval === '1h' && days * 24 > 1000) continue; // the planner rejects > 1,000 hourly buckets
             const key = `${project.hash}|${scopeName}|${window}|${shapeId}${options.variant === 'base' ? '' : `|${options.variant}`}`;
             if (skip.has(key)) continue;
             const base = {
@@ -620,7 +714,14 @@ async function check(platform: string, window: string) {
 }
 
 /** Runs every shape as `base` and `copies` on one window and compares the rows. */
-async function parity(platform: string, window: string, roles: Set<string>, scopeNames: Scope[]) {
+async function parity(
+  platform: string,
+  window: string,
+  roles: Set<string>,
+  scopeNames: Scope[],
+  variant: Variant,
+  shapeIds: string[],
+) {
   const selection = loadSelection();
   if (!selection) throw new Error('No project selection');
   const { mods, raw } = await connect(platform);
@@ -642,8 +743,9 @@ async function parity(platform: string, window: string, roles: Set<string>, scop
     for (const [role, project] of pickProjects(selection.projects)) {
       if (!roles.has(role)) continue;
       for (const { name, scope } of scopes(project, scopeNames, role)) {
-        for (const [shapeId, shape] of Object.entries(SHAPES)) {
-          if (shape.interval && days * 24 > 1000) continue;
+        for (const shapeId of shapeIds) {
+          const shape = SHAPES[shapeId]!;
+          if (shape.interval === '1h' && days * 24 > 1000) continue;
           // Unlimited so a tie at the limit can't hide a difference.
           // `quantile` samples, so two plans can return slightly different p95s; compare exact ones.
           const full = { ...shape, limit: 10_000, exactQuantiles: true };
@@ -662,7 +764,7 @@ async function parity(platform: string, window: string, roles: Set<string>, scop
               await exec(
                 raw,
                 mods,
-                compileSpanAggregate(mods, full, timeRange, scope, 'copies'),
+                compileSpanAggregate(mods, full, timeRange, scope, variant),
                 MEASURE,
                 false,
                 randomUUID(),
@@ -757,6 +859,8 @@ async function main() {
       values.window!,
       new Set(values.roles!.split(',')),
       values.scopes!.split(',') as Scope[],
+      values.variant as Variant,
+      values.shapes!.split(','),
     );
   if (command !== 'run') throw new Error('usage: run | check | report');
   await run({
