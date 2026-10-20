@@ -1,5 +1,21 @@
 # @mastra/core
 
+## 1.79.0-alpha.6
+
+### Minor Changes
+
+- Support embedding specification v4 models from AI SDK v7. Core accepts v4 embedding models and exports `embedV4`; Memory and RAG use the matching SDK to generate embeddings while preserving v1, v2, and v3 behavior. ([#27710](https://github.com/mastra-ai/mastra/pull/27710))
+
+### Patch Changes
+
+- Fixed live scorers passed at call time (`agent.stream(..., { scorers })`) or through `defaultOptions.scorers` never running unless the same scorer was also registered on the agent or on Mastra. Such scorers now run and save their scores on every agent engine, including durable and evented agents. ([#27714](https://github.com/mastra-ai/mastra/pull/27714))
+
+- Fixed live scorers passed to `stream()`/`generate()` via `scorers`, or set in an agent's `defaultOptions.scorers`, being skipped on the Inngest engine when they are not registered on the agent or on Mastra. They now run after the call, as they already do on the default and evented engines. ([#27719](https://github.com/mastra-ai/mastra/pull/27719))
+
+- Fixed experiment comparisons when item, scorer, or experiment IDs match built-in object property names such as `constructor`, `toString`, or `__proto__`. Comparisons previously threw or dropped those entries; they now group and report them like any other ID. ([#27718](https://github.com/mastra-ai/mastra/pull/27718))
+
+- Fix experiment comparisons to average repeated trial scores per item instead of keeping only the last score. Items retain equal weight when experiments have different numbers of trials. ([#27705](https://github.com/mastra-ai/mastra/pull/27705))
+
 ## 1.79.0-alpha.5
 
 ### Minor Changes
