@@ -154,6 +154,10 @@ export function useUserSessionQuery(sessionId: string | undefined) {
   return useQuery({
     queryKey: queryKeys.userSession(sessionId),
     queryFn: sessionId ? () => getUserSession(baseUrl, sessionId) : skipToken,
+    // Many components observe this query, and some mount only once it settles.
+    // Refetching a failed read on every mount flips it back to pending, which
+    // unmounts those observers, so a 404 looped forever. Recover with an explicit refetch.
+    retryOnMount: false,
   });
 }
 
