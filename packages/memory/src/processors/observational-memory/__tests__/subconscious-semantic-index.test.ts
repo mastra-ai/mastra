@@ -284,7 +284,7 @@ describe('knowledge semantic search when this caller cannot fully drain', () => 
     expect(held.length).toBeGreaterThan(0);
 
     const hits = await coordinator.search('indexed', scopeIds);
-    expect(hits.map(hit => hit.id)).toEqual([`knowledge:node:${indexed.id}`]);
+    expect(hits.map(hit => hit.id)).toEqual([indexed.id]);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]!.meta).toEqual({
       cause: 'held-by-another-worker',
@@ -330,7 +330,7 @@ describe('knowledge semantic search when this caller cannot fully drain', () => 
     vector.query = async () => [{ id: `knowledge:node:${indexed.id}`, score: 1, metadata: {} }];
 
     const hits = await coordinator.search('indexed', scopeIds);
-    expect(hits.map(hit => hit.id)).toEqual([`knowledge:node:${indexed.id}`]);
+    expect(hits.map(hit => hit.id)).toEqual([indexed.id]);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]!.meta).toEqual({
       cause: 'backlog-exceeded-drain',
