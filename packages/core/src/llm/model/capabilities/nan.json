@@ -11,7 +11,13 @@
   ],
   "structuredOutput": ["deepseek-v4-flash", "gemma4", "glm5.3", "glm5.3-flash", "qwen3.6", "qwen3.8-flash"],
   "reasoning": {
-    "glm5.3": [
+    "qwen3.6": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "glm5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "max"]
@@ -23,13 +29,7 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "qwen3.6": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "glm5.3-flash": [
+    "glm5.3": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "max"]

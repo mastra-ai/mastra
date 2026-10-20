@@ -875,15 +875,12 @@ describe('webhook route', () => {
       // Delivery builds the run's request context from the subscription, which
       // needs the subscribing user: a webhook carries no signed-in identity, and
       // tenant credential resolution fails closed without one.
-      subscribedByUserId: 'owner-1',
+      subscribedByUserId: 'u1',
       resourceId: 'resource-1',
       threadId: 'thread-1',
       sessionScope: '/worktrees/a',
       source: 'explicit-tool',
       status: 'open',
-      // Delivery runs the woken session as the subscribing user; a row without
-      // one is a failed delivery, not a silent unauthenticated run.
-      subscribedByUserId: 'u1',
     });
 
     const res = await buildApp(null, { controller }).request(

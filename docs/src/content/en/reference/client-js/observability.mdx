@@ -108,7 +108,7 @@ Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', valu
 
 Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews. Model/provider are available in returned rows but aren't filterable.
 
-The additional identity, context and parent/root entity filters require an updated storage adapter. With an older adapter, requests using these filters return a structured `422` error.
+Check `capabilities.spanQueryContextFields` from `getObservabilityCapabilities()` before using the additional identity, context and parent/root entity filters. A missing or false value means these filters aren't available. With an older adapter, requests using these filters return a structured `422` error.
 
 DuckDB returns `null` for parent/root entity type, ID and name, and for `executionSource`. Equality filters on these fields match no spans. Parent/root entity version IDs remain available.
 

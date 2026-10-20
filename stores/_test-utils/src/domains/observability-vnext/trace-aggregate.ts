@@ -8,14 +8,14 @@ import {
   TRACE_AGGREGATE_MIXED_COST_UNIT,
   TRACE_AGGREGATE_USAGE_METRIC_NAMES,
   traceAggregateRowSchema,
-  type TraceAggregateCountDistinctField,
+  type TraceAggregateDimension,
   type TraceAggregateRequest,
   type TraceAggregateResponse,
   type TraceAggregateRow,
   type TraceAggregateRowCost,
   type TraceQueryTenantScope,
+  type TrustedSpanAggregatePlan,
   type TrustedTraceAggregateHavingPredicate,
-  type TrustedTraceAggregateMeasureName,
   type TrustedTraceAggregatePlan,
 } from '@mastra/core/storage';
 import { TokenMetrics } from '@mastra/core/observability';
@@ -39,7 +39,7 @@ import {
  * re-checked here.
  *
  * Token and cost measures read `metrics` rows: usage is first summed per
- * candidate trace (`computeTraceUsage`), then per group. See the `TrustedTraceAggregatePlan`
+ * candidate trace (`computeUsage`), then per group. See the `TrustedTraceAggregatePlan`
  * JSDoc in core for the contract this implements.
  */
 
@@ -104,27 +104,29 @@ function isPricingFailure(metric: RawTraceAggregateMetric): boolean {
  * pruned only by `timestamp >= from` (no upper bound) and the trusted tenant scope. Traces with no
  * qualifying row are absent from the result, i.e. not usage-bearing.
  */
-function computeTraceUsage(
+function computeUsage(
   metrics: RawTraceAggregateMetric[],
-  roots: RawTraceQuerySpan[],
-  plan: TrustedTraceAggregatePlan,
+  rows: RawTraceQuerySpan[],
+  plan: AggregatePlan,
+  scope: AggregateScope,
 ): Map<string, TraceUsage> {
-  const candidates = new Set(roots.map(root => root.traceId));
+  const candidates = new Set(rows.map(scope.usageKey));
   const fromMs = Date.parse(plan.timeRange.from);
   const seen = new Set<string>();
   const usage = new Map<string, TraceUsage>();
   for (const metric of metrics) {
-    if (metric.traceId === null || !candidates.has(metric.traceId)) continue;
+    const key = scope.metricKey(metric);
+    if (key === null || !candidates.has(key)) continue;
     if (!usageMetricNames.has(metric.name)) continue;
     if (Date.parse(metric.timestamp) < fromMs) continue;
     if (!matchesScope(metric, plan.scope)) continue;
     if (seen.has(metric.metricId)) continue;
     seen.add(metric.metricId);
 
-    let trace = usage.get(metric.traceId);
+    let trace = usage.get(key);
     if (!trace) {
       trace = { tokens: new Map(), cost: 0, priced: false, hasPricingFailure: false, costUnits: new Set() };
-      usage.set(metric.traceId, trace);
+      usage.set(key, trace);
     }
     trace.tokens.set(metric.name, (trace.tokens.get(metric.name) ?? 0) + metric.value);
     if (!costMetricNames.has(metric.name)) continue;
@@ -149,8 +151,20 @@ export function traceAggregatePercentile(sortedValues: number[], p: number): num
   return lowerValue + (rank - lower) * (upperValue - lowerValue);
 }
 
-function countDistinctValue(root: RawTraceQuerySpan, field: TraceAggregateCountDistinctField): string | null {
-  return field === 'traceId' ? root.traceId : traceQueryDimensionValue(root, field);
+/** Either aggregate plan: both share group, measure, `having`, `orderBy`, and bucket semantics. */
+type AggregatePlan = TrustedTraceAggregatePlan | TrustedSpanAggregatePlan;
+
+/** What differs between trace and span aggregation once the population is selected. */
+export interface AggregateScope {
+  dimensionValue(row: RawTraceQuerySpan, dimension: string): string | null;
+  /** Key a row's usage is aggregated under. */
+  usageKey(row: RawTraceQuerySpan): string;
+  /** Key of the row a metric belongs to, or `null` when it cannot belong to any. */
+  metricKey(metric: RawTraceAggregateMetric): string | null;
+}
+
+function countDistinctValue(row: RawTraceQuerySpan, field: string, scope: AggregateScope): string | null {
+  return field === 'traceId' ? row.traceId : scope.dimensionValue(row, field);
 }
 
 function durationMs(root: RawTraceQuerySpan): number {
@@ -158,7 +172,7 @@ function durationMs(root: RawTraceQuerySpan): number {
 }
 
 type MeasureValue = number | null;
-type MeasureValues = Map<TrustedTraceAggregateMeasureName, MeasureValue>;
+type MeasureValues = Map<string, MeasureValue>;
 
 interface GroupValues {
   measures: MeasureValues;
@@ -166,18 +180,19 @@ interface GroupValues {
   cost?: TraceAggregateRowCost;
 }
 
-function hasCostMeasure(plan: TrustedTraceAggregatePlan): boolean {
+function hasCostMeasure(plan: AggregatePlan): boolean {
   return plan.measures.some(measure => measure.type === 'canonical' && measure.name.startsWith('cost.'));
 }
 
 function computeMeasures(
   roots: RawTraceQuerySpan[],
-  plan: TrustedTraceAggregatePlan,
+  plan: AggregatePlan,
   usage: Map<string, TraceUsage>,
+  scope: AggregateScope,
 ): GroupValues {
   const values: MeasureValues = new Map();
   const count = roots.length;
-  const usageBearing = roots.flatMap(root => usage.get(root.traceId!) ?? []);
+  const usageBearing = roots.flatMap(root => usage.get(scope.usageKey(root)) ?? []);
   const priced = usageBearing.filter(trace => trace.priced);
   const covered = priced.filter(trace => !trace.hasPricingFailure).length;
   const costUnits = new Set(priced.flatMap(trace => [...trace.costUnits]));
@@ -192,7 +207,7 @@ function computeMeasures(
     if (measure.type === 'countDistinct') {
       const distinct = new Set<string>();
       for (const root of roots) {
-        const value = countDistinctValue(root, measure.field);
+        const value = countDistinctValue(root, measure.field, scope);
         if (value !== null) distinct.add(value);
       }
       values.set(measure.name, distinct.size);
@@ -277,11 +292,14 @@ function computeMeasures(
  * measure is UNKNOWN, `not` keeps UNKNOWN, `and` / `or` follow Kleene logic, and only TRUE keeps
  * the group.
  */
-function evaluateHaving(predicate: TrustedTraceAggregateHavingPredicate, measures: MeasureValues): boolean | null {
+function evaluateHaving(
+  predicate: TrustedTraceAggregateHavingPredicate<string>,
+  measures: MeasureValues,
+): boolean | null {
   switch (predicate.type) {
     case 'boolean': {
       const results = predicate.args.map(arg => evaluateHaving(arg, measures));
-      const decisive = predicate.operator === 'and' ? false : true;
+      const decisive = predicate.operator !== 'and';
       if (results.includes(decisive)) return decisive;
       return results.includes(null) ? null : !decisive;
     }
@@ -337,8 +355,9 @@ function compareNullable<T extends number | string>(
   return direction === 'desc' ? -order : order;
 }
 
-function compareGroups(left: Group, right: Group, plan: TrustedTraceAggregatePlan): number {
+function compareGroups(left: Group, right: Group, plan: AggregatePlan): number {
   const orderBy = plan.orderBy;
+  const dimensions: readonly string[] = plan.dimensions;
   const primary =
     orderBy.target === 'measure'
       ? compareNullable(
@@ -347,8 +366,8 @@ function compareGroups(left: Group, right: Group, plan: TrustedTraceAggregatePla
           orderBy.direction,
         )
       : compareNullable(
-          left.dimensions[plan.dimensions.indexOf(orderBy.dimension)]!,
-          right.dimensions[plan.dimensions.indexOf(orderBy.dimension)]!,
+          left.dimensions[dimensions.indexOf(orderBy.dimension)]!,
+          right.dimensions[dimensions.indexOf(orderBy.dimension)]!,
           orderBy.direction,
         );
   if (primary !== 0) return primary;
@@ -359,15 +378,12 @@ function compareGroups(left: Group, right: Group, plan: TrustedTraceAggregatePla
   return 0;
 }
 
-function projectValues(
-  values: GroupValues,
-  plan: TrustedTraceAggregatePlan,
-): Pick<TraceAggregateRow, 'measures' | 'cost'> {
+function projectValues(values: GroupValues, plan: AggregatePlan): Pick<TraceAggregateRow, 'measures' | 'cost'> {
   const measures = Object.fromEntries(plan.measures.map(measure => [measure.name, values.measures.get(measure.name)!]));
   return { measures: measures as TraceAggregateRow['measures'], ...(values.cost && { cost: values.cost }) };
 }
 
-function rowDimensions(group: Group, plan: TrustedTraceAggregatePlan): TraceAggregateRow['dimensions'] {
+function rowDimensions(group: Group, plan: AggregatePlan): TraceAggregateRow['dimensions'] {
   const dimensions: Record<string, string | null> = {};
   plan.dimensions.forEach((dimension, index) => {
     dimensions[dimension] = group.dimensions[index]!;
@@ -375,16 +391,34 @@ function rowDimensions(group: Group, plan: TrustedTraceAggregatePlan): TraceAggr
   return dimensions;
 }
 
+const traceScope: AggregateScope = {
+  dimensionValue: (root, dimension) => traceQueryDimensionValue(root, dimension as TraceAggregateDimension),
+  usageKey: root => root.traceId!,
+  metricKey: metric => metric.traceId,
+};
+
 export function evaluateTraceAggregate(
   data: TraceAggregateFixtureData,
   plan: TrustedTraceAggregatePlan,
 ): TraceAggregateResponse {
-  const roots = selectTraceQueryRoots(data, plan);
-  const usage = computeTraceUsage(data.metrics ?? [], roots, plan);
+  return evaluateAggregate(selectTraceQueryRoots(data, plan), data.metrics ?? [], plan, traceScope);
+}
+
+/**
+ * Groups, measures, filters, orders, limits, and buckets an already-selected population. Shared
+ * by the trace and span evaluators so the two scopes cannot drift.
+ */
+export function evaluateAggregate(
+  roots: RawTraceQuerySpan[],
+  metrics: RawTraceAggregateMetric[],
+  plan: AggregatePlan,
+  scope: AggregateScope,
+): TraceAggregateResponse {
+  const usage = computeUsage(metrics, roots, plan, scope);
 
   const groupsByKey = new Map<string, Group>();
   for (const root of roots) {
-    const dimensions = plan.dimensions.map(dimension => traceQueryDimensionValue(root, dimension));
+    const dimensions = plan.dimensions.map(dimension => scope.dimensionValue(root, dimension));
     const key = JSON.stringify(dimensions);
     let group = groupsByKey.get(key);
     if (!group) {
@@ -395,7 +429,7 @@ export function evaluateTraceAggregate(
   }
 
   const groups = [...groupsByKey.values()];
-  for (const group of groups) group.values = computeMeasures(group.roots, plan, usage);
+  for (const group of groups) group.values = computeMeasures(group.roots, plan, usage, scope);
 
   const surviving = plan.having
     ? groups.filter(group => evaluateHaving(plan.having!, group.values.measures) === true)
@@ -424,7 +458,7 @@ export function evaluateTraceAggregate(
       rows.push({
         ...(dimensions && { dimensions }),
         bucket: new Date(bucketMs).toISOString(),
-        ...projectValues(computeMeasures(buckets.get(bucketMs)!, plan, usage), plan),
+        ...projectValues(computeMeasures(buckets.get(bucketMs)!, plan, usage, scope), plan),
       });
     }
   }

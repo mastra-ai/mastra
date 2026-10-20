@@ -4821,6 +4821,12 @@ export class AgentThreadStreamRuntime {
     let activeReaderStreamId: string | null = null;
     let currentRunRequestContext: RequestContext | undefined;
     let cancelledByAbort = false;
+    /** Runs whose suspension or approval prompt this subscriber yielded. */
+    const parkedPromptRunIds = new Set<string>();
+    /** Parked runs aborted after their stream ended here, awaiting a synthetic abort. */
+    const parkedAbortRunIds: string[] = [];
+    // Queued streams of a run aborted before this subscriber read them.
+    const abortedPendingStreamIds = new Set<string>();
 
     const markActiveIfLive = async (runId: string, streamId: string, local: boolean) => {
       if (!local && !(await this.#hasLiveThreadLease(resolvedPubSub, key, runId))) return;
@@ -5323,7 +5329,21 @@ export class AgentThreadStreamRuntime {
           try {
             void currentReader.cancel();
           } catch {}
+        } else if (data.type === 'run-aborted' && parkedPromptRunIds.has(data.runId)) {
+          const abortedPending = pendingRuns.filter(
+            pending =>
+              pending.runId === data.runId && (data.streamId === undefined || pending.streamId === data.streamId),
+          );
+          if (abortedPending.length > 0) {
+            // Not read yet: yield the abort once that stream ends without one.
+            for (const pending of abortedPending) abortedPendingStreamIds.add(pending.streamId);
+          } else if (activeReaderRunId !== data.runId) {
+            // A run whose prompt this subscriber surfaced, aborted while parked:
+            // its stream already ended here, so yield the abort without a reader.
+            parkedAbortRunIds.push(data.runId);
+          }
         }
+        if (data.type !== 'run-suspended') parkedPromptRunIds.delete(data.runId);
         // An abort is not completion: the owner still needs to finish and drain
         // pending signals before idle messages can start.
         if (data.type === 'run-completed') {
@@ -5492,12 +5512,20 @@ export class AgentThreadStreamRuntime {
         try {
           if (historyChunk) yield historyChunk;
           while (!done || pendingRuns.length > 0) {
+            const parkedAbortRunId = parkedAbortRunIds.shift();
+            if (parkedAbortRunId !== undefined) {
+              yield { type: 'abort', runId: parkedAbortRunId } as any;
+              continue;
+            }
             if (pendingRuns.length === 0) {
               await new Promise<void>(resolve => waiters.push(resolve));
               continue;
             }
             const run = pendingRuns.shift()!;
-            if (isSuperseded(run.runId, run.generation)) continue;
+            if (isSuperseded(run.runId, run.generation)) {
+              abortedPendingStreamIds.delete(run.streamId);
+              continue;
+            }
             // A local run can be read before its `run-registered` event arrives.
             noteGeneration(run.runId, run.streamId, run.generation, run.supersedes);
             noteRunHalf(run.runId, { streamId: run.streamId, streamSeq: run.streamSeq });
@@ -5549,6 +5577,7 @@ export class AgentThreadStreamRuntime {
                     yield heldStart;
                   }
                   if (!isPrompt) heldStart = undefined;
+                  else parkedPromptRunIds.add(run.runId);
                   yield partWithRunId;
                 } else if (typedPart?.type === 'start' && historyFilter && !storedStreamIds.has(run.streamId)) {
                   heldStart = partWithRunId;
@@ -5560,6 +5589,9 @@ export class AgentThreadStreamRuntime {
                   typedPart.type === 'abort' ||
                   typedPart.type === 'tripwire' ||
                   (typedPart.type === 'finish' && finishReason !== 'tool-calls');
+                if (typedPart.type === 'error' || typedPart.type === 'abort' || typedPart.type === 'tripwire') {
+                  parkedPromptRunIds.delete(run.runId);
+                }
                 if (terminalBoundary) {
                   // After a final terminal chunk, drain any non-visible trailing
                   // data in the background to prevent upstream backpressure while
@@ -5580,7 +5612,8 @@ export class AgentThreadStreamRuntime {
               // If the stream closed because we cancelled the reader after a
               // run-aborted event, yield a synthetic abort so subscribers
               // finalize the run.
-              if (!readerReleased && !done && cancelledByAbort) {
+              const abortedWhilePending = abortedPendingStreamIds.delete(run.streamId);
+              if (!readerReleased && !done && (cancelledByAbort || abortedWhilePending)) {
                 yield { type: 'abort', runId: run.runId } as any;
                 cancelledByAbort = false;
               }

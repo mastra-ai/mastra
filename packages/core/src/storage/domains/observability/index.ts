@@ -5,6 +5,7 @@ export * from './inmemory';
 export * from './logs';
 export * from './metrics';
 export * from './scores';
+export * from './span-aggregate';
 export * from './record-builders';
 export * from './trace-aggregate';
 export * from './trace-aggregate-planner';

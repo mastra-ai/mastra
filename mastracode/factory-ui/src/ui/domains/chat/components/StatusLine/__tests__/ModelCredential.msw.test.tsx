@@ -1,3 +1,4 @@
+import type { ModelCredentialHolder } from '@mastra/factory/routes/config';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -6,7 +7,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/ui/render';
-import type { ModelCredentialHolder } from '../../../../../../hooks/useAvailableModels';
 import type { SessionModelCatalog } from '../../../../../../hooks/useSessionModelCatalog';
 import { ChatModelsContext } from '../../../context/ChatModelsContext';
 import type { ChatModelsApi } from '../../../context/ChatModelsContext';

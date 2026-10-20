@@ -1,3 +1,4 @@
+export * from './span-aggregate';
 export * from './trace-aggregate';
 export * from './trace-query';
 export * from './trace-query-discovery';
@@ -180,6 +181,13 @@ export async function writeTraceQueryFixture(
       userId: span.userId ?? null,
       sessionId: span.sessionId ?? null,
       experimentId: span.experimentId ?? null,
+      requestId: span.requestId ?? null,
+      parentEntityType: (span.parentEntityType ?? null) as EntityType | null,
+      parentEntityId: span.parentEntityId ?? null,
+      parentEntityName: span.parentEntityName ?? null,
+      rootEntityType: (span.rootEntityType ?? null) as EntityType | null,
+      rootEntityId: span.rootEntityId ?? null,
+      rootEntityName: span.rootEntityName ?? null,
       tags: span.tags,
       attributes: span.attributes,
       metadata: span.metadata,

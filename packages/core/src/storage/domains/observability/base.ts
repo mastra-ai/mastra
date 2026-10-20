@@ -65,6 +65,7 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
 } from './scores';
+import type { SpanAggregateResponse, TrustedSpanAggregatePlan } from './span-aggregate';
 import type { SpanQueryResponse, TrustedSpanQueryPlan } from './span-query';
 import type { ThreadQueryResponse, TrustedThreadRowsQueryPlan } from './thread-query';
 import type { TraceAggregateResponse } from './trace-aggregate';
@@ -117,6 +118,7 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
  * - `span-query`: `querySpans` over completed spans
  * - `span-query-context-fields`: identity, context and parent/root entity predicates added to `querySpans`
+ * - `span-aggregate`: `aggregateSpans`, including every `querySpans` predicate field
  * - `trace-query`: `queryTraces`
  * - `trace-aggregate`: `aggregateTraces`
  * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
@@ -141,6 +143,7 @@ export type ObservabilityStorageFeature =
   | 'metric-discovery'
   | 'span-query'
   | 'span-query-context-fields'
+  | 'span-aggregate'
   | 'trace-query'
   | 'trace-aggregate'
   | 'trace-query-root-duration'
@@ -436,6 +439,18 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support trace aggregation',
+    });
+  }
+
+  /**
+   * Executes a validated span-aggregate plan.
+   */
+  async aggregateSpans(_plan: TrustedSpanAggregatePlan): Promise<SpanAggregateResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_AGGREGATE_SPANS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support span aggregation',
     });
   }
 
