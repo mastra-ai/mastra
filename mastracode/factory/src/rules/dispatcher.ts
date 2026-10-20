@@ -92,23 +92,28 @@ class FactoryDecisionSuperseded extends Error {}
 /** A run that ran and ended in error; the session's own listener reports it to followers. */
 class RunEndedInError extends FactoryDispatchError {}
 
-/** Credential and auth failures, which a person can fix and retry; checked before any permanent-rejection test. */
-function isCredentialFailure(error: string): boolean {
-  const normalized = error.toLowerCase();
-  return (
-    normalized.includes('credential') ||
-    normalized.includes('no authenticated user') ||
-    normalized.includes('unauthorized') ||
-    normalized.includes('api key') ||
-    /\b(?:401|403)\b/.test(normalized)
-  );
+// The Mastra Code credential resolver's own failure; free text that merely mentions credentials does not count.
+const CREDENTIAL_RESOLUTION_FAILURE = 'tenant model credential policy could not be resolved';
+
+function httpStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const { statusCode, status } = error as { statusCode?: unknown; status?: unknown };
+  if (typeof statusCode === 'number') return statusCode;
+  return typeof status === 'number' ? status : undefined;
 }
 
-function runErrorFailure(label: string, error: string | undefined): RunEndedInError {
-  const cause = error?.trim();
+/** Model credentials a person can fix: the resolver's own error, or a provider's structured 401/403. */
+function isCredentialFailure(error: unknown, message: string): boolean {
+  if (message.toLowerCase().includes(CREDENTIAL_RESOLUTION_FAILURE)) return true;
+  const status = httpStatus(error) ?? httpStatus((error as { cause?: unknown } | undefined)?.cause);
+  return status === 401 || status === 403;
+}
+
+function runErrorFailure(label: string, error: unknown): RunEndedInError {
+  const cause = (error instanceof Error ? error.message : String(error ?? '')).trim();
   if (!cause) return new RunEndedInError('run_failed', `${label} ended in error.`);
   return new RunEndedInError(
-    isCredentialFailure(cause) ? 'run_credentials_unavailable' : 'run_failed',
+    isCredentialFailure(error, cause) ? 'run_credentials_unavailable' : 'run_failed',
     `${label} ended in error: ${cause}`,
   );
 }
@@ -169,7 +174,7 @@ function watchRun(
   // model) is lost and the abort is retried blindly.
   let omFailure: string | undefined;
   // The run's own error event precedes its `agent_end: 'error'` and is the only place the cause appears.
-  let runError: string | undefined;
+  let runError: unknown;
   // Re-armed before a redelivery so the second send waits on its own run's
   // ending rather than seeing the one that already resolved.
   const arm = () => {
@@ -190,7 +195,7 @@ function watchRun(
       return;
     }
     if (event.type === 'error') {
-      runError = event.error instanceof Error ? event.error.message : String(event.error ?? '');
+      runError = event.error;
       return;
     }
     if (event.type === 'om_observation_failed' || event.type === 'om_buffering_failed') {
@@ -403,9 +408,21 @@ function positiveMs(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
+// Provider and source-control key prefixes; run errors carry provider text verbatim.
+const KEY_SHAPED_TOKEN =
+  /\b(?:sk-[A-Za-z0-9_-]{3,}|gh[pousr]_[A-Za-z0-9]{10,}|github_pat_[A-Za-z0-9_]{10,}|xox[abprs]-[A-Za-z0-9-]{10,})/g;
+
+// Mixed-case alphanumeric runs read as keys; lowercase hex SHAs and UUIDs stay readable.
+function looksLikeSecret(token: string): boolean {
+  return /[A-Z]/.test(token) && /[a-z]/.test(token) && /\d/.test(token);
+}
+
 function sanitizeDispatchError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message
+    .replace(KEY_SHAPED_TOKEN, '[redacted]')
+    .replace(/\bbearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
+    .replace(/\b[A-Za-z0-9_+/=-]{24,}/g, token => (looksLikeSecret(token) ? '[redacted]' : token))
     .replace(/\b(?:bearer|token|api[-_ ]?key|authorization)\s*[:=]?\s*[^\s,;]+/gi, '[redacted]')
     .slice(0, MAX_ERROR_LENGTH);
 }

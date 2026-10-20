@@ -41,7 +41,7 @@ function createSession(
     /** Emitted on the run's event stream just before each `agent_end`, modelling an OM failure that aborted the run. */
     omObservationError?: string;
     /** Emitted as the run's `error` event just before an `agent_end: 'error'`, as the session does. */
-    runError?: string;
+    runError?: string | Error;
     /** Models a signal queued onto an in-flight run that ends before draining it. */
     dropDeliveredSignal?: boolean;
     /** The run that swallowed the dropped signal ends, freeing the session. */
@@ -81,7 +81,10 @@ function createSession(
   const emitAgentEnd = (reason = options?.agentEndReason) => {
     if (reason === 'error' && options?.runError) {
       for (const listener of agentEndListeners) {
-        listener({ type: 'error', error: new Error(options.runError) });
+        listener({
+          type: 'error',
+          error: options.runError instanceof Error ? options.runError : new Error(options.runError),
+        });
       }
     }
     if (options?.omObservationError) {
@@ -6686,5 +6689,118 @@ describe('a skill run that ends in error (#27740)', () => {
       failureCode: 'run_failed',
       lastError: expect.stringContaining('ECONNRESET'),
     });
+  });
+
+  it.each([
+    ['a tool quoting an API key hint', 'Tool failed: README says "set your API key in .env" (user quote)'],
+    ['model output naming a 401 handler', 'Model output parse error near "HTTP 401 handler" in user code'],
+    ['a repository credential failure', 'Invalid credentials for repository clone'],
+  ])('does not blame model credentials for %s', async (_case, runError) => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-not-credentials',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller } = createSession(undefined, { agentEndReason: 'error', runError });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      failureCode: 'run_failed',
+    });
+  });
+
+  it('blames model credentials for a provider error carrying a 401 status', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-provider-401',
+    });
+    await bindWorkRun(storage, item.id);
+    const runError = Object.assign(new Error('Request failed'), { statusCode: 401 });
+    const { controller } = createSession(undefined, { agentEndReason: 'error', runError });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      failureCode: 'run_credentials_unavailable',
+    });
+  });
+
+  it.each([
+    ['Incorrect API key provided: sk-proj-abc123SECRET', 'sk-proj-abc123SECRET'],
+    ['Authorization: Bearer sk-abcSECRET42', 'sk-abcSECRET42'],
+    ['x-api-key header is invalid: sk-ant-api03-SECRETxyz', 'sk-ant-api03-SECRETxyz'],
+    ['provider rejected token Zm9vYmFyQmF6UXV4MTIzNDU2Nzg5MA', 'Zm9vYmFyQmF6UXV4MTIzNDU2Nzg5MA'],
+  ])('keeps a key in the run error out of lastError and attention: %s', async (runError, secret) => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-secret-error',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller } = createSession(undefined, { agentEndReason: 'error', runError });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision?.lastError).toContain('[redacted]');
+    expect(decision?.lastError).not.toContain(secret);
+    expect(failedDecisionAttentionSpec.detail(decision!)).not.toContain(secret);
+  });
+
+  it('leaves commit SHAs and ids in a run error readable', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-sha-error',
+    });
+    await bindWorkRun(storage, item.id);
+    const runError =
+      'git checkout 9c34731d508cc586e92194d2e871d00fa7c030eb failed for run 8b065d55-2922-4ae8-915f-ee66aa30d726';
+    const { controller } = createSession(undefined, { agentEndReason: 'error', runError });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.lastError).toContain(runError);
   });
 });
