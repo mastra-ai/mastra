@@ -8248,6 +8248,16 @@ export class Agent<
     return undefined;
   }
 
+  /** The run-level `returnScorerData` a suspended run started with, persisted beside its stream state. */
+  #getSnapshotReturnScorerData(existingSnapshot: WorkflowRunState | null | undefined): boolean | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      const persisted = step?.status === 'suspended' ? step.suspendPayload?.__returnScorerData : undefined;
+      if (typeof persisted === 'boolean') return persisted;
+    }
+    return undefined;
+  }
+
   /**
    * Resolves a run's scopes (see `resolveAgentScopes`) and returns the options the run
    * executes with. When scopes carry `resource:`/`thread:`, `memory` is set from them so
@@ -10597,6 +10607,12 @@ export class Agent<
       method: 'resumeStream',
     });
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
+    // Precedence: resume call > the run's own flag > defaultOptions (merged above).
+    const persistedReturnScorerData =
+      streamOptions?.returnScorerData === undefined ? this.#getSnapshotReturnScorerData(existingSnapshot) : undefined;
+    if (persistedReturnScorerData !== undefined) {
+      mergedStreamOptions.returnScorerData = loopStreamOptions.returnScorerData = persistedReturnScorerData;
+    }
 
     if (snapshotMemoryInfo?.threadId) {
       mergedStreamOptions.memory = {
@@ -10813,6 +10829,12 @@ export class Agent<
 
     const runId = options?.runId ?? '';
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
+    // Precedence: resume call > the run's own flag > defaultOptions (merged above).
+    const persistedReturnScorerData =
+      options?.returnScorerData === undefined ? this.#getSnapshotReturnScorerData(existingSnapshot) : undefined;
+    if (persistedReturnScorerData !== undefined) {
+      mergedOptions.returnScorerData = loopOptions.returnScorerData = persistedReturnScorerData;
+    }
     const { options: scopedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(mergedOptions, {
       callScopes: options?.scopes,
       defaultScopes: defaultOptions?.scopes,
