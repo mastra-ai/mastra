@@ -3,7 +3,8 @@ import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 
 import { createSessionAsRowOwner } from '../integrations/subscription-session.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
-import { listFactorySessionThreads } from '../session/session-threads.js';
+import { listFactorySessionThreads, sessionOwnsResource } from '../session/session-threads.js';
+import type { FactorySessionOwnership } from '../session/session-threads.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 /** Notifications between Factory sessions all carry this source. */
@@ -73,7 +74,9 @@ export async function deliverFactorySessionNotification({
   // session's when it is the session's own thread or carries its session stamp
   // (or, before migration, sits under the session id). Anything else is not
   // this session's, whatever the caller paired it with.
-  if (!isSessionThread(thread, target.sessionId)) {
+  let targetRow: ReturnType<SourceControlSessionLookup['getBySessionId']> | undefined;
+  const loadRow = () => (targetRow ??= sessions.getBySessionId(target.sessionId));
+  if (!(await isSessionThread(thread, target.sessionId, loadRow))) {
     return { delivered: 'skipped', reason: 'thread-not-owned' };
   }
   const ownerResourceId = thread.resourceId || target.sessionId;
@@ -83,7 +86,7 @@ export async function deliverFactorySessionNotification({
   let session = await controller.getSession(target.sessionId);
   if (!session) {
     if (onlyIfLive) return { delivered: 'skipped', reason: 'offline' };
-    const row = await sessions.getBySessionId(target.sessionId);
+    const row = await loadRow();
     if (!row?.factoryProjectId) return { delivered: 'skipped', reason: 'session-not-found' };
     session = await createSessionAsRowOwner(controller, {
       sessionId: target.sessionId,
@@ -173,17 +176,24 @@ export async function resolveSessionThread({
   const live = await controller.getSession(sessionId);
   const current = live?.thread.getId();
   if (current) return current;
-  const threads = await listFactorySessionThreads(controller, sessionId);
+  // Without a row no resource is the session's to claim stamped threads on.
+  const threads = await listFactorySessionThreads(controller, row ?? { sessionId, userId: '' });
   const newest = [...threads].sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())[0];
   return newest?.id ?? null;
 }
 
-function isSessionThread(
+async function isSessionThread(
   thread: { id: string; resourceId?: string | null; metadata?: Record<string, unknown> | null },
   sessionId: string,
-): boolean {
+  loadRow: () => Promise<FactorySessionOwnership | null>,
+): Promise<boolean> {
   if (thread.id === sessionId) return true;
   const stamp = thread.metadata?.factorySessionId;
-  if (typeof stamp === 'string' && stamp) return stamp === sessionId;
+  if (typeof stamp === 'string' && stamp) {
+    if (stamp !== sessionId) return false;
+    // The stamp is client-writable metadata: it only counts under a resource the session may use.
+    const row = await loadRow();
+    return !!row && sessionOwnsResource(row, thread.resourceId);
+  }
   return !thread.resourceId || thread.resourceId === sessionId;
 }

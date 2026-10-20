@@ -1325,6 +1325,38 @@ describe('MastraFactory.prepare', () => {
       expect(runEndReports).toEqual([]);
     });
 
+    it("refuses a wake on a thread another resource stamped with someone else's session", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      // An attacker's own thread, stamped with user-1's session id.
+      controllerMock.queryThreadById.mockResolvedValueOnce({
+        id: 'thread-atk',
+        resourceId: 'user-atk',
+        metadata: { factorySessionId: 'session-1' },
+      });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      await expect(
+        prepareWake({ requestContext: wake, resourceId: 'user-atk', threadId: 'thread-atk' }),
+      ).rejects.toThrow("can't be woken as its owner");
+
+      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+      expect(runEndReports).toEqual([
+        expect.objectContaining({
+          sessionId: 'thread-atk',
+          threadId: 'thread-atk',
+          outcome: expect.objectContaining({ status: 'failed', failureCode: 'wake-owner-unresolved' }),
+        }),
+      ]);
+    });
+
     it("fails a wake whose owner can't be resolved, with a failed report, rather than running it as the sender", async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });

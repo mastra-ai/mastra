@@ -608,7 +608,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: 'Session not found' }, 404);
         }
         if (!options.controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
-        const threads = await listFactorySessionThreads(options.controller, sessionId);
+        const threads = await listFactorySessionThreads(options.controller, row);
         const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
         if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
         const stored = await options.memorySettings.get({ orgId: row.orgId, userId: row.userId });

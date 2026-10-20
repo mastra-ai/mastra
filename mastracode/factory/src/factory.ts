@@ -120,6 +120,7 @@ import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './ses
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
+import { sessionOwnsResource } from './session/session-threads.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
@@ -873,14 +874,18 @@ export class MastraFactory {
       threadId: string;
       thread?: { metadata?: Record<string, unknown> } | null;
     }) => {
-      const stored = thread === undefined ? await this.#prepared?.base.controller.queryThreadById({ threadId }) : thread;
+      const stored =
+        thread === undefined ? await this.#prepared?.base.controller.queryThreadById({ threadId }) : thread;
       const stamp = stored?.metadata?.factorySessionId;
       const candidates = [...new Set([typeof stamp === 'string' ? stamp : '', threadId, resourceId])].filter(Boolean);
       for (const sessionId of candidates) {
         const row = await sourceControlSessions.getBySessionId(sessionId);
-        if (row) return { sessionId, row };
+        // The stamp is client-writable metadata: a session only claims a
+        // thread that runs under a resource it may use.
+        if (row && sessionOwnsResource(row, resourceId)) return { sessionId, row };
       }
-      return { sessionId: candidates[0]!, row: null };
+      // Unresolved: report on the woken thread, never on a session a stamp merely names.
+      return { sessionId: threadId, row: null };
     };
     const failWake = async ({ sessionId, threadId }: { sessionId: string; threadId: string }, reason: string) => {
       const message = `Factory session ${sessionId} can't be woken as its owner: ${reason}.`;
