@@ -194,6 +194,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'repository_pr_failed',
   'run_configuration_invalid',
   'run_credentials_unavailable',
+  'run_user_unauthenticated',
   'run_failed',
   'unknown',
 ] as const;

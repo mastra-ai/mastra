@@ -94,28 +94,33 @@ class RunEndedInError extends FactoryDispatchError {}
 
 // The Mastra Code credential resolver's own failure; free text that merely mentions credentials does not count.
 const CREDENTIAL_RESOLUTION_FAILURE = 'tenant model credential policy could not be resolved';
+// The resolver's reason when the request context has no user; it recurs on every retry of the same start.
+const NO_AUTHENTICATED_USER = 'the request has no authenticated user';
 
 function httpStatus(error: unknown): number | undefined {
   if (!error || typeof error !== 'object') return undefined;
-  const { statusCode, status } = error as { statusCode?: unknown; status?: unknown };
-  if (typeof statusCode === 'number') return statusCode;
-  return typeof status === 'number' ? status : undefined;
+  if ('statusCode' in error && typeof error.statusCode === 'number') return error.statusCode;
+  return 'status' in error && typeof error.status === 'number' ? error.status : undefined;
 }
 
-/** Model credentials a person can fix: the resolver's own error, or a provider's structured 401/403. */
-function isCredentialFailure(error: unknown, message: string): boolean {
-  if (message.toLowerCase().includes(CREDENTIAL_RESOLUTION_FAILURE)) return true;
-  const status = httpStatus(error) ?? httpStatus((error as { cause?: unknown } | undefined)?.cause);
-  return status === 401 || status === 403;
+function causeOf(error: unknown): unknown {
+  return error && typeof error === 'object' && 'cause' in error ? error.cause : undefined;
+}
+
+function runErrorCode(error: unknown, message: string): FactoryDispatchFailureCode {
+  const lower = message.toLowerCase();
+  if (lower.includes(CREDENTIAL_RESOLUTION_FAILURE)) {
+    return lower.includes(NO_AUTHENTICATED_USER) ? 'run_user_unauthenticated' : 'run_credentials_unavailable';
+  }
+  // Model credentials a person can fix: a provider's structured 401/403.
+  const status = httpStatus(error) ?? httpStatus(causeOf(error));
+  return status === 401 || status === 403 ? 'run_credentials_unavailable' : 'run_failed';
 }
 
 function runErrorFailure(label: string, error: unknown): RunEndedInError {
   const cause = (error instanceof Error ? error.message : String(error ?? '')).trim();
   if (!cause) return new RunEndedInError('run_failed', `${label} ended in error.`);
-  return new RunEndedInError(
-    isCredentialFailure(error, cause) ? 'run_credentials_unavailable' : 'run_failed',
-    `${label} ended in error: ${cause}`,
-  );
+  return new RunEndedInError(runErrorCode(error, cause), `${label} ended in error: ${cause}`);
 }
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
