@@ -92,7 +92,14 @@ const manifest = {
   settings: {
     event_subscriptions: {
       request_url: webhookUrl,
-      bot_events: ['app_mention', 'message.channels', 'message.groups', 'message.im', 'message.mpim'],
+      bot_events: [
+        'app_mention',
+        'message.channels',
+        'message.groups',
+        'message.im',
+        'message.mpim',
+        'agent_session_stopped',
+      ],
     },
     interactivity: {
       is_enabled: true,

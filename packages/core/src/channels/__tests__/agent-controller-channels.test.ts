@@ -1301,3 +1301,72 @@ describe('AgentControllerChannels thread history', () => {
     expect(chatThread.post).not.toHaveBeenCalled();
   }, 30_000);
 });
+
+/**
+ * Holds the stream open until the run's abort signal fires, so a test can
+ * observe an in-flight run and stop it. MockLanguageModelV2 rather than aimock:
+ * the test needs a deterministic never-finishing stream it can abort mid-flight.
+ */
+function createHangingModel() {
+  const aborted = vi.fn();
+  const model = new MockLanguageModelV2({
+    doStream: async ({ abortSignal }) => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      stream: new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: [] });
+          controller.enqueue({ type: 'text-start', id: 'text-1' });
+          controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Working' });
+          abortSignal?.addEventListener('abort', () => {
+            aborted();
+            controller.error(abortSignal.reason ?? new Error('aborted'));
+          });
+        },
+      }),
+    }),
+  });
+  return { model, aborted };
+}
+
+function stopEvent(adapter: any, threadId: string) {
+  return {
+    adapter,
+    channelId: threadId.split(':')[0],
+    streamingMessageTs: [],
+    threadId,
+    threadTs: threadId.split(':')[1],
+    userId: 'user-1',
+  };
+}
+
+describe('AgentControllerChannels native stop', () => {
+  it('aborts the in-flight run of the thread when the platform stop button is clicked', async () => {
+    const { model, aborted } = createHangingModel();
+    const { adapter, controller, mastra, channels } = await createSetup({ model });
+    const chatThread = createChatThread(adapter, 'chan-1:t-1');
+
+    await (channels as any).processChatMessage(
+      chatThread,
+      createMessage('m-1', 'long task'),
+      mastra,
+      new RequestContext(),
+    );
+    const session = (await controller.getSession('channel:chan-1:t-1'))!;
+    await waitFor(() => session.run.isRunning() && model.doStreamCalls.length > 0, { what: 'run in flight' });
+
+    channels.sdk!.processAgentSessionStopped(stopEvent(adapter, 'chan-1:t-1') as any);
+
+    await waitFor(() => aborted.mock.calls.length > 0, { what: 'model stream aborted' });
+    await waitFor(() => !session.run.isRunning(), { what: 'run stopped' });
+  }, 30_000);
+
+  it('does not create a session when stop is clicked in an unmapped thread', async () => {
+    const { adapter, controller, channels } = await createSetup();
+
+    channels.sdk!.processAgentSessionStopped(stopEvent(adapter, 'chan-9:t-9') as any);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(await controller.getSession('channel:chan-9:t-9')).toBeUndefined();
+  }, 30_000);
+});

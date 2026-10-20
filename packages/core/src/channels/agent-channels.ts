@@ -402,6 +402,18 @@ export class AgentChannels {
   }
 
   /**
+   * Stop the active run on a mapped thread, e.g. when the user clicks the
+   * platform's native stop button. Returns whether a run was aborted.
+   */
+  protected async dispatchStop(args: { thread: StorageThreadType }): Promise<boolean> {
+    return this.agent.abortThreadStream({
+      threadId: args.thread.id,
+      resourceId: args.thread.resourceId,
+      clearPendingSignals: true,
+    });
+  }
+
+  /**
    * Check if an adapter is registered for the given platform.
    */
   hasAdapter(platform: string): boolean {
@@ -924,6 +936,28 @@ export class AgentChannels {
           return defaultHandler();
         });
       }
+
+      // Slack's native agent stop button (`agent_session_stopped`).
+      chat.onAgentSessionStopped(async event => {
+        const platform = event.adapter.name;
+        const logContext = { platform, threadId: event.threadId, actorId: event.userId };
+        try {
+          const { thread } = await this.findThreadMapping({
+            externalThreadId: event.threadId,
+            channelId: event.adapter.channelIdFromThreadId(event.threadId),
+            platform,
+            mastra,
+          });
+          if (!thread) {
+            this.log('debug', 'No mapped channel thread for stop request', logContext);
+            return;
+          }
+          const stopped = await this.dispatchStop({ thread });
+          this.log('info', stopped ? 'Stopped run from chat' : 'No active run to stop', logContext);
+        } catch (err) {
+          this.log('error', 'Error handling stop request', { ...logContext, error: err });
+        }
+      });
       await chat.initialize();
       this.chat = chat;
 

@@ -386,6 +386,20 @@ export class AgentControllerChannels extends AgentChannels {
   }
 
   /**
+   * Abort the run of the controller session bound to this chat thread. Without
+   * a `resolveSession` hook only a live session is looked up, so a stop click
+   * never creates one; with the hook, the host resolves the session as usual.
+   */
+  protected override async dispatchStop({ thread }: { thread: StorageThreadType }): Promise<boolean> {
+    const session = this.resolveSession
+      ? await this.getSessionForThread(thread)
+      : await this.requireController().getSession(thread.resourceId);
+    if (!session || session.thread.getId() !== thread.id || !session.run.isRunning()) return false;
+    session.abort();
+    return true;
+  }
+
+  /**
    * Shared approve/decline path. Never calls the session's internal
    * `approveToolCall`/`declineToolCall` executors directly — the engine parked
    * at the gate owns the resume. `respondToToolApproval` is a silent no-op
