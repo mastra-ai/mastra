@@ -20,6 +20,7 @@ import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
 import { MessageBubble } from './MessageBubble';
 import { ProviderLoginAction } from './ProviderLoginAction';
+import { RunErrorNotice } from './RunErrorNotice';
 import { draws, messageText, renderableParts } from './transcript-parts';
 import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
@@ -272,6 +273,7 @@ function TranscriptItem({
 }
 
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
+  if (entry.error) return <RunErrorNotice error={entry.error} entryId={entry.id} />;
   return (
     <Notice
       className="my-2"

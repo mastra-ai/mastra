@@ -45,7 +45,7 @@ function canSwitchModel(kind: ChatSessionContextApi['kind'], isDraft: boolean, s
   return sessionEnabled;
 }
 
-export function ModelPicker() {
+export function ModelPicker({ triggerLabel, showThinking = true }: { triggerLabel?: string; showThinking?: boolean }) {
   const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
   const { status } = useChatConnection();
   const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
@@ -142,7 +142,7 @@ export function ModelPicker() {
         <PopoverTrigger
           type="button"
           disabled={modelMenuLocked}
-          aria-label={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
+          aria-label={triggerLabel ?? (notConfigured ? `Session model, ${label} is not configured` : 'Session model')}
           aria-busy={modelMenuLocked}
           className={cn(
             buttonVariants({ variant: 'ghost', size: 'sm' }),
@@ -151,7 +151,7 @@ export function ModelPicker() {
           title={selectedModelId}
         >
           <span className="max-w-48 truncate">
-            {label}
+            {triggerLabel ?? label}
             {notConfigured ? ' · not configured' : null}
           </span>
           <ChevronDown aria-hidden size={12} />
@@ -204,7 +204,7 @@ export function ModelPicker() {
           </Command>
         </PopoverContent>
       </Popover>
-      {activeModelId ? <SessionThinkingControl modelId={activeModelId} switchingModel={busy} /> : null}
+      {showThinking && activeModelId ? <SessionThinkingControl modelId={activeModelId} switchingModel={busy} /> : null}
     </ButtonsGroup>
   );
 }

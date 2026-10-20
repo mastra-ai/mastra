@@ -3,6 +3,7 @@ import type { ActivityStatus } from '@mastra/playground-ui/components/ai/activit
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+import type { MastraErrorPart } from '@mastra/core/agent/message-list';
 
 import { sentByOther } from './message-author';
 
@@ -40,6 +41,8 @@ export interface NoticeEntry {
   text: string;
   /** A provider credential is missing; the notice offers a way to sign in. */
   action?: 'provider-login';
+  /** Safe identity retained from run error events for the shared error notice. */
+  error?: MastraErrorPart['error'];
 }
 
 /** Wire-stable `Error.name` the SDK uses for missing provider credentials. */
@@ -402,6 +405,13 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
         'error',
         describeErrorEvent(event),
         isProviderAuthError(event.error) ? 'provider-login' : undefined,
+        {
+          name:
+            event.error && typeof event.error === 'object' && typeof event.error.name === 'string'
+              ? event.error.name
+              : 'Error',
+          message: describeErrorEvent(event),
+        },
       );
 
     default:
@@ -1063,8 +1073,10 @@ function pushNotice(
   level: 'info' | 'error',
   text: string,
   action?: NoticeEntry['action'],
+  error?: MastraErrorPart['error'],
 ): TranscriptState {
   const notice: NoticeEntry = { kind: 'notice', id: `notice-${Date.now()}-${noticeSeq++}`, level, text };
   if (action) notice.action = action;
+  if (error) notice.error = error;
   return { ...state, entries: [...state.entries, notice] };
 }
