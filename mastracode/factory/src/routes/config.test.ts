@@ -10,6 +10,7 @@ import type * as CoreLlm from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -606,6 +607,8 @@ describe('GET /web/config/models', () => {
           modelName: 'claude-fable-5',
           hasApiKey: true,
           reasoningOptions: fableReasoning,
+          credentialLabel: 'Claude Pro/Max',
+          credentialHolder: 'personal',
         },
       ],
     });
@@ -653,6 +656,53 @@ describe('GET /web/config/models', () => {
     expect((await app.request('/web/config/models?factoryId=missing')).status).toBe(404);
   });
 
+  it('names the credential and its holder from the scope a reply will use, not a personal login that shadows it', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
+      type: 'oauth',
+      refresh: 'refresh',
+      access: 'access',
+      expires: Date.now() + 60_000,
+    });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'anthropic', { type: 'api_key', key: 'sk-org' });
+    const orgProject = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Org' } });
+    const controller = {
+      listAvailableModels: async () => [
+        { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: false },
+      ],
+    };
+    const app = new Hono<{ Variables: { factoryAuthUser: { workosId: string; organizationId: string } } }>();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser', { workosId: 'user-a', organizationId: 'org1' });
+      await next();
+    });
+    mountApiRoutes(
+      app,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller,
+        modelCredentials: seed.credentials,
+        factoryProjects: seed.projects,
+      }).routes(),
+    );
+    const catalog = z.object({
+      models: z.array(z.object({ credentialLabel: z.string().optional(), credentialHolder: z.string().optional() })),
+    });
+    const credential = async (query: string) => {
+      const res = await app.request(`/web/config/models${query}`);
+      return catalog.parse(await res.json()).models[0];
+    };
+
+    expect(await credential(`?factoryId=${orgProject.id}`)).toEqual({
+      credentialLabel: 'Anthropic API key',
+      credentialHolder: 'organization',
+    });
+    expect(await credential('?scope=user')).toEqual({
+      credentialLabel: 'Claude Pro/Max',
+      credentialHolder: 'personal',
+    });
+  });
+
   it('includes Bedrock models for a tenant only when the deployment opted in', async () => {
     const seed = await createFactoryStorageForTests();
     const controller = {
@@ -691,6 +741,7 @@ describe('GET /web/config/models', () => {
           provider: 'amazon-bedrock',
           modelName: 'anthropic.claude-x',
           hasApiKey: true,
+          credentialHolder: 'deployment',
         },
       ],
     });
@@ -727,7 +778,9 @@ describe('GET /web/config/models', () => {
     const res = await app.request('/web/config/models');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      models: [{ id: 'acme/fast-1', provider: 'acme', modelName: 'fast-1', hasApiKey: true }],
+      models: [
+        { id: 'acme/fast-1', provider: 'acme', modelName: 'fast-1', hasApiKey: true, credentialHolder: 'organization' },
+      ],
     });
   });
 
@@ -860,6 +913,55 @@ describe('default model routes with a tenant', () => {
     expect(cleared.status).toBe(200);
     expect(await cleared.json()).toEqual({ ok: true, modelId: null });
     expect(await seed.modelDefaults.get({ orgId: 'org1', userId: 'user-a' })).toBeNull();
+  });
+
+  it('switches only the caller’s live user sessions without starting dormant sessions', async () => {
+    await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Team' } });
+    await putDefault(buildApp(userA), { modelId: 'openai/gpt-5.6' });
+    const settings = new Map<string, string>();
+    const rows = [
+      { sessionId: 'live', userId: 'user-a', originSessionId: null },
+      { sessionId: 'dormant', userId: 'user-a', originSessionId: null },
+      { sessionId: 'other-user', userId: 'user-b', originSessionId: null },
+      { sessionId: 'side-session', userId: 'user-a', originSessionId: 'live' },
+    ];
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, userA as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        modelDefaults: seed.modelDefaults,
+        factoryProjects: seed.projects,
+        workItems: seed.workItems,
+        sourceControls: [{ sessions: { listByProject: async () => rows } }] as never,
+        controller: {
+          ...controller,
+          getSessionByResource: async (id: string) =>
+            id === 'live'
+              ? {
+                  model: {
+                    get: () => settings.get('currentModelId') ?? '',
+                    switch: async (modelId: string) => void settings.set('currentModelId', modelId),
+                  },
+                  thread: { getId: () => 'thread-live' },
+                }
+              : undefined,
+        },
+      }).routes(),
+    );
+
+    const response = await app.request('/web/config/default-model/apply', { method: 'POST' });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      modelId: 'openai/gpt-5.6',
+      applied: ['live'],
+      skipped: [{ sessionId: 'dormant', reason: 'not-running' }],
+    });
+    expect(settings.get('currentModelId')).toBe('openai/gpt-5.6');
   });
 
   it('uses the local sentinel org and user when auth is disabled', async () => {

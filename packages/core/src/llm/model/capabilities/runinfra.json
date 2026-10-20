@@ -19,7 +19,13 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16": [
+    "Inferact/Qwen3.8-2.4T-A95B-NVFP4": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "ornith-ai/Ornith-1.5-35B-A3B": [
       {
         "type": "toggle"
       }
@@ -28,12 +34,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "Qwen/Qwen3.8-27B": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "deepseek-ai/DeepSeek-V4-Pro-0813": [
@@ -47,15 +47,15 @@
         "values": ["none", "low", "max"]
       }
     ],
-    "ornith-ai/Ornith-1.5-35B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Inferact/Qwen3.8-2.4T-A95B-NVFP4": [
+    "Qwen/Qwen3.8-27B": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16": [
+      {
+        "type": "toggle"
       }
     ]
   }

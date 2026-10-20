@@ -11,7 +11,8 @@
       "outputLogs": "new-only"
     },
     "lint": {
-      "dependsOn": []
+      "dependsOn": [],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/oxlint.config.ts"]
     },
     "lint:fix": {
       "dependsOn": [],

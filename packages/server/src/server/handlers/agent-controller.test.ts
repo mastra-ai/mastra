@@ -43,6 +43,18 @@ function makeAgent(id = 'test-agent') {
   return new Agent({ id, name: id, instructions: 'test', model: {} as any });
 }
 
+function makeControllerOn(storage: InMemoryStore) {
+  return new AgentController({
+    id: 'code',
+    storage,
+    workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+    modes: [
+      { id: 'build', name: 'Build', default: true, agent: makeAgent() },
+      { id: 'plan', name: 'Plan', agent: makeAgent() },
+    ],
+  });
+}
+
 function makeMastra() {
   const storage = new InMemoryStore();
   const controller = new AgentController({
@@ -202,6 +214,11 @@ describe('agent-controller routes', () => {
 
   describe('ABORT_AGENT_CONTROLLER_SESSION_ROUTE', () => {
     it('acks an abort on an idle session', async () => {
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra: mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any);
       const res = await ABORT_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',
@@ -246,28 +263,50 @@ describe('agent-controller routes', () => {
       }
     });
 
-    it('recreates a missing live session through the execute-authorized path', async () => {
-      const controller = mastra.getAgentController('code')!;
+    it('recovers a lost live session from its stored thread through the execute-authorized path', async () => {
+      const storage = new InMemoryStore();
+      const before = makeControllerOn(storage);
+      await before.init();
+      await before.createSession({ resourceId: 'lost-resource', id: 'lost-resource', threadId: 'lost-thread' });
+      // A restart keeps the stored thread and drops the in-memory session.
+      const controller = makeControllerOn(storage);
+      const restarted = new Mastra({ agentControllers: { code: controller }, storage });
       const createSession = vi.spyOn(controller, 'createSession');
 
-      await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
-        mastra,
+      const state = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra: restarted,
         controllerId: 'code',
-        resourceId: 'missing-resource',
-      } as any);
+        resourceId: 'lost-resource',
+      } as any)) as { threadId: string };
 
       expect(createSession).toHaveBeenCalledWith(
-        expect.objectContaining({
-          resourceId: 'missing-resource',
-          requestContext: undefined,
-        }),
+        expect.objectContaining({ resourceId: 'lost-resource', resumeOnly: true, requestContext: undefined }),
       );
-      expect(await controller.getSessionByResource('missing-resource')).toBeDefined();
+      expect(state.threadId).toBe('lost-thread');
+    });
+
+    it('returns 404 instead of starting a session that was never created', async () => {
+      const controller = mastra.getAgentController('code')!;
+
+      await expect(
+        GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'missing-resource',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(await controller.getSessionByResource('missing-resource')).toBeUndefined();
+      expect(await controller.queryThreads({ resourceId: 'missing-resource' })).toEqual([]);
     });
   });
 
   describe('SEND_AGENT_CONTROLLER_MESSAGE_ROUTE', () => {
     it('acks a send (reply streams over SSE, not this response)', async () => {
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra: mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any);
       const res = await SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
         mastra,
         controllerId: 'code',
@@ -275,6 +314,21 @@ describe('agent-controller routes', () => {
         message: 'hello',
       } as any);
       expect(res).toEqual({ ok: true });
+    });
+
+    it('rejects a send to a session that was never started instead of creating a random thread', async () => {
+      const controller = mastra.getAgentController('code')!;
+
+      await expect(
+        SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'never-started',
+          message: 'hello',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(await controller.getSessionByResource('never-started')).toBeUndefined();
+      expect(await controller.queryThreads({ resourceId: 'never-started' })).toEqual([]);
     });
   });
 
@@ -1367,6 +1421,11 @@ describe('agent-controller routes', () => {
         modes: [{ id: 'build', name: 'Build', default: true, agent: makeAgent() }],
       });
       const boundedMastra = new Mastra({ agentControllers: { 'bounded-state': controller }, storage });
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra: boundedMastra,
+        controllerId: 'bounded-state',
+        resourceId: 'user-route-limit',
+      } as any);
       const entries = Array.from({ length: 33 }, (_, index) => ({
         id: `route-${index}`,
         label: `Route ${index}`,
@@ -1656,6 +1715,11 @@ describe('agent-controller routes', () => {
 
   describe('SWITCH_AGENT_CONTROLLER_MODE_ROUTE', () => {
     it('switches the active mode', async () => {
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra: mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any);
       const ack = await SWITCH_AGENT_CONTROLLER_MODE_ROUTE.handler({
         mastra,
         controllerId: 'code',
@@ -1675,6 +1739,11 @@ describe('agent-controller routes', () => {
 
   describe('SWITCH_AGENT_CONTROLLER_MODEL_ROUTE', () => {
     it('switches and persists the model and thinking level together', async () => {
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra: mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any);
       const ack = await SWITCH_AGENT_CONTROLLER_MODEL_ROUTE.handler({
         mastra,
         controllerId: 'code',
@@ -1721,6 +1790,11 @@ describe('agent-controller routes', () => {
     });
 
     it('switches the session model', async () => {
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra: mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any);
       const ack = await SWITCH_AGENT_CONTROLLER_MODEL_ROUTE.handler({
         mastra,
         controllerId: 'code',

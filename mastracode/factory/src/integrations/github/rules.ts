@@ -775,6 +775,48 @@ export class GithubRules {
       return { status: committed.status };
     };
 
+    // A push moves the head a recorded review verdict was given on. Recording
+    // the new head lets the verdict badge show that it is outdated, while the
+    // verdict itself stays so the next pass still runs as a re-review. It is
+    // recorded before the push is evaluated: the dispatcher can apply the
+    // re-review transition as soon as it commits, and the pass it starts names
+    // the head it covers, which must be the pushed one.
+    const stampHead = async () => {
+      const headSha = string(object(pullRequest?.head)?.sha)?.toLowerCase();
+      if (event !== 'pullRequestUpdated' || !headSha || !pullRequestNumber) return;
+      const headAt = timestamp(pullRequest?.updated_at);
+      if (relatedItem?.externalSource?.type !== 'pull-request') return;
+      const parent = await this.#linkedClosureItem(
+        project.orgId,
+        project.factoryProjectId,
+        repositoryId,
+        repositoryName,
+        pullRequestNumber,
+        relatedItem,
+      );
+      // The authoring Work item mirrors the verdict of the pull request it has
+      // out; a push to an older one must not mark its successor's verdict.
+      await recordPullRequestHead(this.options.storage, {
+        orgId: relatedItem.orgId,
+        id: relatedItem.id,
+        headSha,
+        headAt,
+      });
+      if (parent) {
+        await recordPullRequestHead(this.options.storage, {
+          orgId: parent.orgId,
+          id: parent.id,
+          headSha,
+          headAt,
+          ownedPullRequestNumber: pullRequestNumber,
+        });
+      }
+    };
+    await stampHead();
+    const evaluated =
+      event === 'pullRequestUpdated' && relatedItem
+        ? ((await this.options.storage.get({ orgId: relatedItem.orgId, id: relatedItem.id })) ?? relatedItem)
+        : relatedItem;
     const deliveryIdentity = `${installationId}:${parsed.deliveryId}`;
     // A pull request opening concerns two cards: its own Review card, which the
     // arrival rule files — committed against the Work item that authored the
@@ -784,7 +826,7 @@ export class GithubRules {
     // identity suffixed with its id, because ingress identities are the replay
     // key and reusing the delivery's own would drop it as a duplicate.
     const pullRequestOpened = event === 'pullRequestOpened';
-    const primary = await evaluate(relatedItem, deliveryIdentity, pullRequestOpened);
+    const primary = await evaluate(evaluated, deliveryIdentity, pullRequestOpened);
     // A closed pull request is the one *other* event both linked cards need:
     // the Review card has to close, and the Work item that wrote the code has
     // to finish (on merge) or at least stop recording it as open. Resolution binds the delivery to
@@ -889,43 +931,8 @@ export class GithubRules {
       relatedItem.externalSource?.type !== 'pull-request'
         ? relatedItem
         : undefined;
-    // A push moves the head a recorded review verdict was given on. Recording
-    // the new head lets the verdict badge show that it is outdated, while the
-    // verdict itself stays so the next pass still runs as a re-review.
-    const stampHead = async () => {
-      const headSha = string(object(pullRequest?.head)?.sha)?.toLowerCase();
-      if (event !== 'pullRequestUpdated' || !headSha || !pullRequestNumber) return;
-      const headAt = timestamp(pullRequest?.updated_at);
-      if (relatedItem?.externalSource?.type !== 'pull-request') return;
-      const parent = await this.#linkedClosureItem(
-        project.orgId,
-        project.factoryProjectId,
-        repositoryId,
-        repositoryName,
-        pullRequestNumber,
-        relatedItem,
-      );
-      // The authoring Work item mirrors the verdict of the pull request it has
-      // out; a push to an older one must not mark its successor's verdict.
-      await recordPullRequestHead(this.options.storage, {
-        orgId: relatedItem.orgId,
-        id: relatedItem.id,
-        headSha,
-        headAt,
-      });
-      if (parent) {
-        await recordPullRequestHead(this.options.storage, {
-          orgId: parent.orgId,
-          id: parent.id,
-          headSha,
-          headAt,
-          ownedPullRequestNumber: pullRequestNumber,
-        });
-      }
-    };
     if (linked === undefined && authoringItem === undefined) {
       await stampClosed();
-      await stampHead();
       return primary;
     }
     const companion = linked ?? authoringItem;

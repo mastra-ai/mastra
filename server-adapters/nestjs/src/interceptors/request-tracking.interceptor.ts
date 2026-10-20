@@ -2,7 +2,8 @@ import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
 import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
 import type { Request } from 'express';
-import { Observable, tap, catchError } from 'rxjs';
+import type { Observable } from 'rxjs';
+import { tap, catchError } from 'rxjs';
 
 import { ShutdownService } from '../services/shutdown.service';
 

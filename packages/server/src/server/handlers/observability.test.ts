@@ -3551,7 +3551,14 @@ describe('Observability Handlers', () => {
       const { ObservabilityStorage } = await import('@mastra/core/storage');
       class DeclaredStore extends ObservabilityStorage {
         override getFeatures() {
-          return ['metrics', 'tag-discovery', 'trace-query', 'trace-query-context-ids', 'feedback'] as const;
+          return [
+            'metrics',
+            'tag-discovery',
+            'trace-query',
+            'trace-query-context-ids',
+            'trace-query-root-span-fields',
+            'feedback',
+          ] as const;
         }
       }
       const storage = createMockStorage(
@@ -3569,6 +3576,7 @@ describe('Observability Handlers', () => {
         logs: false,
         traceQuery: true,
         traceQueryContextIds: true,
+        traceQueryRootSpanFields: true,
         traceQueryRootDuration: false,
         feedback: true,
       });

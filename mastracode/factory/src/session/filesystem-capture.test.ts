@@ -14,10 +14,9 @@ import {
   observeSessionFilesystem,
   parseFilesystemCaptureFiles,
   waitForPendingFilesystemCapture,
-  type FilesystemCaptureDependencies,
-  type FilesystemCaptureSession,
   ROOT_FILES_LIST_COMMAND,
 } from './filesystem-capture.js';
+import type { FilesystemCaptureDependencies, FilesystemCaptureSession } from './filesystem-capture.js';
 
 function commandResult(overrides: Partial<{ exitCode: number; stdout: string; stderr: string }> = {}) {
   return {

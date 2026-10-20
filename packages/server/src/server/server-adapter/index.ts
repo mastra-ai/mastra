@@ -274,6 +274,8 @@ export interface ParsedRequestParams {
    */
   bodyParseError?: {
     message: string;
+    /** Business code for the failure. Defaults to `REQUEST_BODY_INVALID_JSON`. */
+    code?: ServerErrorCode;
   };
 }
 
@@ -1432,7 +1434,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // Custom routes are served at root (/), not under the API prefix — add per-path servers override.
     const allCustomRoutes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
     if (allCustomRoutes && allCustomRoutes.length > 0) {
-      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes);
+      const componentSchemas = openApiSpec.components?.schemas ?? Object.create(null);
+      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes, componentSchemas);
+      if (Object.keys(componentSchemas).length > 0) {
+        openApiSpec.components = { ...openApiSpec.components, schemas: componentSchemas };
+      }
       if (prefix) {
         for (const pathKey of Object.keys(customPaths)) {
           if (!customPaths[pathKey].servers) {

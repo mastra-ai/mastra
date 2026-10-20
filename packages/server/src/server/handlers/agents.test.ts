@@ -2525,6 +2525,39 @@ describe('Agent Routes Authorization', () => {
   });
 
   describe('OBSERVE_AGENT_STREAM_ROUTE', () => {
+    async function observe(runId: string, options: { offset?: number; abortSignal?: AbortSignal } = {}) {
+      return (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        runId,
+        ...options,
+      } as any)) as ReadableStream<any>;
+    }
+
+    async function collectWithDeadline(stream: ReadableStream<any>) {
+      const reader = stream.getReader();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          (async () => {
+            const events: any[] = [];
+            while (true) {
+              const result = await reader.read();
+              if (result.done) return events;
+              events.push(result.value);
+            }
+          })(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error('Observation did not close within one second')), 1_000);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+        await reader.cancel().catch(() => {});
+        reader.releaseLock();
+      }
+    }
+
     beforeEach(() => {
       mockAgent = new Agent({
         id: 'test-agent',
@@ -2534,6 +2567,180 @@ describe('Agent Routes Authorization', () => {
       });
       mockDurableAgent = createDurableAgent({ agent: mockAgent, id: 'test-durable-agent', name: 'test-durable-agent' });
       mastra = new Mastra({ agents: { 'test-durable-agent': mockDurableAgent }, storage, logger: false });
+    });
+
+    it('closes an unknown run within one second', async () => {
+      expect(await collectWithDeadline(await observe(crypto.randomUUID()))).toEqual([]);
+    });
+
+    it('closes after replay even when the offset is past the terminal event', async () => {
+      const runId = 'observe-past-finish';
+      await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+        runId,
+        type: 'finish',
+        data: {},
+      } as any);
+      expect(await collectWithDeadline(await observe(runId, { offset: 100 }))).toEqual([]);
+    });
+
+    it.each(['finish', 'error', 'abort'])('forwards and closes on a chunk-enveloped %s event', async type => {
+      const runId = `observe-enveloped-${type}`;
+      const event = { runId, type: 'chunk', data: { type }, index: 0 };
+      const unsubscribe = vi.fn(async () => {});
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(async (_runId, _options, onEvent) => {
+        onEvent(event);
+        return unsubscribe;
+      });
+
+      expect(await collectWithDeadline(await observe(runId))).toEqual([event]);
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('forwards and closes on a top-level abort event', async () => {
+      const type = 'abort';
+      const runId = `observe-control-${type}`;
+      const event = { runId, type, data: {} };
+      const unsubscribe = vi.fn(async () => {});
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(async (_runId, _options, onEvent) => {
+        onEvent(event);
+        return unsubscribe;
+      });
+
+      expect(await collectWithDeadline(await observe(runId))).toEqual([event]);
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      { name: 'top-level', suspended: { type: 'suspended', data: {} } },
+      { name: 'chunk-enveloped', suspended: { type: 'chunk', data: { type: 'suspended' } } },
+    ])('keeps a $name suspended run open until its resumed segment finishes', async ({ suspended }) => {
+      let onEvent!: (event: any) => void;
+      const unsubscribe = vi.fn(async () => {});
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(async (_runId, _options, deliver) => {
+        onEvent = deliver;
+        return unsubscribe;
+      });
+      const reader = (await observe('observe-approval-suspend')).getReader();
+      try {
+        await vi.waitFor(() => expect(onEvent).toBeDefined());
+        onEvent(suspended);
+        expect((await reader.read()).value).toEqual(suspended);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(unsubscribe).not.toHaveBeenCalled();
+
+        const resumed = { type: 'chunk', data: { type: 'text-delta', payload: { text: 'after approval' } } };
+        const finish = { type: 'finish', data: {} };
+        onEvent(resumed);
+        onEvent(finish);
+        expect((await reader.read()).value).toEqual(resumed);
+        expect((await reader.read()).value).toEqual(finish);
+        expect(await reader.read()).toEqual({ done: true, value: undefined });
+        expect(unsubscribe).toHaveBeenCalledTimes(1);
+      } finally {
+        reader.releaseLock();
+      }
+    });
+
+    it('does not end a legacy subscription on a step finish or empty replay', async () => {
+      (mockDurableAgent as any).__subscribeToRunStream = undefined;
+      const runId = 'observe-legacy-quiet';
+      const abort = new AbortController();
+      const reader = (await observe(runId, { abortSignal: abort.signal })).getReader();
+      const next = reader.read();
+      await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+        runId,
+        type: 'chunk',
+        data: { type: 'step-finish' },
+      } as any);
+      expect((await next).value.data.type).toBe('step-finish');
+      abort.abort();
+      expect(await reader.read()).toEqual({ done: true, value: undefined });
+    });
+
+    it('closes and unsubscribes once when replay completes synchronously during setup', async () => {
+      const unsubscribe = vi.fn(async () => {});
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(async (_runId, options, onEvent) => {
+        options.onComplete?.();
+        onEvent({ type: 'chunk', data: { type: 'text-delta' } });
+        options.onComplete?.();
+        return unsubscribe;
+      });
+      expect(await collectWithDeadline(await observe('observe-sync-complete'))).toEqual([]);
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('unsubscribes once when cancellation happens during subscription setup', async () => {
+      const abort = new AbortController();
+      const unsubscribe = vi.fn(async () => {});
+      let finishSetup!: (unsubscribe: () => Promise<void>) => void;
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(
+        () => new Promise(resolve => (finishSetup = resolve)),
+      );
+      const stream = await observe('observe-setup-abort', { abortSignal: abort.signal });
+      abort.abort();
+      finishSetup(unsubscribe);
+      expect(await collectWithDeadline(stream)).toEqual([]);
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not subscribe when the client is already aborted', async () => {
+      const abort = new AbortController();
+      abort.abort();
+      const subscribe = vi.spyOn(mockDurableAgent, '__subscribeToRunStream');
+      expect(await collectWithDeadline(await observe('observe-pre-abort', { abortSignal: abort.signal }))).toEqual([]);
+      expect(subscribe).not.toHaveBeenCalled();
+    });
+
+    it('removes the disconnect listener when the observer completes', async () => {
+      const abort = new AbortController();
+      const removeListener = vi.spyOn(abort.signal, 'removeEventListener');
+      const unsubscribe = vi.fn(async () => {});
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(async (_runId, options) => {
+        options.onComplete?.();
+        return unsubscribe;
+      });
+      expect(
+        await collectWithDeadline(await observe('observe-remove-listener', { abortSignal: abort.signal })),
+      ).toEqual([]);
+      abort.abort();
+      expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores a subscription setup rejection after the observer has been aborted', async () => {
+      const abort = new AbortController();
+      let rejectSetup!: (error: Error) => void;
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(
+        () => new Promise((_resolve, reject) => (rejectSetup = reject)),
+      );
+      const stream = await observe('observe-aborted-error', { abortSignal: abort.signal });
+      abort.abort();
+      rejectSetup(new Error('Subscription failed after disconnect'));
+      expect(await collectWithDeadline(stream)).toEqual([]);
+    });
+
+    it('errors the observer when subscription setup throws synchronously', async () => {
+      const error = new Error('Subscription failed synchronously');
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(() => {
+        throw error;
+      });
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await expect(collectWithDeadline(await observe('observe-sync-error'))).rejects.toThrow(error);
+      } finally {
+        consoleError.mockRestore();
+      }
+    });
+
+    it('errors the observer when subscription setup fails', async () => {
+      const error = new Error('Replay cache unavailable');
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockRejectedValue(error);
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await expect(collectWithDeadline(await observe('observe-subscribe-error'))).rejects.toThrow(error);
+      } finally {
+        consoleError.mockRestore();
+      }
     });
 
     it('drops what a superseded execution publishes after another execution claims the run, and does not forward the claim marker', async () => {

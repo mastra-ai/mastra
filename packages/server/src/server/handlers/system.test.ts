@@ -20,10 +20,14 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   traceQuery: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
+  traceQueryTimeToFirstChunk: false,
+  traceQueryRootSpanFields: false,
+  traceQueryTimeToFirstChunkSort: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   traceAggregate: false,
   threadQuery: false,
+  threadQueryRows: false,
   spanQuery: false,
   feedback: false,
 };
@@ -645,6 +649,49 @@ describe('System Handlers', () => {
           traceQueryTenantScope: true,
           threadQuery: true,
           spanQuery: true,
+        });
+      });
+
+      it('reports time to first chunk only when the store also serves a trace, thread or span query', async () => {
+        class SpanQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-query', 'trace-query-time-to-first-chunk'] as const;
+          }
+        }
+        class NoQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['trace-query-time-to-first-chunk'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new SpanQueryStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          spanQuery: true,
+          traceQueryTimeToFirstChunk: true,
+        });
+        expect(await capabilitiesFor(new NoQueryStore())).toEqual(NO_OBSERVABILITY_CAPABILITIES);
+      });
+
+      it('reports the time to first chunk sort only when the store also serves a trace or span query', async () => {
+        class SpanQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-query', 'trace-query-time-to-first-chunk-sort'] as const;
+          }
+        }
+        class NoQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['thread-query', 'trace-query-time-to-first-chunk-sort'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new SpanQueryStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          spanQuery: true,
+          traceQueryTimeToFirstChunkSort: true,
+        });
+        expect(await capabilitiesFor(new NoQueryStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          threadQuery: true,
         });
       });
 

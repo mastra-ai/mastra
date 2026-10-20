@@ -31,6 +31,8 @@ export interface FactoryUserSession {
   materializedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** What the viewer may do with this session, computed by the server. */
+  capabilities?: { recreateSandbox: boolean };
 }
 
 type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
@@ -87,6 +89,20 @@ export async function deleteUserSession(baseUrl: string, sessionId: string): Pro
     credentials: 'include',
   });
   if (!res.ok && res.status !== 404) throw new Error(`Failed to delete session (${res.status})`);
+}
+
+/** Destroy the session's sandbox (stopping any active run) so the next message boots a fresh one. */
+export async function recreateSessionSandbox(
+  baseUrl: string,
+  sessionId: string,
+): Promise<{ recreated: boolean; aborted: boolean }> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/sandbox/recreate`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  const body: { recreated?: boolean; aborted?: boolean; error?: string } = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Failed to recreate sandbox (${res.status})`);
+  return { recreated: body.recreated === true, aborted: body.aborted === true };
 }
 
 /** Ask the title model to re-name a session's conversation. Resolves to the new title. */

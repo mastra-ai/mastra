@@ -7,7 +7,7 @@ description: "Browse EmpirioLabs AI model IDs, capabilities, context windows, an
 
 # <img src="https://models.dev/logos/empiriolabs.svg" alt="EmpirioLabs AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />EmpirioLabs AI
 
-Access 64 EmpirioLabs AI models through Mastra's model router. Authentication is handled automatically using the `EMPIRIOLABS_API_KEY` environment variable.
+Access 65 EmpirioLabs AI models through Mastra's model router. Authentication is handled automatically using the `EMPIRIOLABS_API_KEY` environment variable.
 
 Learn more in the [EmpirioLabs AI documentation](https://docs.empiriolabs.ai).
 
@@ -406,6 +406,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.9
   },
   {
+    "model": "empiriolabs/minimax-m3-1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 524288,
+    "inputCost": 0.1125,
+    "outputCost": 0.45
+  },
+  {
     "model": "empiriolabs/mistral-small-4",
     "imageInput": true,
     "audioInput": false,
@@ -629,7 +641,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 65536,
+    "maxOutput": 131072,
     "inputCost": 2.5,
     "outputCost": 7.5
   },

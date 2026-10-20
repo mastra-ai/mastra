@@ -66,6 +66,7 @@ import type {
   GetScorePercentilesResponse,
 } from './scores';
 import type { SpanQueryResponse, TrustedSpanQueryPlan } from './span-query';
+import type { ThreadQueryResponse, TrustedThreadRowsQueryPlan } from './thread-query';
 import type { TraceAggregateResponse } from './trace-aggregate';
 import type { TrustedTraceAggregatePlan } from './trace-aggregate-planner';
 import type {
@@ -120,6 +121,9 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `trace-aggregate`: `aggregateTraces`
  * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
  * - `trace-query-context-ids`: `runId`, `sessionId`, `userId` and `organizationId` predicates in trace/thread queries
+ * - `trace-query-time-to-first-chunk`: `timeToFirstChunkMs` on trace and span query results and predicates
+ * - `trace-query-root-span-fields`: root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
+ * - `trace-query-time-to-first-chunk-sort`: `orderBy` on `timeToFirstChunkMs` in trace and span queries
  * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
@@ -142,9 +146,13 @@ export type ObservabilityStorageFeature =
   | 'trace-query-root-duration'
   | 'trace-query-discovery'
   | 'thread-query'
+  | 'thread-query-rows'
   | 'trace-query-tenant-scope'
   | 'feedback'
-  | 'trace-query-context-ids';
+  | 'trace-query-context-ids'
+  | 'trace-query-time-to-first-chunk'
+  | 'trace-query-root-span-fields'
+  | 'trace-query-time-to-first-chunk-sort';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
@@ -459,8 +467,13 @@ export class ObservabilityStorage extends StorageDomain {
 
   /**
    * Executes a validated thread-query plan.
+   * Keep the base return type compatible with identity-only adapters. The server
+   * checks `thread-query-rows` before sending a row plan; capable concrete adapters
+   * provide the more specific row overload.
    */
-  async queryThreads(_plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+  async queryThreads(
+    _plan: TrustedThreadQueryPlan | TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | ThreadQueryResponse> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_QUERY_THREADS_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,

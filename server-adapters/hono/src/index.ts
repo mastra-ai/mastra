@@ -4,6 +4,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 
 import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
+import type { ServerErrorCode } from '@mastra/server/error-codes';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -298,7 +299,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     // Use queries() to get all values for repeated params (e.g., ?tags=a&tags=b -> { tags: ['a', 'b'] })
     const queryParams = normalizeQueryParams(request.queries());
     let body: unknown;
-    let bodyParseError: { message: string } | undefined;
+    let bodyParseError: { message: string; code: ServerErrorCode } | undefined;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.header('content-type') || '';
@@ -317,6 +318,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
           bodyParseError = {
             message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+            code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID,
           };
         }
       } else if (contentType.includes('application/json')) {
@@ -336,6 +338,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             // Track JSON parse error to return 400 Bad Request
             bodyParseError = {
               message: error instanceof Error ? error.message : 'Invalid JSON in request body',
+              code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
             };
           }
         }
@@ -545,7 +548,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             {
               error: 'Invalid request body',
               issues,
-              problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON, metadata: { issues } },
+              problem: {
+                code: params.bodyParseError.code ?? SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
+                metadata: { issues },
+              },
             },
             400,
           );

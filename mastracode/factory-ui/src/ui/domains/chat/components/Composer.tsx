@@ -6,11 +6,11 @@ import {
   ComposerActions,
   ComposerBox,
   ComposerInput,
-  type ComposerInputProps,
   ComposerRing,
   ComposerSuggestions,
   useComposerCommands,
 } from '@mastra/playground-ui/components/Composer';
+import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square } from 'lucide-react';

@@ -416,7 +416,7 @@ describe('IntakeSection', () => {
 
       // Listed twice, selected once: the count follows ids, not rows.
       const linearSection = screen.getByRole('region', { name: 'Linear issues' });
-      await userEvent.click(within(projects).getAllByRole('checkbox', { name: 'Shared initiative' })[0]!);
+      await userEvent.click(within(projects).getAllByRole('checkbox', { name: 'Shared initiative' })[0]);
       await waitFor(() => expect(within(linearSection).getByText('1 selected')).toBeInTheDocument());
     });
 
@@ -537,8 +537,8 @@ describe('IntakeSection', () => {
       await userEvent.click(await screen.findByRole('switch', { name: 'Sync GitHub issues' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.github.enabled).toBe(false);
-      expect(saved[0]!.linear.enabled).toBe(true);
+      expect(saved[0].github.enabled).toBe(false);
+      expect(saved[0].linear.enabled).toBe(true);
       expect(await screen.findByText('Intake sources updated')).toBeInTheDocument();
     });
   });
@@ -605,7 +605,7 @@ describe('IntakeSection', () => {
       await userEvent.click(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.linear.sourceIds).toEqual(['lproj-1']);
+      expect(saved[0].linear.sourceIds).toEqual(['lproj-1']);
     });
 
     it('disables the checkboxes and shows a spinner while the selection saves', async () => {
@@ -648,7 +648,7 @@ describe('IntakeSection', () => {
 
       await userEvent.click(await screen.findByText('Q3 Roadmap'));
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.linear.sourceIds).toEqual(['lproj-1']);
+      expect(saved[0].linear.sourceIds).toEqual(['lproj-1']);
 
       // A second, different pick lands after any duplicate the first click could
       // have fired, so a doubled label toggle shows up as a third request here.
@@ -666,7 +666,7 @@ describe('IntakeSection', () => {
       await userEvent.click(await screen.findByRole('checkbox', { name: 'All issues in Engineering' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:opaque-eng']);
+      expect(saved[0].linear.sourceIds).toEqual(['linear-team:opaque-eng']);
     });
     it('waits for a returned team DTO before enabling opaque team selection', async () => {
       const saved = useIntakeHandlers();
@@ -691,7 +691,7 @@ describe('IntakeSection', () => {
       const team = await screen.findByRole('checkbox', { name: 'All issues in Engineering' });
       await userEvent.click(team);
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:opaque-eng']);
+      expect(saved[0].linear.sourceIds).toEqual(['linear-team:opaque-eng']);
     });
 
     it('keeps explicit projects editable so the selection can switch to team-only intake', async () => {
@@ -717,7 +717,7 @@ describe('IntakeSection', () => {
 
       await userEvent.click(project);
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:opaque-eng']);
+      expect(saved[0].linear.sourceIds).toEqual(['linear-team:opaque-eng']);
 
       // Projects that are only included through a selected team remain selectable too.
       expect(within(linearSection).getAllByText('included via team').length).toBeGreaterThanOrEqual(1);
@@ -736,7 +736,7 @@ describe('IntakeSection', () => {
 
       await waitFor(() => expect(saved).toHaveLength(1));
       // The board and intake integrations key GitHub sources by repo slug (owner/name).
-      expect(saved[0]!.github.sourceIds).toEqual(['mastra']);
+      expect(saved[0].github.sourceIds).toEqual(['mastra']);
       expect(saved[0]).not.toHaveProperty('github.repositoryIds');
     });
   });
@@ -911,8 +911,8 @@ describe('IntakeSection', () => {
       await userEvent.click(toggle);
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.jira.enabled).toBe(true);
-      expect(saved[0]!.github.enabled).toBe(true);
+      expect(saved[0].jira.enabled).toBe(true);
+      expect(saved[0].github.enabled).toBe(true);
     });
 
     it('shows a Platform-managed connection even when the status does not expose connection metadata', async () => {
@@ -956,7 +956,7 @@ describe('IntakeSection', () => {
       await userEvent.click(within(projects).getByRole('checkbox', { name: 'ENG · Engineering' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.jira.sourceIds).toEqual(['10001']);
+      expect(saved[0].jira.sourceIds).toEqual(['10001']);
     });
 
     it('routes a selected Jira project to a Factory through the generic bindings', async () => {
@@ -1322,7 +1322,7 @@ describe('IntakeSection', () => {
       await userEvent.click(within(projects).getByRole('checkbox', { name: 'acme/app' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.gitlab.sourceIds).toEqual(['gitlab-project:encoded']);
+      expect(saved[0].gitlab.sourceIds).toEqual(['gitlab-project:encoded']);
       expect(await screen.findByText(/Not routed — this source's issues won't be picked up/)).toBeInTheDocument();
 
       await userEvent.click(await screen.findByLabelText('Factory for acme/app'));

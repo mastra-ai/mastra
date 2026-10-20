@@ -89,6 +89,17 @@ function hasCodeProperty(node: ts.Expression | undefined): boolean {
   );
 }
 
+/** Whether `node` names a parameter of an enclosing function declared as `HandleErrorFallback`. */
+function isTypedFallbackParameter(node: ts.Expression | undefined): boolean {
+  if (!node || !ts.isIdentifier(node)) return false;
+  for (let scope: ts.Node | undefined = node.parent; scope; scope = scope.parent) {
+    if (!ts.isFunctionLike(scope)) continue;
+    const parameter = scope.parameters.find(p => ts.isIdentifier(p.name) && p.name.text === node.text);
+    if (parameter) return parameter.type?.getText() === 'HandleErrorFallback';
+  }
+  return false;
+}
+
 /** Returns each `new HTTPException(...)` and `handleError(...)` call whose options carry no `code`. */
 function findUncodedCalls(fileName: string, source: string): string[] {
   const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
@@ -99,9 +110,8 @@ function findUncodedCalls(fileName: string, source: string): string[] {
     }
     if (ts.isCallExpression(node) && node.expression.getText() === 'handleError') {
       const fallback = node.arguments[1];
-      // A wrapper forwarding a `HandleErrorFallback` already has a `code` required by its type.
-      const forwardsTypedFallback = !!fallback && ts.isIdentifier(fallback) && fallback.text === 'fallback';
-      if (!forwardsTypedFallback && !hasCodeProperty(fallback)) uncoded.push(node.getText());
+      // A wrapper forwarding its `HandleErrorFallback` parameter already has a `code` required by that type.
+      if (!isTypedFallbackParameter(fallback) && !hasCodeProperty(fallback)) uncoded.push(node.getText());
     }
     ts.forEachChild(node, visit);
   };
@@ -130,12 +140,21 @@ describe('built-in server code', () => {
       new HTTPException(400, { message: String({ code: 1 }) });
       handleError(error, { message: 'oops (', code: SERVER_ERROR_CODES.AGENT_GET_FAILED });
       handleError(error, 'error code');
+      function typed(error: unknown, fallback: HandleErrorFallback) {
+        handleError(error, fallback);
+      }
+      function untyped(error: unknown, fallback: string) {
+        handleError(error, fallback);
+      }
+      const fallback = 'outer string';
       handleError(error, fallback);
     `;
     expect(findUncodedCalls('sample.ts', source)).toEqual([
       "new HTTPException(400, { message: 'missing code' })",
       'new HTTPException(400, { message: String({ code: 1 }) })',
       "handleError(error, 'error code')",
+      'handleError(error, fallback)',
+      'handleError(error, fallback)',
     ]);
   });
 });

@@ -1,7 +1,5 @@
-import {
-  resolveAuthenticatedCredentialTenant,
-  type CredentialTenant,
-} from '@mastra/code-sdk/agents/credential-resolver';
+import { resolveAuthenticatedCredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
+import type { CredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 

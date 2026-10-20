@@ -1297,7 +1297,7 @@ describe('FilterBar', () => {
       render(
         <Harness fields={fields} initial={[{ id: 'scope', fieldId: 'scope', operatorId: 'is', value: 'agent-1' }]} />,
       );
-      expect(within(getChips()[0] as HTMLElement).getByText('Scope')).toBeTruthy();
+      expect(within(getChips()[0]).getByText('Scope')).toBeTruthy();
     });
   });
 
@@ -1472,7 +1472,7 @@ describe('FilterBar', () => {
         const onChange = vi.fn();
         render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
         const editor = await openPopover();
-        fireEvent.click(within(editor).getAllByRole('button', { name: 'Remove Tags filter' })[0] as HTMLElement);
+        fireEvent.click(within(editor).getAllByRole('button', { name: 'Remove Tags filter' })[0]);
         fireEvent.click(within(editor).getByRole('button', { name: 'Remove Tags filter' }));
         // Empty group persists while editing…
         expect(argAt(onChange, 1, 0).nodes[1]).toMatchObject({ id: 'g', nodes: [] });
@@ -1510,7 +1510,7 @@ describe('FilterBar', () => {
         pressActive({ key: 'ArrowLeft' });
         pressActive({ key: 'ArrowLeft' });
         pressActive({ key: 'ArrowLeft' });
-        const advanced = getAdvancedChips()[0] as HTMLElement;
+        const advanced = getAdvancedChips()[0];
         expect(advanced.contains(document.activeElement)).toBe(true);
         expect((document.activeElement as HTMLElement).dataset.filterBarSegment).toBe('remove');
         pressActive({ key: 'ArrowLeft' });

@@ -163,14 +163,14 @@ type InputShared_Auxiliary_230 =
       arg: InputShared_Auxiliary_230;
     };
 
-type InputShared_Auxiliary_264 =
+type InputShared_Auxiliary_271 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_264[];
+      args: InputShared_Auxiliary_271[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_264;
+      arg: InputShared_Auxiliary_271;
     }
   | {
       traces:
@@ -182,7 +182,7 @@ type InputShared_Auxiliary_264 =
           };
     };
 
-type InputShared_Auxiliary_692 =
+type InputShared_Auxiliary_699 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,27 +227,27 @@ type InputShared_Auxiliary_692 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_692[];
+      args: InputShared_Auxiliary_699[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_692;
+      arg: InputShared_Auxiliary_699;
     };
 
-type InputShared_Auxiliary_766 = {
+type InputShared_Auxiliary_773 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_766[] | undefined;
+  children?: InputShared_Auxiliary_773[] | undefined;
 };
 
-type Shared_Auxiliary_764 = {
+type Shared_Auxiliary_767 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_764[] | undefined;
+  children?: Shared_Auxiliary_767[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -577,7 +577,8 @@ type InputShared_Type_15 =
   | 'tool'
   | 'mcp_server'
   | 'workflow_run'
-  | 'memory';
+  | 'memory'
+  | 'classifier';
 
 type InputShared_Type_16 = {
   /** Filter by timestamp range */
@@ -1808,7 +1809,7 @@ type InputShared_Type_88 = {
       }
     | undefined;
   steps: InputShared_Type_83[];
-  predicates: InputShared_Auxiliary_692[];
+  predicates: InputShared_Auxiliary_699[];
 };
 
 type InputShared_Type_89 = {
@@ -1822,7 +1823,7 @@ type InputShared_Type_89 = {
     | undefined;
   step: InputShared_Type_83;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_692;
+  predicate: InputShared_Auxiliary_699;
 };
 
 type InputShared_Type_90 =
@@ -2351,6 +2352,8 @@ type Shared_Type_6 = {
   modelVersion?: string | undefined;
   supportsMemory?: boolean | undefined;
   modelList?: Shared_Type_2[] | undefined;
+  /** False when the model list comes from a function and cannot be reordered or edited */
+  modelListEditable?: boolean | undefined;
   /** Default options for agent execution */
   defaultOptions?: Shared_Type_5 | undefined;
   defaultGenerateOptionsLegacy?:
@@ -3411,7 +3414,8 @@ type Shared_Type_60 =
   | 'tool'
   | 'mcp_server'
   | 'workflow_run'
-  | 'memory';
+  | 'memory'
+  | 'classifier';
 
 type Shared_Type_61 = {
   /** Unique trace identifier */
@@ -3630,6 +3634,7 @@ type Shared_Type_64 = {
   entityType: string | null;
   environment: string | null;
   status: 'success' | 'error';
+  timeToFirstChunkMs?: (number | null) | undefined;
 };
 
 type Shared_Type_65 = {
@@ -3719,6 +3724,12 @@ type Shared_Type_67 = {
   traceQueryRootDuration: boolean;
   /** `runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries */
   traceQueryContextIds: boolean;
+  /** `timeToFirstChunkMs` in trace and span query results, and predicates on it in trace, thread and span queries */
+  traceQueryTimeToFirstChunk: boolean;
+  /** Root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct` */
+  traceQueryRootSpanFields: boolean;
+  /** Sorting trace and span queries by `timeToFirstChunkMs` */
+  traceQueryTimeToFirstChunkSort: boolean;
   /** Trace query field discovery (POST /observability/traces/query/fields and /values) */
   traceQueryDiscovery: boolean;
   /** Trusted tenant scoping of trace and thread queries */
@@ -3727,6 +3738,8 @@ type Shared_Type_67 = {
   traceAggregate: boolean;
   /** Advanced thread queries (POST /observability/threads/query) */
   threadQuery: boolean;
+  /** Full-history thread rows with activity windows, filters and sorting. Treat a missing value as unavailable. */
+  threadQueryRows: boolean;
   /** Span queries (POST /observability/spans/query) */
   spanQuery: boolean;
   /** Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit. */
@@ -4240,7 +4253,7 @@ type Shared_Type_83 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_764[] | undefined;
+  files?: Shared_Auxiliary_767[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -5577,6 +5590,11 @@ export type PostAgentsAgentIdApproveToolCall_Body = {
       }
     | undefined;
   modelSettings?: unknown | undefined;
+  clientTools?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
 };
 
 export type PostAgentsAgentIdApproveToolCall_Response = {
@@ -5726,6 +5744,11 @@ export type PostAgentsAgentIdDeclineToolCall_Body = {
       }
     | undefined;
   modelSettings?: unknown | undefined;
+  clientTools?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   reason?: string | undefined;
 };
 
@@ -10487,7 +10510,7 @@ export type PostObservabilityTracesQuery_Body = {
     | undefined;
   orderBy?:
     | {
-        field: 'startedAt' | 'endedAt';
+        field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs';
         direction: 'asc' | 'desc';
       }[]
     | undefined;
@@ -10675,29 +10698,90 @@ export interface PostObservabilityTracesAggregate_RouteContract {
 // ============================================================================
 // Route: POST /observability/threads/query
 // ============================================================================
-export type PostObservabilityThreadsQuery_Body = {
-  traces: {
-    timeRange: {
-      from: string;
-      to: string;
+export type PostObservabilityThreadsQuery_Body =
+  | {
+      timeRange:
+        | {
+            traces: {
+              from: string;
+              to: string;
+            };
+          }
+        | {
+            threads: {
+              from: string;
+              to: string;
+              field: 'startedAt' | 'endedAt';
+            };
+          };
+      where?: InputShared_Auxiliary_230 | undefined;
+      orderBy?: {
+        field: 'startedAt' | 'endedAt';
+        direction: 'asc' | 'desc';
+      }[];
+      page?: {
+        limit?: number;
+        after?: string | undefined;
+      };
+    }
+  | {
+      traces: {
+        timeRange: {
+          from: string;
+          to: string;
+        };
+        where?: InputShared_Auxiliary_207 | undefined;
+      };
+      where?: InputShared_Auxiliary_271 | undefined;
+      page?: {
+        limit?: number;
+        after?: (string | null) | undefined;
+      };
     };
-    where?: InputShared_Auxiliary_207 | undefined;
-  };
-  where?: InputShared_Auxiliary_264 | undefined;
-  page?: {
-    limit?: number;
-    after?: (string | null) | undefined;
-  };
-};
 
-export type PostObservabilityThreadsQuery_Response = {
-  threads: {
-    threadId: string;
-  }[];
-  page: {
-    next: string | null;
-  };
-};
+export type PostObservabilityThreadsQuery_Response =
+  | {
+      threads: {
+        organizationId: string | null;
+        threadId: string;
+        firstTraceId: string;
+        lastTraceId: string;
+        resourceId: string | null;
+        userId: string | null;
+        entityType: string | null;
+        entityId: string | null;
+        entityName: string | null;
+        entityVersionId: string | null;
+        runId: string | null;
+        sessionId: string | null;
+        requestId: string | null;
+        serviceName: string | null;
+        experimentId: string | null;
+        environment: string | null;
+        executionSource: string | null;
+        status: 'success' | 'error';
+        startedAt: string;
+        endedAt: string;
+        timeToFirstChunkMs: number | null;
+        inputPreview: string | null;
+        outputPreview: string | null;
+        errorPreview: string | null;
+        traceCount: number;
+        model: string | null;
+        provider: string | null;
+      }[];
+      page: {
+        next: string | null;
+      };
+    }
+  | {
+      threads: {
+        threadId: string;
+      }[];
+      page: {
+        next: string | null;
+      };
+    };
 
 export type PostObservabilityThreadsQuery_Request = Simplify<
   (never extends never ? {} : { params: never }) &
@@ -10728,7 +10812,7 @@ export type PostObservabilitySpansQuery_Body = {
   };
   where?: InputShared_Auxiliary_230 | undefined;
   orderBy?: {
-    field: 'startedAt' | 'endedAt';
+    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs';
     direction: 'asc' | 'desc';
   }[];
   page?: {
@@ -10776,6 +10860,7 @@ export type PostObservabilitySpansQuery_Response = {
     inputPreview: string | null;
     outputPreview: string | null;
     errorPreview: string | null;
+    timeToFirstChunkMs?: (number | null) | undefined;
   }[];
   page: {
     next: string | null;
@@ -18651,7 +18736,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_766[] | undefined;
+  files?: InputShared_Auxiliary_773[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18709,7 +18794,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_766[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_773[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (

@@ -46,22 +46,30 @@ function pathParams(route: ServerRoute): Record<string, string> {
   return params;
 }
 
-type RouteOutcome = { ok: true } | { ok: false; error: unknown };
+const ROUTE_TIMEOUT_MS = 2000;
+const TIMED_OUT = Symbol('timed out');
+
+type RouteOutcome = { ok: true } | { ok: false; error: unknown } | { timedOut: true };
 
 async function runRoute(route: ServerRoute): Promise<RouteOutcome> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await Promise.race([
+    const result = await Promise.race([
       route.handler({
         ...pathParams(route),
         mastra: createFailingMastra(),
         requestContext: new RequestContext(),
         abortSignal: new AbortController().signal,
       }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000)),
+      new Promise<typeof TIMED_OUT>(resolve => {
+        timer = setTimeout(() => resolve(TIMED_OUT), ROUTE_TIMEOUT_MS);
+      }),
     ]);
-    return { ok: true };
+    return result === TIMED_OUT ? { timedOut: true } : { ok: true };
   } catch (error) {
     return { ok: false, error };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -105,6 +113,9 @@ describe('error code contract', () => {
     '%s returns a catalog problem when it fails',
     async (name, route) => {
       const outcome = await runRoute(route);
+      if ('timedOut' in outcome) {
+        expect.fail(`${name} neither resolved nor rejected within ${ROUTE_TIMEOUT_MS}ms`);
+      }
       if (outcome.ok) {
         expect(ROUTES_THAT_SUCCEED_WITHOUT_MASTRA.has(name), `${name} resolved despite a failing Mastra`).toBe(true);
         return;

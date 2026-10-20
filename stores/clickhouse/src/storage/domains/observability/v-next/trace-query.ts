@@ -10,6 +10,7 @@ import type {
   TraceQueryPredicateField,
   TraceQueryResponse,
   TraceQueryScoreField,
+  TraceQuerySortValue,
   TraceQuerySpanField,
   TraceQueryTenantScope,
   TrustedThreadPredicate,
@@ -43,6 +44,21 @@ type TraceSelection = {
 
 export const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
 
+/**
+ * Core versions without the field reject it in strict query results, so it is only returned when core knows it.
+ * Core before 1.68 has no field registry at all.
+ */
+export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {});
+
+/** Core before the sort rejects `orderBy` on the field, so the sort is only declared when core plans it. */
+const timeToFirstChunkSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstChunkMs') === true;
+
+export const timeToFirstChunkFeatures = timeToFirstChunkSupported
+  ? timeToFirstChunkSortSupported
+    ? (['trace-query-time-to-first-chunk', 'trace-query-time-to-first-chunk-sort'] as const)
+    : (['trace-query-time-to-first-chunk'] as const)
+  : ([] as const);
+
 export function durationMsSql(startedAt: string, endedAt: string): string {
   return `dateDiff('millisecond', ${startedAt}, ${endedAt})`;
 }
@@ -63,8 +79,11 @@ const TRACE_FIELDS = {
   startedAt: { sql: 'r.startedAt', parameterType: "DateTime64(3, 'UTC')" },
   endedAt: { sql: 'r.endedAt', parameterType: "DateTime64(3, 'UTC')" },
   durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'Float64' },
+  timeToFirstChunkMs: { sql: 'r.timeToFirstChunkMs', parameterType: 'Float64' },
   entityName: { sql: 'r.entityName', parameterType: 'String' },
   entityType: { sql: 'r.entityType', parameterType: 'String' },
+  name: { sql: 'r.name', parameterType: 'String' },
+  spanType: { sql: 'r.spanType', parameterType: 'String' },
   environment: { sql: 'r.environment', parameterType: 'String' },
   status: { sql: TRACE_STATUS_SQL, parameterType: 'String' },
   tags: { sql: 'r.tags', parameterType: 'String' },
@@ -78,6 +97,7 @@ const SPAN_FIELDS = {
   startedAt: { sql: 's.startedAt', parameterType: "DateTime64(3, 'UTC')" },
   endedAt: { sql: 's.endedAt', parameterType: "DateTime64(3, 'UTC')" },
   durationMs: { sql: 's.durationMs', parameterType: 'Float64' },
+  timeToFirstChunkMs: { sql: 's.timeToFirstChunkMs', parameterType: 'Float64' },
   status: { sql: 's.status', parameterType: 'String' },
   error: { sql: 's.error', parameterType: 'String' },
   entityType: { sql: 's.entityType', parameterType: 'String' },
@@ -156,6 +176,7 @@ const TRACE_SELECT = `
   r.entityName AS entityName,
   r.entityType AS entityType,
   r.environment AS environment,
+  r.timeToFirstChunkMs AS timeToFirstChunkMs,
   ${TRACE_STATUS_SQL} AS status`;
 
 export class ParameterBuilder {
@@ -179,8 +200,8 @@ function fieldDefinition<TField extends string>(
   return definition;
 }
 
-function resolveOrderField(field: string): 'startedAt' | 'endedAt' {
-  if (field === 'startedAt' || field === 'endedAt') return field;
+function resolveOrderField(field: string): TraceOrder['field'] {
+  if (field === 'startedAt' || field === 'endedAt' || field === 'timeToFirstChunkMs') return field;
   throw new Error(`Unsupported trusted trace-query field: ${field}`);
 }
 
@@ -469,6 +490,7 @@ function compileClickHouseTraceScope(
       startedAt,
       endedAt,
       ${durationMsSql('startedAt', 'endedAt')} AS durationMs,
+      timeToFirstChunkMs,
       if(isNotNull(error), 'error', 'success') AS status,
       error,
       entityType,
@@ -621,7 +643,7 @@ const TRACE_LIST_SELECT = TRACE_SELECT.split('\n')
   .filter(line => !/ AS (metadata|inputPreview|outputPreview|errorPreview),$/.test(line))
   .join('\n');
 
-type TraceOrder = { field: 'startedAt' | 'endedAt'; direction: 'ASC' | 'DESC' };
+type TraceOrder = { field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs'; direction: 'ASC' | 'DESC' };
 
 function traceOrder(plan: TrustedTraceQueryTracesPlan): TraceOrder {
   return {
@@ -641,10 +663,14 @@ function keysetCursorCondition(
   parameters: ParameterBuilder,
 ): string {
   if (plan.paginationMode !== 'keyset' || !plan.cursor) return '';
+  // Empty values sort last in both directions: after an empty value only empty values remain.
+  if (plan.cursor.sortValue === null)
+    return `(isNull(sortValue) AND traceId > ${parameters.add(plan.cursor.traceId, 'String')})`;
+  const numeric = order.field === 'timeToFirstChunkMs';
   const comparison = order.direction === 'ASC' ? '>' : '<';
-  const sortValue = parameters.add(plan.cursor.sortValue, "DateTime64(3, 'UTC')");
+  const sortValue = parameters.add(plan.cursor.sortValue, numeric ? 'Float64' : "DateTime64(3, 'UTC')");
   const traceId = parameters.add(plan.cursor.traceId, 'String');
-  return `(sortValue ${comparison} ${sortValue} OR (sortValue = ${sortValue} AND traceId > ${traceId}))`;
+  return `(sortValue ${comparison} ${sortValue} OR (sortValue = ${sortValue} AND traceId > ${traceId})${numeric ? ' OR isNull(sortValue)' : ''})`;
 }
 
 /**
@@ -659,12 +685,15 @@ export function compileClickHouseTraceQueryKeys(plan: TrustedTraceQueryTracesPla
   const order = traceOrder(plan);
   const ctes = compileClickHouseTraceCandidates(
     plan,
-    'r.traceId AS traceId, r.dedupeKey AS dedupeKey, r.startedAt AS startedAt, r.endedAt AS endedAt',
+    'r.traceId AS traceId, r.dedupeKey AS dedupeKey, r.startedAt AS startedAt, r.endedAt AS endedAt, r.timeToFirstChunkMs AS timeToFirstChunkMs',
     parameters,
     QUERY_TRACES_SCOPE,
   );
   const cursor = keysetCursorCondition(plan, order, parameters);
   const pick = order.direction === 'DESC' ? 'max' : 'min';
+  // argMax/argMin skip empty values and return no root when all are empty, so empty values rank last instead.
+  const rootOrder =
+    order.field === 'timeToFirstChunkMs' ? `ifNull(${order.field}, ${pick === 'max' ? '-inf' : 'inf'})` : order.field;
   const limit =
     plan.paginationMode === 'page'
       ? `LIMIT ${parameters.add(plan.perPage, 'UInt64')} OFFSET ${parameters.add(plan.page * plan.perPage, 'UInt64')}`
@@ -673,20 +702,25 @@ export function compileClickHouseTraceQueryKeys(plan: TrustedTraceQueryTracesPla
     query: `WITH ${ctes.join(',\n')},
 per_trace AS (
   SELECT traceId, ${pick}(${order.field}) AS sortValue,
-    ${pick === 'max' ? 'argMax' : 'argMin'}((dedupeKey, startedAt), ${order.field}) AS root
+    ${pick === 'max' ? 'argMax' : 'argMin'}((dedupeKey, startedAt), ${rootOrder}) AS root
   FROM candidates
   GROUP BY traceId${cursor ? `\n  HAVING ${cursor}` : ''}
 )
 SELECT traceId, root.1 AS dedupeKey, sortValue, root.2 AS rootStartedAt, count() OVER () AS __total
 FROM per_trace
-ORDER BY sortValue ${order.direction}, traceId ASC
+ORDER BY sortValue ${order.direction} NULLS LAST, traceId ASC
 ${limit}`,
     query_params: parameters.params,
     sharedSnapshot: true,
   };
 }
 
-export type ClickHouseTraceRootKey = { traceId: string; dedupeKey: string; sortValue: string; rootStartedAt: string };
+export type ClickHouseTraceRootKey = {
+  traceId: string;
+  dedupeKey: string;
+  sortValue: TraceQuerySortValue;
+  rootStartedAt: string;
+};
 
 /**
  * Second statement of keyset and page mode: the rows of the keyed roots, with `metadata`
@@ -703,9 +737,9 @@ export function compileClickHouseTraceRowsByKey(
   const ts = (value: string) => parameters.add(value, "DateTime64(3, 'UTC')");
   const byEnd = order.field === 'endedAt';
   const tuples = keys.map(key => {
-    const started = ts(byEnd ? key.rootStartedAt : key.sortValue);
+    const started = ts(key.rootStartedAt);
     const id = `${parameters.add(key.traceId, 'String')}, ${parameters.add(key.dedupeKey, 'String')}`;
-    return byEnd ? `(${started}, ${id}, ${ts(key.sortValue)})` : `(${started}, ${id})`;
+    return byEnd ? `(${started}, ${id}, ${ts(String(key.sortValue))})` : `(${started}, ${id})`;
   });
   const conjuncts = plan.where
     ? (plan.where.type === 'boolean' && plan.where.operator === 'and' ? plan.where.args : [plan.where]).filter(
@@ -717,7 +751,7 @@ export function compileClickHouseTraceRowsByKey(
     query: `SELECT ${TRACE_SELECT}
 FROM ${TABLE_TRACE_ROOTS} r
 WHERE (r.startedAt, r.traceId, r.dedupeKey${byEnd ? ', r.endedAt' : ''}) IN (${tuples.join(', ')})${compileTenantScope(plan.scope, parameters)}${predicate}
-ORDER BY ${order.field} ${order.direction}, traceId ASC
+ORDER BY ${order.field} ${order.direction} NULLS LAST, traceId ASC
 LIMIT 1 BY traceId`,
     query_params: parameters.params,
   };
@@ -1006,6 +1040,9 @@ function isClickHouseResourceLimit(error: unknown): boolean {
 export type ClickHouseTraceQueryExecutionLimits = {
   timeoutMs: number;
   memoryLimitBytes?: number;
+  maxThreads?: number;
+  maxBlockSize?: number;
+  spillThresholdBytes?: number;
 };
 
 export async function runWithClickHouseTraceQueryTimeout(
@@ -1025,6 +1062,14 @@ export async function runWithClickHouseTraceQueryTimeout(
         ...CH_SETTINGS,
         max_execution_time: resolvedTimeoutMs / 1000,
         ...(limits.memoryLimitBytes === undefined ? {} : { max_memory_usage: String(limits.memoryLimitBytes) }),
+        ...(limits.maxThreads === undefined ? {} : { max_threads: limits.maxThreads }),
+        ...(limits.maxBlockSize === undefined ? {} : { max_block_size: String(limits.maxBlockSize) }),
+        ...(limits.spillThresholdBytes === undefined
+          ? {}
+          : {
+              max_bytes_before_external_sort: String(limits.spillThresholdBytes),
+              max_bytes_before_external_group_by: String(limits.spillThresholdBytes),
+            }),
         ...(compiled.sharedSnapshot ? { enable_shared_storage_snapshot_in_query: 1 } : {}),
       },
     });
@@ -1174,6 +1219,9 @@ export async function queryTraces(
     entityType: row.entityType == null ? null : String(row.entityType),
     environment: row.environment == null ? null : String(row.environment),
     status: row.status,
+    ...(timeToFirstChunkSupported && {
+      timeToFirstChunkMs: row.timeToFirstChunkMs == null ? null : Number(row.timeToFirstChunkMs),
+    }),
   });
 
   if (plan.paginationMode === 'delta') {
@@ -1201,6 +1249,8 @@ export async function queryTraces(
   // Keyset and page mode: the page's root keys (and the total), then those rows with
   // their payloads.
   const keys = await run(compileClickHouseTraceQueryKeys(plan));
+  const sortValue = (value: unknown): TraceQuerySortValue =>
+    plan.orderBy.field !== 'timeToFirstChunkMs' ? asIsoTimestamp(value) : value == null ? null : Number(value);
   let total = Number(keys[0]?.__total ?? 0);
   if (plan.paginationMode === 'page' && keys.length === 0 && plan.page > 0) {
     const [stats] = await run(compileClickHouseTraceQueryTotal(plan));
@@ -1216,7 +1266,7 @@ export async function queryTraces(
             visible.map(key => ({
               traceId: String(key.traceId),
               dedupeKey: String(key.dedupeKey),
-              sortValue: asIsoTimestamp(key.sortValue),
+              sortValue: sortValue(key.sortValue),
               rootStartedAt: asIsoTimestamp(key.rootStartedAt),
             })),
           ),
@@ -1248,7 +1298,7 @@ export async function queryTraces(
         keys.length > plan.limit && lastKey
           ? coreStorage.encodeTraceQueryCursor(plan, {
               result: 'traces',
-              sortValue: asIsoTimestamp(lastKey.sortValue),
+              sortValue: sortValue(lastKey.sortValue),
               traceId: String(lastKey.traceId),
             })
           : null,
@@ -1280,4 +1330,22 @@ export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPred
   const parameters = new ParameterBuilder();
   const sql = compileScalarPredicate(predicate, SPAN_QUERY_FIELDS, parameters);
   return { sql, params: parameters.params };
+}
+
+/** Thread filters see full-history representative values, never individual member traces. */
+export function compileThreadQueryPredicate(
+  predicate: TrustedTraceQueryScalarPredicate,
+  parameters = new ParameterBuilder(),
+): SqlFragment {
+  const fields = Object.fromEntries(
+    Object.entries(coreStorage.THREAD_QUERY_FIELD_REGISTRY).map(([field, rule]) => [
+      field,
+      {
+        sql: `s.${field}`,
+        parameterType:
+          rule.valueKind === 'timestamp' ? "DateTime64(3, 'UTC')" : rule.valueKind === 'number' ? 'Float64' : 'String',
+      },
+    ]),
+  ) as Record<string, FieldDefinition>;
+  return { sql: compileScalarPredicate(predicate, fields, parameters), params: parameters.params };
 }

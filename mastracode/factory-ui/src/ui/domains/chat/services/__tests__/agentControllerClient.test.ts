@@ -10,12 +10,8 @@ vi.mock('@mastra/client-js', () => ({
   },
 }));
 
-import {
-  createAgentControllerClient,
-  invokeWorkspaceSkill,
-  prepareWorkspaceSkill,
-  WorkspaceSkillInvocationError,
-} from '../agentControllerClient';
+import type { WorkspaceSkillInvocationError } from '../agentControllerClient';
+import { createAgentControllerClient, invokeWorkspaceSkill, prepareWorkspaceSkill } from '../agentControllerClient';
 
 afterEach(() => vi.restoreAllMocks());
 

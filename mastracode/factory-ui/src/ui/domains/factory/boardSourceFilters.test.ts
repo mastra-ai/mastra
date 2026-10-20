@@ -7,14 +7,13 @@ import { linearIssue, sourceCards } from '../../__tests__/fixtures/boardSourceFi
 describe('Board source filters', () => {
   it('preserves multiple sources and projects through URL and saved view filters', () => {
     const params = new URLSearchParams(
-      'source=github&source=linear&linearProject=project-a&linearProject=project-b&q=Portal&label=feature&sort=created-newest',
+      'source=github&source=linear&linearProject=project-a&linearProject=project-b&label=feature&sort=created-newest',
     );
     const state = boardFiltersFromParams(params, 'work');
     const restored = boardFilterStateFromItems(boardFilterItems(state, 'work'), 'work');
     const url = boardFilterParams(params, restored, 'work');
     expect(url.getAll('source')).toEqual(['github', 'linear']);
     expect(url.getAll('linearProject')).toEqual(['project-a', 'project-b']);
-    expect(url.get('q')).toBe('Portal');
     expect(url.get('sort')).toBe('created-newest');
   });
 

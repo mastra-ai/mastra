@@ -4,6 +4,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
 import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
+import type { ServerErrorCode } from '@mastra/server/error-codes';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -316,7 +317,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
     const queryParams = normalizeQueryParams(Object.fromEntries(url.searchParams));
 
     let body: unknown;
-    let bodyParseError: { message: string } | undefined;
+    let bodyParseError: { message: string; code: ServerErrorCode } | undefined;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.headers.get('content-type') || '';
@@ -335,6 +336,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
           }
           bodyParseError = {
             message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+            code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID,
           };
         }
       } else if (contentType.includes('application/json')) {
@@ -350,6 +352,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             });
             bodyParseError = {
               message: error instanceof Error ? error.message : 'Invalid JSON in request body',
+              code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
             };
           }
         }
@@ -562,7 +565,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       const urlParams = paramNames.length > 0 ? remapParams(rawParams, paramNames) : rawParams;
       const queryParams = normalizeQueryParams(ctx.query || {});
       let body: unknown;
-      let bodyParseError: { message: string } | undefined;
+      let bodyParseError: { message: string; code: ServerErrorCode } | undefined;
 
       if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
         const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
@@ -612,6 +615,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             }
             bodyParseError = {
               message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+              code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID,
             };
           }
         } else if (contentType.includes('application/json')) {
@@ -630,6 +634,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
                 });
                 bodyParseError = {
                   message: error instanceof Error ? error.message : 'Invalid JSON in request body',
+                  code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
                 };
               }
             }
@@ -646,7 +651,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             error: 'Invalid request body',
             issues: [{ field: 'body', message: params.bodyParseError.message }],
             problem: {
-              code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
+              code: params.bodyParseError.code ?? SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
               metadata: { issues: [{ field: 'body', message: params.bodyParseError.message }] },
             },
           }),
@@ -950,7 +955,11 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
           ...(httpStatus < 500 ? { issues: [] } : {}),
           problem:
             ctx.code === 'PARSE'
-              ? { code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON }
+              ? {
+                  code: ctx.request?.headers?.get('content-type')?.includes('multipart/form-data')
+                    ? SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID
+                    : SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
+                }
               : ctx.code === 'VALIDATION'
                 ? { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED }
                 : formatErrorResponse(error).body.problem,

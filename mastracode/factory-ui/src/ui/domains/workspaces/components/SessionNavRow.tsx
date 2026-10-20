@@ -4,11 +4,13 @@ import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/Ho
 import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MoreHorizontal, Pin, PinOff, RefreshCw, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Pin, PinOff, RefreshCw, Trash2, User } from 'lucide-react';
 import { useRef } from 'react';
 import type { RefObject } from 'react';
 
+import { SourceIcon } from '../../factory/components/BoardIcons';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
+import type { SessionSource } from '../services/sessionPresentation';
 import type { SessionRowStatus } from '../services/sessionStatus';
 import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
 import { SessionPreviewCard } from './SessionPreviewCard';
@@ -28,6 +30,7 @@ export function SessionNavRow({
   name,
   title,
   url,
+  source,
   active,
   disabled,
   loading,
@@ -46,6 +49,8 @@ export function SessionNavRow({
   /** Hover tooltip, typically the branch name. */
   title?: string;
   url: string;
+  /** Leading icon: a user session, or the source of the session's work item. */
+  source?: SessionSource;
   active: boolean;
   disabled: boolean;
   /** True while this row's async open is in flight — shows a spinner and blocks clicks. */
@@ -82,6 +87,7 @@ export function SessionNavRow({
       }}
       title={preview ? undefined : title}
     >
+      {source ? <SessionSourceIcon source={source} /> : null}
       <Sidebar.NavLabel>{name}</Sidebar.NavLabel>
       {pinned && !loading ? (
         <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
@@ -143,6 +149,13 @@ export function SessionNavRow({
       <SessionPreviewCard name={name} anchor={anchor} status={status} merged={merged} details={preview} />
     </HoverCard>
   );
+}
+
+function SessionSourceIcon({ source }: { source: SessionSource }) {
+  if (source === 'user') {
+    return <User data-source="user" aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
+  }
+  return <SourceIcon source={source} className="size-3.5" />;
 }
 
 const trailingSlot = 'size-control-sm shrink-0 place-items-center *:col-start-1 *:row-start-1';

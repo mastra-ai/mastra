@@ -242,7 +242,7 @@ function DataListBase({
 
   // One hover surface travels between rows (same primitive as menus/selects).
   // Subheaders, pagination and whitespace stay inert, so no gap-click routing.
-  const menu = useFluidMenu<HTMLDivElement>({ gapClick: false });
+  const menu = useFluidMenu({ gapClick: false });
   const grid = (
     <div
       // Lists scroll inside the ScrollArea viewport (below); the grid just lays out.

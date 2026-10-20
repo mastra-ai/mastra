@@ -4,6 +4,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { SERVER_ERROR_CODES } from '@mastra/server/error-codes';
+import type { ServerErrorCode } from '@mastra/server/error-codes';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -276,7 +277,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     // Fastify's request.query can contain string | string[] for repeated params
     const queryParams = normalizeQueryParams((request.query || {}) as Record<string, unknown>);
     let body: unknown;
-    let bodyParseError: { message: string } | undefined;
+    let bodyParseError: { message: string; code: ServerErrorCode } | undefined;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.headers['content-type'] || '';
@@ -295,6 +296,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           }
           bodyParseError = {
             message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+            code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID,
           };
         }
       } else {
@@ -594,7 +596,10 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         return reply.status(400).send({
           error: 'Invalid request body',
           issues,
-          problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON, metadata: { issues } },
+          problem: {
+            code: params.bodyParseError.code ?? SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
+            metadata: { issues },
+          },
         });
       }
 

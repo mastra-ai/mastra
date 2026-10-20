@@ -26,6 +26,7 @@ import {
   type TraceQueryTraceResponse,
   type TrustedThreadPredicate,
   type TrustedThreadQueryPlan,
+  type TraceQuerySortValue,
   type TrustedTraceQueryKeysetTracesPlan,
   type TrustedTraceQueryPlan,
   type TrustedTraceQueryPredicate,
@@ -63,6 +64,7 @@ export interface RawTraceQuerySpan {
   userId?: string | null;
   sessionId?: string | null;
   experimentId?: string | null;
+  timeToFirstChunkMs?: number | null;
 }
 
 export interface RawTraceQueryScore {
@@ -764,6 +766,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       endedAt: '2026-08-05T10:00:02.250Z',
     }),
     span(30, 'trace-c', 'root-c', {
+      spanType: 'workflow_run',
       threadId: 'thread-2',
       resourceId: null,
       startedAt: '2026-08-07T10:00:00.000Z',
@@ -2020,6 +2023,56 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [],
   },
   {
+    name: 'filters by the current root span name only',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'eq', left: { path: 'name' }, right: { literal: 'root-a' } },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'trace-scope name ignores superseded roots and child span names',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'in',
+        value: { path: 'name' },
+        set: ['root-a-old', 'medication_lookup', 'retrieve_medications'],
+      },
+    },
+    expected: [],
+  },
+  {
+    name: 'filters by the root span type without matching child span types',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'in', value: { path: 'spanType' }, set: ['workflow_run', 'tool_call', 'rag_action'] },
+    },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'excludes a root span type with ne',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'ne', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
+    },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'combines a root span type with a related span type',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
+          { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } } },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
     name: 'eq excludes traces whose nullable field is null',
     request: {
       timeRange: fullRange,
@@ -2034,6 +2087,22 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
       where: { op: 'ne', left: { path: 'threadId' }, right: { literal: 'thread-1' } },
     },
     expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }],
+  },
+  {
+    name: 'not eq includes traces whose nullable field is null',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'not', arg: { op: 'eq', left: { path: 'threadId' }, right: { literal: 'thread-1' } } },
+    },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }],
+  },
+  {
+    name: 'not ne excludes traces whose nullable field is null',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'not', arg: { op: 'ne', left: { path: 'threadId' }, right: { literal: 'thread-1' } } },
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
   },
   {
     name: 'in excludes traces whose nullable field is null',
@@ -2762,7 +2831,7 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
     hasNext && last
       ? encodeTraceQueryCursor(plan, {
           result: 'traces',
-          sortValue: last[plan.orderBy.field],
+          sortValue: last[plan.orderBy.field] ?? null,
           traceId: last.traceId,
         })
       : null;
@@ -3041,6 +3110,7 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
     startedAt: span.startedAt,
     endedAt: span.endedAt,
     durationMs: durationMsBetween(span.startedAt, span.endedAt),
+    timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
     status: span.error === null ? 'success' : 'error',
     error: span.error,
     entityType: span.entityType,
@@ -3076,6 +3146,10 @@ export function traceQueryDimensionValue(root: RawTraceQuerySpan, dimension: Tra
       return root.entityType;
     case 'entityName':
       return root.entityName;
+    case 'name':
+      return root.name;
+    case 'spanType':
+      return root.spanType;
     case 'environment':
       return root.environment;
     case 'threadId':
@@ -3115,8 +3189,11 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     startedAt: root.startedAt,
     endedAt: root.endedAt,
     durationMs: durationMsBetween(root.startedAt, root.endedAt),
+    timeToFirstChunkMs: root.timeToFirstChunkMs ?? null,
     entityName: traceQueryDimensionValue(root, 'entityName'),
     entityType: traceQueryDimensionValue(root, 'entityType'),
+    name: traceQueryDimensionValue(root, 'name'),
+    spanType: traceQueryDimensionValue(root, 'spanType'),
     environment: traceQueryDimensionValue(root, 'environment'),
     status: traceQueryDimensionValue(root, 'status'),
     tags: root.tags,
@@ -3144,7 +3221,22 @@ function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
     entityType: root.entityType,
     environment: root.environment,
     status: root.error === null ? 'success' : 'error',
+    timeToFirstChunkMs: root.timeToFirstChunkMs ?? null,
   };
+}
+
+/** Orders sort values in the requested direction; empty values sort last in both directions. */
+export function compareTraceQuerySortValues(
+  left: TraceQuerySortValue | undefined,
+  right: TraceQuerySortValue | undefined,
+  direction: 'asc' | 'desc',
+): number {
+  if (left == null || right == null) return Number(left == null) - Number(right == null);
+  const values =
+    typeof left === 'number' && typeof right === 'number'
+      ? Math.sign(left - right)
+      : compareTraceQueryStrings(String(left), String(right));
+  return direction === 'asc' ? values : -values;
 }
 
 function compareTraces(
@@ -3152,14 +3244,19 @@ function compareTraces(
   right: TraceQueryTrace,
   plan: Extract<TrustedTraceQueryPlan, { result: 'traces' }>,
 ): number {
-  const values = compareTraceQueryStrings(left[plan.orderBy.field], right[plan.orderBy.field]);
-  if (values !== 0) return plan.orderBy.direction === 'asc' ? values : -values;
+  const field = plan.orderBy.field;
+  const values = compareTraceQuerySortValues(left[field], right[field], plan.orderBy.direction);
+  if (values !== 0) return values;
   return compareTraceQueryStrings(left.traceId, right.traceId);
 }
 
 function isTraceAfterCursor(trace: TraceQueryTrace, plan: TrustedTraceQueryKeysetTracesPlan): boolean {
   const cursor = plan.cursor!;
-  const sortComparison = compareTraceQueryStrings(trace[plan.orderBy.field], cursor.sortValue);
+  const sortComparison = compareTraceQuerySortValues(
+    trace[plan.orderBy.field],
+    cursor.sortValue,
+    plan.orderBy.direction,
+  );
   if (sortComparison === 0) return compareTraceQueryStrings(trace.traceId, cursor.traceId) > 0;
-  return plan.orderBy.direction === 'asc' ? sortComparison > 0 : sortComparison < 0;
+  return sortComparison > 0;
 }
