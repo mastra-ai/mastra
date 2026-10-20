@@ -2861,6 +2861,12 @@ export class WorkflowEventProcessor extends EventProcessor {
             ...prevResult, // Get iteration timing info
             // An iteration that finishes after a sibling failed must not mark the foreach successful.
             ...(existingStepResult?.status === 'failed' ? { status: 'failed' as const } : {}),
+            // One iteration succeeding doesn't finish the foreach: the coordinator writes 'success'
+            // once every iteration settles. A suspended aggregate stays suspended until then.
+            ...(prevResult.status === 'success' && existingStepResult?.status !== 'failed'
+              ? { status: existingStepResult?.status === 'suspended' ? 'suspended' : 'running', endedAt: undefined }
+              : {}),
+            startedAt: existingStepResult?.startedAt ?? prevResult.startedAt,
             output: currentResult,
             payload: originalPayload,
             suspendPayload,
