@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { builtinModules } from 'node:module';
 import path from 'node:path';
-import { createPathsMatcher, getTsconfig, parseTsconfig } from 'get-tsconfig';
+import { createPathsMatcher, parseTsconfig } from 'get-tsconfig';
 import type { PathsMatcher } from 'get-tsconfig';
 import type { Plugin } from 'rollup';
 
@@ -38,7 +38,7 @@ export function tsConfigPaths({
   localResolve,
   cwd,
 }: PluginOptions = {}): Plugin {
-  const matcherCache = new Map<string, PathsMatcher | null>();
+  const matcherCache = new Map<string, { matcher: PathsMatcher | null; patterns: string[] } | null>();
 
   function resolveImportToSourceFile(moduleName: string): string {
     if (fs.existsSync(moduleName) && fs.statSync(moduleName).isFile()) {
@@ -88,18 +88,21 @@ export function tsConfigPaths({
     return null;
   }
 
-  function getMatcherForFile(filePath: string): PathsMatcher | null {
+  function getMatcherForFile(filePath: string): { matcher: PathsMatcher | null; patterns: string[] } | null {
     const configPath = tsConfigPath ?? findTsConfigForFile(filePath);
     if (!configPath) {
       return null;
     }
 
     if (!matcherCache.has(configPath)) {
-      const config = getTsconfig(configPath);
-      if (config?.config.compilerOptions?.paths && !config.config.compilerOptions.baseUrl) {
-        config.config.compilerOptions.baseUrl = path.dirname(config.path);
+      const config = parseTsconfig(configPath);
+      const patterns = Object.keys(config.compilerOptions?.paths ?? {});
+      if (patterns.length > 0 && !config.compilerOptions?.baseUrl) {
+        config.compilerOptions = { ...config.compilerOptions, baseUrl: path.dirname(configPath) };
       }
-      matcherCache.set(configPath, config ? createPathsMatcher(config) : null);
+      const matcher = createPathsMatcher({ path: configPath, config });
+
+      matcherCache.set(configPath, { matcher, patterns });
     }
 
     return matcherCache.get(configPath) ?? null;
@@ -110,7 +113,19 @@ export function tsConfigPaths({
       return [];
     }
 
-    return getMatcherForFile(importer)?.(request) ?? [];
+    const matchedConfig = getMatcherForFile(importer);
+    if (
+      !matchedConfig?.patterns.some(pattern => {
+        const wildcardIndex = pattern.indexOf('*');
+        return wildcardIndex === -1
+          ? request === pattern
+          : request.startsWith(pattern.slice(0, wildcardIndex)) && request.endsWith(pattern.slice(wildcardIndex + 1));
+      })
+    ) {
+      return [];
+    }
+
+    return matchedConfig.matcher?.(request) ?? [];
   }
 
   return {
