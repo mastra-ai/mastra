@@ -250,7 +250,11 @@ interface SharedToolsState {
   ttlMs: number;
   options: ToolsOptions;
   normalizedProviders: NormalizedProviders;
-  /** Keyed by `${integrationId}::${connectionId}`; shared across every scope. */
+  /**
+   * Keyed by `${integrationId}::${connectionId}`; shared across every scope.
+   * Global connections' transports are built with a resource-free client so
+   * the shared entry never carries one scope's resource header.
+   */
   mcpClients: Map<string, McpClientEntry>;
   /** Keyed by {@link scopeKey}. */
   scopes: Map<string, SnapshotScope>;
@@ -1116,6 +1120,14 @@ async function mapTools(
   resolverId: number,
 ): Promise<{ record: ResolvedToolsRecord; mcpKeys: Set<string> }> {
   const byIntegrationId = groupByIntegrationId(connections);
+  // The MCP client cache is shared across resource scopes, and a resource
+  // scope's snapshot includes global connections. Build global connections'
+  // transports with a resource-free client so a shared global transport never
+  // carries whichever scope's resource header resolved it first.
+  const globalClient =
+    clientOptions.resourceId === undefined ? client : resolveClient({ ...clientOptions, resourceId: undefined });
+  const clientFor = (connectionId: string): ResolvedClient =>
+    connections.find(connection => connection.id === connectionId)?.resourceId == null ? globalClient : client;
   // Set of ${integrationId}::${connectionId} keys still in use this snapshot.
   const activeMcpKeys = new Set<string>();
   const result: ResolvedToolsRecord = {};
@@ -1146,7 +1158,7 @@ async function mapTools(
             allowTools: request.options.allowTools,
             disallowTools: request.options.disallowTools,
             requireApproval: request.options.requireApproval,
-            client,
+            client: clientFor(resolution.connectionId),
             mcpClients,
             resolverId,
           });
@@ -1171,6 +1183,7 @@ async function mapTools(
             disallowTools: request.options.disallowTools,
             requireApproval: request.options.requireApproval,
             client,
+            globalClient,
             mcpClients,
             resolverId,
           });

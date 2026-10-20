@@ -534,6 +534,8 @@ describe('GET /:provider (hosted page)', () => {
     expect(response.headers.get('content-type')).toContain('text/html');
     expect(response.headers.get('cache-control')).toBe('no-store, private');
     expect(response.headers.get('content-security-policy')).toContain("default-src 'none'");
+    // Cookie-authenticated page must not be embeddable (clickjacking).
+    expect(response.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
     const page = await response.text();
     expect(page).not.toContain('<script>alert(1)</script>');
     expect(page).toContain('&lt;script&gt;');

@@ -105,6 +105,22 @@ GET /connect/linear?returnTo=/settings/integrations
 
 The page shows a Connect button, opens the provider's authorization flow in a popup, polls until the connection is active, and then redirects back to `returnTo` with `connectionId` and `status` query parameters. `returnTo` accepts relative paths only, unless you allowlist origins with `returnTo.allowedOrigins`.
 
+The hosted page is a plain browser navigation: it carries no `Authorization` header, and the page's own status calls send only same-origin cookies. It therefore requires auth that can authenticate the request itself, such as a session cookie. `authenticateToken` receives the raw request as its second argument:
+
+```typescript title="src/mastra/index.ts"
+const auth = {
+  authenticateToken: async (token: string, request: Request) => {
+    // JSON routes send a bearer token.
+    if (token) return verifyToken(token)
+    // The hosted page sends no token: authenticate the session cookie.
+    return verifySessionCookie(request.headers.get('cookie'))
+  },
+  mapUserToResourceId: (user: { id: string }) => user.id,
+}
+```
+
+With token-only auth, the hosted page returns a 401. The JSON routes still work: call them with the bearer token and build your own UI instead.
+
 Prefer your own UI? Call the JSON routes directly. See the [route reference](/reference/connect/user-connect-routes#routes).
 
 ### The authorization link never leaves the server

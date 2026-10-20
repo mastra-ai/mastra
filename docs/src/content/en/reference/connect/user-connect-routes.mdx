@@ -87,7 +87,7 @@ All routes are gated on the caller's resource ID and respond with `Cache-Control
 | `GET /connect/connections/:id/status` | Poll target for a visible (global or own) connection: `{ id, status, scope }`. An invisible connection returns the same 404 as an unknown ID. |
 | `DELETE /connect/connections/:id` | Disconnects the caller's own connection (204). Global connections return 403. |
 | `GET /connect/connections/:id/launch` | Launch gate for a pending session. Verifies the caller owns the session, then responds with a 302 redirect to the provider's authorization flow. A session owned by another user, an expired session, or an unknown ID all return the same 404, so a leaked launch URL can't bind someone else's account. |
-| `GET /connect/:provider?returnTo=...` | Hosted connect page: a Connect button opens the provider's authorization flow in a popup, polls the status route, and redirects to the validated `returnTo` with `connectionId` and `status` query parameters. |
+| `GET /connect/:provider?returnTo=...` | Hosted connect page: a Connect button opens the provider's authorization flow in a popup, polls the status route, and redirects to the validated `returnTo` with `connectionId` and `status` query parameters. Loaded by top-level navigation, so it requires [cookie-based auth](/docs/mastra-platform/connect/end-user-connections#let-users-connect-their-accounts); with token-only auth it returns 401 and the JSON routes are the alternative. |
 
 ## Error responses
 
