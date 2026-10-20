@@ -24,5 +24,7 @@ export type { ConnectPromptPayload, ConnectPromptProvider } from './connect-prom
 export { MastraConnectError } from './errors.js';
 export type { MastraConnectErrorCode } from './errors.js';
 export type { ConnectClientOptions, ConnectionCredential, ProjectConnection } from './client.js';
+export { listProjectConnections, proxyRequest, resolveClient } from './client.js';
+export type { ProxyRequestOptions, ResolvedClient } from './client.js';
 export { PROVIDERS, CHANNELS } from './registry.js';
 export type { ProviderRegistration } from './registry.js';
