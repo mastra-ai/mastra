@@ -263,6 +263,13 @@ const connectionListSchema = z.object({
  */
 export const catalogAuthFieldSchema = z.object({
   name: z.string(),
+  /**
+   * Where the value goes in a headless auth call: `credentials` are
+   * exchanged with the provider (API keys, passwords), `params` configure
+   * the flow (e.g. an MCP server URL). Absent on older platforms; clients
+   * treat missing as `credentials`.
+   */
+  target: z.enum(['credentials', 'params']).nullish(),
   label: z.string().nullish(),
   description: z.string().nullish(),
   placeholder: z.string().nullish(),

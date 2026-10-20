@@ -2,8 +2,19 @@ import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import {
+  HeadlessAuthError,
+  headlessAuthFields,
+  headlessAuthRequiresForm,
+  splitHeadlessAuthValues,
+  startHeadlessAuth,
+  supportsHeadlessAuth,
+} from './headless-connect';
+import type { HeadlessAuthHandle } from './headless-connect';
 import type {
   UserConnectErrorBody,
+  UserConnectLaunchTokenResponse,
+  UserConnectProvider,
   UserConnectProvidersResponse,
   UserConnectSessionResponse,
   UserConnectionStatusResponse,
@@ -76,6 +87,34 @@ export function useConnectLaunchHref(): (launchUrl: string) => string {
   const client = useMastraClient();
   const { baseUrl } = client.options;
   return useCallback((launchUrl: string) => (baseUrl ? `${baseUrl}${launchUrl}` : launchUrl), [baseUrl]);
+}
+
+/**
+ * Redeems the launch gate for a headless session token (`Accept:
+ * application/json`) instead of following its hosted 302. The gate runs the
+ * same ownership assertion in both modes; a `null` token means the server
+ * could not extract one and the caller falls back to the hosted popup.
+ */
+function useRedeemLaunchToken(): (launchUrl: string) => Promise<UserConnectLaunchTokenResponse> {
+  const client = useMastraClient();
+  const { baseUrl, headers, credentials, fetch: customFetch } = client.options;
+
+  return useCallback(
+    async launchUrl => {
+      const fetchFn = customFetch ?? fetch;
+      // `launchUrl` is the full server-relative gate path (it already carries
+      // the connect mount prefix), so it resolves against the bare base URL.
+      const response = await fetchFn(`${baseUrl ?? ''}${launchUrl}`, {
+        headers: { ...headers, accept: 'application/json' },
+        credentials,
+      });
+      if (!response.ok) {
+        throw new UserConnectRequestError(response.status, null, `Request failed with status ${response.status}`);
+      }
+      return (await response.json()) as UserConnectLaunchTokenResponse;
+    },
+    [baseUrl, headers, credentials, customFetch],
+  );
 }
 
 export type ConnectSurface =
@@ -183,9 +222,23 @@ export function useConnectionStatus({ connectionId }: { connectionId: string | n
 export interface PendingConnect {
   provider: string;
   connectionId: string;
+  /**
+   * `headless` — the Nango SDK drives the provider's own consent popup (or no
+   * popup at all for collected credentials). `hosted` — a popup navigated
+   * through the launch gate's 302 into the hosted connect page.
+   */
+  mode: 'headless' | 'hosted';
   /** Shown when the popup was blocked so the user can finish the flow manually. */
   fallbackUrl: string | null;
 }
+
+/**
+ * What a caller passes to `connect()`: the provider's id plus the auth shape
+ * when known. Callers that only know the id (older payloads) always get the
+ * hosted flow.
+ */
+export type ConnectTarget = Pick<UserConnectProvider, 'id'> &
+  Partial<Pick<UserConnectProvider, 'authType' | 'authFields'>>;
 
 /**
  * Grace period after the vendor popup closes before an unsettled flow is
@@ -210,25 +263,53 @@ export interface UsePendingConnectOptions {
 export interface SettledConnect {
   provider: string;
   status: 'active' | 'failed';
+  /** Human-readable failure detail (blocked popup, closed window, rejected credentials). */
+  message?: string;
 }
 
+/** Window features for the hosted connect popup. */
+const POPUP_FEATURES = 'popup,width=600,height=720';
+
 /**
- * Drives one add-connection flow end to end: opens the popup synchronously in
- * the click gesture (so popup blockers allow it), creates the connect session,
- * sends the popup through the server's launch gate, and polls the connection
- * status until it settles. The pending state always resolves — on settle, on a
- * poll failure, when the popup closes without settling (after a grace period),
- * or at the poll budget — so the Connect action is never stuck disabled.
+ * Drives one add-connection flow end to end. Providers whose auth the browser
+ * can complete headlessly go through the launch gate's JSON redemption: the
+ * released session token keys the Nango SDK, which opens the provider's own
+ * consent popup (or submits collected credentials with no popup). Everything
+ * else gets the hosted flow — a popup opened synchronously in the click
+ * gesture (so popup blockers allow it) and navigated through the launch
+ * gate's 302. Either way the connection status is polled until it settles.
+ * The pending state always resolves — on settle, on a poll or auth failure,
+ * when the popup closes without settling (after a grace period), or at the
+ * poll budget — so the Connect action is never stuck disabled.
  */
 export function usePendingConnect(options: UsePendingConnectOptions = {}) {
   const { popupCloseGraceMs = POPUP_CLOSE_GRACE_MS, pendingTimeoutMs = PENDING_TIMEOUT_MS } = options;
   const session = useCreateConnectSession();
   const resolveLaunchHref = useConnectLaunchHref();
+  const redeemLaunchToken = useRedeemLaunchToken();
   const [pending, setPending] = useState<PendingConnect | null>(null);
   const [settled, setSettled] = useState<SettledConnect | null>(null);
   const [connectedProviders, setConnectedProviders] = useState<ReadonlySet<string>>(new Set());
   const popupRef = useRef<Pick<Window, 'closed'> | null>(null);
+  const headlessRef = useRef<HeadlessAuthHandle | null>(null);
+  // Mirrors `pending` for async guards (the SDK promise settles outside the
+  // render cycle); written directly at every transition so a cancel is never
+  // raced by a trailing rejection.
+  const pendingRef = useRef<PendingConnect | null>(null);
   const status = useConnectionStatus({ connectionId: pending?.connectionId ?? null });
+
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
+
+  // Close the provider popup if the surface unmounts mid-flow.
+  useEffect(
+    () => () => {
+      headlessRef.current?.close();
+      headlessRef.current = null;
+    },
+    [],
+  );
 
   // Settle only on a status response for the connection currently pending —
   // a stale result from a previous flow must not clear or mark a newer one.
@@ -240,6 +321,10 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
     if (statusData.status === 'active') {
       setConnectedProviders(previous => (previous.has(provider) ? previous : new Set([...previous, provider])));
     }
+    // The provider window closes itself on active settles; drop the handle so
+    // a trailing SDK rejection cannot re-settle this flow.
+    headlessRef.current = null;
+    pendingRef.current = null;
     setSettled({ provider, status: statusData.status === 'active' ? 'active' : 'failed' });
     setPending(null);
   }, [pending, statusData]);
@@ -247,6 +332,10 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
   // A failed poll hands the Connect action back instead of leaving it stuck.
   useEffect(() => {
     if (!status.isError || !pending) return;
+    // The ref is cleared before close() so the rejection it triggers no-ops.
+    pendingRef.current = null;
+    headlessRef.current?.close();
+    headlessRef.current = null;
     setSettled({ provider: pending.provider, status: 'failed' });
     setPending(null);
   }, [status.isError, pending]);
@@ -263,6 +352,10 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
       const abandoned = closedAt !== null && Date.now() - closedAt >= popupCloseGraceMs;
       const timedOut = Date.now() - startedAt >= pendingTimeoutMs;
       if (abandoned || timedOut) {
+        // The ref is cleared before close() so the rejection it triggers no-ops.
+        pendingRef.current = null;
+        headlessRef.current?.close();
+        headlessRef.current = null;
         setSettled({ provider: pending.provider, status: 'failed' });
         setPending(null);
       }
@@ -270,16 +363,88 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
     return () => window.clearInterval(timer);
   }, [pending, popupCloseGraceMs, pendingTimeoutMs]);
 
+  const beginHeadless = useCallback(
+    async (provider: ConnectTarget, created: UserConnectSessionResponse, values?: Record<string, string>) => {
+      let sessionToken: string | null = null;
+      try {
+        sessionToken = (await redeemLaunchToken(created.launchUrl)).sessionToken;
+      } catch {
+        // Redemption failure (older platform, transient error) is not fatal —
+        // the hosted flow below still works through the gate's 302.
+      }
+      if (!sessionToken) {
+        // Opened after an await, so a blocker may stop it; the fallback link
+        // in the pending state covers that.
+        const launchHref = resolveLaunchHref(created.launchUrl);
+        const popup = window.open(launchHref, 'mastra-connect', POPUP_FEATURES);
+        popupRef.current = popup;
+        const next: PendingConnect = {
+          provider: provider.id,
+          connectionId: created.connectionId,
+          mode: 'hosted',
+          fallbackUrl: popup ? null : launchHref,
+        };
+        pendingRef.current = next;
+        setPending(next);
+        return;
+      }
+
+      const split = values ? splitHeadlessAuthValues(headlessAuthFields(provider), values) : {};
+      const handle = startHeadlessAuth({
+        sessionToken,
+        integrationId: created.integrationId,
+        authType: provider.authType,
+        credentials: split.credentials,
+        params: split.params,
+      });
+      headlessRef.current = handle;
+      const next: PendingConnect = {
+        provider: provider.id,
+        connectionId: created.connectionId,
+        mode: 'headless',
+        fallbackUrl: null,
+      };
+      pendingRef.current = next;
+      setPending(next);
+      // Success needs no action here — the activation webhook lands on the
+      // platform and the status poll settles the flow. Failures settle it now.
+      handle.result.catch((error: unknown) => {
+        if (pendingRef.current?.connectionId !== created.connectionId) return;
+        headlessRef.current = null;
+        pendingRef.current = null;
+        const message = error instanceof HeadlessAuthError ? error.message : 'Could not authorize this connection.';
+        setSettled({ provider: provider.id, status: 'failed', message });
+        setPending(null);
+      });
+    },
+    [redeemLaunchToken, resolveLaunchHref],
+  );
+
   const connect = useCallback(
-    (providerId: string) => {
-      // Opened synchronously in the click handler so popup blockers allow it.
-      const popup = window.open('', 'mastra-connect', 'popup,width=600,height=720');
-      popupRef.current = popup;
+    (provider: ConnectTarget, values?: Record<string, string>) => {
       setSettled(null);
+      headlessRef.current?.close();
+      headlessRef.current = null;
+
+      // Headless needs both the capability and the inputs: a caller without a
+      // form (no `values`) can only run flows whose fields are all optional —
+      // anything else falls back to the hosted page, which renders the form.
+      const headless =
+        supportsHeadlessAuth(provider.authType, provider.authFields) &&
+        (values !== undefined || !headlessAuthRequiresForm(provider));
+      // Hosted flows open the popup synchronously in the click gesture so
+      // popup blockers allow it; headless flows never navigate to a hosted
+      // page, so no window opens here.
+      const popup = headless ? null : window.open('', 'mastra-connect', POPUP_FEATURES);
+      popupRef.current = popup;
       session.mutate(
-        { provider: providerId },
+        { provider: provider.id },
         {
           onSuccess: created => {
+            if (headless) {
+              void beginHeadless(provider, created, values);
+              return;
+            }
             // The popup enters OAuth through the server's launch gate, which
             // verifies this browser owns the pending session before
             // redirecting — the raw vendor URL never reaches the page.
@@ -287,11 +452,14 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
             if (popup) {
               popup.location.href = launchHref;
             }
-            setPending({
-              provider: providerId,
+            const next: PendingConnect = {
+              provider: provider.id,
               connectionId: created.connectionId,
+              mode: 'hosted',
               fallbackUrl: popup ? null : launchHref,
-            });
+            };
+            pendingRef.current = next;
+            setPending(next);
           },
           onError: () => {
             popup?.close();
@@ -300,12 +468,23 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
         },
       );
     },
-    [session, resolveLaunchHref],
+    [session, resolveLaunchHref, beginHeadless],
   );
+
+  /** Abandons the in-flight flow: closes the provider window, hands the Connect action back. */
+  const cancel = useCallback(() => {
+    headlessRef.current?.close();
+    headlessRef.current = null;
+    popupRef.current = null;
+    pendingRef.current = null;
+    setPending(null);
+    setSettled(null);
+  }, []);
 
   return {
     pending,
     connect,
+    cancel,
     /** Outcome of the most recently settled flow; null while none settled or a flow is in progress. */
     settled,
     /** Providers whose connection settled `active` during this hook's lifetime. */

@@ -1,5 +1,6 @@
 import type {
   UserConnectErrorBody,
+  UserConnectLaunchTokenResponse,
   UserConnectProvidersResponse,
   UserConnectSessionResponse,
   UserConnectionStatusResponse,
@@ -22,7 +23,24 @@ export const providersResponse: UserConnectProvidersResponse = {
       authType: 'OAUTH2',
       authFields: null,
     },
+    // Needs collected credentials before authorizing: the dialog renders the
+    // (synthesized) API key form before any session is created.
+    {
+      id: 'airtable',
+      displayName: 'Airtable',
+      logoUrl: null,
+      authType: 'API_KEY',
+      authFields: null,
+    },
   ],
+};
+
+/** Session minted for the Airtable credentials flow. */
+export const airtableSessionResponse: UserConnectSessionResponse = {
+  connectionId: 'conn-user-3',
+  integrationId: 'airtable',
+  launchUrl: '/connect/connections/conn-user-3/launch',
+  expiresAt: '2026-10-13T23:59:59.000Z',
 };
 
 export const mixedConnectionsResponse: UserConnectionsResponse = {
@@ -61,6 +79,17 @@ export const sessionResponse: UserConnectSessionResponse = {
   // Server-relative launch-gate path; no launch capability (vendor OAuth URL
   // or session token) is ever exposed to the browser.
   launchUrl: '/connect/connections/conn-user-2/launch',
+  expiresAt: '2026-10-13T23:59:59.000Z',
+};
+
+/**
+ * JSON redemption of the launch gate with no extractable session token: the
+ * client falls back to the hosted popup through the gate's 302. The headless
+ * (token-released) journey is covered by the playground-ui hook tests, where
+ * the Nango SDK boundary lives.
+ */
+export const launchTokenUnavailable: UserConnectLaunchTokenResponse = {
+  sessionToken: null,
   expiresAt: '2026-10-13T23:59:59.000Z',
 };
 

@@ -3,10 +3,32 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectPromptTool } from '../connect-prompt-tool';
 import { connectPromptPayload, connectPromptSession, connectPromptStatusActive } from './fixtures/connect-prompt';
 import { server } from '@/test/msw-server';
+
+// The Nango frontend SDK opens real windows and websockets, so it is the one
+// boundary mocked beyond MSW.
+const nangoMocks = vi.hoisted(() => ({
+  auth: vi.fn(),
+  close: vi.fn(),
+  constructorOptions: [] as unknown[],
+}));
+
+vi.mock('@nangohq/frontend', async importOriginal => {
+  const actual = await importOriginal<typeof import('@nangohq/frontend')>();
+  class FakeNango {
+    win = { close: nangoMocks.close };
+    constructor(options: unknown) {
+      nangoMocks.constructorOptions.push(options);
+    }
+    auth(...args: unknown[]) {
+      return nangoMocks.auth(...args);
+    }
+  }
+  return { ...actual, default: FakeNango };
+});
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -21,12 +43,14 @@ function renderConnectPrompt({ output, readOnly }: { output: unknown; readOnly?:
   );
 }
 
-/** Stubs `window.open` with a trackable popup handle, as popups don't exist in jsdom. */
-function stubPopup({ blocked = false }: { blocked?: boolean } = {}) {
-  const popup = { location: { href: '' }, close: vi.fn() };
-  const open = vi.spyOn(window, 'open').mockReturnValue(blocked ? null : (popup as unknown as Window));
-  return { popup, open };
-}
+const launchPath = `${BASE_URL}${connectPromptSession.launchUrl}`;
+
+beforeEach(() => {
+  nangoMocks.auth.mockReset();
+  nangoMocks.auth.mockResolvedValue({});
+  nangoMocks.close.mockReset();
+  nangoMocks.constructorOptions.length = 0;
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -61,11 +85,14 @@ describe('ConnectPromptTool', () => {
     });
   });
 
-  describe('when the user connects a provider from the card', () => {
-    it('drives the popup through the launch gate and marks the provider connected', async () => {
-      const { popup } = stubPopup();
+  describe('when the user connects an OAuth provider from the card', () => {
+    it('authorizes headlessly with the gate-released token and marks the provider connected', async () => {
+      const open = vi.spyOn(window, 'open');
       server.use(
         http.post(`${BASE_URL}/connect/linear/sessions`, () => HttpResponse.json(connectPromptSession)),
+        http.get(launchPath, () =>
+          HttpResponse.json({ sessionToken: 'nango_connect_session_t1', expiresAt: connectPromptSession.expiresAt }),
+        ),
         http.get(`${BASE_URL}/connect/connections/${connectPromptSession.connectionId}/status`, () =>
           HttpResponse.json(connectPromptStatusActive),
         ),
@@ -74,21 +101,51 @@ describe('ConnectPromptTool', () => {
       renderConnectPrompt({ output: connectPromptPayload });
       fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
 
-      // The popup is sent to the server's launch gate — never the raw vendor URL.
-      await waitFor(() => expect(popup.location.href).toBe(`${BASE_URL}${connectPromptSession.launchUrl}`));
-
       // The poll settles active and the row flips to connected.
       await waitFor(() => expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull());
       const card = screen.getByRole('region', { name: 'Connect an account' });
       expect(card.textContent).toContain('Connected');
+
+      // The SDK drove the provider's own consent popup, keyed by the token the
+      // launch gate released — no window ever navigated to a hosted page.
+      expect(nangoMocks.constructorOptions).toContainEqual({ connectSessionToken: 'nango_connect_session_t1' });
+      expect(nangoMocks.auth).toHaveBeenCalledWith('linear', { detectClosedAuthWindow: true });
+      expect(open).not.toHaveBeenCalled();
     });
   });
 
-  describe('when the popup is blocked', () => {
-    it('offers a manual launch link to the launch gate', async () => {
-      stubPopup({ blocked: true });
+  describe('when authorization fails in the provider popup', () => {
+    it('shows the failure reason and re-enables the connect action', async () => {
       server.use(
         http.post(`${BASE_URL}/connect/linear/sessions`, () => HttpResponse.json(connectPromptSession)),
+        http.get(launchPath, () =>
+          HttpResponse.json({ sessionToken: 'nango_connect_session_t1', expiresAt: connectPromptSession.expiresAt }),
+        ),
+        http.get(`${BASE_URL}/connect/connections/${connectPromptSession.connectionId}/status`, () =>
+          HttpResponse.json({ ...connectPromptStatusActive, status: 'pending' }),
+        ),
+      );
+      const { AuthError } = await import('@nangohq/frontend');
+      nangoMocks.auth.mockRejectedValueOnce(new AuthError('closed', 'window_closed'));
+
+      renderConnectPrompt({ output: connectPromptPayload });
+      fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toMatch(/window was closed/i);
+      // The flow settled, so the action is available to retry.
+      expect((screen.getByRole('button', { name: 'Connect' }) as HTMLButtonElement).disabled).toBe(false);
+    });
+  });
+
+  describe('when the gate releases no token and the fallback popup is blocked', () => {
+    it('offers a manual launch link to the launch gate', async () => {
+      vi.spyOn(window, 'open').mockReturnValue(null);
+      server.use(
+        http.post(`${BASE_URL}/connect/linear/sessions`, () => HttpResponse.json(connectPromptSession)),
+        http.get(launchPath, () =>
+          HttpResponse.json({ sessionToken: null, expiresAt: connectPromptSession.expiresAt }),
+        ),
         http.get(`${BASE_URL}/connect/connections/${connectPromptSession.connectionId}/status`, () =>
           HttpResponse.json({ ...connectPromptStatusActive, status: 'pending' }),
         ),
@@ -98,7 +155,8 @@ describe('ConnectPromptTool', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
 
       const link = await screen.findByRole('link', { name: 'Open the connect window' });
-      expect(link.getAttribute('href')).toBe(`${BASE_URL}${connectPromptSession.launchUrl}`);
+      expect(link.getAttribute('href')).toBe(launchPath);
+      expect(nangoMocks.auth).not.toHaveBeenCalled();
     });
   });
 });
