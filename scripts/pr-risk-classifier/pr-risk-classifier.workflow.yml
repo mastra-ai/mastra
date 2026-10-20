@@ -11,20 +11,16 @@ on:
       - synchronize
       - reopened
       - ready_for_review
-      - edited
 
 permissions:
   contents: read
 
 jobs:
   classify:
-    # `edited` only matters when the description changes (it carries the self-reported Risk line).
     if: >-
       ${{ github.repository == 'mastra-ai/mastra'
-      && !github.event.pull_request.draft
-      && (github.event.action != 'edited' || github.event.changes.body != null) }}
+      && !github.event.pull_request.draft }}
     runs-on: starsling-ubuntu-26.04
-    # Job-level so skipped `edited` events do not cancel a run in progress.
     concurrency:
       group: pr-risk-classifier-${{ github.event.pull_request.number }}
       cancel-in-progress: true
@@ -68,10 +64,9 @@ jobs:
         working-directory: scripts/pr-risk-classifier
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
-          BOT_LOGIN: ${{ steps.app-auth.outputs.app-slug }}[bot]
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
           RISK_MODEL: ${{ vars.PR_RISK_MODEL }}
           REPO_ROOT: ${{ github.workspace }}
