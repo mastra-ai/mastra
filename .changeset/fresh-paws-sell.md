@@ -26,4 +26,6 @@ const server = new MCPServer({
 await server.events.emit('ticket.created', { id: 't-1', project: 'web' });
 ```
 
+`match` filters by the arguments a client chooses. To restrict who can subscribe, add an `authorize` function: it receives the arguments and the caller's `requestContext`, and returning `false` rejects the poll or stream with `-32024`.
+
 Event types without a `poll` function are served over push and poll from an in-memory buffer, so clients can resume from a cursor. Event types with a `poll` function are served over poll only and can't be emitted to. Emitted events only reach subscribers of the same server process. Changes to the list of event types aren't announced yet (a limitation of the MCP TypeScript SDK 2.2.0), so clients should re-run `events/list` to see them.

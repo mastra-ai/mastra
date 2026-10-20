@@ -14,7 +14,13 @@ import {
   StreamEventsRequestParamsSchema,
   StreamEventsResultSchema,
 } from '../../shared/events';
-import type { EventOccurrence, ListEventsResult, PollEventsResult, StreamEventsResult } from '../../shared/events';
+import type {
+  EventDeliveryMode,
+  EventOccurrence,
+  ListEventsResult,
+  PollEventsResult,
+  StreamEventsResult,
+} from '../../shared/events';
 import { toDescriptor, toTimestamp } from './registry';
 import type { RegisteredEvent, ServerEventRegistry } from './registry';
 import { EventStream } from './stream';
@@ -65,6 +71,7 @@ export function registerEventHandlers(server: Server, deps: EventHandlerDeps): v
       deps.trace(server, EVENTS_METHODS.poll, params, ctx, async (requestContext): Promise<PollEventsResult> => {
         const event = registry.resolve(params.name, 'poll');
         const args = await registry.validateArguments(event, params.arguments ?? {});
+        await authorizeOrThrow(event, args, requestContext, 'poll', deps);
         const maxEvents = params.maxEvents ?? DEFAULT_MAX_EVENTS;
         const { poll, match, pollIntervalMs } = event.definition;
 
@@ -124,9 +131,11 @@ export function registerEventHandlers(server: Server, deps: EventHandlerDeps): v
     EVENTS_METHODS.stream,
     { params: StreamEventsRequestParamsSchema, result: StreamEventsResultSchema },
     (params, ctx) =>
-      deps.trace(server, EVENTS_METHODS.stream, params, ctx, async (): Promise<StreamEventsResult> => {
+      deps.trace(server, EVENTS_METHODS.stream, params, ctx, async (requestContext): Promise<StreamEventsResult> => {
         const event = registry.resolve(params.name, 'push');
         const args = await registry.validateArguments(event, params.arguments ?? {});
+        // Before the stream cap, so a forbidden caller never holds a slot.
+        await authorizeOrThrow(event, args, requestContext, 'push', deps);
         const buffer = bufferOf(event);
         if (registry.openStreams.size >= (deps.maxStreams ?? DEFAULT_EVENTS_MAX_STREAMS)) {
           throw new ProtocolError(EVENTS_ERROR_CODES.ResourceExhausted, 'Too many open event streams');
@@ -170,6 +179,28 @@ export function registerEventHandlers(server: Server, deps: EventHandlerDeps): v
         return { _meta: { [EVENTS_SUBSCRIPTION_ID_META_KEY]: subscriptionId } };
       }),
   );
+}
+
+/** Runs the definition's `authorize`; rejects with -32024 when it denies the caller. */
+export async function authorizeOrThrow(
+  event: RegisteredEvent,
+  args: Record<string, unknown>,
+  requestContext: RequestContext,
+  delivery: EventDeliveryMode,
+  deps: Pick<EventHandlerDeps, 'getLogger'>,
+): Promise<void> {
+  const { authorize } = event.definition;
+  if (!authorize) return;
+  let allowed: boolean;
+  try {
+    allowed = await authorize({ arguments: args, requestContext, delivery });
+  } catch (error) {
+    deps.getLogger().error(`Authorization check for event "${event.name}" failed`, { error });
+    throw new ProtocolError(ProtocolErrorCode.InternalError, `Authorizing event "${event.name}" failed`);
+  }
+  if (allowed !== true) {
+    throw new ProtocolError(EVENTS_ERROR_CODES.Forbidden, `Not allowed to subscribe to event "${event.name}"`);
+  }
 }
 
 function bufferOf(event: RegisteredEvent) {
