@@ -35,8 +35,9 @@ export { SlackManifestClient } from './client';
 export { verifySlackRequest, parseSlackFormBody } from './crypto';
 export { buildManifest, DEFAULT_BOT_SCOPES, DEFAULT_BOT_EVENTS } from './manifest';
 
-// Re-export from @chat-adapter/slack for convenience
-export { createSlackAdapter } from '@chat-adapter/slack';
+// `@chat-adapter/slack`'s factory plus the Agent Session typing bridge that
+// Slack's native Stop button needs under `agentView`.
+export { createSlackAdapter, withAgentSessionTyping } from './adapter';
 export type { SlackAdapter } from '@chat-adapter/slack';
 
 // Zod schemas for parsing channel storage data

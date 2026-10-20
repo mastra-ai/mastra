@@ -1,11 +1,12 @@
 import { AgentControllerChannels } from '@mastra/core/channels';
+import { createSlackAdapter } from '@mastra/slack';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { SlackIntegration } from './integration.js';
 
 vi.mock('@mastra/slack', () => ({
   createSlackAdapter: vi.fn(() => ({ __adapter: true })),
 }));
-
-import { SlackIntegration } from './integration.js';
 
 function ctxWith(overrides: Record<string, unknown> = {}) {
   return {
@@ -27,6 +28,13 @@ describe('SlackIntegration.channels', () => {
     expect(config.handlers?.onSubscribedMessage).toBeTypeOf('function');
     expect(config.resolveResourceId).toBeTypeOf('function');
     expect(config.resolveThreadId).toBeTypeOf('function');
+  });
+
+  it('runs as a Slack Agent Session so long runs get the native Stop button', () => {
+    vi.mocked(createSlackAdapter).mockClear();
+    new SlackIntegration({ signingSecret: 'secret' }).channels(ctxWith());
+
+    expect(createSlackAdapter).toHaveBeenCalledWith(expect.objectContaining({ agentView: true }));
   });
 
   it('uses concise progress statuses by default', () => {

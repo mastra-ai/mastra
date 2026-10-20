@@ -13,8 +13,9 @@ import {
 import type { AgentController } from '@mastra/core/agent-controller';
 import type { ApiRoute, ContextWithMastra } from '@mastra/core/server';
 import { type ChannelsStorage, type ChannelInstallation } from '@mastra/core/storage';
-import { createSlackAdapter, type SlackAdapter } from '@chat-adapter/slack';
+import type { SlackAdapter } from '@chat-adapter/slack';
 
+import { createSlackAdapter } from './adapter';
 import { SlackManifestClient } from './client';
 import { verifySlackRequest, parseSlackFormBody, encrypt, decrypt } from './crypto';
 import { buildManifest } from './manifest';
@@ -840,8 +841,8 @@ export class SlackProvider implements ChannelProvider {
    * applied separately.
    */
   #forwardedAdapterOptions() {
-    const { logger } = this.#channelConfig;
-    return { logger };
+    const { logger, agentView } = this.#channelConfig;
+    return { logger, agentView };
   }
 
   /**

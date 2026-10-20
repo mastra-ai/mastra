@@ -1080,9 +1080,15 @@ interface SlackCredentials {
 }
 
 export function createSlackChannelsConfig(deps: SlackChannelDeps & { slack: SlackCredentials }): FactoryChannelsConfig {
-  // Per HTTP attempt, not per call: the WebClient's own retry policy still
-  // waits out a 429. Without it a dead socket hangs a post forever.
-  const adapter = createSlackAdapter({ ...deps.slack, webClientOptions: { timeout: SLACK_REQUEST_TIMEOUT_MS } });
+  const adapter = createSlackAdapter({
+    ...deps.slack,
+    // Agent Sessions: Slack offers its native Stop button, which aborts the
+    // run for that thread. Factory runs are long enough to need one.
+    agentView: true,
+    // Per HTTP attempt, not per call: the WebClient's own retry policy still
+    // waits out a 429. Without it a dead socket hangs a post forever.
+    webClientOptions: { timeout: SLACK_REQUEST_TIMEOUT_MS },
+  });
   const slack =
     deps.adapterOptions?.streaming === false
       ? { adapter, ...deps.adapterOptions }

@@ -51,6 +51,66 @@ describe('resolveSlackAdapterConfig', () => {
   });
 });
 
+describe('agentView', () => {
+  /**
+   * Restore an installation from storage and return the adapter the provider
+   * built for it — the same path every adapter construction shares.
+   */
+  async function restoredAdapter(config: { agentView?: boolean }) {
+    const store = new InMemoryStore();
+    const channels = (await store.getStore('channels'))!;
+    await channels.saveInstallation({
+      id: 'install-1',
+      platform: 'slack',
+      agentId: 'agent-1',
+      status: 'active',
+      webhookId: 'hook-1',
+      configHash: 'h',
+      data: {
+        appId: 'A1',
+        clientId: 'client-id',
+        clientSecret: 'client-secret',
+        signingSecret: 'signing-secret',
+        teamId: 'T1',
+        botToken: 'xoxb-test',
+        botUserId: 'U-bot',
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const provider = new SlackProvider({ ...config, tokenResolver: async () => 'token' });
+    provider.__attach({
+      getStorage: () => store,
+      // Agent lookup fails: the adapter is still built and kept, channels are not.
+      getAgentById: () => {
+        throw new Error('not found');
+      },
+      getServer: () => undefined,
+    } as unknown as Mastra);
+    await provider.initialize();
+    return provider.getAdapter('install-1')!;
+  }
+
+  it('builds legacy assistant-view adapters by default', async () => {
+    const adapter = await restoredAdapter({});
+    expect(adapter.supportsTurnCancellation).toBe(false);
+  });
+
+  it('builds Agent Session adapters that offer the Stop button when enabled', async () => {
+    const adapter = await restoredAdapter({ agentView: true });
+    expect(adapter.supportsTurnCancellation).toBe(true);
+
+    // The bridge is on: a text status first marks the session processing.
+    const apiCall = vi.fn(async () => ({ ok: true }));
+    (adapter as any)._client = { apiCall, assistant: { threads: { setStatus: vi.fn(async () => ({ ok: true })) } } };
+    await adapter.startTyping('slack:C1:1.0', 'is thinking…');
+    expect(apiCall).toHaveBeenCalledWith(
+      'agents.sessions.setStatus',
+      expect.objectContaining({ status: 'processing' }),
+    );
+  });
+});
+
 describe('connect config hash', () => {
   afterEach(() => {
     vi.restoreAllMocks();

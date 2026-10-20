@@ -180,6 +180,18 @@ interface SlackProviderConfigBase extends SlackAdapterChannelConfigBase {
   logger?: SlackAdapterConfig['logger'];
 
   /**
+   * Run the agent as a Slack Agent Session (`agent_view`) rather than the
+   * legacy assistant view. This is what makes Slack show its native Stop
+   * button: each run is marked `processing` for the thread and the user's
+   * stop aborts it. It also lets Slack title new DM sessions after the first
+   * message and surface the active-view context.
+   *
+   * Defaults to `false`. Requires the `agent_session_stopped` bot event on the
+   * Slack app (new apps created by this provider subscribe to it).
+   */
+  agentView?: SlackAdapterConfig['agentView'];
+
+  /**
    * Base URL for webhook callbacks.
    * Required when calling connect() to create apps.
    * Can also be set later via setBaseUrl() or auto-detected from server config.
