@@ -14,6 +14,7 @@ import {
   FileText,
   Folder,
   FolderOpen,
+  FolderSymlink,
   Image,
   NotepadText,
   RefreshCw,
@@ -73,6 +74,19 @@ function TreeMessage({ children, tone = 'muted' }: { children: ReactNode; tone?:
   );
 }
 
+/** Tree ids for symlinked folders, which jump to their target instead of expanding. */
+const FOLDER_LINK_ID = 'folder-link:';
+
+/** `→ target` after a symlink's name. */
+function LinkTarget({ target }: { target?: string }) {
+  if (!target) return null;
+  return (
+    <Txt as="span" variant="caption" tone="muted" className="ml-1.5 truncate">
+      → {target}
+    </Txt>
+  );
+}
+
 /** Dotfiles and dot-folders, hidden unless the viewer asks for them. */
 function isHidden(entry: WorkspaceTreeEntry): boolean {
   return entry.name.startsWith('.');
@@ -114,6 +128,19 @@ function FolderChildren({ path, ...props }: TreeLevelProps & { path: string }) {
 }
 
 function WorkspaceTreeItem({ entry, ...props }: TreeLevelProps & { entry: WorkspaceTreeEntry }) {
+  if (entry.type === 'directory' && entry.linkedPath !== undefined) {
+    return (
+      <Tree.File id={`${FOLDER_LINK_ID}${entry.linkedPath}`} className={treeRowContainmentClass}>
+        <Tree.Icon>
+          <FolderSymlink className="text-badge-amber-indicator" />
+        </Tree.Icon>
+        <Tree.Label>
+          {entry.name}
+          <LinkTarget target={entry.symlinkTarget} />
+        </Tree.Label>
+      </Tree.File>
+    );
+  }
   if (entry.type === 'directory') {
     const isOpen = props.openFolders[entry.path] ?? false;
     return (
@@ -134,7 +161,10 @@ function WorkspaceTreeItem({ entry, ...props }: TreeLevelProps & { entry: Worksp
   return (
     <Tree.File id={entry.path} className={treeRowContainmentClass}>
       <Tree.Icon>{getFileIcon(entry.name)}</Tree.Icon>
-      <Tree.Label>{entry.name}</Tree.Label>
+      <Tree.Label>
+        {entry.name}
+        <LinkTarget target={entry.symlinkTarget} />
+      </Tree.Label>
     </Tree.File>
   );
 }
@@ -172,6 +202,12 @@ export function WorkspaceFileBrowser({
   const refresh = () =>
     void queryClient.refetchQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath), type: 'active' });
   const entries = (root.data?.entries ?? []).filter(entry => showHidden || !isHidden(entry));
+  // A symlinked folder opens its target and every folder above it.
+  const select = (id: string) => {
+    if (!id.startsWith(FOLDER_LINK_ID)) return onFileSelect(id);
+    const segments = id.slice(FOLDER_LINK_ID.length).split('/');
+    segments.forEach((_, i) => onFolderOpenChange(segments.slice(0, i + 1).join('/'), true));
+  };
 
   let content: ReactNode;
   if (root.isLoading) {
@@ -225,7 +261,7 @@ export function WorkspaceFileBrowser({
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">{content}</div>
       ) : (
         <ScrollArea className="min-h-0 flex-1">
-          <Tree className="p-1.5" selectedId={selectedFilePath} onSelect={onFileSelect}>
+          <Tree className="p-1.5" selectedId={selectedFilePath} onSelect={select}>
             {entries.map(entry => (
               <WorkspaceTreeItem
                 key={entry.path}

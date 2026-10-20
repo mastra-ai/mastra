@@ -326,8 +326,19 @@ async function requestSessionRoute(path: string, sessionFs: ReturnType<typeof ma
  * host and whose native filesystem is the host's, so the tree and file routes
  * run real `git check-ignore`, real directory listings and real symlink checks.
  */
-/** The tree's hidden-path check; mocked sandboxes answer it with "nothing hidden". */
-const isHiddenPathsCheck = (script: string) => script.includes('git check-ignore -z --stdin -v -n');
+/**
+ * Answers the tree's checks for a mocked sandbox with no symlinks and nothing
+ * ignored: `realpath` maps each path under the root, `check-ignore` matches none.
+ */
+function treeCheck(args: string[]): { exitCode: number; stdout: string } | undefined {
+  const [, script = '', , root = '', ...paths] = args;
+  if (!script.startsWith('cd "$1" && shift')) return undefined;
+  if (script.includes('readlink -f')) {
+    return { exitCode: 0, stdout: [root, ...paths.map(path => `${root}/${path}`)].map(p => `${p}\0`).join('') };
+  }
+  if (script.includes('git check-ignore -z --stdin')) return { exitCode: 1, stdout: '' };
+  return undefined;
+}
 
 async function seedHostCheckouts(repos: string[] = ['acme/repo']) {
   const parent = await realpath(await mkdtemp(join(tmpdir(), 'factory-tree-')));
@@ -445,6 +456,12 @@ describe('live session file tree', () => {
       'f agent.ts',
       'f readme-link.md',
     ]);
+    expect((await listSessionWorkspaceTree(makeSession(), 'src')).entries).toContainEqual(
+      expect.objectContaining({ name: 'readme-link.md', symlinkTarget: '../README.md', linkedPath: 'README.md' }),
+    );
+    await symlink('nested', join(repo, 'src', 'nested-link'));
+    await expect(listSessionWorkspaceTree(makeSession(), 'src/nested-link')).rejects.toThrow('not available');
+    await expect(readSessionWorkspaceFile(makeSession(), 'src/nested-link/deep.ts')).rejects.toThrow('not available');
     await expect(readSessionWorkspaceFile(makeSession(), 'src/env-link.txt')).rejects.toThrow('not available');
     await expect(readSessionWorkspaceFile(makeSession(), 'src/deps/pkg/index.js')).rejects.toThrow('not available');
     await expect(listSessionWorkspaceTree(makeSession(), 'src/deps')).rejects.toThrow('not available');
@@ -625,8 +642,9 @@ describe('listSessionRenderedPath', () => {
 describe('readSessionWorkspaceFile', () => {
   function respondForFile(content: string) {
     const abs = `${WORKDIR}/.artifacts/understand-pr/HISTORY.md`;
-    return (script: string) => {
-      if (isHiddenPathsCheck(script)) return { exitCode: 0, stdout: '' };
+    return (script: string, _command: string, args: string[]) => {
+      const check = treeCheck(args);
+      if (check) return check;
       if (script.includes(`p='${abs}'`)) return { exitCode: 0, stdout: `${WORKDIR}\n${abs}` };
       if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `regular file|${content.length}|1700000000|0\n` };
       if (script.includes('base64 <')) return { exitCode: 0, stdout: Buffer.from(content, 'utf8').toString('base64') };
@@ -659,8 +677,9 @@ describe('readSessionWorkspaceFile', () => {
   });
 
   it('rejects directories', async () => {
-    seedSessionSandbox(script => {
-      if (isHiddenPathsCheck(script)) return { exitCode: 0, stdout: '' };
+    seedSessionSandbox((script, _command, args) => {
+      const check = treeCheck(args);
+      if (check) return check;
       if (script.includes(`p='${WORKDIR}/.artifacts'`)) {
         return { exitCode: 0, stdout: `${WORKDIR}\n${WORKDIR}/.artifacts` };
       }
@@ -687,15 +706,12 @@ describe('readSessionWorkspaceFile', () => {
       };
     }
 
-    it('reads through it after the hidden-path check and one symlink check', async () => {
+    it('reads through it after resolving the path and one symlink check', async () => {
       const filesystem = nativeFilesystem('# History');
       const { executeCommand } = seedSessionSandbox(
-        script =>
-          isHiddenPathsCheck(script)
-            ? { exitCode: 0, stdout: '' }
-            : script.includes(`p='${abs}'`)
-              ? { exitCode: 0, stdout: `${WORKDIR}\n${abs}` }
-              : { exitCode: 1, stdout: '' },
+        (script, _command, args) =>
+          treeCheck(args) ??
+          (script.includes(`p='${abs}'`) ? { exitCode: 0, stdout: `${WORKDIR}\n${abs}` } : { exitCode: 1, stdout: '' }),
         { filesystem },
       );
 
@@ -710,8 +726,7 @@ describe('readSessionWorkspaceFile', () => {
     it('refuses a symlink that leads outside the checkout', async () => {
       const filesystem = nativeFilesystem('root:x:0:0');
       seedSessionSandbox(
-        script =>
-          isHiddenPathsCheck(script) ? { exitCode: 0, stdout: '' } : { exitCode: 0, stdout: `${WORKDIR}\n/etc/passwd` },
+        (_script, _command, args) => treeCheck(args) ?? { exitCode: 0, stdout: `${WORKDIR}\n/etc/passwd` },
         { filesystem },
       );
 
@@ -1263,7 +1278,8 @@ describe('workspace changes across environment repositories', () => {
     };
     const { session } = seedEnvironment((_dir, _kind, args) => {
       const script = args[1] ?? '';
-      if (isHiddenPathsCheck(script)) return { exitCode: 0, stdout: '' };
+      const check = treeCheck(args);
+      if (check) return check;
       const match = /p='([^']+)'/.exec(script);
       const abs = match?.[1];
       if (abs && files[abs] !== undefined && script.includes('readlink'))

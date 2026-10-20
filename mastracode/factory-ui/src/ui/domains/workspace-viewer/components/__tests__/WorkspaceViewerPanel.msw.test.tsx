@@ -220,6 +220,49 @@ describe('WorkspaceViewerPanel', () => {
       expect(screen.queryByText('.github')).not.toBeInTheDocument();
     });
 
+    it('shows where symlinks point and opens a linked folder at its target', async () => {
+      installHandlers();
+      const requested: string[] = [];
+      server.use(
+        http.get(TREE_URL, ({ request }) => {
+          const path = new URL(request.url).searchParams.get('path') ?? '';
+          requested.push(path);
+          const listings: Record<string, object[]> = {
+            '': [
+              {
+                name: 'docs',
+                path: 'docs',
+                type: 'directory',
+                symlinkTarget: 'packages/docs',
+                linkedPath: 'packages/docs',
+              },
+              { name: 'packages', path: 'packages', type: 'directory' },
+              {
+                name: 'CLAUDE.md',
+                path: 'CLAUDE.md',
+                type: 'file',
+                symlinkTarget: 'AGENTS.md',
+                linkedPath: 'AGENTS.md',
+              },
+            ],
+            packages: [{ name: 'docs', path: 'packages/docs', type: 'directory' }],
+            'packages/docs': [{ name: 'guide.md', path: 'packages/docs/guide.md', type: 'file' }],
+          };
+          return HttpResponse.json({ workspacePath: WORKSPACE, path, available: true, entries: listings[path] ?? [] });
+        }),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await user.click(await screen.findByRole('button', { name: /^Files/ }));
+
+      expect(await screen.findByText('→ AGENTS.md')).toBeInTheDocument();
+      expect(screen.getByText('→ packages/docs')).toBeInTheDocument();
+
+      await user.click(screen.getByText('docs'));
+      expect(await screen.findByText('guide.md')).toBeInTheDocument();
+      expect(requested).toEqual(['', 'packages', 'packages/docs']);
+    });
+
     it('refetches every open folder on refresh', async () => {
       const { treeRequests } = installHandlers();
       const user = userEvent.setup();
