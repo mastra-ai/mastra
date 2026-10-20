@@ -797,6 +797,8 @@ const SCHEDULER_WAKE_EVENT = 'scheduler.wake';
 // Mirrors BackgroundTaskManager's grace period and the deployer's
 // `server.drainTimeout` default.
 const DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS = 5_000;
+// Releasing thread leases is cheap; give it a moment even after the drain used the whole budget.
+const SHUTDOWN_THREAD_RELEASE_MIN_MS = 1_000;
 // Spreads re-checks of durable-agent runs other instances still drove at boot,
 // so replicas that skipped the same run don't all try it at the same instant.
 const DURABLE_RECOVERY_RECHECK_JITTER_MS = 5_000;
@@ -7425,6 +7427,27 @@ export class Mastra<
   }
 
   /**
+   * Hand back every thread run this instance's agents still hold, on each pubsub they stream on.
+   */
+  async #releaseThreadRunsForShutdown(): Promise<void> {
+    const agents = Object.values(this.#agents);
+    // Agents may stream on their own pubsub rather than this instance's.
+    const pubsubs = new Set<PubSub>([this.pubsub]);
+    for (const agent of agents) {
+      const pubsub = agent.getPubSub();
+      if (pubsub) pubsubs.add(pubsub);
+    }
+    const results = await Promise.allSettled(
+      [...pubsubs].map(pubsub => agentThreadStreamRuntime.releaseRunsForShutdown(pubsub, this)),
+    );
+    results.forEach(result => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Failed to release thread runs during shutdown', { error: result.reason });
+      }
+    });
+  }
+
+  /**
    * Await an already-started promise for at most `timeoutMs`. Returns its value
    * when it settles in time, or `undefined` after logging a warning when the
    * budget is exhausted — the work keeps running in the background so teardown
@@ -7820,6 +7843,18 @@ export class Mastra<
         }
       });
     }
+
+    // Thread runs still going (a plain agent stream, a run parked on an
+    // approval) hold their thread's lease, which observers in other processes
+    // watch. Announce how each run ended here and release its lease while
+    // pubsub is still open, instead of leaving every observer to wait out the
+    // lease and fail the run. The runs are not aborted. This also frees the
+    // thread for the next boot's durable recovery.
+    await this.#awaitBounded(
+      this.#releaseThreadRunsForShutdown(),
+      Math.max(SHUTDOWN_THREAD_RELEASE_MIN_MS, deadline - Date.now()),
+      'thread run lease release(s)',
+    );
 
     // A durable-agent execution still running now would keep its run claimed
     // until the claim expires. Stop it without writing and release the run, so

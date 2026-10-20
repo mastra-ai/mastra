@@ -535,6 +535,12 @@ type AgentThreadRuntimeState = {
    */
   leaseDeadlines: Map<string, { timer: ReturnType<typeof setTimeout>; confirmedSentAt: number }>;
   leaseFences: Map<string, () => Promise<void>>;
+  /**
+   * Streams whose run this process handed back while shutting down. The run's
+   * end is already on the wire and its lease released, so the stream publishes
+   * nothing more, even though the run keeps executing until the process exits.
+   */
+  shutdownReleasedStreamIds: Set<string>;
   threadEventListeners: Set<ThreadEventListenerRegistration>;
   threadControlSubscriptions: Map<string, ThreadControlSubscription>;
   /**
@@ -734,6 +740,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     leaseRenewalTimers: new Map(),
     leaseDeadlines: new Map(),
     leaseFences: new Map(),
+    shutdownReleasedStreamIds: new Set(),
     threadEventListeners: new Set(),
     threadControlSubscriptions: new Map(),
     runStreamReaders: new Map(),
@@ -818,6 +825,62 @@ export class AgentThreadStreamRuntime {
   /** How long a thread lease outlives the process that stopped renewing it. */
   get threadLeaseTtlMs(): number {
     return AGENT_THREAD_LEASE_TTL_MS;
+  }
+
+  /**
+   * Hand back the thread runs of a shutting-down process. Observers in other
+   * processes follow each run until its terminal event and watch its thread
+   * lease meanwhile; a process that exits without either leaves them waiting
+   * for the lease to lapse and then failing the run with
+   * {@link AgentThreadLeaseLostError}.
+   *
+   * A run parked on a suspension is announced as `run-suspended`, so it stays
+   * resumable; a run still executing as an unpersisted `run-completed`. The
+   * lease is released only after that event is published, so no observer
+   * finds the thread free while the run still looks live there. Runs are not
+   * aborted: one still executing keeps going until the process exits, but it
+   * publishes nothing more and no longer holds its thread.
+   *
+   * Only needed with a lease backend: without one, no other process follows
+   * the thread.
+   *
+   * @param owner - The shutting-down Mastra instance; only its agents' runs are released.
+   */
+  async releaseRunsForShutdown(pubsub: PubSub | undefined, owner: unknown): Promise<void> {
+    const resolved = this.#getPubSub(pubsub);
+    const state = this.#statesByPubSub.get(resolved);
+    const { provider, isFallback } = this.#resolveLeaseProvider(resolved);
+    if (!state || isFallback) return;
+    const releases = [...state.activeThreadRunIds].flatMap(([key, runId]) => {
+      const record = state.threadRunsById.get(runId);
+      if (
+        !record ||
+        record.agent.getMastraInstance() !== owner ||
+        state.shutdownReleasedStreamIds.has(record.streamId) ||
+        // Without a renewing lease the run no longer holds the thread; it is
+        // stopping, or another execution has the run and ends it.
+        !state.leaseRenewalTimers.has(runId) ||
+        record.ownershipLost?.() ||
+        record.registeredElsewhere
+      ) {
+        return [];
+      }
+      state.shutdownReleasedStreamIds.add(record.streamId);
+      const event: AgentThreadStreamRuntimeEvent = this.#isParkedRun(state, runId)
+        ? { type: 'run-suspended', runId, streamId: record.streamId }
+        : { type: 'run-completed', runId, streamId: record.streamId, persisted: false };
+      return [
+        this.#publishAndWait(resolved, key, event)
+          // Release even if the publish failed: holding the lease past this
+          // process only delays every observer by a full TTL.
+          .catch(() => {})
+          .then(async () => {
+            this.#stopLeaseRenewal(resolved, runId);
+            await provider.releaseLease(key, runId).catch(() => {});
+          }),
+      ];
+    });
+    await Promise.all(releases);
   }
 
   #getSourceId(): string {
@@ -2472,20 +2535,24 @@ export class AgentThreadStreamRuntime {
       parts.push(part);
       if ((part as { type?: string } | null | undefined)?.type === 'start') startPart = part;
       const partType = (part as { type?: string } | null | undefined)?.type;
-      await runtime.#publishAndWait(pubsub, key, {
-        type: 'stream-part',
-        runId: output.runId,
-        streamId,
-        part,
-        sourceId: runtime.#getSourceId(),
-        generation: getGeneration?.(),
-        producedAt,
-        // `start` and prompts stay on the topic until the run is trimmed as a
-        // whole, so a subscriber joining mid-run still sees the run begin.
-        ...(partType === 'start' || partType === 'tool-call-approval' || partType === 'tool-call-suspended'
-          ? { pinned: true }
-          : {}),
-      });
+      // A run handed back at shutdown already announced its end; a later part
+      // would make observers track the stream again.
+      if (!runtime.#getState(pubsub).shutdownReleasedStreamIds.has(streamId)) {
+        await runtime.#publishAndWait(pubsub, key, {
+          type: 'stream-part',
+          runId: output.runId,
+          streamId,
+          part,
+          sourceId: runtime.#getSourceId(),
+          generation: getGeneration?.(),
+          producedAt,
+          // `start` and prompts stay on the topic until the run is trimmed as a
+          // whole, so a subscriber joining mid-run still sees the run begin.
+          ...(partType === 'start' || partType === 'tool-call-approval' || partType === 'tool-call-suspended'
+            ? { pinned: true }
+            : {}),
+        });
+      }
       const typedPart = part as { type?: string; finishReason?: string; payload?: { finishReason?: string } };
       const finishReason = typedPart.finishReason ?? typedPart.payload?.finishReason;
       if (
@@ -3731,6 +3798,7 @@ export class AgentThreadStreamRuntime {
     // Keep the record intact for resume routing while bounding how long a parked
     // run remains cached in this process.
     record.suspendedAt = Date.now();
+    if (this.#getState(pubsub).shutdownReleasedStreamIds.has(record.streamId)) return;
     await this.#publishAndWait(pubsub, key, {
       type: 'run-suspended',
       runId: record.runId,
@@ -3781,6 +3849,8 @@ export class AgentThreadStreamRuntime {
         void this.#publishRunSuspended(pubsub, key, record).catch(() => {});
         return;
       }
+      // Handed back at shutdown: the end and the lease release already happened.
+      const releasedForShutdown = state.shutdownReleasedStreamIds.has(record.streamId);
 
       record.lifecycle = 'completed';
       this.#clearSuspendedRun(state, record.runId);
@@ -3812,7 +3882,7 @@ export class AgentThreadStreamRuntime {
       // suspended), so the broadcast pump is guaranteed to settle. Local state
       // cleanup above stays immediate.
       void Promise.resolve(record.broadcastFinished).then(() => {
-        if (isDisabled?.()) return;
+        if (isDisabled?.() || releasedForShutdown) return;
         // Suspended runs save their messages too, so their parts are backed by
         // storage; only a successful run leaves nothing actionable to trim.
         const persisted = record.output.status === 'success' || record.output.status === 'suspended';
