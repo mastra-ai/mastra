@@ -4,6 +4,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { AddDatasetItemDialog } from '@mastra/playground-ui/domains/datasets';
 import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
@@ -17,7 +18,6 @@ import {
   DatasetTagsEditor,
   DuplicateDatasetDialog,
   ExperimentTriggerDialog,
-  AddItemDialog,
   DeleteDatasetDialog,
 } from '@/domains/datasets';
 import { DatasetItemSidePanel } from '@/domains/datasets/components/items/dataset-item-side-panel';
@@ -195,7 +195,7 @@ function DatasetPage() {
         onSuccess={handleExperimentSuccess}
       />
 
-      <AddItemDialog datasetId={datasetId} open={addItemDialogOpen} onOpenChange={setAddItemDialogOpen} />
+      <AddDatasetItemDialog datasetId={datasetId} open={addItemDialogOpen} onOpenChange={setAddItemDialogOpen} />
 
       {/* Dataset duplicate dialog */}
       {dataset && (
