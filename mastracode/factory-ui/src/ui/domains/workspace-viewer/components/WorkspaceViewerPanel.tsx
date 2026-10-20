@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { useWorkspaceChanges, useWorkspaceFile } from '../../../../hooks/use-fs';
+import { useWorkspaceProcesses } from '../../../../hooks/use-processes';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { WorkspacePanelSize } from '../layout';
@@ -11,6 +12,7 @@ import type { RepositoryProviders } from './WorkspaceChangesPanel';
 import { WorkspaceFileBrowser } from './WorkspaceFileBrowser';
 import { WorkspaceFileViewer } from './WorkspaceFileViewer';
 import { WorkspaceOverview } from './WorkspaceOverview';
+import { WorkspaceProcessDetail, WorkspaceProcessList } from './WorkspaceProcesses';
 import { selectWorkspaceFilePreview } from './workspace-file-preview';
 
 interface WorkspaceViewerPanelProps {
@@ -28,6 +30,8 @@ type WorkspacePanelView =
   | { type: 'files'; selectedPath?: string }
   | { type: 'file'; path: string }
   | { type: 'changes' }
+  | { type: 'processes' }
+  | { type: 'process'; pid: string }
   | { type: 'feed' };
 
 export function WorkspaceViewerPanel({
@@ -45,6 +49,7 @@ export function WorkspaceViewerPanel({
   const [showHidden, setShowHidden] = useState(false);
   const selectedFilePath = view.type === 'file' ? view.path : undefined;
   const changes = useWorkspaceChanges(workspacePath, { enabled: visible });
+  const processes = useWorkspaceProcesses(workspacePath, { enabled: visible });
   const factory = useFactoryQuery(factoryProjectId);
   const repositoryProviders: RepositoryProviders | undefined = factory.data
     ? Object.fromEntries(factory.data.repositories.map(repo => [repo.slug.toLowerCase(), repo.provider]))
@@ -58,7 +63,7 @@ export function WorkspaceViewerPanel({
     setView({ type: 'overview' });
     onSizeChange?.('compact');
   };
-  const showView = (type: 'files' | 'changes') => {
+  const showView = (type: 'files' | 'changes' | 'processes') => {
     setView({ type });
     onSizeChange?.('full');
   };
@@ -86,6 +91,28 @@ export function WorkspaceViewerPanel({
         error={changes.error ?? undefined}
         onRefresh={() => changes.refetch()}
         onBack={showOverview}
+      />
+    );
+  }
+
+  if (view.type === 'processes') {
+    return (
+      <WorkspaceProcessList
+        workspacePath={workspacePath}
+        visible={visible}
+        onSelect={pid => setView({ type: 'process', pid })}
+        onBack={showOverview}
+      />
+    );
+  }
+
+  if (view.type === 'process') {
+    return (
+      <WorkspaceProcessDetail
+        workspacePath={workspacePath}
+        pid={view.pid}
+        visible={visible}
+        onBack={() => setView({ type: 'processes' })}
       />
     );
   }
@@ -127,6 +154,8 @@ export function WorkspaceViewerPanel({
       changesError={changes.error ?? undefined}
       onShowFiles={() => showView('files')}
       onShowChanges={() => showView('changes')}
+      processes={processes.data}
+      onShowProcesses={() => showView('processes')}
       commentCount={workItem?.commentCount}
       onShowComments={workItem ? showFeed : undefined}
       recreateSandbox={

@@ -38,6 +38,11 @@ import type {
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
 } from '@mastra/factory/routes/fs';
+import type {
+  WorkspaceProcessListing,
+  WorkspaceProcessOutput,
+  WorkspaceProcessSummary,
+} from '@mastra/factory/routes/processes';
 
 export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
 export type {
@@ -55,6 +60,9 @@ export type {
   WorkspaceTreeListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
+  WorkspaceProcessListing,
+  WorkspaceProcessOutput,
+  WorkspaceProcessSummary,
 };
 
 // ── GET response envelopes ─────────────────────────────────────────────────

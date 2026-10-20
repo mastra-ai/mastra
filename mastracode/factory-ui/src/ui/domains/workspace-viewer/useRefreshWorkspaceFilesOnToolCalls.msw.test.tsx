@@ -79,4 +79,25 @@ describe('useRefreshWorkspaceFilesOnToolCalls', () => {
 
     expect(stale()).toEqual([false, false]);
   });
+
+  it('marks the process list and output stale when a process tool finishes, without touching files', () => {
+    const { client, rerender } = renderHookWithProviders(
+      ({ entries }) => useRefreshWorkspaceFilesOnToolCalls(WORKSPACE, entries),
+      { initialProps: { entries: [] as TimelineEntry[] } },
+    );
+    const { stale } = seed(client);
+    const listKey = queryKeys.workspaceProcesses(WORKSPACE);
+    const outputKey = queryKeys.workspaceProcess(WORKSPACE, '7');
+    client.setQueryData(listKey, { workspacePath: WORKSPACE, available: true, supported: true, processes: [] });
+    client.setQueryData(outputKey, { stdout: '', stderr: '' });
+    const processesStale = () => [
+      client.getQueryState(listKey)?.isInvalidated,
+      client.getQueryState(outputKey)?.isInvalidated,
+    ];
+
+    rerender({ entries: [toolMessage('t1', 'kill_process', 'result')] });
+
+    expect(processesStale()).toEqual([true, true]);
+    expect(stale()).toEqual([false, false]);
+  });
 });

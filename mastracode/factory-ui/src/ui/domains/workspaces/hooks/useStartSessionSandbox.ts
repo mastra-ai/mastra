@@ -4,7 +4,7 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { startSessionSandbox } from '../services/user-sessions';
 
-/** Start a session's sandbox, then reload its files and changes from it. */
+/** Start a session's sandbox, then reload its files, changes and processes from it. */
 export function useStartSessionSandbox(workspacePath: string) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
@@ -14,6 +14,7 @@ export function useStartSessionSandbox(workspacePath: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceChanges(workspacePath) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceProcessesScope(workspacePath) });
     },
   });
 }

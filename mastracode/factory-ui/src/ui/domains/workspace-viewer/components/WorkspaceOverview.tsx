@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { FileDiff, MessageSquare, NotepadText } from 'lucide-react';
+import { FileDiff, MessageSquare, NotepadText, SquareTerminal } from 'lucide-react';
 
-import type { WorkspaceChanges } from '../../../../api/types';
+import type { WorkspaceChanges, WorkspaceProcessListing } from '../../../../api/types';
 import { RecreateSandboxAction } from './RecreateSandboxAction';
 import type { RecreateSandboxTarget } from './RecreateSandboxAction';
 import { WorkspaceOverviewStatus } from './WorkspaceOverviewStatus';
@@ -13,6 +13,9 @@ interface WorkspaceOverviewProps {
   changesError?: Error;
   onShowFiles: () => void;
   onShowChanges: () => void;
+  /** The sandbox's processes; Processes is hidden when the sandbox has no process manager. */
+  processes?: WorkspaceProcessListing;
+  onShowProcesses: () => void;
   /** From the board snapshot the thread already polls; absent when the thread has no work item. */
   commentCount?: number;
   onShowComments?: () => void;
@@ -26,12 +29,19 @@ function changesSummary(changes: WorkspaceChanges | undefined) {
   return `${changes.changes.length} changed`;
 }
 
+function runningSummary(processes: WorkspaceProcessListing) {
+  const running = processes.processes.filter(process => process.running).length;
+  return running === 0 ? 'None running' : `${running} running`;
+}
+
 export function WorkspaceOverview({
   changes,
   changesLoading,
   changesError,
   onShowFiles,
   onShowChanges,
+  processes,
+  onShowProcesses,
   commentCount,
   onShowComments,
   recreateSandbox,
@@ -67,6 +77,17 @@ export function WorkspaceOverview({
         <NotepadText />
         <span>Files</span>
       </Button>
+      {processes?.supported !== false ? (
+        <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowProcesses}>
+          <SquareTerminal />
+          <span>Processes</span>
+          {processes?.available ? (
+            <Txt as="span" variant="meta" tone="muted" className="ml-auto tabular-nums">
+              {runningSummary(processes)}
+            </Txt>
+          ) : null}
+        </Button>
+      ) : null}
       {onShowComments ? (
         <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowComments}>
           <MessageSquare />

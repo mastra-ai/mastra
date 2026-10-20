@@ -158,6 +158,12 @@ export const queryKeys = {
   planFile: (workspacePath: string | undefined, filePath: string | undefined, toolCallId: string | undefined) =>
     ['plan-file', workspacePath ?? null, filePath ?? null, toolCallId ?? null] as const,
   workspaceChanges: (workspacePath: string | undefined) => ['workspace-changes', workspacePath ?? null] as const,
+  workspaceProcessesScope: (workspacePath: string | undefined) =>
+    ['workspace-processes', workspacePath ?? null] as const,
+  workspaceProcesses: (workspacePath: string | undefined) =>
+    ['workspace-processes', workspacePath ?? null, 'list'] as const,
+  workspaceProcess: (workspacePath: string | undefined, pid: string | undefined) =>
+    ['workspace-processes', workspacePath ?? null, 'process', pid ?? null] as const,
   workspaceDiff: (
     workspacePath: string | undefined,
     filePath: string | undefined,
