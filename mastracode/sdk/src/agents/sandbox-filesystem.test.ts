@@ -910,7 +910,7 @@ describe('with a native sandbox filesystem', () => {
     return { sandbox, fs, calls };
   }
 
-  it('runs the eight single-entry operations natively with no shell commands', async () => {
+  it('runs single-entry operations natively with no shell commands', async () => {
     const { sandbox, fs, calls } = makeNativeFs();
     expect(await fs.readFile('/src/a.ts', { encoding: 'utf-8' })).toEqual(Buffer.from('hello'));
     await fs.writeFile('/src/a.ts', 'x');
@@ -933,17 +933,34 @@ describe('with a native sandbox filesystem', () => {
     ]);
   });
 
-  it('keeps appendFile, copyFile, moveFile and no-overwrite writes on the shell', async () => {
+  it('runs appends, copies, moves and no-overwrite writes natively too', async () => {
     const { sandbox, fs, calls } = makeNativeFs();
     await fs.appendFile('/log.txt', 'x');
-    await fs.copyFile('/a.ts', '/b.ts');
-    await fs.moveFile('/a.ts', '/c.ts');
+    await fs.copyFile('/a.ts', '/b.ts', { recursive: true });
+    await fs.moveFile('/a.ts', '/c.ts', { overwrite: false });
     await fs.writeFile('/new.ts', 'x', { overwrite: false });
+    expect(sandbox.calls).toEqual([]);
+    expect(calls).toEqual([
+      ['appendFile', `${WORKDIR}/log.txt`, 'x'],
+      ['copyFile', `${WORKDIR}/a.ts`, `${WORKDIR}/b.ts`, { recursive: true }],
+      ['moveFile', `${WORKDIR}/a.ts`, `${WORKDIR}/c.ts`, { overwrite: false }],
+      ['writeFile', `${WORKDIR}/new.ts`, 'x', { overwrite: false }],
+    ]);
+  });
+
+  it('checks both ends of a copy or move for escaping symlinks when asked', async () => {
+    const { fs, calls } = makeNativeFs({
+      verifySymlinks: true,
+      responder: script =>
+        isContainmentCheck(script) && script.includes('/out')
+          ? realpathResult('/etc')
+          : isContainmentCheck(script)
+            ? realpathResult(WORKDIR)
+            : { exitCode: 0, stdout: '', stderr: '' },
+    });
+    await expect(fs.copyFile('/a.ts', '/out/b.ts')).rejects.toThrow(/workspace root/);
+    await expect(fs.moveFile('/out/a.ts', '/b.ts')).rejects.toThrow(/workspace root/);
     expect(calls).toEqual([]);
-    expect(sandbox.calls.some(c => c.includes('>>'))).toBe(true);
-    expect(sandbox.calls.some(c => c.includes(' cp '))).toBe(true);
-    expect(sandbox.calls.some(c => c.includes(' mv '))).toBe(true);
-    expect(sandbox.calls.some(c => c.includes('set -C'))).toBe(true);
   });
 
   it('rejects paths that escape the workdir before calling anything', async () => {

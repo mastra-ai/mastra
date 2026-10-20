@@ -34,6 +34,8 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/workspace-test-utils": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@types/node": "22.20.1",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
@@ -50,5 +52,8 @@
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "peerDependencies": {
+    "@mastra/core": "*"
   }
 }

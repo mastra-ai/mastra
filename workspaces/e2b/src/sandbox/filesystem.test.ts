@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer';
+import { execFile } from 'node:child_process';
 import {
   lstat,
   mkdir,
@@ -6,6 +7,7 @@ import {
   readdir,
   readFile,
   readlink,
+  realpath,
   rename,
   rm,
   stat,
@@ -14,10 +16,10 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { promisify } from 'node:util';
 
 import { createFilesystemTestSuite } from '@internal/workspace-test-utils';
 import {
-  DirectoryNotEmptyError,
   DirectoryNotFoundError,
   FileExistsError,
   FileNotFoundError,
@@ -41,6 +43,33 @@ function runningSandbox(files: FakeFiles, id?: string): E2BSandbox {
   const sandbox = new E2BSandbox({ id });
   (sandbox as unknown as { _sandbox: Sandbox })._sandbox = { files } as unknown as Sandbox;
   sandbox.status = 'running';
+  return sandbox;
+}
+
+const runSh = promisify(execFile);
+
+/**
+ * Point the sandbox's shell at the host directory backing the fake. Every
+ * absolute path in a file command is a single-quoted literal, so rooting the
+ * script is a plain prefix on each one.
+ */
+function hostShell(sandbox: E2BSandbox, root: string): E2BSandbox {
+  sandbox.executeCommand = async (command, args = []) => {
+    const rooted = args.map(arg => arg.replaceAll(`'/`, `'${root}/`));
+    try {
+      const { stdout, stderr } = await runSh(command, rooted);
+      return { success: true, exitCode: 0, stdout, stderr, executionTimeMs: 0 };
+    } catch (error) {
+      const failure = error as { code: number; stdout: string; stderr: string };
+      return {
+        success: false,
+        exitCode: failure.code,
+        stdout: failure.stdout,
+        stderr: failure.stderr,
+        executionTimeMs: 0,
+      };
+    }
+  };
   return sandbox;
 }
 
@@ -189,264 +218,24 @@ describe('E2BSandboxFilesystem', () => {
     root = await mkdtemp(join(tmpdir(), 'e2b-sandbox-fs-'));
     files = new FakeFiles(root);
     fs = runningSandbox(files).filesystem;
-    await mkdir(join(root, 'w/src/nested'), { recursive: true });
+    await mkdir(join(root, 'w/src'), { recursive: true });
     await writeFile(join(root, 'w/a.txt'), 'hello');
-    await writeFile(join(root, 'w/src/b.ts'), 'export {}');
-    await writeFile(join(root, 'w/src/nested/c.ts'), 'c');
-    await writeFile(join(root, 'w/src/nested/d.md'), 'd');
-    await symlink('src', join(root, 'w/dirlink'));
-    await symlink('a.txt', join(root, 'w/filelink'));
-    await symlink('missing', join(root, 'w/broken'));
-    await mkdir(join(root, 'w/empty'));
   });
 
   afterEach(async () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  describe('readFile', () => {
-    it('returns a Buffer, or a string with an encoding', async () => {
-      const buffer = await fs.readFile('/w/a.txt');
-      expect(Buffer.isBuffer(buffer)).toBe(true);
-      expect(buffer.toString()).toBe('hello');
-      expect(await fs.readFile('/w/a.txt', { encoding: 'utf-8' })).toBe('hello');
-    });
+  // The operations themselves are covered once, against the shared class, in
+  // `@internal/workspace` (files-api-filesystem.test.ts). These tests cover how
+  // this provider reads E2B's errors and reaches the sandbox.
 
-    it('maps a missing file or broken link to FileNotFoundError and a directory to IsDirectoryError', async () => {
-      await expect(fs.readFile('/w/nope')).rejects.toBeInstanceOf(FileNotFoundError);
-      await expect(fs.readFile('/w/broken')).rejects.toBeInstanceOf(FileNotFoundError);
-      await expect(fs.readFile('/w/src')).rejects.toBeInstanceOf(IsDirectoryError);
-    });
-  });
-
-  describe('writeFile', () => {
-    it('writes strings and bytes, creating parents by default', async () => {
-      await fs.writeFile('/w/new/deep/x.txt', 'x');
-      await fs.writeFile('/w/bytes.bin', new Uint8Array([1, 2, 3]));
-      expect(await readFile(join(root, 'w/new/deep/x.txt'), 'utf-8')).toBe('x');
-      expect([...(await readFile(join(root, 'w/bytes.bin')))]).toEqual([1, 2, 3]);
-    });
-
-    it('writes only the view of a Buffer that shares a larger pool', async () => {
-      const pooled = Buffer.from('xxhelloyy').subarray(2, 7);
-      await fs.writeFile('/w/view.txt', pooled);
-      expect(await readFile(join(root, 'w/view.txt'), 'utf-8')).toBe('hello');
-    });
-
-    it('with recursive: false, rejects a missing parent instead of creating it', async () => {
-      await expect(fs.writeFile('/w/missing/x.txt', 'x', { recursive: false })).rejects.toBeInstanceOf(
-        DirectoryNotFoundError,
-      );
-      await expect(fs.writeFile('/w/a.txt/x.txt', 'x', { recursive: false })).rejects.toBeInstanceOf(NotDirectoryError);
-      expect(files.calls.some(c => c.startsWith('write'))).toBe(false);
-      await fs.writeFile('/w/src/ok.ts', 'ok', { recursive: false });
-      expect(await readFile(join(root, 'w/src/ok.ts'), 'utf-8')).toBe('ok');
-    });
-
-    it('with overwrite: false, rejects an existing file and writes a new one', async () => {
-      await expect(fs.writeFile('/w/a.txt', 'x', { overwrite: false })).rejects.toBeInstanceOf(FileExistsError);
-      expect(await readFile(join(root, 'w/a.txt'), 'utf-8')).toBe('hello');
-      await fs.writeFile('/w/fresh.txt', 'x', { overwrite: false });
-      expect(await readFile(join(root, 'w/fresh.txt'), 'utf-8')).toBe('x');
-    });
-
-    it('maps writing onto a directory to IsDirectoryError', async () => {
-      await expect(fs.writeFile('/w/src', 'x')).rejects.toBeInstanceOf(IsDirectoryError);
-    });
-  });
-
-  describe('appendFile', () => {
-    it('appends to an existing file and creates a missing one', async () => {
-      await fs.appendFile('/w/a.txt', ' world');
-      await fs.appendFile('/w/log.txt', Buffer.from('first'));
-      expect(await readFile(join(root, 'w/a.txt'), 'utf-8')).toBe('hello world');
-      expect(await readFile(join(root, 'w/log.txt'), 'utf-8')).toBe('first');
-    });
-
-    it('rejects a directory', async () => {
-      await expect(fs.appendFile('/w/src', 'x')).rejects.toBeInstanceOf(IsDirectoryError);
-    });
-  });
-
-  describe('deleteFile', () => {
-    it('deletes a file, and only the link for a symlink to a directory', async () => {
-      await fs.deleteFile('/w/a.txt');
-      await fs.deleteFile('/w/dirlink');
-      await fs.deleteFile('/w/broken');
-      expect(await lstat(join(root, 'w/a.txt')).catch(() => null)).toBeNull();
-      expect(await lstat(join(root, 'w/dirlink')).catch(() => null)).toBeNull();
-      expect(await lstat(join(root, 'w/broken')).catch(() => null)).toBeNull();
-      expect((await stat(join(root, 'w/src'))).isDirectory()).toBe(true);
-    });
-
-    it('rejects a directory and a missing file unless force is set', async () => {
-      await expect(fs.deleteFile('/w/src')).rejects.toBeInstanceOf(IsDirectoryError);
-      await expect(fs.deleteFile('/w/nope')).rejects.toBeInstanceOf(FileNotFoundError);
-      await fs.deleteFile('/w/nope', { force: true });
-      expect(files.calls.some(c => c.startsWith('remove'))).toBe(false);
-    });
-  });
-
-  describe('copyFile', () => {
-    it('copies a file, refusing to overwrite when asked', async () => {
-      await fs.copyFile('/w/a.txt', '/w/copy/a.txt');
-      expect(await readFile(join(root, 'w/copy/a.txt'), 'utf-8')).toBe('hello');
-      await expect(fs.copyFile('/w/src/b.ts', '/w/a.txt', { overwrite: false })).rejects.toBeInstanceOf(
-        FileExistsError,
-      );
-      expect(await readFile(join(root, 'w/a.txt'), 'utf-8')).toBe('hello');
-    });
-
-    it('copies a directory tree only with recursive', async () => {
-      await expect(fs.copyFile('/w/src', '/w/out')).rejects.toBeInstanceOf(IsDirectoryError);
-      await fs.copyFile('/w/src', '/w/out', { recursive: true });
-      expect(await readFile(join(root, 'w/out/b.ts'), 'utf-8')).toBe('export {}');
-      expect(await readFile(join(root, 'w/out/nested/c.ts'), 'utf-8')).toBe('c');
-    });
-
-    it('rejects a missing source', async () => {
-      await expect(fs.copyFile('/w/nope', '/w/x')).rejects.toBeInstanceOf(FileNotFoundError);
-      await expect(fs.copyFile('/w/broken', '/w/x')).rejects.toBeInstanceOf(FileNotFoundError);
-    });
-  });
-
-  describe('moveFile', () => {
-    it('renames, creating the destination parent', async () => {
-      await fs.moveFile('/w/a.txt', '/w/moved/deep/a.txt');
-      expect(await readFile(join(root, 'w/moved/deep/a.txt'), 'utf-8')).toBe('hello');
-      expect(await lstat(join(root, 'w/a.txt')).catch(() => null)).toBeNull();
-    });
-
-    it('rejects a missing source and an existing destination with overwrite: false', async () => {
-      await expect(fs.moveFile('/w/nope', '/w/x')).rejects.toBeInstanceOf(FileNotFoundError);
-      await expect(fs.moveFile('/w/src/b.ts', '/w/a.txt', { overwrite: false })).rejects.toBeInstanceOf(
-        FileExistsError,
-      );
-      expect(await readFile(join(root, 'w/a.txt'), 'utf-8')).toBe('hello');
-    });
-  });
-
-  describe('mkdir', () => {
-    it('creates nested directories by default and is a no-op on an existing one', async () => {
-      await fs.mkdir('/w/m1/m2');
-      await fs.mkdir('/w/src');
-      expect((await stat(join(root, 'w/m1/m2'))).isDirectory()).toBe(true);
-    });
-
-    it('with recursive: false, requires the parent', async () => {
-      await expect(fs.mkdir('/w/x/y', { recursive: false })).rejects.toBeInstanceOf(DirectoryNotFoundError);
-      await fs.mkdir('/w/x', { recursive: false });
-      expect((await stat(join(root, 'w/x'))).isDirectory()).toBe(true);
-    });
-
-    it('maps a file in the way to FileExistsError', async () => {
-      await expect(fs.mkdir('/w/a.txt')).rejects.toBeInstanceOf(FileExistsError);
-    });
-  });
-
-  describe('rmdir', () => {
-    it('removes an empty directory, and a non-empty one only with recursive', async () => {
-      await fs.rmdir('/w/empty');
-      await expect(fs.rmdir('/w/src')).rejects.toBeInstanceOf(DirectoryNotEmptyError);
-      await fs.rmdir('/w/src', { recursive: true });
-      expect(await lstat(join(root, 'w/empty')).catch(() => null)).toBeNull();
-      expect(await lstat(join(root, 'w/src')).catch(() => null)).toBeNull();
-    });
-
-    it('rejects a file, a symlink to a directory without recursive, and a missing path unless force', async () => {
-      await expect(fs.rmdir('/w/a.txt')).rejects.toBeInstanceOf(NotDirectoryError);
-      await expect(fs.rmdir('/w/dirlink')).rejects.toBeInstanceOf(NotDirectoryError);
-      await expect(fs.rmdir('/w/nope')).rejects.toBeInstanceOf(DirectoryNotFoundError);
-      await fs.rmdir('/w/nope', { force: true });
-    });
-
-    it('removes only the link when recursively removing a symlink to a directory', async () => {
-      await fs.rmdir('/w/dirlink', { recursive: true });
-      expect(await lstat(join(root, 'w/dirlink')).catch(() => null)).toBeNull();
-      expect(await readFile(join(root, 'w/src/b.ts'), 'utf-8')).toBe('export {}');
-    });
-  });
-
-  describe('readdir', () => {
-    it('lists names relative to the directory, resolving links and dropping broken ones', async () => {
-      const entries = await fs.readdir('/w');
-      expect(entries.map(e => [e.name, e.type])).toEqual([
-        ['a.txt', 'file'],
-        ['dirlink', 'directory'],
-        ['empty', 'directory'],
-        ['filelink', 'file'],
-        ['src', 'directory'],
-      ]);
-      expect(entries.find(e => e.name === 'a.txt')).toMatchObject({ size: 5 });
-      expect(entries.find(e => e.name === 'dirlink')).toMatchObject({ isSymlink: true, symlinkTarget: '/w/src' });
-      expect(files.calls).toEqual(['list /w']);
-    });
-
-    it('lists recursively with a/b-style names, honoring maxDepth and filtering only files by extension', async () => {
-      const all = await fs.readdir('/w/src', { recursive: true });
-      expect(all.map(e => e.name).sort()).toEqual(['b.ts', 'nested', 'nested/c.ts', 'nested/d.md']);
-      const shallow = await fs.readdir('/w/src', { recursive: true, maxDepth: 0 });
-      expect(shallow.map(e => e.name).sort()).toEqual(['b.ts', 'nested']);
-      const ts = await fs.readdir('/w/src', { recursive: true, extension: '.ts' });
-      expect(ts.map(e => e.name).sort()).toEqual(['b.ts', 'nested', 'nested/c.ts']);
-      const md = await fs.readdir('/w/src', { recursive: true, extension: ['md'] });
-      expect(md.map(e => e.name).sort()).toEqual(['nested', 'nested/d.md']);
-    });
-
-    it('lists through a symlinked directory', async () => {
-      expect((await fs.readdir('/w/dirlink')).map(e => e.name)).toEqual(['b.ts', 'nested']);
-    });
-
-    it('maps a missing path to DirectoryNotFoundError and a file to NotDirectoryError', async () => {
-      await expect(fs.readdir('/w/nope')).rejects.toBeInstanceOf(DirectoryNotFoundError);
-      await expect(fs.readdir('/w/a.txt')).rejects.toBeInstanceOf(NotDirectoryError);
-    });
-  });
-
-  describe('exists', () => {
-    it('is true for files, directories and live links, false for missing paths and broken links', async () => {
-      expect(await fs.exists('/w/a.txt')).toBe(true);
-      expect(await fs.exists('/w/src')).toBe(true);
-      expect(await fs.exists('/w/filelink')).toBe(true);
-      expect(await fs.exists('/w/nope')).toBe(false);
-      expect(await fs.exists('/w/broken')).toBe(false);
-    });
-  });
-
-  describe('stat', () => {
-    it('reports a file and a directory with absolute paths', async () => {
-      const file = await fs.stat('/w/a.txt');
-      expect(file).toMatchObject({ name: 'a.txt', path: '/w/a.txt', type: 'file', size: 5 });
-      expect(file.modifiedAt).toBeInstanceOf(Date);
-      expect(file.createdAt).toEqual(file.modifiedAt);
-      expect(await fs.stat('/w/src')).toMatchObject({ name: 'src', type: 'directory' });
-    });
-
-    it('reports a directory size of 0', async () => {
-      expect((await fs.stat('/w/src')).size).toBe(0);
-      expect((await fs.stat('/w/dirlink')).size).toBe(0);
-    });
-
-    it("follows symlinks to the target's type and size", async () => {
-      expect(await fs.stat('/w/filelink')).toMatchObject({
-        name: 'filelink',
-        path: '/w/filelink',
-        type: 'file',
-        size: 5,
-      });
-      expect(await fs.stat('/w/dirlink')).toMatchObject({ type: 'directory' });
-    });
-
-    it('maps a missing path and a broken link to FileNotFoundError', async () => {
-      await expect(fs.stat('/w/nope')).rejects.toBeInstanceOf(FileNotFoundError);
-      await expect(fs.stat('/w/broken')).rejects.toBeInstanceOf(FileNotFoundError);
-    });
-
-    it('falls back to the epoch when envd omits modifiedTime', async () => {
-      const original = files.getInfo.bind(files);
-      files.getInfo = async path => ({ ...(await original(path)), modifiedTime: undefined });
-      expect((await fs.stat('/w/a.txt')).modifiedAt).toEqual(new Date(0));
-    });
+  it("reads E2B's file-level errors as typed errors", async () => {
+    await expect(fs.readFile('/w/nope')).rejects.toBeInstanceOf(FileNotFoundError);
+    await expect(fs.readFile('/w/src')).rejects.toBeInstanceOf(IsDirectoryError);
+    await expect(fs.readdir('/w/a.txt')).rejects.toBeInstanceOf(NotDirectoryError);
+    await expect(fs.mkdir('/w/a.txt')).rejects.toBeInstanceOf(FileExistsError);
+    await expect(fs.rmdir('/w/nope')).rejects.toBeInstanceOf(DirectoryNotFoundError);
   });
 
   it('passes errors it does not recognise through unchanged', async () => {
@@ -455,6 +244,21 @@ describe('E2BSandboxFilesystem', () => {
       throw boom;
     };
     await expect(fs.stat('/w/a.txt')).rejects.toBe(boom);
+  });
+
+  it('runs copies, appends and no-clobber moves as one executeCommand each, not through the files API', async () => {
+    const sandbox = runningSandbox(files);
+    const scripts: string[] = [];
+    sandbox.executeCommand = vi.fn(async (_command: string, args?: string[]) => {
+      scripts.push(args![1]!);
+      return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 1 };
+    });
+    await sandbox.filesystem.copyFile('/w/src', '/w/out', { recursive: true });
+    await sandbox.filesystem.moveFile('/w/a.txt', '/w/b.txt', { overwrite: false });
+    expect(sandbox.executeCommand).toHaveBeenCalledWith('sh', ['-c', expect.any(String)]);
+    expect(scripts[0]).toContain(`cp -R -P "$src"/. "$dest"/`);
+    expect(scripts[1]).toContain(`mv -n "$src" "$dest"`);
+    expect(files.calls).toEqual([]);
   });
 });
 
@@ -532,30 +336,28 @@ describe('E2BSandbox.filesystem', () => {
   });
 
   it('retries only the call that hit the dead sandbox, never the calls that already succeeded', async () => {
-    await mkdir(join(root, 'w/src'));
-    await writeFile(join(root, 'w/src/1.txt'), '1');
-    await writeFile(join(root, 'w/src/2.txt'), '2');
-    const writes: string[] = [];
+    await symlink('a.txt', join(root, 'w/link.txt'));
+    const infos: string[] = [];
     const handle = (label: string, dieOn?: string) => {
       const files = new FakeFiles(root);
-      const write = files.write.bind(files);
-      files.write = async (path, data) => {
-        writes.push(`${label} ${path}`);
+      const getInfo = files.getInfo.bind(files);
+      files.getInfo = async path => {
+        infos.push(`${label} ${path}`);
         if (path === dieOn) throw new E2BFileNotFoundError('paused sandbox sbx_old not found');
-        return write(path, data);
+        return getInfo(path);
       };
       return files;
     };
-    const sandbox = runningSandbox(handle('old', '/w/out/2.txt'));
+    // stat follows the link with a second getInfo; the sandbox dies in between.
+    const sandbox = runningSandbox(handle('old', '/w/a.txt'));
     vi.spyOn(sandbox, 'ensureRunning').mockImplementation(async () => {
       const current = sandbox as unknown as { _sandbox: Sandbox | null };
       if (!current._sandbox) current._sandbox = { files: handle('new') } as unknown as Sandbox;
       sandbox.status = 'running';
     });
 
-    await sandbox.filesystem.copyFile('/w/src', '/w/out', { recursive: true, overwrite: false });
-    expect(writes).toEqual(['old /w/out/1.txt', 'old /w/out/2.txt', 'new /w/out/2.txt']);
-    expect(await readFile(join(root, 'w/out/2.txt'), 'utf-8')).toBe('2');
+    expect(await sandbox.filesystem.stat('/w/link.txt')).toMatchObject({ type: 'file', size: 5 });
+    expect(infos).toEqual(['old /w/link.txt', 'old /w/a.txt', 'new /w/a.txt']);
   });
 
   it('surfaces the error when the sandbox is dead again after the restart', async () => {
@@ -599,9 +401,9 @@ afterAll(async () => {
 createFilesystemTestSuite({
   suiteName: 'E2BSandboxFilesystem Conformance (host-backed files fake)',
   createFilesystem: async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'e2b-sandbox-fs-suite-'));
+    const dir = await realpath(await mkdtemp(join(tmpdir(), 'e2b-sandbox-fs-suite-')));
     suiteRoots.push(dir);
-    return runningSandbox(new FakeFiles(dir)).filesystem;
+    return hostShell(runningSandbox(new FakeFiles(dir)), dir).filesystem;
   },
   capabilities: {
     supportsAppend: true,

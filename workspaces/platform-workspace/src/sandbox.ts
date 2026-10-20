@@ -1566,6 +1566,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._filesystem ??= new PlatformSandboxFilesystem({
       id: this.id,
       withFiles: (operation, fn) => this._withE2BFiles(operation, fn),
+      runCommand: script => this.executeCommand('sh', ['-c', script]),
     });
     return this._filesystem;
   }

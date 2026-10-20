@@ -9,4 +9,4 @@ const sandbox = new PlatformSandbox();
 const source = await sandbox.filesystem.readFile('/workspace/app/src/index.ts', { encoding: 'utf-8' });
 ```
 
-`appendFile`, `copyFile`, and writes with `overwrite: false` are not atomic; use `executeCommand()` when you need that.
+Copies, appends, and writes or moves with `overwrite: false` run as one command inside the VM, so they're atomic and file contents don't travel through your server.

@@ -5,8 +5,9 @@
  * (e.g. a Railway VM) rather than on the server host. File operations are
  * implemented by shelling out through the sandbox's `executeCommand`, so the
  * agent's file tools and command tools share one VM and one view of the repo.
- * When the sandbox exposes its own `filesystem`, single-entry operations use
- * it instead, which takes one round trip rather than several commands.
+ * When the sandbox exposes its own `filesystem`, file operations use it
+ * instead, which takes one round trip rather than several commands; grep and
+ * walks still run as shell commands.
  *
  * Paths are workspace-relative (`/src/foo.ts`) and resolve under the sandbox
  * working directory (`basePath`). A traversal guard rejects any path that
@@ -64,7 +65,7 @@ export interface SandboxExec {
   readonly id: string;
   /**
    * The sandbox's own file API, when it has one (`WorkspaceSandbox.filesystem`).
-   * Single-entry operations go through it instead of shell commands.
+   * File operations go through it instead of shell commands.
    */
   readonly filesystem?: WorkspaceFilesystem;
   executeCommand(
@@ -415,8 +416,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   async writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void> {
     const abs = await this.resolveAsync(path);
     const native = this.sandbox.filesystem;
-    // overwrite: false stays on the shell, where noclobber makes it atomic.
-    if (native && options?.overwrite !== false) {
+    if (native) {
       await this.verifyNative('dest', abs, path);
       return native.writeFile(abs, content, options);
     }
@@ -441,6 +441,11 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async appendFile(path: string, content: FileContent): Promise<void> {
     const abs = await this.resolveAsync(path);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('dest', abs, path);
+      return native.appendFile(abs, content);
+    }
     await this.assertContainedDest(abs, path);
     const b64 = toBuffer(content).toString('base64');
     await this.execOk(
@@ -478,6 +483,12 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     const srcAbs = await this.resolveAsync(src);
     const destAbs = await this.resolveAsync(dest);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('target', srcAbs, src);
+      await this.verifyNative('dest', destAbs, dest);
+      return native.copyFile(srcAbs, destAbs, options);
+    }
     await this.assertContainedRealpath(srcAbs, src);
     await this.assertContainedDest(destAbs, dest);
     const recursive = options?.recursive ? '-r ' : '';
@@ -521,6 +532,12 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     const srcAbs = await this.resolveAsync(src);
     const destAbs = await this.resolveAsync(dest);
+    const native = this.sandbox.filesystem;
+    if (native) {
+      await this.verifyNative('target', srcAbs, src);
+      await this.verifyNative('dest', destAbs, dest);
+      return native.moveFile(srcAbs, destAbs, options);
+    }
     await this.assertContainedRealpath(srcAbs, src);
     await this.assertContainedDest(destAbs, dest);
     if (options?.overwrite === false) {
