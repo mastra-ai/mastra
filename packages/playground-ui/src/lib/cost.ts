@@ -1,3 +1,5 @@
+import { formatPercent } from './number';
+
 export interface CompactNumberFormatOptions {
   currency?: string;
 }
@@ -38,4 +40,27 @@ export function formatCost(value: number, unit?: string | null): string {
   const amount = value > 0 && value < 0.01 ? '<0.01' : value.toFixed(2);
   if (!isUsd) return `${amount} ${unit}`;
   return amount.startsWith('<') ? '<$0.01' : `$${amount}`;
+}
+
+/** `cost` on an `aggregateTraces()` row: how much of the usage was priced, and in which currency. */
+export type AggregateCostInfo = { coverage: number | null; unit: string | null };
+
+export type FormattedAggregateCost = { text: string; tooltip?: string };
+
+/**
+ * An aggregate `cost.*` value for display. Mixed currencies can't be summed into one number, and a
+ * partly priced total is marked approximate (`~$x`) with how much of the usage was priced.
+ */
+export function formatAggregateCost(
+  value: number | null | undefined,
+  cost: AggregateCostInfo | undefined,
+): FormattedAggregateCost {
+  if (cost?.unit === 'mixed') return { text: '—', tooltip: 'Costs use more than one currency' };
+  if (value == null) return { text: '—', tooltip: 'No priced usage for these traces' };
+  const text = formatCost(value, cost?.unit);
+  const coverage = cost?.coverage;
+  if (coverage != null && coverage < 1) {
+    return { text: `~${text}`, tooltip: `Priced for ${formatPercent(coverage)} of traces with usage` };
+  }
+  return { text };
 }

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 
 import { buildMetricsDimensionalFilter } from '../metrics-filters';
 import type { MetricsDimensionalFilter } from '../metrics-filters';
+import { TraceAggregateLimiterProvider } from './trace-aggregate-limiter-provider';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 import { formatShortDate } from '@/utils/date-format';
 
@@ -157,5 +158,9 @@ export function MetricsProvider({
     ],
   );
 
-  return <MetricsContext.Provider value={value}>{children}</MetricsContext.Provider>;
+  return (
+    <MetricsContext.Provider value={value}>
+      <TraceAggregateLimiterProvider>{children}</TraceAggregateLimiterProvider>
+    </MetricsContext.Provider>
+  );
 }

@@ -12,6 +12,7 @@ export {
   type UseTraceOrBranchSpansArgs,
   type UseTraceOrBranchSpansResult,
 } from './use-trace-or-branch-spans';
+export * from './use-trace-aggregate';
 export * from './use-trace-query';
 export * from './use-query-spans';
 export * from './use-query-threads';

@@ -59,6 +59,9 @@ export type DrilldownScope = {
   entityName?: string;
   threadId?: string;
   resourceId?: string;
+  environment?: string;
+  sessionId?: string;
+  userId?: string;
   model?: string;
   provider?: string;
   /** Trace-only. Valid for drill-downs from "errors" segments. */
@@ -153,13 +156,17 @@ export function buildTracesDrilldownUrl({
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.threadId, scope.threadId ?? dashboardFilter.threadId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.resourceId, scope.resourceId ?? dashboardFilter.resourceId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.runId, dashboardFilter.runId);
-  setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.sessionId, dashboardFilter.sessionId);
+  setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.sessionId, scope.sessionId ?? dashboardFilter.sessionId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.requestId, dashboardFilter.requestId);
-  setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.userId, dashboardFilter.userId);
+  setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.userId, scope.userId ?? dashboardFilter.userId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.organizationId, dashboardFilter.organizationId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.experimentId, dashboardFilter.experimentId);
   setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.serviceName, dashboardFilter.serviceName);
-  setIfDefined(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.environment, dashboardFilter.environment);
+  setIfDefined(
+    params,
+    TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.environment,
+    scope.environment ?? dashboardFilter.environment,
+  );
   appendArray(params, TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.tags, dashboardFilter.tags);
 
   const query = params.toString();
