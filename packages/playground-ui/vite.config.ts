@@ -1,11 +1,12 @@
+import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { dirname, relative, resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import nodeExternals from 'rollup-plugin-node-externals';
-import type { UserConfig } from 'vite';
+import type { Plugin, UserConfig } from 'vite';
 import { defineConfig } from 'vite';
-import dts from 'vite-plugin-dts';
 import { libInjectCss } from 'vite-plugin-lib-inject-css';
 
 const srcDir = resolve(__dirname, 'src');
@@ -63,26 +64,89 @@ const componentEntries = (directory: string, prefix: string) => {
   return Object.fromEntries(entries);
 };
 
-// vite-plugin-dts logs diagnostics unless afterDiagnostic fails the build.
-const typeDeclarations = () =>
-  dts({
-    insertTypesEntry: true,
-    exclude: [
-      'vite.config.ts',
-      'src/**/*.test.ts',
-      'src/**/*.test.tsx',
-      'src/**/*.stories.ts',
-      'src/**/*.stories.tsx',
-      'src/**/__tests__/**',
-      'src/test/**',
-      '.storybook/**',
-    ],
-    afterDiagnostic: diagnostics => {
-      if (diagnostics.length > 0) {
-        throw new Error(`vite-plugin-dts found ${diagnostics.length} type error(s); see log above.`);
-      }
-    },
+const toPosix = (path: string) => path.replace(/\\/g, '/');
+const toImportPath = (path: string) => (path.startsWith('.') ? path : `./${path}`);
+
+const runTsc = (args: string[]) =>
+  new Promise<number>(resolveExit => {
+    const child = spawn('tsc', args, { stdio: 'inherit', shell: process.platform === 'win32' });
+    child.on('error', () => resolveExit(1));
+    child.on('close', code => resolveExit(code ?? 1));
   });
+
+// Side-effect imports (CSS) are dropped and `@/` aliases made relative, so consumers resolve every import.
+const sideEffectImportRE = /^import ['"][^'"]+['"];\r?\n/gm;
+const aliasImportRE = /(from |import\()(['"])@\/([^'"]+)\2/g;
+
+const finishDeclaration = async (file: string) => {
+  const content = await readFile(file, 'utf8');
+  const next = content
+    .replace(sideEffectImportRE, '')
+    .replace(
+      aliasImportRE,
+      (_, prefix, quote, path) =>
+        `${prefix}${quote}${toImportPath(toPosix(relative(dirname(file), resolve(dtsSrcDir, path))))}${quote}`,
+    );
+  if (next !== content) await writeFile(file, next);
+};
+
+const forEachDeclaration = (directory: string, visit: (file: string) => void) => {
+  readdirSync(directory, { withFileTypes: true }).forEach(dirent => {
+    const path = resolve(directory, dirent.name);
+    if (dirent.isDirectory()) forEachDeclaration(path, visit);
+    else if (dirent.name.endsWith('.d.ts')) visit(path);
+  });
+};
+
+const distDir = resolve(__dirname, 'dist');
+const dtsTempDir = resolve(__dirname, 'node_modules/.cache/dts');
+const dtsSrcDir = resolve(distDir, 'src');
+
+// TypeScript 7 emits declarations while Vite bundles; vite-plugin-dts needs the TypeScript 6 compiler API and took ~14s.
+// tsc writes to a temp dir because Vite empties `dist` when it writes the bundle. Type errors fail the build.
+const typeDeclarations = (): Plugin => {
+  let entries: Record<string, string> = {};
+  let tsc: Promise<number>;
+
+  return {
+    name: 'playground-ui:dts',
+    configResolved(config) {
+      if (config.build.lib) entries = config.build.lib.entry as Record<string, string>;
+    },
+    buildStart() {
+      tsc = rm(dtsTempDir, { recursive: true, force: true }).then(() =>
+        runTsc(['-p', 'tsconfig.build.json', '--declarationDir', dtsTempDir]),
+      );
+    },
+    async closeBundle() {
+      if ((await tsc) !== 0) throw new Error('tsc found type errors; see log above.');
+
+      await rm(dtsSrcDir, { recursive: true, force: true });
+      await rename(resolve(dtsTempDir, 'src'), dtsSrcDir);
+
+      const declarations: string[] = [];
+      forEachDeclaration(dtsSrcDir, file => declarations.push(file));
+      await Promise.all(declarations.map(finishDeclaration));
+
+      // Each lib entry gets a declaration next to its JS that re-exports the emitted source declaration.
+      await Promise.all(
+        Object.entries(entries).map(async ([name, source]) => {
+          const entryFile = resolve(distDir, `${name}.d.ts`);
+          const sourceFile = resolve(distDir, relative(__dirname, source)).replace(/\.tsx?$/, '.d.ts');
+          const from = toImportPath(toPosix(relative(dirname(entryFile), sourceFile)).replace(/\.d\.ts$/, ''));
+          const declaration = await readFile(sourceFile, 'utf8');
+          const lines = [/^export /m.test(declaration) ? `export * from '${from}';` : 'export {};'];
+          if (/^export default |^export \{[^}]*\bdefault\b/m.test(declaration)) {
+            lines.push(`export { default } from '${from}';`);
+          }
+
+          await mkdir(dirname(entryFile), { recursive: true });
+          await writeFile(entryFile, `${lines.join('\n')}\n`);
+        }),
+      );
+    },
+  };
+};
 
 const appPlugins = [react(), tailwindcss()];
 

@@ -69,7 +69,6 @@ patchedDependencies:
   '@manypkg/tools@2.1.1': patches/@manypkg__tools@2.1.1.patch
   react-docgen-typescript@2.4.0: patches/react-docgen-typescript@2.4.0.patch
   read-yaml-file@1.1.0: patches/read-yaml-file@1.1.0.patch
-  vite-plugin-dts@4.5.4: patches/vite-plugin-dts@4.5.4.patch
   zod-to-ts@2.1.0: patches/zod-to-ts@2.1.0.patch
 
 packageExtensions:
@@ -95,11 +94,6 @@ packageExtensions:
       typescript-classic: npm:typescript@^6.0.3
     peerDependencies:
       typescript: '>=5'
-  # vite-plugin-dts also embeds the classic compiler API. Keep the package's
-  # TS7 peer for consumers while its patched runtime uses this alias.
-  'vite-plugin-dts@4.5.4':
-    dependencies:
-      typescript-classic: npm:typescript@^6.0.3
   # Storybook's TypeScript docgen plugin and parser both load the classic
   # compiler API while building the playground preview.
   '@joshwooding/vite-plugin-react-docgen-typescript@0.7.0':
