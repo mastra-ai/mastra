@@ -35,9 +35,9 @@ export interface CreateFactoryToolsOptions {
  * Worker and side sessions only answer messages. User sessions get every tool
  * on every turn. Turns nobody signed in started (notification wakes, webhooks,
  * dispatcher notices) carry text other people wrote, so each tool limits what
- * it does on them itself: approvals, proposals and plan pre-approval need a
- * person, moves run as an agent, model switches reach only this session and
- * its side sessions, and side-session starts are capped.
+ * it does on them itself: approvals, proposals, plan pre-approval and muting
+ * side sessions need a person, moves run as an agent, model switches reach
+ * only this session and its side sessions, and starts are side sessions only.
  */
 export function createFactoryTools({ scope, deps }: CreateFactoryToolsOptions): IntegrationTools {
   const messagingTools = createFactoryMessagingTools(scope, deps);
