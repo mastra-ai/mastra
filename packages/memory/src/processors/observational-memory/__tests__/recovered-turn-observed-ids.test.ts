@@ -292,4 +292,36 @@ describe('recovered OM turn whose response was observed by the dead worker', () 
     const second = await runStepOnStorage(storage, undefined, undefined, { stored: true });
     expect(second.rotateResponseMessageId).toHaveBeenCalledTimes(1);
   });
+
+  it('fails the recovery step instead of rotating when the seal cannot be stored', async () => {
+    const storage = await createStorage();
+    await storage.saveMessages({
+      messages: [
+        message('user-1', 'user', 'hello', '2025-01-01T08:00:00.000Z'),
+        message(responseId, 'assistant', 'partial answer', '2025-01-01T08:00:01.000Z'),
+      ],
+    });
+    const om = new ObservationalMemory({ storage, scope: 'thread', model: 'openai/gpt-4o-mini' });
+    const record = await om.getOrCreateRecord(threadId, resourceId);
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: '- user said hello',
+      tokenCount: 5,
+      lastObservedAt: new Date('2025-01-01T08:00:01.001Z'),
+      observedMessageIds: ['user-1', responseId],
+    });
+
+    vi.spyOn(storage, 'updateMessages').mockRejectedValueOnce(new Error('storage unavailable'));
+    await expect(runStepOnStorage(storage, undefined, undefined, { stored: true })).rejects.toThrow(
+      'storage unavailable',
+    );
+
+    // The retried step stores the seal, so it survives a reflection.
+    const retried = await runStepOnStorage(storage, undefined, undefined, { stored: true });
+    expect(retried.rotateResponseMessageId).toHaveBeenCalledTimes(1);
+    const current = (await storage.getObservationalMemory(threadId, resourceId))!;
+    await storage.createReflectionGeneration({ currentRecord: current, reflection: '- greeting', tokenCount: 2 });
+    const afterReflection = await runStepOnStorage(storage, undefined, undefined, { stored: true });
+    expect(afterReflection.rotateResponseMessageId).toHaveBeenCalledTimes(1);
+  });
 });

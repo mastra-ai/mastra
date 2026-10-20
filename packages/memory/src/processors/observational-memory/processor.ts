@@ -339,12 +339,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           (!!messageId && Array.isArray(observedIds) && observedIds.includes(messageId));
         if (messageId && responseObserved) {
           if (response && !responseSealed) {
+            // Persist first, and fail the step rather than continue: without the stored seal, a later
+            // reflection erases the only evidence, and the next recovery would merge into this message.
+            await this.engine.persistMessageSeal(response);
             this.engine.sealMessagesForBuffering([response]);
-            await this.engine.persistMessageSeal(response).catch(error => {
-              omDebug(
-                `[OM:recover] persisting the seal on ${response.id} failed: ${error instanceof Error ? error.message : String(error)}`,
-              );
-            });
           }
           responseMessageId = rotateResponseMessageId?.() ?? messageId;
         }
