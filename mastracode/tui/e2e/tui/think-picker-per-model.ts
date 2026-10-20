@@ -72,8 +72,14 @@ export const thinkPickerPerModelScenario = {
     await switchModel(terminal, runtime, 'xai', 'grok-4.5');
     const grok45Picker = await openThinkPicker(terminal, runtime);
     runtime.printScreen('/think on Grok 4.5', terminal);
-    assert.match(grok45Picker, /Deep reasoning/);
-    assert.doesNotMatch(grok45Picker, /Very High/);
+    assert.match(grok45Picker, /Very High\s+Maximum reasoning depth/);
+    await closeThinkPicker(terminal, runtime);
+
+    await switchModel(terminal, runtime, 'xai', 'grok-4.20-0309-reasoning');
+    const grok420Picker = await openThinkPicker(terminal, runtime);
+    runtime.printScreen('/think on Grok 4.20 without reasoning controls', terminal);
+    assert.match(grok420Picker, /none\s+Reasoning disabled/);
+    assert.doesNotMatch(grok420Picker, /Light reasoning|Balanced reasoning|Deep reasoning|Very High/);
     await closeThinkPicker(terminal, runtime);
 
     terminal.keyCtrlC();

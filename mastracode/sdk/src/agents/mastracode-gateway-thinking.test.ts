@@ -87,9 +87,12 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect((await requestBody(resolve('max', 'mistral', 'zai-glm-5-2'))).reasoning_effort).toBe('high');
   });
 
-  it('sends Extra high only to xAI models that list it', async () => {
-    expect((await requestBody(resolve('max', 'xai', 'grok-4.6'))).reasoning).toEqual({ effort: 'xhigh' });
-    expect((await requestBody(resolve('xhigh', 'xai', 'grok-4.5'))).reasoning).toEqual({ effort: 'high' });
+  it.each(['grok-4.5', 'grok-4.6'])('sends Extra high to xAI %s, which lists it', async modelId => {
+    expect((await requestBody(resolve('max', 'xai', modelId))).reasoning).toEqual({ effort: 'xhigh' });
+  });
+
+  it('leaves xAI models without reasoning controls untouched', async () => {
+    expect(await requestBody(resolve('xhigh', 'xai', 'grok-4.20-0309-reasoning'))).not.toHaveProperty('reasoning');
   });
 
   it.each([
