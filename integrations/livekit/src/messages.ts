@@ -49,11 +49,12 @@ function toVoiceTurnMessage(item: llm.ChatItem): VoiceTurnMessage | undefined {
  *
  * Two extensions over the naive "slice after the last assistant message":
  *
- * - **Interrupted-turn self-heal:** when the last assistant message was cut off by barge-in
- *   (`interrupted: true`), the server never persisted it — aborted runs skip persistence — so
- *   its heard-only text is missing from the thread. Re-send that fragment (ordered first) this
- *   turn to backfill it. It stops being "the last assistant message" once a full reply lands,
- *   so each interrupted fragment is sent exactly once, on the following turn.
+ * - **Interrupted-turn fragment:** when the last assistant message was cut off by barge-in
+ *   (`interrupted: true`), re-send its heard-only text (ordered first) this turn. The server
+ *   already saved the streamed partial reply on abort, and the memory input filter drops the
+ *   re-sent fragment on threads with history, so it isn't saved twice; on a thread with no
+ *   stored messages it seeds the transcript. It stops being "the last assistant message" once
+ *   a full reply lands, so each interrupted fragment is sent exactly once, on the following turn.
  * - **Instructions filter:** LiveKit injects the customer Agent's `instructions` as a
  *   leading `system` message ({@link LIVEKIT_INSTRUCTIONS_MESSAGE_ID}); the server-side Mastra
  *   agent owns its own system prompt, so drop it (it would otherwise ship on the first turn,

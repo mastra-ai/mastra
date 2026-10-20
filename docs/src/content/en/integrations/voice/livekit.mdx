@@ -219,7 +219,7 @@ When the resolved Mastra agent has memory configured, each call becomes one memo
 
 Each turn sends only the new user input; Mastra Memory supplies history, semantic recall, and working memory. Pin a session to an existing thread by passing `threadId` in the connection request body, which is useful for continuing a text conversation by voice. In Studio, starting a call from an open chat binds the call to that thread, and the transcript fills into the chat after each exchange.
 
-When a user interrupts the agent, the in-flight generation aborts and nothing from that turn is persisted at that moment. LiveKit keeps the part the user actually heard in its transcript, and on the next turn the worker re-sends that heard-only fragment so the thread backfills to match the call. A user who hangs up right after interrupting leaves that final fragment unrecorded. See [interrupted turns](#interrupted-turns) for the details and a reconciliation recipe.
+When a user interrupts the agent, the in-flight generation aborts and the server saves the partial reply it had streamed so far. On the next turn the worker re-sends the heard-only fragment LiveKit kept, and Mastra Memory drops it so the thread doesn't store it twice. See [interrupted turns](#interrupted-turns) for the details.
 
 #### Preemptive generation with memory
 
@@ -1371,36 +1371,11 @@ LiveKit injects your `voice.Agent`'s `instructions` into the chat context of eve
 
 When the user interrupts a reply:
 
-1. The plugin cancels the stream. The server aborts generation and persists nothing from that turn.
+1. The plugin cancels the stream. The server aborts generation and saves the partial reply it had streamed so far to the memory thread.
 1. LiveKit records the part the user actually heard in its chat context, flagged as interrupted.
-1. On the next turn, the plugin re-sends that heard-only fragment, ordered before the new user message, so the memory thread backfills to match the call. Messages carry LiveKit's message ids and the server deduplicates by id, so retries and re-sends stay idempotent.
+1. On the next turn, the plugin re-sends that heard-only fragment, ordered before the new user message. On a thread that already has history, Mastra Memory drops the re-sent fragment so the reply isn't saved twice.
 
-A user who hangs up immediately after interrupting leaves that final fragment unrecorded. When the transcript must capture it, reconcile immediately from the session event; the shared message id means the next turn's re-send upserts instead of duplicating:
-
-```typescript title="src/mastra/voice-worker-plugin.ts"
-import { voice } from '@livekit/agents'
-import { MastraClient } from '@mastra/client-js'
-
-const client = new MastraClient({ baseUrl: process.env.MASTRA_URL! })
-
-session.on(voice.AgentSessionEventTypes.ConversationItemAdded, ({ item }) => {
-  if (item.type !== 'message' || item.role !== 'assistant' || !item.interrupted) return
-  void client.saveMessageToMemory({
-    agentId: 'support',
-    messages: [
-      {
-        id: item.id,
-        threadId: callId,
-        resourceId: userId,
-        role: 'assistant',
-        content: item.textContent ?? '',
-        type: 'text',
-        createdAt: new Date(),
-      },
-    ],
-  })
-})
-```
+The saved reply is the text the server streamed, which can run slightly ahead of what the user heard before interrupting. A user who hangs up right after interrupting still leaves that partial reply in the thread.
 
 #### Usage metrics
 
