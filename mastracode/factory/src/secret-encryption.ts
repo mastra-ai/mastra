@@ -159,6 +159,12 @@ export function createPlaintextFactorySecretEncryption(): FactorySecretEncryptio
       if (value.startsWith(ENVELOPE_PREFIX)) {
         // Never hand an envelope back as the secret, and never let migration
         // rewrite it as plaintext JSON: that corrupts the row for keyed instances.
+        // A raw legacy secret can merely start with the prefix; keep those as-is.
+        try {
+          parseEnvelope(value);
+        } catch {
+          return { value: value as T, needsReencryption: true };
+        }
         throw new Error(
           '[FactorySecretEncryption] Value is encrypted, but this instance has no secret encryption key configured. ' +
             "Configure 'secretEncryption' with the same key on every Factory instance.",

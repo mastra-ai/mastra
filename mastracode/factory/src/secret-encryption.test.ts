@@ -133,6 +133,15 @@ describe('createPlaintextFactorySecretEncryption', () => {
       /no secret encryption key configured/,
     );
   });
+
+  it('keeps a raw legacy secret that only starts with the envelope prefix', async () => {
+    const lookalike = 'mastra:factory-secret:v1:not-a-real-envelope';
+
+    await expect(createPlaintextFactorySecretEncryption().decrypt(lookalike)).resolves.toEqual({
+      value: lookalike,
+      needsReencryption: true,
+    });
+  });
 });
 
 describe('createFactorySecretEncryption nested envelopes', () => {
