@@ -242,4 +242,69 @@ describe('client-js approveToolCall/declineToolCall with client tools (#27186)',
       expect(result.toolResults.filter(r => r.payload.toolName === 'clientTool')).toEqual([]);
     },
   );
+
+  it.each(['approveToolCallGenerate', 'declineToolCallGenerate'] as const)(
+    '%s keeps the memory thread on the client-tool continuation (#27754)',
+    async method => {
+      // An earlier exchange already on the thread, so recalled history holds assistant turns too.
+      llm.on({ endpoint: 'chat', userMessage: 'Earlier.' }, { content: 'Hi.' });
+      registerFixtures();
+      const { client, memory } = await setup({ withMemory: true });
+      if (!memory) throw new Error('setup did not create memory');
+      const threadMemory = { thread: 't1', resource: 'r1' };
+      const runs: string[] = [];
+      const clientTools = {
+        clientTool: createClientTool({
+          id: 'clientTool',
+          description: 'Client tool executed by the caller.',
+          inputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }) => {
+            runs.push(value);
+            return { echoed: value };
+          },
+        }),
+      };
+      const agent = client.getAgent('agent');
+      expect((await agent.generate('Earlier.', { memory: threadMemory })).text).toBe('Hi.');
+      const first = await collect(await agent.stream('Do the thing.', { clientTools, memory: threadMemory }));
+      const runId = first.find(c => c.type === 'tool-call-approval')?.runId;
+      if (!runId) throw new Error('stream did not suspend for approval');
+
+      const result = await agent[method]({ runId, toolCallId: 'call_server', clientTools, memory: threadMemory });
+
+      expect(runs).toEqual(['b']);
+      expect(result.text).toBe('All done.');
+
+      // The final model call sees the recalled conversation in order, each turn once.
+      const lastRequestMessages: { role: string; content: unknown; tool_call_id?: string }[] =
+        llm.getRequests().at(-1)?.body?.messages ?? [];
+      expect(lastRequestMessages.map(m => m.role)).toEqual([
+        'system',
+        'user',
+        'assistant',
+        'user',
+        'assistant',
+        'tool',
+        'assistant',
+        'tool',
+      ]);
+      expect(lastRequestMessages.filter(m => m.role === 'user').map(m => m.content)).toEqual([
+        'Earlier.',
+        'Do the thing.',
+      ]);
+      expect(lastRequestMessages.filter(m => m.role === 'tool').map(m => m.tool_call_id)).toEqual([
+        'call_server',
+        'call_client',
+      ]);
+
+      // The thread ends with the client tool result followed by the final answer.
+      const { messages } = await memory.recall({ threadId: 't1', resourceId: 'r1' });
+      const parts = messages.flatMap(m => m.content.parts ?? []);
+      const clientInvocation = parts
+        .filter(p => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === 'call_client')
+        .at(-1);
+      expect(clientInvocation).toMatchObject({ toolInvocation: { state: 'result', result: { echoed: 'b' } } });
+      expect(parts.at(-1)).toMatchObject({ type: 'text', text: 'All done.' });
+    },
+  );
 });

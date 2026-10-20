@@ -3462,9 +3462,14 @@ export class Agent extends BaseResource {
       /** Client tools the model may call after the approval decision. */
       clientTools?: ToolsInput;
       clientToolsResolver?: ClientToolsResolver;
+      /**
+       * Memory of the original call. When the model calls a client tool after the decision, the
+       * continuation is saved to this thread instead of running stateless.
+       */
+      memory?: StreamParamsBaseWithoutMessages['memory'];
     },
   ): Promise<ToolCallGenerateResponse> {
-    const { requestContext, clientTools, clientToolsResolver, ...rest } = params;
+    const { requestContext, clientTools, clientToolsResolver, memory, ...rest } = params;
     const response: ToolCallGenerateResponse = await this.request(
       `/agents/${this.agentId}/approve-tool-call-generate`,
       {
@@ -3476,7 +3481,7 @@ export class Agent extends BaseResource {
         },
       },
     );
-    return this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver });
+    return this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver, memory });
   }
 
   /**
@@ -3489,9 +3494,14 @@ export class Agent extends BaseResource {
       /** Client tools the model may call after the approval decision. */
       clientTools?: ToolsInput;
       clientToolsResolver?: ClientToolsResolver;
+      /**
+       * Memory of the original call. When the model calls a client tool after the decision, the
+       * continuation is saved to this thread instead of running stateless.
+       */
+      memory?: StreamParamsBaseWithoutMessages['memory'];
     },
   ): Promise<ToolCallGenerateResponse> {
-    const { requestContext, clientTools, clientToolsResolver, ...rest } = params;
+    const { requestContext, clientTools, clientToolsResolver, memory, ...rest } = params;
     const response: ToolCallGenerateResponse = await this.request(
       `/agents/${this.agentId}/decline-tool-call-generate`,
       {
@@ -3503,13 +3513,14 @@ export class Agent extends BaseResource {
         },
       },
     );
-    return this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver });
+    return this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver, memory });
   }
 
   /**
    * Runs executable client tools the model called after an approval decision and continues on
-   * /generate. The resumed run restored its conversation server-side, so the stateless
-   * continuation re-sends the original user turn alongside the resumed response messages.
+   * /generate, like generate() does. With memory the continuation sends only the new messages to the
+   * thread. Without memory it re-sends the conversation up to the last user turn, because the resume
+   * routes keep the earlier history server-side and drop it once the run finishes.
    */
   private async continueResumedGenerate(
     response: ToolCallGenerateResponse,
@@ -3517,10 +3528,12 @@ export class Agent extends BaseResource {
       requestContext,
       clientTools,
       clientToolsResolver,
+      memory,
     }: {
       requestContext?: RequestContext | Record<string, any>;
       clientTools?: ToolsInput;
       clientToolsResolver?: ClientToolsResolver;
+      memory?: StreamParamsBaseWithoutMessages['memory'];
     },
   ): Promise<ToolCallGenerateResponse> {
     if (response.finishReason !== 'tool-calls') return response;
@@ -3528,15 +3541,23 @@ export class Agent extends BaseResource {
       requestContext === undefined || requestContext instanceof RequestContext
         ? requestContext
         : new RequestContext<unknown>(Object.entries(requestContext));
+    const threadId = typeof memory?.thread === 'string' ? memory.thread : memory?.thread?.id;
+    const history = response.messages ?? [];
+    // response.messages is the whole run; the turns after the last user message are also in
+    // response.response.messages, which executeToolCallAndRespond appends.
+    const priorTurns = history.slice(0, history.findLastIndex(message => message.role === 'user') + 1);
     return executeToolCallAndRespond<undefined>({
       response,
       params: {
-        messages: (response.messages ?? []).filter(message => message.role === 'user'),
+        messages: threadId ? [] : priorTurns,
         clientTools: clientToolsResolver?.() ?? clientTools,
         clientToolsResolver,
         requestContext: context,
+        memory,
       },
       agentId: this.agentId,
+      resourceId: memory?.resource,
+      threadId,
       requestContext: context,
       respondFn: (messages, options) => this.generate(messages, options),
     });
