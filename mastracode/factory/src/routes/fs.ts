@@ -2,6 +2,7 @@ import { lstat, open, readdir, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, posix as posixPath, resolve, sep } from 'node:path';
 
+import { SETUP_MARKER_DIR } from '@internal/workspace';
 import { SandboxFilesystem } from '@mastra/code-sdk/agents/sandbox-filesystem';
 import { detectProject, getResourceIdOverride } from '@mastra/code-sdk/utils/project';
 import { registerApiRoute } from '@mastra/core/server';
@@ -605,8 +606,11 @@ export async function listSessionRenderedPath(
   return { workspacePath: session.sessionId, root: safeRoot, rootPath, entries };
 }
 
-/** Directory entries the file tree never shows or serves: a checkout's git internals. */
-const HIDDEN_TREE_ENTRIES = new Set(['.git']);
+/**
+ * Directory entries the file tree never shows or serves: git internals and the
+ * sandbox's own setup markers.
+ */
+const HIDDEN_TREE_ENTRIES = new Set(['.git', SETUP_MARKER_DIR]);
 
 /**
  * Where a tree path lives. Inside a checkout: that checkout and the path within

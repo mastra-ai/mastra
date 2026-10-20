@@ -431,6 +431,8 @@ describe('live session file tree', () => {
     await mkdir(join(parent, 'notes'));
     await writeFile(join(parent, 'notes', 'setup.log'), 'installed');
     await mkdir(join(parent, '.git'));
+    await mkdir(join(parent, '.mastra-sandbox'));
+    await writeFile(join(parent, '.mastra-sandbox', 'setup'), 'done');
 
     const top = await listSessionWorkspaceTree(makeSession());
     expect(top.entries).toEqual([
@@ -446,6 +448,8 @@ describe('live session file tree', () => {
     });
     expect(executeCommand.mock.calls.some(([, args]) => String(args?.[1]).includes('check-ignore'))).toBe(false);
     await expect(listSessionWorkspaceTree(makeSession(), '.git')).rejects.toThrow('not available');
+    await expect(listSessionWorkspaceTree(makeSession(), '.mastra-sandbox')).rejects.toThrow('not available');
+    await expect(readSessionWorkspaceFile(makeSession(), '.mastra-sandbox/setup')).rejects.toThrow('not available');
     expect(names(await listSessionWorkspaceTree(makeSession(), 'docs'))).toEqual([
       'd src',
       'f .gitignore',
