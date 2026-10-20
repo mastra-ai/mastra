@@ -527,6 +527,12 @@ type AgentThreadRuntimeState = {
    * if `activeThreadRunIds` is rotated by a follow-up signal.
    */
   leaseRenewalTimers: Map<string, ReturnType<typeof setInterval>>;
+  /**
+   * Per-run local lease deadline: one TTL after the last acquire or renewal
+   * this process sent and had confirmed. When it fires, the run can no longer
+   * prove it still holds the lease, so it is aborted.
+   */
+  leaseDeadlines: Map<string, { timer: ReturnType<typeof setTimeout>; confirmedSentAt: number }>;
   threadEventListeners: Set<ThreadEventListenerRegistration>;
   threadControlSubscriptions: Map<string, ThreadControlSubscription>;
   /**
@@ -724,6 +730,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     abortedRunIds: new Set(),
     startingQueuedRunIds: new Set(),
     leaseRenewalTimers: new Map(),
+    leaseDeadlines: new Map(),
     threadEventListeners: new Set(),
     threadControlSubscriptions: new Map(),
     runStreamReaders: new Map(),
@@ -848,12 +855,19 @@ export class AgentThreadStreamRuntime {
    * TTL/3 intervals while the run is still going. If the lease is lost
    * (e.g. expired due to clock skew or pubsub outage) the renewal stops
    * and the run is aborted, since a successor may already own the thread.
+   *
+   * A renewal that rejects or never settles proves nothing either way, so
+   * the run also keeps a local deadline one TTL after the send time of its
+   * last confirmed acquire or renewal. The backend's lease can't outlive
+   * that point, so once it passes a successor may own the thread and the
+   * run is aborted, even if the backend never answers.
    */
   #startLeaseRenewal(pubsub: PubSub, key: string, runId: string): void {
     const state = this.#getState(pubsub);
     if (state.leaseRenewalTimers.has(runId)) return;
     const leaseProvider = this.#getLeaseProvider(pubsub);
     const timer = setInterval(() => {
+      const sentAt = Date.now();
       state.pendingLeaseRenewals.set(runId, (state.pendingLeaseRenewals.get(runId) ?? 0) + 1);
       void leaseProvider
         .renewLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)
@@ -862,15 +876,16 @@ export class AgentThreadStreamRuntime {
             // Another process may already own the thread, so stop this run instead of letting it keep
             // calling the model and tools beside its successor.
             this.#stopLeaseRenewal(pubsub, runId, timer);
-            const preparedRun = state.preparedRunsById.get(runId);
-            if (preparedRun) preparedRun.abortController.abort(new AgentThreadLeaseLostError(runId));
-            // Durable runs own their controller outside the thread runtime.
-            else state.threadRunsById.get(runId)?.agent.abortRunStream(runId);
-          } else if (state.sweptLeasedRunIds.has(runId)) {
-            // A renewal in flight when the sweep stopped this timer still extended the lease.
-            state.sweptLeasedRunIds.set(runId, Date.now());
+            this.#abortLeaseLostRun(state, runId);
+          } else {
+            if (state.leaseRenewalTimers.get(runId) === timer) this.#armLeaseDeadline(pubsub, runId, sentAt);
+            if (state.sweptLeasedRunIds.has(runId)) {
+              // A renewal in flight when the sweep stopped this timer still extended the lease.
+              state.sweptLeasedRunIds.set(runId, Date.now());
+            }
           }
         })
+        // A failed renewal leaves the deadline in place: the run stops once the lease may have lapsed.
         .catch(() => {})
         // Stop counting the renewal only after the marker is refreshed, so nothing sees a stale marker in between.
         .finally(() => {
@@ -884,6 +899,35 @@ export class AgentThreadStreamRuntime {
       (timer as any).unref();
     }
     state.leaseRenewalTimers.set(runId, timer);
+    // The lease was acquired or transferred just before this call.
+    this.#armLeaseDeadline(pubsub, runId, Date.now());
+  }
+
+  #armLeaseDeadline(pubsub: PubSub, runId: string, confirmedSentAt: number): void {
+    const state = this.#getState(pubsub);
+    const previous = state.leaseDeadlines.get(runId);
+    // A slow renewal that settles after a newer one must not pull the deadline back.
+    if (previous && previous.confirmedSentAt >= confirmedSentAt) return;
+    if (previous) clearTimeout(previous.timer);
+    const timer = setTimeout(
+      () => {
+        if (state.leaseDeadlines.get(runId)?.timer !== timer) return;
+        this.#stopLeaseRenewal(pubsub, runId);
+        this.#abortLeaseLostRun(state, runId);
+      },
+      Math.max(0, confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS - Date.now()),
+    );
+    if (typeof timer === 'object' && timer && typeof (timer as any).unref === 'function') {
+      (timer as any).unref();
+    }
+    state.leaseDeadlines.set(runId, { timer, confirmedSentAt });
+  }
+
+  #abortLeaseLostRun(state: AgentThreadRuntimeState, runId: string): void {
+    const preparedRun = state.preparedRunsById.get(runId);
+    if (preparedRun) preparedRun.abortController.abort(new AgentThreadLeaseLostError(runId));
+    // Durable runs own their controller outside the thread runtime.
+    else state.threadRunsById.get(runId)?.agent.abortRunStream(runId);
   }
 
   /** Pass `only` to stop that timer alone, never one a later registration of the run started. */
@@ -893,6 +937,9 @@ export class AgentThreadStreamRuntime {
     if (!timer || (only && timer !== only)) return;
     clearInterval(timer);
     state.leaseRenewalTimers.delete(runId);
+    const deadline = state.leaseDeadlines.get(runId);
+    if (deadline) clearTimeout(deadline.timer);
+    state.leaseDeadlines.delete(runId);
   }
 
   /**
@@ -2975,6 +3022,8 @@ export class AgentThreadStreamRuntime {
     state.threadControlSubscriptions.clear();
     state.leaseRenewalTimers.forEach(timer => clearInterval(timer));
     state.leaseRenewalTimers.clear();
+    state.leaseDeadlines.forEach(({ timer }) => clearTimeout(timer));
+    state.leaseDeadlines.clear();
     state.threadRunsById.clear();
     state.threadRunsByStreamId.clear();
     state.threadKeysByRunId.clear();
