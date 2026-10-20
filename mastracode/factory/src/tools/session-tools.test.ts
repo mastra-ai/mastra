@@ -237,6 +237,7 @@ async function setup(
     getSessionByResource: async (resourceId: string) =>
       (await controller.getSessionByResource(resourceId)) ?? {
         thread: { getId: () => (resourceId === seeded.scope.sessionId ? seeded.scope.threadId : resourceId) },
+        stream: { isActive: () => false },
       },
     getCurrentAgent: () => ({
       sendNotificationSignal: async (

@@ -90,7 +90,33 @@ const RECONCILE_INTERVAL_MS = 30_000;
 class FactoryDecisionSuperseded extends Error {}
 
 /** A run that ran and ended in error; the session's own listener reports it to followers. */
-class RunEndedInError extends Error {}
+class RunEndedInError extends FactoryDispatchError {}
+
+// The Mastra Code credential resolver's own failure; free text that merely mentions credentials does not count.
+const CREDENTIAL_RESOLUTION_FAILURE = 'tenant model credential policy could not be resolved';
+
+function httpStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const { statusCode, status } = error as { statusCode?: unknown; status?: unknown };
+  if (typeof statusCode === 'number') return statusCode;
+  return typeof status === 'number' ? status : undefined;
+}
+
+/** Model credentials a person can fix: the resolver's own error, or a provider's structured 401/403. */
+function isCredentialFailure(error: unknown, message: string): boolean {
+  if (message.toLowerCase().includes(CREDENTIAL_RESOLUTION_FAILURE)) return true;
+  const status = httpStatus(error) ?? httpStatus((error as { cause?: unknown } | undefined)?.cause);
+  return status === 401 || status === 403;
+}
+
+function runErrorFailure(label: string, error: unknown): RunEndedInError {
+  const cause = (error instanceof Error ? error.message : String(error ?? '')).trim();
+  if (!cause) return new RunEndedInError('run_failed', `${label} ended in error.`);
+  return new RunEndedInError(
+    isCredentialFailure(error, cause) ? 'run_credentials_unavailable' : 'run_failed',
+    `${label} ended in error: ${cause}`,
+  );
+}
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
@@ -147,12 +173,15 @@ function watchRun(
   // reason — so without this the true cause (e.g. a provider rejecting the OM
   // model) is lost and the abort is retried blindly.
   let omFailure: string | undefined;
+  // The run's own error event precedes its `agent_end: 'error'` and is the only place the cause appears.
+  let runError: unknown;
   // Re-armed before a redelivery so the second send waits on its own run's
   // ending rather than seeing the one that already resolved.
   const arm = () => {
     endReason = undefined;
     supersededAtEnd = undefined;
     omFailure = undefined;
+    runError = undefined;
     agentEnd = new Promise<void>(resolve => {
       resolveAgentEnd = resolve;
     });
@@ -163,6 +192,10 @@ function watchRun(
       endReason = event.reason;
       supersededAtEnd = onAgentEnd?.();
       resolveAgentEnd();
+      return;
+    }
+    if (event.type === 'error') {
+      runError = event.error;
       return;
     }
     if (event.type === 'om_observation_failed' || event.type === 'om_buffering_failed') {
@@ -222,7 +255,7 @@ function watchRun(
           `${label} terminal event was not observed before timeout.`,
         );
       }
-      if (endReason === 'error') throw new RunEndedInError(`${label} ended in error.`);
+      if (endReason === 'error') throw runErrorFailure(label, runError);
       if (endReason === 'aborted') {
         // An abort that follows an observational-memory failure is not the
         // usual "process went away" case — the OM stream deliberately aborted
@@ -375,11 +408,43 @@ function positiveMs(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
+// Provider and source-control key prefixes; run errors carry provider text verbatim.
+const KEY_SHAPED_TOKEN =
+  /\b(?:sk-[A-Za-z0-9_-]{3,}|gh[pousr]_[A-Za-z0-9]{10,}|github_pat_[A-Za-z0-9_]{10,}|xox[abprs]-[A-Za-z0-9-]{10,})/g;
+
+// Mixed-case alphanumeric runs read as keys; lowercase hex SHAs, UUIDs, path segments and
+// hyphenated names such as branches stay readable.
+function looksLikeSecret(token: string): boolean {
+  return /[A-Z]/.test(token) && /[a-z]/.test(token) && /\d/.test(token) && /[A-Za-z0-9]{16,}/.test(token);
+}
+
+// Base64 keys can contain `/`. A `/`-joined token is redacted whole unless one of its pieces is a
+// plain word, which paths and branches nearly always have (`fix`, `cache`, `Users`, `Documents`);
+// those are redacted piece by piece instead.
+function redactSecretRun(token: string): string {
+  if (looksLikeSecret(token) && !token.split('/').some(piece => /^[A-Za-z][a-z]+$/.test(piece))) return '[redacted]';
+  return token.replace(/[A-Za-z0-9_+=-]{24,}/g, piece =>
+    looksLikeSecret(piece) || isGroupedKey(piece) ? '[redacted]' : piece,
+  );
+}
+
+// Keys printed in `-`/`_` groups (`x7Kp9-Qm2Rt-…`) have no long unbroken run, but every group mixes
+// upper, lower and digits; branch and identifier words such as `Parked-snapshot-lease2-loss` do not.
+function isGroupedKey(token: string): boolean {
+  const groups = token.split(/[-_]/);
+  return groups.length >= 4 && groups.every(group => /[A-Z]/.test(group) && /[a-z]/.test(group) && /\d/.test(group));
+}
+
 function sanitizeDispatchError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  return message
-    .replace(/\b(?:bearer|token|api[-_ ]?key|authorization)\s*[:=]?\s*[^\s,;]+/gi, '[redacted]')
-    .slice(0, MAX_ERROR_LENGTH);
+  return (
+    message
+      .replace(KEY_SHAPED_TOKEN, '[redacted]')
+      .replace(/\b[A-Za-z0-9_+=/-]{24,}/g, redactSecretRun)
+      // `Authorization: Bearer <value>` names the scheme first; consume it so the value goes too.
+      .replace(/\b(?:bearer|token|api[-_ ]?key|authorization)\s*[:=]?\s*(?:bearer\s+)?[^\s,;]+/gi, '[redacted]')
+      .slice(0, MAX_ERROR_LENGTH)
+  );
 }
 
 function retryAt(now: Date, attempts: number): Date {

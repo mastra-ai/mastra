@@ -1352,6 +1352,10 @@ export class MastraFactory {
                       const session = await this.#prepared?.base.controller.getSessionByResource(sessionId);
                       return session?.stream.isActive() ?? false;
                     },
+                    lastActivity: async threadId => {
+                      const thread = await this.#prepared?.base.controller.queryThreadById({ threadId });
+                      return thread?.updatedAt ? new Date(thread.updatedAt) : null;
+                    },
                     notifications: async () => (await factoryMessaging())?.notifications ?? null,
                   }),
                 ]
