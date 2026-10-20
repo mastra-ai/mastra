@@ -303,15 +303,12 @@ export interface GithubRulesOptions {
 /** Identity under which label-driven relocations are recorded. */
 const LABEL_ROUTE_USER_ID = 'factory-rule-dispatcher';
 
-function issueLabelChange(parsed: ParsedGithubWebhook): boolean {
-  const action = string(parsed.payload.action);
-  return parsed.event === 'issues' && (action === 'labeled' || action === 'unlabeled');
-}
-
-function issueAssigneeChange(parsed: ParsedGithubWebhook): boolean {
-  const action = string(parsed.payload.action);
-  return parsed.event === 'issues' && (action === 'assigned' || action === 'unassigned');
-}
+type IssueActionHandler = (
+  parsed: ParsedGithubWebhook,
+  repositoryId: number,
+  repositoryName: string,
+  project: ExternalRepositoryProjectTarget,
+) => Promise<{ status: 'ignored' | 'committed' }>;
 
 /**
  * Whether a login is Factory itself. Prefers the resolved identity, which is
@@ -497,10 +494,23 @@ export class GithubRules {
     }
   }
 
+  /** `issues` actions that are not rule events but still update an existing card. */
+  #issueActionHandler(parsed: ParsedGithubWebhook): IssueActionHandler | undefined {
+    if (parsed.event !== 'issues') return undefined;
+    switch (string(parsed.payload.action)) {
+      case 'labeled':
+      case 'unlabeled':
+        return (...args) => this.#relocateLabeledIssue(...args);
+      case 'assigned':
+      case 'unassigned':
+        return (...args) => this.#syncIssueAssignees(...args);
+      default:
+        return undefined;
+    }
+  }
+
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
-    const labelChange = issueLabelChange(parsed);
-    const assigneeChange = issueAssigneeChange(parsed);
     const repository = object(parsed.payload.repository);
     const installationId = number(object(parsed.payload.installation)?.id);
     const repositoryId = number(repository?.id);
@@ -510,9 +520,15 @@ export class GithubRules {
       await this.#handOffPush(parsed, installationId, repositoryId);
       return { status: 'ignored' };
     }
-    if ((!event && !labelChange && !assigneeChange) || !installationId || !repositoryId || !repositoryName || !login) {
-      return { status: 'ignored' };
-    }
+    if (!installationId || !repositoryId || !repositoryName || !login) return { status: 'ignored' };
+    const issueAction = this.#issueActionHandler(parsed);
+    const handle = event
+      ? (project: ExternalRepositoryProjectTarget) =>
+          this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project)
+      : issueAction
+        ? (project: ExternalRepositoryProjectTarget) => issueAction(parsed, repositoryId, repositoryName, project)
+        : undefined;
+    if (!handle) return { status: 'ignored' };
 
     const projects = await this.options.sourceControl.projectRepositories.listByExternalRepository({
       installationExternalId: String(installationId),
@@ -521,13 +537,7 @@ export class GithubRules {
     if (projects.length === 0) return { status: 'ignored' };
     const results = [];
     for (const project of projects) {
-      results.push(
-        event
-          ? await this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project)
-          : labelChange
-            ? await this.#relocateLabeledIssue(parsed, repositoryId, repositoryName, project)
-            : await this.#syncIssueAssignees(parsed, repositoryId, repositoryName, project),
-      );
+      results.push(await handle(project));
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
