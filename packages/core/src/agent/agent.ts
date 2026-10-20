@@ -9794,9 +9794,9 @@ export class Agent<
    * An aborted suspended run can never be resumed, so drop its workflow
    * registration and snapshot rows; otherwise it stays listed as suspended.
    */
-  async #deleteAbortedSuspendedRun(runId: string): Promise<void> {
-    const mastra = this.#mastra;
-    if (!mastra) return;
+  async #deleteAbortedSuspendedRun(runId: string): Promise<boolean> {
+    const mastra = this.#mastra ?? this.#ephemeralMastra;
+    if (!mastra) return true;
     const runtimeLoopWorkflowName = (
       this.#threadRuntimeAgent as Partial<Pick<DurableAgentLike, 'durableLoopWorkflowName'>> | undefined
     )?.durableLoopWorkflowName;
@@ -9813,8 +9813,10 @@ export class Agent<
       await Promise.all(
         [...workflowNames].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
       );
+      return true;
     } catch (error) {
       this.logger.warn(`Failed to delete snapshot of aborted suspended run ${runId}`, { runId, error });
+      return false;
     }
   }
 
@@ -10299,6 +10301,7 @@ export class Agent<
     const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
       { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
+      () => this.#deleteAbortedSuspendedRun(mergedOptions.runId!),
     );
 
     const executeOptions = {
@@ -10688,6 +10691,7 @@ export class Agent<
       preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
         { ...loopStreamOptions, actor } as unknown as AgentExecutionOptions<OUTPUT>,
         threadStreamPubSub,
+        () => this.#deleteAbortedSuspendedRun(runId),
       );
 
       const result = await this.#execute({
