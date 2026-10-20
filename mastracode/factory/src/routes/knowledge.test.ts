@@ -2184,4 +2184,356 @@ describe('KnowledgeRoutes', () => {
     });
     expect(trigger.status).toBe(403);
   });
+
+  describe('structured record links', () => {
+    async function addressed(
+      h: Harness,
+      name: string,
+      metadata: { address?: string; addressAliases?: unknown } = {},
+      scope: KnowledgeAddressScope = h.projectScope,
+    ): Promise<KnowledgeNode> {
+      const scopeIds = await scopePathIds(h.knowledge, scope);
+      return h.knowledge.createNode({
+        name,
+        kind: 'doc',
+        scopeIds: [scopeIds.at(-1)!],
+        contextScopeId: scopeIds.at(-1),
+        metadata,
+      });
+    }
+    const linked = (h: Harness, owner: KnowledgeNode, text: string, links: unknown[]) =>
+      record(h.knowledge, owner, text, h.projectScope, 't-1', { links });
+    const nodeIdsOf = (body: KnowledgeGraphPayload, recordId: string) =>
+      body.records.find(entry => entry.id === recordId)?.nodeIds;
+    /** Project-scope lens: project nodes are the window, org nodes stay resolvable but out of it. */
+    const projectLens = async (h: Harness) =>
+      `?scopeNodeId=${(await scopePathIds(h.knowledge, h.projectScope)).at(-1)!}`;
+
+    // 1
+    it('adds an in-window node named by a link address to the record nodeIds without an edge', async () => {
+      const h = await createHarness();
+      const owner = await addressed(h, 'Issue Owner', { address: 'linear:issue:1' });
+      const target = await addressed(h, 'Linked Doc', { address: 'notion:page:9' });
+      const fact = await linked(h, owner, 'Issue body.', [{ address: 'notion:page:9', rel: 'relates' }]);
+
+      const { body } = await graph(h);
+      expect(nodeIdsOf(body, fact.id)).toEqual([owner.id, target.id]);
+      expect(body.edges).toEqual([]);
+    });
+
+    // 2
+    it('resolves a link address through addressAliases', async () => {
+      const h = await createHarness();
+      const owner = await addressed(h, 'Issue Owner', { address: 'linear:issue:1' });
+      const target = await addressed(h, 'Linked Doc', { address: 'notion:page:9', addressAliases: ['notion:alias:9'] });
+      const fact = await linked(h, owner, 'Issue body.', [{ address: 'notion:alias:9' }]);
+
+      const { body } = await graph(h);
+      expect(nodeIdsOf(body, fact.id)).toEqual([owner.id, target.id]);
+      expect(body.edges).toEqual([]);
+    });
+
+    // 3
+    it('resolves name-only links through the shared resolver, after text wikilinks spend the fallback budget', async () => {
+      const seed = async (maxFallbackLookups: number) => {
+        const h = await createHarness({ limits: { maxFallbackLookups } });
+        const owner = await addressed(h, 'Issue Owner');
+        const textTarget = await addressed(h, 'Org One', {}, h.orgScope);
+        const nameTarget = await addressed(h, 'Org Two', {}, h.orgScope);
+        const fact = await linked(h, owner, 'See [[Org One]].', [{ name: 'Org Two' }]);
+        return { body: (await graph(h, await projectLens(h))).body, owner, textTarget, nameTarget, fact };
+      };
+
+      const capped = await seed(1);
+      expect(nodeIdsOf(capped.body, capped.fact.id)).toEqual([capped.owner.id, capped.textTarget.id]);
+      expect(capped.body.unresolvedCapped).toEqual({ count: 1, names: ['Org Two'] });
+
+      const open = await seed(2);
+      expect(open.body.unresolvedCapped).toEqual({ count: 0, names: [] });
+      expect(nodeIdsOf(open.body, open.fact.id)).toEqual([open.owner.id, open.textTarget.id, open.nameTarget.id]);
+    });
+
+    // 4
+    it('requires every present selector to resolve to the same single node', async () => {
+      const h = await createHarness();
+      const owner = await addressed(h, 'Issue Owner');
+      const one = await addressed(h, 'Target One', { address: 'p:1' });
+      await addressed(h, 'Target Two', { address: 'p:2', addressAliases: ['p:shared'] });
+      await addressed(h, 'Target Three', { address: 'p:shared' });
+      const skipped = {
+        unresolvedAddress: await linked(h, owner, 'a', [{ address: 'p:missing', name: 'Target One' }]),
+        ambiguousAddress: await linked(h, owner, 'b', [{ address: 'p:shared', name: 'Target Two' }]),
+        unresolvedName: await linked(h, owner, 'c', [{ address: 'p:1', name: 'No Such Target' }]),
+        aliasCollision: await linked(h, owner, 'd', [{ address: 'p:shared' }]),
+        disagreement: await linked(h, owner, 'e', [{ address: 'p:1', name: 'Target Two' }]),
+      };
+      const agreement = await linked(h, owner, 'f', [{ address: 'p:1', name: 'target one' }]);
+
+      const { body } = await graph(h);
+      for (const fact of Object.values(skipped)) expect(nodeIdsOf(body, fact.id)).toEqual([owner.id]);
+      expect(nodeIdsOf(body, agreement.id)).toEqual([owner.id, one.id]);
+    });
+
+    // 5
+    it('skips malformed, dangling, ambiguous, inaccessible, out-of-scope and self links', async () => {
+      const h = await createHarness();
+      const owner = await addressed(h, 'Issue Owner', { address: 'p:owner' });
+      const peer = await addressed(h, 'Peer', { address: 'p:peer', addressAliases: ['p:shared'] });
+      const twin = await addressed(h, 'Twin', { address: 'p:shared' });
+      await addressed(h, 'Foreign Doc', { address: 'p:foreign' }, [
+        `org:${ORG}`,
+        'project:00000000-0000-4000-8000-000000000099',
+      ]);
+      await addressed(h, 'Hidden Note', { address: 'p:hidden' }, h.threadScope('t-hidden'));
+      const fact = await linked(h, owner, 'Body.', [
+        'p:peer',
+        null,
+        ['p:peer'],
+        {},
+        { address: '' },
+        { address: 42 },
+        { name: '   ' },
+        { address: 'p:peer', name: 7 },
+        { address: 'p:missing' },
+        { name: 'Missing Name' },
+        { address: 'p:shared' },
+        { address: 'p:foreign' },
+        { name: 'Foreign Doc' },
+        { address: 'p:hidden' },
+        { name: 'Hidden Note' },
+        { address: 'p:owner' },
+        { name: 'Issue Owner' },
+      ]);
+
+      const { body } = await graph(h);
+      expect(nodeIdsOf(body, fact.id)).toEqual([owner.id]);
+      expect(body.nodes.map(node => node.id).sort()).toEqual([owner.id, peer.id, twin.id].sort());
+      expect(body.outOfWindow).toEqual([]);
+      expect(body.edges).toEqual([]);
+    });
+
+    // 6
+    it('lists a target named by both a text wikilink and a structured link once', async () => {
+      const h = await createHarness();
+      const owner = await addressed(h, 'Issue Owner');
+      const target = await addressed(h, 'Linked Doc', { address: 'p:doc' });
+      const fact = await linked(h, owner, 'See [[Linked Doc]].', [{ address: 'p:doc' }, { name: 'Linked Doc' }]);
+
+      const { body } = await graph(h);
+      expect(nodeIdsOf(body, fact.id)).toEqual([owner.id, target.id]);
+    });
+
+    // 7
+    it('never promotes an out-of-window address target, while a name-only target becomes a boundary node', async () => {
+      const h = await createHarness();
+      const owner = await addressed(h, 'Issue Owner');
+      const outside = await addressed(h, 'Org Doc', { address: 'o:doc', addressAliases: ['o:alias'] }, h.orgScope);
+      const byAddress = await linked(h, owner, 'by address', [{ address: 'o:doc' }, { address: 'o:alias' }]);
+      const lens = await projectLens(h);
+
+      const before = (await graph(h, lens)).body;
+      expect(nodeIdsOf(before, byAddress.id)).toEqual([owner.id]);
+      expect(before.outOfWindow).toEqual([]);
+      expect(before.nodes.some(node => node.id === outside.id)).toBe(false);
+
+      const byName = await linked(h, owner, 'by name', [{ name: 'Org Doc' }]);
+      const after = (await graph(h, lens)).body;
+      expect(nodeIdsOf(after, byAddress.id)).toEqual([owner.id]);
+      expect(after.outOfWindow).toEqual([{ id: outside.id, name: 'Org Doc', scope: h.orgScope, rung: 'org' }]);
+      expect(nodeIdsOf(after, byName.id)).toEqual([owner.id, outside.id]);
+    });
+
+    // 8
+    it('keeps pinned records to in-window targets without changing caps or pin edges', async () => {
+      const h = await createHarness({ limits: { maxNodes: 3 } });
+      // Distinct clock ticks make the bounded window deterministic: the overflow nodes are oldest.
+      let tick = Date.parse('2026-10-20T00:00:00.000Z');
+      vi.useFakeTimers({ toFake: ['Date'], now: tick });
+      const step = () => vi.setSystemTime((tick += 1000));
+      try {
+        await addressed(h, 'Overflow One');
+        step();
+        await addressed(h, 'Overflow Two');
+        step();
+        const pinned = await node(h.knowledge, 'pinned', h.projectScope, 'system');
+        step();
+        const deploy = await addressed(h, 'Deploy Runbook', { address: 'p:deploy' });
+        step();
+        const train = await addressed(h, 'Release Train', { address: 'p:train' });
+        step();
+        await addressed(h, 'Org Doc', { address: 'o:doc' }, h.orgScope);
+        step();
+        const pin = await record(h.knowledge, pinned, 'Always check [[Deploy Runbook]].', h.projectScope, 't-1', {
+          links: [{ address: 'p:train' }, { address: 'o:doc' }, { name: 'Org Doc' }],
+        });
+        const lens = await projectLens(h);
+
+        const { body } = await graph(h, lens);
+        expect(body.truncated).toBe(true);
+        expect(body.nodes.map(node => node.name)).toEqual(expect.arrayContaining(['Deploy Runbook', 'Release Train']));
+        expect(body.records.find(entry => entry.id === pin.id)).toMatchObject({
+          nodeIds: [deploy.id, train.id],
+          pinned: true,
+        });
+        expect(body.nodes.find(node => node.id === deploy.id)?.pinned).toBe(true);
+        expect(body.nodes.find(node => node.id === train.id)?.pinned).toBe(false);
+        expect(body.edges.filter(edge => edge.type !== 'contains')).toEqual([]);
+        expect(body.outOfWindow).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // 9
+    it('keeps rel in record metadata and out of the graph payload', async () => {
+      const h = await createHarness();
+      const owner = await addressed(h, 'Issue Owner');
+      await addressed(h, 'Linked Doc', { address: 'p:doc' });
+      const fact = await linked(h, owner, 'Body.', [{ address: 'p:doc', rel: 'blocked-by-structured-rel' }]);
+
+      const { body } = await graph(h);
+      expect(JSON.stringify(body)).not.toContain('blocked-by-structured-rel');
+      const detail = await nodeDetail(h, owner.id);
+      expect(detail.body.records.find(entry => entry.id === fact.id)?.metadata).toMatchObject({
+        links: [{ address: 'p:doc', rel: 'blocked-by-structured-rel' }],
+      });
+    });
+
+    // 10
+    it('changes the payload only by the resolved structured targets and their name-only boundary nodes', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-20T00:00:00.000Z') });
+      try {
+        const seed = async (withLinks: boolean) => {
+          const h = await createHarness({ limits: { maxNodes: 6, maxFallbackLookups: 10 } });
+          const owner = await addressed(h, 'Alpha Owner', { address: 'p:alpha' });
+          const beta = await addressed(h, 'Beta Doc', { address: 'p:beta', addressAliases: ['p:beta-old'] });
+          const gamma = await addressed(h, 'Gamma Doc', { address: 'p:gamma' });
+          await addressed(h, 'Delta Doc');
+          const orgDoc = await addressed(h, 'Org Doc', { address: 'o:doc' }, h.orgScope);
+          await addressed(h, 'Org Extra', {}, h.orgScope);
+          const pinned = await node(h.knowledge, 'pinned', h.projectScope, 'system');
+          const meta = (links: unknown[]) => (withLinks ? { links } : {});
+          const facts = {
+            plain: await record(h.knowledge, owner, 'Plain fact.', h.projectScope, 't-1'),
+            dupes: await record(
+              h.knowledge,
+              owner,
+              'Twice [[Beta Doc]] and [[beta doc]] then [[Org Extra]] and [[Nowhere]].',
+              h.projectScope,
+              't-1',
+              meta([{ name: 'Org Doc' }, { address: 'p:gamma' }, { address: 'p:beta-old' }, { address: 'o:doc' }]),
+            ),
+            shuffled: await record(
+              h.knowledge,
+              beta,
+              'Beta notes.',
+              h.projectScope,
+              't-1',
+              meta([{ address: 'p:gamma' }, { name: 'Org Doc' }, { address: 'p:alpha', name: 'Alpha Owner' }]),
+            ),
+            pin: await record(
+              h.knowledge,
+              pinned,
+              'Pinned [[Gamma Doc]] and [[Delta Doc]].',
+              h.projectScope,
+              't-1',
+              meta([{ address: 'p:beta' }, { name: 'Org Doc' }]),
+            ),
+          };
+          const body = (await graph(h, await projectLens(h))).body;
+          return { h, body, owner, beta, gamma, orgDoc, facts };
+        };
+        const canonical = async (h: Harness, payload: unknown) => {
+          let json = JSON.stringify(payload).replaceAll(h.projectId, 'PROJECT');
+          // Node uuids and record ulids differ per harness; compare by name/text (scope nodes by kind).
+          const ids = json.match(
+            /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\b[0-9A-HJKMNP-TV-Z]{26}\b/g,
+          );
+          for (const id of new Set(ids)) {
+            const found = await h.knowledge.getNode(id);
+            const fact = found ? null : await h.knowledge.getRecord({ id });
+            const label = found ? (found.isScope ? 'scope' : found.name) : null;
+            json = json.replaceAll(id, label ? `node:${label}` : fact ? `record:${fact.text}` : 'opaque');
+          }
+          const value = JSON.parse(json) as KnowledgeGraphPayload;
+          const sorted = <T>(list: T[]) => [...list].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+          return { ...value, records: sorted(value.records), edges: sorted(value.edges), nodes: sorted(value.nodes) };
+        };
+
+        const base = await seed(false);
+        const next = await seed(true);
+        const byText = (shape: typeof next, id: string) => nodeIdsOf(shape.body, id);
+        const sortedIds = (...ids: string[]) => [...ids].sort();
+        const orgExtra = next.body.outOfWindow.find(entry => entry.name === 'Org Extra')!.id;
+        // Recording a wikilink materializes its target, so [[Nowhere]] is a real in-window node.
+        const nowhere = next.body.nodes.find(entry => entry.name === 'Nowhere')!.id;
+        expect(byText(next, next.facts.dupes.id)).toEqual([
+          next.owner.id,
+          next.beta.id,
+          orgExtra,
+          nowhere,
+          ...sortedIds(next.gamma.id, next.orgDoc.id),
+        ]);
+        expect(byText(next, next.facts.shuffled.id)).toEqual([
+          next.beta.id,
+          ...sortedIds(next.gamma.id, next.orgDoc.id, next.owner.id),
+        ]);
+        expect(byText(next, next.facts.pin.id)!.slice(-1)).toEqual([next.beta.id]);
+
+        const expectedDelta = new Map<string, string[]>([
+          [next.facts.dupes.id, [next.gamma.id, next.orgDoc.id]],
+          [next.facts.shuffled.id, [next.gamma.id, next.orgDoc.id, next.owner.id]],
+          [next.facts.pin.id, [next.beta.id]],
+        ]);
+        const boundaryDelta = [next.orgDoc.id];
+        const stripped: KnowledgeGraphPayload = {
+          ...next.body,
+          records: next.body.records.map(entry => ({
+            ...entry,
+            nodeIds: entry.nodeIds.filter(id => !(expectedDelta.get(entry.id) ?? []).includes(id)),
+          })),
+          outOfWindow: next.body.outOfWindow.filter(entry => !boundaryDelta.includes(entry.id)),
+        };
+        expect(next.body.outOfWindow.map(entry => entry.id)).toContain(next.orgDoc.id);
+        expect(base.body.outOfWindow.map(entry => entry.id)).not.toContain(base.orgDoc.id);
+        expect(await canonical(next.h, stripped)).toEqual(await canonical(base.h, base.body));
+        expect(next.body.edges.length).toBe(base.body.edges.length);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // 11
+    it('mints no target from neutralized importer wikilink text', async () => {
+      const h = await createHarness();
+      const owner = await addressed(h, 'Issue Owner');
+      await addressed(h, 'Linked Doc', { address: 'p:doc' });
+      const fact = await linked(h, owner, 'Provider text ［［Linked Doc］］ stays text.', []);
+
+      const { body } = await graph(h);
+      expect(nodeIdsOf(body, fact.id)).toEqual([owner.id]);
+      expect(body.edges).toEqual([]);
+    });
+
+    // 12
+    it('lets a pinned record spend only the fallback budget its text wikilinks left over', async () => {
+      const h = await createHarness({ limits: { maxFallbackLookups: 3 } });
+      const inA = await addressed(h, 'In Window A');
+      const inB = await addressed(h, 'In Window B');
+      await addressed(h, 'Org One', {}, h.orgScope);
+      await addressed(h, 'Org Two', {}, h.orgScope);
+      await addressed(h, 'Org Three', {}, h.orgScope);
+      const pinned = await node(h.knowledge, 'pinned', h.projectScope, 'system');
+      const pin = await record(h.knowledge, pinned, 'Pin [[In Window A]] and [[Org One]].', h.projectScope, 't-1', {
+        links: [{ name: 'In Window B' }, { name: 'Org Two' }, { name: 'Org Three' }],
+      });
+
+      const { body } = await graph(h, await projectLens(h));
+      expect(body.nodes.find(node => node.id === inA.id)?.pinned).toBe(true);
+      // Every distinct name costs one lookup: text spends two, structured names get the one left.
+      expect(body.unresolvedCapped).toEqual({ count: 2, names: ['Org Three', 'Org Two'] });
+      expect(body.edges.filter(edge => edge.type !== 'contains')).toEqual([]);
+      expect(body.records.find(entry => entry.id === pin.id)?.nodeIds).toEqual([inA.id, inB.id]);
+    });
+  });
 });

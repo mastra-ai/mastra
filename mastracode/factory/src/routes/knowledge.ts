@@ -467,6 +467,88 @@ function boundedDate(value: string | undefined): Date | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
+/**
+ * Factory-viewer convention for importer records (provider-neutral): a content
+ * node may carry `metadata.address` and `metadata.addressAliases` (strings), and
+ * a record may carry `metadata.links: Array<{ address?, name?, rel? }>`. The
+ * subgraph resolves each link into the record's existing `nodeIds` only when
+ * every present selector names the same accessible node: `address` matches only
+ * nodes already in the bounded window (never promoting a boundary node), `name`
+ * goes through the same {@link WikilinkResolver} and fallback budget as text
+ * wikilinks. Links never become payload edges; `rel` is reserved for a later
+ * typed contract and is not read here.
+ */
+interface RecordLinkSelector {
+  address?: string;
+  name?: string;
+}
+
+function trimmedString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function recordLinkSelectors(metadata: Record<string, unknown> | undefined): RecordLinkSelector[] {
+  const links = metadata?.links;
+  if (!Array.isArray(links)) return [];
+  const selectors: RecordLinkSelector[] = [];
+  for (const link of links) {
+    if (!link || typeof link !== 'object' || Array.isArray(link)) continue;
+    const entry = link as Record<string, unknown>;
+    const address = trimmedString(entry.address);
+    const name = trimmedString(entry.name);
+    if ((entry.address !== undefined && !address) || (entry.name !== undefined && !name)) continue;
+    if (!address && !name) continue;
+    selectors.push({ ...(address ? { address } : {}), ...(name ? { name } : {}) });
+  }
+  // Resolve in a stable order so the shared fallback budget is spent the same
+  // way however the provider ordered its links.
+  return selectors.sort(
+    (a, b) => (a.address ?? '').localeCompare(b.address ?? '') || (a.name ?? '').localeCompare(b.name ?? ''),
+  );
+}
+
+/** Address/alias → in-window node ids; a string naming more than one node is ambiguous. */
+function recordLinkAddressIndex(nodes: KnowledgeNode[]): Map<string, Set<string>> {
+  const index = new Map<string, Set<string>>();
+  const add = (value: unknown, nodeId: string) => {
+    const key = trimmedString(value);
+    if (!key) return;
+    const ids = index.get(key) ?? new Set<string>();
+    ids.add(nodeId);
+    index.set(key, ids);
+  };
+  for (const node of nodes) {
+    add(node.metadata?.address, node.id);
+    const aliases = node.metadata?.addressAliases;
+    if (Array.isArray(aliases)) for (const alias of aliases) add(alias, node.id);
+  }
+  return index;
+}
+
+async function resolveRecordLink(
+  link: RecordLinkSelector,
+  addressIndex: Map<string, Set<string>>,
+  windowNodes: Map<string, KnowledgeNode>,
+  resolver: WikilinkResolver,
+  scopeIds: KnowledgeScopeIds,
+): Promise<KnowledgeNode | null> {
+  let byAddress: KnowledgeNode | undefined;
+  if (link.address) {
+    const ids = addressIndex.get(link.address);
+    if (!ids || ids.size !== 1) return null;
+    byAddress = windowNodes.get([...ids][0]!);
+    if (!byAddress) return null;
+  }
+  if (link.name) {
+    const byName = await resolver.resolve(link.name, scopeIds);
+    if (!byName || (byAddress && byName.id !== byAddress.id)) return null;
+    return byName;
+  }
+  return byAddress ?? null;
+}
+
 class WikilinkResolver {
   readonly #inWindow = new Map<string, KnowledgeNode>();
   readonly #windowIds = new Set<string>();
@@ -1491,6 +1573,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             : [];
           const records: KnowledgeGraphRecord[] = [];
           const boundaryNodes = new Map<string, KnowledgeNode>();
+          const linkedRecords: Array<{ record: KnowledgeRecord; payload: KnowledgeGraphRecord; pinned: boolean }> = [];
           const edgeSeen = new Set<string>();
           const recordCounts = new Map<string, number>();
           for (const record of recordWindow) {
@@ -1516,6 +1599,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               });
             }
             records.push({ id: record.id, nodeIds, pinned: false, text: record.text });
+            linkedRecords.push({ record, payload: records[records.length - 1]!, pinned: false });
           }
           const pinnedRecords = await this.#pinnedRecords(selectedView, pinnedNodeIds);
           const accented = new Set<string>();
@@ -1527,6 +1611,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             }
             if (targets.length === 1) accented.add(targets[0]!);
             records.push({ id: record.id, nodeIds: targets, pinned: true, text: record.text });
+            linkedRecords.push({ record, payload: records[records.length - 1]!, pinned: true });
             for (let a = 0; a < targets.length; a++) {
               for (let b = a + 1; b < targets.length; b++) {
                 const key = `${targets[a]}\u0000${targets[b]}\u0000pin`;
@@ -1541,6 +1626,25 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                   pinned: true,
                 });
               }
+            }
+          }
+          // Structured links resolve only after every text wikilink, so text targets,
+          // their order and their share of the fallback budget match a link-free graph.
+          const windowNodes = new Map(contentNodes.map(node => [node.id, node]));
+          const addressIndex = recordLinkAddressIndex(contentNodes);
+          for (const { record, payload, pinned } of linkedRecords) {
+            const targets = new Set<string>();
+            for (const link of recordLinkSelectors(record.metadata)) {
+              const target = await resolveRecordLink(link, addressIndex, windowNodes, resolver, resolutionScopeIds);
+              if (!target || target.id === record.nodeId) continue;
+              if (!resolver.inWindowId(target.id)) {
+                if (pinned) continue;
+                boundaryNodes.set(target.id, target);
+              }
+              targets.add(target.id);
+            }
+            for (const id of [...targets].sort()) {
+              if (!payload.nodeIds.includes(id)) payload.nodeIds.push(id);
             }
           }
           const memberScopeIds = await Promise.all(
