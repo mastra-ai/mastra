@@ -634,24 +634,142 @@ function treeLocation(
 }
 
 /**
- * The checkout-relative paths git ignores, in one `git check-ignore` call.
- * Ignored files (`.env`, build output, `node_modules`) are neither listed nor
- * served: viewers of a session shouldn't read its local secrets. Fails closed
- * when git can't answer.
+ * Resolves each path to where it really is (its folder's physical location
+ * and, for a symlink, its target), then asks each checkout's git which of those
+ * locations it ignores. Paths go in as positional arguments, never into the
+ * script text, and every record comes back NUL-separated, so no filename needs
+ * quoting. Output: one `R` record per path (`R, path, where, target`, each
+ * place as `<repo index>:<path in repo>`, `-:<path in root>`, `out` or
+ * `broken`; target empty when not a link), then per checkout `G, index`,
+ * its `git check-ignore -v -n` records, and `\x01` + git's exit code.
  */
-async function ignoredPaths(sandbox: ExecutableSandbox, repoDir: string, paths: string[]): Promise<Set<string>> {
+const HIDDEN_PATHS_SCRIPT = `
+root=$1; n=$2; shift 2
+cd "$root" || exit 3
+rootp=$(pwd -P)
+nl='
+'
+repos=
+i=0
+while [ "$i" -lt "$n" ]; do
+  r=$(cd -- "$1" 2>/dev/null && pwd -P) || r=//missing
+  repos="$repos$r$nl"
+  shift; i=$((i + 1))
+done
+tmp=$(mktemp -d) || exit 3
+trap 'rm -rf "$tmp"' EXIT
+place() {
+  case $1 in "$rootp" | "$rootp"/*) ;; *) P=out; return ;; esac
+  j=0
+  IFS=$nl
+  for r in $repos; do
+    case $1 in
+      "$r") P="$j:."; unset IFS; printf '.\\0' >> "$tmp/$j"; return ;;
+      "$r"/*) P="$j:\${1#"$r"/}"; unset IFS; printf '%s\\0' "\${1#"$r"/}" >> "$tmp/$j"; return ;;
+    esac
+    j=$((j + 1))
+  done
+  unset IFS
+  if [ "$1" = "$rootp" ]; then P='-:.'; else P="-:\${1#"$rootp"/}"; fi
+}
+lastd=
+for p; do
+  case $p in */*) d=\${p%/*} ;; *) d=. ;; esac
+  if [ "$d" != "$lastd" ]; then
+    lastd=$d
+    pd=$(cd -- "$d" 2>/dev/null && pwd -P) || pd=
+  fi
+  if [ -n "$pd" ]; then place "$pd/\${p##*/}"; where=$P; else where=broken; fi
+  target=
+  if [ -L "$p" ]; then
+    t=$(readlink -f -- "$p" 2>/dev/null) || t=
+    if [ -n "$t" ] && [ -e "$t" ]; then place "$t"; target=$P; else target=broken; fi
+  fi
+  printf 'R\\0%s\\0%s\\0%s\\0' "$p" "$where" "$target"
+done
+j=0
+IFS=$nl
+for r in $repos; do
+  if [ -s "$tmp/$j" ]; then
+    printf 'G\\0%s\\0' "$j"
+    (cd -- "$r" && git check-ignore -z --stdin -v -n < "$tmp/$j")
+    printf '\\001%s\\0' "$?"
+  fi
+  j=$((j + 1))
+done
+`;
+
+/**
+ * The paths (relative to the working directory) the tree must not show or
+ * serve: those inside git internals or the setup markers, those a checkout
+ * ignores, and those whose real location (through a symlinked folder or the
+ * symlink itself) is any of that, outside the working directory, or missing.
+ * One sandbox command; a checkout git can't answer for hides everything in it.
+ */
+async function hiddenPaths(
+  sandbox: ExecutableSandbox,
+  layout: SessionLayout,
+  paths: string[],
+  { trustRequested = false }: { trustRequested?: boolean } = {},
+): Promise<Set<string>> {
   if (paths.length === 0) return new Set();
-  // Paths go in as positional arguments, never into the script text, and back
-  // NUL-separated so no filename needs quoting either way.
   const result = await sandbox.executeCommand(
     'sh',
-    ['-c', 'cd "$1" && shift && printf \'%s\\0\' "$@" | git check-ignore -z --stdin', 'sh', repoDir, ...paths],
+    [
+      '-c',
+      HIDDEN_PATHS_SCRIPT,
+      'sh',
+      layout.root,
+      String(layout.repos.length),
+      ...layout.repos.map(repo => repo.dir),
+      ...paths,
+    ],
     { timeout: 30_000, maxRetainedBytes: Infinity },
   );
-  // 0: some paths are ignored, 1: none are.
-  if (result.exitCode === 1) return new Set();
-  if (result.exitCode !== 0) throw new Error(`Unable to check ignored files: ${result.stderr.trim() || 'git failed'}`);
-  return new Set(result.stdout.split('\0').filter(Boolean));
+  if (result.exitCode !== 0) throw new Error(`Unable to check ignored files: ${result.stderr.trim() || 'failed'}`);
+
+  const fields = result.stdout.split('\0');
+  const records: Array<{ path: string; where: string; target: string }> = [];
+  const ignored = new Set<string>();
+  const unanswered = new Set<string>();
+  for (let i = 0; i < fields.length;) {
+    const tag = fields[i];
+    if (tag === 'R') {
+      records.push({ path: fields[i + 1]!, where: fields[i + 2]!, target: fields[i + 3]! });
+      i += 4;
+    } else if (tag === 'G') {
+      const repo = fields[i + 1]!;
+      i += 2;
+      // `-v -n` gives every path a record: source, line, pattern, path. An empty
+      // source means no pattern matched; a `!` pattern re-includes the path.
+      while (i < fields.length && !fields[i]!.startsWith('\x01')) {
+        const [source, , pattern, path] = fields.slice(i, i + 4);
+        if (source && !pattern!.startsWith('!')) ignored.add(`${repo}:${path}`);
+        i += 4;
+      }
+      // 0: some paths are ignored, 1: none are; anything else: git couldn't say.
+      const code = fields[i]?.slice(1);
+      if (code !== '0' && code !== '1') unanswered.add(repo);
+      i += 1;
+    } else {
+      i += 1;
+    }
+  }
+
+  const blocked = (place: string) => {
+    if (place === 'out' || place === 'broken') return true;
+    const colon = place.indexOf(':');
+    const repo = place.slice(0, colon);
+    const inside = place.slice(colon + 1);
+    if (inside.split('/').some(segment => HIDDEN_TREE_ENTRIES.has(segment))) return true;
+    if (repo === '-') return false;
+    return unanswered.has(repo) || ignored.has(place);
+  };
+  return new Set(
+    records
+      .filter(({ where, target }) => (!trustRequested && blocked(where)) || (target !== '' && blocked(target)))
+      .map(({ path }) => path),
+  );
 }
 
 /**
@@ -671,21 +789,16 @@ export async function listSessionWorkspaceTree(
 
   const { layout, sandbox, filesystem } = handle;
   const location = treeLocation(layout, requested);
-  const dir = location.repo ? location.repo.prefix + location.relative : location.relative;
+  const dir = (location.repo ? location.repo.prefix + location.relative : location.relative).replace(/\/$/, '');
   const children = (await filesystem.readdir(dir || '.')).filter(entry => !HIDDEN_TREE_ENTRIES.has(entry.name));
   const childPath = (name: string) => (dir ? `${dir}/${name}` : name);
 
-  let visible = children;
-  if (location.repo) {
-    const { repo, relative } = location;
-    const inRepo = (name: string) => (relative ? `${relative}/${name}` : name);
-    const ignored = await ignoredPaths(sandbox, repo.dir, [
-      ...(relative ? [relative] : []),
-      ...children.map(entry => inRepo(entry.name)),
-    ]);
-    if (ignored.has(relative)) throw new Error('Path is not available in this session');
-    visible = children.filter(entry => !ignored.has(inRepo(entry.name)));
-  }
+  const hidden = await hiddenPaths(sandbox, layout, [
+    ...(dir ? [dir] : []),
+    ...children.map(entry => childPath(entry.name)),
+  ]);
+  if (dir && hidden.has(dir)) throw new Error('Path is not available in this session');
+  const visible = children.filter(entry => !hidden.has(childPath(entry.name)));
 
   const entries = visible
     .map(
@@ -710,12 +823,12 @@ export async function readSessionWorkspaceFile(session: SourceControlSession, pa
 
   const handle = await sessionSandbox(session);
   if (!handle) throw new Error('Session workspace is not available');
-  // Rendered roots (plans, reports) are served even when a checkout ignores them.
-  if (!APPROVED_RENDERED_ROOTS.has(safePath.split('/')[0] ?? '')) {
-    const { repo, relative } = treeLocation(handle.layout, safePath);
-    if (repo && relative && (await ignoredPaths(handle.sandbox, repo.dir, [relative])).has(relative)) {
-      throw new Error('Path is not available in this session');
-    }
+  treeLocation(handle.layout, safePath);
+  // Rendered roots (plans, reports) are served even when a checkout ignores
+  // them, but not through a symlink to something the tree hides.
+  const trustRequested = APPROVED_RENDERED_ROOTS.has(safePath.split('/')[0] ?? '');
+  if ((await hiddenPaths(handle.sandbox, handle.layout, [safePath], { trustRequested })).has(safePath)) {
+    throw new Error('Path is not available in this session');
   }
   const { filesystem } = handle;
   const info = await filesystem.stat(safePath);
