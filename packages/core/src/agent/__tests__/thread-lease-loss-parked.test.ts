@@ -34,6 +34,22 @@ const RESOURCE = 'parked-lease-user';
 class FlakyLeasePubSub extends EventEmitterPubSub {
   leases = new Map<string, { owner: string; expiresAt: number }>();
   down = false;
+  readonly #parked = new Set<string>();
+  readonly #parkWaiters = new Map<string, () => void>();
+
+  /** Resolves once the runtime has published `run-suspended` for the run, i.e. it is parked, not still suspending. */
+  parked(runId: string): Promise<void> {
+    if (this.#parked.has(runId)) return Promise.resolve();
+    return new Promise(resolve => this.#parkWaiters.set(runId, resolve));
+  }
+  override async publish(...args: Parameters<EventEmitterPubSub['publish']>) {
+    const data = args[1].data as { type?: string; runId?: string } | undefined;
+    if (data?.type === 'run-suspended' && data.runId) {
+      this.#parked.add(data.runId);
+      this.#parkWaiters.get(data.runId)?.();
+    }
+    return super.publish(...args);
+  }
 
   #owner(key: string) {
     const lease = this.leases.get(key);
@@ -171,6 +187,8 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
       }
       expect(chunkTypes).toContain('tool-call-approval');
       const runId: string = output.runId ?? result.runId;
+      // The approval chunk can arrive while the run is still suspending; take the backend down only once it is parked.
+      await pubsub.parked(runId);
 
       const workflows = (await storage.getStore('workflows'))!;
       const snapshots = async () =>
@@ -226,6 +244,8 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
       if (chunk.type === 'tool-call-approval') break;
     }
     const runId: string = output.runId ?? result.runId;
+    // The approval chunk can arrive while the run is still suspending; drop the lease only once it is parked.
+    await pubsub.parked(runId);
     const leaseKey = [...pubsub.leases.keys()].find(key => key.endsWith(thread));
     expect(leaseKey).toBeDefined();
     pubsub.leases.clear();
