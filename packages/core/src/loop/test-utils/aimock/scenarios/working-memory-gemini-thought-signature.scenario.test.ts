@@ -13,8 +13,9 @@ import { createTool } from '../../../../tools';
  * parallel step. When that call is `updateWorkingMemory`, persistence strips
  * it, and the stored step must mark the next surviving call with Google's
  * documented `skip_thought_signature_validator` signature. Otherwise providers
- * that do not add it themselves (`@ai-sdk/google` before 3.0.80, or other
- * Gemini clients) replay the step unsigned, and a same-turn replay is rejected
+ * that do not add it themselves (`@ai-sdk/google` 2.x before 2.0.85 and 3.x
+ * before 3.0.80, i.e. `@ai-sdk/google-vertex` below 3.0.157 and 4.0.0-4.0.137,
+ * or other Gemini clients) replay the step unsigned, and a same-turn replay is rejected
  * with "Function call is missing a thought_signature". The real signature is
  * bound to the removed call, so it must not be moved onto another call.
  *
