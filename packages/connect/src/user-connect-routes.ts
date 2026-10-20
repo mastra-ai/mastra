@@ -146,6 +146,11 @@ export function validateReturnTo(
       return { ok: false };
     }
     if (resolved.origin !== RETURN_TO_BASE) return { ok: false };
+    // Dot-segment normalization can mint a protocol-relative value the raw
+    // prefix checks never saw: `/foo/..//evil.test` normalizes to
+    // `//evil.test`, which `location.assign` treats as a different host. The
+    // parser maps `\` to `/` in https paths, so this one check covers both.
+    if (resolved.pathname.startsWith('//')) return { ok: false };
     return { ok: true, value: `${resolved.pathname}${resolved.search}${resolved.hash}` };
   }
   let parsed: URL;
