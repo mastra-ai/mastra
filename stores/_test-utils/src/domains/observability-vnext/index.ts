@@ -141,8 +141,9 @@ function traceQueryFixtureForWriteModel(
   }
 
   return {
+    // Completion-only writers never see a span before it ends.
     spans: [...roots.values()].filter(root => !root.isPending),
-    relatedSpans: [...spans.values()],
+    relatedSpans: [...spans.values()].filter(span => !span.isPending),
     scores: data.scores,
     feedback: data.feedback,
   };

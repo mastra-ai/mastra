@@ -1,6 +1,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import {
   parseTraceAggregateRequest,
+  planSpanAggregate,
   planTraceAggregate,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
@@ -8,7 +9,7 @@ import {
 import type { TrustedTraceAggregatePlan } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
-import { aggregateTraces, compileClickHouseTraceAggregate } from './trace-aggregate';
+import { aggregateTraces, compileClickHouseSpanAggregate, compileClickHouseTraceAggregate } from './trace-aggregate';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
 
@@ -152,7 +153,7 @@ describe('ClickHouse trace aggregate compiler', () => {
   it('fails closed on unmapped dimensions and measures', () => {
     const base = plan();
     expect(() => compileClickHouseTraceAggregate({ ...base, dimensions: ['traceId' as never] })).toThrow(
-      'Unsupported trusted trace-aggregate field',
+      'Unsupported trusted aggregate field',
     );
     expect(() =>
       compileClickHouseTraceAggregate({ ...base, measures: [{ type: 'canonical', name: 'tokens.total' as never }] }),
@@ -201,6 +202,65 @@ describe('ClickHouse trace aggregate compiler', () => {
     );
     expect(compiled.query).toContain('toFloat64(sumOrNull(t0 + t1))');
     expect(compiled.query).toContain('countIf(covered) / nullIf(countIf(usageBearing), 0) AS costCoverage');
+  });
+});
+
+describe('ClickHouse span aggregate compiler', () => {
+  const spanPlan = (input: Record<string, unknown> = {}) =>
+    planSpanAggregate({ timeRange: TIME_RANGE, measures: ['count'], ...input }, { scope: { organizationId: 'org-a' } });
+  const spanType = (literal: string) => ({ op: 'eq', left: { path: 'spanType' }, right: { literal } });
+
+  it('reads branch span types from trace_branches and collapses copies with one hash aggregation', () => {
+    const compiled = compileClickHouseSpanAggregate(
+      spanPlan({ where: spanType('agent_run'), groupBy: ['status'], interval: '1d' }),
+    );
+    expect(compiled.query).toContain('FROM mastra_trace_branches e');
+    expect(compiled.query).not.toContain('mastra_span_events');
+    expect(compiled.query).toContain('argMax(tuple(');
+    expect(compiled.query).toMatch(/GROUP BY e\.organizationId, e\.resourceId, e\.traceId, e\.spanId/);
+    expect(compiled.query).toMatch(/AND e\.organizationId = \{trace_query_\d+:String\}/);
+    expect(compiled.query).toMatch(/AND e\.spanType IN \(\{trace_query_\d+:String\}\)/);
+  });
+
+  it('reads other spans from span_events, filtering span type and name before collapsing copies', () => {
+    const compiled = compileClickHouseSpanAggregate(
+      spanPlan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'in', value: { path: 'spanType' }, set: ['model_generation', 'tool_call'] },
+            { op: 'eq', left: { path: 'name' }, right: { literal: 'llm' } },
+          ],
+        },
+      }),
+    );
+    expect(compiled.query).toContain('FROM mastra_span_events e');
+    expect(compiled.query).toMatch(
+      /ORDER BY organizationId, resourceId, traceId, spanId, e\.endedAt DESC\s+LIMIT 1 BY/,
+    );
+    expect(compiled.query).toMatch(/AND e\.spanType IN \(\{trace_query_\d+:String\}, \{trace_query_\d+:String\}\)/);
+    expect(compiled.query).toMatch(/AND e\.name IN \(\{trace_query_\d+:String\}\)/);
+  });
+
+  it('does not prefilter or switch tables on negated or alternative span type conditions', () => {
+    for (const where of [
+      { op: 'not', arg: spanType('agent_run') },
+      { op: 'or', args: [spanType('agent_run'), spanType('tool_call')] },
+      { op: 'ne', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
+    ]) {
+      const compiled = compileClickHouseSpanAggregate(spanPlan({ where }));
+      expect(compiled.query).toContain('FROM mastra_span_events e');
+      expect(compiled.query).not.toContain('AND e.spanType IN');
+    }
+  });
+
+  it('joins usage per span, bounded by tenant and window instead of a second selection pass', () => {
+    const compiled = compileClickHouseSpanAggregate(spanPlan({ measures: ['tokens.total.sum', 'cost.sum'] }));
+    expect(compiled.query).toContain('LEFT JOIN usage u ON u.traceId = r.traceId AND u.spanId = r.spanId');
+    expect(compiled.query).toContain('GROUP BY traceId, spanId, metricId');
+    expect(compiled.query).toMatch(/WHERE isNotNull\(spanId\)\s+AND name IN/);
+    expect(compiled.query).not.toContain('FROM selected)');
+    expect(compiled.query).toMatch(/AND organizationId = \{trace_query_\d+:String\}/);
   });
 });
 
