@@ -376,9 +376,9 @@ async function* paginateRequests<T>(
       seen.add(String(cursor));
       request = { ...request, params: { ...request.params, [pageConfig.cursor_name_in_request]: cursor } };
     } else {
-      // Offset paging ends on a short page; without a page size there is no
-      // way to tell a short page from a full one, so stop after the first.
-      if (pageConfig.limit === undefined || items.length < pageConfig.limit) return;
+      // A configured page size lets us stop on a short page. Without one,
+      // continue until the provider returns an empty page or the safety cap.
+      if (pageConfig.limit !== undefined && items.length < pageConfig.limit) return;
       offset += items.length;
       request = { ...request, params: { ...request.params, [pageConfig.offset_name_in_request]: offset } };
     }

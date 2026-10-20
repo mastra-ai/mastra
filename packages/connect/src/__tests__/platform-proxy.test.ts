@@ -403,6 +403,29 @@ describe('platformProxy.paginate', () => {
     ]);
   });
 
+  it('continues offset pagination without a configured page size until an empty page', async () => {
+    const fetchMock = pages({ rows: [1, 2] }, { rows: [3] }, { rows: [] });
+    const proxy = makeProxy(fetchMock);
+
+    const result = await collect(
+      proxy.paginate({
+        endpoint: '/rows',
+        paginate: {
+          type: 'offset',
+          offset_name_in_request: 'skip',
+          response_path: 'rows',
+        },
+      }),
+    );
+
+    expect(result).toEqual([[1, 2], [3]]);
+    expect(urls(fetchMock)).toEqual([
+      'https://example.test/v2/connections/conn-1/proxy/rows?skip=0',
+      'https://example.test/v2/connections/conn-1/proxy/rows?skip=2',
+      'https://example.test/v2/connections/conn-1/proxy/rows?skip=3',
+    ]);
+  });
+
   it('throws instead of silently truncating once it hits the page cap', async () => {
     let page = 0;
     const fetchMock = vi.fn().mockImplementation(async () => Response.json({ value: [page], next: `/p?n=${++page}` }));

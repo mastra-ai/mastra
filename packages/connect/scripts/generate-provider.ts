@@ -32,7 +32,7 @@ import {
   providerDir,
   providerRegistrationName,
   providersDir,
-  templatesDir,
+  templateProviderDir,
   validateProviderId,
 } from './provider-utils.js';
 import type { ProviderManifest } from './provider-utils.js';
@@ -745,6 +745,15 @@ const INPUT_FIELD_PATTERNS = new Map<string, Readonly<Record<string, { pattern: 
     },
   ],
   [
+    'microsoft-excel/list-users',
+    {
+      cursor: {
+        pattern: /^https:\/\/graph\.microsoft\.com\/v1\.0\/users\?/,
+        message: 'cursor must be the nextCursor returned by a previous list_users call',
+      },
+    },
+  ],
+  [
     'microsoft-excel-oauth2-cc/list-sites',
     {
       cursor: {
@@ -754,7 +763,26 @@ const INPUT_FIELD_PATTERNS = new Map<string, Readonly<Record<string, { pattern: 
     },
   ],
   [
+    'microsoft-excel/list-sites',
+    {
+      cursor: {
+        pattern: /^https:\/\/graph\.microsoft\.com\/v1\.0\/sites\?/,
+        message: 'cursor must be the nextCursor returned by a previous list_sites call',
+      },
+    },
+  ],
+  [
     'microsoft-excel-oauth2-cc/list-workbooks',
+    {
+      cursor: {
+        // Graph may percent-encode the quotes around the search term.
+        pattern: /^https:\/\/graph\.microsoft\.com\/v1\.0\/drives\/[^/?#]+\/root\/search\(q=[^/?#]*\)\?/,
+        message: 'cursor must be the nextCursor returned by a previous list_workbooks call',
+      },
+    },
+  ],
+  [
+    'microsoft-excel/list-workbooks',
     {
       cursor: {
         // Graph may percent-encode the quotes around the search term.
@@ -898,8 +926,9 @@ export async function generateProvider({
   const pin = templatePinFor(providerId);
   const expectedSha = expectedTemplateSha ?? pin.sha;
 
-  const actionDir = resolve(templatesDir, providerId, 'actions');
-  if (!existsSync(actionDir)) {
+  const templateDir = templateProviderDir(providerId);
+  const actionDir = templateDir ? resolve(templateDir, 'actions') : undefined;
+  if (!actionDir || !existsSync(actionDir)) {
     throw new Error(`Unknown provider '${providerId}'. No actions directory exists in the template checkout.`);
   }
 

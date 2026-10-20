@@ -453,6 +453,10 @@ describe('maintainer provider commands', () => {
     }
     const integrationsDir = resolve(packageRoot, '.templates', 'integrations');
     symlinkSync('first-provider', resolve(integrationsDir, 'first-provider-alias'), 'dir');
+    const outsideActionDir = resolve(packageRoot, 'outside-provider', 'actions');
+    mkdirSync(outsideActionDir, { recursive: true });
+    writeFileSync(resolve(outsideActionDir, 'echo.ts'), actionTemplate);
+    symlinkSync(resolve(packageRoot, 'outside-provider'), resolve(integrationsDir, 'outside-provider-alias'), 'dir');
 
     const microsoftExcelActionDir = resolve(integrationsDir, 'microsoft-excel-oauth2-cc', 'actions');
     mkdirSync(microsoftExcelActionDir, { recursive: true });
@@ -683,9 +687,9 @@ export default action;
     expect(labelDeclarations).toHaveLength(1);
   });
 
-  it('pins Graph next-page cursors to the endpoint the tool lists', async () => {
+  it('pins Graph next-page cursors when generating from the delegated provider alias', async () => {
     await addProvider({
-      providerId: 'microsoft-excel-oauth2-cc',
+      providerId: 'microsoft-excel',
       localId: 'microsoft-excel',
       yes: true,
       expectedTemplateSha: templateSha,
@@ -738,6 +742,18 @@ export default action;
       providerId: 'first-provider-alias',
       localId: 'first-provider-alias',
     });
+  });
+
+  it('rejects template symlinks that resolve outside the template checkout', async () => {
+    expect(listProviders({ installedOnly: false, search: 'outside-provider-alias' })).toEqual([]);
+    await expect(
+      addProvider({
+        providerId: 'outside-provider-alias',
+        localId: 'outside-provider-alias',
+        yes: true,
+        expectedTemplateSha: templateSha,
+      }),
+    ).rejects.toThrow("Unknown template provider 'outside-provider-alias'");
   });
 
   it('adapts shared Office templates for delegated OAuth without changing client-credentials providers', async () => {

@@ -29,9 +29,8 @@ const isPersonalAccount = process.env.MASTRA_SMOKE_MICROSOFT_ACCOUNT_TYPE?.trim(
 
 function isAccountCapabilityError(error: unknown): boolean {
   const detail = errorMessage(error);
-  return (
-    /personal|msa account|tenant-directory|work or school|sharepoint operations require/i.test(detail) ||
-    (isPersonalAccount && /status=(400|401|403|405|501)/i.test(detail))
+  return /personal|consumer|msa account|tenant-directory|work or school|sharepoint|FileOpenUserUnauthorized|access denied|not supported|not available/i.test(
+    detail,
   );
 }
 
@@ -108,61 +107,36 @@ export const microsoftExcelScenario: Scenario = {
       steps.push(makeStep('get user drive', 'microsoft_excel_get_user_drive', 'fail', errorMessage(error)));
     }
 
-    let users: Array<{ id: string; userPrincipalName?: string }> = [];
     try {
-      const page = await call<{ users: typeof users; nextCursor?: string }>('microsoft_excel_list_users', { top: 5 });
-      users = page.users;
+      const page = await call<{
+        users: Array<{ id: string; userPrincipalName?: string }>;
+        nextCursor?: string;
+      }>('microsoft_excel_list_users', { top: 5 });
       if (page.nextCursor) {
-        const next = await call<{ users: typeof users }>('microsoft_excel_list_users', {
-          cursor: page.nextCursor,
-          top: 5,
-        });
+        const next = await call<{ users: Array<{ id: string; userPrincipalName?: string }> }>(
+          'microsoft_excel_list_users',
+          { cursor: page.nextCursor, top: 5 },
+        );
         steps.push(
           makeStep(
             'list users',
             'microsoft_excel_list_users',
             'pass',
-            `${users.length} users, next page ${next.users.length}`,
+            `${page.users.length} users, next page ${next.users.length}`,
           ),
         );
       } else {
-        steps.push(makeStep('list users', 'microsoft_excel_list_users', 'pass', `${users.length} users`));
+        steps.push(makeStep('list users', 'microsoft_excel_list_users', 'pass', `${page.users.length} users`));
       }
     } catch (error) {
       steps.push(
         makeStep(
           'list users',
           'microsoft_excel_list_users',
-          isAccountCapabilityError(error) ? 'skip' : 'fail',
+          isPersonalAccount && isAccountCapabilityError(error) ? 'skip' : 'fail',
           errorMessage(error),
         ),
       );
-    }
-
-    if (!driveId && !pinnedUser) {
-      let lastDriveError: string | undefined;
-      for (const user of users) {
-        try {
-          const drive = await call<{ id: string }>('microsoft_excel_get_user_drive', { userId: user.id });
-          driveId = drive.id;
-          steps.push(
-            makeStep('get listed user drive', 'microsoft_excel_get_user_drive', 'pass', `${user.id} → ${drive.id}`),
-          );
-          break;
-        } catch (error) {
-          lastDriveError = errorMessage(error);
-        }
-      }
-      if (!driveId && users.length > 0) {
-        steps.push(
-          makeStep(
-            'get listed user drive',
-            'microsoft_excel_get_user_drive',
-            'fail',
-            lastDriveError ?? 'no drive found',
-          ),
-        );
-      }
     }
 
     let sites: Array<{ id: string; name?: string }> = [];
@@ -175,7 +149,7 @@ export const microsoftExcelScenario: Scenario = {
         makeStep(
           'list sites',
           'microsoft_excel_list_sites',
-          isAccountCapabilityError(error) ? 'skip' : 'fail',
+          isPersonalAccount && isAccountCapabilityError(error) ? 'skip' : 'fail',
           errorMessage(error),
         ),
       );
@@ -185,10 +159,10 @@ export const microsoftExcelScenario: Scenario = {
     if (site) {
       await attempt('get site drive', 'microsoft_excel_get_site_drive', async () => {
         const drive = await call<{ id: string }>('microsoft_excel_get_site_drive', { siteId: site.id });
-        driveId ??= drive.id;
         return `${site.name ?? site.id} → ${drive.id}`;
       });
     } else {
+      // Site discovery produced no real prerequisite, so verify the route with a synthetic SharePoint site id.
       steps.push(
         await probeTool(
           call,
@@ -204,7 +178,11 @@ export const microsoftExcelScenario: Scenario = {
     }
 
     if (!driveId) {
-      steps.push({ name: 'resolve drive', status: 'skip', detail: 'no user OneDrive or SharePoint drive reachable' });
+      steps.push({
+        name: 'resolve drive',
+        status: 'skip',
+        detail: 'connected-user OneDrive unavailable; set MASTRA_SMOKE_EXCEL_USER_ID to opt into another user drive',
+      });
       return steps;
     }
 
