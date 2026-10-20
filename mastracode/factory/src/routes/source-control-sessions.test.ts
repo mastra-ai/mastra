@@ -472,7 +472,7 @@ describe('source-control session routes', () => {
       app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sessionId, title: 'First prompt' }),
+        body: JSON.stringify({ sessionId, title: 'First prompt', visibility: 'private' }),
       });
 
     expect((await create()).status).toBe(200);
@@ -651,7 +651,7 @@ describe('source-control session routes', () => {
         userId: 'user-1',
         branch: overrides.branch ?? 'user/session-visibility',
         baseBranch: 'main',
-        ...(overrides.visibility ? { visibility: overrides.visibility } : {}),
+        visibility: overrides.visibility ?? 'private',
       });
       return { ...seeded, session };
     }
@@ -722,7 +722,7 @@ describe('source-control session routes', () => {
       const created = await owner.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sessionId, title: 'Shared later' }),
+        body: JSON.stringify({ sessionId, title: 'Shared later', visibility: 'private' }),
       });
       expect(created.status).toBe(200);
       // A thread the session opened, stamped with its id, moves along with its own thread.
