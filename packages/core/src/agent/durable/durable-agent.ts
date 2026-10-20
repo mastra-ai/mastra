@@ -3128,7 +3128,7 @@ export class DurableAgent<
     resumeData: unknown,
     options?: DurableAgentResumeOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
+    if (agentThreadStreamRuntime.isResumeFenced(runId, this.getPubSub())) {
       throw new MastraError({
         id: 'AGENT_RESUME_ABORTED_RUN',
         domain: ErrorDomain.AGENT,
