@@ -26,11 +26,18 @@ describe('durable intake', () => {
   it('accepts_and_persists_internationalized_top_level_domains_in_ascii_form', async () => {
     const app = await harness();
     cleanup.push(() => app.close());
-    for (const [index, domain] of ['пример.рф', 'xn--e1afmkfd.xn--p1ai'].entries()) {
-      const response = await app.post(event(`idn-tld-${index}`, { domain }));
+    for (const [index, lead] of [
+      { domain: 'пример.рф' },
+      { domain: 'xn--e1afmkfd.xn--p1ai' },
+      { domain: 'пример.рф', email: 'Sales@пример.рф' },
+      { email: 'Sales@xn--e1afmkfd.xn--p1ai' },
+    ].entries()) {
+      const response = await app.post(event(`idn-tld-${index}`, lead));
       expect(response.status).toBe(202);
       const { runId } = await response.json();
-      expect((await app.store.get(runId))?.event.lead.domain).toBe('xn--e1afmkfd.xn--p1ai');
+      const stored = (await app.store.get(runId))!.event.lead;
+      expect(stored.domain).toBe(lead.domain ? 'xn--e1afmkfd.xn--p1ai' : undefined);
+      expect(stored.email).toBe(lead.email ? 'Sales@xn--e1afmkfd.xn--p1ai' : undefined);
     }
   });
 

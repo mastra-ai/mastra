@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { domainSchema, leadEventSchema, normalizedEventSchema } from '../../src/mastra/contracts';
+import { domainSchema, emailSchema, leadEventSchema, normalizedEventSchema } from '../../src/mastra/contracts';
 import { discoverySchema } from '../../src/mastra/research/contracts';
 import { LocalInputProvider } from '../../src/mastra/providers/local/input';
 import { intakeConfig } from '../../src/mastra/config/lead-ingestion';
@@ -25,6 +25,35 @@ describe('lead event contracts', () => {
       expect(domainSchema.parse(domain)).toBe('xn--e1afmkfd.xn--p1ai');
     },
   );
+
+  it.each(['Sales@пример.рф', 'Sales@xn--e1afmkfd.xn--p1ai', ' Sales@ПРИМЕР.РФ '])(
+    'normalizes_internationalized_email_domains: %s',
+    email => {
+      expect(emailSchema.parse(email)).toBe('Sales@xn--e1afmkfd.xn--p1ai');
+      expect(leadEventSchema.parse(event('idn-email', { domain: 'пример.рф', email })).lead.domain).toBe(
+        'xn--e1afmkfd.xn--p1ai',
+      );
+    },
+  );
+
+  it.each([
+    'sales.example.com',
+    '@example.com',
+    'sales@',
+    'sales@@example.com',
+    '.sales@example.com',
+    'sales.@example.com',
+    'sa..les@example.com',
+    'sa les@example.com',
+    'пользователь@example.com',
+    `${'s'.repeat(65)}@example.com`,
+    'sales@localhost',
+    'sales@company.internal',
+    'sales@127.0.0.1',
+    'sales@example.c0m',
+  ])('rejects_invalid_email_identifiers: %s', email => {
+    expect(emailSchema.safeParse(email).success).toBe(false);
+  });
 
   it('rejects_ambiguous_shapes_and_unsafe_identifier_formats', () => {
     expect(

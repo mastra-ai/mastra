@@ -28,13 +28,22 @@ export const emailSchema = z
   .string()
   .trim()
   .max(254)
-  .email()
-  .refine(value => value.split('@')[0]!.length <= 64)
   .transform(value => {
-    const [local, domain] = value.split('@');
-    return `${local}@${domain!.toLowerCase()}`;
+    const separator = value.lastIndexOf('@');
+    return { local: separator < 0 ? '' : value.slice(0, separator), domain: value.slice(separator + 1) };
   })
-  .refine(value => domainSchema.safeParse(value.split('@')[1]).success, 'Use an email with a public DNS domain');
+  .pipe(
+    z.strictObject({
+      local: z
+        .string()
+        .min(1)
+        .max(64)
+        .regex(/^(?!\.)(?!.*\.\.)[A-Za-z0-9_'+.-]*[A-Za-z0-9_+-]$/, 'Use a valid email local part'),
+      domain: domainSchema,
+    }),
+  )
+  .transform(({ local, domain }) => `${local}@${domain}`)
+  .pipe(z.string().max(254));
 
 export const leadSchema = z
   .strictObject({
