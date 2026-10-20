@@ -609,6 +609,15 @@ export class AgentController<TState = {}> {
         if (resourceId !== undefined && session.identity.getResourceId() !== resourceId) {
           throw new Error(`Session ${registryKey} belongs to another resource`);
         }
+        // A caller that named no resource gets the session's own, so authorize against that.
+        if (resourceId === undefined && session.identity.getResourceId() !== effectiveResourceId) {
+          await this.requireAgentControllerFGA({
+            permission: MastraFGAPermissions.AGENT_CONTROLLER_EXECUTE,
+            requestContext,
+            resourceId: session.identity.getResourceId(),
+            sessionId: effectiveSessionId,
+          });
+        }
         // An exact thread binding is part of the createSession contract
         // ("existing threads are resumed; missing threads are created with this
         // id"), so honor it on cached sessions too. Without this, whichever

@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { Agent } from '../agent';
+import { FGADeniedError } from '../auth/ee/fga-check';
+import type { IFGAProvider } from '../auth/ee/interfaces/fga';
+import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
@@ -456,6 +459,32 @@ describe('AgentController session registry', () => {
       }),
     ).rejects.toThrow('Session session-b belongs to another resource');
     expect(victim.thread.getId()).toBe(victimThread);
+  });
+
+  it("authorizes a caller that leaves out resourceId against the live session's own resource", async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+    const victim = await controller.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
+
+    // The caller may act on its own resource (and the controller default), never on user-b's.
+    const provider: IFGAProvider = {
+      check: async () => false,
+      require: async (user, { resource, permission, context }) => {
+        if ((context as { resourceId?: string } | undefined)?.resourceId === 'user-b') {
+          throw new FGADeniedError(user as { id: string }, resource, permission);
+        }
+      },
+      filterAccessible: async () => [],
+    };
+    controller.__registerMastra({ getServer: () => ({ fga: provider }) } as any);
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'user-a' });
+
+    await expect(controller.createSession({ id: 'session-b', requestContext })).rejects.toBeInstanceOf(FGADeniedError);
+    await expect(
+      controller.createSession({ id: 'session-b', resourceId: 'user-b', requestContext }),
+    ).rejects.toBeInstanceOf(FGADeniedError);
+    expect(await controller.getSession('session-b')).toBe(victim);
   });
 
   it('keeps a session reachable by its sessionId when its resourceId changes', async () => {
