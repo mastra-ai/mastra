@@ -140,8 +140,7 @@ describe('trace aggregate dimension registry', () => {
 
   it('keeps every canonical dimension filterable at trace scope so groups can be drilled into', () => {
     // Groupable-only dimensions predate this rule; new dimensions must also be trace-scope filter fields.
-    // entityId only splits traces that lack an entityName; drill into its groups with a span-scope entityId filter.
-    const groupableOnly = ['serviceName', 'executionSource', 'experimentId', 'entityId'];
+    const groupableOnly = ['serviceName', 'executionSource', 'experimentId'];
     const traceFields = Object.keys(TRACE_QUERY_FIELD_REGISTRY.trace);
     for (const path of Object.keys(TRACE_AGGREGATE_DIMENSION_REGISTRY)) {
       if (groupableOnly.includes(path)) continue;

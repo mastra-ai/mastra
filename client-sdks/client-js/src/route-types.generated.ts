@@ -3728,6 +3728,8 @@ type Shared_Type_67 = {
   traceQueryTimeToFirstChunk: boolean;
   /** Root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct` */
   traceQueryRootSpanFields: boolean;
+  /** Root span `entityId` in trace-scope predicates, aggregate `groupBy` and `countDistinct` */
+  traceQueryRootEntityId: boolean;
   /** Sorting trace and span queries by `timeToFirstChunkMs` */
   traceQueryTimeToFirstChunkSort: boolean;
   /** Trace query field discovery (POST /observability/traces/query/fields and /values) */

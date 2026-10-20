@@ -80,6 +80,7 @@ const TRACE_FIELDS = {
   endedAt: { sql: 'r.endedAt', parameterType: "DateTime64(3, 'UTC')" },
   durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'Float64' },
   timeToFirstChunkMs: { sql: 'r.timeToFirstChunkMs', parameterType: 'Float64' },
+  entityId: { sql: 'r.entityId', parameterType: 'String' },
   entityName: { sql: 'r.entityName', parameterType: 'String' },
   entityType: { sql: 'r.entityType', parameterType: 'String' },
   name: { sql: 'r.name', parameterType: 'String' },

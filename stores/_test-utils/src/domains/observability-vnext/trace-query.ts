@@ -2023,6 +2023,14 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [],
   },
   {
+    name: 'trace-scope entityId reads the root span, not child span entity ids',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'in', value: { path: 'entityId' }, set: ['medication_lookup', 'medication-index'] },
+    },
+    expected: [],
+  },
+  {
     name: 'filters by the current root span name only',
     request: {
       timeRange: fullRange,
@@ -3192,6 +3200,7 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     endedAt: root.endedAt,
     durationMs: durationMsBetween(root.startedAt, root.endedAt),
     timeToFirstChunkMs: root.timeToFirstChunkMs ?? null,
+    entityId: traceQueryDimensionValue(root, 'entityId'),
     entityName: traceQueryDimensionValue(root, 'entityName'),
     entityType: traceQueryDimensionValue(root, 'entityType'),
     name: traceQueryDimensionValue(root, 'name'),

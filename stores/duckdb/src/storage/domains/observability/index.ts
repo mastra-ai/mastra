@@ -277,6 +277,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
         'trace-query-context-ids',
         ...timeToFirstChunkFeatures,
         'trace-query-root-span-fields',
+        'trace-query-root-entity-id',
       ] as const;
     }
 
@@ -302,6 +303,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       'trace-query-context-ids',
       ...timeToFirstChunkFeatures,
       'trace-query-root-span-fields',
+      'trace-query-root-entity-id',
     ] as const;
   }
 
