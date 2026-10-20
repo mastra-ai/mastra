@@ -233,7 +233,7 @@ describeForAllEngines('AIMock loop scenario: model fallback list', engine => {
             id: 'gpt-4o-mini',
             maxRetries: 1,
             modelSettings: { temperature: 0.1 },
-            providerOptions: { openai: { store: false } },
+            providerOptions: { openai: { user: 'entry-user', store: false } },
           },
           { id: 'gpt-4o', maxRetries: 0 },
         ],
@@ -248,7 +248,7 @@ describeForAllEngines('AIMock loop scenario: model fallback list', engine => {
     expect(await output.text).toBe('Success after retry');
     expect(calledModels(requests)).toEqual(['gpt-4o-mini', 'gpt-4o-mini']);
     for (const request of requests as Array<{ body: Record<string, unknown> }>) {
-      expect(request.body).toMatchObject({ temperature: 0.1, max_tokens: 99, user: 'call-user', store: false });
+      expect(request.body).toMatchObject({ temperature: 0.1, max_tokens: 99, user: 'entry-user', store: false });
     }
   });
 });
