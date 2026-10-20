@@ -929,10 +929,16 @@ export class AgentThreadStreamRuntime {
         () => onExpired(undefined),
         Math.max(0, deadline.confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS - Date.now()),
       );
-      const owner = await Promise.race([leaseProvider.getLeaseOwner(key).catch(() => runId), expiredAt]).finally(() =>
-        clearTimeout(expired),
+      const unreachable = Symbol('unreachable');
+      const owner = await Promise.race([leaseProvider.getLeaseOwner(key).catch(() => unreachable), expiredAt]).finally(
+        () => clearTimeout(expired),
       );
       if (owner === runId) return;
+      // A backend error only passes while the last confirmed renewal still covers this call.
+      if (owner === unreachable) {
+        const current = state.leaseDeadlines.get(runId);
+        if (current && Date.now() < current.confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS) return;
+      }
       // Only the registration that owns this fence may stop the run.
       if (state.leaseRenewalTimers.get(runId) === timer) {
         this.#stopLeaseRenewal(pubsub, runId, timer);

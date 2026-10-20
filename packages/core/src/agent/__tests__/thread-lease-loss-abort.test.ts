@@ -577,9 +577,58 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(ran).toHaveLength(5);
     expect(await output.finishReason).toBe('aborted');
     // The ended run leaves no fence behind, so a later run with its id can call tools.
-    await expect(verifyRunLease(runId)).resolves.toBeUndefined();
+    await vi.waitFor(() => expect(verifyRunLease(runId)).resolves.toBeUndefined());
   }, 20_000);
 
+  it('runs no tool once its lease deadline has passed, even if the lease backend errors', async () => {
+    const thread = 'stalled-deadline-thread';
+    for (let i = 0; i < 40; i++) {
+      llm.on(
+        { userMessage: 'stalled deadline', sequenceIndex: i },
+        { toolCalls: [0, 1, 2, 3].map(j => ({ id: `call_stalled_${i}_${j}`, name: 'tick', arguments: {} })) },
+      );
+    }
+    const shared = new SharedLeases();
+    let stall = false;
+    /** The event loop stalls past the lease TTL while an owner check is in flight, then the check errors. */
+    class StallingPubSub extends ReplicaPubSub {
+      override async getLeaseOwner(key: string) {
+        if (!stall || !key.startsWith(`${RESOURCE}\u0000`)) return super.getLeaseOwner(key);
+        const until = Date.now() + 400;
+        while (Date.now() < until) {
+          // stall
+        }
+        throw new Error('lease backend unreachable');
+      }
+    }
+    let ticks = 0;
+    const afterStall: number[] = [];
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        if (stall) afterStall.push(ticks);
+        if (ticks === 3) stall = true;
+        return 'ticked';
+      },
+    });
+
+    const pubsub = new StallingPubSub(shared);
+    const { output, drain } = await startStream(
+      replica(shared, new MockMemory(), { tick }, pubsub),
+      'stalled deadline',
+      {
+        maxSteps: 40,
+        toolCallConcurrency: 1,
+        memory: { thread, resource: RESOURCE },
+      },
+    );
+    await drain().catch(() => undefined);
+
+    expect(afterStall).toEqual([]);
+  }, 30_000);
   it('runs tools on a pubsub that cannot lease', async () => {
     for (let i = 0; i < 2; i++) {
       llm.on(
