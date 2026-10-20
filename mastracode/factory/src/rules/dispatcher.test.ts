@@ -582,7 +582,9 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date(t0.getTime() + 11 * 60_000));
     const keep = sweep.mock.calls[0]?.[0].keep;
     expect(keep).toBeTypeOf('function');
-    const binding = { sessionId: 'session-1', resourceId: PROJECT_ID, threadId: 'thread-1' } as Parameters<NonNullable<typeof keep>>[0];
+    const binding = { sessionId: 'session-1', resourceId: PROJECT_ID, threadId: 'thread-1' } as Parameters<
+      NonNullable<typeof keep>
+    >[0];
 
     // Idle session: nothing waits on it, so the age limit applies.
     await expect(keep!(binding)).resolves.toBe(false);

@@ -514,7 +514,7 @@ const subscription = await session.subscribe({
 subscription.unsubscribe()
 ```
 
-`subscribe()` takes an options object and is async, unlike the in-process listener. Its promise resolves once the stream is established and rejects when it can't connect. A rejected call leaves nothing running in the background. `reconnect: true` re-establishes a stream that drops after it was established, with exponential backoff. A connection that goes silent without closing, for example after the device sleeps, counts as a drop once no data, including server heartbeats, arrives for `idleTimeoutMs` (default `60000`).
+`subscribe()` takes an options object and is async, unlike the in-process listener. Its promise resolves once the stream is established and rejects when it can't connect. A rejected call leaves nothing running in the background. `reconnect: true` re-establishes a stream that drops after it was established, with exponential backoff. A connection that stays open but stops delivering data, for example after the device sleeps, counts as a drop once no data, including server heartbeats, arrives for `idleTimeoutMs` (default `60000`).
 
 The server doesn't replay events missed while the stream was down, so read `session.state()` from `onReconnect` for the current mode, model, and thread. The client surface has no `session.displayState.get()`.
 
