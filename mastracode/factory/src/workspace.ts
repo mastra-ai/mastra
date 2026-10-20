@@ -348,7 +348,7 @@ export interface CreateWorkspaceFactoryOptions {
   /** Work-items storage used to resolve the session's run-binding role, so
    * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
    * without it every session uses the default (worker) PAT. */
-  workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession'>;
+  workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession' | 'hasRunBindingForSession'>;
   /** Projects storage used to resolve a session's project environment. */
   projects?: Pick<FactoryProjectsStorage, 'get'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
@@ -915,18 +915,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     };
     // Fails closed: review skills need a readable active review binding, or a
     // side session (started by a user session to run a skill on request) that
-    // holds no active binding at all. A side session bound to another role
-    // follows that role.
+    // has never been bound. Any binding (another role, revoked, or several
+    // ambiguous active ones) keeps the side session on the binding check.
     const isReviewSession = async (): Promise<boolean> => {
       if (!workItems) return false;
       try {
         if (session.originSessionId) {
-          const binding = await workItems.findActiveRunBindingForSession({
+          const everBound = await workItems.hasRunBindingForSession({
             orgId: session.orgId,
             factoryProjectId: connection.factoryProjectId,
             sessionId: session.sessionId,
           });
-          if (!binding) return true;
+          if (!everBound) return true;
         }
         return isActiveReviewBinding(await findSessionBinding(), session.orgId);
       } catch {

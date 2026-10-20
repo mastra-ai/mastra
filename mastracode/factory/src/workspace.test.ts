@@ -103,6 +103,9 @@ const mocks = vi.hoisted(() => ({
   runBindingRole: null as string | null,
   runBindingStatus: 'active' as 'active' | 'revoked',
   runBindingThreadId: null as string | null,
+  /** Whether the session has any binding row, even one the active lookup cannot resolve. */
+  everBound: false,
+  hasRunBindingForSession: vi.fn(async () => mocks.everBound || mocks.runBindingRole !== null),
   findActiveRunBindingForSession: vi.fn(async ({ sessionId }: { sessionId: string }) =>
     mocks.runBindingRole
       ? {
@@ -201,7 +204,9 @@ afterEach(async () => {
   mocks.runBindingRole = null;
   mocks.runBindingStatus = 'active';
   mocks.runBindingThreadId = null;
+  mocks.everBound = false;
   mocks.findActiveRunBindingForSession.mockClear();
+  mocks.hasRunBindingForSession.mockClear();
 });
 
 function createRequestContext(projectPath: string) {
@@ -1019,7 +1024,10 @@ describe('GitHub session workspace preparation', () => {
     const resolver = createWorkspaceFactory({
       sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
       github: github as any,
-      workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
+      workItems: {
+        findActiveRunBindingForSession: mocks.findActiveRunBindingForSession,
+        hasRunBindingForSession: mocks.hasRunBindingForSession,
+      } as any,
       ...(workspaceRegistry ? { workspaceRegistry } : {}),
     });
     return {
@@ -1296,6 +1304,19 @@ describe('GitHub session workspace preparation', () => {
     addProject();
     addSession({ id: 'session-a', originSessionId: 'user-session', originThreadId: 'user-thread' });
     mocks.runBindingRole = 'work';
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+  });
+
+  it('keeps review skills hidden from a side session whose active binding is ambiguous', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', originSessionId: 'user-session', originThreadId: 'user-thread' });
+    // Several active bindings: the active lookup returns null, but the session is bound.
+    mocks.everBound = true;
 
     const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
     await workspace.skills?.maybeRefresh();
