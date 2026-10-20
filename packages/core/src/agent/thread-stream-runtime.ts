@@ -4821,6 +4821,10 @@ export class AgentThreadStreamRuntime {
     let activeReaderStreamId: string | null = null;
     let currentRunRequestContext: RequestContext | undefined;
     let cancelledByAbort = false;
+    /** Runs whose suspension or approval prompt this subscriber yielded. */
+    const parkedPromptRunIds = new Set<string>();
+    /** Parked runs aborted after their stream ended here, awaiting a synthetic abort. */
+    const parkedAbortRunIds: string[] = [];
 
     const markActiveIfLive = async (runId: string, streamId: string, local: boolean) => {
       if (!local && !(await this.#hasLiveThreadLease(resolvedPubSub, key, runId))) return;
@@ -5323,7 +5327,17 @@ export class AgentThreadStreamRuntime {
           try {
             void currentReader.cancel();
           } catch {}
+        } else if (
+          data.type === 'run-aborted' &&
+          parkedPromptRunIds.has(data.runId) &&
+          activeReaderRunId !== data.runId &&
+          !pendingRuns.some(pending => pending.runId === data.runId)
+        ) {
+          // A run whose prompt this subscriber surfaced, aborted while parked:
+          // its stream already ended here, so yield the abort without a reader.
+          parkedAbortRunIds.push(data.runId);
         }
+        if (data.type !== 'run-suspended') parkedPromptRunIds.delete(data.runId);
         // An abort is not completion: the owner still needs to finish and drain
         // pending signals before idle messages can start.
         if (data.type === 'run-completed') {
@@ -5492,12 +5506,18 @@ export class AgentThreadStreamRuntime {
         try {
           if (historyChunk) yield historyChunk;
           while (!done || pendingRuns.length > 0) {
+            const parkedAbortRunId = parkedAbortRunIds.shift();
+            if (parkedAbortRunId !== undefined) {
+              yield { type: 'abort', runId: parkedAbortRunId } as any;
+              continue;
+            }
             if (pendingRuns.length === 0) {
               await new Promise<void>(resolve => waiters.push(resolve));
               continue;
             }
             const run = pendingRuns.shift()!;
             if (isSuperseded(run.runId, run.generation)) continue;
+            parkedPromptRunIds.delete(run.runId);
             // A local run can be read before its `run-registered` event arrives.
             noteGeneration(run.runId, run.streamId, run.generation, run.supersedes);
             noteRunHalf(run.runId, { streamId: run.streamId, streamSeq: run.streamSeq });
@@ -5549,6 +5569,7 @@ export class AgentThreadStreamRuntime {
                     yield heldStart;
                   }
                   if (!isPrompt) heldStart = undefined;
+                  else parkedPromptRunIds.add(run.runId);
                   yield partWithRunId;
                 } else if (typedPart?.type === 'start' && historyFilter && !storedStreamIds.has(run.streamId)) {
                   heldStart = partWithRunId;
