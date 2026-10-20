@@ -124,4 +124,35 @@ describeForAllEngines('AIMock loop scenario: streamed tool call fallback', engin
     expect(chunks.filter(c => c.type === 'tool-call').map(c => c.payload.args)).toEqual([{ q: 'real' }]);
     expect(executed).toEqual([{ q: 'real' }]);
   });
+
+  it('emits the real call after a partial-args call from a failed attempt with the same id', async () => {
+    const chunks = await run(
+      [
+        [
+          ...head,
+          { type: 'tool-input-start', id: 'call-p', toolName: 'lookup' },
+          { type: 'tool-input-delta', id: 'call-p', delta: '{"q":"old"}' },
+          { type: 'tool-input-end', id: 'call-p' },
+          { type: 'error', error: { message: 'boom', isRetryable: true } },
+        ],
+        [
+          ...head,
+          { type: 'tool-input-start', id: 'call-p', toolName: 'lookup' },
+          { type: 'tool-input-delta', id: 'call-p', delta: '{"q":"real"}' },
+          { type: 'tool-input-end', id: 'call-p' },
+          { type: 'tool-call', toolCallId: 'call-p', toolName: 'lookup', input: '{"q":"real"}' },
+          { type: 'finish', finishReason: 'tool-calls', usage },
+        ],
+        textTape,
+      ],
+      { errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 2, retryUnknownErrors: true })] },
+    );
+
+    const calls = chunks.filter(c => c.type === 'tool-call' || c.type === 'tool-result');
+    expect(calls.map(c => [c.type, c.payload.args])).toEqual([
+      ['tool-call', { q: 'old' }],
+      ['tool-call', { q: 'real' }],
+      ['tool-result', { q: 'real' }],
+    ]);
+  });
 });

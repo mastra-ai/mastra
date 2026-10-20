@@ -608,6 +608,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #toolCallArgsDeltas: Record<string, LLMStepResult<OUTPUT>['text'][]> = Object.create(null);
   #toolCallDeltaIdNameMap: Record<string, string> = Object.create(null);
   #toolCallStreamingMeta: Record<string, ToolCallStreamingMeta> = Object.create(null);
+  /** Recorded calls whose input streams again in a retry; the retry's tool-call replaces them. */
+  #replaceableToolCallIds = new Set<string>();
   /**
    * Tool calls whose input stream ended without any deltas. Their args only arrive with the
    * final `tool-call` chunk, so they wait here instead of being emitted as a synthetic `{}` call.
@@ -1142,6 +1144,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               }
               break;
             case 'tool-call-input-streaming-start':
+              // A recorded call whose input streams again comes from a failed attempt being retried
+              // (the failure itself may never reach this stream), so the retry's call replaces it.
+              if (self.#toolCalls.some(tc => tc.payload.toolCallId === chunk.payload.toolCallId)) {
+                self.#replaceableToolCallIds.add(chunk.payload.toolCallId);
+              }
               self.#toolCallDeltaIdNameMap[chunk.payload.toolCallId] = chunk.payload.toolName;
               self.#toolCallStreamingMeta[chunk.payload.toolCallId] = {
                 toolName: chunk.payload.toolName,
@@ -1261,6 +1268,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 if (meta.title && !chunk.payload.title) chunk.payload.title = meta.title;
                 if (meta.observability && !chunk.payload.observability) {
                   chunk.payload.observability = meta.observability;
+                }
+              }
+              // The retry's real call replaces the one recorded from the failed attempt.
+              if (self.#replaceableToolCallIds.delete(chunk.payload.toolCallId)) {
+                for (const calls of [self.#toolCalls, self.#bufferedByStep.toolCalls]) {
+                  const index = calls.findIndex(tc => tc.payload.toolCallId === chunk.payload.toolCallId);
+                  if (index !== -1) calls.splice(index, 1);
                 }
               }
               // A call already recorded under this id (a repeated tool-call) is not emitted twice.
@@ -2776,6 +2790,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#toolCallDeltaIdNameMap = Object.create(null);
     this.#toolCallStreamingMeta = Object.create(null);
     this.#pendingToolCalls = Object.create(null);
+    this.#replaceableToolCallIds.clear();
   }
 
   #createEventedStream() {
@@ -2885,6 +2900,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       toolCallDeltaIdNameMap: this.#toolCallDeltaIdNameMap,
       toolCallStreamingMeta: this.#toolCallStreamingMeta,
       pendingToolCalls: this.#pendingToolCalls,
+      replaceableToolCallIds: [...this.#replaceableToolCallIds],
       toolCalls: this.#toolCalls,
       toolResults: this.#toolResults,
       warnings: this.#warnings,
@@ -2916,6 +2932,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#toolCallDeltaIdNameMap = Object.assign(Object.create(null), state.toolCallDeltaIdNameMap);
     this.#toolCallStreamingMeta = Object.assign(Object.create(null), state.toolCallStreamingMeta);
     this.#pendingToolCalls = Object.assign(Object.create(null), state.pendingToolCalls);
+    this.#replaceableToolCallIds = new Set(state.replaceableToolCallIds ?? []);
     this.#toolCalls = state.toolCalls;
     this.#toolResults = state.toolResults;
     this.#warnings = state.warnings;
