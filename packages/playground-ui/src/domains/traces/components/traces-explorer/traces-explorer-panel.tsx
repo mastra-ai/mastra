@@ -9,7 +9,6 @@ import { TraceFeedbackTab } from '../trace-feedback-tab';
 import { TraceSpanPanel } from '../trace-span-panel';
 import type { TraceSpanPanelProps } from '../trace-span-panel';
 import { useTraceUsageColumns, useTracesConfig, useTracesList, useTracesSelection } from './traces-explorer-context';
-import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { ScoreDataPanel, TraceScoresTab } from '@/domains/scores';
 
@@ -23,8 +22,6 @@ export type TracesExplorerPanelProps = {
   traceHref?: (traceId: string) => string;
   /** Shows "Add full trace to dataset" in the trace actions menu. Defaults to `true`. */
   withAddTraceToDataset?: boolean;
-  /** Shows "Add tool mocks to item" in the trace actions menu for agent traces. Defaults to `true`. */
-  withAddToolMocksToItem?: boolean;
 };
 
 type DatasetDialogTarget = { traceId: string; rootSpanId: string | undefined };
@@ -35,7 +32,6 @@ export function TracesExplorerPanel({
   headerActionsSlot,
   traceHref,
   withAddTraceToDataset = true,
-  withAddToolMocksToItem = true,
 }: TracesExplorerPanelProps) {
   const { withQueryTrace, withFeedback } = useTracesConfig();
   const { rows, autoRefetch, isLoading: isListLoading } = useTracesList();
@@ -46,7 +42,6 @@ export function TracesExplorerPanel({
   const spanId = selection.spanId;
 
   const [datasetDialogTarget, setDatasetDialogTarget] = useState<DatasetDialogTarget | null>(null);
-  const [addMocksTarget, setAddMocksTarget] = useState<{ traceId: string } | null>(null);
   // Keyed by trace id so selecting another trace (row click, prev/next) falls back to the trace panel.
   const [fullThreadTraceId, setFullThreadTraceId] = useState<string | null>(null);
 
@@ -92,8 +87,6 @@ export function TracesExplorerPanel({
 
   const { handlePreviousTrace, handleNextTrace } = useTraceListNavigation(rows, traceId, null, selectTrace);
 
-  // Tool mocks only make sense for agent runs.
-  const isAgentTrace = anchorSpan?.entityType === 'agent';
   const isFullThreadOpen = !!traceId && fullThreadTraceId === traceId;
   const depth = isFullThreadOpen ? 3 : 2;
 
@@ -119,7 +112,6 @@ export function TracesExplorerPanel({
         onFullThreadOpenChange={open => setFullThreadTraceId(open ? (traceId ?? null) : null)}
         onSpanSelect={id => selectSpan(id ?? null)}
         onSaveAsDatasetItem={withAddTraceToDataset ? setDatasetDialogTarget : undefined}
-        onAddTraceMocksToItem={withAddToolMocksToItem && isAgentTrace ? setAddMocksTarget : undefined}
         initialSpanId={spanId}
         onPrevious={handlePreviousTrace}
         onNext={handleNextTrace}
@@ -154,13 +146,6 @@ export function TracesExplorerPanel({
           isOpen={!!datasetDialogTarget}
           onClose={() => setDatasetDialogTarget(null)}
           renderCreateDatasetDialog={renderCreateDatasetDialog}
-        />
-      )}
-      {withAddToolMocksToItem && (
-        <AddTraceMocksToItemDialog
-          traceId={addMocksTarget?.traceId}
-          isOpen={!!addMocksTarget}
-          onClose={() => setAddMocksTarget(null)}
         />
       )}
     </>

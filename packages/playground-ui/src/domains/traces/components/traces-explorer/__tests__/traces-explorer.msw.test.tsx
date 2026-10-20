@@ -730,7 +730,7 @@ describe('TracesExplorer', () => {
     });
   });
 
-  describe('the trace actions menu of an agent trace', () => {
+  describe('the trace actions menu', () => {
     const openTraceActions = async (panelProps?: Partial<TracesExplorerPanelProps>) => {
       setExplorerHandlers();
       const { queryClient } = renderExplorer({
@@ -743,26 +743,17 @@ describe('TracesExplorer', () => {
       await screen.findByRole('menuitem', { name: 'Download trace JSON' });
     };
 
-    it('offers adding the trace and its tool mocks to a dataset by default', async () => {
+    it('offers adding the trace to a dataset by default', async () => {
       await openTraceActions();
 
       expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).toBeTruthy();
-      expect(screen.getByRole('menuitem', { name: 'Add tool mocks to item' })).toBeTruthy();
     });
 
     it('hides "Add full trace to dataset" when the host turns it off', async () => {
       await openTraceActions({ withAddTraceToDataset: false });
 
       expect(screen.queryByRole('menuitem', { name: 'Add full trace to dataset' })).toBeNull();
-      expect(screen.getByRole('menuitem', { name: 'Add tool mocks to item' })).toBeTruthy();
       expect(screen.getByRole('menuitem', { name: 'Download trace JSON' })).toBeTruthy();
-    });
-
-    it('hides "Add tool mocks to item" when the host turns it off', async () => {
-      await openTraceActions({ withAddToolMocksToItem: false });
-
-      expect(screen.queryByRole('menuitem', { name: 'Add tool mocks to item' })).toBeNull();
-      expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).toBeTruthy();
     });
   });
 

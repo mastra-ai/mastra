@@ -6,7 +6,7 @@ import type {
   TraceQueryKeysetTraceResponse,
 } from '@mastra/client-js';
 import type { ListScoresResponse } from '@mastra/core/evals';
-import { EntityType, SpanType } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import { TraceStatus } from '@mastra/core/storage';
 
 type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
@@ -99,8 +99,6 @@ export const weatherTraceSpans: GetTraceResponse = {
       parentSpanId: null,
       name: 'weather-agent',
       spanType: SpanType.AGENT_RUN,
-      entityType: EntityType.AGENT,
-      entityId: 'weather-agent',
       isEvent: false,
       startedAt: new Date('2026-09-15T12:00:00.000Z'),
       endedAt: new Date('2026-09-15T12:00:01.000Z'),
