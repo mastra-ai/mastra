@@ -2,14 +2,14 @@
 '@mastra/factory': minor
 ---
 
-Decide who can see a project's Knowledge importers, import runs and transcripts with `knowledge.importOperator`. Without it, organization admins can see them, and everyone can when auth is disabled.
+Anyone who can open a project's Knowledge page can now see its importers, import runs and transcripts. Narrow that with `knowledge.importOperator`, which receives the authenticated org, user and project and decides.
 
 ```ts
 new MastraFactory({
   knowledge: {
     key: 'default',
     instance: knowledge,
-    importOperator: ({ userId }) => maintainers.has(userId),
+    importOperator: ({ orgId, userId }) => isOrgAdmin(orgId, userId),
   },
 });
 ```

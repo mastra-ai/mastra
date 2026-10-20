@@ -213,8 +213,8 @@ export interface MastraFactoryConfig {
     key: string;
     instance: Knowledge;
     /**
-     * Who may see a project's importers, import runs, and transcripts. Omitted: every caller when
-     * auth is disabled, otherwise organization administrators.
+     * Who may see a project's importers, import runs, and transcripts. Omitted: anyone who can open
+     * the project's Knowledge page. Set it to narrow that, e.g. to organization administrators.
      */
     importOperator?: KnowledgeImportOperatorRule;
   };

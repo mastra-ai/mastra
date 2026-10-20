@@ -1965,17 +1965,47 @@ describe('KnowledgeRoutes', () => {
     await expect(response.json()).resolves.toMatchObject({ runs: [{ id: expected.id }] });
   });
 
-  it('gates importer run metadata at organization-admin trust', async () => {
+  it('opens importers, run history and run detail to any project viewer when the host sets no rule', async () => {
     const runtime = new Knowledge({
       id: 'mastra',
       storage: new InMemoryStore(),
       importers: [{ id: 'calendar', handler: async () => {} }],
     });
-    const h = await createHarness({ knowledgeRuntime: runtime, isOrganizationAdmin: async () => false });
+    // A same-org member who neither created the project nor administers the org.
+    const h = await createHarness({
+      knowledgeRuntime: runtime,
+      user: { workosId: 'member-7', organizationId: ORG },
+      isOrganizationAdmin: async () => false,
+    });
+    const base = `/web/factory/projects/${h.projectId}/knowledge/importers`;
 
-    const response = await h.app.request(`/web/factory/projects/${h.projectId}/knowledge/importers`);
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({ error: 'forbidden' });
+    const list = await h.app.request(base);
+    expect(list.status).toBe(200);
+    await expect(list.json()).resolves.toEqual({ importers: expect.any(Array) });
+    const runs = await h.app.request(`${base}/calendar/runs`);
+    expect(runs.status).toBe(200);
+    await expect(runs.json()).resolves.toMatchObject({ runs: [] });
+    const detail = await h.app.request(`${base}/calendar/runs/missing-run`);
+    expect(detail.status).toBe(404);
+    await expect(detail.json()).resolves.not.toEqual({ error: 'forbidden' });
+  });
+
+  it('keeps importer routes closed to callers from another org under the open default', async () => {
+    const runtime = new Knowledge({
+      id: 'mastra',
+      storage: new InMemoryStore(),
+      importers: [{ id: 'calendar', handler: async () => {} }],
+    });
+    const h = await createHarness({
+      knowledgeRuntime: runtime,
+      user: { workosId: 'intruder', organizationId: OTHER_ORG },
+    });
+    const base = `/web/factory/projects/${h.projectId}/knowledge/importers`;
+    for (const path of [base, `${base}/calendar/runs`, `${base}/calendar/runs/any-run`]) {
+      const response = await h.app.request(path);
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toEqual({ error: 'Project not found' });
+    }
   });
 
   it("lets the host's import-operator rule decide instead of organization-admin trust", async () => {

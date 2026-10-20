@@ -60,9 +60,8 @@ export interface KnowledgeRoutesDeps extends RouteDependencies {
    */
   threadTitle?: (threadId: string) => Promise<string | undefined>;
   /**
-   * Host rule for who may see a project's importers, import runs, and transcripts. These reflect the
-   * importer's authority rather than the viewer's. Unset: every caller when auth is disabled, otherwise
-   * organization administrators.
+   * Host rule for who may see a project's importers, import runs, and transcripts. Unset: anyone who can
+   * open the project's Knowledge page. Set it to narrow that, e.g. to organization administrators.
    */
   importOperator?: KnowledgeImportOperatorRule;
 }
@@ -563,7 +562,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     if (!(await this.deps.projects.get({ orgId: tenant.orgId, id: projectId }))) {
       return { response: c.json({ error: 'Project not found' }, 404) };
     }
-    if (!(await this.#isImportOperator(c, { orgId: tenant.orgId, userId: tenant.userId, projectId }))) {
+    if (!(await this.#isImportOperator({ orgId: tenant.orgId, userId: tenant.userId, projectId }))) {
       return { response: c.json({ error: 'forbidden' }, 403) };
     }
 
@@ -580,10 +579,9 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     return { knowledge, orgId: tenant.orgId, projectId };
   }
 
-  async #isImportOperator(c: Context, input: { orgId: string; userId: string; projectId: string }): Promise<boolean> {
+  async #isImportOperator(input: { orgId: string; userId: string; projectId: string }): Promise<boolean> {
     if (this.deps.importOperator) return (await this.deps.importOperator(input)) === true;
-    if (!this.deps.auth.enabled()) return true;
-    return this.deps.auth.isOrganizationAdmin(c, input.orgId);
+    return true;
   }
 
   async #resolveView(
