@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Improved shared component development updates by avoiding duplicate Tailwind scans of CommonJS output.
+Fixed shared component edits resetting React state in Studio and Factory during development. Watch builds now keep stable chunk names so hot reload swaps the module in place instead of remounting it.

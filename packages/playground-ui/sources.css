@@ -1,3 +1,1 @@
 @source './dist/**/*.js';
-/* Both formats contain the same classes; watch and scan one copy. */
-@source not './dist/**/*.cjs.js';
