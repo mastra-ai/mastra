@@ -1088,6 +1088,29 @@ describe('BackgroundTaskManager workflow run settlement', () => {
     }
   });
 
+  it('still publishes task.failed when a per-task failure hook throws during settlement', async () => {
+    const storage = new FailOnceOnCompleteStore();
+    const { manager, onTaskFailed, failedEvents, cleanup } = await setup(storage);
+    const onFailed = vi.fn(async () => {
+      throw new Error('onFailed hook exploded');
+    });
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1' },
+        { executor: { execute: async () => 'done' }, onFailed },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('failed'));
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+
+      expect(onFailed).toHaveBeenCalledTimes(1);
+      expect(failedEvents()).toHaveLength(1);
+    } finally {
+      await cleanup();
+    }
+  });
+
   it('fires failure hooks and events once when the task itself fails', async () => {
     const { manager, onTaskFailed, failedEvents, cleanup } = await setup(new InMemoryStore());
     const onFailed = vi.fn();

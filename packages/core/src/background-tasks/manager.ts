@@ -1464,7 +1464,11 @@ export class BackgroundTaskManager {
       this.#mastra?.getLogger?.()?.error(`background-task workflow ${action} failed for ${taskId}:`, err);
       const failedTask = await storage.getTask(taskId);
       if (failedTask?.status === 'failed') {
-        await this.runLocalCompletionHooks(failedTask, 'failed', { error: failedTask.error ?? errorInfo });
+        try {
+          await this.runLocalCompletionHooks(failedTask, 'failed', { error: failedTask.error ?? errorInfo });
+        } catch (hookError) {
+          this.#mastra?.getLogger?.()?.warn(`background-task failure hooks threw for ${taskId}:`, hookError);
+        }
         await this.publishLifecycleEvent('task.failed', failedTask);
       }
     } catch (settleError) {
