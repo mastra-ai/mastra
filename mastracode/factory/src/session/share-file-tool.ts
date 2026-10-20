@@ -1,6 +1,6 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '@mastra/core/channels';
-import type { ChatChannelRenderContext } from '@mastra/core/channels';
+import type { AgentChannels, ChatChannelRenderContext } from '@mastra/core/channels';
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -9,6 +9,15 @@ import type { IntegrationTools } from '../integrations/base.js';
 
 /** Slack rejects larger uploads well before this; keep the sandbox read bounded too. */
 export const SHARE_FILE_MAX_BYTES = 50 * 1024 * 1024;
+
+export interface ShareFileToolDeps {
+  /**
+   * The channels attached to the controller, used to rebuild the chat thread
+   * for runs that did not start from a platform message. Omit when the caller
+   * has no controller; the tool is then offered only on inbound-webhook runs.
+   */
+  channels?: () => AgentChannels | null | undefined;
+}
 
 /**
  * Uploads need a scope (`files:write` on Slack) that an app created before
@@ -28,6 +37,30 @@ function missingScopeError(error: unknown, platform: string): Error | undefined 
 }
 
 /**
+ * The chat thread this run replies into, if any.
+ *
+ * Inbound platform messages stash the render context on `requestContext`.
+ * A run woken by a signal (a subagent finishing, a scheduled fire) has no
+ * such entry even though its thread is still channel-backed — and that is
+ * exactly the run that ends a long job with a file to hand back. Rebuild the
+ * context from the thread's persisted channel coordinates the same way
+ * `ChatChannelOutputProcessor` does, so the tool is offered on both kinds of
+ * run. A forked subagent's thread carries no channel metadata, so forks get
+ * nothing here and never post to the platform.
+ */
+async function resolveRenderContext(
+  requestContext: RequestContext,
+  deps: ShareFileToolDeps,
+): Promise<ChatChannelRenderContext | undefined> {
+  const stashed = requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
+  if (stashed) return stashed;
+  const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
+  const threadId = controller?.threadId;
+  if (!threadId) return undefined;
+  return (await deps.channels?.()?.buildRenderContextForThread(threadId)) ?? undefined;
+}
+
+/**
  * Lets a channel-triggered run hand a workspace file back to the thread it
  * came from. The agent's reply stream can only carry text, so a report it
  * generated in the sandbox would otherwise be described by path and left
@@ -35,14 +68,17 @@ function missingScopeError(error: unknown, platform: string): Error | undefined 
  * read through the session's workspace filesystem so sandbox confinement
  * still applies.
  */
-export function createShareFileTool(requestContext: RequestContext): IntegrationTools {
-  const render = requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
+export async function createShareFileTool(
+  requestContext: RequestContext,
+  deps: ShareFileToolDeps = {},
+): Promise<IntegrationTools> {
+  const render = await resolveRenderContext(requestContext, deps);
   if (!render) return {};
   return {
-    share_file: createTool({
-      id: 'share_file',
+    attach_file: createTool({
+      id: 'attach_file',
       description:
-        'Attach a file from the workspace to the current chat thread. Use this to deliver anything you generated (reports, exports, images) instead of describing where it is on disk. The file posts on its own; say what it is in your reply.',
+        'Upload a file from the workspace into this chat thread as an attachment. This is the only way the person you are talking to can receive a file you produced (a report, PDF, export, screenshot, image); they cannot open workspace paths. Call it whenever you have a file to hand over, then describe it briefly in your reply. The attachment posts on its own.',
       inputSchema: z.object({
         path: z.string().min(1).describe('Absolute path of the file inside the workspace'),
       }),
@@ -52,7 +88,7 @@ export function createShareFileTool(requestContext: RequestContext): Integration
         const fs = workspace?.filesystem;
         if (!fs) throw new Error('No workspace filesystem is attached to this session.');
         const stat = await fs.stat(path);
-        if (stat.type === 'directory') throw new Error(`${path} is a directory; share a single file.`);
+        if (stat.type === 'directory') throw new Error(`${path} is a directory; attach a single file.`);
         // The stat check keeps us from reading something enormous; the check on
         // the bytes we actually hold is the one that bounds the upload, since the
         // file can change between the two calls.
@@ -76,7 +112,7 @@ export function createShareFileTool(requestContext: RequestContext): Integration
         } catch (error) {
           throw missingScopeError(error, render.platform) ?? error;
         }
-        return { shared: true, filename, bytes: data.length };
+        return { attached: true, filename, bytes: data.length };
       },
     }),
   };

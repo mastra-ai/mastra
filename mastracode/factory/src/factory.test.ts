@@ -73,6 +73,7 @@ const controllerMock = {
   queryThreadById: vi.fn(),
   getSession: vi.fn(),
   createSession: vi.fn(),
+  getChannels: vi.fn(() => null),
 };
 
 // Run-end reports the factory's session reporter is asked to send.

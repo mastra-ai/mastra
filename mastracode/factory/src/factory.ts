@@ -1466,8 +1466,15 @@ export class MastraFactory {
               tools[name] = tool;
             }
           };
-          // Channel runs get share_file so a produced file can go to the sender rather than a sandbox path.
-          mergeTools('factory-share-file', createShareFileTool(requestContext));
+          // Channel runs get attach_file so a produced file can go to the sender
+          // rather than a sandbox path. Signal-woken runs rebuild the thread from
+          // the controller's channels.
+          mergeTools(
+            'factory-attach-file',
+            await createShareFileTool(requestContext, {
+              channels: () => this.#prepared?.base.controller.getChannels(),
+            }),
+          );
           if (storage.isDomainReady('source-control')) {
             mergeTools(
               'source-control',
