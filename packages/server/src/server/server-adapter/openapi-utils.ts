@@ -236,11 +236,13 @@ export function hoistSchemaDefinitions(schema: unknown, components: OpenAPICompo
   return rootIsReferenced ? { $ref: componentRef(names[names.length - 1]!) } : rewriteRefs(root, rewrite);
 }
 
-function toComponentSchema(schema: PublicSchema<unknown>, components: OpenAPIComponentSchemas): any {
-  return hoistSchemaDefinitions(schemaToJsonSchema(schema), components);
+function toComponentSchema(schema: PublicSchema<unknown>, components?: OpenAPIComponentSchemas): any {
+  const jsonSchema = schemaToJsonSchema(schema);
+  return components ? hoistSchemaDefinitions(jsonSchema, components) : jsonSchema;
 }
 
-function resolveComponentRef(schema: any, components: OpenAPIComponentSchemas): any {
+function resolveComponentRef(schema: any, components?: OpenAPIComponentSchemas): any {
+  if (!components) return schema;
   const prefix = '#/components/schemas/';
   if (typeof schema?.$ref !== 'string' || !schema.$ref.startsWith(prefix)) return schema;
   return components[schema.$ref.slice(prefix.length).replace(/~1/g, '/').replace(/~0/g, '~')] ?? schema;
@@ -249,7 +251,7 @@ function resolveComponentRef(schema: any, components: OpenAPIComponentSchemas): 
 /**
  * Converts an OpenAPI route spec with PublicSchema to one with JSON Schema
  */
-function convertToJsonSchema(spec: OpenAPIRoute, components: OpenAPIComponentSchemas): any {
+function convertToJsonSchema(spec: OpenAPIRoute, components?: OpenAPIComponentSchemas): any {
   const converted: any = {
     summary: spec.summary,
     description: spec.description,
@@ -376,13 +378,16 @@ export function generateOpenAPIDocument(
  * @param routes - Array of ApiRoute objects with optional openapi specifications
  * @param componentSchemas - The document's `components.schemas` map. Nested schema definitions are
  * hoisted into it and referenced as `#/components/schemas/<name>`, so the caller must serve it.
+ * When omitted, schemas are left as converted (definitions stay nested), so no ref can point at a
+ * component the caller never serves.
  * @returns OpenAPI paths object to be merged into the main spec
  */
 export function convertCustomRoutesToOpenAPIPaths(
   routes: ApiRoute[],
-  componentSchemas: OpenAPIComponentSchemas = createComponentSchemas(),
+  componentSchemas?: OpenAPIComponentSchemas,
 ): Record<string, any> {
   const paths: Record<string, any> = {};
+  const hoist = (schema: unknown) => (componentSchemas ? hoistSchemaDefinitions(schema, componentSchemas) : schema);
 
   for (const route of routes) {
     // Skip routes without openapi metadata or routes marked as hidden
@@ -435,7 +440,7 @@ export function convertCustomRoutesToOpenAPIPaths(
         if (param.schema && typeof param.schema === 'object' && '_def' in param.schema) {
           return {
             ...param,
-            schema: hoistSchemaDefinitions(zodToJsonSchema(param.schema, 'openApi3', 'none'), componentSchemas),
+            schema: hoist(zodToJsonSchema(param.schema, 'openApi3', 'none')),
           };
         }
         return param;
@@ -454,10 +459,7 @@ export function convertCustomRoutesToOpenAPIPaths(
           if (mediaContent?.schema && typeof mediaContent.schema === 'object' && '_def' in mediaContent.schema) {
             operation.requestBody.content[mediaType] = {
               ...mediaContent,
-              schema: hoistSchemaDefinitions(
-                zodToJsonSchema(mediaContent.schema, 'openApi3', 'none'),
-                componentSchemas,
-              ),
+              schema: hoist(zodToJsonSchema(mediaContent.schema, 'openApi3', 'none')),
             };
           } else {
             operation.requestBody.content[mediaType] = mediaContent;
@@ -487,10 +489,7 @@ export function convertCustomRoutesToOpenAPIPaths(
             if (mediaContent?.schema && typeof mediaContent.schema === 'object' && '_def' in mediaContent.schema) {
               operation.responses[statusCode].content[mediaType] = {
                 ...mediaContent,
-                schema: hoistSchemaDefinitions(
-                  zodToJsonSchema(mediaContent.schema, 'openApi3', 'none'),
-                  componentSchemas,
-                ),
+                schema: hoist(zodToJsonSchema(mediaContent.schema, 'openApi3', 'none')),
               };
             } else {
               operation.responses[statusCode].content[mediaType] = mediaContent;

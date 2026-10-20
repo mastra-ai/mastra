@@ -77,6 +77,8 @@ interface Category {
 }
 const Category: z.ZodType<Category> = z.lazy(() => z.object({ name: z.string(), children: z.array(Category) }));
 
+const CategoryId = z.string().regex(/^cat_/).meta({ id: 'CategoryId' });
+
 // A different schema registered under the same zod id, to force a component-name collision.
 const Invoice = z.object({ number: z.string(), total: z.number() }).meta({ id: 'Invoice' });
 const OtherInvoice = z.object({ invoiceId: z.string() }).meta({ id: 'Invoice' });
@@ -127,7 +129,8 @@ describe('served OpenAPI document $refs (#27153)', () => {
             method: 'POST',
             path: '/categories/:categoryId',
             responseType: 'json',
-            pathParamSchema: z.object({ categoryId: z.string() }),
+            // An id-tagged path param emits its own definitions, so path params must be hoisted too.
+            pathParamSchema: z.object({ categoryId: CategoryId }),
             queryParamSchema: z.object({ filter: JsonValue.optional() }),
             bodySchema: z.object({ category: Category }),
             responseSchema: z.object({ category: Category, meta: JsonValue }),
@@ -163,6 +166,11 @@ describe('served OpenAPI document $refs (#27153)', () => {
     });
     expect(otherRef.properties.other.$ref).not.toBe(invoiceRef.properties.invoice.$ref);
     expect(resolvePointer(doc, otherRef.properties.other.$ref)).not.toHaveProperty('properties.number');
+
+    const categoryIdParam = doc.paths['/categories/{categoryId}'].post.parameters.find(
+      (p: any) => p.in === 'path' && p.name === 'categoryId',
+    );
+    expect(resolvePointer(doc, categoryIdParam.schema.$ref)).toMatchObject({ type: 'string', pattern: '^cat_' });
 
     // No route schema still carries a nested definitions block.
     expect(JSON.stringify(doc.paths)).not.toMatch(/"(\$defs|definitions)":/);
