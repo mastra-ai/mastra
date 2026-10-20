@@ -70,6 +70,13 @@ const literalSchema = z.union([literalStringSchema, z.number(), z.boolean(), z.n
 const pathRefSchema = z.object({ path: predicatePathSchema }).strict();
 const literalRefSchema = z.object({ literal: literalSchema }).strict();
 const pathOrLiteralSchema = z.union([pathRefSchema, literalRefSchema]);
+// Not `.max()`: zod >=4.6.7 aborts oversized arrays before parsing them, which makes every predicate
+// union branch fail as aborted and collapses the issue to `where` instead of `where.set`.
+const membershipSetSchema = z
+  .array(literalSchema)
+  .min(1)
+  .refine(set => set.length <= TRACE_QUERY_MAX_SET_VALUES, 'Membership set is too large')
+  .meta({ maxItems: TRACE_QUERY_MAX_SET_VALUES });
 
 export const traceQueryScalarPredicateSchema: z.ZodType<TraceQueryScalarPredicate> = z.lazy(() =>
   z.union([
@@ -84,7 +91,7 @@ export const traceQueryScalarPredicateSchema: z.ZodType<TraceQueryScalarPredicat
       .object({
         op: z.enum(['in', 'notIn']),
         value: pathOrLiteralSchema,
-        set: z.array(literalSchema).min(1).max(TRACE_QUERY_MAX_SET_VALUES),
+        set: membershipSetSchema,
       })
       .strict(),
     z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),
@@ -115,7 +122,7 @@ export const traceQueryPredicateSchema: z.ZodType<TraceQueryPredicate> = z.lazy(
       .object({
         op: z.enum(['in', 'notIn']),
         value: pathOrLiteralSchema,
-        set: z.array(literalSchema).min(1).max(TRACE_QUERY_MAX_SET_VALUES),
+        set: membershipSetSchema,
       })
       .strict(),
     z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),

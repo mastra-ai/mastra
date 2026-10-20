@@ -243,6 +243,15 @@ describe('traceQueryRequestSchema', () => {
     expect(oversizedSet.issues).toContainEqual(
       expect.objectContaining({ code: 'invalid_request', path: ['where', 'set'] }),
     );
+    const oversizedRelatedSet = validationError(() =>
+      parsed({
+        ...baseRequest,
+        where: { spans: { some: { op: 'in', value: { path: 'name' }, set: [...values, 'name-over-limit'] } } },
+      }),
+    );
+    expect(oversizedRelatedSet.issues).toContainEqual(
+      expect.objectContaining({ code: 'invalid_request', path: ['where', 'spans', 'some', 'set'] }),
+    );
 
     const maxString = 'é'.repeat(TRACE_QUERY_MAX_STRING_BYTES / 2);
     expect(
