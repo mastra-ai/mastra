@@ -179,7 +179,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
         return this.#claimExistingRecord(existing, scopeIds);
       }
     }
-    return this.#context.knowledge.createRecord({
+    const created = this.#context.knowledge.createRecord({
       ...(input.id !== undefined ? { id: input.id } : {}),
       text: input.text,
       metadata: input.metadata,
@@ -190,6 +190,14 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
       contextScopeId: importer.scopeId,
       importRunId,
       claimant,
+    });
+    if (input.id === undefined) return created;
+    // Another binding of this source may create the same stable id concurrently; then claim theirs.
+    return created.catch(async error => {
+      if (!(error instanceof KnowledgeConflictError)) throw error;
+      const existing = await storage.getRecord({ id: input.id! });
+      if (!existing) throw error;
+      return this.appendKnowledge(input);
     });
   }
 

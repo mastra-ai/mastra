@@ -8,6 +8,11 @@ import {
   canonicalizeKnowledgeNodeId,
   canonicalizeKnowledgeScopeIds,
   isKnowledgeNodeVisible,
+  isSameKnowledgeClaimant,
+  knowledgeImportClaimKey,
+  parseKnowledgeImportClaim,
+  reconcileKnowledgeClaimScopes,
+  serializeKnowledgeImportClaim,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
   KNOWLEDGE_IMPORT_RUNS_SCHEMA,
   KNOWLEDGE_IMPORT_STATE_SCHEMA,
@@ -38,6 +43,7 @@ import {
   TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
   TABLE_KNOWLEDGE_SCOPE_GRANTS,
 } from '@internal/core/knowledge-compat';
+import type { KnowledgeImportClaimCompat } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import {
   createKnowledgeUlid,
@@ -67,6 +73,11 @@ import {
 } from '@mastra/core/storage';
 import type {
   ClaimKnowledgeImportRunInput,
+  ClaimKnowledgeRecordInput,
+  KnowledgeImportClaimant,
+  ReleaseKnowledgeRecordClaimInput,
+  ReleaseKnowledgeRecordClaimResult,
+  SetKnowledgeNodeScopesInput,
   CreateKnowledgeRecordInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeImportRunInput,
@@ -518,6 +529,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
           args: [],
         },
         {
+          sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_import_state_key ON "${TABLE_KNOWLEDGE_IMPORT_STATE}" (key)`,
+          args: [],
+        },
+        {
           sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_import_runs_lookup ON "${TABLE_KNOWLEDGE_IMPORT_RUNS}" (importerId, binding, queuedAt DESC)`,
           args: [],
         },
@@ -858,8 +873,16 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
           record.version + 1,
           recordScopeIds,
         );
+        // A node edit bumps its records without changing them, so importer claims follow the bump.
+        await this.#advanceClaims(tx, 'record', record.id, record.version, record.version + 1);
         after = record.id;
       }
+    }
+    if (input.claimant) {
+      const previous = (await this.#claims(tx, 'node', input.id)).find(claim =>
+        isSameKnowledgeClaimant(claim, input.claimant!),
+      );
+      await this.#writeClaim(tx, input.claimant, 'node', input.id, previous?.scopeIds ?? [], updated.version);
     }
     return updated;
   }
@@ -965,7 +988,11 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async createRecord(input: CreateKnowledgeRecordInput): Promise<KnowledgeRecord> {
-    return this.#transaction(tx => this.#createRecord(tx, input));
+    return this.#transaction(tx => this.#createRecord(tx, input)).catch(error => {
+      // A concurrent writer created the same stable id first; report it like any version race.
+      if (input.id && String(error).includes('UNIQUE constraint failed')) throw new KnowledgeConflictError(input.id);
+      throw error;
+    });
   }
 
   async #createRecord(tx: Transaction, input: CreateKnowledgeRecordInput): Promise<KnowledgeRecord> {
@@ -1010,6 +1037,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     );
     await this.#activity(tx, 'create', 'record', record.id, input.contextScopeId, input.importRunId);
     await this.#outbox(tx, 'record', record.id, 'upsert', record.version, scopeIds);
+    if (input.claimant) await this.#writeClaim(tx, input.claimant, 'record', record.id, scopeIds, record.version);
     return record;
   }
 
@@ -1469,6 +1497,258 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       await tx.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODES}" WHERE id=?`, args: [node.id] });
       return { node, deleted: true };
     });
+  }
+
+  async listImportClaims(input: {
+    targetType: KnowledgeSemanticDocumentType;
+    targetId: string;
+  }): Promise<KnowledgeImportClaimCompat[]> {
+    return this.#claims(this.#client, input.targetType, input.targetId);
+  }
+
+  async setNodeScopes(input: SetKnowledgeNodeScopesInput): Promise<KnowledgeNode> {
+    return this.#transaction(async tx => {
+      const existing = await this.#getNode(tx, input.id);
+      if (!existing) throw new KnowledgeNotFoundError('node', input.id);
+      if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
+      const next = await this.#assertScopeNodes(tx, input.scopeIds);
+      if (next.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
+      const claims = await this.#claims(tx, 'node', input.id);
+      const previous = claims.find(claim => isSameKnowledgeClaimant(claim, input.claimant));
+      const current = await this.#getNodeScopeIds(tx, input.id);
+      const scopeIds = reconcileKnowledgeClaimScopes({
+        current,
+        previous: previous?.scopeIds ?? [],
+        next,
+        others: claims
+          .filter(claim => !isSameKnowledgeClaimant(claim, input.claimant))
+          .flatMap(claim => claim.scopeIds),
+      });
+      if (knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) {
+        await this.#writeClaim(tx, input.claimant, 'node', input.id, next, existing.version);
+        return existing;
+      }
+      const collision = await this.#getNodeByName(tx, existing.name, scopeIds);
+      if (collision && collision.id !== input.id) throw new KnowledgeConflictError(collision.id);
+      await this.#assertNoSiblingNameCollision(tx, existing.name, scopeIds, input.id);
+      const now = new Date();
+      const result = await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET version=version+1,updatedAt=? WHERE id=? AND version=?`,
+        args: [now.toISOString(), input.id, input.version],
+      });
+      if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
+      const updated: KnowledgeNode = { ...existing, version: existing.version + 1, updatedAt: now };
+      await this.#replaceNodeScopes(tx, input.id, scopeIds, now);
+      await this.#activity(tx, 'move', 'node', input.id, input.contextScopeId ?? next[0], input.importRunId);
+      await this.#outbox(tx, 'node', input.id, 'delete', updated.version, current);
+      await this.#outbox(tx, 'node', input.id, 'upsert', updated.version, scopeIds);
+      await this.#advanceClaims(tx, 'node', input.id, existing.version, updated.version);
+      await this.#writeClaim(tx, input.claimant, 'node', input.id, next, updated.version);
+      return updated;
+    });
+  }
+
+  async claimRecord(input: ClaimKnowledgeRecordInput): Promise<KnowledgeRecord> {
+    return this.#transaction(async tx => {
+      const record = await this.#getRecord(tx, input.id, false);
+      if (!record) throw new KnowledgeNotFoundError('record', input.id);
+      if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
+      const next = await this.#assertScopeNodes(tx, input.scopeIds);
+      if (next.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
+      const claims = await this.#claims(tx, 'record', input.id);
+      const previous = claims.find(claim => isSameKnowledgeClaimant(claim, input.claimant));
+      const current = await this.#getRecordScopeIds(tx, input.id);
+      const scopeIds = reconcileKnowledgeClaimScopes({
+        current,
+        previous: previous?.scopeIds ?? [],
+        next,
+        others: claims
+          .filter(claim => !isSameKnowledgeClaimant(claim, input.claimant))
+          .flatMap(claim => claim.scopeIds),
+      });
+      const updated = await this.#moveRecord(
+        tx,
+        record,
+        current,
+        scopeIds,
+        input.contextScopeId ?? next[0],
+        input.importRunId,
+      );
+      await this.#advanceClaims(tx, 'record', input.id, record.version, updated.version);
+      await this.#writeClaim(tx, input.claimant, 'record', input.id, next, updated.version);
+      return updated;
+    });
+  }
+
+  async releaseRecordClaim(input: ReleaseKnowledgeRecordClaimInput): Promise<ReleaseKnowledgeRecordClaimResult> {
+    return this.#transaction(async tx => {
+      const record = await this.#getRecord(tx, input.id, true);
+      if (!record) throw new KnowledgeNotFoundError('record', input.id);
+      if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
+      return this.#releaseRecordClaim(tx, record, input.claimant, input.importRunId);
+    });
+  }
+
+  async releaseImportClaims(input: { importerId: string; binding: string; importRunId?: string }): Promise<void> {
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
+    await this.#transaction(async tx => {
+      const rows = await tx.execute({
+        sql: `SELECT importerId,binding,key,value FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" WHERE importerId=? AND binding=? AND key LIKE '__mastra_internal/claim/%'`,
+        args: [input.importerId, binding],
+      });
+      for (const row of rows.rows) {
+        const claim = parseKnowledgeImportClaim({
+          importerId: String(row.importerId),
+          binding: String(row.binding),
+          key: String(row.key),
+          value: String(row.value),
+        });
+        if (!claim) continue;
+        if (claim.targetType === 'record') {
+          const record = await this.#getRecord(tx, claim.targetId, true);
+          if (record) await this.#releaseRecordClaim(tx, record, claim, input.importRunId);
+          else await this.#deleteClaim(tx, claim, 'record', claim.targetId);
+          continue;
+        }
+        await this.#deleteClaim(tx, claim, 'node', claim.targetId);
+        const node = await this.#getNode(tx, claim.targetId);
+        if (!node) continue;
+        const current = await this.#getNodeScopeIds(tx, node.id);
+        const others = (await this.#claims(tx, 'node', node.id)).flatMap(other => other.scopeIds);
+        const scopeIds = reconcileKnowledgeClaimScopes({ current, previous: claim.scopeIds, next: [], others });
+        // A node keeps at least one membership; one only this binding held stays rather than orphaning it.
+        if (scopeIds.length === 0 || knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) continue;
+        const now = new Date();
+        await tx.execute({
+          sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET version=version+1,updatedAt=? WHERE id=?`,
+          args: [now.toISOString(), node.id],
+        });
+        await this.#replaceNodeScopes(tx, node.id, scopeIds, now);
+        await this.#activity(tx, 'move', 'node', node.id, scopeIds[0], input.importRunId);
+        await this.#outbox(tx, 'node', node.id, 'delete', node.version + 1, current);
+        await this.#outbox(tx, 'node', node.id, 'upsert', node.version + 1, scopeIds);
+        await this.#advanceClaims(tx, 'node', node.id, node.version, node.version + 1);
+      }
+    });
+  }
+
+  async #releaseRecordClaim(
+    tx: Transaction,
+    record: KnowledgeRecord,
+    claimant: Pick<KnowledgeImportClaimant, 'importerId' | 'binding'>,
+    importRunId: string | undefined,
+  ): Promise<ReleaseKnowledgeRecordClaimResult> {
+    const claims = await this.#claims(tx, 'record', record.id);
+    const previous = claims.find(claim => isSameKnowledgeClaimant(claim, claimant));
+    const others = claims.filter(claim => !isSameKnowledgeClaimant(claim, claimant));
+    await this.#deleteClaim(tx, claimant, 'record', record.id);
+    if (others.length === 0) {
+      await this.#deleteRecordPermanently(tx, record.id, importRunId, record.version);
+      return { record, deleted: true };
+    }
+    const current = await this.#getRecordScopeIds(tx, record.id);
+    const scopeIds = reconcileKnowledgeClaimScopes({
+      current,
+      previous: previous?.scopeIds ?? [],
+      next: [],
+      others: others.flatMap(claim => claim.scopeIds),
+    });
+    const updated = await this.#moveRecord(tx, record, current, scopeIds, scopeIds[0], importRunId);
+    await this.#advanceClaims(tx, 'record', record.id, record.version, updated.version);
+    return { record: updated, deleted: false };
+  }
+
+  async #moveRecord(
+    tx: Transaction,
+    record: KnowledgeRecord,
+    current: KnowledgeScopeIds,
+    scopeIds: KnowledgeScopeIds,
+    contextScopeId: string | undefined,
+    importRunId: string | undefined,
+  ): Promise<KnowledgeRecord> {
+    if (knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) return record;
+    const now = new Date();
+    const result = await tx.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET version=version+1,updatedAt=? WHERE id=? AND version=?`,
+      args: [now.toISOString(), record.id, record.version],
+    });
+    if (result.rowsAffected === 0) throw new KnowledgeConflictError(record.id);
+    const version = record.version + 1;
+    await this.#replaceRecordScopes(tx, record.id, scopeIds, now);
+    await this.#activity(tx, 'move', 'record', record.id, contextScopeId, importRunId);
+    await this.#outbox(tx, 'record', record.id, 'delete', version, current);
+    if (!record.deletedAt) await this.#outbox(tx, 'record', record.id, 'upsert', version, scopeIds);
+    return { ...record, version, updatedAt: now };
+  }
+
+  async #claims(
+    executor: Executor,
+    targetType: KnowledgeSemanticDocumentType,
+    targetId: string,
+  ): Promise<KnowledgeImportClaimCompat[]> {
+    const result = await executor.execute({
+      sql: `SELECT importerId,binding,key,value FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" WHERE key=? ORDER BY importerId,binding`,
+      args: [knowledgeImportClaimKey(targetType, targetId)],
+    });
+    return result.rows
+      .map(row =>
+        parseKnowledgeImportClaim({
+          importerId: String(row.importerId),
+          binding: String(row.binding),
+          key: String(row.key),
+          value: String(row.value),
+        }),
+      )
+      .filter((claim): claim is KnowledgeImportClaimCompat => claim !== null);
+  }
+
+  async #writeClaim(
+    executor: Executor,
+    claimant: KnowledgeImportClaimant,
+    targetType: KnowledgeSemanticDocumentType,
+    targetId: string,
+    scopeIds: KnowledgeScopeIds,
+    version: number,
+  ): Promise<void> {
+    await executor.execute({
+      sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?) ON CONFLICT(importerId,binding,key) DO UPDATE SET value=excluded.value`,
+      args: [
+        claimant.importerId,
+        canonicalizeKnowledgeImporterBindingKey(claimant.binding),
+        knowledgeImportClaimKey(targetType, targetId),
+        serializeKnowledgeImportClaim({ source: claimant.source, scopeIds, version }),
+      ],
+    });
+  }
+
+  async #deleteClaim(
+    executor: Executor,
+    claimant: Pick<KnowledgeImportClaimant, 'importerId' | 'binding'>,
+    targetType: KnowledgeSemanticDocumentType,
+    targetId: string,
+  ): Promise<void> {
+    await executor.execute({
+      sql: `DELETE FROM "${TABLE_KNOWLEDGE_IMPORT_STATE}" WHERE importerId=? AND binding=? AND key=?`,
+      args: [
+        claimant.importerId,
+        canonicalizeKnowledgeImporterBindingKey(claimant.binding),
+        knowledgeImportClaimKey(targetType, targetId),
+      ],
+    });
+  }
+
+  /** A claim operation bumps its target without an outside edit, so claims current before stay current. */
+  async #advanceClaims(
+    executor: Executor,
+    targetType: KnowledgeSemanticDocumentType,
+    targetId: string,
+    from: number,
+    to: number,
+  ): Promise<void> {
+    if (from === to) return;
+    for (const claim of await this.#claims(executor, targetType, targetId)) {
+      if (claim.version === from) await this.#writeClaim(executor, claim, targetType, targetId, claim.scopeIds, to);
+    }
   }
 
   async deleteRecordBySource(input: {
@@ -2091,6 +2371,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     await this.#replaceNodeScopes(executor, node.id, scopeIds, now);
     await this.#activity(executor, 'create', 'node', node.id, input.contextScopeId, input.importRunId);
     await this.#outbox(executor, 'node', node.id, 'upsert', node.version, scopeIds);
+    if (input.claimant) await this.#writeClaim(executor, input.claimant, 'node', node.id, scopeIds, node.version);
     return node;
   }
 

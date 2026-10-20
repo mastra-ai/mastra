@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createKnowledgeSchemaLatchTests, createKnowledgeStorageTests } from '@internal/storage-test-utils';
+import {
+  createKnowledgeImportClaimStorageTests,
+  createKnowledgeImporterMultiBindingTests,
+  createKnowledgeSchemaLatchTests,
+  createKnowledgeStorageTests,
+} from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import {
   InMemoryStore,
@@ -22,6 +27,7 @@ describe('InMemory canonical parity', () => {
     if (!reopen) storage = new InMemoryStore();
     return (await storage.getStore('knowledge'))!;
   });
+  createKnowledgeImportClaimStorageTests(async () => (await new InMemoryStore().getStore('knowledge'))!);
 });
 
 const fixtures: { client: ReturnType<typeof createClient>; path: string }[] = [];
@@ -30,6 +36,21 @@ createKnowledgeStorageTests(reopen => {
   const client = createClient({ url: `file:${path}` });
   fixtures.push({ client, path });
   return new KnowledgeLibSQL({ client });
+});
+createKnowledgeImportClaimStorageTests(() => {
+  const path = join(tmpdir(), `mastra-knowledge-claims-${randomUUID()}.db`);
+  const client = createClient({ url: `file:${path}` });
+  fixtures.push({ client, path });
+  return new KnowledgeLibSQL({ client });
+});
+describe('LibSQL', () => {
+  createKnowledgeImporterMultiBindingTests(
+    () =>
+      new LibSQLStore({
+        id: `fact-471-${randomUUID()}`,
+        url: `file:${join(tmpdir(), `mastra-fact-471-${randomUUID()}.db`)}`,
+      }),
+  );
 });
 createKnowledgeSchemaLatchTests(async () => {
   const path = join(tmpdir(), `mastra-knowledge-latch-${randomUUID()}.db`);

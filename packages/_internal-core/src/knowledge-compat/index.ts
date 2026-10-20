@@ -603,3 +603,84 @@ export function createKnowledgeCoreLoader(
     return knowledgeCore;
   };
 }
+
+/**
+ * Importer claims (mirrors `@mastra/core/storage` so adapters run against any core with Knowledge).
+ * A claim is one importer binding's contribution to a node's memberships or a record, stored in that
+ * binding's import state and written in the same transaction as the change it describes.
+ */
+export interface KnowledgeImportClaimCompat {
+  importerId: string;
+  binding: string;
+  source: string;
+  targetType: 'node' | 'record';
+  targetId: string;
+  scopeIds: string[];
+  version: number;
+}
+
+export function knowledgeImportClaimKey(targetType: 'node' | 'record', targetId: string): string {
+  return `__mastra_internal/claim/${targetType}/${targetId}`;
+}
+
+export function parseKnowledgeImportClaim(state: {
+  importerId: string;
+  binding: string;
+  key: string;
+  value: string;
+}): KnowledgeImportClaimCompat | null {
+  const match = /^__mastra_internal\/claim\/(node|record)\/(.+)$/.exec(state.key);
+  if (!match) return null;
+  try {
+    const value = JSON.parse(state.value) as { source?: unknown; scopeIds?: unknown; version?: unknown };
+    if (
+      typeof value.source !== 'string' ||
+      !Array.isArray(value.scopeIds) ||
+      !value.scopeIds.every(id => typeof id === 'string') ||
+      !Number.isSafeInteger(value.version)
+    ) {
+      return null;
+    }
+    return {
+      importerId: state.importerId,
+      binding: state.binding,
+      source: value.source,
+      targetType: match[1] as 'node' | 'record',
+      targetId: match[2]!,
+      scopeIds: canonicalizeKnowledgeScopeIds(value.scopeIds as string[]),
+      version: Number(value.version),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function serializeKnowledgeImportClaim(claim: { source: string; scopeIds: string[]; version: number }): string {
+  return JSON.stringify({
+    source: claim.source,
+    scopeIds: canonicalizeKnowledgeScopeIds(claim.scopeIds),
+    version: claim.version,
+  });
+}
+
+/** Memberships after one claimant replaces its claim, keeping what other claims (or no claim) hold. */
+export function reconcileKnowledgeClaimScopes(input: {
+  current: string[];
+  previous: string[];
+  next: string[];
+  others: string[];
+}): string[] {
+  const keep = new Set([...input.next, ...input.others]);
+  const dropped = new Set(input.previous.filter(id => !keep.has(id)));
+  return canonicalizeKnowledgeScopeIds([...input.current.filter(id => !dropped.has(id)), ...input.next]);
+}
+
+export function isSameKnowledgeClaimant(
+  left: { importerId: string; binding: string },
+  right: { importerId: string; binding: string },
+): boolean {
+  return (
+    left.importerId === right.importerId &&
+    canonicalizeKnowledgeImporterBindingKey(left.binding) === canonicalizeKnowledgeImporterBindingKey(right.binding)
+  );
+}

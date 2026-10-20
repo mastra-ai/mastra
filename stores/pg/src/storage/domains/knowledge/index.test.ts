@@ -1,5 +1,10 @@
 import { readFile } from 'node:fs/promises';
-import { createKnowledgeSchemaLatchTests, createKnowledgeStorageTests } from '@internal/storage-test-utils';
+import {
+  createKnowledgeImportClaimStorageTests,
+  createKnowledgeImporterMultiBindingTests,
+  createKnowledgeSchemaLatchTests,
+  createKnowledgeStorageTests,
+} from '@internal/storage-test-utils';
 import {
   knowledgeImporterBindingKey,
   KnowledgeSchemaError,
@@ -31,6 +36,21 @@ createKnowledgeStorageTests(async reopen => {
     await pool.query(`CREATE SCHEMA "${schemaName}"`);
   }
   return new KnowledgePG({ pool, schemaName });
+});
+
+createKnowledgeImportClaimStorageTests(async () => {
+  const schemaName = `knowledge_claims_${process.pid}_${schemaCounter++}`;
+  schemas.push(schemaName);
+  await pool.query(`CREATE SCHEMA "${schemaName}"`);
+  return new KnowledgePG({ pool, schemaName });
+});
+
+describe('PostgreSQL', () => {
+  createKnowledgeImporterMultiBindingTests(() => {
+    const schemaName = `knowledge_fact471_${process.pid}_${schemaCounter++}`;
+    schemas.push(schemaName);
+    return new PostgresStore({ id: schemaName, connectionString, schemaName });
+  });
 });
 
 createKnowledgeSchemaLatchTests(async () => {
