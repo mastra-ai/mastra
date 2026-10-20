@@ -46,16 +46,16 @@ const OUT = {
   check: join(RESULTS_DIR, 'mobs-metrics-page-check.jsonl'),
 };
 const ALL_LOG = `clusterAllReplicas('all_groups.default', system.query_log)`;
-const HOUR = 3_600_000;
-const DAY = 24 * HOUR;
-const GiB = 1024 ** 3;
-const MEASURE: ClickHouseSettings = {
+export const HOUR = 3_600_000;
+export const DAY = 24 * HOUR;
+export const GiB = 1024 ** 3;
+export const MEASURE: ClickHouseSettings = {
   max_memory_usage: String(4 * GiB),
   max_execution_time: 30,
   filesystem_prefetches_limit: '8',
 };
 /** mobs-query's interactive read settings (`db/read-settings.ts` with `env.ts` defaults). */
-const PROD: ClickHouseSettings = {
+export const PROD: ClickHouseSettings = {
   filesystem_prefetches_limit: '8',
   max_execution_time: 9,
   timeout_overflow_mode: 'throw',
@@ -66,10 +66,10 @@ const PROD: ClickHouseSettings = {
   read_overflow_mode: 'throw',
 };
 
-type Role = 'p99' | 'largest';
-type ScopeKind = 'project' | 'org';
-type Interval = '1h' | '1d';
-type Scope = { organizationId: string; projectId?: string };
+export type Role = 'p99' | 'largest';
+export type ScopeKind = 'project' | 'org';
+export type Interval = '1h' | '1d';
+export type Scope = { organizationId: string; projectId?: string };
 
 interface Tag {
   queryIds: string[];
@@ -77,7 +77,7 @@ interface Tag {
   settings: ClickHouseSettings;
 }
 
-interface QueryStat {
+export interface QueryStat {
   id: string;
   host: string;
   startUs: number;
@@ -126,7 +126,7 @@ function guardedClient(raw: ClickHouseClient): ClickHouseClient {
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-async function loadPlatform(dir: string) {
+export async function loadPlatform(dir: string) {
   const load = (path: string) => import(pathToFileURL(join(dir, path)).href) as Promise<any>;
   return {
     plan: await load('src/services/trace-aggregate-plan.ts'),
@@ -136,9 +136,9 @@ async function loadPlatform(dir: string) {
     obs: await load('src/services/observability.ts'),
   };
 }
-type Mods = Awaited<ReturnType<typeof loadPlatform>>;
+export type Mods = Awaited<ReturnType<typeof loadPlatform>>;
 
-async function connect(platform: string, maxOpenConnections: number) {
+export async function connect(platform: string, maxOpenConnections: number) {
   const database = (JSON.parse(readFileSync(PREFLIGHT_FILE, 'utf8')) as { database: string }).database;
   const credentials = loadCredentials();
   // mobs-query's own client copy: its compilers pass TupleParam, which a second copy would not recognize.
@@ -157,9 +157,9 @@ async function connect(platform: string, maxOpenConnections: number) {
   return { raw, client: guardedClient(raw), mods: await loadPlatform(platform) };
 }
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-interface Measured<T> {
+export interface Measured<T> {
   ok: boolean;
   errorCode?: string;
   wallMs: number;
@@ -167,7 +167,11 @@ interface Measured<T> {
   value?: T;
 }
 
-async function measured<T>(cold: boolean, settings: ClickHouseSettings, fn: () => Promise<T>): Promise<Measured<T>> {
+export async function measured<T>(
+  cold: boolean,
+  settings: ClickHouseSettings,
+  fn: () => Promise<T>,
+): Promise<Measured<T>> {
   const tag: Tag = { queryIds: [], cold, settings };
   const started = performance.now();
   try {
@@ -184,7 +188,7 @@ async function measured<T>(cold: boolean, settings: ClickHouseSettings, fn: () =
   }
 }
 
-async function rows<T>(
+export async function rows<T>(
   raw: ClickHouseClient,
   sql: string,
   params: Record<string, unknown>,
@@ -207,7 +211,7 @@ async function rows<T>(
   return result.json<T>();
 }
 
-async function fetchStats(raw: ClickHouseClient, ids: string[]): Promise<Map<string, QueryStat>> {
+export async function fetchStats(raw: ClickHouseClient, ids: string[]): Promise<Map<string, QueryStat>> {
   const found = new Map<string, QueryStat>();
   for (let attempt = 0; attempt < 30 && found.size < ids.length; attempt++) {
     if (attempt > 0) await sleep(2000);
@@ -232,7 +236,7 @@ async function fetchStats(raw: ClickHouseClient, ids: string[]): Promise<Map<str
 // ---------------------------------------------------------------------------------------------
 // Scopes and windows
 
-function pickProjects(projects: SelectedProject[]): Array<[Role, SelectedProject]> {
+export function pickProjects(projects: SelectedProject[]): Array<[Role, SelectedProject]> {
   const of = (bucket: string) => projects.filter(p => p.bucket === bucket);
   const perTrace = (p: SelectedProject) => (p.stats.spans30d ?? 0) / Math.max(1, p.stats.traces30d);
   const p99 = of('p99');
@@ -247,32 +251,32 @@ function pickProjects(projects: SelectedProject[]): Array<[Role, SelectedProject
   return out.filter((e): e is [Role, SelectedProject] => !!e[1]);
 }
 
-function scopeOf(project: SelectedProject, kind: ScopeKind): Scope {
+export function scopeOf(project: SelectedProject, kind: ScopeKind): Scope {
   return kind === 'project'
     ? { organizationId: project.organizationId, projectId: project.projectId }
     : { organizationId: project.organizationId };
 }
 
-const windowMs = (window: string) => {
+export const windowMs = (window: string) => {
   const n = Number.parseInt(window, 10);
   return window.endsWith('h') ? n * HOUR : n * DAY;
 };
 
-interface Range {
+export interface Range {
   from: Date;
   to: Date;
 }
-const rangeOf = (to: Date, window: string, periodsBack = 0): Range => {
+export const rangeOf = (to: Date, window: string, periodsBack = 0): Range => {
   const ms = windowMs(window);
   return { from: new Date(to.getTime() - (periodsBack + 1) * ms), to: new Date(to.getTime() - periodsBack * ms) };
 };
-const timeRange = (r: Range) => ({ from: r.from.toISOString(), to: r.to.toISOString() });
+export const timeRange = (r: Range) => ({ from: r.from.toISOString(), to: r.to.toISOString() });
 
 /** The Metrics page's own bucket choice (`bucketPlan` in playground-ui): hourly to 14 d, then daily. */
-const pageInterval = (window: string): Interval => (windowMs(window) <= 14 * DAY ? '1h' : '1d');
+export const pageInterval = (window: string): Interval => (windowMs(window) <= 14 * DAY ? '1h' : '1d');
 
 /** `limit × buckets ≤ 10,000` (Core's planner): 20 groups, fewer when the buckets need it. */
-function seriesLimit(r: Range, interval: Interval) {
+export function seriesLimit(r: Range, interval: Interval) {
   const step = interval === '1h' ? HOUR : DAY;
   const buckets = Math.floor(r.to.getTime() / step) - Math.floor(r.from.getTime() / step) + 1;
   return Math.min(20, Math.floor(10_000 / buckets));
@@ -282,11 +286,11 @@ function seriesLimit(r: Range, interval: Interval) {
 // Card shapes (aggregateTraces request bodies)
 
 const agentRoot = { op: 'eq', left: { path: 'entityType' }, right: { literal: 'agent' } };
-const withInterval = new Set(['O1s', 'O2', 'O12s', 'O4', 'P3', 'P4', 'P5']);
+export const withInterval = new Set(['O1s', 'O2', 'O12s', 'O4', 'P3', 'P4', 'P5']);
 const ORG_SHAPES = ['O1', 'O1s', 'O2', 'O3s', 'O3f', 'O4', 'O5', 'O6', 'O7', 'P1', 'P2'];
 const PROJECT_SHAPES = ['P1', 'P2', 'P3', 'P4', 'P5'];
 
-function shapeBody(shape: string, r: Range, interval?: Interval): Record<string, unknown> {
+export function shapeBody(shape: string, r: Range, interval?: Interval): Record<string, unknown> {
   const tr = { timeRange: timeRange(r) };
   const iv = () => ({ interval: interval!, limit: seriesLimit(r, interval!) });
   const slowest = {
@@ -375,7 +379,7 @@ function cellsFor(shapes: string[], window: string): Array<{ shape: string; inte
   });
 }
 
-function compileShape(mods: Mods, shape: string, scope: Scope, to: Date, window: string, interval?: Interval) {
+export function compileShape(mods: Mods, shape: string, scope: Scope, to: Date, window: string, interval?: Interval) {
   const r = rangeOf(to, window, shape === 'O7' ? 1 : 0);
   const plan = mods.plan.planPlatformTraceAggregate(shapeBody(shape, r, interval), scope, []);
   const usage = mods.sql.traceAggregateUsageOptions();
@@ -507,14 +511,14 @@ async function grid(options: {
 // ---------------------------------------------------------------------------------------------
 // page
 
-interface Card {
+export interface Card {
   card: string;
   source: 'agg' | 'metrics';
   fn: () => Promise<unknown>;
 }
 
 /** Today's Metrics page (Platform `MetricsCards`, playground-ui hooks), one entry per HTTP request. */
-function metricsCards(mods: Mods, client: ClickHouseClient, scope: Scope, r: Range, window: string): Card[] {
+export function metricsCards(mods: Mods, client: ClickHouseClient, scope: Scope, r: Range, window: string): Card[] {
   const filters = { timestamp: { start: r.from, end: r.to } };
   const interval = pageInterval(window);
   const m = mods.metrics;
@@ -578,7 +582,7 @@ function metricsCards(mods: Mods, client: ClickHouseClient, scope: Scope, r: Ran
   ];
 }
 
-function aggCards(
+export function aggCards(
   mods: Mods,
   client: ClickHouseClient,
   page: 'org' | 'project',
@@ -614,7 +618,7 @@ function aggCards(
   return entries.map(([card, shape, back]) => aggCard(mods, client, scope, to, window, card, shape, back));
 }
 
-function aggCard(
+export function aggCard(
   mods: Mods,
   client: ClickHouseClient,
   scope: Scope,
@@ -633,7 +637,7 @@ function aggCard(
   return { card, source: 'agg', fn: () => mods.run.aggregateTraces(client, plan) };
 }
 
-interface PageRecord {
+export interface PageRecord {
   runId: string;
   label: string;
   page: 'org' | 'project';
@@ -731,7 +735,7 @@ async function pageLoad(options: {
   }
 }
 
-function summarizePage(record: PageRecord) {
+export function summarizePage(record: PageRecord) {
   const qs = record.cards.flatMap(c => c.queries);
   // Largest sum of peaks among statements that overlapped on one replica (an upper bound on what
   // the page held at once there: each statement's peak, not its memory at that instant).
@@ -1210,79 +1214,83 @@ function report() {
 
 // ---------------------------------------------------------------------------------------------
 
-installOutputRedaction();
-const { positionals, values } = parseArgs({
-  allowPositionals: true,
-  options: {
-    platform: { type: 'string', default: '/tmp/platform-x48/servers/mobs-query' },
-    label: { type: 'string', default: 'x48' },
-    reps: { type: 'string', default: '3' },
-    scopes: { type: 'string', default: 'project,org' },
-    windows: { type: 'string', default: '24h,7d,30d' },
-    projects: { type: 'string', default: 'p99,largest' },
-    cells: { type: 'string' },
-    page: { type: 'string', default: 'org' },
-    variants: { type: 'string', default: 'agg,both' },
-  },
-});
-const common = {
-  platform: values.platform,
-  label: values.label,
-  roles: new Set(values.projects.split(',')),
-  windows: values.windows.split(','),
-};
-switch (positionals[0]) {
-  case 'grid':
-    await grid({
-      ...common,
-      reps: Number(values.reps),
-      scopes: values.scopes.split(',') as ScopeKind[],
-      ...(values.cells ? { cells: new Set(values.cells.split(',')) } : {}),
-    });
-    break;
-  case 'page':
-    await pageLoad({
-      ...common,
-      page: values.page as 'org' | 'project',
-      variants: values.variants.split(','),
-      reps: Number(values.reps),
-    });
-    break;
-  case 'parity':
-    await parity(common);
-    break;
-  case 'check':
-    await check(common);
-    break;
-  case 'dry': {
-    // Plans and compiles every grid cell offline (no connection), so planner rejections surface first.
-    const mods = await loadPlatform(values.platform);
-    const to = new Date(Math.floor(Date.now() / HOUR) * HOUR);
-    let cells = 0;
-    let rejected = 0;
-    for (const [scope, shapes] of [
-      [{ organizationId: 'o' }, ORG_SHAPES],
-      [{ organizationId: 'o', projectId: 'p' }, PROJECT_SHAPES],
-    ] as const)
-      for (const window of common.windows)
-        for (const cell of cellsFor(shapes, window)) {
-          cells++;
-          try {
-            compileShape(mods, cell.shape, scope, to, window, cell.interval);
-          } catch (error) {
-            rejected++;
-            console.log(
-              `${scope.projectId ? 'project' : 'org'} ${window} ${cell.id}: ${(error as Error).message.slice(0, 400)}`,
-            );
+if (import.meta.url === pathToFileURL(process.argv[1]!).href) await main();
+
+async function main() {
+  installOutputRedaction();
+  const { positionals, values } = parseArgs({
+    allowPositionals: true,
+    options: {
+      platform: { type: 'string', default: '/tmp/platform-x48/servers/mobs-query' },
+      label: { type: 'string', default: 'x48' },
+      reps: { type: 'string', default: '3' },
+      scopes: { type: 'string', default: 'project,org' },
+      windows: { type: 'string', default: '24h,7d,30d' },
+      projects: { type: 'string', default: 'p99,largest' },
+      cells: { type: 'string' },
+      page: { type: 'string', default: 'org' },
+      variants: { type: 'string', default: 'agg,both' },
+    },
+  });
+  const common = {
+    platform: values.platform,
+    label: values.label,
+    roles: new Set(values.projects.split(',')),
+    windows: values.windows.split(','),
+  };
+  switch (positionals[0]) {
+    case 'grid':
+      await grid({
+        ...common,
+        reps: Number(values.reps),
+        scopes: values.scopes.split(',') as ScopeKind[],
+        ...(values.cells ? { cells: new Set(values.cells.split(',')) } : {}),
+      });
+      break;
+    case 'page':
+      await pageLoad({
+        ...common,
+        page: values.page as 'org' | 'project',
+        variants: values.variants.split(','),
+        reps: Number(values.reps),
+      });
+      break;
+    case 'parity':
+      await parity(common);
+      break;
+    case 'check':
+      await check(common);
+      break;
+    case 'dry': {
+      // Plans and compiles every grid cell offline (no connection), so planner rejections surface first.
+      const mods = await loadPlatform(values.platform);
+      const to = new Date(Math.floor(Date.now() / HOUR) * HOUR);
+      let cells = 0;
+      let rejected = 0;
+      for (const [scope, shapes] of [
+        [{ organizationId: 'o' }, ORG_SHAPES],
+        [{ organizationId: 'o', projectId: 'p' }, PROJECT_SHAPES],
+      ] as const)
+        for (const window of common.windows)
+          for (const cell of cellsFor(shapes, window)) {
+            cells++;
+            try {
+              compileShape(mods, cell.shape, scope, to, window, cell.interval);
+            } catch (error) {
+              rejected++;
+              console.log(
+                `${scope.projectId ? 'project' : 'org'} ${window} ${cell.id}: ${(error as Error).message.slice(0, 400)}`,
+              );
+            }
           }
-        }
-    console.log(`${cells} cells, ${rejected} rejected`);
-    break;
+      console.log(`${cells} cells, ${rejected} rejected`);
+      break;
+    }
+    case 'report':
+      report();
+      break;
+    default:
+      console.error('usage: mobs-metrics-page.ts grid|page|parity|check|dry|report');
+      process.exit(1);
   }
-  case 'report':
-    report();
-    break;
-  default:
-    console.error('usage: mobs-metrics-page.ts grid|page|parity|check|dry|report');
-    process.exit(1);
 }
