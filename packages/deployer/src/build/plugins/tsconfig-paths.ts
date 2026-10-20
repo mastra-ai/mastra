@@ -97,10 +97,17 @@ export function tsConfigPaths({
     if (!matcherCache.has(configPath)) {
       const config = parseTsconfig(configPath);
       const patterns = Object.keys(config.compilerOptions?.paths ?? {});
-      if (patterns.length > 0 && !config.compilerOptions?.baseUrl) {
-        config.compilerOptions = { ...config.compilerOptions, baseUrl: path.dirname(configPath) };
+      let matcher: PathsMatcher | null;
+
+      try {
+        matcher = createPathsMatcher({ path: configPath, config });
+      } catch {
+        const configWithBaseUrl = {
+          ...config,
+          compilerOptions: { ...config.compilerOptions, baseUrl: path.dirname(configPath) },
+        };
+        matcher = createPathsMatcher({ path: configPath, config: configWithBaseUrl });
       }
-      const matcher = createPathsMatcher({ path: configPath, config });
 
       matcherCache.set(configPath, { matcher, patterns });
     }

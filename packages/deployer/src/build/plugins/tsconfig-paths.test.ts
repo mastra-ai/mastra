@@ -172,6 +172,38 @@ describe('tsconfig-paths plugin', () => {
       expect(result.output[0].code).not.toContain('local');
     });
 
+    it('resolves inherited aliases relative to the config that defines them', async () => {
+      const appDir = join(tempDir, 'apps', 'app');
+      fs.mkdirSync(appDir, { recursive: true });
+      fs.writeFileSync(
+        join(tempDir, 'tsconfig.base.json'),
+        JSON.stringify({
+          compilerOptions: {
+            paths: {
+              '@lib/*': ['./lib/*'],
+            },
+          },
+        }),
+      );
+      const tsConfigPath = join(appDir, 'tsconfig.json');
+      fs.writeFileSync(tsConfigPath, JSON.stringify({ extends: '../../tsconfig.base.json' }));
+
+      fs.mkdirSync(join(tempDir, 'lib'), { recursive: true });
+      fs.writeFileSync(join(tempDir, 'lib', 'utils.ts'), `export const value = 42;`);
+      const indexFile = join(appDir, 'index.ts');
+      fs.writeFileSync(indexFile, `import { value } from '@lib/utils';\nconsole.log(value);`);
+
+      const bundle = await rollup({
+        logLevel: 'silent',
+        input: indexFile,
+        plugins: [tsConfigPaths({ tsConfigPath })],
+      });
+
+      const result = await bundle.generate({ format: 'esm' });
+      expect(result.output[0].code).toContain('42');
+      expect(result.output[0].code).not.toContain(`'@lib/utils'`);
+    });
+
     it('should resolve aliases from extended tsconfig', async () => {
       // Create base config
       const baseConfig = JSON.stringify({
