@@ -182,6 +182,47 @@ describe('qualification quality and operations', () => {
     expect(report.coverage.completeHistoricalCohort).toBe(false);
   });
 
+  it('truncates_reports_in_completion_order_with_deterministic_ties', async () => {
+    const { profiles } = await qualityFixtures();
+    const app = await qualityHarness();
+    cleanup.push(() => app.close());
+    const items: Array<Awaited<ReturnType<typeof app.assess>>> = [];
+    for (let index = 0; index < 3; index++) {
+      const item = await app.assess({ ...profiles.cases[0]!, id: `report-order-${index}` });
+      await app.reviews.advance(item.run.runId);
+      await app.store.complete(item.run.runId);
+      items.push(item);
+    }
+    // PR #27839: UUID order must not choose an arbitrary part of a truncated time window.
+    items.sort((left, right) => right.run.runId.localeCompare(left.run.runId));
+    const times = ['2026-10-20T10:00:00Z', '2026-10-20T10:30:00Z', '2026-10-20T11:00:00Z'];
+    async function setTime(index: number, completedAt: string) {
+      await app.store.client.execute({
+        sql: "UPDATE lead_qualifications SET assessment_json=json_set(assessment_json,'$.completedAt',?) WHERE run_id=?",
+        args: [completedAt, items[index]!.run.runId],
+      });
+    }
+    for (const [index, time] of times.entries()) await setTime(index, time);
+    const response = await app.http.request(`/lead-qualification/report?from=${window.from}&to=${window.to}&limit=2`);
+    expect(response.status).toBe(200);
+    const report = await response.json();
+    expect(report.assessments.map((item: { cycleId: string }) => item.cycleId)).toEqual(
+      items.slice(0, 2).map(item => item.run.runId),
+    );
+    expect(report.coverage).toMatchObject({ truncated: true, earliestRetained: times[0] });
+    const remainder = await qualificationReport(app.store.client, { from: times[2]!, to: window.to }, false);
+    expect(remainder.assessments.map(item => item.cycleId)).toEqual([items[2]!.run.runId]);
+    // Equivalent offsets represent the same instant; the run ID breaks only that tie.
+    await setTime(1, '2026-10-20T12:00:00+02:00');
+    const tied = await qualificationReport(app.store.client, { ...window, limit: 2 }, false);
+    expect(tied.assessments.map(item => item.cycleId)).toEqual(
+      items
+        .slice(0, 2)
+        .map(item => item.run.runId)
+        .sort(),
+    );
+  });
+
   it('redacts_diagnostics_and_prunes_only_eligible_records', async () => {
     const { profiles } = await qualityFixtures();
     const app = await qualityHarness();

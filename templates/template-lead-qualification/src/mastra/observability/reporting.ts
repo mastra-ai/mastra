@@ -47,7 +47,8 @@ export async function qualificationReport(
        AND (o.kind='final' OR o.kind LIKE 'final:%') ORDER BY o.rowid DESC LIMIT 1) AS patch_json
       FROM lead_qualifications q JOIN lead_cycles c USING(run_id)
       WHERE q.assessment_json IS NOT NULL AND julianday(json_extract(q.assessment_json,'$.completedAt'))>=julianday(?)
-      AND julianday(json_extract(q.assessment_json,'$.completedAt'))<julianday(?) ORDER BY c.run_id LIMIT ?`,
+      AND julianday(json_extract(q.assessment_json,'$.completedAt'))<julianday(?)
+      ORDER BY julianday(json_extract(q.assessment_json,'$.completedAt')),c.run_id LIMIT ?`,
     args: [window.from, window.to, window.limit + 1],
   });
   const salesTable =
