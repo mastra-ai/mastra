@@ -136,6 +136,7 @@ describe('login() server lifecycle', () => {
     );
     const port = extractPort();
     const state = extractState();
+    expect(state).toMatch(/^[a-f0-9]{32}$/);
 
     await sendCallback(port, { ...validParams, state });
 
@@ -143,6 +144,30 @@ describe('login() server lifecycle', () => {
     expect(creds.token).toBe('test-token');
     expect(creds.user.email).toBe('test@test.com');
     expect(creds.organizationId).toBe('org-1');
+  });
+
+  it.each([
+    { options: undefined, expected: 'mastra-cli' },
+    { options: { source: 'create-mastra' as const }, expected: 'create-mastra' },
+    { options: { source: 'mastra-cli-create' as const }, expected: 'mastra-cli-create' },
+    { options: { source: 'create-factory' as const }, expected: 'create-factory' },
+  ])('sends source=$expected in the login URL', async ({ options, expected }) => {
+    const { login } = await import('./credentials.js');
+
+    const loginPromise = login(undefined, options);
+
+    await vi.waitFor(
+      () => {
+        extractPort();
+      },
+      { timeout: 5000 },
+    );
+    expect(extractUrl()).toMatch(
+      new RegExp(`/v1/auth/login\\?product=cli&cli_port=\\d+&state=[a-f0-9]{32}&source=${expected}$`),
+    );
+
+    await sendCallback(extractPort(), { ...validParams, state: extractState() });
+    await loginPromise;
   });
 
   it('closes all connections so the process can exit', async () => {

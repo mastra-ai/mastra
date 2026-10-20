@@ -2226,6 +2226,26 @@
       "permanent": true
     },
     {
+      "source": "/reference/core/getTelemetry",
+      "destination": "/docs/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/reference/client-js/telemetry",
+      "destination": "/reference/client-js/observability",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getTools",
+      "destination": "/reference/agents/listTools",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/tracing/trace-query",
+      "destination": "/reference/observability/tracing/advanced-queries",
+      "permanent": true
+    },
+    {
       "source": "/docs/workspace/overview/llms.txt",
       "destination": "/docs/sandbox/overview/llms.txt",
       "permanent": true
@@ -4043,6 +4063,26 @@
     {
       "source": "/docs/connections/connect-mcp-client/llms.txt",
       "destination": "/docs/connections/mcp/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getTelemetry/llms.txt",
+      "destination": "/docs/observability/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/client-js/telemetry/llms.txt",
+      "destination": "/reference/client-js/observability/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getTools/llms.txt",
+      "destination": "/reference/agents/listTools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/tracing/trace-query/llms.txt",
+      "destination": "/reference/observability/tracing/advanced-queries/llms.txt",
       "permanent": true
     }
   ]

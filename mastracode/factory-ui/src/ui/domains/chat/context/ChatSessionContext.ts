@@ -1,5 +1,7 @@
 import { createContext } from 'react';
 
+import type { ThreadOwner } from '../services/reply-credential';
+
 export interface FactorySessionState {
   factoryProjectId: string;
   projectRepositoryId?: string;
@@ -54,11 +56,13 @@ export interface ChatSessionContextApi {
   baseUrl: string;
   /**
    * 'factory' — org-scoped session bound to a factory worktree of a GitHub
-   * project (runs are driven by the factory; modes are hidden).
+   * project (runs are driven by the factory).
    * 'user' — personal session (a `user/` worktree opened via
-   * /user/threads/*); modes stay available.
+   * /user/threads/*); its draft can pick a model before the session exists.
    */
   kind: 'factory' | 'user';
+  /** Who the stored session belongs to; absent where no session row backs the chat (supervisor, `?resourceId=` override). */
+  owner?: ThreadOwner;
 }
 
 export const ChatSessionContext = createContext<ChatSessionContextApi | null>(null);

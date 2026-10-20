@@ -9,9 +9,16 @@ import { consumeStream } from './base/consume-stream';
 import { ChunkFrom } from './types';
 import type { StepTripwireData, WorkflowStreamEvent } from './types';
 
-type AggregatedLanguageModelUsage = Required<LanguageModelUsage> & {
-  cacheCreationInputTokens: number;
+type AggregatedLanguageModelUsage = Omit<LanguageModelUsage, 'inputTokens' | 'outputTokens' | 'totalTokens'> & {
+  inputTokens: number | undefined;
+  outputTokens: number | undefined;
+  totalTokens: number | undefined;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
 };
+
+const primaryUsageKeys = ['inputTokens', 'outputTokens', 'totalTokens'] as const;
 
 export class WorkflowRunOutput<
   TResult extends WorkflowResult<any, any, any, any> = WorkflowResult<any, any, any, any>,
@@ -19,13 +26,11 @@ export class WorkflowRunOutput<
   #status: WorkflowRunStatus = 'running';
   #tripwireData: StepTripwireData | undefined;
   #usageCount: AggregatedLanguageModelUsage = {
-    inputTokens: 0,
-    outputTokens: 0,
-    totalTokens: 0,
-    cachedInputTokens: 0,
-    cacheCreationInputTokens: 0,
-    reasoningTokens: 0,
+    inputTokens: undefined,
+    outputTokens: undefined,
+    totalTokens: undefined,
   };
+  #usageCountMissing = new Set<(typeof primaryUsageKeys)[number]>();
   #consumptionStarted = false;
   #baseStream: ReadableStream<WorkflowStreamEvent>;
   #emitter = new EventEmitter();
@@ -189,28 +194,30 @@ export class WorkflowRunOutput<
           cacheCreationInputTokens?: `${number}` | number;
         },
   ) {
-    let totalUsage = {
-      inputTokens: this.#usageCount.inputTokens ?? 0,
-      outputTokens: this.#usageCount.outputTokens ?? 0,
-      totalTokens: this.#usageCount.totalTokens ?? 0,
-      reasoningTokens: this.#usageCount.reasoningTokens ?? 0,
-      cachedInputTokens: this.#usageCount.cachedInputTokens ?? 0,
-      cacheCreationInputTokens: this.#usageCount.cacheCreationInputTokens ?? 0,
+    const primaryUsage = {
+      inputTokens:
+        'inputTokens' in usage ? usage.inputTokens : 'promptTokens' in usage ? usage.promptTokens : undefined,
+      outputTokens:
+        'outputTokens' in usage ? usage.outputTokens : 'completionTokens' in usage ? usage.completionTokens : undefined,
+      totalTokens: usage.totalTokens,
     };
-    if ('inputTokens' in usage) {
-      totalUsage.inputTokens += parseInt(usage?.inputTokens?.toString() ?? '0', 10);
-      totalUsage.outputTokens += parseInt(usage?.outputTokens?.toString() ?? '0', 10);
-      // we need to handle both formats because you can use a V1 model inside a stream workflow
-    } else if ('promptTokens' in usage) {
-      totalUsage.inputTokens += parseInt(usage?.promptTokens?.toString() ?? '0', 10);
-      totalUsage.outputTokens += parseInt(usage?.completionTokens?.toString() ?? '0', 10);
-    }
-    totalUsage.totalTokens += parseInt(usage?.totalTokens?.toString() ?? '0', 10);
 
-    totalUsage.reasoningTokens += parseInt(usage?.reasoningTokens?.toString() ?? '0', 10);
-    totalUsage.cachedInputTokens += parseInt(usage?.cachedInputTokens?.toString() ?? '0', 10);
-    totalUsage.cacheCreationInputTokens += parseInt(usage?.cacheCreationInputTokens?.toString() ?? '0', 10);
-    this.#usageCount = totalUsage;
+    for (const key of primaryUsageKeys) {
+      const value = primaryUsage[key] === undefined ? undefined : Number(primaryUsage[key]);
+      if (value === undefined) {
+        this.#usageCountMissing.add(key);
+        this.#usageCount[key] = undefined;
+      } else if (!this.#usageCountMissing.has(key)) {
+        this.#usageCount[key] = (this.#usageCount[key] ?? 0) + value;
+      }
+    }
+
+    for (const key of ['reasoningTokens', 'cachedInputTokens', 'cacheCreationInputTokens'] as const) {
+      const value = usage[key] === undefined ? undefined : Number(usage[key]);
+      if (value !== undefined) {
+        this.#usageCount[key] = (this.#usageCount[key] ?? 0) + value;
+      }
+    }
   }
 
   /**

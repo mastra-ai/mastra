@@ -4,7 +4,6 @@ import { useEffect } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ComposerAttachmentsProvider, useComposerAttachments } from '../composer-attachments';
-import type { ComposerAttachment } from '../composer-attachments';
 import { server } from '@/test/msw-server';
 
 afterEach(() => cleanup());
@@ -140,14 +139,12 @@ describe('composer attachments', () => {
       [0xff, 0xfe, 0xfd],
       [0xc3, 0x28],
       [0xe2, 0x82],
-    ])('rejects invalid bytes %j', async (...bytes) => {
+    ])('attaches invalid bytes %j as a file instead of reading them as text', async (...bytes) => {
       const { ref } = renderProvider();
-      let rejected;
       await act(async () => {
-        rejected = await ref.current!.addFiles([new File([new Uint8Array(bytes)], 'unknown.bin')]);
+        await ref.current!.addFiles([new File([new Uint8Array(bytes)], 'unknown.bin')]);
       });
-      expect(rejected).toEqual(['unknown.bin']);
-      expect(ref.current!.attachments).toEqual([]);
+      expect(ref.current!.attachments.map(file => [file.name, file.kind])).toEqual([['unknown.bin', 'file']]);
       expect(ref.current!.isAddingAttachments).toBe(false);
     });
   });
@@ -194,15 +191,13 @@ describe('composer attachments', () => {
 
   describe('when a local workbook name contains URL punctuation', () => {
     it.each(['leads#2026.xlsx', 'leads.csv#2026.xlsx', 'leads.csv?2026.xls'])(
-      'rejects %s rather than reading its bytes as text',
+      'attaches %s as a file rather than reading its bytes as text',
       async name => {
         const { ref } = renderProvider();
-        let rejected;
         await act(async () => {
-          rejected = await ref.current!.addFiles([new File(['fake workbook'], name)]);
+          await ref.current!.addFiles([new File(['fake workbook'], name)]);
         });
-        expect(rejected).toEqual([name]);
-        expect(ref.current!.attachments).toEqual([]);
+        expect(ref.current!.attachments.map(file => [file.name, file.kind])).toEqual([[name, 'file']]);
       },
     );
   });
@@ -219,22 +214,26 @@ describe('composer attachments', () => {
     });
   });
 
-  describe('when unsupported binary files are selected', () => {
-    it.each(['leads.xls', 'leads.xlsx', 'archive.zip', 'file.constructor'])(
-      'rejects %s while keeping supported files in the same selection',
-      async name => {
-        const { ref } = renderProvider();
-        let rejected: string[] = [];
-        await act(async () => {
-          rejected = await ref.current!.addFiles([textFile(), new File([new Uint8Array([80, 75, 0, 1, 2])], name)]);
-        });
-        expect(rejected).toEqual([name]);
-        expect(ref.current!.attachments.map(file => file.name)).toEqual(['notes.txt']);
-        expect(await ref.current!.toCoreUserMessages()).toEqual([
-          { role: 'user', content: '<attachment name="notes.txt">hello world</attachment>' },
-        ]);
-      },
-    );
+  describe('when binary files of an unknown kind are selected', () => {
+    it.each([
+      ['leads.xls', 'application/vnd.ms-excel'],
+      ['leads.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+      ['archive.zip', 'application/octet-stream'],
+      ['file.constructor', 'application/octet-stream'],
+    ])('sends %s as a file part with its bytes intact, next to the other files', async (name, mimeType) => {
+      const { ref } = renderProvider();
+      await act(async () => {
+        await ref.current!.addFiles([textFile(), new File([new Uint8Array([80, 75, 0, 1, 2])], name)]);
+      });
+      expect(ref.current!.attachments.map(file => file.name)).toEqual(['notes.txt', name]);
+      expect(await ref.current!.toCoreUserMessages()).toEqual([
+        { role: 'user', content: '<attachment name="notes.txt">hello world</attachment>' },
+        {
+          role: 'user',
+          content: [{ type: 'file', data: `data:${mimeType};base64,UEsAAQI=`, mimeType, filename: name }],
+        },
+      ]);
+    });
   });
 
   it('adds files and classifies them by kind', async () => {
@@ -254,7 +253,7 @@ describe('composer attachments', () => {
     await act(async () => {
       await ref.current!.addFiles([imageFile(), textFile()]);
     });
-    const firstId = ref.current!.attachments[0]!.id;
+    const firstId = ref.current!.attachments[0].id;
 
     act(() => {
       ref.current!.remove(firstId);
@@ -279,21 +278,21 @@ describe('composer attachments', () => {
 
     const [image, pdf, text] = messages;
     // image part
-    expect(Array.isArray(image!.content)).toBe(true);
-    const imagePart = (image!.content as Array<{ type: string; mimeType?: string }>)[0];
-    expect(imagePart!.type).toBe('image');
-    expect(imagePart!.mimeType).toBe('image/png');
+    expect(Array.isArray(image.content)).toBe(true);
+    const imagePart = (image.content as Array<{ type: string; mimeType?: string }>)[0];
+    expect(imagePart.type).toBe('image');
+    expect(imagePart.mimeType).toBe('image/png');
 
     // pdf -> file part with data: prefix
-    const pdfPart = (pdf!.content as Array<{ type: string; data?: string; filename?: string }>)[0];
-    expect(pdfPart!.type).toBe('file');
-    expect(pdfPart!.filename).toBe('doc.pdf');
-    expect(pdfPart!.data).toMatch(/^data:application\/pdf;base64,/);
+    const pdfPart = (pdf.content as Array<{ type: string; data?: string; filename?: string }>)[0];
+    expect(pdfPart.type).toBe('file');
+    expect(pdfPart.filename).toBe('doc.pdf');
+    expect(pdfPart.data).toMatch(/^data:application\/pdf;base64,/);
     // The data URL prefix must appear exactly once; `fileToBase64` already
     // returns a full data URL, so it must not be prepended a second time.
-    expect(pdfPart!.data).not.toMatch(/data:application\/pdf;base64,data:/);
+    expect(pdfPart.data).not.toMatch(/data:application\/pdf;base64,data:/);
 
-    expect(text!.content).toBe('<attachment name="notes.txt">hello world</attachment>');
+    expect(text.content).toBe('<attachment name="notes.txt">hello world</attachment>');
   });
 
   it('adds a URL attachment whose data forwards the URL, not base64', async () => {
@@ -309,13 +308,13 @@ describe('composer attachments', () => {
       await ref.current!.addUrl('https://example.com/pic.png');
     });
 
-    const att = ref.current!.attachments[0] as ComposerAttachment;
+    const att = ref.current!.attachments[0];
     expect(att.isUrl).toBe(true);
     expect(att.kind).toBe('image');
 
     const messages = await ref.current!.toCoreUserMessages();
-    const imagePart = (messages[0]!.content as Array<{ type: string; image?: string }>)[0];
-    expect(imagePart!.image).toBe('https://example.com/pic.png');
+    const imagePart = (messages[0].content as Array<{ type: string; image?: string }>)[0];
+    expect(imagePart.image).toBe('https://example.com/pic.png');
   });
 
   it('classifies a gs:// URL as a forwarded URL attachment', async () => {
@@ -327,7 +326,7 @@ describe('composer attachments', () => {
       await ref.current!.addUrl('gs://my-bucket/clip.mp4');
     });
 
-    const att = ref.current!.attachments[0] as ComposerAttachment;
+    const att = ref.current!.attachments[0];
     expect(att.isUrl).toBe(true);
     expect(att.kind).toBe('video');
     expect(att.contentType).toBe('video/mp4');
@@ -341,10 +340,10 @@ describe('composer attachments', () => {
     });
 
     const messages = await ref.current!.toCoreUserMessages();
-    const filePart = (messages[0]!.content as Array<{ type: string; data?: string; mimeType?: string }>)[0];
-    expect(filePart!.type).toBe('file');
-    expect(filePart!.data).toBe('gs://my-bucket/clip.mp4');
-    expect(filePart!.mimeType).toBe('video/mp4');
+    const filePart = (messages[0].content as Array<{ type: string; data?: string; mimeType?: string }>)[0];
+    expect(filePart.type).toBe('file');
+    expect(filePart.data).toBe('gs://my-bucket/clip.mp4');
+    expect(filePart.mimeType).toBe('video/mp4');
   });
 
   it('forwards an audio URL as a file part instead of empty text', async () => {
@@ -356,16 +355,16 @@ describe('composer attachments', () => {
       await ref.current!.addUrl('gs://my-bucket/track.mp3');
     });
 
-    const att = ref.current!.attachments[0] as ComposerAttachment;
+    const att = ref.current!.attachments[0];
     expect(att.isUrl).toBe(true);
     expect(att.kind).toBe('video');
     expect(att.contentType).toBe('audio/mpeg');
 
     const messages = await ref.current!.toCoreUserMessages();
-    const filePart = (messages[0]!.content as Array<{ type: string; data?: string; mimeType?: string }>)[0];
-    expect(filePart!.type).toBe('file');
-    expect(filePart!.data).toBe('gs://my-bucket/track.mp3');
-    expect(filePart!.mimeType).toBe('audio/mpeg');
+    const filePart = (messages[0].content as Array<{ type: string; data?: string; mimeType?: string }>)[0];
+    expect(filePart.type).toBe('file');
+    expect(filePart.data).toBe('gs://my-bucket/track.mp3');
+    expect(filePart.mimeType).toBe('audio/mpeg');
   });
 
   it('inlines a local video file as a data URI file part', async () => {
@@ -375,16 +374,16 @@ describe('composer attachments', () => {
       await ref.current!.addFiles([new File(['video-bytes'], 'movie.mp4', { type: 'video/mp4' })]);
     });
 
-    const att = ref.current!.attachments[0] as ComposerAttachment;
+    const att = ref.current!.attachments[0];
     expect(att.kind).toBe('video');
     expect(att.isUrl).toBe(false);
 
     const messages = await ref.current!.toCoreUserMessages();
-    const filePart = (messages[0]!.content as Array<{ type: string; data?: string }>)[0];
-    expect(filePart!.type).toBe('file');
+    const filePart = (messages[0].content as Array<{ type: string; data?: string }>)[0];
+    expect(filePart.type).toBe('file');
     // A single, well-formed data URI — guards against double-wrapping the
     // base64 payload (e.g. `data:video/mp4;base64,data:video/mp4;base64,...`).
-    expect(filePart!.data).toMatch(/^data:video\/mp4;base64,[^,]+$/);
-    expect(filePart!.data).not.toContain('base64,data:');
+    expect(filePart.data).toMatch(/^data:video\/mp4;base64,[^,]+$/);
+    expect(filePart.data).not.toContain('base64,data:');
   });
 });

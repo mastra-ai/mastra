@@ -180,6 +180,72 @@ describe('Factory run binding authority', () => {
       ]);
     });
 
+    it('keeps an over-age binding that keep vouches for, and revokes it when keep declines', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepareBinding(storage);
+      const olderThan = new Date(Date.now() + 60_000);
+      const seen: string[] = [];
+
+      await expect(
+        storage.revokeStaleRunBindings({
+          olderThan,
+          now: new Date(),
+          keep: async binding => {
+            seen.push(binding.id);
+            return true;
+          },
+        }),
+      ).resolves.toBe(0);
+      expect(seen).toEqual([prepared.binding.id]);
+      await expect(storage.listRunBindings('org-1', PROJECT_ID, prepared.item.id)).resolves.toEqual([
+        expect.objectContaining({ status: 'active' }),
+      ]);
+
+      await expect(
+        storage.revokeStaleRunBindings({ olderThan, now: new Date(), keep: async () => false }),
+      ).resolves.toBe(1);
+      await expect(storage.listRunBindings('org-1', PROJECT_ID, prepared.item.id)).resolves.toEqual([
+        expect.objectContaining({ status: 'revoked' }),
+      ]);
+    });
+
+    it('only consults keep for over-age bindings', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      await prepareBinding(storage);
+      let calls = 0;
+
+      await expect(
+        storage.revokeStaleRunBindings({
+          olderThan: new Date(Date.now() - 60_000),
+          now: new Date(),
+          keep: async () => {
+            calls += 1;
+            return true;
+          },
+        }),
+      ).resolves.toBe(0);
+      expect(calls).toBe(0);
+    });
+
+    it('still revokes a kept over-age binding whose work item reached a terminal stage', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepareBinding(storage);
+      await storage.update({
+        orgId: 'org-1',
+        id: prepared.item.id,
+        userId: 'user-1',
+        patch: { stages: ['done'] },
+      });
+
+      await expect(
+        storage.revokeStaleRunBindings({
+          olderThan: new Date(Date.now() + 60_000),
+          now: new Date(),
+          keep: async () => true,
+        }),
+      ).resolves.toBe(1);
+    });
+
     it('revokes fresh bindings whose work item reached a terminal stage', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const prepared = await prepareBinding(storage);
@@ -193,6 +259,24 @@ describe('Factory run binding authority', () => {
       await expect(
         storage.revokeStaleRunBindings({ olderThan: new Date(Date.now() - 60_000), now: new Date() }),
       ).resolves.toBe(1);
+    });
+
+    it('finds the session binding without a thread and stops once it is revoked', async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const prepared = await prepareBinding(storage);
+      const find = (orgId = 'org-1') =>
+        storage.findActiveRunBindingForSession({ orgId, factoryProjectId: PROJECT_ID, sessionId: 'session-1' });
+
+      await expect(find()).resolves.toMatchObject({ id: prepared.binding.id, role: 'work' });
+      await expect(find('org-2')).resolves.toBeNull();
+
+      await storage.revokeRunBinding({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        bindingId: prepared.binding.id,
+        revokedAt: new Date(),
+      });
+      await expect(find()).resolves.toBeNull();
     });
 
     it('revokes fresh bindings whose work item is missing', async () => {

@@ -1,7 +1,7 @@
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsFieldsetRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
@@ -71,7 +71,7 @@ export function IntakeSourceRouting({
       <ScrollArea orientation="vertical" maxHeight="20rem">
         <div role="group" aria-label={`${label} routing`} className="flex flex-col">
           {matchingSources.length === 0 ? (
-            <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
+            <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
               No matches
             </Txt>
           ) : (
@@ -88,7 +88,7 @@ export function IntakeSourceRouting({
                   ? "Choose a board — this source's issues won't be picked up until one is set."
                   : undefined;
               return (
-                <SettingsRow key={sourceId} label={name} description={description}>
+                <SettingsFieldsetRow key={sourceId} label={name} description={description}>
                   <div className="flex items-center gap-2">
                     <Select
                       value={routedFactory?.id ?? UNROUTED}
@@ -122,7 +122,7 @@ export function IntakeSourceRouting({
                       />
                     )}
                   </div>
-                </SettingsRow>
+                </SettingsFieldsetRow>
               );
             })
           )}

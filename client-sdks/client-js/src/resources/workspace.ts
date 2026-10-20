@@ -17,6 +17,18 @@ import type {
   SearchSkillsResponse,
   ListSkillReferencesResponse,
   GetSkillReferenceResponse,
+  SkillsShSearchParams,
+  SkillsShSearchResponse,
+  SkillsShPopularParams,
+  SkillsShPopularResponse,
+  SkillsShPreviewParams,
+  SkillsShPreviewResponse,
+  SkillsShInstallParams,
+  SkillsShInstallResponse,
+  SkillsShRemoveParams,
+  SkillsShRemoveResponse,
+  SkillsShUpdateParams,
+  SkillsShUpdateResponse,
 } from '../types';
 
 import { BaseResource } from './base';
@@ -72,6 +84,7 @@ export class WorkspaceSkillResource extends BaseResource {
  * - Filesystem operations (read, write, list, delete, mkdir, stat)
  * - Search operations (search, index)
  * - Skills operations (list, get, search, references)
+ * - skills.sh registry operations (search, popular, preview, install, remove, update)
  */
 export class Workspace extends BaseResource {
   private workspaceId: string;
@@ -280,5 +293,72 @@ export class Workspace extends BaseResource {
    */
   getSkill(skillName: string, skillPath?: string): WorkspaceSkillResource {
     return new WorkspaceSkillResource(this.options, this.workspaceId, skillName, skillPath);
+  }
+
+  // ==========================================================================
+  // skills.sh Registry Operations
+  // ==========================================================================
+
+  private skillsShQuery(params: Record<string, string | number | undefined>): string {
+    const searchParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined) searchParams.set(key, String(value));
+    }
+    const query = searchParams.toString();
+    return query ? `?${query}` : '';
+  }
+
+  /**
+   * Searches the skills.sh registry
+   * @param params - Search query and optional result limit
+   * @returns Promise containing matching skills
+   */
+  searchSkillsSh(params: SkillsShSearchParams): Promise<SkillsShSearchResponse> {
+    return this.request(`${this.basePath}/skills-sh/search${this.skillsShQuery(params)}`);
+  }
+
+  /**
+   * Lists popular skills from the skills.sh registry
+   * @param params - Optional pagination
+   * @returns Promise containing popular skills
+   */
+  listPopularSkillsSh(params: SkillsShPopularParams = {}): Promise<SkillsShPopularResponse> {
+    return this.request(`${this.basePath}/skills-sh/popular${this.skillsShQuery(params)}`);
+  }
+
+  /**
+   * Fetches the SKILL.md of a skills.sh skill without installing it
+   * @param params - GitHub owner, repo and skill path
+   * @returns Promise containing the SKILL.md content
+   */
+  previewSkillsSh(params: SkillsShPreviewParams): Promise<SkillsShPreviewResponse> {
+    return this.request(`${this.basePath}/skills-sh/preview${this.skillsShQuery(params)}`);
+  }
+
+  /**
+   * Installs a skills.sh skill into the workspace filesystem
+   * @param params - GitHub owner, repo, skill name and optional mount
+   * @returns Promise containing the installed path and files written
+   */
+  installSkillsSh(params: SkillsShInstallParams): Promise<SkillsShInstallResponse> {
+    return this.request(`${this.basePath}/skills-sh/install`, { method: 'POST', body: params, retries: 0 });
+  }
+
+  /**
+   * Removes an installed skills.sh skill from the workspace
+   * @param params - Name of the skill to remove
+   * @returns Promise containing the removed path
+   */
+  removeSkillsSh(params: SkillsShRemoveParams): Promise<SkillsShRemoveResponse> {
+    return this.request(`${this.basePath}/skills-sh/remove`, { method: 'POST', body: params, retries: 0 });
+  }
+
+  /**
+   * Re-fetches installed skills.sh skills from GitHub
+   * @param params - Optional skill name; omit to update all
+   * @returns Promise containing per-skill update results
+   */
+  updateSkillsSh(params: SkillsShUpdateParams = {}): Promise<SkillsShUpdateResponse> {
+    return this.request(`${this.basePath}/skills-sh/update`, { method: 'POST', body: params, retries: 0 });
   }
 }

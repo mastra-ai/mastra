@@ -131,6 +131,25 @@ describe('status route', () => {
     });
   });
 
+  it('surfaces the credential mode so the SPA can tell an API key from Platform connections', async () => {
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, org1() as never);
+      await next();
+    });
+    mountApiRoutes(
+      app,
+      buildIncidentioRoutes({
+        incidentio,
+        mode: 'api-key',
+        auth: fakeRouteAuth({ enabled: true }),
+        intake: seed.intake,
+      }),
+    );
+    const res = await app.request('/web/incidentio/status');
+    expect(await res.json()).toMatchObject({ enabled: true, configured: true, mode: 'api-key', reason: 'ready' });
+  });
+
   it('requires an organization', async () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/incidentio/status');
     expect(await res.json()).toMatchObject({

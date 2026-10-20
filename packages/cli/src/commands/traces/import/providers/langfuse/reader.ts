@@ -1,18 +1,12 @@
-import {
-  LangfuseClient,
-  type LangfuseClientDependencies,
-  type LangfuseClientOptions,
-  type LangfuseObservationQuery,
-  LangfuseResponseTooLargeError,
-} from './client.js';
-import {
-  LANGFUSE_EXPAND_ALL_METADATA,
-  LANGFUSE_OBSERVATION_FIELDS,
-  type LangfuseObservation,
-  type LangfuseObservationsPage,
-  type LangfuseProject,
-  type LangfuseSourceTrace,
-  type LangfuseTraceDiscovery,
+import { LangfuseClient, LangfuseResponseTooLargeError } from './client.js';
+import type { LangfuseClientDependencies, LangfuseClientOptions, LangfuseObservationQuery } from './client.js';
+import { LANGFUSE_EXPAND_ALL_METADATA, LANGFUSE_OBSERVATION_FIELDS } from './types.js';
+import type {
+  LangfuseObservation,
+  LangfuseObservationsPage,
+  LangfuseProject,
+  LangfuseSourceTrace,
+  LangfuseTraceDiscovery,
 } from './types.js';
 
 const PAGE_SIZE = 1000;

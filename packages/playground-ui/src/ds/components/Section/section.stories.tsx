@@ -141,9 +141,9 @@ export const Flat: Story = {
         <Section.Row label="Two-factor authentication" description="Require a verification code when signing in.">
           <Switch aria-label="Two-factor authentication" />
         </Section.Row>
-        <Section.Row label="Session timeout" description="Sign out after a period of inactivity." htmlFor="timeout">
+        <Section.Row label="Session timeout" description="Sign out after a period of inactivity.">
           <Select defaultValue="30">
-            <SelectTrigger id="timeout" className="w-full sm:w-40">
+            <SelectTrigger className="w-full sm:w-40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -186,13 +186,9 @@ export const Factory: Story = {
           <Switch aria-label="Smart editing" />
         </Section.Row>
         <Section.Divider />
-        <Section.Row
-          label="Notifications"
-          description="Choose how completion alerts are delivered."
-          htmlFor="notifications"
-        >
+        <Section.Row label="Notifications" description="Choose how completion alerts are delivered.">
           <Select defaultValue="off">
-            <SelectTrigger id="notifications" className="w-full sm:w-36">
+            <SelectTrigger className="w-full sm:w-36">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -262,13 +258,9 @@ export const MultipleSections: Story = {
             <Switch aria-label="Smart editing" defaultChecked />
           </Section.Row>
           <Section.Divider />
-          <Section.Row
-            label="Notifications"
-            description="Choose how completion alerts are delivered."
-            htmlFor="multiple-notifications"
-          >
+          <Section.Row label="Notifications" description="Choose how completion alerts are delivered.">
             <Select defaultValue="off">
-              <SelectTrigger id="multiple-notifications" className="w-full sm:w-40">
+              <SelectTrigger className="w-full sm:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -292,13 +284,9 @@ export const MultipleSections: Story = {
           <Section.Row label="Two-factor authentication" description="Require a verification code when signing in.">
             <Switch aria-label="Two-factor authentication" />
           </Section.Row>
-          <Section.Row
-            label="Session timeout"
-            description="Sign out after a period of inactivity."
-            htmlFor="multiple-timeout"
-          >
+          <Section.Row label="Session timeout" description="Sign out after a period of inactivity.">
             <Select defaultValue="30">
-              <SelectTrigger id="multiple-timeout" className="w-full sm:w-40">
+              <SelectTrigger className="w-full sm:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

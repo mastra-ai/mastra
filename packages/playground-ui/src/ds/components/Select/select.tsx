@@ -5,11 +5,13 @@ import * as React from 'react';
 
 import { buttonVariants } from '../Button/Button';
 import type { TextButtonSize } from '../Button/Button';
+import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
-import { fieldTriggerStyle } from '@/ds/primitives/form-element';
+import { useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { fieldTriggerErrorBorder, fieldTriggerStyle, fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
 import { menuItemCheckClass, menuItemClass, menuPopupClass, menuPositionerClass } from '@/ds/primitives/menu-item';
+import { menuScrollPopupClass, MenuScrollArea } from '@/ds/primitives/menu-scroll-area';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -54,7 +56,7 @@ function collectItems(children: React.ReactNode, acc: Array<{ value: unknown; la
   });
 }
 
-type SelectRootProps<Value> = SelectPrimitive.Root.Props<Value, false>;
+type SelectRootProps<Value> = SelectPrimitive.Root.Props<Value>;
 type SelectChangeDetails = Parameters<NonNullable<SelectRootProps<unknown>['onValueChange']>>[1];
 
 /**
@@ -76,7 +78,7 @@ function Select<Value = string>({ children, items, onValueChange, ...props }: Se
 
   return (
     <SelectPrimitive.Root
-      items={derivedItems as SelectRootProps<Value>['items']}
+      items={derivedItems}
       onValueChange={onValueChange ? (value, eventDetails) => onValueChange(value as Value, eventDetails) : undefined}
       {...props}
     >
@@ -141,15 +143,17 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
           visualVariant === 'default' && fieldTriggerStyle,
           // Fill the field and push the value left / chevron right (Button's
           // base centers its content with `justify-center`).
-          'justify-between text-body-sm',
+          fieldTriggerWidthStyle,
+          'justify-between',
           // Read as "active" while the menu is open, per variant (see map above).
           controlTriggerOpenState[visualVariant],
           'data-[placeholder]:text-muted-foreground',
-          'aria-invalid:border-destructive aria-invalid:focus-visible:border-destructive',
+          fieldTriggerErrorBorder,
           '[&>span]:truncate',
           className,
         )}
         {...props}
+        {...keepOwnAccessibleName(props)}
       >
         {children}
         {/* `SelectPrimitive.Icon` renders the provided element in place of its
@@ -214,7 +218,7 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
     // Default to the nearest SideDialog/Drawer popup so the dropdown stays
     // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
-    const menu = useFluidMenu<HTMLDivElement>();
+    const menu = useFluidMenu();
     const positionerProps: SelectContentPositionerProps = {
       side,
       align,
@@ -234,10 +238,12 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
     return (
       <SelectPrimitive.Portal container={resolvedContainer}>
         <SelectPrimitive.Positioner className={menuPositionerClass} {...positionerProps}>
-          <SelectPrimitive.Popup ref={ref} className={cn(menuPopupClass, className)} {...props}>
-            <SelectPrimitive.List className={menu.containerClassName} {...menu.getContainerProps({})}>
-              <FluidMenuItems menu={menu}>{children}</FluidMenuItems>
-            </SelectPrimitive.List>
+          <SelectPrimitive.Popup ref={ref} className={cn(menuPopupClass, menuScrollPopupClass, className)} {...props}>
+            {/* The viewport is Select's list, so Select scrolls it to line the selected item up with the
+                trigger. `role` is restated because the viewport's own `presentation` role would win. */}
+            <MenuScrollArea menu={menu} viewportRender={<SelectPrimitive.List role="listbox" />}>
+              {children}
+            </MenuScrollArea>
           </SelectPrimitive.Popup>
         </SelectPrimitive.Positioner>
       </SelectPrimitive.Portal>

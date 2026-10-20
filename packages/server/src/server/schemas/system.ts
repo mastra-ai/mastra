@@ -38,11 +38,42 @@ export const observabilityStorageCapabilitiesSchema = z.object({
       'Advanced trace queries (POST /observability/traces/query). When false, list traces with GET /observability/traces/light instead.',
     ),
   traceQueryRootDuration: z.boolean().describe('`durationMs` predicates in trace and thread queries'),
+  traceQueryContextIds: z
+    .boolean()
+    .describe('`runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries'),
+  traceQueryTimeToFirstChunk: z
+    .boolean()
+    .describe(
+      '`timeToFirstChunkMs` in trace and span query results, and predicates on it in trace, thread and span queries',
+    ),
+  traceQueryRootSpanFields: z
+    .boolean()
+    .describe('Root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct`'),
   traceQueryDiscovery: z
     .boolean()
     .describe('Trace query field discovery (POST /observability/traces/query/fields and /values)'),
   traceQueryTenantScope: z.boolean().describe('Trusted tenant scoping of trace and thread queries'),
+  traceAggregate: z
+    .boolean()
+    .describe(
+      'Trace aggregation (POST /observability/traces/aggregate). Unlike `traceQuery`, clients should treat a missing value as unavailable.',
+    ),
   threadQuery: z.boolean().describe('Advanced thread queries (POST /observability/threads/query)'),
+  threadQueryRows: z
+    .boolean()
+    .default(false)
+    .describe(
+      'Full-history thread rows with activity windows, filters and sorting. Treat a missing value as unavailable.',
+    ),
+  spanQuery: z.boolean().describe('Span queries (POST /observability/spans/query)'),
+  traceRetentionDays: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit.',
+    ),
   feedback: z
     .boolean()
     .describe(
@@ -72,6 +103,8 @@ export const systemPackagesResponseSchema = z.object({
   cmsEnabled: z.boolean(),
   /** Whether the default LiveKit connection-details route is registered — not whether credentials or a worker exist. */
   liveKitConnectionRouteEnabled: z.boolean(),
+  /** True when the default LiveKit trace recording review route is registered. */
+  liveKitRecordingRouteEnabled: z.boolean().optional(),
   /**
    * The editor's configured source, when set. `'code'` swaps Studio's
    * Save/Publish UI for Download JSON + Open PR. `'db'` keeps the standard

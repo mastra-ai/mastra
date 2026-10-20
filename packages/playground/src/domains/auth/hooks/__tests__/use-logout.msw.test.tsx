@@ -8,7 +8,7 @@ import { deleteDB } from 'idb';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useLogout } from '../use-auth-actions';
+import { useLogout } from '../use-logout';
 import { logoutResponse } from './fixtures/logout';
 import { createThreadDraftState } from '@/domains/conversation/context/thread-draft-state';
 import { readThreadDraft, writeThreadDraft } from '@/domains/conversation/context/thread-draft-storage';

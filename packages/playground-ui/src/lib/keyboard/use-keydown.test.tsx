@@ -152,6 +152,30 @@ describe('useKeydown', () => {
 
       expect(onSearch).toHaveBeenCalledTimes(1);
     });
+
+    it('when insideFields is set, then Escape fires from a textarea and only for that binding', () => {
+      const onClose = vi.fn();
+      const onHelp = vi.fn();
+      renderHook(() => useKeydown({ Escape: onClose }, { insideFields: true }));
+      renderHook(() => useKeydown({ '?': onHelp }));
+
+      const escape = typeInField('textarea', 'Escape');
+      typeInField('textarea', '?', { shiftKey: true });
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(escape.defaultPrevented).toBe(true);
+      expect(onHelp).not.toHaveBeenCalled();
+    });
+
+    it('when insideFields is set and a widget already handled the key, then the binding does not fire', () => {
+      const onClose = vi.fn();
+      renderHook(() => useKeydown({ Escape: onClose }, { insideFields: true }));
+      render(<div role="menu" data-testid="menu" onKeyDown={event => event.preventDefault()} />);
+
+      fireEvent.keyDown(screen.getByTestId('menu'), { key: 'Escape' });
+
+      expect(onClose).not.toHaveBeenCalled();
+    });
   });
 
   it('does not let a shifted symbol relax Shift for letter bindings', () => {
@@ -339,6 +363,44 @@ describe('useKeydown', () => {
 
     pressKey('ArrowUp');
     expect(onArrowUp).toHaveBeenCalledTimes(1);
+  });
+
+  describe('given a key is held down', () => {
+    it('by default, then every auto-repeat fires the handler', () => {
+      const onArrowDown = vi.fn();
+      renderHook(() => useKeydown({ ArrowDown: onArrowDown }));
+
+      pressKey('ArrowDown');
+      pressKey('ArrowDown', { repeat: true });
+
+      expect(onArrowDown).toHaveBeenCalledTimes(2);
+    });
+
+    it('given repeat is false, then the handler fires once and repeats are still default-prevented', () => {
+      const onToggle = vi.fn();
+      renderHook(() => useKeydown({ '[': onToggle }, { repeat: false }));
+
+      pressKey('[');
+      const repeat = new KeyboardEvent('keydown', { key: '[', repeat: true, cancelable: true });
+      window.dispatchEvent(repeat);
+
+      expect(onToggle).toHaveBeenCalledTimes(1);
+      expect(repeat.defaultPrevented).toBe(true);
+    });
+
+    it('given repeat is false, then holding a key does not complete a sequence', () => {
+      const onGoGo = vi.fn();
+      renderHook(() => useKeydown({ 'g$+g': onGoGo }, { repeat: false }));
+
+      pressKey('g');
+      pressKey('g', { repeat: true });
+      pressKey('g', { repeat: true });
+      pressKey('g', { repeat: true });
+      expect(onGoGo).not.toHaveBeenCalled();
+
+      pressKey('g');
+      expect(onGoGo).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

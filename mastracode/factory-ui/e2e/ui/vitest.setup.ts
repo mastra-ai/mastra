@@ -25,6 +25,9 @@ afterEach(async () => {
   cleanup();
   await new Promise(resolve => setTimeout(resolve, 0));
   server.resetHandlers();
+  // Remembered UI state (e.g. board filters) must not carry into the next case.
+  localStorage.clear();
+  sessionStorage.clear();
 });
 
 afterAll(() => server.close());
@@ -40,7 +43,7 @@ if (!globalThis.localStorage) {
     key: index => Array.from(store.keys())[index] ?? null,
     removeItem: key => store.delete(key),
     setItem: (key, value) => store.set(key, value),
-  } as Storage;
+  };
 }
 
 // jsdom polyfills used by the settings UI.

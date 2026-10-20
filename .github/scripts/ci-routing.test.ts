@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { discoverPackages } from './check-package-readmes.mjs';
+import { discoverPackages, findPackagesMissingDocs } from './check-package-readmes.mjs';
 import { describe, expect, test } from 'vitest';
 import routing from './ci-routing.cjs';
 
@@ -324,11 +324,43 @@ describe('quality assurance CI routing', () => {
 
   test('wires eligible README discovery and the conditional job into the QA workflow', () => {
     const workflow = readFileSync(new URL('../workflows/lint.yml', import.meta.url), 'utf8');
-    expect(workflow).toContain('qualityAssuranceInputs(changedFiles, packageReadmePaths)');
+    expect(workflow).toContain('qualityAssuranceInputs(changedFiles, packageReadmePaths, packagesMissingDocs)');
     expect(workflow).toContain('discoverPackages(process.cwd())');
+    expect(workflow).toContain('findPackagesMissingDocs(process.cwd())');
     expect(workflow).toContain('has_readme_inputs: ${{ steps.filter.outputs.has_readme_inputs }}');
     expect(workflow).toContain("if: needs.changes.outputs.has_readme_inputs == 'true'");
     expect(workflow).toContain('run: node .github/scripts/check-package-readmes.mjs');
+  });
+
+  test('runs README validation when an eligible package is missing required docs', () => {
+    const missingPackageDocs = [
+      { name: '@mastra/teams', relativeDirectory: 'channels/teams', missing: ['README', 'CHANGELOG'] },
+    ];
+    expect(
+      qualityAssuranceInputs(['channels/teams/src/index.ts'], ['channels/teams/README.md'], missingPackageDocs),
+    ).toMatchObject({
+      hasReadmeInputs: true,
+      readmeReasons: [],
+      missingPackageDocs,
+    });
+  });
+
+  test('runs README validation even when the change is unrelated to the package missing docs', () => {
+    expect(
+      qualityAssuranceInputs(
+        ['docs/page.mdx'],
+        ['channels/teams/README.md'],
+        [{ name: '@mastra/teams', relativeDirectory: 'channels/teams', missing: ['README', 'CHANGELOG'] }],
+      ),
+    ).toMatchObject({ hasReadmeInputs: true, readmeReasons: [] });
+  });
+
+  test('skips README validation when package docs exist and no relevant path changed', () => {
+    expect(qualityAssuranceInputs(['channels/teams/src/index.ts'], ['channels/teams/README.md'], [])).toMatchObject({
+      hasReadmeInputs: false,
+      readmeReasons: [],
+      missingPackageDocs: [],
+    });
   });
 
   test('runs only relevant checks for unrelated code', () => {
@@ -366,6 +398,19 @@ describe('quality assurance CI routing', () => {
       readmeReasons: ['invalid-input'],
       agentsReasons: ['invalid-input'],
       peerdepsReasons: ['invalid-input'],
+      missingPackageDocs: [],
+    });
+  });
+
+  test('fails closed when the missing package docs input is malformed', () => {
+    expect(qualityAssuranceInputs(['docs/page.mdx'], [], 'not-an-array')).toEqual({
+      hasAgentsInputs: true,
+      hasPeerdepsInputs: true,
+      hasReadmeInputs: true,
+      readmeReasons: ['invalid-input'],
+      agentsReasons: ['invalid-input'],
+      peerdepsReasons: ['invalid-input'],
+      missingPackageDocs: [],
     });
   });
 });

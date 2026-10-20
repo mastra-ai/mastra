@@ -1,5 +1,6 @@
 import { SearchIcon, XIcon } from 'lucide-react';
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useRef } from 'react';
+import type { RefObject } from 'react';
 import { Button } from '../../Button';
 import { Input } from '../../Input';
 import type { InputProps } from '../../Input';
@@ -31,6 +32,7 @@ export type SearchFieldBlockProps = {
   inputRef?: RefObject<HTMLInputElement | null>;
 };
 
+/** @deprecated Use `SearchInput`. */
 export function SearchFieldBlock({
   name,
   helpText,

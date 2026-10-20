@@ -416,8 +416,75 @@ describe('IntakeSection', () => {
 
       // Listed twice, selected once: the count follows ids, not rows.
       const linearSection = screen.getByRole('region', { name: 'Linear issues' });
-      await userEvent.click(within(projects).getAllByRole('checkbox', { name: 'Shared initiative' })[0]!);
+      await userEvent.click(within(projects).getAllByRole('checkbox', { name: 'Shared initiative' })[0]);
       await waitFor(() => expect(within(linearSection).getByText('1 selected')).toBeInTheDocument());
+    });
+
+    it('maps a Linear project only to repositories in its routed Factory', async () => {
+      seedGithubProject();
+      const saved = useIntakeHandlers({
+        config: { ...baseConfig(), linear: { enabled: true, sourceIds: ['lproj-1'] } },
+      });
+      server.use(
+        http.get(BINDINGS_URL, () =>
+          HttpResponse.json({
+            bindings: [{ integrationId: 'linear', sourceId: 'lproj-1', factoryProjectId: 'fp-1', board: 'work' }],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+          HttpResponse.json({
+            projects: [
+              { id: 'fp-1', name: 'mastra' },
+              { id: 'fp-2', name: 'Other Factory' },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-2/source-control-connections`, () =>
+          HttpResponse.json({
+            connections: [
+              {
+                id: 'conn-fp-2',
+                repositories: [
+                  { id: 'ghp-2', branch: null, repository: { slug: 'unrelated/repo', defaultBranch: 'main' } },
+                ],
+              },
+            ],
+          }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      await userEvent.click(await screen.findByRole('combobox', { name: 'Repository for Q3 Roadmap' }));
+      expect(screen.queryByRole('option', { name: 'unrelated/repo' })).not.toBeInTheDocument();
+      await userEvent.click(await screen.findByRole('option', { name: 'mastra' }));
+
+      await waitFor(() => expect(saved.at(-1)?.linear.repositoryByLinearProject).toEqual({ 'lproj-1': 'mastra' }));
+      expect(screen.queryByRole('combobox', { name: 'Repository for Design refresh' })).not.toBeInTheDocument();
+    });
+
+    it('maps projects included through a team source to that team’s routed Factory', async () => {
+      seedGithubProject();
+      const saved = useIntakeHandlers({
+        config: { ...baseConfig(), linear: { enabled: true, sourceIds: [engTeam.sourceId] } },
+      });
+      server.use(
+        http.get(BINDINGS_URL, () =>
+          HttpResponse.json({
+            bindings: [
+              { integrationId: 'linear', sourceId: engTeam.sourceId, factoryProjectId: 'fp-1', board: 'work' },
+            ],
+          }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      await userEvent.click(await screen.findByRole('combobox', { name: 'Repository for Q3 Roadmap' }));
+      await userEvent.click(await screen.findByRole('option', { name: 'mastra' }));
+      await waitFor(() => expect(saved.at(-1)?.linear.repositoryByLinearProject).toEqual({ 'lproj-1': 'mastra' }));
+      expect(screen.getByRole('combobox', { name: 'Repository for Shared initiative' })).toBeInTheDocument();
+      expect(screen.queryByRole('combobox', { name: 'Repository for Design refresh' })).not.toBeInTheDocument();
     });
 
     it('shows how many items are selected', async () => {
@@ -443,7 +510,7 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      const search = await screen.findByRole('textbox', { name: 'Search Linear projects and teams' });
+      const search = await screen.findByRole('searchbox', { name: 'Search Linear projects and teams' });
       expect(await screen.findByRole('checkbox', { name: 'Design refresh' })).toBeInTheDocument();
 
       await userEvent.type(search, 'road');
@@ -470,8 +537,8 @@ describe('IntakeSection', () => {
       await userEvent.click(await screen.findByRole('switch', { name: 'Sync GitHub issues' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.github.enabled).toBe(false);
-      expect(saved[0]!.linear.enabled).toBe(true);
+      expect(saved[0].github.enabled).toBe(false);
+      expect(saved[0].linear.enabled).toBe(true);
       expect(await screen.findByText('Intake sources updated')).toBeInTheDocument();
     });
   });
@@ -538,7 +605,7 @@ describe('IntakeSection', () => {
       await userEvent.click(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.linear.sourceIds).toEqual(['lproj-1']);
+      expect(saved[0].linear.sourceIds).toEqual(['lproj-1']);
     });
 
     it('disables the checkboxes and shows a spinner while the selection saves', async () => {
@@ -581,7 +648,7 @@ describe('IntakeSection', () => {
 
       await userEvent.click(await screen.findByText('Q3 Roadmap'));
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.linear.sourceIds).toEqual(['lproj-1']);
+      expect(saved[0].linear.sourceIds).toEqual(['lproj-1']);
 
       // A second, different pick lands after any duplicate the first click could
       // have fired, so a doubled label toggle shows up as a third request here.
@@ -599,7 +666,7 @@ describe('IntakeSection', () => {
       await userEvent.click(await screen.findByRole('checkbox', { name: 'All issues in Engineering' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:opaque-eng']);
+      expect(saved[0].linear.sourceIds).toEqual(['linear-team:opaque-eng']);
     });
     it('waits for a returned team DTO before enabling opaque team selection', async () => {
       const saved = useIntakeHandlers();
@@ -624,7 +691,7 @@ describe('IntakeSection', () => {
       const team = await screen.findByRole('checkbox', { name: 'All issues in Engineering' });
       await userEvent.click(team);
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:opaque-eng']);
+      expect(saved[0].linear.sourceIds).toEqual(['linear-team:opaque-eng']);
     });
 
     it('keeps explicit projects editable so the selection can switch to team-only intake', async () => {
@@ -650,7 +717,7 @@ describe('IntakeSection', () => {
 
       await userEvent.click(project);
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.linear.sourceIds).toEqual(['linear-team:opaque-eng']);
+      expect(saved[0].linear.sourceIds).toEqual(['linear-team:opaque-eng']);
 
       // Projects that are only included through a selected team remain selectable too.
       expect(within(linearSection).getAllByText('included via team').length).toBeGreaterThanOrEqual(1);
@@ -669,7 +736,7 @@ describe('IntakeSection', () => {
 
       await waitFor(() => expect(saved).toHaveLength(1));
       // The board and intake integrations key GitHub sources by repo slug (owner/name).
-      expect(saved[0]!.github.sourceIds).toEqual(['mastra']);
+      expect(saved[0].github.sourceIds).toEqual(['mastra']);
       expect(saved[0]).not.toHaveProperty('github.repositoryIds');
     });
   });
@@ -844,8 +911,8 @@ describe('IntakeSection', () => {
       await userEvent.click(toggle);
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.jira.enabled).toBe(true);
-      expect(saved[0]!.github.enabled).toBe(true);
+      expect(saved[0].jira.enabled).toBe(true);
+      expect(saved[0].github.enabled).toBe(true);
     });
 
     it('shows a Platform-managed connection even when the status does not expose connection metadata', async () => {
@@ -889,7 +956,7 @@ describe('IntakeSection', () => {
       await userEvent.click(within(projects).getByRole('checkbox', { name: 'ENG · Engineering' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.jira.sourceIds).toEqual(['10001']);
+      expect(saved[0].jira.sourceIds).toEqual(['10001']);
     });
 
     it('routes a selected Jira project to a Factory through the generic bindings', async () => {
@@ -1047,6 +1114,120 @@ describe('IntakeSection', () => {
     });
   });
 
+  describe('given a deployment API key serves incident.io without Platform connections', () => {
+    it('keeps the section usable for source selection and routing', async () => {
+      seedFactories();
+      useIntakeHandlers({
+        config: { ...baseConfig(), incidentio: { enabled: true, sourceIds: ['incidentio-source:follow-ups'] } },
+      });
+      // The ambient platform-connections 404 stands in for a server without
+      // Platform credentials; only the direct status route answers.
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/incidentio/status`, () =>
+          HttpResponse.json({ enabled: true, configured: true, mode: 'api-key', reason: 'ready' }),
+        ),
+        http.get(INTAKE_SOURCES_URL, () =>
+          HttpResponse.json({
+            sources: [
+              {
+                integrationId: 'incidentio',
+                id: 'incidentio-source:follow-ups',
+                name: 'Incident follow-ups (acme)',
+                type: 'follow-up',
+              },
+            ],
+            failures: [],
+          }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      const section = await screen.findByRole('region', { name: 'incident.io follow-ups' });
+      expect(within(section).getByText('incident.io API key configured on this server')).toBeInTheDocument();
+      expect(within(section).queryByRole('button', { name: 'Connect incident.io' })).not.toBeInTheDocument();
+      const toggle = within(section).getByRole('switch', { name: 'Sync incident.io follow-ups' });
+      expect(toggle).toBeChecked();
+      expect(toggle).toBeEnabled();
+      expect(await within(section).findByRole('checkbox', { name: 'Incident follow-ups (acme)' })).toBeChecked();
+      // Routing stays reachable so the source can feed a Factory board.
+      expect(await screen.findByLabelText('Factory for Incident follow-ups (acme)')).toBeInTheDocument();
+    });
+
+    it('stays usable when the Platform connections request fails', async () => {
+      seedFactories();
+      useIntakeHandlers({
+        config: { ...baseConfig(), incidentio: { enabled: true, sourceIds: ['incidentio-source:follow-ups'] } },
+      });
+      // The direct integration does not need Platform connections, so a
+      // transient Platform failure must not collapse the section into the
+      // retry-only stub.
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/integrations/platform/incident-io/connections`, () =>
+          HttpResponse.json({ error: 'boom' }, { status: 500 }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/incidentio/status`, () =>
+          HttpResponse.json({ enabled: true, configured: true, mode: 'api-key', reason: 'ready' }),
+        ),
+        http.get(INTAKE_SOURCES_URL, () =>
+          HttpResponse.json({
+            sources: [
+              {
+                integrationId: 'incidentio',
+                id: 'incidentio-source:follow-ups',
+                name: 'Incident follow-ups (acme)',
+                type: 'follow-up',
+              },
+            ],
+            failures: [],
+          }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      const section = await screen.findByRole('region', { name: 'incident.io follow-ups' });
+      expect(within(section).getByText('incident.io API key configured on this server')).toBeInTheDocument();
+      expect(within(section).queryByText("Couldn't load incident.io connections.")).not.toBeInTheDocument();
+      const toggle = within(section).getByRole('switch', { name: 'Sync incident.io follow-ups' });
+      expect(toggle).toBeChecked();
+      expect(toggle).toBeEnabled();
+      expect(await within(section).findByRole('checkbox', { name: 'Incident follow-ups (acme)' })).toBeChecked();
+    });
+
+    it('keeps intake gated while the API key still needs an organization', async () => {
+      seedFactories();
+      useIntakeHandlers({
+        config: { ...baseConfig(), incidentio: { enabled: true, sourceIds: ['incidentio-source:follow-ups'] } },
+      });
+      // An organization-required key cannot list follow-ups yet, so the
+      // section must not offer controls or fire the sources request.
+      let sourceRequests = 0;
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/incidentio/status`, () =>
+          HttpResponse.json({
+            enabled: true,
+            configured: true,
+            mode: 'api-key',
+            organizationRequired: true,
+            reason: 'organization_required',
+          }),
+        ),
+        http.get(INTAKE_SOURCES_URL, () => {
+          sourceRequests += 1;
+          return HttpResponse.json({ sources: [], failures: [] });
+        }),
+      );
+
+      renderIntakeSection();
+
+      // Let the rest of the page settle so the absence assertion is meaningful.
+      await screen.findByRole('switch', { name: 'Sync GitHub issues' });
+      expect(screen.queryByRole('region', { name: 'incident.io follow-ups' })).not.toBeInTheDocument();
+      expect(sourceRequests).toBe(0);
+    });
+  });
+
   describe('given the server omits unregistered integrations', () => {
     // The server returns a dynamic map keyed by integration id and drops keys
     // for integrations that aren't registered, so the config can arrive as `{}`.
@@ -1076,6 +1257,7 @@ describe('IntakeSection', () => {
   describe('given the config endpoint fails', () => {
     it('shows the unavailable notice', async () => {
       server.use(
+        http.get(BINDINGS_URL, () => HttpResponse.json({ bindings: [] })),
         http.get(CONFIG_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
         http.get(GITHUB_STATUS_URL, () => HttpResponse.json(githubReadyStatus)),
         http.get(LINEAR_STATUS_URL, () => HttpResponse.json(connectedStatus)),
@@ -1140,7 +1322,7 @@ describe('IntakeSection', () => {
       await userEvent.click(within(projects).getByRole('checkbox', { name: 'acme/app' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
-      expect(saved[0]!.gitlab.sourceIds).toEqual(['gitlab-project:encoded']);
+      expect(saved[0].gitlab.sourceIds).toEqual(['gitlab-project:encoded']);
       expect(await screen.findByText(/Not routed — this source's issues won't be picked up/)).toBeInTheDocument();
 
       await userEvent.click(await screen.findByLabelText('Factory for acme/app'));

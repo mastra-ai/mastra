@@ -1,10 +1,5 @@
-/**
- * BDD coverage for workspace sidebar previews. The real workspace, work-item,
- * and agent-controller reads are driven through MSW so the card exercises the
- * same joins used by the live sidebar without adding a hover-time request.
- */
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
-import { screen, waitFor, within } from '@testing-library/react';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -15,7 +10,7 @@ import type { ReactNode } from 'react';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionConfigProvider } from '../../../chat/context/ChatSessionProvider';
-import { WorkspacesSection } from '../WorkspacesSection';
+import { SessionsSection } from '../SessionsSection';
 import {
   createSessionHoverDetailsFixtures,
   factoryId,
@@ -31,14 +26,14 @@ function stubSessionDetails(updatedAt: string, { includeSessionTitles = true, sl
   if (!includeSessionTitles) {
     fixtures.sessionsResponse.sessions = fixtures.sessionsResponse.sessions.map(({ title: _, ...session }) => session);
   }
-  if (slackWorkSession) fixtures.sessionsResponse.sessions[0]!.branch = 'slack/1785354600-536029';
+  if (slackWorkSession) fixtures.sessionsResponse.sessions[0].branch = 'slack/1785354600-536029';
 
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json(fixtures.projectsResponse)),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/source-control-connections`, () =>
       HttpResponse.json(fixtures.connectionsResponse),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
       HttpResponse.json(fixtures.sessionsResponse),
     ),
     http.get(`${TEST_BASE_URL}/web/user-sessions/${workSessionId}`, () =>
@@ -74,7 +69,7 @@ function renderSection(wrap: (section: ReactNode) => ReactNode = section => sect
       <Routes>
         <Route
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
-          element={<ChatSessionConfigProvider>{wrap(<WorkspacesSection />)}</ChatSessionConfigProvider>}
+          element={<ChatSessionConfigProvider>{wrap(<SessionsSection />)}</ChatSessionConfigProvider>}
         />
       </Routes>
     </MemoryRouter>,
@@ -149,9 +144,9 @@ describe('Workspace session hover details', () => {
 
   describe('when a review session receives keyboard focus', () => {
     it('shows the related review metadata', async () => {
-      const { user, reviewRow } = await setupSessionRows();
+      const { user, workRow, reviewRow } = await setupSessionRows();
 
-      await user.tab();
+      act(() => workRow.focus());
       await user.tab();
       await user.tab();
 
@@ -169,8 +164,8 @@ describe('Workspace session hover details', () => {
     });
 
     it('closes the details when focus moves away', async () => {
-      const { user, reviewRow } = await setupSessionRows();
-      await user.tab();
+      const { user, workRow, reviewRow } = await setupSessionRows();
+      act(() => workRow.focus());
       await user.tab();
       await user.tab();
       expect(reviewRow).toHaveFocus();
@@ -188,7 +183,7 @@ describe('Workspace session hover details', () => {
       stubSessionDetails(new Date().toISOString());
       const user = userEvent.setup();
       const { client } = renderSection(section => (
-        <MainSidebarProvider storageKey="session-hover-test">{section}</MainSidebarProvider>
+        <SidebarProvider storageKey="session-hover-test">{section}</SidebarProvider>
       ));
 
       const workRow = await screen.findByRole('button', { name: workName });

@@ -78,21 +78,25 @@ const action = createAction({
 export default action;
 `;
 
-const unsupportedResponseTypeTemplate = `import { z } from 'zod';
+const arrayBufferResponseTypeTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 
-const InputSchema = z.object({ value: z.string() });
-const OutputSchema = z.object({ value: z.string() });
+const InputSchema = z.object({ fileId: z.string() });
+const OutputSchema = z.object({ base64: z.string() });
 
 const action = createAction({
-  description: 'Fetch a binary value.',
+  description: 'Fetch a binary asset and return it base64-encoded.',
   version: '1.0.0',
   input: InputSchema,
   output: OutputSchema,
   scopes: [],
   exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
-    const response = await nango.post({ endpoint: '/binary', data: input, responseType: 'arraybuffer' });
-    return OutputSchema.parse(response.data);
+    const response = await nango.get({
+      endpoint: '/files/' + encodeURIComponent(input.fileId),
+      responseType: 'arraybuffer',
+    });
+    const buffer = Buffer.isBuffer(response.data) ? response.data : Buffer.from(response.data as ArrayBuffer);
+    return { base64: buffer.toString('base64') };
   },
 });
 
@@ -296,7 +300,7 @@ describe('maintainer provider commands', () => {
         writeFileSync(resolve(actionDir, 'shadowed-credentials.ts'), shadowedCredentialsTemplate);
         writeFileSync(resolve(actionDir, 'parenthesized-credentials.ts'), parenthesizedCredentialsTemplate);
         writeFileSync(resolve(actionDir, 'unsupported-no-proxy.ts'), noProxyCallTemplate);
-        writeFileSync(resolve(actionDir, 'unsupported-response-type.ts'), unsupportedResponseTypeTemplate);
+        writeFileSync(resolve(actionDir, 'arraybuffer-response-type.ts'), arrayBufferResponseTypeTemplate);
       }
     }
     const openaiActionDir = resolve(packageRoot, '.templates', 'integrations', 'openai', 'actions');
@@ -604,22 +608,23 @@ export default action;
     expect(parenthesizedCredentialsTool).toContain('platformProxy.getConnectionWithCredentials()');
     expect(parenthesizedCredentialsTool).not.toMatch(/platformProxy\.getConnection\(\)/);
     expect(existsSync(resolve(packageRoot, 'src/providers/second-provider/tools/unsupported-no-proxy.ts'))).toBe(false);
-    expect(existsSync(resolve(packageRoot, 'src/providers/second-provider/tools/unsupported-response-type.ts'))).toBe(
-      false,
+    // Binary responses (responseType: 'arraybuffer') are supported by the
+    // platform proxy, so the fixture generates a tool that preserves the
+    // option verbatim for the runtime to honor.
+    const arrayBufferTool = readFileSync(
+      resolve(packageRoot, 'src/providers/second-provider/tools/arraybuffer-response-type.ts'),
+      'utf8',
     );
+    expect(arrayBufferTool).toMatch(/responseType:\s*['"]arraybuffer['"]/);
 
     const manifest = JSON.parse(
       readFileSync(resolve(packageRoot, 'src/providers/second-provider/.manifest.json'), 'utf8'),
     ) as { toolCount: number; skippedActions: { action: string; reason: string }[] };
-    expect(manifest.toolCount).toBe(8);
+    expect(manifest.toolCount).toBe(9);
     expect(manifest.skippedActions).toEqual([
       {
         action: 'unsupported-no-proxy',
         reason: 'exec does not call the provider proxy',
-      },
-      {
-        action: 'unsupported-response-type',
-        reason: 'exec uses unsupported proxy options: responseType',
       },
     ]);
   });
@@ -674,7 +679,7 @@ export default action;
     expect(providerIndex).not.toContain('.stale.generate-123');
     expect(listProviders({ installedOnly: true })).toEqual([
       'local <- first-provider (1 tools, 0 skipped)',
-      'other <- second-provider (8 tools, 2 skipped)',
+      'other <- second-provider (9 tools, 1 skipped)',
     ]);
   });
 

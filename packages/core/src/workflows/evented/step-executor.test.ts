@@ -435,4 +435,50 @@ describe('StepExecutor', () => {
       expect(receivedAbortSignal).toBeInstanceOf(AbortSignal);
     });
   });
+
+  describe('evaluateConditions error handling', () => {
+    const run = (conditions: any[]) =>
+      stepExecutor.evaluateConditions({
+        workflowId: 'test-workflow',
+        step: {
+          type: 'conditional',
+          conditions,
+          serializedConditions: conditions.map((_, i) => ({ id: `c${i}`, fn: '' })),
+          steps: conditions.map((_, i) => ({ type: 'step', step: { id: `s${i}` } as any })),
+        },
+        runId: 'test-run',
+        requestContext,
+        stepResults: {},
+        state: {},
+      });
+
+    it('treats an async-throwing condition as falsy and evaluates the rest', async () => {
+      const result = await run([
+        async () => {
+          throw new Error('boom');
+        },
+        async () => true,
+      ]);
+      expect(result).toEqual([1]);
+    });
+
+    it('treats a sync-throwing condition as falsy and evaluates the rest', async () => {
+      const result = await run([
+        () => {
+          throw new Error('boom');
+        },
+        async () => true,
+      ]);
+      expect(result).toEqual([1]);
+    });
+
+    it('returns no indexes when every condition throws', async () => {
+      const result = await run([
+        async () => {
+          throw new Error('boom');
+        },
+      ]);
+      expect(result).toEqual([]);
+    });
+  });
 });

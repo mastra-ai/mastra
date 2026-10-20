@@ -1,6 +1,6 @@
 import type { Provider } from '@mastra/client-js';
+import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useMemo } from 'react';
-import { cleanProviderId } from '../utils';
 
 export interface ModelInfo {
   provider: string;

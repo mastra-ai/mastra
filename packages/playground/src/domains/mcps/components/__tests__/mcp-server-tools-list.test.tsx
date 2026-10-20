@@ -57,7 +57,7 @@ describe('McpServerToolsList', () => {
       renderList();
       await screen.findByRole('link', { name: /echo/ });
 
-      fireEvent.change(screen.getByRole('textbox', { name: 'Filter tools' }), { target: { value: 'weather' } });
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Filter tools' }), { target: { value: 'weather' } });
 
       await waitFor(() => expect(screen.queryByRole('link', { name: /echo/ })).toBeNull());
       expect(screen.getByRole('link', { name: /weather-dashboard/ })).not.toBeNull();
@@ -67,7 +67,7 @@ describe('McpServerToolsList', () => {
       renderList();
       await screen.findByRole('link', { name: /echo/ });
 
-      fireEvent.change(screen.getByRole('textbox', { name: 'Filter tools' }), { target: { value: 'zzz' } });
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Filter tools' }), { target: { value: 'zzz' } });
 
       expect(await screen.findByText('No tools match your search')).not.toBeNull();
     });

@@ -34,7 +34,21 @@ export const TRACE_AGGREGATE_FIXED_MEASURES = [
   'duration.p99',
   'errorCount',
   'errorRate',
+  'tokens.input.sum',
+  'tokens.input.avg',
+  'tokens.output.sum',
+  'tokens.output.avg',
+  'tokens.total.sum',
+  'tokens.total.avg',
+  'tokens.reasoning.sum',
+  'tokens.reasoning.avg',
+  'tokens.cached.sum',
+  'tokens.cached.avg',
+  'cost.sum',
+  'cost.avg',
 ] as const;
+/** `cost.unit` value for a group whose priced rows use more than one cost unit. */
+export const TRACE_AGGREGATE_MIXED_COST_UNIT = 'mixed';
 export const TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX = 'countDistinct.';
 
 const hasMaxUtf8Bytes = (value: string, maxBytes: number) => Buffer.byteLength(value, 'utf8') <= maxBytes;
@@ -121,11 +135,29 @@ export const traceAggregateRequestSchema = z.preprocess((input, context) => {
   return input;
 }, traceAggregateRequestObjectSchema);
 
+// Measures are null when the group has no data for them: tokens with no usage-bearing traces,
+// cost with no priced traces or mixed units.
+const traceAggregateRowMeasuresSchema = z.record(traceAggregateMeasureSchema, z.number().nullable());
+
+/** Returned on every row whenever any `cost.*` measure is requested. */
+export const traceAggregateRowCostSchema = z
+  .object({
+    /**
+     * Covered traces ÷ usage-bearing traces; null when the group has no usage-bearing traces. A trace
+     * is covered when it has priced cost and no total row failed to price.
+     */
+    coverage: z.number().min(0).max(1).nullable(),
+    /** The priced rows' cost unit, `'mixed'` when they use more than one, null when none are priced. */
+    unit: z.string().nullable(),
+  })
+  .strict();
+
 export const traceAggregateRowSchema = z
   .object({
     dimensions: z.record(z.string(), z.string().nullable()).optional(),
     bucket: z.string().datetime({ offset: true }).optional(),
-    measures: z.record(traceAggregateMeasureSchema, z.number()),
+    measures: traceAggregateRowMeasuresSchema,
+    cost: traceAggregateRowCostSchema.optional(),
   })
   .strict();
 
@@ -141,6 +173,7 @@ export type TraceAggregateMeasure = z.infer<typeof traceAggregateMeasureSchema>;
 export type TraceAggregateRequest = z.input<typeof traceAggregateRequestObjectSchema>;
 export type NormalizedTraceAggregateRequest = z.output<typeof traceAggregateRequestObjectSchema>;
 export type TraceAggregateRow = z.infer<typeof traceAggregateRowSchema>;
+export type TraceAggregateRowCost = z.infer<typeof traceAggregateRowCostSchema>;
 export type TraceAggregateResponse = z.infer<typeof traceAggregateResponseSchema>;
 
 function formatTraceAggregateSchemaIssues(error: z.ZodError): TraceQueryIssue[] {

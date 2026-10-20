@@ -52,7 +52,10 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 console.log('Not running MSSQL tests in CI. You can enable them if you want to test them locally.');
 if (process.env.ENABLE_TESTS === 'true') {
-  createTestSuite(new MSSQLStore(TEST_CONFIG), { deterministicScorePagination: true });
+  createTestSuite(new MSSQLStore(TEST_CONFIG), {
+    deterministicScorePagination: true,
+    workflowResultsNoopWhenRunMissing: false,
+  });
 
   // Pre-configured client (pool) acceptance tests
   createClientAcceptanceTests({

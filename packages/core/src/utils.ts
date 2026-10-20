@@ -29,7 +29,20 @@ export type { FetchWithRetryOptions } from './utils/fetchWithRetry';
 export { boundedStringify, ensureSerializable, isBoundedSerializable, safeStringify } from './utils/safe-stringify';
 export { deepEqual } from './utils/deep-equal';
 
-export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+/** Resolves after `ms`, or as soon as `signal` aborts. */
+export const delay = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>(resolve => {
+    if (signal?.aborted) return resolve();
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 
 /**
  * Read a positive-integer environment variable (e.g. a TTL in ms). Unset, empty,
@@ -426,6 +439,39 @@ export function makeCoreTool(
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
   }).build();
+}
+
+const rebindToRequestContext = Symbol('rebindToRequestContext');
+
+/**
+ * Converts a raw tool an input processor added during a step. The processor does not run
+ * again before a suspended call resumes, so the converted tool remembers how to rebuild
+ * itself for the resuming call's request context (see {@link rebindProcessorTools}).
+ */
+export function makeProcessorCoreTool(...args: Parameters<typeof makeCoreTool>): CoreTool {
+  const [originalTool, options, ...rest] = args;
+  const tool = makeCoreTool(originalTool, options, ...rest);
+  Object.defineProperty(tool, rebindToRequestContext, {
+    value: (requestContext: RequestContext) =>
+      makeProcessorCoreTool(originalTool, { ...options, requestContext }, ...rest),
+  });
+  return tool;
+}
+
+/**
+ * Rebuilds the processor-added tools in `tools` for `requestContext`, the way request tools
+ * are rebuilt when a suspended run resumes, so an approved processor tool runs with the
+ * approver's request context like a statically defined tool does.
+ */
+export function rebindProcessorTools<T extends Record<string, unknown>>(tools: T, requestContext: RequestContext): T {
+  const rebound: Record<string, unknown> = { ...tools };
+  for (const [name, tool] of Object.entries(tools)) {
+    const rebind = (tool as { [rebindToRequestContext]?: (rc: RequestContext) => CoreTool } | undefined)?.[
+      rebindToRequestContext
+    ];
+    if (rebind) rebound[name] = rebind(requestContext);
+  }
+  return rebound as T;
 }
 
 export function makeCoreToolV5(

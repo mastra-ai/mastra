@@ -1,5 +1,6 @@
 import type { KeyboardEventHandler, PointerEventHandler } from 'react';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 interface DateRangeSelectionProps {
@@ -39,7 +40,8 @@ export function DateRangeSelection({
       aria-valuenow={value}
       aria-valuetext={valueText}
       className={cn(
-        'absolute inset-y-1 z-10 flex cursor-grab touch-none items-center justify-center overflow-hidden rounded-md bg-fill text-foreground outline-hidden select-none focus-visible:ring-2 focus-visible:ring-accent3 active:cursor-grabbing',
+        'absolute inset-y-1 z-10 flex cursor-grab touch-none items-center justify-center overflow-hidden rounded-md bg-fill text-foreground select-none active:cursor-grabbing',
+        focusRing,
         active
           ? 'transition-none'
           : 'transition-[left,width,background-color] duration-150 ease-out motion-reduce:transition-none',

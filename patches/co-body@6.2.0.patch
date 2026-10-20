@@ -1,0 +1,36 @@
+diff --git a/lib/form.js b/lib/form.js
+--- a/lib/form.js
++++ b/lib/form.js
+@@ -4,7 +4,7 @@
+  * Module dependencies.
+  */
+ 
+-const raw = require('raw-body');
++const raw = require('raw-body').default || require('raw-body');
+ const inflate = require('inflation');
+ const qs = require('qs');
+ const utils = require('./utils');
+diff --git a/lib/json.js b/lib/json.js
+--- a/lib/json.js
++++ b/lib/json.js
+@@ -4,7 +4,7 @@
+  * Module dependencies.
+  */
+ 
+-const raw = require('raw-body');
++const raw = require('raw-body').default || require('raw-body');
+ const inflate = require('inflation');
+ const bourne = require('@hapi/bourne');
+ const utils = require('./utils');
+diff --git a/lib/text.js b/lib/text.js
+--- a/lib/text.js
++++ b/lib/text.js
+@@ -4,7 +4,7 @@
+  * Module dependencies.
+  */
+ 
+-const raw = require('raw-body');
++const raw = require('raw-body').default || require('raw-body');
+ const inflate = require('inflation');
+ const utils = require('./utils');
+ 

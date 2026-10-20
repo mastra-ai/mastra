@@ -1,3 +1,4 @@
+export * from './trace-aggregate';
 export * from './trace-query';
 export * from './trace-query-discovery';
 
@@ -16,6 +17,7 @@ import {
 import type {
   TraceQueryTenantScope,
   CreateFeedbackRecord,
+  CreateMetricRecord,
   CreateScoreRecord,
   CreateSpanRecord,
   ObservabilityStorage,
@@ -39,6 +41,7 @@ import {
   TRACE_QUERY_SCORE_REPLACEMENT_CASES,
   TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
 } from './trace-query';
+import type { TraceAggregateFixtureData } from './trace-aggregate';
 import type { TraceQueryFixtureData } from './trace-query';
 
 export interface ObservabilityVNextCapabilities {
@@ -142,7 +145,7 @@ function traceQueryFixtureForWriteModel(
   };
 }
 
-async function writeTraceQueryFixture(
+export async function writeTraceQueryFixture(
   storage: ObservabilityStorage,
   data: TraceQueryFixtureData,
   writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
@@ -169,6 +172,12 @@ async function writeTraceQueryFixture(
       rootEntityVersionId: span.rootEntityVersionId,
       environment: span.environment,
       organizationId: span.organizationId,
+      serviceName: span.serviceName ?? null,
+      executionSource: span.executionSource ?? null,
+      runId: span.runId ?? null,
+      userId: span.userId ?? null,
+      sessionId: span.sessionId ?? null,
+      experimentId: span.experimentId ?? null,
       tags: span.tags,
       attributes: span.attributes,
       metadata: span.metadata,
@@ -223,6 +232,44 @@ async function writeTraceQueryFixture(
       },
     });
   }
+}
+
+/**
+ * Writes a trace-aggregate fixture: the trace-query fixture plus its token metric rows.
+ * The n-th copy of each `metricId` goes in batch n, so duplicates always arrive in
+ * separate inserts (ClickHouse writes each insert as its own part, which is what an
+ * exporter retry produces).
+ */
+export async function writeTraceAggregateFixture(
+  storage: ObservabilityStorage,
+  data: TraceAggregateFixtureData,
+  writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
+) {
+  await writeTraceQueryFixture(storage, data, writeModel);
+
+  const batches: CreateMetricRecord[][] = [];
+  const copies = new Map<string, number>();
+  for (const metric of data.metrics ?? []) {
+    const copy = copies.get(metric.metricId) ?? 0;
+    copies.set(metric.metricId, copy + 1);
+    (batches[copy] ??= []).push({
+      metricId: metric.metricId,
+      timestamp: new Date(metric.timestamp),
+      name: metric.name,
+      value: metric.value,
+      traceId: metric.traceId,
+      spanId: metric.spanId,
+      provider: metric.provider,
+      model: metric.model,
+      estimatedCost: metric.estimatedCost,
+      costUnit: metric.costUnit,
+      costMetadata: metric.costMetadata,
+      organizationId: metric.organizationId,
+      resourceId: metric.resourceId,
+      labels: {},
+    });
+  }
+  for (const metrics of batches) await storage.batchCreateMetrics({ metrics });
 }
 
 async function waitFor<T>(
@@ -362,6 +409,18 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         await expect(values({ predicateScope: 'trace', path: 'environment', limit: 1 })).resolves.toEqual({
           values: [{ value: 'production', count: 2 }],
           valuesTruncated: true,
+        });
+        // Root span name/type come from current qualified roots only: no superseded, pending, or child spans.
+        await expect(values({ predicateScope: 'trace', path: 'spanType' })).resolves.toEqual({
+          values: [
+            { value: 'agent_run', count: 2 },
+            { value: 'workflow_run', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'name', search: 'SYNC' })).resolves.toEqual({
+          values: [{ value: 'nightly-sync', count: 1 }],
+          valuesTruncated: false,
         });
         await expect(values({ predicateScope: 'spans', path: 'model' })).resolves.toEqual({
           values: [
@@ -2250,6 +2309,103 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       });
     });
 
+    if (capabilities.traceQuery) {
+      describe('time to first chunk on traces', () => {
+        const at = (ms: number) => new Date(VNEXT_BASE_DATE.getTime() + ms);
+        const timeRange = { from: at(-60_000).toISOString(), to: at(60_000).toISOString() };
+        const traceTtfc = async (where?: TraceQueryRequest['where']) => {
+          const response = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange, where })));
+          if (!('traces' in response)) throw new Error('Expected traces');
+          return Object.fromEntries(response.traces.map(trace => [trace.traceId, trace.timeToFirstChunkMs]));
+        };
+
+        beforeEach(async () => {
+          const span = (traceId: string, spanId: string, timeToFirstChunkMs: number | null, extra = {}) =>
+            makeSpan({ traceId, spanId, timeToFirstChunkMs, ...extra });
+          await storage.batchCreateSpans({
+            records: [
+              // The root agent answers at 300 ms; its own generation and a nested agent never replace that.
+              span('ttfc-agent', 'agent-root', 300),
+              span('ttfc-agent', 'agent-generation', 320, {
+                parentSpanId: 'agent-root',
+                spanType: SpanType.MODEL_GENERATION,
+              }),
+              span('ttfc-agent', 'nested-agent', 50, { parentSpanId: 'agent-root' }),
+              // A workflow root never streams, even when an agent inside it does.
+              span('ttfc-workflow', 'workflow-root', null, { spanType: SpanType.WORKFLOW_RUN }),
+              span('ttfc-workflow', 'workflow-agent', 200, { parentSpanId: 'workflow-root' }),
+              span('ttfc-zero', 'zero-root', 0),
+            ],
+          });
+          if (flushPendingMerges) await flushPendingMerges(storage);
+        });
+
+        it("returns the root span's value, null when the root never streamed", async () => {
+          expect(await traceTtfc()).toEqual({ 'ttfc-agent': 300, 'ttfc-workflow': null, 'ttfc-zero': 0 });
+        });
+
+        it('filters by the root value, counting zero as a value and missing as empty', async () => {
+          const field = { path: 'timeToFirstChunkMs' } as const;
+          expect(Object.keys(await traceTtfc({ op: 'gt', left: field, right: { literal: 100 } }))).toEqual([
+            'ttfc-agent',
+          ]);
+          expect(Object.keys(await traceTtfc({ op: 'eq', left: field, right: { literal: 0 } }))).toEqual(['ttfc-zero']);
+          expect(Object.keys(await traceTtfc({ op: 'exists', path: 'timeToFirstChunkMs' })).sort()).toEqual([
+            'ttfc-agent',
+            'ttfc-zero',
+          ]);
+          expect(Object.keys(await traceTtfc({ op: 'notExists', path: 'timeToFirstChunkMs' }))).toEqual([
+            'ttfc-workflow',
+          ]);
+        });
+
+        it('returns the value in numbered pages and delta polls', async () => {
+          const page = await storage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 10 } })),
+          );
+          if (!('traces' in page)) throw new Error('Expected traces');
+          expect(Object.fromEntries(page.traces.map(trace => [trace.traceId, trace.timeToFirstChunkMs]))).toEqual({
+            'ttfc-agent': 300,
+            'ttfc-workflow': null,
+            'ttfc-zero': 0,
+          });
+
+          const feature = 'observability-delta-polling';
+          const wasEnabled = coreFeatures.has(feature);
+          coreFeatures.add(feature);
+          try {
+            const request = { timeRange, mode: 'delta' as const, limit: 10 };
+            const bootstrap = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest(request)));
+            if (!('delta' in bootstrap)) throw new Error('Expected delta');
+            await storage.batchCreateSpans({
+              records: [makeSpan({ traceId: 'ttfc-late', spanId: 'late-root', timeToFirstChunkMs: 75 })],
+            });
+            if (flushPendingMerges) await flushPendingMerges(storage);
+            const polled = await waitFor(
+              async () => {
+                const batch = await storage.queryTraces(
+                  planTraceQuery(parseTraceQueryRequest({ ...request, after: bootstrap.deltaCursor })),
+                );
+                if (!('delta' in batch)) throw new Error('Expected delta');
+                return batch.traces.map(trace => [trace.traceId, trace.timeToFirstChunkMs]);
+              },
+              rows => rows.length > 0,
+            );
+            expect(polled).toEqual([['ttfc-late', 75]]);
+          } finally {
+            if (!wasEnabled) coreFeatures.delete(feature);
+          }
+        });
+
+        it("filters by any span's value", async () => {
+          const fast = await traceTtfc({
+            spans: { some: { op: 'lt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 100 } } },
+          });
+          expect(Object.keys(fast).sort()).toEqual(['ttfc-agent', 'ttfc-zero']);
+        });
+      });
+    }
+
     describe('getStructure / getTraceLight', () => {
       beforeEach(async () => {
         await storage.createSpan({
@@ -3278,6 +3434,52 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           ).toEqual([
             ['trace-a', 10],
             ['trace-c', 30],
+          ]);
+        });
+      });
+
+      describe('when a batch of experiment IDs is filtered', () => {
+        it('returns token totals and cost for each selected experiment', async () => {
+          const tokenMetric = (
+            metricId: string,
+            experimentId: string,
+            name: string,
+            value: number,
+            estimatedCost: number,
+          ) => ({
+            metricId,
+            timestamp: new Date('2026-01-01T03:00:00Z'),
+            name,
+            value,
+            experimentId,
+            estimatedCost,
+            costUnit: 'usd',
+            labels: {},
+          });
+          await storage.batchCreateMetrics({
+            metrics: [
+              tokenMetric('exp-a-in', 'exp-a', 'mastra_model_total_input_tokens', 100, 0.25),
+              tokenMetric('exp-a-out', 'exp-a', 'mastra_model_total_output_tokens', 40, 0.5),
+              tokenMetric('exp-b-in', 'exp-b', 'mastra_model_total_input_tokens', 300, 0.75),
+              tokenMetric('exp-c-in', 'exp-c', 'mastra_model_total_input_tokens', 700, 1.25),
+            ],
+          });
+
+          const result = await storage.getMetricBreakdown({
+            name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
+            groupBy: ['experimentId', 'name'],
+            aggregation: 'sum',
+            filters: { experimentIds: ['exp-a', 'exp-c'] },
+          });
+
+          expect(
+            result.groups
+              .map(group => [group.dimensions.experimentId, group.dimensions.name, group.value, group.estimatedCost])
+              .sort((left, right) => `${left[0]}:${left[1]}`.localeCompare(`${right[0]}:${right[1]}`)),
+          ).toEqual([
+            ['exp-a', 'mastra_model_total_input_tokens', 100, 0.25],
+            ['exp-a', 'mastra_model_total_output_tokens', 40, 0.5],
+            ['exp-c', 'mastra_model_total_input_tokens', 700, 1.25],
           ]);
         });
       });

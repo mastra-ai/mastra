@@ -455,6 +455,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
             createdAt: issue.createdAt,
             updatedAt: issue.updatedAt,
             sourceId: issue.sourceId ?? null,
+            projectId: issue.projectId ?? null,
           }));
           if (factoryProjectId && intakeBoards && options.ingestFactoryIssues) {
             await options.ingestFactoryIssues({

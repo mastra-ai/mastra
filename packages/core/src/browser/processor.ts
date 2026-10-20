@@ -66,6 +66,13 @@ export class BrowserContextProcessor {
   readonly id = 'browser-context';
   readonly stateId = 'browser';
 
+  constructor(options: { stateSignal?: boolean } = {}) {
+    // State signals are persisted per thread, so memory-less agents must not expose the hook.
+    if (options.stateSignal === false) {
+      Object.defineProperty(this, 'computeStateSignal', { value: undefined });
+    }
+  }
+
   processInput(args: ProcessInputArgs): ProcessInputResult {
     const ctx = args.requestContext?.get('browser') as BrowserContext | undefined;
     if (!ctx) return args.messageList;

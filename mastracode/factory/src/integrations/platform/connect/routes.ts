@@ -17,7 +17,8 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { RouteAuth } from '../../../routes/route.js';
-import { PlatformApiClient, PlatformApiError } from '../api-client.js';
+import type { PlatformApiClient} from '../api-client.js';
+import { PlatformApiError } from '../api-client.js';
 
 type RouteContext = Context;
 
@@ -42,6 +43,7 @@ export interface PlatformConnectProvider {
 export const PLATFORM_CONNECT_PROVIDERS: Record<string, PlatformConnectProvider> = {
   jira: { integrationId: 'jira', connectionIntegrationIds: ['jira'] },
   'incident-io': { integrationId: 'incident-io', connectionIntegrationIds: ['incident-io'] },
+  gitlab: { integrationId: 'gitlab', connectionIntegrationIds: ['gitlab'] },
 };
 
 interface PlatformConnectionRow {

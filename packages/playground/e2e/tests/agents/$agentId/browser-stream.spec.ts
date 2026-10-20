@@ -46,7 +46,7 @@ test.describe('Browser stream WebSocket gating', () => {
 
       // Wait for the agent page to settle.
       await expect(page.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
-      await expect(page.locator('a:has-text("New Chat")')).toBeVisible();
+      await expect(page.locator('a:has-text("New Thread")')).toBeVisible();
 
       // Negative assertion: poll for any browser traffic and fail fast if it appears.
       // The poll resolves at the timeout with the final count, which we expect to be 0.

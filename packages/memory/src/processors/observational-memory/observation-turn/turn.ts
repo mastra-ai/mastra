@@ -49,6 +49,21 @@ export class ObservationTurn {
   /** Generation count at turn start — used to detect if reflection happened during the turn. */
   private _generationCountAtStart = -1;
 
+  /**
+   * Ids of the messages this turn was started with (the user's request). Mid-turn
+   * observation may record them, but they stay in the live prompt until the turn ends.
+   * @internal Set by step 0.
+   */
+  inputMessageIds: string[] = [];
+
+  /**
+   * Fingerprints of the non-marker parts each message had when a step last drained it. A message
+   * is unread step output only if it gained a part the model has not seen — including a tool result
+   * merged in place into an existing tool-invocation part — not when it only gained OM markers.
+   * @internal
+   */
+  drainedPartKeys = new Map<string, Set<string>>();
+
   /** Memory context provider — set via start(). Used by steps for beforeBuffer persistence. */
   memory?: MemoryContextProvider;
 
@@ -214,13 +229,13 @@ export class ObservationTurn {
    * proactively while the agent is idle, rather than waiting for the next turn.
    * The returned record does not wait for that background buffering pass to finish.
    */
-  async end(): Promise<TurnResult> {
+  async end(messageList: MessageList = this.messageList): Promise<TurnResult> {
     if (this._ended) throw new Error('Turn already ended');
     this._ended = true;
 
     // Save any unsaved messages from the last step
-    const unsavedInput = this.messageList.get.input.db();
-    const unsavedOutput = this.messageList.get.response.db();
+    const unsavedInput = messageList.get.input.db();
+    const unsavedOutput = messageList.get.response.db();
     const unsavedMessages = [...unsavedInput, ...unsavedOutput];
     if (unsavedMessages.length > 0) {
       await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
@@ -232,7 +247,7 @@ export class ObservationTurn {
     const asyncObservationEnabled = this.om.buffering.isAsyncObservationEnabled();
     const bufferOnIdle = this.om.getObservationConfig().bufferOnIdle;
     if (asyncObservationEnabled && bufferOnIdle) {
-      const allMessages = getObservableMessages(this.messageList);
+      const allMessages = getObservableMessages(messageList);
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
       // Buffer only the safe prefix before a tool call still pending on the newest
@@ -258,6 +273,7 @@ export class ObservationTurn {
             .catch((err: Error) => {
               omDebug(`[OM:turn.end] idle buffer failed: ${err?.message}`);
             }),
+          { threadId: this.threadId, resourceId: this.resourceId },
         );
       }
     }

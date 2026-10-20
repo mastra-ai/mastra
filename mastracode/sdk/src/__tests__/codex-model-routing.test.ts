@@ -1,7 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { getModelReasoningOptions } from '@mastra/core/llm';
+import type * as CoreLlm from '@mastra/core/llm';
+import { describe, expect, it, vi } from 'vitest';
 
 import { remapOpenAIModelForCodexOAuth } from '../agents/model.js';
-import { getEffectiveThinkingLevel, supportsMaxReasoningEffort } from '../providers/openai-codex.js';
+import { getEffectiveThinkingLevel } from '../providers/openai-codex.js';
+
+vi.mock('@mastra/core/llm', async importOriginal => {
+  const actual = await importOriginal<typeof CoreLlm>();
+  return { ...actual, getModelReasoningOptions: vi.fn(actual.getModelReasoningOptions) };
+});
 
 describe('remapOpenAIModelForCodexOAuth', () => {
   it('maps only explicit GPT-5 models to codex variants for OAuth', () => {
@@ -37,9 +44,14 @@ describe('getEffectiveThinkingLevel', () => {
     expect(getEffectiveThinkingLevel('gpt-5.1-codex-mini', 'off')).toBe('low');
   });
 
-  it('preserves requested level for non-GPT-5 models', () => {
-    expect(getEffectiveThinkingLevel('gpt-4.1', 'off')).toBe('off');
-    expect(getEffectiveThinkingLevel('gpt-4.1', 'high')).toBe('high');
+  it('raises off to the lowest effort a GPT-5 model publishes', () => {
+    vi.mocked(getModelReasoningOptions).mockReturnValueOnce([{ type: 'effort', values: ['high'] }]);
+    expect(getEffectiveThinkingLevel('gpt-5-pro', 'off')).toBe('high');
+  });
+
+  it('keeps off and published efforts for non-GPT-5 reasoning models', () => {
+    expect(getEffectiveThinkingLevel('o3', 'off')).toBe('off');
+    expect(getEffectiveThinkingLevel('o3', 'high')).toBe('high');
   });
 
   it('preserves max for GPT-5.6+ models that support it', () => {
@@ -51,18 +63,5 @@ describe('getEffectiveThinkingLevel', () => {
   it('clamps max to xhigh for models whose effort scale tops out there', () => {
     expect(getEffectiveThinkingLevel('gpt-5.3-codex', 'max')).toBe('xhigh');
     expect(getEffectiveThinkingLevel('gpt-5.1-codex-mini', 'max')).toBe('xhigh');
-    expect(getEffectiveThinkingLevel('gpt-4.1', 'max')).toBe('xhigh');
-  });
-});
-
-describe('supportsMaxReasoningEffort', () => {
-  it('is true from gpt-5.6 upward and false below', () => {
-    expect(supportsMaxReasoningEffort('gpt-5.6')).toBe(true);
-    expect(supportsMaxReasoningEffort('gpt-5.6-sol')).toBe(true);
-    expect(supportsMaxReasoningEffort('gpt-6')).toBe(true);
-    expect(supportsMaxReasoningEffort('gpt-5.5')).toBe(false);
-    expect(supportsMaxReasoningEffort('gpt-5')).toBe(false);
-    expect(supportsMaxReasoningEffort('gpt-4.1')).toBe(false);
-    expect(supportsMaxReasoningEffort('o3')).toBe(false);
   });
 });

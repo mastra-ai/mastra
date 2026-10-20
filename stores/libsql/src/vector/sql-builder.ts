@@ -498,14 +498,16 @@ function handleLogicalOperator(
   const values: InValue[] = [];
   const joinOperator = key === '$or' || key === '$nor' ? 'OR' : 'AND';
   const conditions = Array.isArray(value)
-    ? value.map(f => {
+    ? value.flatMap(f => {
         const entries = !!f ? Object.entries(f) : [];
-        return entries.map(([k, v]) => buildCondition(k, v, key));
+        const branch = entries.map(([k, v]) => buildCondition(k, v, key));
+        if (branch.length <= 1) return branch;
+        // The keys of one branch are an implicit AND: `{ a: 1, b: 2 }` matches only when both hold.
+        return [{ sql: `(${branch.map(c => c.sql).join(' AND ')})`, values: branch.flatMap(c => c.values) }];
       })
     : [buildCondition(key, value, parentPath)];
 
   const joined = conditions
-    .flat()
     .map(c => {
       values.push(...c.values);
       return c.sql;

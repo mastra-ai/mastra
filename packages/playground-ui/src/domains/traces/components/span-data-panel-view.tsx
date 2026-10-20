@@ -32,6 +32,8 @@ export interface SpanDataPanelViewProps {
   isLoading?: boolean;
   onPrevious?: () => void;
   onNext?: () => void;
+  /** When provided, an × button in the header closes the span column. */
+  onClose?: () => void;
   activeTab?: string;
   onTabChange?: (tab: string) => void;
   /**
@@ -58,6 +60,7 @@ export function SpanDataPanelView({
   isLoading,
   onPrevious,
   onNext,
+  onClose,
   activeTab,
   onTabChange,
   feedbackTabSlot,
@@ -84,6 +87,7 @@ export function SpanDataPanelView({
             previousLabel="Go to previous span"
             nextLabel="Go to next span"
           />
+          {onClose && <DataPanel.CloseButton icon="x" onClick={onClose} label="Close span" tooltip="Close span" />}
         </DataPanel.HeaderActions>
       </DataPanel.Header>
 
@@ -126,6 +130,7 @@ function SpanDataPanelContent({
   feedbackTabBadge?: ReactNode;
   isAnchor?: boolean;
 }) {
+  // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Built SDK declarations type attributes.usage as unknown.
   const usage = span.attributes?.usage as TokenUsage | undefined;
   const hasContext =
     (isAnchor ?? span.parentSpanId == null) &&
@@ -143,7 +148,7 @@ function SpanDataPanelContent({
         </div>
       )}
 
-      <SpanPayloadSection title="Error" raw={span.error} className="mb-3">
+      <SpanPayloadSection title="Error" raw={span.error} framed={false} className="mb-3">
         <SpanErrorRenderer span={span} />
       </SpanPayloadSection>
 

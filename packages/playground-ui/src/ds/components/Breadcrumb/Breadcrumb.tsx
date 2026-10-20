@@ -4,8 +4,9 @@ import { Icon } from '../../icons/Icon';
 import { SlashIcon } from '../../icons/SlashIcon';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
+import { PopupAnchorProvider } from '@/ds/primitives/popup-anchor';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { quietTextHover } from '@/ds/primitives/typography';
+import { quietTextHover, quietTextHoverInGroup } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 export interface BreadcrumbProps {
@@ -36,20 +37,46 @@ export interface CrumbProps {
   isLoading?: boolean;
   /**
    * Sibling control rendered next to the label (never inside it). Expected to be a
-   * `size="icon-sm"` ghost control: an icon-only Combobox switcher, a CopyButton, …
+   * `size="icon-sm"` ghost control, e.g. a CopyButton. Entity switchers go in `switcher`.
    */
   action?: React.ReactNode;
+  /**
+   * Entity switcher rendered next to the label; spread `crumbSwitcherTriggerProps` on it.
+   * When the crumb doesn't navigate (current crumb, or no `to`), its hit area covers the whole crumb.
+   */
+  switcher?: React.ReactNode;
   'data-testid'?: string;
 }
 
 export const CrumbSkeleton = (props: { 'data-testid'?: string }) => <Skeleton className="h-3 w-24" {...props} />;
 
-export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, children, ...props }: CrumbProps) => {
+export const Crumb = ({
+  className,
+  as,
+  to,
+  isCurrent,
+  action,
+  switcher,
+  icon,
+  isLoading,
+  children,
+  ...props
+}: CrumbProps) => {
   const Root = as || 'span';
+  const switcherCoversCrumb = Boolean(switcher && (isCurrent || !to));
+  const crumbRef = React.useRef<HTMLLIElement>(null);
 
   return (
     <>
-      <li className={cn('group flex h-control-sm min-w-0 items-center', isCurrent ? 'shrink' : 'shrink-0')}>
+      <li
+        ref={crumbRef}
+        className={cn(
+          'group flex h-control-sm min-w-0 items-center',
+          isCurrent ? 'shrink' : 'shrink-0',
+          switcherCoversCrumb &&
+            'relative rounded-full has-[[data-slot=crumb-switcher]_[data-popup-open]]:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:hover:bg-fill-subtle has-[[data-slot=crumb-switcher]_button:enabled]:active:bg-fill',
+        )}
+      >
         <Root
           aria-current={isCurrent ? 'page' : undefined}
           className={cn(
@@ -61,15 +88,18 @@ export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, child
             // Long labels truncate: the current crumb gets more room than nav crumbs.
             isCurrent
               ? 'max-w-xs cursor-default text-foreground'
-              : cn(quietTextHover, 'max-w-48 cursor-pointer hover:bg-fill-subtle active:bg-fill'),
+              : switcherCoversCrumb
+                ? cn(quietTextHoverInGroup, 'max-w-48')
+                : cn(quietTextHover, 'max-w-48 cursor-pointer hover:bg-fill-subtle active:bg-fill'),
             className,
           )}
+          to={to}
           {...props}
         >
           {icon && (
             <Icon
               className={cn(
-                '-ml-[.3em] shrink-0 opacity-50 group-hover:opacity-100',
+                'ml-[-.3em] shrink-0 opacity-50 group-hover:opacity-100',
                 'transition-opacity duration-normal ease-out-custom',
               )}
             >
@@ -85,6 +115,19 @@ export const Crumb = ({ className, as, isCurrent, action, icon, isLoading, child
             <span className="min-w-0 flex-1 truncate">{children}</span>
           )}
         </Root>
+        {switcher && (
+          <span
+            data-slot="crumb-switcher"
+            className={cn(
+              '-ml-1 flex h-control-sm shrink-0 items-center',
+              switcherCoversCrumb &&
+                '[&_button]:bg-transparent! [&_button:enabled]:after:absolute [&_button:enabled]:after:inset-0 [&_button:enabled]:after:rounded-full',
+            )}
+          >
+            {/* The switcher's popup opens from the crumb's start, like a menu on the whole crumb. */}
+            <PopupAnchorProvider value={crumbRef}>{switcher}</PopupAnchorProvider>
+          </span>
+        )}
         {action && <span className="-ml-1 flex h-control-sm shrink-0 items-center">{action}</span>}
       </li>
       {!isCurrent && (

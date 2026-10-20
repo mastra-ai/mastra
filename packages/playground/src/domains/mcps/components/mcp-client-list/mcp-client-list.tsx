@@ -6,7 +6,8 @@ import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Sectio
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
-import { stringToColor } from '@mastra/playground-ui/utils/colors';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { hueFillClass, hueForName } from '@mastra/playground-ui/utils/colors';
 import { LaptopMinimal, PlusIcon, XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -160,8 +161,6 @@ export function MCPClientList() {
           <div className="flex flex-col gap-1">
             {mcpClients.map((mcpClient, index) => {
               const serverCount = Object.keys(mcpClient.servers ?? {}).length;
-              const bg = stringToColor(mcpClient.name);
-              const text = stringToColor(mcpClient.name, 25);
 
               return (
                 <Entity
@@ -170,8 +169,10 @@ export function MCPClientList() {
                   onClick={() => setViewIndex(index)}
                 >
                   <div
-                    className="flex size-11 shrink-0 items-center justify-center rounded-lg uppercase"
-                    style={{ backgroundColor: bg, color: text }}
+                    className={cn(
+                      'flex size-11 shrink-0 items-center justify-center rounded-lg uppercase shadow-inset',
+                      hueFillClass(hueForName(mcpClient.name)),
+                    )}
                   >
                     <Icon>
                       <McpServerIcon />

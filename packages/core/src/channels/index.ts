@@ -39,6 +39,8 @@ export type {
   ChannelInstallationInfo,
   ChannelPlatformInfo,
   ChannelProvider,
+  ChannelsResolver,
+  ChannelsResolverContext,
   InlineLinkEntry,
   PostableMessage,
   ResolveResourceId,

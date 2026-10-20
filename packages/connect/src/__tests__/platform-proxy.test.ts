@@ -85,6 +85,26 @@ describe('createPlatformProxy request context binding', () => {
     expect(fetchMock.mock.calls[0]![1].headers['base-url-override']).toBe('https://caller-controlled.example');
   });
 
+  it('returns raw ArrayBuffer data when a template requests responseType arraybuffer', async () => {
+    const binary = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // %PDF
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(binary, {
+        status: 200,
+        headers: { 'content-type': 'application/pdf' },
+      }),
+    );
+    const proxy = createPlatformProxy({
+      connectionId: 'conn-1',
+      client: { accessToken: 'token', baseUrl: 'https://example.test', fetch: fetchMock },
+    });
+
+    const response = await proxy.get({ endpoint: '/files/x/export', responseType: 'arraybuffer' });
+
+    expect(response.data).toBeInstanceOf(ArrayBuffer);
+    const roundTripped = Buffer.from(response.data as ArrayBuffer);
+    expect(roundTripped.toString('base64')).toBe(Buffer.from(binary).toString('base64'));
+  });
+
   it('exposes credentials only through getConnectionWithCredentials, mapped to the template wire shape', async () => {
     const fetchMock = vi
       .fn()

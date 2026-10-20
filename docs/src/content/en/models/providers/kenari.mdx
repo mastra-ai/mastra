@@ -7,7 +7,7 @@ description: "Browse Kenari model IDs, capabilities, and context windows. Learn 
 
 # <img src="https://models.dev/logos/kenari.svg" alt="Kenari logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kenari
 
-Access 60 Kenari models through Mastra's model router. Authentication is handled automatically using the `KENARI_API_KEY` environment variable.
+Access 64 Kenari models through Mastra's model router. Authentication is handled automatically using the `KENARI_API_KEY` environment variable.
 
 Learn more in the [Kenari documentation](https://kenari.id/docs).
 
@@ -466,13 +466,25 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "kenari/grok-imagine-image",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 16000,
+    "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "kenari/grok-imagine-image-2-0",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 8000,
+    "contextWindow": 64000,
     "maxOutput": null,
     "inputCost": null,
     "outputCost": null
@@ -654,6 +666,42 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kenari/nano-banana-2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kenari/nano-banana-2-lite",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kenari/nano-banana-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 32768,
     "inputCost": null,
     "outputCost": null
   },

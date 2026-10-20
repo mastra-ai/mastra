@@ -6,7 +6,8 @@ import type {
   RouteResponse,
 } from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
-import { TraceStatus, type PaginationInfo } from '@mastra/core/storage';
+import { TraceStatus } from '@mastra/core/storage';
+import type { PaginationInfo } from '@mastra/core/storage';
 
 type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
 type GetSpanResponse = Awaited<ReturnType<MastraClient['getSpan']>>;
@@ -42,6 +43,20 @@ export const experimentTraceChildSpan = {
 export const experimentTraceSpans: GetTraceResponse = {
   traceId: TRACE_ID,
   spans: [experimentTraceRootSpan, experimentTraceChildSpan],
+};
+/** Same trace, with a term that only lives in the tool span's `metadata`. */
+export const experimentTraceSpansWithMetadata: GetTraceResponse = {
+  traceId: TRACE_ID,
+  spans: [
+    experimentTraceRootSpan,
+    { ...experimentTraceChildSpan, metadata: { ticket: 'zanzibar-payload-term' } },
+    {
+      ...experimentTraceChildSpan,
+      spanId: 'span-sibling',
+      name: 'Experiment model call',
+      spanType: SpanType.MODEL_GENERATION,
+    },
+  ],
 };
 export const experimentSpanDetailById: Record<string, GetSpanResponse> = {
   [experimentTraceRootSpan.spanId]: {

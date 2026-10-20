@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { AgentCard, Message, Task } from '@a2a-js/sdk-v0_3';
 import { MastraA2AError } from '../error';
 import type { A2AProtocolCompat, A2AStreamEventData, SendMessageInput } from './types';
@@ -20,7 +19,7 @@ export const v0_3Compat: A2AProtocolCompat = {
     message: {
       role: 'user',
       kind: 'message',
-      messageId: randomUUID(),
+      messageId: globalThis.crypto.randomUUID(),
       parts: [{ kind: 'text', text: prompt }, ...(data ? [{ kind: 'data' as const, data }] : [])],
       ...(contextId ? { contextId } : {}),
       ...(taskId ? { taskId } : {}),

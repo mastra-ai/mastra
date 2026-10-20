@@ -75,7 +75,7 @@ export async function registerWorkflowBuilderPrimitives(
       basePath: projectPath,
       allowedPaths: [projectPath, ...allowedPaths],
     }),
-    sandbox: new LocalSandbox({ workingDirectory: projectPath }),
+    sandbox: new LocalSandbox({ workingDirectory: projectPath, timeout: 30_000 }),
     tools: createMastraCodeWorkspaceTools(),
   });
   const workspaceTools = await createWorkspaceTools(workspace, { workspace });

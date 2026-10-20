@@ -1,7 +1,9 @@
 import { coreFeatures } from '@mastra/core/features';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
+import { createFetchWithRefresh } from '@mastra/react/hooks/auth';
 import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 import type { LoaderFunctionArgs, RouteObject } from 'react-router';
@@ -18,8 +20,10 @@ import {
   legacyAgentChatLoader,
   legacyAgentSettingsLoader,
   paths,
+  workspaceSkillFileLink,
 } from './lib/app-routing';
 import { Link } from './lib/link';
+import { isSamePageHref } from './lib/same-page-href';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
 import { AgentBuilderRoot } from './pages/agent-builder';
 import AgentBuilderAgents from './pages/agent-builder/agents';
@@ -58,7 +62,6 @@ import DatasetPage from './pages/datasets/dataset';
 import EditDatasetPage from './pages/datasets/dataset/edit';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
-import CreateDatasetPage from './pages/datasets/new';
 import Experiments from './pages/experiments';
 import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
@@ -68,10 +71,8 @@ import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
-import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
 import PromptBlocks from './pages/prompt-blocks';
-import RequestContext from './pages/request-context';
 import Resources from './pages/resources';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
@@ -79,8 +80,6 @@ import { StudioSettingsPage } from './pages/settings';
 import { SignUp } from './pages/signup';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
-import AgentTool from './pages/tools/agent-tool';
-import Tool from './pages/tools/tool';
 import Traces from './pages/traces';
 import Workflows from './pages/workflows';
 import SchedulePage from './pages/workflows/schedule';
@@ -89,14 +88,12 @@ import { Workflow } from './pages/workflows/workflow';
 import WorkflowSchedules from './pages/workflows/workflow-schedules';
 import WorkflowTraces from './pages/workflows/workflow-traces';
 import Workspace from './pages/workspace';
-import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import { AuthLayout } from '@/components/auth-layout';
 import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layouts/agent-builder-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
-import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
 
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
@@ -133,7 +130,8 @@ declare global {
 
 const RootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) => navigate(path, { viewTransition: true });
+  const frameworkNavigate = (path: string) =>
+    navigate(path, { viewTransition: !isSamePageHref(path, window.location.pathname) });
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
@@ -151,7 +149,8 @@ const RootLayout = () => {
 
 const MinimalRootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) => navigate(path, { viewTransition: true });
+  const frameworkNavigate = (path: string) =>
+    navigate(path, { viewTransition: !isSamePageHref(path, window.location.pathname) });
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
@@ -356,10 +355,6 @@ export const routes: RouteObject[] = [
         element: <CmsPromptBlocksEditPage />,
       },
       {
-        path: '/agents/:agentId/tools/:toolId',
-        element: <AgentTool />,
-      },
-      {
         path: '/agents/:agentId',
         element: (
           <AgentLayout>
@@ -389,10 +384,6 @@ export const routes: RouteObject[] = [
       },
 
       { path: '/tools', element: <Tools /> },
-      {
-        path: '/tools/:toolId',
-        element: <Tool />,
-      },
 
       {
         path: '/integrations',
@@ -410,16 +401,13 @@ export const routes: RouteObject[] = [
         path: '/mcps/:serverId',
         element: <McpServerPage />,
       },
-      {
-        path: '/mcps/:serverId/tools/:toolId',
-        element: <MCPServerToolExecutor />,
-      },
 
       { path: '/workspaces', element: <Workspace /> },
       { path: '/workspaces/:workspaceId', element: <Workspace /> },
       {
         path: '/workspaces/:workspaceId/skills/:skillName',
-        element: <WorkspaceSkillDetailPage />,
+        loader: ({ params, request }: LoaderFunctionArgs) =>
+          redirect(workspaceSkillFileLink(params.workspaceId, new URL(request.url).searchParams.get('path'))),
       },
 
       { path: '/workflows', element: <Workflows /> },
@@ -456,10 +444,6 @@ export const routes: RouteObject[] = [
       ...(isExperimentalFeatures
         ? [
             { path: '/datasets', element: <Datasets /> },
-            {
-              path: '/datasets/new',
-              element: <CreateDatasetPage />,
-            },
             {
               path: '/datasets/:datasetId',
               element: <DatasetPage />,
@@ -510,7 +494,6 @@ export const routes: RouteObject[] = [
         index: true,
         element: <StudioIndexRedirect />,
       },
-      { path: '/request-context', element: <RequestContext /> },
     ],
   },
 ];
@@ -530,7 +513,12 @@ function App() {
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
     // between the first tanstack resolution and the React useLayoutEffect where headers are not set yet on the first HTTP request.
-    return null;
+    // The instance probe can also be slow, so show the same spinner as RoutePermissionsGate instead of a blank page.
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
   }
 
   if (!baseUrl) {

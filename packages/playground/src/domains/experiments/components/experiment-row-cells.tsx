@@ -1,7 +1,8 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { DataList as EntityList } from '@mastra/playground-ui/components/DataList';
+import { DataList } from '@mastra/playground-ui/components/DataList';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import type { sideVariant } from './comparison/constants';
 import { STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
 import { ExperimentDescriptionLabel, ExperimentNameLabel } from './experiment-name-label';
 import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
@@ -17,9 +18,16 @@ export interface ExperimentRowCellsProps {
   experiment: DatasetExperiment;
   datasetName?: string;
   review?: ExperimentReviewSummary;
+  /** Comparison role badge shown before the name (e.g. "Baseline", "Contender 1"). */
+  selectionRole?: ExperimentSelectionRole;
 }
 
-export function ExperimentRowCells({ experiment: exp, datasetName, review }: ExperimentRowCellsProps) {
+export interface ExperimentSelectionRole {
+  label: string;
+  variant: (typeof sideVariant)[keyof typeof sideVariant];
+}
+
+export function ExperimentRowCells({ experiment: exp, datasetName, review, selectionRole }: ExperimentRowCellsProps) {
   const status = exp.status ?? 'pending';
   const succeeded = exp.succeededCount ?? 0;
   const failed = exp.failedCount ?? 0;
@@ -27,30 +35,39 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
 
   return (
     <>
-      <EntityList.Cell>
-        <ExperimentNameLabel experiment={exp} />
-      </EntityList.Cell>
-      <EntityList.Cell>
+      <DataList.Cell>
+        {selectionRole ? (
+          <span className="flex min-w-0 items-center gap-2">
+            <Badge variant={selectionRole.variant} className="shrink-0">
+              {selectionRole.label}
+            </Badge>
+            <ExperimentNameLabel experiment={exp} />
+          </span>
+        ) : (
+          <ExperimentNameLabel experiment={exp} />
+        )}
+      </DataList.Cell>
+      <DataList.Cell>
         <ExperimentDescriptionLabel experiment={exp} />
-      </EntityList.Cell>
-      {datasetName !== undefined && <EntityList.TextCell>{datasetName}</EntityList.TextCell>}
-      <EntityList.Cell>
+      </DataList.Cell>
+      {datasetName !== undefined && <DataList.TextCell>{datasetName}</DataList.TextCell>}
+      <DataList.Cell>
         <ExperimentTargetCell experiment={exp} />
-      </EntityList.Cell>
-      <EntityList.Cell>
+      </DataList.Cell>
+      <DataList.Cell>
         <Badge variant={STATUS_VARIANT[status] ?? 'neutral'} indicator="dot">
           {STATUS_LABEL[status] ?? status}
         </Badge>
-      </EntityList.Cell>
-      <EntityList.TextCell className="text-center">{total}</EntityList.TextCell>
-      <EntityList.TextCell className="text-center">{succeeded}</EntityList.TextCell>
-      <EntityList.TextCell className="text-center">
-        <span className={failed > 0 ? 'text-accent2' : ''}>{failed}</span>
-      </EntityList.TextCell>
-      <EntityList.Cell className="text-center">
+      </DataList.Cell>
+      <DataList.TextCell className="text-center">{total}</DataList.TextCell>
+      <DataList.TextCell className="text-center">{succeeded}</DataList.TextCell>
+      <DataList.TextCell className="text-center">
+        <span className={failed > 0 ? 'text-destructive-foreground' : ''}>{failed}</span>
+      </DataList.TextCell>
+      <DataList.Cell className="text-center">
         <ExperimentReviewCell review={review} />
-      </EntityList.Cell>
-      <EntityList.TextCell>{formatDate(exp.createdAt, 'date') ?? '—'}</EntityList.TextCell>
+      </DataList.Cell>
+      <DataList.TextCell>{formatDate(exp.createdAt, 'date') ?? '—'}</DataList.TextCell>
     </>
   );
 }
@@ -79,13 +96,13 @@ function ExperimentReviewCell({ review }: { review?: ExperimentReviewSummary }) 
   if (inPipeline === 0) return <span className="text-placeholder">—</span>;
   if (review.needsReview > 0) {
     return (
-      <Badge size="xs" variant="yellow">
+      <Badge size="xs" variant="warning">
         {review.needsReview} pending
       </Badge>
     );
   }
   return (
-    <Badge size="xs" variant="green">
+    <Badge size="xs" variant="success">
       {review.complete}/{inPipeline} reviewed
     </Badge>
   );

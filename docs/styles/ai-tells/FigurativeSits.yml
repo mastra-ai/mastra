@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI overused verb: '%s'. Name the literal relation: is at or rests with. Disable this rule for furniture or geography prose."
+message: "AI overused verb: '%s'. Use the literal relation: is at or rests with. Disable this rule for furniture or geography prose."
 level: error
 nonword: true
 ignorecase: true

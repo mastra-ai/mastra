@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { describe, expect, it } from 'vitest';
 import { getWorkflowRunErrors } from '../workflow-run-errors';
 

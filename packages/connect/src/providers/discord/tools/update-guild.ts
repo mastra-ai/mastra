@@ -3,10 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
-
-const MetadataSchema = z.object({
-  botToken: z.string(),
-});
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const updateGuildInputSchema = z.object({
   guild_id: z.string().describe('Guild ID to update. Example: "197038439483310086"'),
@@ -91,14 +88,7 @@ export function updateGuildTool(proxy: PlatformProxy) {
     outputSchema: updateGuildOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof updateGuildOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken: string }>();
-
-      if (!metadata?.botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // Build the update payload - only include fields that were provided
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -172,7 +162,7 @@ export function updateGuildTool(proxy: PlatformProxy) {
       const response = await platformProxy.patch({
         endpoint: `/api/v10/guilds/${input.guild_id}`,
         headers: {
-          Authorization: `Bot ${metadata.botToken}`,
+          Authorization: `Bot ${botToken}`,
         },
         data: payload,
         retries: 3,

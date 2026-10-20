@@ -9,6 +9,7 @@ import { formatRelativeTime } from '@/utils/relative-time';
 
 export interface RelativeTimestampProps {
   value: DateInput;
+  label?: string;
   className?: string;
 }
 
@@ -68,7 +69,16 @@ function formatSince(date: Date, at: number) {
 }
 
 function Relative({ date }: { date: Date }) {
-  return <>{formatRelativeTime(date, { now: useNow() })}</>;
+  const parts = formatRelativeTime(date, { now: useNow() })?.split(/(\d+[smhd])/) ?? [];
+  return parts.map((part, index) =>
+    index % 2 ? (
+      <span key={index} className="font-mono [font-size-adjust:cap-height_0.729]">
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
 }
 
 function Since({ date }: { date: Date }) {
@@ -94,7 +104,7 @@ function zoneRow(date: Date, timeZone?: string) {
   };
 }
 
-export function RelativeTimestamp({ value, className }: RelativeTimestampProps) {
+export function RelativeTimestamp({ value, label, className }: RelativeTimestampProps) {
   const date = toDate(value);
   if (!date) return null;
 
@@ -108,17 +118,18 @@ export function RelativeTimestamp({ value, className }: RelativeTimestampProps) 
           <time
             dateTime={date.toISOString()}
             tabIndex={0}
-            className={cn('rounded-sm font-mono whitespace-nowrap tabular-nums', focusRing.visible, className)}
+            className={cn('rounded-sm whitespace-nowrap tabular-nums', focusRing, className)}
           />
         }
       >
         <span aria-hidden="true">
           <Relative date={date} />
         </span>
-        <span className="sr-only">{formatDate(date, 'date-time-seconds')}</span>
+        <span className="sr-only">{[label, formatDate(date, 'date-time-seconds')].filter(Boolean).join(' ')}</span>
       </TooltipTrigger>
       <TooltipContent>
         <span className="text-muted-foreground">
+          {label ? `${label} ` : null}
           <Since date={date} />
         </span>
         <table className="mt-1.5 border-t border-border font-mono tabular-nums">

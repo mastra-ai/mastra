@@ -12,6 +12,7 @@ const FAILURE_METADATA = {
   session_unavailable: { canRetry: true, label: 'Factory session unavailable' },
   source_control_missing: { canRetry: true, label: 'Source-control connection unavailable' },
   source_repository_missing: { canRetry: true, label: 'Source repository unavailable' },
+  source_repository_ambiguous: { canRetry: true, label: 'Choose a repository for this work item' },
   unsupported_provider_item: { canRetry: false, label: 'Unsupported provider work item' },
   notification_delivery_failed: { canRetry: true, label: 'Factory message delivery failed' },
   run_terminal_event_missing: { canRetry: false, label: 'Agent run terminal event was not observed' },

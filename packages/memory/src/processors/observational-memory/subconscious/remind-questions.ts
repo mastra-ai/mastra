@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { ToolAction } from '@mastra/core/tools';
@@ -7,7 +5,7 @@ import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
 import type { Memory } from '../../..';
-import { withOmInternalThreadId } from '../internal-request-context';
+import { withOwnThreadIds } from '../internal-request-context';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousError } from './activity';
 import { resolveKnowledgeToolScope } from './knowledge-tools';
@@ -28,7 +26,7 @@ type AskMemoryToolContext = {
     resourceId?: string;
     messages?: unknown;
   };
-  requestContext?: Parameters<typeof withOmInternalThreadId>[0];
+  requestContext?: Parameters<typeof withOwnThreadIds>[0];
   writer?: ProcessorStreamWriter;
 };
 
@@ -235,7 +233,7 @@ export function createAskMemoryTool(options: {
               behavior: 'wake',
               streamOptions: {
                 memory: { thread: reminderThread.id, resource: resourceId },
-                requestContext: withOmInternalThreadId(context.requestContext, reminderAgent.id),
+                requestContext: withOwnThreadIds(context.requestContext, reminderThread.id, resourceId),
                 maxSteps: options.config.maxSteps,
               },
             },
@@ -305,7 +303,11 @@ export function createReplyToMemoryQuestionTool(options: {
 
       const trimmedAnswer = answer.trim();
       const suffix = moreComing
-        ? `partial:${crypto.createHash('sha256').update(trimmedAnswer).digest('hex').slice(0, 12)}`
+        ? `partial:${Buffer.from(
+            await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(trimmedAnswer)),
+          )
+            .toString('hex')
+            .slice(0, 12)}`
         : 'terminal';
       const signalId = `${replyId}:${suffix}:signal`;
       if (deliveredSignalIds.has(signalId)) return { delivered: true, replyId, moreComing, outcome };

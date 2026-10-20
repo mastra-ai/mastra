@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createBoardRegistry } from '../../boards/index.js';
+import { createBoardRegistry, defineBoard } from '../../boards/index.js';
+import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
+import { FactoryTransitionService } from '../../rules/transition-service.js';
+import type { FactoryGitLabRuleContext } from '../../rules/types.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { resolveGitLabRules } from './default-rules.js';
 import { encodeSourceId } from './integration.js';
@@ -101,7 +104,14 @@ function mergeRequestNote(deliveryId = 'delivery-mr-note') {
 }
 
 async function setup(
-  options: { selected?: boolean; accessLevel?: number; duplicateInstallation?: boolean; installationHost?: string; platformOnly?: boolean } = {},
+  options: {
+    selected?: boolean;
+    accessLevel?: number;
+    duplicateInstallation?: boolean;
+    installationHost?: string;
+    platformOnly?: boolean;
+    boards?: ReturnType<typeof createBoardRegistry>;
+  } = {},
 ) {
   const seeded = await createFactoryStorageForTests();
   const sourceControl = seeded.sourceControl.forIntegration('gitlab');
@@ -167,9 +177,11 @@ async function setup(
     rules: resolveGitLabRules(),
     getProjectMemberAccessLevel: vi.fn().mockResolvedValue(options.accessLevel ?? 40),
     getWorkItemAuthorUsername: vi.fn().mockResolvedValue('maintainer'),
-    resolveActiveConnectionForHost: vi.fn().mockImplementation(async (connectionId: string, host: string) =>
-      options.platformOnly && host === 'gitlab.example.com' ? 'direct' : connectionId,
-    ),
+    resolveActiveConnectionForHost: vi
+      .fn()
+      .mockImplementation(async (connectionId: string, host: string) =>
+        options.platformOnly && host === 'gitlab.example.com' ? 'direct' : connectionId,
+      ),
   };
   const service = new GitLabRules({
     gitlab,
@@ -178,7 +190,7 @@ async function setup(
     storage: seeded.workItems,
     intake: seeded.intake,
     configVersion: 'gitlab-test-v1',
-    boards: createBoardRegistry(),
+    boards: options.boards ?? createBoardRegistry(),
   });
   return { seeded, project, gitlab, service };
 }
@@ -291,14 +303,16 @@ describe('GitLabRules', () => {
     const { seeded, project, gitlab, service } = await setup();
     const event = issueOpened('issue-author-id');
     const { author: _author, ...attributes } = event.payload.object_attributes;
-    await expect(service.ingest({
-      ...event,
-      payload: {
-        ...event.payload,
-        user: { id: 7, username: 'maintainer' },
-        object_attributes: { ...attributes, author_id: 7 },
-      },
-    })).resolves.toEqual({ status: 'committed' });
+    await expect(
+      service.ingest({
+        ...event,
+        payload: {
+          ...event.payload,
+          user: { id: 7, username: 'maintainer' },
+          object_attributes: { ...attributes, author_id: 7 },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
     expect(gitlab.getWorkItemAuthorUsername).not.toHaveBeenCalled();
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       { decision: { metadata: { author: 'maintainer', authorTrusted: true } } },
@@ -312,15 +326,17 @@ describe('GitLabRules', () => {
     );
     const event = issueOpened('issue-author-lookup');
     const { author: _author, ...attributes } = event.payload.object_attributes;
-    await expect(service.ingest({
-      ...event,
-      payload: {
-        ...event.payload,
-        user_username: 'external-editor',
-        user: { id: 8, username: 'external-editor' },
-        object_attributes: { ...attributes, author_id: 7 },
-      },
-    })).resolves.toEqual({ status: 'committed' });
+    await expect(
+      service.ingest({
+        ...event,
+        payload: {
+          ...event.payload,
+          user_username: 'external-editor',
+          user: { id: 8, username: 'external-editor' },
+          object_attributes: { ...attributes, author_id: 7 },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
     expect(gitlab.getWorkItemAuthorUsername).toHaveBeenCalledWith('direct', PROJECT_ID, 'issue', 42);
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       {
@@ -335,14 +351,16 @@ describe('GitLabRules', () => {
     vi.mocked(gitlab.getWorkItemAuthorUsername).mockRejectedValue(new Error('GitLab unavailable'));
     const event = issueOpened('issue-author-unavailable');
     const { author: _author, ...attributes } = event.payload.object_attributes;
-    await expect(service.ingest({
-      ...event,
-      payload: {
-        ...event.payload,
-        user: { id: 8, username: 'maintainer' },
-        object_attributes: { ...attributes, author_id: 7 },
-      },
-    })).resolves.toEqual({ status: 'committed' });
+    await expect(
+      service.ingest({
+        ...event,
+        payload: {
+          ...event.payload,
+          user: { id: 8, username: 'maintainer' },
+          object_attributes: { ...attributes, author_id: 7 },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       { decision: { metadata: { authorTrusted: false, autoStartCandidate: false } } },
     ]);
@@ -376,14 +394,16 @@ describe('GitLabRules', () => {
     const { seeded, project, gitlab, service } = await setup();
     const event = mergeRequestOpened('mr-author-id');
     const { author: _author, ...attributes } = event.payload.object_attributes;
-    await expect(service.ingest({
-      ...event,
-      payload: {
-        ...event.payload,
-        user: { id: 7, username: 'maintainer' },
-        object_attributes: { ...attributes, author_id: 7 },
-      },
-    })).resolves.toEqual({ status: 'committed' });
+    await expect(
+      service.ingest({
+        ...event,
+        payload: {
+          ...event.payload,
+          user: { id: 7, username: 'maintainer' },
+          object_attributes: { ...attributes, author_id: 7 },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
     expect(gitlab.getWorkItemAuthorUsername).not.toHaveBeenCalled();
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       { decision: { metadata: { author: 'maintainer', authorTrusted: true } } },
@@ -396,15 +416,17 @@ describe('GitLabRules', () => {
     );
     const event = mergeRequestOpened('mr-untrusted-actor');
     const { author: _author, ...attributes } = event.payload.object_attributes;
-    await expect(service.ingest({
-      ...event,
-      payload: {
-        ...event.payload,
-        user_username: 'external-editor',
-        user: { id: 8, username: 'external-editor' },
-        object_attributes: { ...attributes, author_id: 7 },
-      },
-    })).resolves.toEqual({ status: 'committed' });
+    await expect(
+      service.ingest({
+        ...event,
+        payload: {
+          ...event.payload,
+          user_username: 'external-editor',
+          user: { id: 8, username: 'external-editor' },
+          object_attributes: { ...attributes, author_id: 7 },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
     expect(gitlab.getWorkItemAuthorUsername).toHaveBeenCalledWith('direct', PROJECT_ID, 'merge_request', 17);
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       {
@@ -434,6 +456,87 @@ describe('GitLabRules', () => {
         },
       },
     ]);
+  });
+
+  it('files the Review card even when the authoring card board switches mergeRequestOpened off', async () => {
+    const delivery = defineBoard({
+      id: 'delivery',
+      title: 'Delivery',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'building' },
+        building: { title: 'Building', kind: 'working', role: 'work', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+      events: { gitlab: { mergeRequestOpened: null } },
+    });
+    const { seeded, project, service } = await setup({
+      boards: createBoardRegistry({ boards: [delivery] }),
+    });
+    await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:authoring' },
+        title: 'Authoring delivery',
+        board: 'delivery',
+        stages: ['building'],
+        sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } },
+      },
+    });
+    await expect(service.ingest(mergeRequestOpened())).resolves.toEqual({ status: 'committed' });
+    expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      { decision: { type: 'upsertLinkedWorkItem', source: 'gitlab-pr', board: 'review' } },
+    ]);
+  });
+
+  it('runs the authoring card board mergeRequestOpened handler alongside Review card intake', async () => {
+    const handler = vi.fn((context: FactoryGitLabRuleContext) => ({
+      type: 'sendMessage' as const,
+      idempotencyKey: `${context.ingress.id}:delivery-out`,
+      role: 'work',
+      message: `Merge request ${context.mergeRequest?.iid} is out.`,
+    }));
+    const delivery = defineBoard({
+      id: 'delivery',
+      title: 'Delivery',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'building' },
+        building: { title: 'Building', kind: 'working', role: 'work', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+      events: { gitlab: { mergeRequestOpened: handler } },
+    });
+    const { seeded, project, service } = await setup({
+      boards: createBoardRegistry({ boards: [delivery] }),
+    });
+    await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:authoring' },
+        title: 'Authoring delivery',
+        board: 'delivery',
+        stages: ['building'],
+        sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } },
+      },
+    });
+    await expect(service.ingest(mergeRequestOpened())).resolves.toEqual({ status: 'committed' });
+    expect(handler).toHaveBeenCalledOnce();
+    expect(handler.mock.calls[0]![0]).toMatchObject({
+      board: 'delivery',
+      phase: { id: 'building', kind: 'working', role: 'work' },
+    });
+    const deferred = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(deferred.map(entry => entry.decision)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'gitlab-pr', board: 'review' }),
+        expect.objectContaining({ type: 'sendMessage', role: 'work' }),
+      ]),
+    );
   });
 
   it('routes an MR note only to the Work card authoring its head branch', async () => {
@@ -466,6 +569,382 @@ describe('GitLabRules', () => {
     ]);
   });
 
+  describe('recording the pushed head against a review verdict', () => {
+    const reviewedHeadSha = 'be10bfa000000000000000000000000000000000';
+    const pushedHeadSha = '8fa258d000000000000000000000000000000000';
+    const reviewKey = `gitlab-pr:${Buffer.from(
+      JSON.stringify({ version: 1, host: 'gitlab.example.com', projectId: 101, mergeRequestIid: 17 }),
+      'utf8',
+    ).toString('base64url')}`;
+
+    function mergeRequestUpdated(
+      deliveryId: string,
+      lastCommit: string,
+      oldrev?: string,
+      updatedAt: string | undefined = '2030-01-01 01:00:00 UTC',
+    ) {
+      const base = mergeRequestOpened(deliveryId);
+      return {
+        ...base,
+        payload: {
+          ...base.payload,
+          object_attributes: {
+            ...base.payload.object_attributes,
+            action: 'update',
+            last_commit: { id: lastCommit },
+            ...(oldrev ? { oldrev } : {}),
+            ...(updatedAt ? { updated_at: updatedAt } : {}),
+          },
+        },
+      };
+    }
+
+    async function seed(workMetadata: Record<string, unknown>) {
+      const { seeded, project, service } = await setup();
+      const verdict = { reviewVerdict: 'approve', reviewedHeadSha };
+      const work = (
+        await seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: project.id,
+          input: {
+            externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:authoring' },
+            title: 'Authoring work',
+            board: 'work',
+            stages: ['execute'],
+            sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } },
+            metadata: { authorTrusted: true, ...verdict, ...workMetadata },
+          },
+        })
+      ).item;
+      const review = (
+        await seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: project.id,
+          input: {
+            externalSource: { integrationId: 'gitlab', type: 'pull-request', externalId: reviewKey },
+            parentWorkItemId: work.id,
+            title: 'MR 17',
+            board: 'review',
+            stages: ['done'],
+            sessions: {},
+            metadata: { authorTrusted: true, ...verdict },
+          },
+        })
+      ).item;
+      const metadataOf = async (id: string) => (await seeded.workItems.get({ orgId: 'org-1', id }))?.metadata;
+      return { seeded, service, workId: work.id, reviewId: review.id, metadataOf };
+    }
+
+    it('ignores a push delivered after a newer one', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
+
+      await service.ingest(
+        mergeRequestUpdated('d-push-new', pushedHeadSha, reviewedHeadSha, '2030-01-01 02:00:00 UTC'),
+      );
+      await service.ingest(mergeRequestUpdated('d-push-late', reviewedHeadSha, 'aaaa', '2030-01-01 01:00:00 UTC'));
+
+      for (const id of [reviewId, workId]) {
+        expect(await metadataOf(id)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+      }
+    });
+
+    // GitLab documents `… UTC`; offset forms and pushes without an update
+    // time must still record the pushed head before the pass is built.
+    it.each([
+      ['in UTC form', '2030-01-01 01:00:00 UTC', undefined],
+      ['in offset form', '2030-01-01 01:00:00 +0000', undefined],
+      ['missing', '', '2030-01-01T01:00:00+00:00'],
+    ])(
+      'starts the re-review of a pushed commit on that commit, not the one the last verdict covered, with updated_at %s (#27590)',
+      async (_form, updatedAt, commitTimestamp) => {
+      const { seeded, project, service } = await setup();
+      const card = (
+        await seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: project.id,
+          input: {
+            externalSource: { integrationId: 'gitlab', type: 'pull-request', externalId: reviewKey },
+            title: 'MR 17',
+            board: 'review',
+            stages: ['review'],
+            sessions: {},
+            metadata: {
+              authorTrusted: true,
+              reviewVerdict: 'request changes',
+              reviewedHeadSha,
+              pullRequestHeadSha: reviewedHeadSha,
+              pullRequestHeadAt: Date.parse('2030-01-01T00:00:00.000Z'),
+            },
+          },
+        })
+      ).item;
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+        transitionService: new FactoryTransitionService({
+          storage: seeded.workItems,
+          configVersion: 'gitlab-test-v1',
+          boards: createBoardRegistry(),
+        }),
+        storage: seeded.workItems,
+        boards: createBoardRegistry(),
+        isAutoRunEnabled: async () => true,
+        ownerId: 'worker-1',
+      });
+      // Run the dispatcher's poll tick right after the push's re-review
+      // transition commits, before the webhook handler has finished.
+      const commitRuleEvaluation = seeded.workItems.commitRuleEvaluation.bind(seeded.workItems);
+      const pushStatuses: string[] = [];
+      seeded.workItems.commitRuleEvaluation = async input => {
+        const committed = await commitRuleEvaluation(input);
+        if (input.ingress.identity.includes('d-push-b')) pushStatuses.push(committed.status);
+        if (committed.status === 'committed' && input.ingress.identity.includes('d-push-b')) {
+          await dispatcher.runOnce(new Date('2030-01-01T01:00:00Z'));
+        }
+        return committed;
+      };
+
+      const push = mergeRequestUpdated('d-push-b', pushedHeadSha, reviewedHeadSha, updatedAt);
+      if (commitTimestamp) {
+        push.payload.object_attributes.last_commit = { id: pushedHeadSha, timestamp: commitTimestamp } as never;
+      }
+      await expect(service.ingest(push)).resolves.toEqual({
+        status: 'committed',
+      });
+      await dispatcher.runOnce(new Date('2030-01-01T01:00:01Z'));
+
+      // The push is evaluated against the card as it is after the head was
+      // recorded, so it commits first time rather than retrying a stale read.
+      expect(pushStatuses).toEqual(['committed']);
+
+      const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+      const invocations = decisions.filter(entry => entry.decision.type === 'invokeSkill');
+      expect(invocations).toHaveLength(1);
+      const kickoff = invocations[0]!.decision;
+      expect(kickoff).toMatchObject({ type: 'invokeSkill', skillName: 'factory-gitlab-rereview', role: 'review' });
+      const text = kickoff.type === 'invokeSkill' ? (kickoff.arguments ?? '') : '';
+      expect(text).toContain(`new review pass for head \`${pushedHeadSha}\``);
+      expect(text).toContain(`recorded "request changes" on \`${reviewedHeadSha}\``);
+      expect(text).toContain(`record a verdict for \`${pushedHeadSha}\``);
+      expect((await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.metadata).toMatchObject({
+        pullRequestHeadSha: pushedHeadSha,
+        reviewedHeadSha,
+      });
+    },
+    );
+
+    it('stamps the new head on the Review card and its authoring Work item without clearing the verdict', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
+
+      await service.ingest(mergeRequestUpdated('delivery-mr-push', pushedHeadSha.toUpperCase(), reviewedHeadSha));
+
+      for (const id of [reviewId, workId]) {
+        expect(await metadataOf(id)).toMatchObject({
+          reviewVerdict: 'approve',
+          reviewedHeadSha,
+          pullRequestHeadSha: pushedHeadSha,
+        });
+      }
+    });
+
+    it('leaves a Work item alone when it has a different merge request out', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed({ openPullRequestNumber: 18 });
+
+      await service.ingest(mergeRequestUpdated('delivery-mr-push-other', pushedHeadSha, reviewedHeadSha));
+
+      expect(await metadataOf(reviewId)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+      expect(await metadataOf(workId)).not.toHaveProperty('pullRequestHeadSha');
+    });
+
+    it('keeps a head that returned to an earlier commit when the push in between arrives late', async () => {
+      const { service, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
+      await service.ingest(mergeRequestUpdated('d-a', reviewedHeadSha, 'aaaa', '2030-01-01 01:00:00 UTC'));
+      await service.ingest(mergeRequestUpdated('d-a-again', reviewedHeadSha, 'bbbb', '2030-01-01 03:00:00 UTC'));
+      await service.ingest(mergeRequestUpdated('d-b-late', pushedHeadSha, 'aaaa', '2030-01-01 02:00:00 UTC'));
+
+      expect(await metadataOf(reviewId)).toMatchObject({ pullRequestHeadSha: reviewedHeadSha });
+    });
+
+    it('ignores an update that carries no time to order it by', async () => {
+      const { service, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
+      await service.ingest(mergeRequestUpdated('d-timed', pushedHeadSha, 'aaaa'));
+      await service.ingest(mergeRequestUpdated('d-untimed', reviewedHeadSha, 'bbbb', ''));
+
+      expect(await metadataOf(reviewId)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+    });
+  });
+
+  describe('open merge request tracking on the authoring Work card', () => {
+    async function seedWork(
+      seeded: Awaited<ReturnType<typeof setup>>['seeded'],
+      projectId: string,
+      metadata: Record<string, unknown> = {},
+      suffix = 'authoring',
+    ) {
+      return (
+        await seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: projectId,
+          input: {
+            externalSource: { integrationId: 'gitlab', type: 'issue', externalId: `gitlab-issue:${suffix}` },
+            title: 'Authoring work',
+            board: 'work',
+            stages: ['execute'],
+            sessions: { work: { sessionId: `${suffix}-session`, threadId: `${suffix}-thread`, branch: 'feature-17' } },
+            metadata: { authorTrusted: true, ...metadata },
+          },
+        })
+      ).item;
+    }
+
+    function mergeRequestEvent(
+      deliveryId: string,
+      action: 'open' | 'reopen' | 'close' | 'merge',
+      updatedAt: string,
+      iid = 17,
+    ) {
+      const base = mergeRequestOpened(deliveryId);
+      const state = action === 'close' ? 'closed' : action === 'merge' ? 'merged' : 'opened';
+      return {
+        ...base,
+        payload: {
+          ...base.payload,
+          object_attributes: { ...base.payload.object_attributes, iid, action, state, updated_at: updatedAt },
+        },
+      };
+    }
+
+    it('records it on open and clears it on close', async () => {
+      const { seeded, project, service } = await setup();
+      const work = await seedWork(seeded, project.id);
+      const read = async () => (await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata;
+
+      await service.ingest(mergeRequestEvent('d-open', 'open', '2030-01-01T00:00:00Z'));
+      expect((await read())?.openPullRequestNumber).toBe(17);
+
+      await service.ingest(mergeRequestEvent('d-close', 'close', '2030-01-01T01:00:00Z'));
+      expect((await read())?.openPullRequestNumber).toBeNull();
+    });
+
+    it('keeps the pushed head when an untimed opening of the recorded merge request is replayed', async () => {
+      const { seeded, project, service } = await setup();
+      const work = await seedWork(seeded, project.id, {
+        openPullRequestNumber: 17,
+        pullRequestHeadSha: '8fa258d000000000000000000000000000000000',
+        pullRequestHeadAt: Date.parse('2030-01-01T02:00:00Z'),
+      });
+      const opened = mergeRequestOpened('d-open-replay');
+      const event = {
+        ...opened,
+        payload: {
+          ...opened.payload,
+          object_attributes: {
+            ...opened.payload.object_attributes,
+            last_commit: { id: 'be10bfa000000000000000000000000000000000' },
+          },
+        },
+      };
+
+      await service.ingest(event);
+
+      expect((await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata).toMatchObject({
+        openPullRequestNumber: 17,
+        pullRequestHeadSha: '8fa258d000000000000000000000000000000000',
+      });
+    });
+
+    it('replaces a head left by an earlier merge request when the next one opens', async () => {
+      const { seeded, project, service } = await setup();
+      // Merge request 16 was pushed to and closed; its head is still on the card.
+      const work = await seedWork(seeded, project.id, {
+        pullRequestHeadSha: 'be10bfa000000000000000000000000000000000',
+      });
+      const opened = mergeRequestEvent('d-open-next', 'open', '2030-01-01T00:00:00Z');
+      const event = {
+        ...opened,
+        payload: {
+          ...opened.payload,
+          object_attributes: {
+            ...opened.payload.object_attributes,
+            last_commit: { id: '8FA258D000000000000000000000000000000000' },
+          },
+        },
+      };
+
+      await service.ingest(event);
+
+      // A verdict recorded on the new merge request's head now reads as current.
+      expect((await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata).toMatchObject({
+        openPullRequestNumber: 17,
+        pullRequestHeadSha: '8fa258d000000000000000000000000000000000',
+      });
+    });
+
+    it('records a genuine reopen again but ignores an opening older than the close', async () => {
+      const { seeded, project, service } = await setup();
+      const work = await seedWork(seeded, project.id);
+      const read = async () => (await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata;
+
+      await service.ingest(mergeRequestEvent('d-open', 'open', '2030-01-01T00:00:00Z'));
+      await service.ingest(mergeRequestEvent('d-close', 'close', '2030-01-01T01:00:00Z'));
+      // A redelivered opening from before the close must not mark it open again.
+      await service.ingest(mergeRequestEvent('d-open-late', 'open', '2030-01-01T00:00:00Z'));
+      expect((await read())?.openPullRequestNumber).toBeNull();
+
+      await service.ingest(mergeRequestEvent('d-reopen', 'reopen', '2030-01-01T02:00:00Z'));
+      expect((await read())?.openPullRequestNumber).toBe(17);
+    });
+
+    it('ignores an opening delivered after the close it precedes', async () => {
+      const { seeded, project, service } = await setup();
+      const work = await seedWork(seeded, project.id);
+
+      await service.ingest(mergeRequestEvent('d-close', 'close', '2030-01-01T01:00:00Z'));
+      await service.ingest(mergeRequestEvent('d-open', 'open', '2030-01-01T00:00:00Z'));
+      expect(
+        (await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata?.openPullRequestNumber,
+      ).toBeUndefined();
+    });
+
+    it('clears the open merge request and its verdict when that merge request merges', async () => {
+      const { seeded, project, service } = await setup();
+      const work = await seedWork(seeded, project.id);
+      const read = async () => (await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata;
+
+      await service.ingest(mergeRequestEvent('d-open', 'open', '2030-01-01T00:00:00Z'));
+      const current = await seeded.workItems.get({ orgId: 'org-1', id: work.id });
+      await seeded.workItems.update({
+        orgId: 'org-1',
+        id: work.id,
+        userId: 'user-1',
+        expectedRevision: current!.revision,
+        patch: { metadata: { reviewVerdict: 'request changes' } },
+      });
+
+      await service.ingest(mergeRequestEvent('d-merge-other', 'merge', '2030-01-01T01:00:00Z', 18));
+      expect(await read()).toMatchObject({ openPullRequestNumber: 17, reviewVerdict: 'request changes' });
+
+      await service.ingest(mergeRequestEvent('d-merge', 'merge', '2030-01-01T02:00:00Z'));
+      expect(await read()).toMatchObject({ openPullRequestNumber: null, reviewVerdict: null });
+    });
+
+    it('records nothing when two Work cards share the merge request branch', async () => {
+      const { seeded, project, service } = await setup();
+      const first = await seedWork(seeded, project.id, {}, 'first');
+      const second = await seedWork(seeded, project.id, {}, 'second');
+
+      await service.ingest(mergeRequestEvent('d-open', 'open', '2030-01-01T00:00:00Z'));
+      for (const item of [first, second]) {
+        expect(
+          (await seeded.workItems.get({ orgId: 'org-1', id: item.id }))?.metadata?.openPullRequestNumber,
+        ).toBeUndefined();
+      }
+    });
+  });
+
   it('does not route an MR note to an unrelated Work branch', async () => {
     const { seeded, project, service } = await setup();
     await seeded.workItems.upsert({
@@ -481,8 +960,9 @@ describe('GitLabRules', () => {
         metadata: { authorTrusted: true },
       },
     });
-    await expect(service.ingest(mergeRequestNote('delivery-mr-note-unrelated'))).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(mergeRequestNote('delivery-mr-note-unrelated'))).resolves.toEqual({
+      status: 'committed',
+    });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
-
 });

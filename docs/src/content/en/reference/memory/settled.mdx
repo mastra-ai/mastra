@@ -8,14 +8,14 @@ packages:
 
 # Memory.settled()
 
-The `.settled()` method resolves once all background work the `Memory` instance started has finished. Some memory work continues after an agent run returns:
+The `.settled()` method resolves once background work the `Memory` instance started has finished. Some memory work continues after an agent run returns:
 
 - Observational memory cycles (buffered observation and reflection, including the nested agent runs they spawn)
 - Vector cleanup started by `deleteThread()` and `deleteMessages()`
 
-Await this method before closing a storage connection you own. Without it, background statements can run against a closed connection.
+Await this method before closing a storage connection you own. Without it, background statements can run against a closed connection. A scoped call can return while other threads still use the store, so call `settled()` without a scope before closing shared storage.
 
-The method is declared on the base memory class, so it's also available on the `MastraMemory` instance returned by `agent.getMemory()`.
+The method is declared on the base memory class, so it's also available on the `MastraMemory` instance returned by `agent.getMemory()`. The `scope` parameter is only on `Memory` from `@mastra/memory`.
 
 ## Usage example
 
@@ -30,7 +30,17 @@ await store.close()
 
 ## Parameters
 
-This method takes no parameters.
+<PropertiesTable
+  content={[
+  {
+    name: 'scope',
+    type: '{ threadId?: string | null; resourceId?: string | null }',
+    isOptional: true,
+    description:
+      'Waits only for observational memory work on this thread (or resource, when observational memory uses resource scope). If the scope omits the id observational memory is keyed on (`threadId` for thread scope, `resourceId` for resource scope), it waits for all work. Vector cleanup is always included.',
+  },
+]}
+/>
 
 ## Returns
 
@@ -40,10 +50,18 @@ This method takes no parameters.
     name: 'void',
     type: 'Promise<void>',
     description:
-      'A promise that resolves when all background memory work has finished. Background work that fails does not reject this promise.',
+      'A promise that resolves when the requested background memory work has finished (all work, if unscoped). Background work that fails does not reject this promise.',
   },
 ]}
 />
+
+## Wait for one conversation
+
+On a busy server, waiting for all work can take a long time because other threads keep starting new work. Pass a scope to wait for less. When observational memory uses thread scope, the call below waits for `thread-123` only. When it uses resource scope, it waits for every thread under `user-456`:
+
+```typescript
+await memory.settled({ threadId: 'thread-123', resourceId: 'user-456' })
+```
 
 ## Extended usage example
 
@@ -63,7 +81,7 @@ await memory.settled()
 await store.close()
 ```
 
-<Callout>
+<Callout type="note">
   `settled()` joins the work that had started by the time you called it, plus any
   work that work enqueues. It doesn't prevent new work from starting afterwards,
   so call it once the agent runs you care about have returned.

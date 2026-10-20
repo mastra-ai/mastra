@@ -100,8 +100,11 @@ async function transformOneTarget(
     getToolTransformer(source, context.target, context.phase),
   ].filter(Boolean) as ToolPayloadTransformFunction[];
 
+  // A tool transform only covers the phases it defines; other phases keep their
+  // raw payload. Raw input deltas stay suppressed because they can't be
+  // reconciled with a transformed input.
   if (transformers.length === 0) {
-    return context.phase === 'input-delta' ? { suppress: true } : { transformed: safePlaceholder(context) };
+    return context.phase === 'input-delta' ? { suppress: true } : undefined;
   }
 
   for (const transformer of transformers) {

@@ -20,16 +20,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  Node,
-  Project,
-  SyntaxKind,
-  type CallExpression,
-  type ImportDeclaration,
-  type ObjectLiteralExpression,
-  type SourceFile,
-  type Statement,
-} from 'ts-morph';
+import { Node, Project, SyntaxKind } from 'ts-morph';
+import type { CallExpression, ImportDeclaration, ObjectLiteralExpression, SourceFile, Statement } from 'ts-morph';
 import { format, resolveConfig } from 'prettier';
 
 import {
@@ -42,9 +34,10 @@ import {
   providersDir,
   templatesDir,
   validateProviderId,
-  type ProviderManifest,
 } from './provider-utils.js';
-import { templatePinFor, type TemplatePin } from './templates-config.js';
+import type { ProviderManifest } from './provider-utils.js';
+import { templatePinFor } from './templates-config.js';
+import type { TemplatePin } from './templates-config.js';
 
 /** Module specifier the upstream templates import their SDK from. */
 const TEMPLATE_SDK_MODULE = 'nango';
@@ -58,7 +51,14 @@ const PROXY_CONTEXT_METHODS = new Set([
   'ActionError',
   'log',
 ]);
-const UNSUPPORTED_PROXY_OPTIONS = ['responseType'] as const;
+/**
+ * Proxy config keys that shipped templates use but the platform proxy cannot
+ * honor. If a template sets any of these, the action is skipped rather than
+ * silently ignoring the option. `responseType` is not listed because the
+ * platform proxy handles `'arraybuffer'` (the only value templates actually
+ * pass).
+ */
+const UNSUPPORTED_PROXY_OPTIONS: readonly string[] = [];
 const ALLOWED_TEMPLATE_SDK_IMPORTS = new Set(['createAction', 'ProxyConfiguration']);
 
 interface ActionCandidate {
@@ -714,7 +714,7 @@ function emitToolsFile(integrationId: string, actions: ExtractedAction[], pin: T
   return `// AUTO-GENERATED from ${pin.repo} @ ${pin.sha.slice(0, 12)} — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 ${imports}
 
 export function create${toPascal(integrationId)}Tools(options?: ProviderToolsOptions) {
@@ -722,7 +722,7 @@ export function create${toPascal(integrationId)}Tools(options?: ProviderToolsOpt
   const tools = {
 ${toolEntries}
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }
 `;
 }

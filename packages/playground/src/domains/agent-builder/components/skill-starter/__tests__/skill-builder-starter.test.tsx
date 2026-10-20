@@ -7,7 +7,6 @@ import { MemoryRouter } from 'react-router';
 import type * as ReactRouter from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SkillBuilderStarter } from '../skill-builder-starter';
-import { usePlaygroundStore } from '@/store/playground-store';
 import { server } from '@/test/msw-server';
 
 const navigateMock = vi.fn();
@@ -44,7 +43,6 @@ const renderStarter = () => {
 
 describe('SkillBuilderStarter', () => {
   beforeEach(() => {
-    usePlaygroundStore.setState({ requestContext: {} });
     // The starter pulls builder settings + stored workspaces so it can choose a
     // default workspace. Stub both: builder enabled with no agent-workspace
     // pin, and an empty workspace list so workspaceId stays undefined.

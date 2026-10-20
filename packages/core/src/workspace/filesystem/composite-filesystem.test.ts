@@ -922,5 +922,16 @@ describe('CompositeFilesystem', () => {
     it('should throw on stat for unmounted path', async () => {
       await expect(cfs.stat('/unknown/file.txt')).rejects.toThrow('No mount for path');
     });
+
+    it('should report ENOENT for read operations on unmounted paths', async () => {
+      await expect(cfs.readFile('/unknown/file.txt')).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(cfs.readdir('/unknown/dir')).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(cfs.stat('/unknown/file.txt')).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(cfs.readFile('.gitignore')).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+
+    it('should not report ENOENT for write operations on unmounted paths', async () => {
+      await expect(cfs.writeFile('/unknown/file.txt', 'data')).rejects.not.toHaveProperty('code');
+    });
   });
 });

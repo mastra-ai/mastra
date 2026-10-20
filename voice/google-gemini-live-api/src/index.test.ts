@@ -1839,6 +1839,82 @@ describe('GeminiLiveVoice', () => {
         expect(setupMsg.setup.output_audio_transcription).toEqual({});
       });
 
+      describe('transcription language hints (#27230)', () => {
+        const connectAndGetSetup = async (v: GeminiLiveVoice) => {
+          vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+          (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+          await v.connect();
+          const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+          const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+          return payloads.find((p: any) => p.setup).setup;
+        };
+
+        const baseSetup = {
+          model: 'models/gemini-3.1-flash-live-preview',
+          generation_config: { response_modalities: ['AUDIO'] },
+          realtime_input_config: { activity_handling: 'START_OF_ACTIVITY_INTERRUPTS' },
+          history_config: { initial_history_in_client_content: true },
+        };
+
+        it('sends empty transcription configs when no transcription options are set', async () => {
+          const setup = await connectAndGetSetup(new GeminiLiveVoice({ apiKey: 'k' }));
+          expect(setup).toEqual({
+            ...baseSetup,
+            input_audio_transcription: {},
+            output_audio_transcription: {},
+          });
+        });
+
+        it('maps inputAudioTranscription/outputAudioTranscription.languageCodes to language_codes', async () => {
+          const setup = await connectAndGetSetup(
+            new GeminiLiveVoice({
+              apiKey: 'k',
+              inputAudioTranscription: { languageCodes: ['es-ES', 'en-US'] },
+              outputAudioTranscription: { languageCodes: ['es-ES'] },
+            }),
+          );
+          expect(setup).toEqual({
+            ...baseSetup,
+            input_audio_transcription: { language_codes: ['es-ES', 'en-US'] },
+            output_audio_transcription: { language_codes: ['es-ES'] },
+          });
+        });
+
+        it('keeps output transcription as {} when only input hints are set', async () => {
+          const setup = await connectAndGetSetup(
+            new GeminiLiveVoice({ apiKey: 'k', inputAudioTranscription: { languageCodes: ['en-AU'] } }),
+          );
+          expect(setup.input_audio_transcription).toEqual({ language_codes: ['en-AU'] });
+          expect(setup.output_audio_transcription).toEqual({});
+        });
+
+        it('sends {} when the transcription options have no languageCodes', async () => {
+          const setup = await connectAndGetSetup(
+            new GeminiLiveVoice({ apiKey: 'k', inputAudioTranscription: {}, outputAudioTranscription: {} }),
+          );
+          expect(setup.input_audio_transcription).toEqual({});
+          expect(setup.output_audio_transcription).toEqual({});
+        });
+
+        it('updateSessionConfig stores transcription options for the next connect() without sending them', async () => {
+          const v = new GeminiLiveVoice({ apiKey: 'k' });
+          await connectAndGetSetup(v);
+          const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+          const sentBefore = wsSent.mock.calls.length;
+
+          await v.updateSessionConfig({ inputAudioTranscription: { languageCodes: ['fr-FR'] } });
+
+          expect(wsSent.mock.calls.length).toBe(sentBefore);
+          expect((v as any).options.inputAudioTranscription).toEqual({ languageCodes: ['fr-FR'] });
+
+          v.disconnect();
+          const setup = await connectAndGetSetup(v);
+          expect(setup.input_audio_transcription).toEqual({ language_codes: ['fr-FR'] });
+          expect(setup.output_audio_transcription).toEqual({});
+          v.disconnect();
+        });
+      });
+
       it('enables activity-based interrupts in the setup payload', async () => {
         const v = new GeminiLiveVoice({ apiKey: 'k' });
         vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
@@ -2086,6 +2162,130 @@ describe('GeminiLiveVoice', () => {
 
         v.disconnect();
       });
+    });
+  });
+
+  describe('Server-initiated close cleanup', () => {
+    const audioFrame = () => ({
+      serverContent: {
+        modelTurn: {
+          parts: [{ inlineData: { mimeType: 'audio/pcm;rate=24000', data: Buffer.alloc(320).toString('base64') } }],
+        },
+      },
+    });
+
+    const wireConnected = (v: GeminiLiveVoice) => {
+      const fakeWs: any = new EventEmitter();
+      fakeWs.readyState = 1;
+      fakeWs.send = vi.fn();
+      fakeWs.close = vi.fn();
+      (v as any).ws = fakeWs;
+      (v as any).connectionManager.setWebSocket(fakeWs);
+      (v as any).setupEventListeners();
+      (v as any).state = 'connected';
+      return fakeWs;
+    };
+
+    const startReply = async (v: GeminiLiveVoice) => {
+      let speaker: PassThrough | undefined;
+      v.on('speaker', s => {
+        speaker = s as PassThrough;
+      });
+      // The model starts answering: audio arrives, no turnComplete yet.
+      await (v as any).handleGeminiMessage(audioFrame());
+      expect(speaker).toBeDefined();
+      speaker!.resume(); // the consumer is reading, e.g. piping to playback
+      return speaker!;
+    };
+
+    const endsWithin = (stream: PassThrough, ms: number) =>
+      Promise.race([
+        new Promise<string>(resolve => {
+          stream.once('end', () => resolve('end'));
+          stream.once('close', () => resolve('close'));
+        }),
+        new Promise<string>(resolve => setTimeout(() => resolve('still open'), ms)),
+      ]);
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('ends the in-flight speaker stream when the server closes the socket mid-reply (1011)', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k' });
+      const fakeWs = wireConnected(v);
+      const sessionEvents: any[] = [];
+      const errors: any[] = [];
+      v.on('session', e => sessionEvents.push(e));
+      v.on('error', e => errors.push(e));
+      const speaker = await startReply(v);
+
+      fakeWs.emit('close', 1011, Buffer.from('Internal error encountered.'));
+
+      expect(await endsWithin(speaker, 500)).not.toBe('still open');
+      // Consumers still get the same close events as before.
+      expect(sessionEvents).toContainEqual({
+        state: 'disconnected',
+        code: 1011,
+        reason: 'Internal error encountered.',
+      });
+      expect(errors.map(e => e.code)).toContain('websocket_closed');
+    });
+
+    it('clears the maxDuration and sessionExpiring timers when the server closes the socket', async () => {
+      vi.useFakeTimers();
+      const v = new GeminiLiveVoice({ apiKey: 'k', sessionConfig: { maxDuration: '1h' } });
+      const fakeWs = wireConnected(v);
+      v.on('error', () => {});
+      const expiring = vi.fn();
+      v.on('sessionExpiring', expiring);
+      const disconnect = vi.spyOn(v, 'disconnect');
+
+      const baseline = vi.getTimerCount();
+      (v as any).startSessionDurationMonitor();
+      expect(vi.getTimerCount()).toBe(baseline + 2); // expiry + 5-minute warning
+
+      fakeWs.emit('close', 1011, Buffer.from('Internal error encountered.'));
+      await v.disconnect(); // the app's usual cleanup; returns early with "Already disconnected"
+
+      expect((v as any).sessionDurationTimeout).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(baseline);
+
+      // Nothing from the dead session fires later against whatever session is current.
+      disconnect.mockClear();
+      vi.advanceTimersByTime(2 * 60 * 60 * 1000);
+      expect(expiring).not.toHaveBeenCalled();
+      expect(disconnect).not.toHaveBeenCalled();
+    });
+
+    it('disconnect() clears the sessionExpiring warning timer too', async () => {
+      vi.useFakeTimers();
+      const v = new GeminiLiveVoice({ apiKey: 'k', sessionConfig: { maxDuration: '1h' } });
+      wireConnected(v);
+      const expiring = vi.fn();
+      v.on('sessionExpiring', expiring);
+
+      const baseline = vi.getTimerCount();
+      (v as any).startSessionDurationMonitor();
+      await v.disconnect();
+
+      expect(vi.getTimerCount()).toBe(baseline);
+      vi.advanceTimersByTime(2 * 60 * 60 * 1000);
+      expect(expiring).not.toHaveBeenCalled();
+    });
+
+    it('cleans up on a socket error even if no close event follows', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k', sessionConfig: { maxDuration: '1h' } });
+      const fakeWs = wireConnected(v);
+      v.on('error', () => {});
+      (v as any).startSessionDurationMonitor();
+      const speaker = await startReply(v);
+
+      fakeWs.emit('error', new Error('read ECONNRESET'));
+
+      expect(await endsWithin(speaker, 500)).not.toBe('still open');
+      expect((v as any).sessionDurationTimeout).toBeUndefined();
+      expect((v as any).sessionExpiringTimeout).toBeUndefined();
     });
   });
 });

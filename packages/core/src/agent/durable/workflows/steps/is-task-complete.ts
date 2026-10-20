@@ -5,8 +5,9 @@ import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import { DurableAgentDefaults, DurableStepIds } from '../../constants';
-import { globalRunRegistry } from '../../run-registry';
+import { getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
+import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 
 /**
  * Create the durable isTaskComplete step. Behavior lives in the shared
@@ -33,17 +34,20 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
       const { inputData, mastra, getInitData } = params;
       const state = inputData as {
         runId: string;
+        messageId?: string;
         iterationCount: number;
-        messageListState: any;
+        /** Present only on runs that thread the transcript through step payloads. */
+        messageListState?: any;
         accumulatedSteps: Array<{
           text?: string;
           toolCalls?: Array<{ toolName?: string; args?: unknown }>;
           toolResults?: Array<{ toolName?: string; result?: unknown }>;
         }>;
-        lastStepResult?: { isContinued?: boolean; reason?: string };
+        lastStepResult?: { isContinued?: boolean; reason?: string; signalPreempted?: boolean };
         options?: { maxSteps?: number };
         backgroundTaskPending?: boolean;
       };
+      if (state.lastStepResult?.signalPreempted) return state;
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
       const initData = getInitData() as {
         agentId?: string;
@@ -52,15 +56,18 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         requestContextEntries?: Record<string, unknown>;
       };
 
-      const registryEntry = globalRunRegistry.get(state.runId);
+      const registryEntry = getRunRegistryEntry(state.runId, mastra);
+      // No scorers → nothing to grade.
+      if (!registryEntry?.isTaskComplete?.scorers?.length) return state;
 
-      // Rehydrate the message list lazily — only when the core actually
-      // grades this iteration does it read the transcript / append feedback.
+      // Build the message list lazily — only when the core actually grades
+      // this iteration does it read the transcript / append feedback.
+      const messageListState = await readMessageListState(params, state);
       let messageList: MessageList | undefined;
       const list = () => {
         if (!messageList) {
           messageList = new MessageList();
-          messageList.deserialize(state.messageListState);
+          messageList.deserialize(messageListState);
         }
         return messageList;
       };
@@ -114,7 +121,13 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
           isContinued: !outcome.complete,
         };
       }
-      nextState.messageListState = list().serialize();
+      // The retry turn needs its own response message (the non-durable loop
+      // switches to a fresh id too). Reusing the graded turn's id folds the
+      // retry into that earlier message, ahead of the feedback.
+      if (!outcome.complete && nextState.messageId) {
+        nextState.messageId = list().rotateResponseMessageId(nextState.messageId);
+      }
+      Object.assign(nextState, await storeMessageListState(params, list().serialize()));
       return nextState;
     },
   });

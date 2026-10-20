@@ -31,3 +31,32 @@ describe('buildFilterQuery $size operator', () => {
     expect(values).toEqual([3]);
   });
 });
+
+describe('buildFilterQuery multi-key branches inside logical operators', () => {
+  // Each object in an $or/$nor array is one branch, and the keys of a branch
+  // are an implicit AND (same as at the top level of a filter).
+  it('ANDs the keys of one $or branch', () => {
+    const { sql, values } = buildFilterQuery({ $or: [{ category: 'electronics', available: true }, { price: 5 }] });
+
+    expect(sql).toBe(
+      `WHERE ((json_extract(metadata, '$.category') = ? AND json_extract(metadata, '$.available') = ?) OR json_extract(metadata, '$.price') = ?)`,
+    );
+    expect(values).toEqual(['electronics', true, 5]);
+  });
+
+  it('negates the whole branch for $nor', () => {
+    const { sql, values } = buildFilterQuery({ $nor: [{ status: 'archived', pinned: false }] });
+
+    expect(sql).toBe(`WHERE NOT ((json_extract(metadata, '$.status') = ? AND json_extract(metadata, '$.pinned') = ?))`);
+    expect(values).toEqual(['archived', false]);
+  });
+
+  it('ANDs field keys with a nested logical operator in the same branch', () => {
+    const { sql, values } = buildFilterQuery({ $or: [{ $and: [{ a: 1 }], c: 2 }, { d: 3 }] });
+
+    expect(sql).toBe(
+      `WHERE (((json_extract(metadata, '$.a') = ?) AND json_extract(metadata, '$.c') = ?) OR json_extract(metadata, '$.d') = ?)`,
+    );
+    expect(values).toEqual([1, 2, 3]);
+  });
+});

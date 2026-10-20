@@ -33,6 +33,19 @@ describe('RelativeTimestamp', () => {
     );
   });
 
+  it('names the moment in the tooltip and accessible text when labeled', async () => {
+    vi.useFakeTimers({ now, shouldAdvanceTime: true });
+    const { container } = render(<RelativeTimestamp value={now - 12 * 3_600_000} label="Deployed" />);
+    const [time] = container.getElementsByTagName('time');
+    expect(time.querySelector('[aria-hidden]')?.textContent).toBe('12h ago');
+    expect([...time.querySelectorAll('.font-mono')].map(word => word.textContent)).toEqual(['12h']);
+    expect(time.querySelector('.sr-only')?.textContent).toMatch(/^Deployed /);
+
+    act(() => time.focus());
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip.textContent).toMatch(/^Deployed 12 hours/);
+  });
+
   it('keeps the visible label current', () => {
     vi.useFakeTimers({ now });
     const { container } = render(<RelativeTimestamp value={now - 59_000} />);

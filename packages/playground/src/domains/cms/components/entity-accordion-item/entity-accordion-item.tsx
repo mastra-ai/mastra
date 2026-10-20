@@ -1,13 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { RuleBuilder } from '@mastra/playground-ui/components/RuleBuilder';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { countLeafRules } from '@mastra/playground-ui/utils/rule-engine';
-import { ChevronRight, Ruler, Trash2 } from 'lucide-react';
+import { Ruler, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 export interface EntityAccordionItemProps {
@@ -46,7 +47,9 @@ export function EntityAccordionItem({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Icon size="xs">{icon}</Icon>
-            <span className="text-column text-foreground">{name}</span>
+            <Txt as="span" variant="column" tone="ink">
+              {name}
+            </Txt>
           </div>
           {onRemove && (
             <Button tooltip={`Remove ${name}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -60,7 +63,7 @@ export function EntityAccordionItem({
           value={description}
           onChange={onDescriptionChange ? e => onDescriptionChange(e.target.value) : undefined}
           placeholder="Custom description for this entity..."
-          className="min-h-[40px] border-dashed bg-card px-2 py-1 text-caption"
+          className="min-h-[40px] border-dashed bg-card px-2 py-1"
           size="sm"
           disabled={isReadOnly}
         />
@@ -70,20 +73,18 @@ export function EntityAccordionItem({
         <Collapsible open={isRulesOpen} onOpenChange={setIsRulesOpen} className="border-t border-border bg-background">
           <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2">
             <Icon>
-              <ChevronRight
-                className={cn('text-muted-foreground transition-transform', {
-                  'rotate-90': isRulesOpen,
-                })}
-              />
+              <DisclosureChevron direction="right" className="text-muted-foreground" />
             </Icon>
             <Icon>
-              <Ruler className="text-accent6" />
+              <Ruler className="text-warning-foreground" />
             </Icon>
-            <span className="text-caption text-foreground">Display Conditions</span>
+            <Txt as="span" variant="caption" tone="ink">
+              Display Conditions
+            </Txt>
             {ruleCount > 0 && (
-              <span className="text-caption text-muted-foreground">
+              <Txt as="span" variant="caption" tone="muted">
                 ({ruleCount} {ruleCount === 1 ? 'rule' : 'rules'})
-              </span>
+              </Txt>
             )}
           </CollapsibleTrigger>
           <CollapsibleContent>

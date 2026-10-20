@@ -10,7 +10,8 @@ vi.mock('../../tools/index.js', () => ({
 }));
 
 import { getDynamicInstructions, getDynamicInstructionSections } from '../instructions.js';
-import { buildFullPrompt, buildFullPromptSections, joinPromptSections, type PromptContext } from '../prompts/index.js';
+import { buildFullPrompt, buildFullPromptSections, joinPromptSections } from '../prompts/index.js';
+import type { PromptContext } from '../prompts/index.js';
 
 let projectPath: string;
 
@@ -94,6 +95,35 @@ describe('buildFullPromptSections', () => {
     expect(ids).toContain('mode-prompt');
     expect(new Set(ids).size).toBe(ids.length);
     expect(sections.every(section => section.content.length > 0)).toBe(true);
+  });
+});
+
+describe('unavailable submit_plan', () => {
+  const planCtx = (overrides: Partial<PromptContext> = {}) => makeCtx({ mode: 'plan', modeId: 'plan', ...overrides });
+
+  it('keeps submit_plan instructions in plan mode by default', () => {
+    expect(buildFullPrompt(planCtx())).toContain('submit_plan({');
+  });
+
+  it('omits submit_plan instructions when the built-in is disabled', () => {
+    const prompt = buildFullPrompt(planCtx({ disabledBuiltinTools: ['submit_plan'] }));
+
+    expect(prompt).not.toContain('submit_plan(');
+    expect(prompt).not.toContain('Call \`submit_plan\`');
+    expect(prompt).toContain('Plan approval is not available in this session');
+  });
+
+  it('omits submit_plan instructions when a permission rule denies it', () => {
+    const prompt = buildFullPrompt(
+      planCtx({ state: { permissionRules: { tools: { submit_plan: 'deny' } }, skipGlobalInstructions: true } }),
+    );
+
+    expect(prompt).not.toContain('submit_plan(');
+    expect(prompt).toContain('Plan approval is not available in this session');
+  });
+
+  it('leaves the prompt unchanged when an unrelated built-in is disabled', () => {
+    expect(buildFullPrompt(planCtx({ disabledBuiltinTools: ['ask_user'] }))).toContain('submit_plan({');
   });
 });
 

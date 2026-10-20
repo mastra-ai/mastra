@@ -4,6 +4,7 @@ import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { AnySpan, TracingContext } from '@mastra/core/observability';
 import { createTool, validateToolOutput } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 import { toStandardSchema } from '@mastra/schema-compat';
@@ -31,13 +32,15 @@ import type {
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
+import { JSON_SCHEMA_2020_12, MAX_JSON_SCHEMA_DEPTH, MAX_JSON_SCHEMA_NODES, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
-import { traceContextToMeta } from '../shared/trace-context';
+import { takeServerTraceContext, traceContextFromSpan, traceContextToMeta } from '../shared/trace-context';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
 import { isReconnectableMCPError } from './error-utils';
+import { getInputSchemaError, loadInputSchemaMetaValidator } from './input-schema-meta-schema';
 import { MCP_CLIENT_PROTOCOL_VERSION } from './types';
 import type {
   FetchLike,
@@ -46,6 +49,7 @@ import type {
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
   MCPClientProtocolVersion,
+  MCPServerImplementation,
   RequireToolApproval,
   SerializableMCPToolDefinition,
 } from './types';
@@ -74,9 +78,6 @@ export type {
 type MCPToolListEntry = Awaited<ReturnType<Client['listTools']>>['tools'][0];
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
-const JSON_SCHEMA_2020_12 = 'https://json-schema.org/draft/2020-12/schema';
-const MAX_JSON_SCHEMA_DEPTH = 128;
-const MAX_JSON_SCHEMA_NODES = 10_000;
 
 /**
  * Bounds the work a validator can be asked to do for an untrusted tool catalogue.
@@ -145,9 +146,22 @@ function getJsonSchemaComplexityError(schema: unknown): string | undefined {
   return undefined;
 }
 
-/** MCP 2026-07-28 schemas default to JSON Schema 2020-12 when they declare no dialect. */
+const SUPPORTED_DIALECTS = new Set([
+  JSON_SCHEMA_2020_12,
+  `${JSON_SCHEMA_2020_12}#`,
+  'http://json-schema.org/draft-07/schema',
+  'http://json-schema.org/draft-07/schema#',
+]);
+
+/**
+ * MCP 2026-07-28 schemas default to JSON Schema 2020-12 when they declare no dialect.
+ * 2019-09 schemas (e.g. from zod v3 servers) are converted to 2020-12 when that can be done
+ * faithfully, so tool calls are not rejected before they run.
+ */
 function withDefaultDialect(schema: JSONSchema7): JSONSchema7 {
-  return schema.$schema ? schema : { ...schema, $schema: JSON_SCHEMA_2020_12 };
+  if (!schema.$schema) return { ...schema, $schema: JSON_SCHEMA_2020_12 };
+  if (SUPPORTED_DIALECTS.has(schema.$schema)) return schema;
+  return toJsonSchema2020(schema) ?? schema;
 }
 const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
 const DEFAULT_SERVER_LOG_LEVEL: LoggingLevel = 'info';
@@ -210,11 +224,16 @@ function extractToolErrorText(content: unknown): string {
  */
 function extractModelTextFromToolContent(content: unknown): string | undefined {
   if (!Array.isArray(content)) return undefined;
+  // Embedded resources are part of the model-facing channel too (e.g. GitHub's get_file_contents body).
   const text = content
-    .filter((part): part is { type: 'text'; text: string } => {
-      return !!part && typeof part === 'object' && (part as { type?: unknown }).type === 'text';
+    .map(part => {
+      if (!part || typeof part !== 'object') return undefined;
+      const p = part as { type?: unknown; text?: unknown; resource?: { text?: unknown } };
+      if (p.type === 'text' && typeof p.text === 'string') return p.text;
+      if (p.type === 'resource' && typeof p.resource?.text === 'string') return p.resource.text;
+      return undefined;
     })
-    .map(part => part.text)
+    .filter((t): t is string => t !== undefined)
     .join('\n')
     .trim();
   return text || undefined;
@@ -412,6 +431,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private sigTermHandler?: () => void;
   private sigHupHandler?: () => void;
   private serverInstructions?: string;
+  private serverImplementation?: MCPServerImplementation;
   /** The verdict of the last successful probe, reused so reconnects skip it. */
   private priorDiscovery?: PriorDiscovery;
   private readonly requireToolApproval: RequireToolApproval | undefined;
@@ -429,8 +449,16 @@ export class InternalMastraMCPClient extends MastraBase {
   /**
    * @internal
    */
-  constructor({ name, version = '1.0.0', server, timeout = DEFAULT_REQUEST_TIMEOUT_MSEC }: InternalMastraMCPClientOptions) {
+  constructor({
+    name,
+    version = '1.0.0',
+    clientInfo,
+    server,
+    timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
+  }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
+    // Started early so the sync toolFromDefinition() normally has the input schema check ready.
+    void loadInputSchemaMetaValidator();
     this.name = name;
     this.timeout = timeout;
     this.logHandler = server.logger;
@@ -458,7 +486,7 @@ export class InternalMastraMCPClient extends MastraBase {
     };
 
     this.client = new Client(
-      { name, version },
+      { name: clientInfo?.name ?? name, version: clientInfo?.version ?? version },
       {
         capabilities: clientCapabilities,
         ...(server.jsonSchemaValidator ? { jsonSchemaValidator: server.jsonSchemaValidator } : {}),
@@ -510,10 +538,13 @@ export class InternalMastraMCPClient extends MastraBase {
   /**
    * Request metadata every outgoing request carries: the per-request log-level
    * opt-in (when enabled) and the W3C trace fields resolved for this request,
-   * merged under caller-supplied keys.
+   * merged under caller-supplied keys. A configured `traceContext` provider owns
+   * the trace fields; without one they name `span`, the span making the request.
    */
-  private requestMeta(meta?: Record<string, unknown>): Record<string, unknown> | undefined {
-    const traceContext = this.serverConfig.traceContext?.();
+  private requestMeta(meta?: Record<string, unknown>, span?: AnySpan): Record<string, unknown> | undefined {
+    const traceContext = this.serverConfig.traceContext
+      ? this.serverConfig.traceContext()
+      : traceContextFromSpan(span);
     const merged = {
       ...(this.serverLogLevel ? { [LOG_LEVEL_META_KEY]: this.serverLogLevel } : {}),
       ...(traceContext ? traceContextToMeta(traceContext) : {}),
@@ -779,6 +810,7 @@ export class InternalMastraMCPClient extends MastraBase {
         }
 
         this.serverInstructions = this.client.getInstructions();
+        this.serverImplementation = this.client.getServerVersion();
         this.rememberNegotiation();
 
         if (this.hasSubscriptionInterest()) {
@@ -810,6 +842,7 @@ export class InternalMastraMCPClient extends MastraBase {
               this.isConnected = null;
             }
             this.serverInstructions = undefined;
+            this.serverImplementation = undefined;
             this.subscriptionStream = undefined;
             if (staleTransport) {
               this.severClientTransportLink(staleTransport);
@@ -904,6 +937,11 @@ export class InternalMastraMCPClient extends MastraBase {
     return this.serverInstructions;
   }
 
+  /** The identity (`serverInfo`) the server announced on connect; `undefined` until connected or if the server announced none. */
+  get serverInfo(): MCPServerImplementation | undefined {
+    return this.serverImplementation;
+  }
+
   /** The protocol revision negotiated with the server; `undefined` until connected. */
   get negotiatedProtocolVersion(): string | undefined {
     return this.client.getNegotiatedProtocolVersion();
@@ -970,6 +1008,7 @@ export class InternalMastraMCPClient extends MastraBase {
       this.transport = undefined;
       this.isConnected = null;
       this.serverInstructions = undefined;
+      this.serverImplementation = undefined;
 
       this.unregisterProcessHooks();
     }
@@ -1012,6 +1051,7 @@ export class InternalMastraMCPClient extends MastraBase {
         this.transport = undefined;
         this.isConnected = null;
         this.serverInstructions = undefined;
+        this.serverImplementation = undefined;
       }
 
       await this.connect();
@@ -1121,9 +1161,21 @@ export class InternalMastraMCPClient extends MastraBase {
    * Opens a `subscriptions/listen` stream for the current interest set, then closes the
    * previous one so no notification is lost between filters. Resource subscriptions the
    * server declines are an error; declined list-changed bits only mean the server has
-   * nothing to announce.
+   * nothing to announce. Older revisions push list-changed notifications unprompted, so
+   * they need no stream unless resource subscriptions are requested.
    */
   private async replaceSubscriptionStream(): Promise<void> {
+    const negotiated = this.negotiatedProtocolVersion;
+    if (
+      negotiated !== undefined &&
+      negotiated !== MCP_CLIENT_PROTOCOL_VERSION &&
+      this.subscriptionInterest.resourceSubscriptions.size === 0
+    ) {
+      const previous = this.subscriptionStream;
+      this.subscriptionStream = undefined;
+      await previous?.close();
+      return;
+    }
     this.assertCurrentRevision('subscriptions/listen');
     const previous = this.subscriptionStream;
     const filter = this.subscriptionFilter();
@@ -1247,16 +1299,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
     const schema = withDefaultDialect(('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7);
-    const standardSchema = toStandardSchema(schema);
-    const complexityError = getJsonSchemaComplexityError(schema);
-    if (!complexityError) return standardSchema;
-
-    return {
-      '~standard': {
-        ...standardSchema['~standard'],
-        validate: () => ({ issues: [{ message: complexityError }] }),
-      },
-    };
+    return toStandardSchema(schema);
   }
 
   /**
@@ -1351,6 +1394,7 @@ export class InternalMastraMCPClient extends MastraBase {
   async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.log('debug', `Requesting tools from MCP server`);
     const { tools } = await this.client.listTools({ _meta: this.requestMeta() }, { timeout: this.timeout });
+    await loadInputSchemaMetaValidator();
     const toolsRes: Record<string, Tool<any, any, any, any>> = {};
     for (const tool of tools) {
       const mastraTool = this.buildToolFromListEntry(tool, {
@@ -1374,6 +1418,35 @@ export class InternalMastraMCPClient extends MastraBase {
     tool: MCPToolListEntry,
     serverMeta: { version?: string; instructions?: string; connectFirst?: boolean },
   ): Tool<any, any, any, any> | undefined {
+    // A malformed input schema makes strict providers reject the whole tools array, so the
+    // tool is dropped here instead of breaking every request that includes its siblings.
+    const rawInputSchema: unknown = tool.inputSchema;
+    const inputSchema =
+      rawInputSchema && typeof rawInputSchema === 'object' && 'jsonSchema' in rawInputSchema
+        ? rawInputSchema.jsonSchema
+        : rawInputSchema;
+    // Oversized schemas are dropped too: every call to them fails anyway, and the meta-schema
+    // validator cannot walk them safely.
+    const inputSchemaError = getJsonSchemaComplexityError(inputSchema) ?? getInputSchemaError(inputSchema);
+    if (inputSchemaError) {
+      const details = { serverName: this.name, toolName: tool.name, reason: inputSchemaError };
+      this.log(
+        'warning',
+        `Skipping MCP tool "${tool.name}" with an invalid input schema: ${inputSchemaError}`,
+        details,
+      );
+      if (serverMeta.connectFirst) {
+        throw new MastraError({
+          id: 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Invalid input schema for MCP tool "${tool.name}": ${inputSchemaError}`,
+          details,
+        });
+      }
+      return undefined;
+    }
+
     try {
       let requireApproval: boolean | undefined;
       let needsApprovalFn: NeedsApprovalFn | undefined;
@@ -1468,6 +1541,7 @@ export class InternalMastraMCPClient extends MastraBase {
             runId?: string;
             abortSignal?: AbortSignal;
             _meta?: Record<string, unknown>;
+            tracingContext?: TracingContext;
           },
         ) => {
           // A hydrated tool was rebuilt from cache without ever opening a connection, so the
@@ -1485,12 +1559,21 @@ export class InternalMastraMCPClient extends MastraBase {
               const progressMeta = this.enableProgressTracking
                 ? { progressToken: context?.runId || crypto.randomUUID() }
                 : undefined;
-              const _meta = this.requestMeta({ ...context?._meta, ...progressMeta });
-
-              const res = await this.client.callTool(
-                { name: tool.name, arguments: input, ...(_meta ? { _meta } : {}) },
-                { timeout: this.timeout, signal: context?.abortSignal },
+              const _meta = this.requestMeta(
+                { ...context?._meta, ...progressMeta },
+                context?.tracingContext?.currentSpan,
               );
+
+              const { result: res, serverSpan } = takeServerTraceContext(
+                await this.client.callTool(
+                  { name: tool.name, arguments: input, ...(_meta ? { _meta } : {}) },
+                  { timeout: this.timeout, signal: context?.abortSignal },
+                ),
+              );
+              // A Mastra server names the span that served the call. The tool call span ends
+              // after this returns, and its end export carries the link.
+              const toolCallSpan = context?.tracingContext?.currentSpan;
+              if (toolCallSpan && serverSpan) toolCallSpan.links = [...(toolCallSpan.links ?? []), serverSpan];
 
               // Per the MCP spec, tool *execution* failures are reported in-band with
               // `isError: true`. Map that onto Mastra's failed-tool-call path unless the
@@ -1503,18 +1586,26 @@ export class InternalMastraMCPClient extends MastraBase {
                   domain: ErrorDomain.MCP,
                   category: ErrorCategory.THIRD_PARTY,
                   text: errorText,
-                  details: { toolName: tool.name, serverName: this.name },
+                  details: {
+                    toolName: tool.name,
+                    serverName: this.name,
+                    // details only holds scalars, so the structured reason travels as JSON.
+                    ...(res.structuredContent !== undefined
+                      ? { structuredContent: JSON.stringify(res.structuredContent) }
+                      : {}),
+                  },
                 });
               }
 
               this.log('debug', `Tool executed successfully: ${tool.name}`);
 
-              if (res.structuredContent !== undefined) {
+              // In-band errors keep the full envelope so `isError` reaches the caller and the model.
+              if (res.structuredContent !== undefined && !res.isError) {
                 // Enforce the server-advertised outputSchema before the result reaches the
                 // model. Covers hydrated tools too, which never populate the SDK's tools/list
                 // output-schema cache. On mismatch, return the structured ValidationError
                 // shape createTool produces so the model can self-correct.
-                if (!res.isError && outputSchema) {
+                if (outputSchema) {
                   const validationSchema = await getOutputValidationSchema();
                   const validation = validateToolOutput(validationSchema, res.structuredContent, tool.name);
                   if (validation.error) {

@@ -233,7 +233,7 @@ export class MastraModule implements NestModule {
         RequestTrackingInterceptor,
         MastraExceptionFilter,
       ],
-      exports: [MASTRA, MastraService],
+      exports: [MASTRA, MastraService, AuthService],
     };
   }
 
@@ -324,7 +324,7 @@ export class MastraModule implements NestModule {
         RequestTrackingInterceptor,
         MastraExceptionFilter,
       ],
-      exports: [MASTRA, MastraService],
+      exports: [MASTRA, MastraService, AuthService],
     };
   }
 

@@ -79,7 +79,7 @@ describe('Models', () => {
       const openaiTitle = getByTestId('model-provider-section-title-openai');
       expect(openaiTitle.textContent).toBe('OpenAI');
       expect(openaiTitle.className).toContain('uppercase');
-      expect(openaiTitle.className).toContain('text-caption');
+      expect(openaiTitle.className).toContain('text-eyebrow');
 
       const anthropicTitle = getByTestId('model-provider-section-title-anthropic');
       expect(anthropicTitle.textContent).toBe('Anthropic');
@@ -158,9 +158,9 @@ describe('Models', () => {
     it('the left-pane search filters the provider checklist without affecting the model grid', async () => {
       const { getByTestId, queryByTestId } = await renderModels();
 
-      const filterSearch = getByTestId('models-provider-filter-search').querySelector('input');
+      const filterSearch = getByTestId('models-provider-filter-search');
       expect(filterSearch).toBeTruthy();
-      fireEvent.change(filterSearch!, { target: { value: 'anthropic' } });
+      fireEvent.change(filterSearch, { target: { value: 'anthropic' } });
 
       await waitFor(() => expect(queryByTestId('models-provider-filter-item-openai')).toBeNull());
       expect(queryByTestId('models-provider-filter-item-anthropic')).toBeTruthy();
@@ -175,9 +175,9 @@ describe('Models', () => {
 
       fireEvent.click(getByTestId('models-provider-filter-checkbox-anthropic'));
 
-      const searchInput = getByTestId('model-card-picker-search').querySelector('input');
+      const searchInput = getByTestId('model-card-picker-search');
       expect(searchInput).toBeTruthy();
-      fireEvent.change(searchInput!, { target: { value: 'claude' } });
+      fireEvent.change(searchInput, { target: { value: 'claude' } });
 
       await findByText('No models match "claude"');
     });

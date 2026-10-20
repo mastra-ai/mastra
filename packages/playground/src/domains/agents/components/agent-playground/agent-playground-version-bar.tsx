@@ -5,28 +5,26 @@ import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogBody,
-  DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save, X } from 'lucide-react';
+import { useAgentVersions } from '@mastra/react/hooks/agents';
+import { Check, ChevronDown, Download, GitPullRequest, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
-
-import { useAgentVersions } from '../../hooks/use-agent-versions';
 
 interface AgentPlaygroundVersionBarProps {
   agentId: string;
@@ -76,6 +74,7 @@ export function AgentPlaygroundVersionBar({
   const { data } = useAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: Boolean(agentId) },
   });
 
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
@@ -95,11 +94,11 @@ export function AgentPlaygroundVersionBar({
           label: `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber} - ${formatDate(v.createdAt, 'date-time') ?? ''}`,
           description: v.changeMessage || undefined,
           end: isCodeSourceAgent ? (
-            <Badge variant={isPublished ? 'green' : 'blue'}>{isPublished ? 'Current' : 'Saved'}</Badge>
+            <Badge variant={isPublished ? 'success' : 'info'}>{isPublished ? 'Current' : 'Saved'}</Badge>
           ) : isPublished ? (
-            <Badge variant="green">Published</Badge>
+            <Badge variant="success">Published</Badge>
           ) : isDraftVersion ? (
-            <Badge variant="blue">Draft</Badge>
+            <Badge variant="info">Draft</Badge>
           ) : undefined,
         };
       }),
@@ -141,27 +140,13 @@ export function AgentPlaygroundVersionBar({
 
         {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" size="sm" />}
 
-        <Tooltip>
-          <TooltipTrigger
-            aria-label="Version information"
-            className={cn(
-              'shrink-0 rounded-sm focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden',
-              quietTextHover,
-              controlStateColorTransition,
-            )}
-          >
-            <Icon size="xs">
-              <Info />
-            </Icon>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" align="start" className="max-w-56">
-            {versionInfoText}
-          </TooltipContent>
-        </Tooltip>
+        <InfoTooltip aria-label="Version information" side="bottom" align="start" contentClassName="max-w-56">
+          {versionInfoText}
+        </InfoTooltip>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          {readOnly && <Badge variant="yellow">Read-only</Badge>}
-          {!readOnly && hasDraft && !isCodeSourceAgent && <Badge variant="blue">Unpublished</Badge>}
+          {readOnly && <Badge variant="warning">Read-only</Badge>}
+          {!readOnly && hasDraft && !isCodeSourceAgent && <Badge variant="info">Unpublished</Badge>}
         </div>
       </div>
     ),
@@ -262,21 +247,18 @@ export function AgentPlaygroundVersionBar({
           </div>
         )}
 
-        {/* Change message dialog */}
-        <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog}>
+        <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog} pending={isSavingDraft}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Save New Version</DialogTitle>
               <DialogDescription>Add a message to describe the changes in this version.</DialogDescription>
             </DialogHeader>
-            <DialogBody className="py-1">
-              <div className="grid gap-2">
-                <Label htmlFor="change-message">Change message</Label>
+            <DialogBody>
+              <Field>
+                <FieldLabel>Change message</FieldLabel>
                 <Input
-                  id="change-message"
                   placeholder="Describe what changed..."
                   value={changeMessage}
-                  className="focus:ring-white/50"
                   onChange={e => setChangeMessage(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
@@ -286,21 +268,11 @@ export function AgentPlaygroundVersionBar({
                   disabled={isSavingDraft}
                   autoFocus
                 />
-              </div>
+              </Field>
             </DialogBody>
-            <DialogFooter className="px-4">
-              <Button icon={<X />} variant="default" size="sm" onClick={() => setShowMessageDialog(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleSaveWithMessage}
-                disabled={isSavingDraft}
-                icon={<Save />}
-              >
-                Save Version
-              </Button>
+            <DialogFooter>
+              <DialogCancel>Cancel</DialogCancel>
+              <DialogAction onConfirm={handleSaveWithMessage}>Save Version</DialogAction>
             </DialogFooter>
           </DialogContent>
         </Dialog>

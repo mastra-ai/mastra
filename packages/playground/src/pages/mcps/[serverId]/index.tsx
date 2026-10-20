@@ -1,11 +1,13 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useMCPServers } from '@mastra/react/hooks/mcps';
 import { useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { McpToolDrawerBody } from '@/domains/mcps/components/mcp-tool-drawer-body';
 import { MCPDetail } from '@/domains/mcps/components/MCPDetail';
-import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
 import { mcpServerCrumb, navCrumb } from '@/domains/navigation/crumbs';
+import { ToolDrawer } from '@/domains/tools/components/tool-drawer/tool-drawer';
 
 export const McpServerPage = () => {
   const { serverId } = useParams();
@@ -38,6 +40,11 @@ export const McpServerPage = () => {
   return (
     <PageLayout variant="narrow" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} header={header}>
       <MCPDetail isLoading={isLoading} server={server} />
+      {serverId && (
+        <ToolDrawer>
+          <McpToolDrawerBody serverId={serverId} />
+        </ToolDrawer>
+      )}
     </PageLayout>
   );
 };

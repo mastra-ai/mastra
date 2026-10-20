@@ -3,13 +3,24 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type * as authStudioModule from '@mastra/auth-studio';
+import { resolveCustomProviders } from '@mastra/code-sdk/agents/custom-provider-source';
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
+import { Agent } from '@mastra/core/agent';
+import { AgentController } from '@mastra/core/agent-controller';
 import { AgentControllerChannels } from '@mastra/core/channels';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
+import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 
-import { LocalSandbox } from '@mastra/core/workspace';
+import {
+  FactorySandbox,
+  FACTORY_SANDBOX_BRAND,
+  isFactorySandbox,
+  LocalSandbox,
+  Workspace,
+} from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
@@ -19,6 +30,7 @@ import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
 import type { FactoryIntegration, IntegrationContext } from './integrations/base.js';
 import type * as platformGithubModule from './integrations/platform/github/integration.js';
+import { invalidateCustomProvidersSnapshots } from './routes/custom-provider-source.js';
 import type * as projectRoutesModule from './routes/projects.js';
 import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
@@ -27,10 +39,14 @@ import type * as terminalCleanupModule from './rules/terminal-cleanup.js';
 import type * as transitionServiceModule from './rules/transition-service.js';
 import { DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { createFactorySecretEncryption } from './secret-encryption.js';
+import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
+import type { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
+import type * as reportsModule from './tools/reports.js';
+import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
 function fakeStorage(): LibSQLFactoryStorage {
   const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'factory-test-storage' });
@@ -53,7 +69,26 @@ const secretEncryption = createFactorySecretEncryption({
 const controllerMock = {
   onSessionCreated: vi.fn(),
   setChannels: vi.fn(),
+  queryThreadById: vi.fn(),
+  getSessionByResource: vi.fn(),
+  createSession: vi.fn(),
 };
+
+// Run-end reports the factory's session reporter is asked to send.
+const runEndReports = vi.hoisted(() => [] as unknown[]);
+vi.mock('./tools/reports', async importOriginal => {
+  const actual = await importOriginal<typeof reportsModule>();
+  return {
+    ...actual,
+    createSessionRunEndReporter: (deps: Parameters<typeof actual.createSessionRunEndReporter>[0]) => {
+      const report = actual.createSessionRunEndReporter(deps);
+      return async (args: Parameters<typeof report>[0]) => {
+        runEndReports.push(args);
+        return report(args);
+      };
+    },
+  };
+});
 
 const sessionNotifierStub = {
   onSessionCreated: () => () => {},
@@ -177,7 +212,11 @@ function lastStudioProvider():
 const registerTenantCredentialResolverMock = vi.fn();
 vi.mock('./routes/tenant-credentials', async importOriginal => {
   const actual = await importOriginal<typeof tenantCredentialsModule>();
-  return { ...actual, registerTenantCredentialResolver: () => registerTenantCredentialResolverMock() };
+  return {
+    ...actual,
+    registerTenantCredentialResolver: (...args: Parameters<typeof actual.registerTenantCredentialResolver>) =>
+      registerTenantCredentialResolverMock(...args),
+  };
 });
 
 // Wrap the route-surface assembly with a spy so tests can assert the DI deps
@@ -256,6 +295,7 @@ beforeEach(() => {
   terminalCleanups.length = 0;
   transitionServiceOptions.length = 0;
   platformGithubOptions.length = 0;
+  runEndReports.length = 0;
 });
 
 describe('MastraFactory constructor', () => {
@@ -263,7 +303,7 @@ describe('MastraFactory constructor', () => {
     expect(() => new MastraFactory({ secretEncryption } as never)).toThrow(/'storage' is required/);
   });
 
-  it('rejects duplicate installed board ids at construction time', () => {
+  it('rejects a board id already used by an installed built-in', () => {
     expect(
       () =>
         new MastraFactory({
@@ -271,11 +311,140 @@ describe('MastraFactory constructor', () => {
           storage: fakeStorage(),
           boards: [createTestBoard({ id: 'work' })],
         }),
-    ).toThrow("board id 'work' is reserved for a built-in board");
+    ).toThrow("duplicate board id 'work'");
+  });
+
+  it('allows replacing a built-in board when default boards are disabled', () => {
+    expect(
+      () =>
+        new MastraFactory({
+          secretEncryption,
+          storage: fakeStorage(),
+          includeDefaultBoards: false,
+          boards: [createTestBoard({ id: 'work' })],
+        }),
+    ).not.toThrow();
   });
 });
 
 describe('MastraFactory.prepare', () => {
+  it('given a Factory deployment, when the controller mounts, then sessions run without modes', async () => {
+    const config = await prepareFactory({ storage: fakeStorage(), auth: null });
+
+    expect(config.modes).toBe(false);
+  });
+
+  it('loads authoritative memory settings before dynamic memory resolves for each invocation', async () => {
+    const storage = fakeStorage();
+    const config = await prepareFactory({ storage, auth: null });
+    const memorySettings = storage.getDomain<MemorySettingsStorage>('memory-settings');
+    await memorySettings.patch({
+      orgId: 'local',
+      userId: 'local',
+      patch: { observerModelId: 'openai/observer-1' },
+    });
+    const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
+    const requestContext = new RequestContext();
+
+    const first = await inputProcessors({ requestContext });
+    expect(first).toHaveLength(3);
+    expect(first[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
+    expect(first[1]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
+      observerModelId: 'openai/observer-1',
+    });
+
+    await memorySettings.patch({
+      orgId: 'local',
+      userId: 'local',
+      patch: { observerModelId: 'openai/observer-2' },
+    });
+    await inputProcessors({ requestContext });
+    expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
+      observerModelId: 'openai/observer-2',
+    });
+  });
+
+  it('still loads the saved memory settings when work items are unavailable', async () => {
+    const storage = fakeStorage();
+    vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'work-items');
+    const config = await prepareFactory({ storage, auth: null });
+    await storage.getDomain<MemorySettingsStorage>('memory-settings').patch({
+      orgId: 'local',
+      userId: 'local',
+      patch: { observerModelId: 'openai/observer-1' },
+    });
+    const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
+    const requestContext = new RequestContext();
+
+    const processors = await inputProcessors({ requestContext });
+    expect(processors).toHaveLength(2);
+    expect(processors[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
+    expect(processors[1]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
+      observerModelId: 'openai/observer-1',
+    });
+  });
+
+  it('falls back to auto and tells the thread when settings cannot load without work items', async () => {
+    const storage = fakeStorage();
+    vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'work-items');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const config = await prepareFactory({ storage, auth: null });
+    vi.spyOn(storage.getDomain<MemorySettingsStorage>('memory-settings'), 'get').mockRejectedValue(
+      new Error('storage unavailable'),
+    );
+    const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
+    const requestContext = new RequestContext();
+    const emitEvent = vi.fn();
+    requestContext.set('controller', { getState: () => ({}), emitEvent });
+
+    const processors = await inputProcessors({ requestContext });
+    expect(processors).toHaveLength(2);
+    expect(processors[0]).toBeInstanceOf(FactoryEnvironmentStateProcessor);
+    expect(processors[1]).toBeInstanceOf(FactorySessionsStateProcessor);
+    expect(requestContext.get('mastra__factoryMemorySettings')).toEqual({
+      status: 'unavailable',
+      reason: 'storage unavailable',
+    });
+    expect(emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', errorType: 'factory_memory_settings_unavailable' }),
+    );
+    warn.mockRestore();
+  });
+
+  it("layers a channel sender's saved memory settings over the project's", async () => {
+    const storage = fakeStorage();
+    vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'work-items');
+    const config = await prepareFactory({ storage, auth: null });
+    const memorySettings = storage.getDomain<MemorySettingsStorage>('memory-settings');
+    await memorySettings.patch({
+      orgId: 'org-1',
+      userId: 'factory-project:fp-1',
+      patch: { observerModelId: 'anthropic/project-observer', reflectorModelId: 'anthropic/project-reflector' },
+    });
+    await memorySettings.patch({ orgId: 'org-1', userId: 'user-1', patch: { reflectorModelId: 'openai/mine' } });
+    const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
+    const run = async (channel: boolean) => {
+      const requestContext = new RequestContext();
+      requestContext.set('controller', {
+        getState: () => ({ factoryProjectId: 'fp-1', factoryOrgId: 'org-1' }),
+        emitEvent: vi.fn(),
+      });
+      requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
+      if (channel) requestContext.set('channel', { platform: 'slack' });
+      await inputProcessors({ requestContext });
+      return requestContext.get('mastra__factoryMemorySettings');
+    };
+
+    await expect(run(true)).resolves.toMatchObject({
+      observerModelId: 'anthropic/project-observer',
+      reflectorModelId: 'openai/mine',
+    });
+    // Web runs of a project session share the project's row as-is.
+    await expect(run(false)).resolves.toMatchObject({ reflectorModelId: 'anthropic/project-reflector' });
+  });
+
   it('uses the platform bot co-author identity', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
 
@@ -298,6 +467,15 @@ describe('MastraFactory.prepare', () => {
     await expect(factory.prepare()).resolves.toBeDefined();
   });
 
+  it('passes the host-owned keyed Knowledge instance through the SDK mount', async () => {
+    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge' });
+    const knowledge = { key: 'mastra', instance };
+
+    const config = await prepareFactory({ storage: fakeStorage(), knowledge });
+
+    expect(config.knowledge).toEqual(knowledge);
+  });
+
   it('throws when called twice', async () => {
     const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
     await factory.prepare();
@@ -316,7 +494,7 @@ describe('MastraFactory.prepare', () => {
     expect(prepareMock).toHaveBeenCalledOnce();
   });
 
-  it('registers a blocking session-created listener that seeds stored OM settings', async () => {
+  it('registers a blocking session-created listener that seeds the session organization without copying OM settings', async () => {
     const storage = fakeStorage();
     const factory = new MastraFactory({ secretEncryption, storage });
     await factory.prepare();
@@ -325,7 +503,7 @@ describe('MastraFactory.prepare', () => {
       call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
     );
     expect(blockingCalls).toHaveLength(3);
-    const blockingCall = blockingCalls[1];
+    const blockingCall = blockingCalls[0];
 
     // Seed the owner's web session row and stored memory settings through the
     // same storage domains the factory registered.
@@ -382,14 +560,94 @@ describe('MastraFactory.prepare', () => {
 
     await (blockingCall![0] as (session: unknown) => Promise<void>)(session);
 
-    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
   });
 
-  it('passes the sandbox callback through to integrations', async () => {
-    const create = () => ({ id: 'sb-cb' }) as never;
+  it('passes the normalized sandbox through to integrations', async () => {
+    const created = { id: 'sb-cb' } as never;
+    const create = vi.fn(() => created);
     const ctx = await prepareIntegrationContext({ storage: fakeStorage(), sandbox: create });
-    expect(ctx.sandbox).toBe(create);
+    expect(isFactorySandbox(ctx.sandbox)).toBe(true);
+    const fakeCtx = { sessionId: 's', getRepositoryAccess: undefined };
+    expect(ctx.sandbox!.create(fakeCtx, {})).toBe(created);
+    expect(create).toHaveBeenCalledWith(fakeCtx);
+  });
+
+  it('accepts a FactorySandbox instance and describes it', async () => {
+    class StubFactorySandbox extends FactorySandbox<{ size?: string }> {
+      readonly provider = 'stub';
+      readonly settings = {
+        type: 'object',
+        properties: { size: { type: 'string', enum: ['s', 'm'] } },
+        additionalProperties: false,
+      } as const;
+      create = vi.fn(() => ({ id: 'sb' }) as never);
+    }
+    const sandbox = new StubFactorySandbox();
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage(), sandbox });
+    expect(factory.sandboxDescription).toBeUndefined();
+    await factory.prepare();
+    expect(sandbox.create).not.toHaveBeenCalled();
+    expect(factory.sandboxDescription).toMatchObject({
+      provider: 'stub',
+      capabilities: { template: false, builds: { available: false, history: false } },
+    });
+    expect(factory.sandboxDescription!.settingsSchema.properties).toHaveProperty('size');
+  });
+
+  it('registers the environment build workflow only when the sandbox can build', async () => {
+    class PlainSandbox extends FactorySandbox {
+      readonly provider = 'plain';
+      create = vi.fn(() => ({ id: 'sb' }) as never);
+    }
+    class BuildingSandbox extends PlainSandbox {
+      readonly builds = {
+        start: vi.fn(async () => ({ buildId: 'b', status: 'building' as const })),
+        get: vi.fn(async () => ({ buildId: 'b', status: 'ready' as const })),
+      };
+    }
+    const plain = await new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: new PlainSandbox(),
+    }).prepare();
+    expect(plain).not.toHaveProperty('workflows');
+
+    const building = await new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: new BuildingSandbox(),
+    }).prepare();
+    expect(Object.keys(building.workflows ?? {})).toEqual(['factory-environment-build']);
+    expect(building.workflows?.['factory-environment-build']?.id).toBe('factory-environment-build');
+  });
+
+  it('accepts a branded plain object as a FactorySandbox', async () => {
+    const sandbox = {
+      [FACTORY_SANDBOX_BRAND]: true,
+      provider: 'plain',
+      settings: { type: 'object', properties: {}, additionalProperties: false },
+      create: () => ({ id: 'sb' }) as never,
+    } as const;
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage(), sandbox });
+    await factory.prepare();
+    expect(factory.sandboxDescription?.provider).toBe('plain');
+  });
+
+  it('wraps a callback as a custom sandbox with no settings', async () => {
+    const factory = new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: () => ({ id: 'sb' }) as never,
+    });
+    await factory.prepare();
+    expect(factory.sandboxDescription).toMatchObject({
+      provider: 'custom',
+      capabilities: { template: false, builds: { available: false, history: false } },
+    });
+    expect(factory.sandboxDescription!.settingsSchema.properties).toEqual({});
   });
 
   it('hands the terminal-stage cleanup to the transition service', async () => {
@@ -464,7 +722,7 @@ describe('MastraFactory.prepare', () => {
       'audit',
       'work-items',
       'model-credentials',
-      'model-packs',
+      'model-defaults',
       'memory-settings',
       'custom-providers',
       'queue-health',
@@ -501,18 +759,43 @@ describe('MastraFactory.prepare', () => {
     });
     const error = await factory.prepare().catch((e: unknown) => e as Error);
     expect(error).toBeInstanceOf(Error);
-    // Names the new shape and shows the replacement, so an existing host can
-    // fix its config from the message alone.
-    expect(error.message).toMatch(/'sandbox' is now a callback/);
-    expect(error.message).toMatch(/FactorySandboxContext/);
-    expect(error.message).toMatch(/sandbox: ctx => new E2BSandbox\(\{ id: ctx\.sessionId \}\)/);
-    // The old options had three different fates, and a host reading this
-    // message needs all three: none of them is "pass it to the provider"
-    // unchanged.
+    // Names both accepted shapes, instance first, so an existing host can fix
+    // its config from the message alone.
+    expect(error.message).toMatch(/'sandbox' must be a FactorySandbox instance or a callback/);
+    expect(error.message).toMatch(/sandbox: new PlatformFactorySandbox\(\)/);
+    expect(error.message).toMatch(
+      /sandbox: ctx => new PlatformSandbox\(\{ id: ctx\.sessionId, sandboxId: ctx\.sandboxId \}\)/,
+    );
+    // Every retired option the host passed gets its own line.
     expect(error.message).toMatch(/'machine' becomes the provider instance/);
-    expect(error.message).toMatch(/'workdir' is gone/);
+    expect(error.message).toMatch(/'workdir' becomes the workingDirectory/);
     expect(error.message).toMatch(/'maxSandboxes' is gone with the sandbox fleet/);
-    expect(error.message).toMatch(/Omit 'sandbox' entirely to disable/);
+  });
+
+  it('explains only the retired options the host actually passed', async () => {
+    const factory = new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: { machine: {} } as unknown as () => never,
+    });
+    const error = await factory.prepare().catch((e: unknown) => e as Error);
+    expect(error.message).toMatch(/'machine' becomes the provider instance/);
+    expect(error.message).not.toMatch(/'workdir'/);
+    expect(error.message).not.toMatch(/'maxSandboxes'/);
+  });
+
+  it('rejects an unbranded object even when it carries a create key', async () => {
+    // The fleet-era object form had `create`, so shape cannot stand in for the brand.
+    const factory = new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      sandbox: { create: () => ({ id: 'sb' }) } as unknown as () => never,
+    });
+    const error = await factory.prepare().catch((e: unknown) => e as Error);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toMatch(/FactorySandbox instance/);
+    // No retired option was passed, so no migration lines.
+    expect(error.message).not.toMatch(/retired alpha sandbox config/);
   });
 
   it('rejects a sandbox config that is neither a callback nor an object', async () => {
@@ -521,7 +804,7 @@ describe('MastraFactory.prepare', () => {
       storage: fakeStorage(),
       sandbox: 'e2b' as unknown as () => never,
     });
-    await expect(factory.prepare()).rejects.toThrow(/'sandbox' must be a function/);
+    await expect(factory.prepare()).rejects.toThrow(/'sandbox' must be a FactorySandbox instance or a callback/);
   });
 
   it("forwards the backend's Mastra store and the vector instance to the SDK mount", async () => {
@@ -829,6 +1112,338 @@ describe('MastraFactory.prepare', () => {
     await expect(extraTools({ requestContext })).resolves.toEqual({});
   });
 
+  describe('Factory tools in user sessions', () => {
+    async function seedUserSession(storage: ReturnType<typeof fakeStorage>) {
+      await storage.init();
+      const sourceControl = storage.getDomain<SourceControlStorage>('source-control').forIntegration('github');
+      const project = await storage
+        .getDomain<FactoryProjectsStorage>('projects')
+        .create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
+      const installation = await sourceControl.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '123',
+      });
+      const repository = await sourceControl.repositories.upsert({
+        orgId: 'org-1',
+        input: { installationId: installation.id, externalId: '456', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+      });
+      const connection = await sourceControl.connections.create({
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        installationId: installation.id,
+        createdByUserId: 'user-1',
+      });
+      const projectRepository = await sourceControl.projectRepositories.link({
+        orgId: 'org-1',
+        connectionId: connection.id,
+        repositoryId: repository.id,
+        createdByUserId: 'user-1',
+        sandboxProvider: 'local',
+        sandboxWorkdir: '/sandbox/mastra',
+      });
+      await sourceControl.sessions.create({
+        sessionId: 'session-1',
+        projectRepositoryId: projectRepository.id,
+        factoryProjectId: project.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: 'user/session-1',
+        baseBranch: 'main',
+      });
+      return project;
+    }
+
+    function sessionContext(interactive: boolean) {
+      const requestContext = new RequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      if (interactive) requestContext.set('factoryInteractive', true);
+      requestContext.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
+      return requestContext;
+    }
+
+    const READ_TOOLS = ['factory_list_work_items', 'factory_inspect_work_item', 'factory_list_attention'];
+    const MANAGEMENT_TOOLS = [
+      'factory_create_work_item',
+      'factory_update_work_item',
+      'factory_transition_work_item',
+      'factory_retry_decision',
+      'factory_dismiss_decision',
+      'factory_resolve_proposal',
+      'factory_subscribe_work_item',
+      'factory_unsubscribe_work_item',
+      'factory_start_session',
+      'factory_answer_approval',
+      'factory_switch_session_model',
+      'factory_subscribe_session',
+      'factory_unsubscribe_session',
+    ];
+    const ALLOWED_TOOLS = [
+      ...READ_TOOLS,
+      'factory_create_work_item',
+      'factory_update_work_item',
+      'factory_transition_work_item',
+      'factory_retry_decision',
+      'factory_dismiss_decision',
+      'factory_resolve_proposal',
+      'factory_subscribe_work_item',
+      'factory_unsubscribe_work_item',
+      'factory_signal_session',
+      'factory_message_origin',
+      'factory_start_session',
+      'factory_answer_approval',
+      'factory_switch_session_model',
+      'factory_list_side_sessions',
+      'factory_subscribe_session',
+      'factory_unsubscribe_session',
+    ];
+
+    it('gives a user session every tool on every turn, and other sessions none', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const extraTools = config.extraTools as (args: {
+        requestContext: RequestContext;
+      }) => Promise<Record<string, unknown>>;
+
+      const interactive = await extraTools({ requestContext: sessionContext(true) });
+      const woken = await extraTools({ requestContext: sessionContext(false) });
+      expect(Object.keys(interactive)).toEqual(expect.arrayContaining(READ_TOOLS));
+      expect(Object.keys(woken)).toEqual(expect.arrayContaining(READ_TOOLS));
+      expect(Object.keys(interactive)).toEqual(expect.arrayContaining(MANAGEMENT_TOOLS));
+      // Turns nobody signed in started get the same tools; each tool limits what it does on them.
+      expect(Object.keys(woken).sort()).toEqual(Object.keys(interactive).sort());
+
+      const stranger = new RequestContext();
+      stranger.set('user', { workosId: 'user-2', organizationId: 'org-2' });
+      stranger.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
+      const none = await extraTools({ requestContext: stranger });
+      for (const name of [...READ_TOOLS, ...MANAGEMENT_TOOLS]) expect(none).not.toHaveProperty(name);
+    });
+
+    it('refuses an approval answer on a woken turn, which a person in the same session could give', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const extraTools = config.extraTools as (args: {
+        requestContext: RequestContext;
+      }) => Promise<Record<string, { execute: (input: unknown, context: unknown) => Promise<unknown> }>>;
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+      }) => Promise<void>;
+      const answer = { sessionId: crypto.randomUUID(), toolCallId: 'call-1', decision: 'approve' };
+
+      const wake = new RequestContext();
+      await prepareWake({ requestContext: wake, resourceId: 'session-1' });
+      wake.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
+      const woken = await extraTools({ requestContext: wake });
+      await expect(woken.factory_answer_approval!.execute(answer, {})).rejects.toThrow(
+        'Only a person can answer an approval',
+      );
+
+      const person = await extraTools({ requestContext: sessionContext(true) });
+      await expect(person.factory_answer_approval!.execute(answer, {})).rejects.toThrow(
+        'was not found in this Factory',
+      );
+    });
+
+    it("wakes a messaged session as that session's owner, not the sender", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+      }) => Promise<void>;
+
+      // session-1 belongs to user-1; user-2's tool call sent the message. Even if
+      // the sender's identity were on the context, the wake runs as the owner.
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      await prepareWake({ requestContext: wake, resourceId: 'session-1' });
+
+      expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    });
+
+    it("fails a wake whose owner can't be resolved, with a failed report, rather than running it as the sender", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+
+      // No Factory session row names session-2's owner; the sender is on the context.
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      const message = "Factory session session-2 can't be woken as its owner: no Factory session row names its owner.";
+      await expect(
+        prepareWake({ requestContext: wake, resourceId: 'session-2', threadId: 'thread-2' }),
+      ).rejects.toThrow(message);
+
+      expect(runEndReports).toEqual([
+        expect.objectContaining({
+          sessionId: 'session-2',
+          threadId: 'thread-2',
+          outcome: { status: 'failed', reason: message, failureCode: 'wake-owner-unresolved' },
+        }),
+      ]);
+    });
+
+    it('keeps the best-effort wake when auth is off', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage, auth: null });
+      await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+
+      await prepareWake({ requestContext: new RequestContext(), resourceId: 'session-2', threadId: 'thread-2' });
+
+      expect(config.resumeWakeSession).toBeUndefined();
+      expect(runEndReports).toEqual([]);
+    });
+
+    it("brings an offline session online as its row's owner before its wake runs", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage);
+      const resumeWake = config.resumeWakeSession as (args: { resourceId: string; threadId: string }) => Promise<void>;
+      controllerMock.queryThreadById.mockResolvedValue({ id: 'thread-1', resourceId: 'session-1' });
+      controllerMock.getSessionByResource.mockResolvedValue(undefined);
+      controllerMock.createSession.mockResolvedValue({});
+
+      await resumeWake({ resourceId: 'session-1', threadId: 'thread-1' });
+
+      expect(controllerMock.createSession).toHaveBeenCalledOnce();
+      const created = controllerMock.createSession.mock.calls[0]![0];
+      expect(created).toMatchObject({
+        id: 'session-1',
+        resourceId: 'session-1',
+        ownerId: 'user-1',
+        threadId: 'thread-1',
+        tags: expect.objectContaining({ factoryProjectId: project.id }),
+      });
+      expect(created.requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(runEndReports).toEqual([]);
+    });
+
+    it("refuses to resume a session on a thread that isn't its own", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const resumeWake = config.resumeWakeSession as (args: { resourceId: string; threadId: string }) => Promise<void>;
+      controllerMock.queryThreadById.mockResolvedValue({ id: 'thread-9', resourceId: 'session-9' });
+
+      await expect(resumeWake({ resourceId: 'session-1', threadId: 'thread-9' })).rejects.toThrow(
+        "Factory session session-1 can't be woken as its owner: thread thread-9 is not the session's.",
+      );
+      expect(controllerMock.createSession).not.toHaveBeenCalled();
+      expect(runEndReports).toHaveLength(1);
+    });
+
+    it("primes the woken session org's custom providers after resolving its credential policy", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      await storage.getDomain<CustomProvidersStorage>('custom-providers').upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        input: {
+          providerId: 'acme',
+          name: 'Acme',
+          url: 'https://llm.acme.dev/v1',
+          apiKey: 'sk-acme',
+          models: ['fast-1'],
+        },
+      });
+      // Earlier tests share the module-level org-1 snapshot; a provider write invalidates it.
+      invalidateCustomProvidersSnapshots({ orgId: 'org-1' });
+      // Install the resolver the factory registered, so tenant resolution needs
+      // the policy token prepareSessionRunContext sets, as in a deployment.
+      const actual = await vi.importActual<typeof tenantCredentialsModule>('./routes/tenant-credentials');
+      const [credentials, deploymentProviders, resolveTenant] = registerTenantCredentialResolverMock.mock.calls[0]!;
+      actual.registerTenantCredentialResolver(credentials, deploymentProviders, resolveTenant);
+      try {
+        const prepareWake = config.prepareWakeRequestContext as (args: {
+          requestContext: RequestContext;
+          resourceId: string;
+        }) => Promise<void>;
+
+        const wake = new RequestContext();
+        await prepareWake({ requestContext: wake, resourceId: 'session-1' });
+
+        expect(resolveCustomProviders(wake)).toEqual([
+          { name: 'Acme', url: 'https://llm.acme.dev/v1', apiKey: 'sk-acme', models: ['fast-1'] },
+        ]);
+      } finally {
+        actual.resetTenantCredentialResolverForTests();
+      }
+    });
+
+    it('persists allow for the no-approval tools on a new session, so listing work items runs without asking', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage);
+      const blockingCalls = controllerMock.onSessionCreated.mock.calls.filter(
+        call => (call[1] as { blocking?: boolean } | undefined)?.blocking === true,
+      );
+      const applyPermissions = blockingCalls[2]![0] as (session: unknown) => Promise<void>;
+
+      const controller = new AgentController({
+        workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+        id: 'code',
+        storage: new InMemoryStore({ id: 'factory-tools-permissions' }),
+        stateSchema: undefined,
+        modes: [
+          {
+            id: 'build',
+            name: 'Build',
+            default: true,
+            defaultModelId: 'openai/gpt-5.5',
+            agent: new Agent({
+              id: 'test-agent',
+              name: 'test-agent',
+              instructions: 'Test.',
+              model: { id: 'openai/gpt-4o' },
+            }),
+          },
+        ],
+      });
+      await controller.init();
+      // Factory tools fall in the SDK's mcp category, which asks by default.
+      controller.onSessionCreated(session => session.setCategoryResolver(() => 'mcp'), { blocking: true });
+      controller.onSessionCreated(applyPermissions, { blocking: true });
+      const session = await controller.createSession({ resourceId: 'session-1', ownerId: 'user-1' });
+
+      expect(
+        (session.state.get() as { permissionRules?: { tools: Record<string, string> } }).permissionRules?.tools,
+      ).toEqual(Object.fromEntries(ALLOWED_TOOLS.map(name => [name, 'allow'])));
+      // The same policy core consults before parking a tool call for approval.
+      for (const name of ALLOWED_TOOLS) expect(session.resolveToolApproval(name)).toBe('allow');
+
+      const extraTools = config.extraTools as (args: {
+        requestContext: RequestContext;
+      }) => Promise<Record<string, unknown>>;
+      const tools = await extraTools({ requestContext: sessionContext(false) });
+      const listWorkItems = tools.factory_list_work_items as {
+        execute: (input: unknown, context: unknown) => Promise<{ counts: { total: number } }>;
+      };
+      await storage.getDomain<WorkItemsStorage>('work-items').upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: { title: 'Fix the login redirect', stages: ['intake'] },
+      });
+      await expect(listWorkItems.execute({}, {})).resolves.toMatchObject({ counts: { total: 1 } });
+    });
+  });
+
   it('serves the not-registered /web/channel-accounts stub when no slack integration is registered', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     const buildApiRoutes = config.buildApiRoutes as (
@@ -974,17 +1589,25 @@ describe('MastraFactory.prepare', () => {
     }
   });
 
-  it('omits auth routes when auth is explicitly disabled (auth: null)', async () => {
+  it('registers only a 404 /auth/me when auth is explicitly disabled (auth: null)', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
-    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
-    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
-    expect(paths.some(p => p.startsWith('/auth/'))).toBe(false);
+    const buildApiRoutes = config.buildApiRoutes as (
+      deps: object,
+    ) => Array<{ path: string; method: string; handler: (c: unknown) => unknown }>;
+    const authRoutes = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).filter(r =>
+      r.path.startsWith('/auth/'),
+    );
+    expect(authRoutes.map(r => [r.method, r.path])).toEqual([['GET', '/auth/me']]);
+    const json = vi.fn((payload: unknown, status: number) => ({ payload, status }));
+    authRoutes[0]!.handler({ json } as never);
+    expect(json).toHaveBeenCalledWith({ authEnabled: false, authenticated: false }, 404);
   });
 
   it('installs the auth gate and tenant credential primer when auth is configured', async () => {
     // Both modes mount the custom-providers primer and the SPA static
     // middleware is environment-dependent (present when ui/dist exists), so
-    // assert the delta from the two auth-specific middleware.
+    // assert the delta: the gate and the credential primer replace the open
+    // mode's interactive marker (the gate marks signed-in requests itself).
     const openConfig = await prepareFactory({ storage: fakeStorage(), auth: null });
     const openMiddleware = (openConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
 
@@ -992,7 +1615,7 @@ describe('MastraFactory.prepare', () => {
 
     const gatedConfig = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
     const gatedMiddleware = (gatedConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
-    expect(gatedMiddleware).toHaveLength(openMiddleware.length + 2);
+    expect(gatedMiddleware).toHaveLength(openMiddleware.length + 1);
   });
 
   it('passes the resolved auth provider to both server.auth and studio.auth', async () => {
@@ -1433,7 +2056,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom', workers })],
     });
     const args = await factory.prepare();
-    expect(args.workers).toEqual([expect.objectContaining({ name: 'factory-supervisor-health' }), worker]);
+    expect(args.workers).toEqual([worker]);
     // The workers factory gets the same integration context shape as routes().
     const ctx = workers.mock.calls[0]![0];
     expect(ctx.stateSigner).toBeDefined();
@@ -1476,7 +2099,7 @@ describe('MastraFactory.prepare integrations', () => {
       integrations: [fakeIntegration({ id: 'custom' })],
     });
     const args = await factory.prepare();
-    expect(args.workers).toEqual([expect.objectContaining({ name: 'factory-supervisor-health' })]);
+    expect(args).not.toHaveProperty('workers');
   });
 
   /**
@@ -1520,8 +2143,8 @@ describe('MastraFactory.prepare integrations', () => {
       const ctx = channels.mock.calls[0]![0];
       expect(ctx.storage.channelIdentity).toBeDefined();
       // A channel integration starts a new session on the linked sender's own
-      // model pack, so it reads the same model-packs handle the web routes use.
-      expect(ctx.storage.modelPacks).toBeDefined();
+      // default model, so it reads the same model-defaults handle the web routes use.
+      expect(ctx.storage.modelDefaults).toBeDefined();
       expect(ctx.auth).toBeDefined();
     });
 

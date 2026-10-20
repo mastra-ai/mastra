@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { isLeaseProvider, NoopLeaseProvider } from '@mastra/core/events';
 import type { LeaseProvider, PubSub } from '@mastra/core/events';
 import { MastraWorker } from '@mastra/core/worker';
@@ -10,7 +8,8 @@ import type { FactoryProjectsStorage } from '../../../storage/domains/projects/b
 import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.js';
 import type { IssueReconciler } from '../../issue-reconciler.js';
 import type { LinearIssueIngress, LinearRulesIngress } from '../../linear/rules.js';
-import { PlatformApiClient, PlatformApiError } from '../api-client.js';
+import type { PlatformApiClient} from '../api-client.js';
+import { PlatformApiError } from '../api-client.js';
 
 const API_PREFIX = '/v1/server/linear';
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
@@ -128,7 +127,7 @@ export class PlatformLinearEventWorker extends MastraWorker {
   readonly #intervalMs: number;
   readonly #reconcileIntervalMs: number;
   readonly #now: () => number;
-  readonly #leaseOwner = randomUUID();
+  readonly #leaseOwner = globalThis.crypto.randomUUID();
 
   #running = false;
   #timer: ReturnType<typeof setTimeout> | undefined;
@@ -494,7 +493,7 @@ function parseIssueEnvelope(envelope: LinearWebhookEnvelope): LinearIssueIngress
   const id = typeof raw.id === 'string' ? raw.id : undefined;
   const identifier = typeof raw.identifier === 'string' ? raw.identifier : undefined;
   const title = typeof raw.title === 'string' ? raw.title : undefined;
-  const url = typeof raw.url === 'string' ? raw.url : envelope.url ?? undefined;
+  const url = typeof raw.url === 'string' ? raw.url : (envelope.url ?? undefined);
   if (!id || !identifier || !title || !url) return undefined;
 
   const state = optionalObject(raw.state);
@@ -508,7 +507,7 @@ function parseIssueEnvelope(envelope: LinearWebhookEnvelope): LinearIssueIngress
       })
     : [];
 
-  const createdAt = typeof raw.createdAt === 'string' ? raw.createdAt : envelope.createdAt ?? '';
+  const createdAt = typeof raw.createdAt === 'string' ? raw.createdAt : (envelope.createdAt ?? '');
   const updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : createdAt;
 
   return {

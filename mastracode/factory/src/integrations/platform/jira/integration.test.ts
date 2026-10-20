@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../../boards/index.js';
 import { fakeRouteAuth } from '../../../routes/test-utils.js';
 import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
-import { JiraApiError } from '../../jira/api.js';
+import type { JiraApiError } from '../../jira/api.js';
 import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.js';
 import {
   decodeIssueReference,
@@ -421,5 +421,23 @@ describe('PlatformJiraIntegration over integrations v2', () => {
       id: 'c-1',
       url: 'https://acme.atlassian.net/browse/ENG-42?focusedCommentId=c-1',
     });
+  });
+
+  it('returns null when commenting on an unknown issue key', async () => {
+    stubRoutes([
+      [
+        'POST',
+        `a1b_acme/proxy/ex/jira/${ACME_CLOUD_ID}/rest/api/3/issue/ENG-404/comment`,
+        () => json({ errorMessages: ['Issue does not exist'] }, 404),
+      ],
+    ]);
+    await expect(
+      integration().intake.createComment({
+        connection,
+        sourceId: encodeSourceId('a1b_acme', '1'),
+        issueId: 'ENG-404',
+        body: 'Shipping',
+      }),
+    ).resolves.toBeNull();
   });
 });

@@ -10,6 +10,7 @@ import { SpanOutputRenderer } from '../span-output-renderers';
 import { SpanPayloadSection } from '../span-payload-section';
 import {
   agentRunAbortedSpan,
+  agentRunInterruptedSpan,
   agentRunMessagesSpan,
   agentRunResumeSpan,
   agentRunSuspendedSpan,
@@ -102,6 +103,10 @@ describe('SpanOutputRenderer', () => {
     render(<SpanOutputRenderer span={agentRunAbortedSpan} />);
     expect(screen.getByText('Aborted')).toBeTruthy();
     expect(screen.getByText('Client disconnected')).toBeTruthy();
+    cleanup();
+    render(<SpanOutputRenderer span={agentRunInterruptedSpan} />);
+    expect(slot('span-interrupted')?.getAttribute('data-status')).toBe('interrupted');
+    expect(screen.getByText('Interrupted')).toBeTruthy();
   });
 
   it('renders agent run results as markdown text and surfaces tripwires', () => {
@@ -183,7 +188,6 @@ describe.each(['panel', 'details'] as const)('Span %s view', layout => {
       expect(slot('span-error')).not.toBeNull();
       const toggles = screen.getAllByRole('button', { name: 'JSON' });
       expect(toggles).toHaveLength(1);
-      expect(slot('span-input-card')).toBeNull();
       expect(slot('span-payload-json')).not.toBeNull();
       const jsonToggle = toggles[0];
       if (!jsonToggle) throw new Error('Missing error JSON toggle');

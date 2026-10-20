@@ -153,10 +153,10 @@ export const normalizeWorkspaceFromApi = (
 
   // Conditional variants array — take the first value
   if (Array.isArray(workspace)) {
-    return workspace[0]?.value as StoredWorkspaceRef | undefined;
+    return workspace[0]?.value;
   }
 
-  return workspace as StoredWorkspaceRef;
+  return workspace;
 };
 
 // ---------------------------------------------------------------------------
@@ -167,7 +167,7 @@ export const normalizeWorkspaceFromApi = (
 export const mapInstructionBlocksToApi = (blocks: InstructionBlock[] | undefined): AgentInstructionBlock[] =>
   (blocks ?? []).map(block => {
     if (block.type === 'prompt_block_ref') {
-      return { type: 'prompt_block_ref' as const, id: block.promptBlockId };
+      return { type: 'prompt_block_ref' as const, id: block.promptBlockId, rules: block.rules };
     }
     return { type: 'prompt_block' as const, content: block.content, rules: block.rules };
   });
@@ -176,9 +176,7 @@ export const mapInstructionBlocksToApi = (blocks: InstructionBlock[] | undefined
 const normalizeBlockContent = (content: unknown): string => {
   if (typeof content === 'string') return content;
   if (content && typeof content === 'object' && 'content' in content) {
-    return typeof (content as { content: unknown }).content === 'string'
-      ? (content as { content: string }).content
-      : '';
+    return typeof content.content === 'string' ? (content as { content: string }).content : '';
   }
   return '';
 };
@@ -194,7 +192,7 @@ const normalizeSystemMessage = (raw: unknown): string => {
   if (typeof raw === 'string') return raw;
   if (Array.isArray(raw)) return raw.map(normalizeSystemMessage).filter(Boolean).join('\n\n');
   if (raw && typeof raw === 'object' && 'content' in raw) {
-    const c = (raw as { content: unknown }).content;
+    const c = raw.content;
     return typeof c === 'string' ? c : '';
   }
   return '';
@@ -226,7 +224,7 @@ export const mapInstructionBlocksFromApi = (
       )
       .map(b => {
         if (b.type === 'prompt_block_ref') {
-          return createRefInstructionBlock(b.id);
+          return createRefInstructionBlock(b.id, b.rules);
         }
         return createInstructionBlock(normalizeBlockContent(b.content), b.rules);
       });

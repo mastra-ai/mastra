@@ -117,6 +117,42 @@ function createTextOnlyModel() {
   });
 }
 
+function createIncompleteUsageModel() {
+  let step = 0;
+  return new MockLanguageModelV2({
+    doStream: async () => {
+      step++;
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream(
+          step === 1
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'tool-call', toolCallId: 'call_1', toolName: 'get_weather', input: '{"city":"Paris"}' },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Sunny' },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: undefined, outputTokens: 5, totalTokens: undefined },
+                },
+              ],
+        ),
+      };
+    },
+  });
+}
+
 const getWeather = createTool({
   id: 'get_weather',
   description: 'Get the weather',
@@ -169,6 +205,84 @@ describe('MODEL_GENERATION span output tool calls (#24291)', () => {
       expect(endGenerationCalls).toHaveLength(1);
       expect(endGenerationCalls[0].output.toolCalls).toBeUndefined();
       expect(endGenerationCalls[0].output.text).toBe('Hello');
+      expect(endGenerationCalls[0].attributes).not.toHaveProperty('usageIncomplete');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('reports observed step usage and marks an incomplete aggregate', async () => {
+    endGenerationCalls.length = 0;
+    const spy = await mockTracedSpans();
+
+    try {
+      const agent = new Agent({
+        id: 'incomplete-usage-span-agent',
+        name: 'Incomplete Usage Span Agent',
+        instructions: 'test',
+        model: createIncompleteUsageModel(),
+        tools: { get_weather: getWeather },
+      });
+
+      const res = await agent.stream('weather in Paris?');
+      await res.consumeStream();
+
+      expect(endGenerationCalls).toHaveLength(1);
+      expect(endGenerationCalls[0]).toMatchObject({
+        attributes: { usageIncomplete: true },
+        usage: { inputTokens: 10, outputTokens: 25, totalTokens: 35 },
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('keeps completed-step usage on the span when the stream is aborted with an incomplete aggregate', async () => {
+    endGenerationCalls.length = 0;
+    const spy = await mockTracedSpans();
+    const controller = new AbortController();
+
+    try {
+      const agent = new Agent({
+        id: 'aborted-incomplete-usage-span-agent',
+        name: 'Aborted Incomplete Usage Span Agent',
+        instructions: 'test',
+        model: new MockLanguageModelV2({
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'tool-call', toolCallId: 'call_1', toolName: 'get_weather', input: '{"city":"Paris"}' },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: undefined, outputTokens: 5, totalTokens: undefined, reasoningTokens: 2 },
+              },
+            ] as any),
+          }),
+        }),
+        tools: {
+          get_weather: createTool({
+            id: 'get_weather',
+            description: 'Get the weather',
+            inputSchema: z.object({ city: z.string() }),
+            execute: async ({ city }) => {
+              controller.abort();
+              return { city, forecast: 'sunny' };
+            },
+          }),
+        },
+      });
+
+      const res = await agent.stream('weather in Paris?', { abortSignal: controller.signal });
+      await res.consumeStream().catch(() => {});
+
+      expect(endGenerationCalls).toHaveLength(1);
+      expect(endGenerationCalls[0]).toMatchObject({
+        attributes: { finishReason: 'aborted', usageIncomplete: true },
+        usage: { outputTokens: 5, reasoningTokens: 2 },
+      });
     } finally {
       spy.mockRestore();
     }

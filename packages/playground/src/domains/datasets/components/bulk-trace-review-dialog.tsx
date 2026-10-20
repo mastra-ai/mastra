@@ -3,11 +3,11 @@
 import type { BatchInsertDatasetItemsParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { Label } from '@mastra/playground-ui/components/Label';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { ChevronLeftIcon, ChevronRightIcon, DatabaseIcon, Loader2Icon, TrashIcon, X } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 
@@ -130,7 +130,9 @@ export function BulkTraceReviewDialog({
       level={1}
     >
       <SideDialog.Top>
-        <DatabaseIcon className="size-4" /> Review {total} item{total !== 1 ? 's' : ''} → {datasetName}
+        <SideDialog.Heading as="h2">
+          <DatabaseIcon /> Review {total} item{total !== 1 ? 's' : ''} → {datasetName}
+        </SideDialog.Heading>
       </SideDialog.Top>
 
       <SideDialog.Content>
@@ -163,35 +165,35 @@ export function BulkTraceReviewDialog({
         </div>
 
         <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label>Input (JSON) *</Label>
+          <Field>
+            <FieldLabel required>Input (JSON)</FieldLabel>
             <CodeEditor
               value={currentItem.input}
               onChange={(v: string | undefined) => updateCurrentItem('input', v ?? '')}
               showCopyButton={false}
               className="min-h-[120px]"
             />
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label>Ground Truth (JSON, optional)</Label>
+          <Field>
+            <FieldLabel>Ground Truth (JSON, optional)</FieldLabel>
             <CodeEditor
               value={currentItem.groundTruth}
               onChange={(v: string | undefined) => updateCurrentItem('groundTruth', v ?? '')}
               showCopyButton={false}
               className="min-h-[80px]"
             />
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label>Expected Trajectory (JSON, optional)</Label>
+          <Field>
+            <FieldLabel>Expected Trajectory (JSON, optional)</FieldLabel>
             <CodeEditor
               value={currentItem.expectedTrajectory}
               onChange={(v: string | undefined) => updateCurrentItem('expectedTrajectory', v ?? '')}
               showCopyButton={false}
               className="min-h-[80px]"
             />
-          </div>
+          </Field>
 
           <div className="flex justify-end gap-2 pt-4">
             <Button icon={<X />} type="button" onClick={onClose}>

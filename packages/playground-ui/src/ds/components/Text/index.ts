@@ -1,2 +1,2 @@
 export * from './text-and-icon';
-export * from './formatters/get-short-id';
+export { getShortId } from '@/utils/id';
