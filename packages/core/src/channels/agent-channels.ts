@@ -937,7 +937,6 @@ export class AgentChannels {
         });
       }
 
-      // Slack's native agent stop button (`agent_session_stopped`).
       chat.onAgentSessionStopped(async event => {
         const platform = event.adapter.name;
         const logContext = { platform, threadId: event.threadId, actorId: event.userId };

@@ -50,7 +50,6 @@ export const DEFAULT_BOT_EVENTS = [
   'message.groups',
   'message.im',
   'message.mpim',
-  // Enables Slack's native stop button on in-progress agent sessions
   'agent_session_stopped',
 ] as const;
 
