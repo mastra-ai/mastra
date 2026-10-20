@@ -327,6 +327,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // neither of which keeps their ids. What survives is on the message itself: buffering
         // persists OM's seal before the Observer runs, and sync observation persists its end
         // marker on the observed message before it may reflect.
+        // When only the ids say so, persist the seal too: a later reflection drops the ids, and
+        // the message would otherwise look unobserved if this worker also dies.
         const observedIds = this.turn.record.observedMessageIds;
         const response = messageId ? messageList.get.all.db().find(message => message.id === messageId) : undefined;
         const responseSealed =
@@ -336,7 +338,14 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           (!!response && findLastCompletedObservationBoundary(response) >= 0) ||
           (!!messageId && Array.isArray(observedIds) && observedIds.includes(messageId));
         if (messageId && responseObserved) {
-          if (response && !responseSealed) this.engine.sealMessagesForBuffering([response]);
+          if (response && !responseSealed) {
+            this.engine.sealMessagesForBuffering([response]);
+            await this.engine.persistMessageSeal(response).catch(error => {
+              omDebug(
+                `[OM:recover] persisting the seal on ${response.id} failed: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            });
+          }
           responseMessageId = rotateResponseMessageId?.() ?? messageId;
         }
         if (stepNumber === 0 && this.temporalMarkers) {

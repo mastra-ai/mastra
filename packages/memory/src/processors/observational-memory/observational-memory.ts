@@ -1038,8 +1038,7 @@ export class ObservationalMemory {
     const resolved = {
       ...tiered,
       model: (await this.resolveModelFunction(tiered.model, options?.requestContext)) as
-        | ResolvedInvocationModel
-        | 'auto',
+        ResolvedInvocationModel | 'auto',
     };
     if (resolved.model !== 'auto') {
       return resolved as InvocationModelResolution<ResolvedInvocationModel>;
@@ -1746,6 +1745,26 @@ export class ObservationalMemory {
   }
 
   /**
+   * @internal Persist the message-level seal flag on a stored message, so a later recovery
+   * still sees it was observed after a reflection drops its id.
+   */
+  async persistMessageSeal(message: MastraDBMessage): Promise<void> {
+    // Seal the stored copy, not the in-memory one, so parts the list hasn't loaded aren't overwritten.
+    const [stored] = (await this.storage.listMessagesById({ messageIds: [message.id] })).messages;
+    if (!stored) return;
+    const metadata = stored.content.metadata ?? {};
+    const mastra = (metadata as { mastra?: Record<string, unknown> }).mastra;
+    await this.storage.updateMessages({
+      messages: [
+        {
+          id: stored.id,
+          content: { ...stored.content, metadata: { ...metadata, mastra: { ...mastra, sealed: true } } },
+        },
+      ],
+    });
+  }
+
+  /**
    * Insert an observation marker into a message.
    * The marker is appended directly to the message's parts array (mutating in place).
    * Also persists the change to storage so markers survive page refresh.
@@ -2144,8 +2163,7 @@ export class ObservationalMemory {
   ): { threadId: string; resourceId?: string } | null {
     // First try RequestContext (set by Memory)
     const memoryContext = requestContext?.get('MastraMemory') as
-      | { thread?: { id: string }; resourceId?: string }
-      | undefined;
+      { thread?: { id: string }; resourceId?: string } | undefined;
 
     if (memoryContext?.thread?.id) {
       return {

@@ -257,4 +257,39 @@ describe('recovered OM turn whose response was observed by the dead worker', () 
     const { rotateResponseMessageId } = await runStepOnStorage(storage, undefined, undefined, { stored: true });
     expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
   });
+
+  it('rotates on a second recovery after a reflection dropped the ids the first recovery used', async () => {
+    const storage = await createStorage();
+    await storage.saveMessages({
+      messages: [
+        message('user-1', 'user', 'hello', '2025-01-01T08:00:00.000Z'),
+        message(responseId, 'assistant', 'partial answer', '2025-01-01T08:00:01.000Z'),
+      ],
+    });
+    // The first dead worker committed an observation of the response, but neither its seal
+    // nor its end marker reached storage.
+    const om = new ObservationalMemory({ storage, scope: 'thread', model: 'openai/gpt-4o-mini' });
+    const record = await om.getOrCreateRecord(threadId, resourceId);
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: '- user said hello',
+      tokenCount: 5,
+      lastObservedAt: new Date('2025-01-01T08:00:01.001Z'),
+      observedMessageIds: ['user-1', responseId],
+    });
+
+    const first = await runStepOnStorage(storage, undefined, undefined, { stored: true });
+    expect(first.rotateResponseMessageId).toHaveBeenCalledTimes(1);
+    // Only the seal flag is written; the stored parts are untouched.
+    const [stored] = (await storage.listMessagesById({ messageIds: [responseId] })).messages;
+    expect(stored!.content.metadata).toMatchObject({ mastra: { sealed: true } });
+    expect(stored!.content.parts).toEqual([{ type: 'text', text: 'partial answer' }]);
+
+    // The recovering worker dies too, and a reflection rolls the record over first.
+    const current = (await storage.getObservationalMemory(threadId, resourceId))!;
+    await storage.createReflectionGeneration({ currentRecord: current, reflection: '- greeting', tokenCount: 2 });
+
+    const second = await runStepOnStorage(storage, undefined, undefined, { stored: true });
+    expect(second.rotateResponseMessageId).toHaveBeenCalledTimes(1);
+  });
 });
