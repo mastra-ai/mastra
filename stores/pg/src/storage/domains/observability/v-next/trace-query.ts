@@ -42,6 +42,13 @@ type TraceSelection = {
 
 export const TRACE_STATUS_SQL = `CASE WHEN r."error" IS NOT NULL THEN 'error' ELSE 'success' END`;
 
+/** Core versions without the field reject it in strict query results, so it is only returned when core knows it. */
+export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;
+
+export const timeToFirstChunkFeatures = timeToFirstChunkSupported
+  ? (['trace-query-time-to-first-chunk'] as const)
+  : ([] as const);
+
 export function durationMsSql(startedAt: string, endedAt: string): string {
   return `EXTRACT(EPOCH FROM (${endedAt} - ${startedAt}))::numeric * 1000`;
 }
@@ -57,8 +64,11 @@ const TRACE_FIELDS = {
   startedAt: 'r."startedAt"',
   endedAt: 'r."endedAt"',
   durationMs: durationMsSql('r."startedAt"', 'r."endedAt"'),
+  timeToFirstChunkMs: 'r."timeToFirstChunkMs"',
   entityName: 'r."entityName"',
   entityType: 'r."entityType"',
+  name: 'r."name"',
+  spanType: 'r."spanType"',
   environment: 'r."environment"',
   status: TRACE_STATUS_SQL,
   tags: 'r."tags"',
@@ -72,6 +82,7 @@ const SPAN_FIELDS = {
   startedAt: 's."startedAt"',
   endedAt: 's."endedAt"',
   durationMs: 's."durationMs"',
+  timeToFirstChunkMs: 's."timeToFirstChunkMs"',
   status: 's."status"',
   error: 's."error"',
   entityType: 's."entityType"',
@@ -146,6 +157,7 @@ const TRACE_SELECT = `
   r."resourceId" AS "resourceId",
   r."startedAt" AS "startedAt",
   r."endedAt" AS "endedAt",
+  r."timeToFirstChunkMs" AS "timeToFirstChunkMs",
   r."entityName" AS "entityName",
   r."entityType" AS "entityType",
   r."environment" AS "environment",
@@ -288,11 +300,13 @@ function compileScalarPredicate<TField extends string>(
 
   const parameter = `$${parameterOffset}`;
   const operators = { lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
+  // `value` is never null, so plain `=`/`<>` keep `IS [NOT] DISTINCT FROM` semantics while staying
+  // indexable. The null guards keep `NOT (...)` two-valued on null columns.
   if (predicate.operator === 'eq') {
-    return { sql: `${field} IS NOT DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
+    return { sql: `${field} IS NOT NULL AND ${field} = ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   if (predicate.operator === 'ne') {
-    return { sql: `${field} IS DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
+    return { sql: `${field} IS NULL OR ${field} <> ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   const operator = operators[predicate.operator];
   if (operator === undefined) throw new Error(`Unsupported trusted trace-query operator: ${predicate.operator}`);
@@ -403,6 +417,8 @@ const ROOT_PUSHDOWN_FIELDS = new Set<string>([
   'endedAt',
   'entityName',
   'entityType',
+  'name',
+  'spanType',
   'environment',
 ]);
 
@@ -590,6 +606,7 @@ function compilePostgresTraceScope(
         WHEN s."isPending" THEN NULL
         ELSE ${durationMsSql('s."startedAt"', 's."endedAt"')}
       END AS "durationMs",
+      s."timeToFirstChunkMs",
       CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status",
       s."error",
       s."entityType",
@@ -1064,6 +1081,9 @@ function traceRowToResult(row: Record<string, unknown>) {
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),
     endedAt: asIsoTimestamp(row.endedAt),
+    ...(timeToFirstChunkSupported && {
+      timeToFirstChunkMs: row.timeToFirstChunkMs == null ? null : Number(row.timeToFirstChunkMs),
+    }),
     entityName: row.entityName == null ? null : String(row.entityName),
     entityType: row.entityType == null ? null : String(row.entityType),
     environment: row.environment == null ? null : String(row.environment),
@@ -1218,4 +1238,11 @@ export async function queryThreads(
 /** Compile a direct span-query filter using its dedicated field mapping. */
 export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate, offset: number): SqlFragment {
   return compileScalarPredicate(predicate, SPAN_QUERY_FIELDS, offset);
+}
+
+export function compileThreadQueryPredicate(predicate: TrustedTraceQueryScalarPredicate, offset: number): SqlFragment {
+  const fields = Object.fromEntries(
+    Object.keys(coreStorage.THREAD_QUERY_FIELD_REGISTRY).map(field => [field, `s."${field}"`]),
+  );
+  return compileScalarPredicate(predicate, fields, offset);
 }

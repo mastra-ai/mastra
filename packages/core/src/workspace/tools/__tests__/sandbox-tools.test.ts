@@ -499,6 +499,32 @@ describe('get_process_output tool', () => {
     expect(result).toBe('(no output yet)');
   });
 
+  it.skipIf(process.platform === 'win32')(
+    'returns once a background command exits, even while a child it left behind holds its output open',
+    async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bg-exit-'));
+      const workspace = new Workspace({ sandbox: new LocalSandbox({ workingDirectory: dir }) });
+      await workspace.init();
+      try {
+        const started = await executeCommandWithBackgroundTool.execute!(
+          { command: 'sleep 30 & echo started', background: true },
+          { workspace } as any,
+        );
+        const pid = String(started).match(/PID: (.+)\)/)![1]!;
+
+        const result = await getProcessOutputTool.execute!({ pid, wait: true }, { workspace } as any);
+
+        expect(result).toBe(
+          'started\n\n\nThe command exited, but a process it started is still running and holding its output open. Call kill_process to stop it.\nExit code: 0',
+        );
+      } finally {
+        await workspace.destroy();
+        await fs.rm(dir, { recursive: true, force: true });
+      }
+    },
+    15_000,
+  );
+
   it('returns not found for unknown PID', async () => {
     const sandbox = createMockSandbox({
       processes: {

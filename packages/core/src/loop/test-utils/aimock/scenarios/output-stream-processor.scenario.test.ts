@@ -194,6 +194,34 @@ describeForAllEngines('Support agent output stream processors', engine => {
     expect(output.tripwire).toMatchObject({ reason: 'Support replies are paused', processorId: 'kill-switch' });
   });
 
+  // Technical: abort() with no reason from processOutputStream must default to the same
+  // "Tripwire triggered by <id>" reason as every other hook, on every engine. Durable and
+  // evented used to report "Stream part blocked by <id>" instead. (#27538)
+  it('a reply stopped without a reason reports which processor stopped it (#27538)', async () => {
+    const blockAll: Processor = {
+      id: 'kill-switch',
+      processOutputStream: async ({ part, abort }) => {
+        if (part.type === 'text-delta') abort();
+        return part;
+      },
+    };
+
+    const { output, chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: CUSTOMER_QUESTION,
+      collectChunks: true,
+      outputProcessors: [blockAll],
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: CARD_REPLY });
+      },
+    });
+
+    const tripwire = chunks!.find(c => c.type === 'tripwire') as { payload: { reason: string } } | undefined;
+    expect(tripwire?.payload.reason).toBe('Tripwire triggered by kill-switch');
+    expect(output.tripwire).toMatchObject({ reason: 'Tripwire triggered by kill-switch', processorId: 'kill-switch' });
+  });
+
   // Technical: a processor's writer.custom() data chunk must reach the stream once and be saved
   // as a data part on the assistant message, so the UI can re-render it from history.
   it('a progress card pushed by a processor is streamed and saved with the reply', async () => {
@@ -274,6 +302,174 @@ describeForAllEngines('Support agent output stream processors', engine => {
     expect(JSON.stringify(requests[1]!.body)).toContain('shipped');
     expect(JSON.stringify(requests[1]!.body)).not.toContain('MARGIN-42');
     expect(JSON.stringify((await memory.recall(THREAD)).messages)).not.toContain('MARGIN-42');
+  });
+
+  const lookupOrderFixtures =
+    (name = 'lookupOrder') =>
+    (llm: ReturnType<typeof getMock>) => {
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        { toolCalls: [{ id: 'call_1', name, arguments: { orderId: '4821' } }] },
+      );
+      llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Your order has shipped.' });
+    };
+  const countToolChunks = () => {
+    const seen = { 'tool-result': 0, 'tool-error': 0, processToolResult: 0 };
+    const processor: Processor = {
+      id: 'tool-chunk-tagger',
+      processToolResult: ({ messageList }) => {
+        seen.processToolResult++;
+        return messageList;
+      },
+      processOutputStream: async ({ part }) => {
+        if (part.type !== 'tool-result' && part.type !== 'tool-error') return part;
+        seen[part.type]++;
+        if (part.type !== 'tool-result') return part;
+        return { ...part, payload: { ...part.payload, result: { ...(part.payload.result as object), tagged: true } } };
+      },
+    };
+    return { seen, processor };
+  };
+
+  // Technical: tool-result chunks go through processOutputStream exactly once, and the streamed
+  // chunk carries the processed payload. Durable/evented process tool chunks worker-side, so the
+  // adapter's MastraModelOutput must not run the processor a second time (#22980).
+  it('an order lookup result shown to the customer is tagged by the stream processor exactly once', async () => {
+    const { seen, processor } = countToolChunks();
+    let lookups = 0;
+    const lookupOrder = createTool({
+      id: 'lookupOrder',
+      description: 'Look up an order by id.',
+      inputSchema: z.object({ orderId: z.string() }),
+      execute: async () => {
+        lookups++;
+        return { status: 'shipped' };
+      },
+    });
+
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: CUSTOMER_QUESTION,
+      tools: { lookupOrder },
+      stopWhen: stepCountIs(5),
+      collectChunks: true,
+      outputProcessors: [processor],
+      fixtures: lookupOrderFixtures(),
+    });
+
+    expect(lookups).toBe(1);
+    expect(seen).toEqual({ 'tool-result': 1, 'tool-error': 0, processToolResult: 1 });
+    const results = chunks!.filter(c => c.type === 'tool-result');
+    expect(results).toHaveLength(1);
+    expect((results[0]!.payload as { result: unknown }).result).toEqual({ status: 'shipped', tagged: true });
+    expect(chunks!.at(-1)?.type).toBe('finish');
+  });
+
+  // Technical: processOutputStream returning null for a tool-result chunk drops it from the
+  // stream; the run still continues to the model's reply.
+  it('an order lookup result hidden by the stream processor never reaches the customer', async () => {
+    const lookupOrder = createTool({
+      id: 'lookupOrder',
+      description: 'Look up an order by id.',
+      inputSchema: z.object({ orderId: z.string() }),
+      execute: async () => ({ status: 'shipped' }),
+    });
+    const hideToolResults: Processor = {
+      id: 'tool-result-hider',
+      processOutputStream: async ({ part }) => (part.type === 'tool-result' ? null : part),
+    };
+
+    const { output, chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: CUSTOMER_QUESTION,
+      tools: { lookupOrder },
+      stopWhen: stepCountIs(5),
+      collectChunks: true,
+      outputProcessors: [hideToolResults],
+      fixtures: lookupOrderFixtures(),
+    });
+
+    expect(chunks!.filter(c => c.type === 'tool-result')).toHaveLength(0);
+    expect(await output.text).toBe('Your order has shipped.');
+  });
+
+  // Technical: a tool-error chunk (tool threw, or the model called a tool that does not exist)
+  // goes through processOutputStream exactly once and the run still finishes.
+  for (const [label, tools, toolName] of [
+    [
+      'a failing order lookup',
+      {
+        lookupOrder: createTool({
+          id: 'lookupOrder',
+          description: 'Look up an order by id.',
+          inputSchema: z.object({ orderId: z.string() }),
+          execute: async () => {
+            throw new Error('order service down');
+          },
+        }),
+      },
+      'lookupOrder',
+    ],
+    ['a call to a tool the agent does not have', {}, 'cancelOrder'],
+  ] as const) {
+    it(`${label} reaches the stream processor as one tool error`, async () => {
+      const { seen, processor } = countToolChunks();
+
+      const { chunks } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: CUSTOMER_QUESTION,
+        tools,
+        stopWhen: stepCountIs(5),
+        collectChunks: true,
+        outputProcessors: [processor],
+        fixtures: lookupOrderFixtures(toolName),
+      });
+
+      expect(seen['tool-error']).toBe(1);
+      expect(chunks!.filter(c => c.type === 'tool-error')).toHaveLength(1);
+      expect(chunks!.at(-1)?.type).toBe('finish');
+    });
+  }
+
+  // Technical: if processOutputStream throws on a tool-result chunk the run fails closed: no
+  // tool-result chunk (raw or processed) is emitted, one error chunk carries the crash, and the
+  // model is not called again to write a reply.
+  it('a redactor crashing on an order lookup result fails the run without showing the raw result', async () => {
+    const lookupOrder = createTool({
+      id: 'lookupOrder',
+      description: 'Look up an order by id.',
+      inputSchema: z.object({ orderId: z.string() }),
+      execute: async () => ({ card: 'RAW-CARD-4111' }),
+    });
+    const crashOnToolResult: Processor = {
+      id: 'tool-result-redactor',
+      processOutputStream: async ({ part }) => {
+        if (part.type === 'tool-result') throw new Error('tool result redactor crashed');
+        return part;
+      },
+    };
+
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: CUSTOMER_QUESTION,
+      tools: { lookupOrder },
+      stopWhen: stepCountIs(5),
+      collectChunks: true,
+      outputProcessors: [crashOnToolResult],
+      fixtures: lookupOrderFixtures(),
+    }).catch(() => ({ chunks: undefined }));
+
+    const all = chunks ?? [];
+    expect(JSON.stringify(all)).not.toContain('RAW-CARD-4111');
+    expect(all.filter(c => c.type === 'tool-result')).toHaveLength(0);
+    const errors = all.filter(c => c.type === 'error');
+    expect(errors).toHaveLength(1);
+    expect(JSON.stringify(errors[0]!.payload)).toContain('tool result redactor crashed');
+    expect(all.filter(c => c.type === 'text-delta')).toHaveLength(0);
   });
 
   // Technical: a processor that throws must fail closed (#25826): the unprocessed text never

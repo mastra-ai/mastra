@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { StatusDot } from './status-dot';
-import { deployStates, statusDotClass, type StatusPresentation } from './status-dot-styles';
+import { deployStates, statusDotClass } from './status-dot-styles';
+import type { StatusPresentation } from './status-dot-styles';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 
 const RUNNING: StatusPresentation = {

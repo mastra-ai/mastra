@@ -91,6 +91,7 @@ async function seedFactory(parentVisibility: SourceControlSessionVisibility = 'o
 
 function fakeController(calls: string[], onSessionCreated: (session: FakeSession) => void = () => {}) {
   const created: Array<{ options: Record<string, unknown>; session: ReturnType<typeof fakeSession> }> = [];
+  const storedThreads = new Map<string, { resourceId: string; metadata: Record<string, unknown>; updatedAt: Date }>();
   function fakeSession(id: string) {
     let state: Record<string, unknown> = {};
     const settings = new Map<string, unknown>();
@@ -119,6 +120,10 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
         rename: vi.fn(async () => undefined),
         getSetting: async ({ key }: { key: string }) => settings.get(key),
         setSetting: vi.fn(async ({ key, value }: { key: string; value: unknown }) => void settings.set(key, value)),
+        setSettingOn: vi.fn(async ({ threadId, key, value }: { threadId: string; key: string; value: unknown }) => {
+          if (threadId !== id) throw new Error('Wrong thread');
+          settings.set(key, value);
+        }),
       },
       sendSignal: vi.fn((_input: unknown, _options: { requestContext: RequestContext }) => {
         calls.push('kickoff');
@@ -130,11 +135,39 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
     createSession: vi.fn(async (options: Record<string, unknown>) => {
       const session = fakeSession(options.threadId as string);
       created.push({ options, session });
+      storedThreads.set(options.threadId as string, {
+        resourceId: options.resourceId as string,
+        metadata: {},
+        updatedAt: new Date(),
+      });
       onSessionCreated(session);
       return session;
     }),
     getSessionByResource: vi.fn(
       async (resourceId: string) => created.find(entry => entry.options.resourceId === resourceId)?.session ?? null,
+    ),
+    queryThreads: vi.fn(async ({ resourceId }: { resourceId: string }) =>
+      [...storedThreads.entries()]
+        .filter(([, thread]) => thread.resourceId === resourceId)
+        .map(([id, thread]) => ({ id, ...thread })),
+    ),
+    listAvailableModels: vi.fn(async () => [
+      { id: 'openai/gpt-5.6', provider: 'openai', modelName: 'gpt-5.6', hasApiKey: true },
+      { id: 'openai/gpt-6.1-sol', provider: 'openai', modelName: 'gpt-6.1-sol', hasApiKey: true },
+      { id: 'anthropic/claude-opus-4-1', provider: 'anthropic', modelName: 'claude-opus-4-1', hasApiKey: false },
+    ]),
+    setThreadModel: vi.fn(
+      async ({ resourceId, threadId, modelId }: { resourceId: string; threadId: string; modelId: string }) => {
+        const thread = storedThreads.get(threadId);
+        if (!thread || thread.resourceId !== resourceId) throw new Error('Thread not found for session.');
+        const live = (await controller.getSessionByResource(resourceId)) as FakeSession | null;
+        if (live?.thread.getId() === threadId) {
+          await live.model.switch(modelId);
+          return { live: true };
+        }
+        thread.metadata.currentModelId = modelId;
+        return { live: false };
+      },
     ),
   };
   return { controller, created };
@@ -148,7 +181,15 @@ async function setup(
   {
     coordinator: coordinatorOption = 'real',
     wrapPrepare,
-  }: { coordinator?: 'real' | 'none'; wrapPrepare?: (prepare: Prepare) => Prepare } = {},
+    deploymentProviders,
+    tenantCredentials = false,
+  }: {
+    coordinator?: 'real' | 'none';
+    wrapPrepare?: (prepare: Prepare) => Prepare;
+    /** Deployed mode: model switches check the target session's stored credentials. */
+    tenantCredentials?: boolean;
+    deploymentProviders?: ReadonlySet<string>;
+  } = {},
 ) {
   const seeded = await seedFactory(parentVisibility);
   const calls: string[] = [];
@@ -188,7 +229,6 @@ async function setup(
       id: threadId,
       resourceId: threadOwner(threadId),
     }),
-    queryThreads: async () => [],
     // Sessions this test created are themselves; anything else (the parent) is a live stub.
     getSessionByResource: async (resourceId: string) =>
       (await controller.getSessionByResource(resourceId)) ?? {
@@ -222,21 +262,215 @@ async function setup(
   });
   const deps = {
     sessions: seeded.sessions,
-    sessionModel: { projects: seeded.seed.projects, modelDefaults: seeded.seed.modelDefaults },
+    sessionModel: {
+      projects: seeded.seed.projects,
+      modelDefaults: seeded.seed.modelDefaults,
+      ...(tenantCredentials
+        ? {
+            tenantCatalog: {
+              credentials: seeded.seed.credentials,
+              customProviders: seeded.seed.customProviders,
+              deploymentProviders,
+            },
+          }
+        : {}),
+    },
     messaging: async () => ({ controller: deliveryController, notifications }) as never,
     workItems: seeded.seed.workItems,
     boards: createBoardRegistry(),
     auditRecorder: audit,
     startCoordinator: () => (coordinatorOption === 'none' ? undefined : { prepare }),
   };
-  const tool = createFactorySessionTools(seeded.scope, deps).factory_start_session!;
+  const tools = createFactorySessionTools(seeded.scope, deps);
+  const tool = tools.factory_start_session!;
   const start = (input: Record<string, unknown>) =>
     (tool as unknown as { execute: (input: unknown, context: unknown) => Promise<unknown> }).execute(input, {});
-  return { ...seeded, calls, controller, created, start, tool, prepare, transition, notifications, reports };
+  const switchModel = (input: Record<string, unknown>) =>
+    (
+      tools.factory_switch_session_model! as unknown as {
+        execute: (input: unknown, context: unknown) => Promise<unknown>;
+      }
+    ).execute(input, {});
+  return {
+    ...seeded,
+    calls,
+    controller,
+    created,
+    start,
+    switchModel,
+    tool,
+    prepare,
+    transition,
+    notifications,
+    reports,
+  };
 }
 
 beforeEach(() => {
   prime.mockReset();
+});
+
+describe('factory_switch_session_model', () => {
+  it('switches a running session immediately, a stopped one for its next run, and rejects unavailable models or other users', async () => {
+    const env = await setup();
+    const started = (await env.start({ prompt: 'Investigate the build.' })) as { sessionId: string };
+    const live = env.created[0]!.session;
+    vi.mocked(live.model.switch).mockClear();
+
+    await expect(env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' })).resolves.toEqual({
+      sessionId: started.sessionId,
+      threadId: started.sessionId,
+      modelId: 'openai/gpt-5.6',
+      live: true,
+    });
+    expect(live.model.switch).toHaveBeenCalledWith('openai/gpt-5.6');
+    expect(env.created).toHaveLength(1);
+
+    env.controller.getSessionByResource.mockResolvedValue(null);
+    await expect(env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-6.1-sol' })).resolves.toEqual({
+      sessionId: started.sessionId,
+      threadId: started.sessionId,
+      modelId: 'openai/gpt-6.1-sol',
+      live: false,
+    });
+    expect(live.model.switch).toHaveBeenCalledTimes(1);
+    expect(env.created).toHaveLength(1);
+
+    await expect(
+      env.switchModel({ sessionId: started.sessionId, modelId: 'anthropic/claude-opus-4-1' }),
+    ).rejects.toThrow(
+      "Model anthropic/claude-opus-4-1 exists, but this session's credential scope (server) has no credential for its provider. Models available to it: openai/gpt-5.6, openai/gpt-6.1-sol.",
+    );
+    await expect(env.switchModel({ sessionId: started.sessionId, modelId: 'made-up/model' })).rejects.toThrow(
+      'Unknown model made-up/model. Models available to it: openai/gpt-5.6, openai/gpt-6.1-sol.',
+    );
+    expect(env.controller.setThreadModel).toHaveBeenCalledTimes(2);
+
+    await env.sourceControl.sessions.create({
+      sessionId: 'other-user-session',
+      projectRepositoryId: env.projectRepository.id,
+      factoryProjectId: env.scope.factoryProjectId,
+      orgId: env.scope.orgId,
+      userId: 'someone-else',
+      branch: 'user/session-other-user-session',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    await expect(env.switchModel({ sessionId: 'other-user-session', modelId: 'openai/gpt-5.6' })).rejects.toThrow(
+      'not owned by you',
+    );
+    await expect(env.switchModel({ sessionId: 'missing', modelId: 'openai/gpt-5.6' })).rejects.toThrow('not found');
+  });
+});
+
+describe('factory_switch_session_model with stored credentials', () => {
+  // The server holds only Bedrock credentials; Anthropic and DeepSeek access comes from stored rows.
+  const serverModels = [
+    { id: 'anthropic/claude-opus-5-5', provider: 'anthropic', modelName: 'claude-opus-5-5', hasApiKey: false },
+    { id: 'deepseek/deepseek-flash', provider: 'deepseek', modelName: 'deepseek-flash', hasApiKey: false },
+    { id: 'amazon-bedrock/claude-sonnet', provider: 'amazon-bedrock', modelName: 'claude-sonnet', hasApiKey: true },
+  ];
+
+  async function tenantSetup(modelScope: 'user' | 'factory' | 'hybrid', deploymentProviders?: ReadonlySet<string>) {
+    const env = await setup('org', { tenantCredentials: true, deploymentProviders });
+    env.controller.listAvailableModels.mockResolvedValue(serverModels);
+    await env.seed.projects.update({ orgId: 'org-1', id: env.project.id, input: { modelScope } });
+    // The session owner's personal Anthropic key, the Factory's DeepSeek key, and someone else's personal key.
+    await env.seed.credentials.setCredential({ orgId: 'org-1', userId: 'user-1' }, 'anthropic', {
+      type: 'api_key',
+      key: 'user-secret',
+    });
+    await env.seed.credentials.setCredential({ orgId: 'org-1' }, 'deepseek', { type: 'api_key', key: 'org-secret' });
+    const started = (await env.start({ prompt: 'Investigate the build.' })) as { sessionId: string };
+    return { ...env, sessionId: started.sessionId };
+  }
+
+  it('lets a user-scoped session switch to a model its owner holds a credential for, and nothing else', async () => {
+    const env = await tenantSetup('user');
+
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-opus-5-5' })).resolves.toEqual({
+      sessionId: env.sessionId,
+      threadId: env.sessionId,
+      modelId: 'anthropic/claude-opus-5-5',
+      live: true,
+    });
+    expect(env.created[0]!.session.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5-5');
+
+    // The Factory's org credential belongs to the other scope.
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'deepseek/deepseek-flash' })).rejects.toThrow(
+      "Model deepseek/deepseek-flash exists, but this session's credential scope (session owner) has no credential for its provider. Models available to it: anthropic/claude-opus-5-5.",
+    );
+    // A server key alone does not open a deployment provider the operator never opted in to.
+    await expect(
+      env.switchModel({ sessionId: env.sessionId, modelId: 'amazon-bedrock/claude-sonnet' }),
+    ).rejects.toThrow('exists, but');
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-made-up' })).rejects.toThrow(
+      'Unknown model anthropic/claude-made-up. Models available to it: anthropic/claude-opus-5-5.',
+    );
+    expect(env.controller.setThreadModel).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a Factory-scoped session use the Factory credentials and its custom providers, not the owner credentials', async () => {
+    const env = await tenantSetup('factory');
+    await env.seed.customProviders.upsert({
+      orgId: 'org-1',
+      userId: 'owner',
+      input: { providerId: 'acme', name: 'Acme', url: 'https://llm.acme.test/v1', apiKey: 'acme', models: ['acme-1'] },
+    });
+    env.controller.getSessionByResource.mockResolvedValue(null);
+
+    await expect(
+      env.switchModel({ sessionId: env.sessionId, modelId: 'deepseek/deepseek-flash' }),
+    ).resolves.toMatchObject({ modelId: 'deepseek/deepseek-flash', live: false });
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'acme/acme-1' })).resolves.toMatchObject({
+      modelId: 'acme/acme-1',
+    });
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-opus-5-5' })).rejects.toThrow(
+      "Model anthropic/claude-opus-5-5 exists, but this session's credential scope (Factory) has no credential for its provider. Models available to it: acme/acme-1, deepseek/deepseek-flash.",
+    );
+  });
+
+  it('resolves the credential scope from the target session, not from a calling work-item run', async () => {
+    const env = await tenantSetup('hybrid');
+    // The caller is a work-item run, which a hybrid Factory bills to the Factory credentials.
+    await env.seed.workItems.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: env.project.id,
+      workItem: {
+        input: {
+          title: 'Task',
+          stages: ['intake'],
+          sessions: {},
+          metadata: {},
+          externalSource: { integrationId: 'github', type: 'issue', externalId: '1' },
+        },
+      },
+      role: 'work',
+      session: { sessionId: env.scope.sessionId, branch: 'user/session-parent-session', threadId: env.scope.threadId },
+      resourceId: env.scope.sessionId,
+      kickoffKey: 'run-1',
+      kickoffMessage: null,
+    });
+
+    // The target is an unbound side session, so it runs on its owner credentials.
+    await expect(
+      env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-opus-5-5' }),
+    ).resolves.toMatchObject({
+      modelId: 'anthropic/claude-opus-5-5',
+    });
+    await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'deepseek/deepseek-flash' })).rejects.toThrow(
+      "this session's credential scope (session owner) has no credential for its provider",
+    );
+  });
+
+  it('opens a deployment provider only when the operator opted in and the server holds its credentials', async () => {
+    const env = await tenantSetup('user', new Set(['amazon-bedrock']));
+
+    await expect(
+      env.switchModel({ sessionId: env.sessionId, modelId: 'amazon-bedrock/claude-sonnet' }),
+    ).resolves.toMatchObject({ modelId: 'amazon-bedrock/claude-sonnet' });
+  });
 });
 
 describe('factory_start_session in side mode', () => {

@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
+import { MastraSandbox } from '@mastra/core/workspace';
+import type { FactorySandbox, FactorySandboxContext, ProviderStatus, WorkspaceSandbox } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -130,6 +132,127 @@ function seedMemoSandbox(
   entry.workdir = '/workspace/mastra';
   return fake;
 }
+
+/** A FactorySandbox whose created instances record what is called on them. */
+function fakeFactorySandbox(calls: string[], { failDestroy = false } = {}) {
+  const create = vi.fn((ctx: { sessionId: string; sandboxId?: string }) => ({
+    status: 'pending',
+    start: vi.fn(async () => {
+      calls.push('start');
+    }),
+    _destroy: vi.fn(async () => {
+      calls.push('_destroy');
+    }),
+    destroy: vi.fn(async () => {
+      if (failDestroy) throw new Error('kill failed');
+      calls.push(`destroy:${ctx.sessionId}:${ctx.sandboxId}`);
+    }),
+  }));
+  return { provider: 'stub', create } as never as FactorySandbox & { create: typeof create };
+}
+
+describe('SessionRetirementCoordinator detached sandboxes', () => {
+  async function materializedSession(storage: SourceControlStorageInMemory) {
+    const session = await seedSession(storage);
+    await storage.sessions.setSandbox({ id: session.id, sandboxId: 'vm-1', sandboxWorkdir: '/workspace/repo' });
+    return (await storage.sessions.getBySessionId(session.sessionId))!;
+  }
+
+  it('destroys a deleted session VM this process never attached to', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const session = await materializedSession(storage);
+    const calls: string[] = [];
+    const sandbox = fakeFactorySandbox(calls);
+
+    await new SessionRetirementCoordinator({ sandbox }).retireSession({
+      sourceControl: storage,
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      deleteSession: true,
+    });
+
+    expect(calls).toEqual([`destroy:${session.id}:vm-1`]);
+    expect(await storage.sessions.getBySessionId(session.sessionId)).toBeNull();
+    expect(peekSessionSandbox(session.id)).toBeUndefined();
+  });
+
+  it('does not construct a sandbox for a session that never materialized', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const session = await seedSession(storage);
+    const sandbox = fakeFactorySandbox([]);
+
+    await new SessionRetirementCoordinator({ sandbox }).retireSession({
+      sourceControl: storage,
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      deleteSession: true,
+    });
+
+    expect(sandbox.create).not.toHaveBeenCalled();
+    expect(await storage.sessions.getBySessionId(session.sessionId)).toBeNull();
+  });
+
+  it('does not construct a sandbox when the session is only retired', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const session = await materializedSession(storage);
+    const sandbox = fakeFactorySandbox([]);
+
+    await new SessionRetirementCoordinator({ sandbox }).retireSession({
+      sourceControl: storage,
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      deleteSession: false,
+    });
+
+    expect(sandbox.create).not.toHaveBeenCalled();
+    expect(await storage.sessions.getBySessionId(session.sessionId)).not.toBeNull();
+  });
+
+  it('still deletes the row when the detached destroy fails', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const session = await materializedSession(storage);
+    const warn = vi.fn();
+
+    await new SessionRetirementCoordinator({
+      sandbox: fakeFactorySandbox([], { failDestroy: true }),
+      warn,
+    }).retireSession({
+      sourceControl: storage,
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      deleteSession: true,
+    });
+
+    expect(warn).toHaveBeenCalledWith(
+      'Factory detached session sandbox destroy failed',
+      expect.objectContaining({ error: 'kill failed' }),
+    );
+    expect(await storage.sessions.getBySessionId(session.sessionId)).toBeNull();
+  });
+
+  it('destroys a memoized sandbox that was constructed but never started here', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage, '');
+    const session = await materializedSession(storage);
+    const calls: string[] = [];
+    const instance = fakeFactorySandbox(calls).create({ sessionId: session.id, sandboxId: 'vm-1' });
+    getSessionSandbox(session.id, 'acme/repo', () => instance as never);
+
+    await new SessionRetirementCoordinator().retireSession({
+      sourceControl: storage,
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      deleteSession: true,
+    });
+
+    expect(calls).toEqual([`destroy:${session.id}:vm-1`]);
+    expect(peekSessionSandbox(session.id)).toBeUndefined();
+  });
+});
 
 describe('SessionRetirementCoordinator', () => {
   it('runs remote teardown before stopping the sandbox, then invalidates', async () => {
@@ -365,5 +488,409 @@ describe('SessionRetirementCoordinator', () => {
     );
     expect(invalidateSession).toHaveBeenCalledWith(session.sessionId);
     expect(await storage.sessions.getBySessionId(session.sessionId)).toBeNull();
+  });
+});
+
+/**
+ * A real `MastraSandbox` subclass, so the base-class lifecycle (`_destroy()`
+ * no-opping on `pending`, status transitions) is exercised, not faked.
+ */
+class RecordingSandbox extends MastraSandbox {
+  readonly id: string;
+  readonly name = 'Recording sandbox';
+  readonly provider = 'test';
+  status: ProviderStatus = 'pending';
+  readonly #calls: string[];
+  readonly #label: string;
+  readonly #destroyError: unknown;
+  readonly #onDestroy: (() => void | Promise<void>) | undefined;
+
+  constructor(
+    calls: string[],
+    label: string,
+    options: { destroyError?: unknown; onDestroy?: () => void | Promise<void> } = {},
+  ) {
+    super({ name: 'Recording sandbox' });
+    this.id = label;
+    this.#calls = calls;
+    this.#label = label;
+    this.#destroyError = options.destroyError;
+    this.#onDestroy = options.onDestroy;
+  }
+
+  async destroy(): Promise<void> {
+    this.#calls.push(`destroy:${this.#label}`);
+    await this.#onDestroy?.();
+    if (this.#destroyError) throw this.#destroyError;
+  }
+}
+
+/** A FactorySandbox whose `create()` hands recreate the given never-started instance. */
+function detachedFactory(build: (ctx: FactorySandboxContext) => WorkspaceSandbox) {
+  const create = vi.fn(build);
+  return { provider: 'test', create } as never as FactorySandbox & { create: typeof create };
+}
+
+function deferred<T = void>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+const nextMacrotask = () => new Promise(resolve => setTimeout(resolve, 0));
+
+describe('SessionRetirementCoordinator.recreateSessionSandbox', () => {
+  async function seedStartedSession(storage: SourceControlStorageInMemory): Promise<SourceControlSession> {
+    seedRepositoryLink(storage);
+    const session = await seedSession(storage);
+    await storage.sessions.setSandbox({ id: session.id, sandboxId: 'vm-old', sandboxWorkdir: '/workspace/mastra' });
+    return (await storage.sessions.getBySessionId(session.sessionId))!;
+  }
+
+  async function persistedSandboxId(storage: SourceControlStorageInMemory, sessionId: string) {
+    return (await storage.sessions.getBySessionId(sessionId))?.sandboxId;
+  }
+
+  function recreate(
+    coordinator: SessionRetirementCoordinator,
+    storage: SourceControlStorageInMemory,
+    sessionId: string,
+  ) {
+    return coordinator.recreateSessionSandbox({ sourceControl: storage, orgId: 'org-1', sessionId });
+  }
+
+  it('destroys a never-started detached instance through its own destroy(), not the no-op lifecycle wrapper', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const calls: string[] = [];
+    const detached = new RecordingSandbox(calls, 'detached');
+    // Snapshot at call time: the in-memory store hands back a live row object.
+    const constructedFrom: Array<Pick<FactorySandboxContext, 'sessionId' | 'sandboxId'>> = [];
+    const coordinator = new SessionRetirementCoordinator({
+      sandbox: detachedFactory(ctx => {
+        constructedFrom.push({ sessionId: ctx.sessionId, sandboxId: ctx.sandboxId });
+        return detached;
+      }),
+    });
+
+    await expect(recreate(coordinator, storage, session.sessionId)).resolves.toBe('recreated');
+
+    expect(detached).toBeInstanceOf(MastraSandbox);
+    expect(constructedFrom).toEqual([{ sessionId: session.id, sandboxId: 'vm-old' }]);
+    expect(calls).toEqual(['destroy:detached']);
+    expect(await persistedSandboxId(storage, session.sessionId)).toBeNull();
+  });
+
+  it('destroys a pending memo instance directly and marks it destroyed so it cannot start again', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const calls: string[] = [];
+    const memo = new RecordingSandbox(calls, 'memo');
+    const lifecycleDestroy = vi.spyOn(memo, '_destroy');
+    getSessionSandbox(session.id, 'acme/mastra', () => memo);
+    const detachedSandbox = detachedFactory(() => new RecordingSandbox([], 'detached'));
+    const coordinator = new SessionRetirementCoordinator({ sandbox: detachedSandbox });
+
+    await expect(recreate(coordinator, storage, session.sessionId)).resolves.toBe('recreated');
+
+    expect(calls).toEqual(['destroy:memo']);
+    expect(lifecycleDestroy).not.toHaveBeenCalled();
+    expect(detachedSandbox.create).not.toHaveBeenCalled();
+    expect(memo.status).toBe('destroyed');
+    await expect(memo._start()).rejects.toThrow('Cannot start a destroyed sandbox');
+  });
+
+  it.each(['running', 'error'] as const)(
+    'destroys a %s memo instance through the lifecycle wrapper, evicts it, and clears the persisted id',
+    async status => {
+      const storage = new SourceControlStorageInMemory();
+      const session = await seedStartedSession(storage);
+      const calls: string[] = [];
+      const memo = new RecordingSandbox(calls, 'memo');
+      memo.status = status;
+      const lifecycleDestroy = vi.spyOn(memo, '_destroy');
+      getSessionSandbox(session.id, 'acme/mastra', () => memo);
+      const setSandbox = vi.spyOn(storage.sessions, 'setSandbox');
+      const coordinator = new SessionRetirementCoordinator({
+        sandbox: detachedFactory(() => new RecordingSandbox([], 'detached')),
+      });
+
+      await expect(recreate(coordinator, storage, session.sessionId)).resolves.toBe('recreated');
+
+      expect(lifecycleDestroy).toHaveBeenCalledTimes(1);
+      expect(calls).toEqual(['destroy:memo']);
+      expect(memo.status).toBe('destroyed');
+      expect(peekSessionSandbox(session.id)).toBeUndefined();
+      expect(setSandbox).toHaveBeenCalledWith({ id: session.id, sandboxId: null, sandboxWorkdir: '' });
+      expect(await persistedSandboxId(storage, session.sessionId)).toBeNull();
+    },
+  );
+
+  it('falls back to a detached destroy when the lifecycle destroy hangs, and releases the session lock', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const calls: string[] = [];
+    const memo = new RecordingSandbox(calls, 'memo');
+    memo.status = 'running';
+    const hung = deferred();
+    vi.spyOn(memo, '_destroy').mockReturnValue(hung.promise);
+    getSessionSandbox(session.id, 'acme/mastra', () => memo);
+    const invalidateSession = vi.fn();
+    const coordinator = new SessionRetirementCoordinator({
+      invalidateSession,
+      destroyTimeoutMs: 50,
+      sandbox: detachedFactory(() => new RecordingSandbox(calls, 'detached')),
+    });
+
+    await expect(recreate(coordinator, storage, session.sessionId)).resolves.toBe('recreated');
+
+    expect(calls).toEqual(['destroy:detached']);
+    expect(memo.status).toBe('destroyed');
+    expect(await persistedSandboxId(storage, session.sessionId)).toBeNull();
+
+    // The lock was released: a retirement for the same session still runs.
+    invalidateSession.mockClear();
+    await coordinator.retireSession({
+      sourceControl: storage,
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      deleteSession: false,
+    });
+    expect(invalidateSession).toHaveBeenCalledWith(session.sessionId);
+    hung.resolve();
+  });
+
+  it('logs, without an unhandled rejection, when the abandoned lifecycle destroy rejects after the timeout', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const memo = new RecordingSandbox([], 'memo');
+    memo.status = 'running';
+    const hung = deferred();
+    vi.spyOn(memo, '_destroy').mockReturnValue(hung.promise);
+    getSessionSandbox(session.id, 'acme/mastra', () => memo);
+    const warn = vi.fn();
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      const coordinator = new SessionRetirementCoordinator({
+        warn,
+        destroyTimeoutMs: 50,
+        sandbox: detachedFactory(() => new RecordingSandbox([], 'detached')),
+      });
+      await expect(recreate(coordinator, storage, session.sessionId)).resolves.toBe('recreated');
+
+      hung.reject(new Error('late start failure'));
+      await nextMacrotask();
+
+      expect(warn).toHaveBeenCalledWith(
+        'Factory sandbox destroy failed after recreate stopped waiting',
+        expect.objectContaining({ sessionId: session.sessionId, error: 'late start failure' }),
+      );
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
+  it('throws and keeps the persisted id when the lifecycle destroy times out and no detached sandbox can be built', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const memo = new RecordingSandbox([], 'memo');
+    memo.status = 'running';
+    const hung = deferred();
+    vi.spyOn(memo, '_destroy').mockReturnValue(hung.promise);
+    getSessionSandbox(session.id, 'acme/mastra', () => memo);
+    const setSandbox = vi.spyOn(storage.sessions, 'setSandbox');
+    const coordinator = new SessionRetirementCoordinator({ destroyTimeoutMs: 50 });
+
+    await expect(recreate(coordinator, storage, session.sessionId)).rejects.toThrow(/Timed out destroying/);
+
+    expect(setSandbox).not.toHaveBeenCalled();
+    expect(await persistedSandboxId(storage, session.sessionId)).toBe('vm-old');
+    hung.resolve();
+  });
+
+  it.each([
+    ['410', { status: 410 }],
+    ['404 not_found', { status: 404, code: 'not_found' }],
+    ['uncoded 404', { status: 404 }],
+  ])('treats a %s from destroy as an already-gone VM', async (_label, destroyError) => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const memo = new RecordingSandbox([], 'memo', { destroyError });
+    getSessionSandbox(session.id, 'acme/mastra', () => memo);
+    const coordinator = new SessionRetirementCoordinator();
+
+    await expect(recreate(coordinator, storage, session.sessionId)).resolves.toBe('recreated');
+
+    expect(memo.status).toBe('destroyed');
+    expect(await persistedSandboxId(storage, session.sessionId)).toBeNull();
+  });
+
+  it('treats an already-gone VM reported through the lifecycle wrapper as destroyed, overriding its error status', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const memo = new RecordingSandbox([], 'memo', { destroyError: { status: 410 } });
+    memo.status = 'running';
+    getSessionSandbox(session.id, 'acme/mastra', () => memo);
+    const coordinator = new SessionRetirementCoordinator();
+
+    await expect(recreate(coordinator, storage, session.sessionId)).resolves.toBe('recreated');
+
+    expect(memo.status).toBe('destroyed');
+    expect(await persistedSandboxId(storage, session.sessionId)).toBeNull();
+  });
+
+  it.each([
+    ['routing 404', { status: 404, code: 'route_not_found' }],
+    ['500', { status: 500 }],
+    ['plain error', new Error('provider unavailable')],
+  ])('propagates a %s from destroy and keeps the persisted id', async (_label, destroyError) => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const setSandbox = vi.spyOn(storage.sessions, 'setSandbox');
+    const coordinator = new SessionRetirementCoordinator({
+      sandbox: detachedFactory(() => new RecordingSandbox([], 'detached', { destroyError })),
+    });
+
+    await expect(recreate(coordinator, storage, session.sessionId)).rejects.toBe(destroyError);
+
+    expect(setSandbox).not.toHaveBeenCalled();
+    expect(await persistedSandboxId(storage, session.sessionId)).toBe('vm-old');
+  });
+
+  it('propagates a detached-construction failure and keeps the persisted id', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const coordinator = new SessionRetirementCoordinator({
+      sandbox: detachedFactory(() => {
+        throw new Error('environmentId is required');
+      }),
+    });
+
+    await expect(recreate(coordinator, storage, session.sessionId)).rejects.toThrow('environmentId is required');
+    expect(await persistedSandboxId(storage, session.sessionId)).toBe('vm-old');
+  });
+
+  it('never runs repository or environment teardown commands', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const calls: string[] = [];
+    const fake = seedMemoSandbox(session, calls);
+    recordSessionEnvironment(session.sessionId, { workingDirectory: '/workspace', repositories: [] }, [
+      { slug: 'acme/mastra', dir: '/workspace/mastra', command: 'pnpm local teardown' },
+    ]);
+    const coordinator = new SessionRetirementCoordinator();
+
+    await expect(recreate(coordinator, storage, session.sessionId)).resolves.toBe('recreated');
+
+    expect(calls).toEqual(['destroy']);
+    expect(fake.stop).not.toHaveBeenCalled();
+  });
+
+  it('invalidates before destroying and again after clearing the id, and survives an invalidation failure', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const calls: string[] = [];
+    const invalidateSession = vi.fn(async (sessionId: string) => {
+      calls.push(`invalidate:${sessionId}`);
+      throw new Error('unregister failed');
+    });
+    const setSandbox = storage.sessions.setSandbox.bind(storage.sessions);
+    vi.spyOn(storage.sessions, 'setSandbox').mockImplementation(async args => {
+      calls.push('setSandbox');
+      await setSandbox(args);
+    });
+    const warn = vi.fn();
+    const coordinator = new SessionRetirementCoordinator({
+      invalidateSession,
+      warn,
+      sandbox: detachedFactory(() => new RecordingSandbox(calls, 'detached')),
+    });
+
+    await expect(recreate(coordinator, storage, session.sessionId)).resolves.toBe('recreated');
+
+    expect(calls).toEqual([
+      `invalidate:${session.sessionId}`,
+      'destroy:detached',
+      'setSandbox',
+      `invalidate:${session.sessionId}`,
+    ]);
+    expect(warn).toHaveBeenCalledWith(
+      'Factory session workspace cache invalidation failed',
+      expect.objectContaining({ sessionId: session.sessionId, error: 'unregister failed' }),
+    );
+  });
+
+  it('evicts a memo instance a concurrent resolve built while the destroy was running', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const calls: string[] = [];
+    const memo = new RecordingSandbox(calls, 'memo', {
+      onDestroy: () => {
+        getSessionSandbox(session.id, 'acme/mastra', () => new RecordingSandbox(calls, 'rebuilt-from-old-id'));
+      },
+    });
+    getSessionSandbox(session.id, 'acme/mastra', () => memo);
+    const coordinator = new SessionRetirementCoordinator();
+
+    await expect(recreate(coordinator, storage, session.sessionId)).resolves.toBe('recreated');
+
+    expect(peekSessionSandbox(session.id)).toBeUndefined();
+  });
+
+  it('returns not-found for an unknown session or another org, destroying nothing', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const detachedSandbox = detachedFactory(() => new RecordingSandbox([], 'detached'));
+    const coordinator = new SessionRetirementCoordinator({ sandbox: detachedSandbox });
+
+    await expect(recreate(coordinator, storage, randomUUID())).resolves.toBe('not-found');
+    await expect(
+      coordinator.recreateSessionSandbox({ sourceControl: storage, orgId: 'org-2', sessionId: session.sessionId }),
+    ).resolves.toBe('not-found');
+
+    expect(detachedSandbox.create).not.toHaveBeenCalled();
+    expect(await persistedSandboxId(storage, session.sessionId)).toBe('vm-old');
+  });
+
+  it('serializes with retirement of the same session', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const calls: string[] = [];
+    const gate = deferred();
+    const coordinator = new SessionRetirementCoordinator({
+      invalidateSession: () => {
+        calls.push('invalidate');
+      },
+      sandbox: detachedFactory(
+        () =>
+          new RecordingSandbox(calls, 'detached', {
+            onDestroy: async () => {
+              await gate.promise;
+              calls.push('destroy-finished');
+            },
+          }),
+      ),
+    });
+
+    const recreating = recreate(coordinator, storage, session.sessionId);
+    const retiring = coordinator.retireSession({
+      sourceControl: storage,
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      deleteSession: false,
+    });
+    await nextMacrotask();
+    expect(calls).toEqual(['invalidate', 'destroy:detached']);
+
+    gate.resolve();
+    await Promise.all([recreating, retiring]);
+
+    expect(calls).toEqual(['invalidate', 'destroy:detached', 'destroy-finished', 'invalidate', 'invalidate']);
   });
 });

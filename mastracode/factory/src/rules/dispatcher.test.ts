@@ -5,11 +5,8 @@ import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-uti
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
 import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
-import {
-  FACTORY_RULE_MATERIALIZATION_KEY,
-  WorkItemUpdateConflictError,
-  type WorkItemsStorage,
-} from '../storage/domains/work-items/base.js';
+import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
@@ -158,10 +155,13 @@ function createSession(
       }),
       rename: vi.fn(async () => {}),
       requireId: vi.fn(() => threadId),
+      getId: vi.fn(() => threadId),
       listActiveMessages: vi.fn(async () => [...deliveredSignals].map(id => ({ id }))),
     },
     stream: { isActive: vi.fn(() => options?.streamActive ?? false) },
     abort,
+    suspensions: { hasPending: vi.fn(() => false) },
+    run: { isRunning: vi.fn(() => false) },
     getWorkspace: () => ({
       skills: {
         maybeRefresh: vi.fn(async () => {}),
@@ -540,6 +540,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(sweep).toHaveBeenCalledExactlyOnceWith({
       olderThan: new Date(t1.getTime() - 24 * 60 * 60_000),
       now: t1,
+      keep: expect.any(Function),
     });
 
     // And the cadence resets: the next sweep waits another full interval.
@@ -547,6 +548,51 @@ describe('FactoryDecisionDispatcher', () => {
     expect(sweep).toHaveBeenCalledTimes(1);
     await dispatcher.runOnce(new Date(t1.getTime() + 11 * 60_000));
     expect(sweep).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps over-age bindings whose live session is parked on a person or still running', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const sweep = vi.spyOn(storage, 'revokeStaleRunBindings');
+    const { controller, session } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService: new FactoryTransitionService({ configVersion: 'rules-v1', storage }),
+      storage,
+      staleBindingSweepIntervalMs: 10 * 60_000,
+      staleBindingTtlMs: 24 * 60 * 60_000,
+    });
+
+    const t0 = new Date('2030-01-01T00:00:00Z');
+    await dispatcher.runOnce(t0);
+    await dispatcher.runOnce(new Date(t0.getTime() + 11 * 60_000));
+    const keep = sweep.mock.calls[0]?.[0].keep;
+    expect(keep).toBeTypeOf('function');
+    const binding = { resourceId: PROJECT_ID, threadId: 'thread-1' } as Parameters<NonNullable<typeof keep>>[0];
+
+    // Idle session: nothing waits on it, so the age limit applies.
+    await expect(keep!(binding)).resolves.toBe(false);
+    expect(controller.getSessionByResource).toHaveBeenLastCalledWith(PROJECT_ID);
+
+    // Parked on ask_user / submit_plan.
+    session.suspensions.hasPending.mockReturnValue(true);
+    await expect(keep!(binding)).resolves.toBe(true);
+    session.suspensions.hasPending.mockReturnValue(false);
+
+    // Resumed after the answer and still running.
+    session.run.isRunning.mockReturnValue(true);
+    await expect(keep!(binding)).resolves.toBe(true);
+
+    // The session moved to another thread: its live state is not this binding's run.
+    await expect(keep!({ ...binding, threadId: 'thread-other' })).resolves.toBe(false);
+
+    // No live session (e.g. after a restart) or a failed lookup: revoke.
+    controller.getSessionByResource.mockResolvedValueOnce(undefined);
+    await expect(keep!(binding)).resolves.toBe(false);
+    controller.getSessionByResource.mockRejectedValueOnce(new Error('forbidden'));
+    await expect(keep!(binding)).resolves.toBe(false);
+
+    await dispatcher.stop();
   });
 
   it('keeps claiming dispatches when the stale-binding sweep fails', async () => {

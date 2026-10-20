@@ -344,7 +344,7 @@ function FilterBarInputImpl({
             className,
           )}
         >
-          <ListFilterIcon aria-hidden className="-ml-[.3em] shrink-0 text-muted-foreground" />
+          <ListFilterIcon aria-hidden className="ml-[-.3em] shrink-0 text-muted-foreground" />
           <ComboboxPrimitive.Input
             ref={el => {
               inputRef.current = el;

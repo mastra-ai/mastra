@@ -44,16 +44,19 @@ function isWorkflowSchemaValidationError(error: unknown): error is Error {
   return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_SCHEMA_VALIDATION_FAILED_CODE;
 }
 
-// A resume the run can't accept: another resume claimed it, or it isn't waiting to be resumed.
-const RESUME_ALREADY_CLAIMED_CODES = new Set([
+// A resume or time travel the run can't accept: another caller claimed it, it is still running,
+// or it isn't waiting to be resumed.
+const RUN_CLAIM_CONFLICT_CODES = new Set([
   'WORKFLOW_RESUME_ALREADY_CLAIMED',
   'AGENT_RESUME_ALREADY_CLAIMED',
   'WORKFLOW_RUN_NOT_SUSPENDED',
   'AGENT_RESUME_RUN_NOT_SUSPENDED',
+  'WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED',
+  'WORKFLOW_TIME_TRAVEL_RUN_RUNNING',
 ]);
 
-function isResumeAlreadyClaimedError(error: unknown): error is Error {
-  return error instanceof Error && RESUME_ALREADY_CLAIMED_CODES.has((error as { id?: unknown }).id as string);
+function isRunClaimConflictError(error: unknown): error is Error & { id: string } {
+  return error instanceof Error && RUN_CLAIM_CONFLICT_CODES.has((error as { id?: unknown }).id as string);
 }
 
 /**
@@ -153,11 +156,18 @@ export function handleError(error: unknown, defaultMessage: string): never {
     });
   }
 
-  // A losing concurrent resume, or a recover of a run that is live or suspended, is a conflict on
-  // run state, not a malformed request, so it maps to 409 and clients can distinguish it from a
-  // 400/500 and re-read the run.
-  if (isResumeAlreadyClaimedError(error) || isDurableRunConflictError(error)) {
+  // A losing concurrent resume or time travel, or a recover of a run that is live or suspended, is
+  // a conflict on run state, not a malformed request, so it maps to 409 and clients can
+  // distinguish it from a 400/500 and re-read the run.
+  if (isRunClaimConflictError(error) || isDurableRunConflictError(error)) {
+    const res = isRunClaimConflictError(error)
+      ? new Response(JSON.stringify({ error: error.message, code: error.id }), {
+          status: 409,
+          headers: { 'content-type': 'application/json' },
+        })
+      : undefined;
     throw new HTTPException(409, {
+      res,
       message: error.message,
       stack: error.stack,
       cause: error,

@@ -12,7 +12,11 @@ import type {
 import { TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
 import { buildSpanQueryResponse } from './preview-compat';
 import { needsPreviewPayloads, PREVIEW_COLUMNS, resolveStoredPreviews } from './previews';
-import { compileSpanQueryPredicate, runWithClickHouseTraceQueryTimeout } from './trace-query';
+import {
+  compileSpanQueryPredicate,
+  runWithClickHouseTraceQueryTimeout,
+  timeToFirstChunkSupported,
+} from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
 const identities = identityFields.join(', ');
@@ -49,6 +53,7 @@ const displayFields = [
   'model',
   'provider',
   'durationMs',
+  'timeToFirstChunkMs',
   'status',
 ];
 
@@ -207,8 +212,17 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
   const hydrated = page.flatMap(identity => {
     const row = byIdentity.get(coreStorage.spanQueryIdentityKey(identity));
     if (!row) return []; // The selected record can be deleted between reads.
-    const { inputPreview: _input, outputPreview: _output, errorPreview: _error, ...metadata } = row;
-    return [{ ...metadata, ...identity, durationMs: Number(row.durationMs) }];
+    const { inputPreview: _input, outputPreview: _output, errorPreview: _error, timeToFirstChunkMs, ...metadata } = row;
+    return [
+      {
+        ...metadata,
+        ...identity,
+        durationMs: Number(row.durationMs),
+        ...(timeToFirstChunkSupported && {
+          timeToFirstChunkMs: timeToFirstChunkMs == null ? null : Number(timeToFirstChunkMs),
+        }),
+      },
+    ];
   });
   // Preserve costs only for older core contracts that still return them.
   let metrics: SpanQueryCostMetric[] = [];

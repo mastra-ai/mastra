@@ -21,7 +21,7 @@ import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, DurableAgentDefaults } from '../constants';
 import { isExecutionFenceError, isForeignExecutionContext, withExecutionFence } from '../execution-fence';
-import { getRunRegistryEntry, globalRunRegistry } from '../run-registry';
+import { getRunRegistryEntry, globalRunRegistry, takeRunScorerInstances } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -50,6 +50,7 @@ import {
   seedMessageListState,
   storeMessageListState,
   buildDeferredStepFinishChunk,
+  expandDurableSteps,
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
@@ -552,6 +553,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               ...toolCall,
               stepSpanData: llmOutput.stepSpanData,
               completionStartTime: llmOutput.completionStartTime,
+              // A suspended step never emits step-finish, so its usage rides on the suspension chunk.
+              stepUsage: llmOutput.stepResult?.totalUsage,
             })) as DurableToolCallInput[];
           },
           { id: 'extract-tool-calls' },
@@ -813,7 +816,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         // Processor retry steps re-run the same step, so only real LLM steps count against maxSteps.
         // Retries stay bounded by maxProcessorRetries.
         underMaxSteps: state.accumulatedSteps.filter(s => s.finishReason !== 'retry').length < runMaxSteps,
-        steps: state.accumulatedSteps,
+        steps: expandDurableSteps(state.accumulatedSteps),
         stopWhen,
         consumeDelegationBail: () => {
           if (state.delegationBailed) {
@@ -1008,6 +1011,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
             const logger = mastra?.getLogger?.();
 
+            const steps = expandDurableSteps(state.accumulatedSteps);
+
             // Extract final text from last step
             const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
             let finalText = lastStep?.text;
@@ -1026,11 +1031,12 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 text: finalText ?? '',
                 usage: state.accumulatedUsage,
                 finishReason: state.lastStepResult?.reason ?? 'unknown',
-                steps: state.accumulatedSteps,
+                steps,
               },
             });
             if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
               lastStep.text = finishResult.outputText;
+              steps[steps.length - 1] = { ...steps[steps.length - 1]!, text: finishResult.outputText };
               finalText = finishResult.outputText;
             }
 
@@ -1050,6 +1056,19 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               }
             }
 
+            // generateTitle.emitEvent: hold FINISH until the title is saved, then stream it as a
+            // transient chunk so consumers see it before the stream closes (as the in-process loop does).
+            if (pubsub && !tripwire && finishResult.titleForStream) {
+              const title = await finishResult.titleForStream;
+              if (title && initData.state?.threadId) {
+                await emitChunkEvent(pubsub, state.runId, {
+                  type: 'data-thread-title',
+                  data: { threadId: initData.state.threadId, title },
+                  transient: true,
+                });
+              }
+            }
+
             const finalOutput = {
               messageListState: finishResult.messageListState,
               messageId: state.messageId,
@@ -1063,6 +1082,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               output: {
                 text: finalText,
                 usage: state.accumulatedUsage,
+                // Saved with the run, so keep tool outputs compacted; the stream adapter expands them.
                 steps: state.accumulatedSteps,
               },
               state: state.state,
@@ -1153,6 +1173,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   requestContext,
                   tracingContext,
                   loadStoredMessages: loadRunStoredMessages(params),
+                  scorerInstances: takeRunScorerInstances(initData.runId, mastra as Mastra | undefined),
                 }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));
               } catch (error) {
                 mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`);

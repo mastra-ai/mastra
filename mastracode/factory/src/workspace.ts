@@ -59,7 +59,7 @@ import type { SessionEnvironmentRepositoryState } from './session/environment-st
 import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
-import { timedPhase } from './timing.js';
+import { instrumentMethods, timed, timedPhase } from './timing.js';
 import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from './work-item-branch.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
@@ -585,7 +585,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // than on the context it was constructed with.
   const skillReviewChecks = new Map<string, () => Promise<boolean>>();
 
-  return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
+  const resolve = async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const resolvedSession = ctx?.resourceId ? await resolveSourceControlSession(sourceControls, ctx.resourceId) : null;
     const session = resolvedSession?.session ?? null;
@@ -801,32 +801,36 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         () => {
           // The provider reads its own settings (resources, images) from the
           // project's stored document, never from the context.
-          const sandbox = factorySandbox.create(
-            {
-              sessionId: session.id,
-              // Physical VM id persisted from a prior start (undefined on first
-              // start). Providers that reattach by physical id use it to resume the
-              // original VM instead of provisioning a replacement.
-              sandboxId: session.sandboxId ?? undefined,
-              repoFullName,
-              ...(environment
-                ? environmentSandboxContext(environment, {
-                    orgId: session.orgId,
-                    getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
-                  })
-                : {
-                    // Stored nullable; the context speaks `undefined` for absent.
-                    setupCommand: projectRepository.setupCommand ?? undefined,
-                    // Deferred call, only dereferenced when a provider needs the repo
-                    // outside the VM (template build time).
-                    getRepositoryAccess: () =>
-                      sourceControl.versionControl.getRepositoryAccess({
-                        orgId: session.orgId,
-                        repositoryId: repository.id,
-                      }),
-                  }),
-            },
-            sandboxSettings,
+          const sandbox = instrumentMethods(
+            factorySandbox.create(
+              {
+                sessionId: session.id,
+                // Physical VM id persisted from a prior start (undefined on first
+                // start). Providers that reattach by physical id use it to resume the
+                // original VM instead of provisioning a replacement.
+                sandboxId: session.sandboxId ?? undefined,
+                repoFullName,
+                ...(environment
+                  ? environmentSandboxContext(environment, {
+                      orgId: session.orgId,
+                      getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
+                    })
+                  : {
+                      // Stored nullable; the context speaks `undefined` for absent.
+                      setupCommand: projectRepository.setupCommand ?? undefined,
+                      // Deferred call, only dereferenced when a provider needs the repo
+                      // outside the VM (template build time).
+                      getRepositoryAccess: () =>
+                        sourceControl.versionControl.getRepositoryAccess({
+                          orgId: session.orgId,
+                          repositoryId: repository.id,
+                        }),
+                    }),
+              },
+              sandboxSettings,
+            ),
+            `sandbox(${session.id})`,
+            ['start', 'stop', 'executeCommand', 'reconnect'],
           );
           // Attached inside the construction closure, so exactly once per
           // instance: `constructSessionEntry` runs on every open and would
@@ -1531,4 +1535,5 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     fireEagerStart();
     return workspace;
   };
+  return (context: DynamicWorkspaceContext) => timed('workspace.resolve', () => resolve(context));
 }

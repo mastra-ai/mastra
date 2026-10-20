@@ -10,12 +10,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Agent } from '../../agent';
 import type { MastraScorer } from '../../evals/base';
-import type { Mastra } from '../../mastra';
+import { Mastra } from '../../mastra';
 import type { MastraCompositeStore, StorageDomains } from '../../storage/base';
 import { DatasetsInMemory } from '../../storage/domains/datasets/inmemory';
 import { ExperimentsInMemory } from '../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { ScoresInMemory } from '../../storage/domains/scores/inmemory';
+import { InMemoryStore } from '../../storage/mock';
 import { Dataset } from '../dataset';
 import { compareExperiments } from '../experiment/analytics/compare';
 
@@ -409,6 +410,82 @@ describe('finalizeExperiment', () => {
 });
 
 describe('caller-driven experiments integrate with comparison', () => {
+  // Repeated trials must not make comparison depend on score-row read order. (#27658)
+  it.each([
+    { baseline: [0, 1], candidate: [1, 0], meanA: 0.5, meanB: 0.5 },
+    { baseline: [1, 0], candidate: [0, 1], meanA: 0.5, meanB: 0.5 },
+    { baseline: [0, 0, 0.9], candidate: [0.2], meanA: 0.3, meanB: 0.2 },
+  ])(
+    'averages repeated trials $baseline vs $candidate before comparing items',
+    async ({ baseline, candidate, meanA, meanB }) => {
+      const mastra = new Mastra({ storage: new InMemoryStore(), logger: false });
+      const ds = await mastra.datasets.create({ name: 'repeated-trial comparison' });
+      const repeated = await ds.addItem({ input: 'repeated item' });
+      const single = await ds.addItem({ input: 'single-trial item' });
+      const runA = await ds.createExperiment({ name: 'baseline' });
+      const runB = await ds.createExperiment({ name: 'candidate' });
+
+      for (const [run, scores] of [
+        [runA, baseline],
+        [runB, candidate],
+      ] as const) {
+        for (const [attempt, score] of scores.entries()) {
+          await ds.submitExperimentResult({
+            experimentId: run.experimentId,
+            itemId: repeated.id,
+            attempt,
+            output: `attempt ${attempt}`,
+            scores: [
+              { scorerId: 'accuracy', score },
+              { scorerId: 'other', score: 0.25 },
+            ],
+          });
+        }
+        await ds.submitExperimentResult({
+          experimentId: run.experimentId,
+          itemId: single.id,
+          output: 'single attempt',
+          scores: [{ scorerId: 'accuracy', score: 0.8 }],
+        });
+        await ds.finalizeExperiment({ experimentId: run.experimentId });
+      }
+
+      const comparison = await compareExperiments(mastra, {
+        experimentIdA: runA.experimentId,
+        experimentIdB: runB.experimentId,
+      });
+      const accuracy = comparison.scorers['accuracy']!;
+      expect(accuracy.statsA.avgScore).toBeCloseTo((meanA + 0.8) / 2);
+      expect(accuracy.statsB.avgScore).toBeCloseTo((meanB + 0.8) / 2);
+      expect(accuracy.statsA).toMatchObject({
+        totalItems: 2,
+        scoreCount: 2,
+        errorCount: 0,
+        passCount: meanA >= 0.5 ? 2 : 1,
+      });
+      expect(accuracy.statsB).toMatchObject({
+        totalItems: 2,
+        scoreCount: 2,
+        errorCount: 0,
+        passCount: meanB >= 0.5 ? 2 : 1,
+      });
+      expect(accuracy.delta).toBeCloseTo((meanB - meanA) / 2);
+      expect(accuracy.regressed).toBe(meanB < meanA);
+      expect(comparison.hasRegression).toBe(meanB < meanA);
+      expect(comparison.items).toHaveLength(2);
+      const repeatedItem = comparison.items.find(item => item.itemId === repeated.id)!;
+      expect(repeatedItem.inBothExperiments).toBe(true);
+      expect(repeatedItem.scoresA['accuracy']).toBeCloseTo(meanA);
+      expect(repeatedItem.scoresB['accuracy']).toBeCloseTo(meanB);
+      expect(repeatedItem.scoresA['other']).toBe(0.25);
+      expect(repeatedItem.scoresB['other']).toBe(0.25);
+      expect(comparison.scorers['other']!.delta).toBe(0);
+      const singleItem = comparison.items.find(item => item.itemId === single.id)!;
+      expect(singleItem.scoresA).toEqual({ accuracy: 0.8, other: null });
+      expect(singleItem.scoresB).toEqual({ accuracy: 0.8, other: null });
+    },
+  );
+
   it('two ingestion experiments with inline scores can be compared', async () => {
     const { ds, mastra, itemIds } = await setup(THREE_ITEMS);
 

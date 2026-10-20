@@ -24,9 +24,18 @@ import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
 import type { DynamicArgument } from '../types';
-import { Workspace } from '../workspace/workspace';
+import type { Workspace } from '../workspace/workspace';
 
-import { Session, THREAD_OWNER_ID_CONTEXT_KEY, migratePersistedModelSelection } from './session';
+import { SessionNotStartedError } from './errors';
+import {
+  MODEL_PERSISTENCE_VERSION,
+  MODEL_PERSISTENCE_VERSION_KEY,
+  Session,
+  THREAD_OWNER_ID_CONTEXT_KEY,
+  isReservedThreadMetadataKey,
+  migratePersistedModelSelection,
+  runModelPersistenceOperation,
+} from './session';
 import type { SessionState, SharedRunOptions, ThreadDataStore } from './session';
 import { addTokenUsage, toStepTokenUsage } from './stream-content';
 import {
@@ -522,6 +531,7 @@ export class AgentController<TState = {}> {
    * @param ownerId - Stable session owner (mirrors `SessionRecord.ownerId`). Defaults to the controller `id`.
    * @param resourceId - Memory resource to bind this session to. Defaults to the controller `resourceId` or `id`.
    * @param createInitialThread - Create a thread when no existing thread matches. Defaults to true.
+   * @param resumeOnly - Only return a live session or recover one from a stored thread; never start a new conversation.
    */
   async createSession({
     resourceId,
@@ -531,6 +541,7 @@ export class AgentController<TState = {}> {
     tags,
     threadId,
     createInitialThread = true,
+    resumeOnly = false,
     workspace,
     browser,
     requestContext,
@@ -560,6 +571,13 @@ export class AgentController<TState = {}> {
     threadId?: string;
     /** Create a thread when no existing thread matches. Set false to defer creation until first use, so unused sessions leave no empty thread behind. */
     createInitialThread?: boolean;
+    /**
+     * Return the live session, or rebuild a lost one (e.g. after a restart) bound to the most recent stored
+     * thread in its scope. Never creates a thread: throws {@link SessionNotStartedError} when there is no
+     * live session and no stored thread to recover, so writes cannot start a conversation on a thread the
+     * caller never asked for.
+     */
+    resumeOnly?: boolean;
     workspace?: Workspace;
     browser?: MastraBrowser;
     requestContext?: RequestContext;
@@ -628,7 +646,7 @@ export class AgentController<TState = {}> {
           } else {
             await session.thread.create({ id: threadId, requestContext });
           }
-        } else if (createInitialThread && session.thread.getId() === null) {
+        } else if (createInitialThread && !resumeOnly && session.thread.getId() === null) {
           await session.thread.create({ requestContext });
         }
         // A deletion may have started during the thread-rebinding awaits.
@@ -651,7 +669,8 @@ export class AgentController<TState = {}> {
       const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {
         scope,
         threadId,
-        createInitialThread,
+        createInitialThread: resumeOnly ? false : createInitialThread,
+        resumeOnly,
         workspace,
         browser,
         requestContext,
@@ -686,6 +705,7 @@ export class AgentController<TState = {}> {
       scope?: string;
       threadId?: string;
       createInitialThread?: boolean;
+      resumeOnly?: boolean;
       workspace?: Workspace;
       browser?: MastraBrowser;
       requestContext?: RequestContext;
@@ -699,6 +719,10 @@ export class AgentController<TState = {}> {
     let initialState = structuredClone(this.config.initialState);
     if (tags && Object.keys(tags).length > 0) {
       initialState = { ...initialState, ...tags } as TState;
+    }
+    // Check before provisioning a workspace, so a refused resume leaves nothing behind.
+    if (overrides?.resumeOnly) {
+      await this.#requireRecoverableThread(effectiveResourceId, tags, initialState, overrides.threadId);
     }
     const defaultMode = this.#defaultMode;
     requestContext.set('controller', {
@@ -811,6 +835,32 @@ export class AgentController<TState = {}> {
 
     await this.#notifySessionCreated(session);
     return session;
+  }
+
+  /**
+   * Throw {@link SessionNotStartedError} unless a stored thread exists that a new session for this
+   * resource would bind to. Mirrors the scope matching in {@link AgentController.#createSessionForResource}.
+   */
+  async #requireRecoverableThread(
+    resourceId: string,
+    tags: Record<string, string> | undefined,
+    initialState: Partial<TState> | undefined,
+    threadId: string | undefined,
+  ): Promise<void> {
+    if (threadId) {
+      const thread = await this.queryThreadById({ threadId });
+      if (thread?.resourceId === resourceId) return;
+      throw new SessionNotStartedError(resourceId);
+    }
+    const tagScope = Object.entries(tags ?? {}).filter(([key]) => !isReservedThreadMetadataKey(key));
+    const { projectPath } = (initialState ?? {}) as { projectPath?: string };
+    const scopeEntries = tagScope.length > 0 ? tagScope : projectPath ? [['projectPath', projectPath] as const] : [];
+    const threads = await this.queryThreads({ resourceId });
+    const recoverable = threads.some(thread => {
+      const metadata = (thread.metadata as Record<string, unknown> | undefined) ?? {};
+      return scopeEntries.every(([key, value]) => metadata[key] === value);
+    });
+    if (!recoverable) throw new SessionNotStartedError(resourceId);
   }
 
   /**
@@ -1337,6 +1387,37 @@ export class AgentController<TState = {}> {
       updatedAt: thread.updatedAt,
       metadata: thread.metadata,
     };
+  }
+
+  /**
+   * Switch the model of a resource's stored thread without creating a session.
+   * A live session bound to that thread switches immediately; otherwise the
+   * selection is persisted and applies when a session next loads the thread.
+   * Returns whether the switch reached a live session.
+   */
+  async setThreadModel({
+    resourceId,
+    threadId,
+    modelId,
+  }: {
+    resourceId: string;
+    threadId: string;
+    modelId: string;
+  }): Promise<{ live: boolean }> {
+    const thread = await this.queryThreadById({ threadId });
+    if (!thread || thread.resourceId !== resourceId) throw new Error('Thread not found for session.');
+    const live = await this.#sessionsByResource.get(sessionRegistryKey(resourceId));
+    if (live && live.thread.getId() === threadId) {
+      await live.model.switch(modelId);
+      return { live: true };
+    }
+    await runModelPersistenceOperation(threadId, () =>
+      this.writeThreadMetadataValues(threadId, {
+        currentModelId: modelId,
+        [MODEL_PERSISTENCE_VERSION_KEY]: MODEL_PERSISTENCE_VERSION,
+      }),
+    );
+    return { live: false };
   }
 
   /**

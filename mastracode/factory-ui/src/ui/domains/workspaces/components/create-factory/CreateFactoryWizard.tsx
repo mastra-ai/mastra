@@ -1,3 +1,4 @@
+import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -5,11 +6,11 @@ import { useApiConfig } from '../../../../../api/config';
 import { useGithubReposQuery } from '../../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../../hooks/useGithubStatus';
 import { connectLinear } from '../../../factory/services/linear';
-import { useCreateFactoryFlow, type CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
+import { useCreateFactoryFlow } from '../../hooks/useCreateFactoryFlow';
+import type { CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
 import { useCreateFactoryFromDraft } from '../../hooks/useCreateFactoryFromDraft';
 import { factoryHomePath } from '../../services/factoryPaths';
 import { connectGithub, manageGithubConnection } from '../../services/github';
-import { useKeyDown } from '../../../../lib/hooks';
 import { CreateFactoryJiraRows } from './CreateFactoryJiraRows';
 import { CreateFactoryLinearRows } from './CreateFactoryLinearRows';
 import { CreateFactoryModelStep } from './CreateFactoryModelStep';
@@ -82,7 +83,7 @@ export function CreateFactoryWizard() {
     if (location.key === 'default') void navigate(factoryId ? `/factories/${factoryId}` : '/');
     else void navigate(-1);
   };
-  useKeyDown({ escape: leave }, { enabled: !committing });
+  useKeydown({ Escape: leave }, { enabled: !committing, insideFields: true });
 
   const step = draft?.step;
   if (!step) return null;

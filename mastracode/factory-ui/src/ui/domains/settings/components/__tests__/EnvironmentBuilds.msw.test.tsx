@@ -115,7 +115,7 @@ describe('Environment builds', () => {
         return HttpResponse.json({ error: 'no_history' }, { status: 404 });
       }),
       http.get(`${ENVIRONMENT_URL}/builds/:buildId`, ({ params }) => {
-        const status = statuses.length > 1 ? statuses.shift()! : statuses[0]!;
+        const status = statuses.length > 1 ? statuses.shift()! : statuses[0];
         return HttpResponse.json({ build: { buildId: params.buildId, status, templateId: 'tpl-1' } });
       }),
     );

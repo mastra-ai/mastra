@@ -4,7 +4,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TraceThreadPanel, type TraceThreadPanelProps } from '../trace-thread-panel';
+import { TraceThreadPanel } from '../trace-thread-panel';
+import type { TraceThreadPanelProps } from '../trace-thread-panel';
 import {
   queryPageFromList,
   THREAD_ID,
