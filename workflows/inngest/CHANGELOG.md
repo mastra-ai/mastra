@@ -1,5 +1,25 @@
 # @mastra/inngest
 
+## 1.10.7-alpha.6
+
+### Patch Changes
+
+- Fixed a TypeScript error (TS2345) when chaining processor steps with `.then()` or `.parallel()`. Steps built with `createStep(processor)` now accept the output of a previous processor step, so the output guardrails workflow from the docs type-checks: ([#27764](https://github.com/mastra-ai/mastra/pull/27764))
+
+  ```ts
+  const workflow = createWorkflow({
+    id: 'output-guardrails',
+    inputSchema: ProcessorStepSchema,
+    outputSchema: ProcessorStepSchema,
+  })
+    .then(createStep(new TokenLimiterProcessor({ limit: 1000 })))
+    .then(createStep(new BatchPartsProcessor()))
+    .commit();
+  ```
+
+- Updated dependencies [[`78b3ef7`](https://github.com/mastra-ai/mastra/commit/78b3ef7cb120f2b366a39d7095ece5f0ec7d3f71), [`3012dd4`](https://github.com/mastra-ai/mastra/commit/3012dd424b2329eda78381688f1f48244173e6a2), [`f9e22cc`](https://github.com/mastra-ai/mastra/commit/f9e22cc6fa264ded4a95ab34dab84b6ce12c2597), [`fed802d`](https://github.com/mastra-ai/mastra/commit/fed802d6e4e395d9ba42a1122c2468a072407b1c)]:
+  - @mastra/core@1.79.0-alpha.8
+
 ## 1.10.7-alpha.5
 
 ### Patch Changes
