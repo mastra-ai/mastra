@@ -1297,14 +1297,15 @@ describe('MastraFactory.prepare', () => {
       const wake = new RequestContext();
       wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
       const message = "Factory session session-2 can't be woken as its owner: no Factory session row names its owner.";
-      await expect(
-        prepareWake({ requestContext: wake, resourceId: 'session-2', threadId: 'thread-2' }),
-      ).rejects.toThrow(message);
+      // session-2's own thread, under its owner's resource.
+      await expect(prepareWake({ requestContext: wake, resourceId: 'user-2', threadId: 'session-2' })).rejects.toThrow(
+        message,
+      );
 
       expect(runEndReports).toEqual([
         expect.objectContaining({
           sessionId: 'session-2',
-          threadId: 'thread-2',
+          threadId: 'session-2',
           outcome: { status: 'failed', reason: message, failureCode: 'wake-owner-unresolved' },
         }),
       ]);

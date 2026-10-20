@@ -415,7 +415,8 @@ describe('source-control session routes', () => {
       factoryProjectId: project.id,
       projectRepositoryId: projectRepository.id,
     });
-    const threads = await controller.queryThreads({ resourceId: sessionId });
+    // A user session runs under its owner's resource.
+    const threads = await controller.queryThreads({ resourceId: 'user-1' });
     expect(threads.map(thread => thread.id)).toEqual([sessionId]);
   });
 

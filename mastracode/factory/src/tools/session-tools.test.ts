@@ -133,7 +133,10 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
     };
   }
   const controller = {
-    queryThreadById: vi.fn(async () => null),
+    queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) => {
+      const thread = storedThreads.get(threadId);
+      return thread ? { id: threadId, ...thread } : null;
+    }),
     createSession: vi.fn(async (options: Record<string, unknown>) => {
       const session = fakeSession(options.threadId as string);
       created.push({ options, session });
@@ -163,8 +166,12 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
       async ({ resourceId, threadId, modelId }: { resourceId: string; threadId: string; modelId: string }) => {
         const thread = storedThreads.get(threadId);
         if (!thread || thread.resourceId !== resourceId) throw new Error('Thread not found for session.');
-        const live = (await controller.getSession(resourceId)) as FakeSession | null;
-        if (live?.thread.getId() === threadId) {
+        // Like the controller: the live session on this resource that has this thread open.
+        const entry = created.find(
+          candidate => candidate.options.resourceId === resourceId && candidate.session.thread.getId() === threadId,
+        );
+        const live = entry ? ((await controller.getSession(entry.options.id as string)) as FakeSession | null) : null;
+        if (live) {
           await live.model.switch(modelId);
           return { live: true };
         }
@@ -231,10 +238,8 @@ async function setup(
   const threadOwner = (threadId: string) => (threadId === seeded.scope.threadId ? seeded.scope.sessionId : threadId);
   const deliveryController = {
     ...controller,
-    queryThreadById: async ({ threadId }: { threadId: string }) => ({
-      id: threadId,
-      resourceId: threadOwner(threadId),
-    }),
+    queryThreadById: async ({ threadId }: { threadId: string }) =>
+      (await controller.queryThreadById({ threadId })) ?? { id: threadId, resourceId: threadOwner(threadId) },
     // Sessions this test created are themselves; anything else (the parent) is a live stub.
     getSession: async (resourceId: string) =>
       (await controller.getSession(resourceId)) ?? {
