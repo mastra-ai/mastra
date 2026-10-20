@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added an opt-in `apply_patch` workspace tool that creates, updates, moves and deletes several files in one call. A patch is checked in full before anything is written, so it applies completely or not at all. The tool is off by default; enable it per tool:
+Added an opt-in `apply_patch` workspace tool that creates, updates, moves and deletes several files in one call. The tool checks the whole patch before it writes anything. If a write fails partway, it tries to undo the changes it already made. The tool is off by default. Enable it per tool:
 
 ```ts
 new Workspace({

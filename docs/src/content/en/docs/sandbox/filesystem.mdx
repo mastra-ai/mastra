@@ -35,7 +35,7 @@ Configuring a filesystem gives the agent these tools:
 | `mastra_workspace_ast_edit` | Applies structural code edits. Available when `@ast-grep/napi` is installed. |
 | `mastra_workspace_apply_patch` | Creates, updates, moves, and deletes several files in one call. Off by default. |
 
-The `apply_patch` tool is opt-in. Enable it with its own entry in `tools`; setting the top-level `tools.enabled` doesn't turn it on. It applies every change in the patch or none of them:
+The `apply_patch` tool is opt-in. Enable it with its own entry in `tools`. Setting the top-level `tools.enabled` doesn't turn it on. The tool checks every change in the patch before it writes any file:
 
 ```typescript title="src/mastra/workspaces/index.ts"
 import { Workspace, LocalFilesystem, WORKSPACE_TOOLS } from '@mastra/core/workspace'

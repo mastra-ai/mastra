@@ -19,7 +19,7 @@ import type { FileReadTracker, FileWriteLock, WorkspaceFilesystem } from '../fil
 import type { WorkspaceSandbox } from '../sandbox';
 import { supportsComputer } from '../sandbox';
 import type { Workspace } from '../workspace';
-import { applyPatchTool, getApplyPatchWritePaths } from './apply-patch';
+import { applyPatchDidWrite, applyPatchTool, getApplyPatchWritePaths } from './apply-patch';
 import { isAstGrepAvailable, astEditTool } from './ast-edit';
 import { computerClickTool } from './computer-click';
 import { computerDoubleClickTool } from './computer-double-click';
@@ -281,6 +281,7 @@ function wrapWithReadTracker(
   config: { requireReadBeforeWrite?: DynamicToolConfigValue<ToolConfigWithArgsContext> },
   mode: 'read' | 'write',
   getWritePaths?: (input: any) => string[],
+  didWrite?: (result: unknown) => boolean,
 ): any {
   return {
     ...tool,
@@ -356,7 +357,7 @@ function wrapWithReadTracker(
         } catch {
           // Ignore stat errors for tracking
         }
-      } else if (mode === 'write') {
+      } else if (mode === 'write' && (didWrite?.(result) ?? true)) {
         for (const path of writePaths) {
           await readTracker.clearReadRecord(path);
         }
@@ -511,6 +512,8 @@ export async function createWorkspaceTools(
       optIn?: boolean;
       /** Every path the call writes, for tools that touch more than `input.path`. */
       getWritePaths?: (input: any) => string[];
+      /** Whether a successful result actually changed files; read records are kept when it didn't. */
+      didWrite?: (result: unknown) => boolean;
     },
   ) => {
     if (opts?.optIn && toolsConfig?.[name]?.enabled === undefined) return;
@@ -561,6 +564,7 @@ export async function createWorkspaceTools(
         config,
         opts.readTrackerMode,
         opts.getWritePaths,
+        opts.didWrite,
       );
     } else {
       wrapped = wrapTool(wrapped, workspace, opts?.targets ?? {});
@@ -636,6 +640,7 @@ export async function createWorkspaceTools(
       useWriteLock: true,
       optIn: true,
       getWritePaths: getApplyPatchWritePaths,
+      didWrite: applyPatchDidWrite,
     });
   }
 

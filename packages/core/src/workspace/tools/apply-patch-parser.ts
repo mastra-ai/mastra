@@ -1,3 +1,5 @@
+import { posix } from 'node:path';
+
 /**
  * Parser and in-memory applier for the apply_patch format used by OpenAI Codex
  * and OpenCode:
@@ -65,7 +67,9 @@ function headerPath(line: string, prefix: string, lineNumber: number): string {
   if (!path) {
     throw new ApplyPatchError(`Line ${lineNumber}: missing file path after "${prefix.trim()}"`);
   }
-  return path;
+  // Canonical form so 'a.ts', './a.ts' and 'src//../a.ts' count as one path
+  // for the duplicate check and share one write lock.
+  return posix.normalize(path);
 }
 
 /**
@@ -130,7 +134,13 @@ export function parsePatch(patch: string): PatchOperation[] {
         const bodyLine = lines[i]!;
         if (bodyLine === '@@' || bodyLine.startsWith('@@ ')) {
           const context = bodyLine.slice(2).trim();
-          current = { context: context || undefined, oldLines: [], newLines: [], contextSource: [], isEndOfFile: false };
+          current = {
+            context: context || undefined,
+            oldLines: [],
+            newLines: [],
+            contextSource: [],
+            isEndOfFile: false,
+          };
           chunks.push(current);
         } else if (bodyLine.trim() === END_OF_FILE) {
           if (!current) {
@@ -169,6 +179,9 @@ export function parsePatch(patch: string): PatchOperation[] {
 
       if (chunks.length === 0 && !moveTo) {
         throw new ApplyPatchError(`Line ${lineNumber}: "${UPDATE_FILE.trim()}" for ${path} has no hunks`);
+      }
+      if (chunks.some(chunk => chunk.oldLines.length === 0 && chunk.newLines.length === 0)) {
+        throw new ApplyPatchError(`Line ${lineNumber}: "${UPDATE_FILE.trim()}" for ${path} has an empty hunk`);
       }
       operations.push({ type: 'update', path, moveTo, chunks });
       continue;

@@ -131,6 +131,20 @@ describe('workspace_apply_patch', () => {
       expect(await read('new.ts')).toBe('keep me\n');
     });
 
+    it('moves a binary file byte for byte', async () => {
+      const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe, 0x00, 0xc3, 0x28, 0x0d, 0x0a]);
+      await fs.writeFile(path.join(tempDir, 'logo.png'), bytes);
+      const { apply } = await setup();
+      const result = await apply(`*** Begin Patch
+*** Update File: logo.png
+*** Move to: assets/logo.png
+*** End Patch`);
+
+      expect(result).toContain('R logo.png -> assets/logo.png');
+      expect(await exists('logo.png')).toBe(false);
+      expect(Buffer.compare(await fs.readFile(path.join(tempDir, 'assets/logo.png')), bytes)).toBe(0);
+    });
+
     it('deletes a file', async () => {
       await fs.writeFile(path.join(tempDir, 'gone.ts'), 'bye\n');
       const { apply } = await setup();
@@ -278,6 +292,21 @@ describe('workspace_apply_patch', () => {
       expect(await exists('b.ts')).toBe(false);
     });
 
+    it('rejects two spellings of the same path', async () => {
+      await fs.writeFile(path.join(tempDir, 'a.ts'), 'a\n');
+      const { apply } = await setup();
+      const result = await apply(`*** Begin Patch
+*** Update File: a.ts
+@@
+-a
++b
+*** Delete File: ./a.ts
+*** End Patch`);
+
+      expect(result).toMatch(/Patch not applied.*a\.ts more than once/);
+      expect(await read('a.ts')).toBe('a\n');
+    });
+
     it('rejects a malformed patch without touching files', async () => {
       await fs.writeFile(path.join(tempDir, 'a.ts'), 'a\n');
       const { apply } = await setup();
@@ -325,6 +354,14 @@ describe('workspace_apply_patch', () => {
     });
   });
 
+  // LocalFilesystem skips its realpath check when the target does not exist yet,
+  // so a new file under a symlinked parent directory lands outside the root.
+  // This already affects write_file on main; the fix belongs in LocalFilesystem.
+  describe('symlinked parent directory (#27916)', () => {
+    it.todo('rejects "*** Add File: link/x.txt" when link points outside the workspace');
+    it.todo('rejects "*** Move to: link/x.txt" when link points outside the workspace');
+  });
+
   describe('read-before-write', () => {
     it('requires every updated or deleted file to have been read first', async () => {
       await fs.writeFile(path.join(tempDir, 'read.ts'), 'r\n');
@@ -354,6 +391,27 @@ describe('workspace_apply_patch', () => {
       expect(await read('read.ts')).toBe('R\n');
       expect(await exists('unread.ts')).toBe(false);
       expect(await read('brand-new.ts')).toBe('n\n');
+    });
+
+    it('keeps read records when a patch fails validation', async () => {
+      await fs.writeFile(path.join(tempDir, 'a.ts'), 'a\n');
+      const { tools, workspace } = await setup({
+        [APPLY_PATCH]: { enabled: true, requireReadBeforeWrite: true },
+      });
+      await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'a.ts' }, { workspace });
+
+      const mismatch = await tools[APPLY_PATCH].execute(
+        { patch: '*** Begin Patch\n*** Update File: a.ts\n@@\n-nope\n+b\n*** End Patch' },
+        { workspace },
+      );
+      expect(mismatch).toContain('Patch not applied');
+
+      const retry = await tools[APPLY_PATCH].execute(
+        { patch: '*** Begin Patch\n*** Update File: a.ts\n@@\n-a\n+b\n*** End Patch' },
+        { workspace },
+      );
+      expect(retry).toContain('M a.ts');
+      expect(await read('a.ts')).toBe('b\n');
     });
 
     it('applies nothing when a file changed after it was read', async () => {

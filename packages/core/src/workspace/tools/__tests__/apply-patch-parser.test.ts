@@ -51,10 +51,23 @@ describe('parsePatch', () => {
     ['missing end marker', '*** Begin Patch\n*** Delete File: x', /last line/],
     ['no operations', '*** Begin Patch\n*** End Patch', /no file operations/],
     ['add line without +', wrap('*** Add File: a\nplain'), /must start with "\+"/],
-    ['update without hunks', wrap('*** Update File: a'), /a/],
-    ['unknown header', wrap('*** Frobnicate File: a'), /./],
+    ['update without hunks', wrap('*** Update File: a'), /has no hunks/],
+    ['unknown header', wrap('*** Frobnicate File: a'), /expected "\*\*\* Add File:"/],
     ['empty path', wrap('*** Delete File: '), /missing file path/],
-    ['same path twice', wrap('*** Delete File: a\n*** Add File: a\n+x'), /more than once|once/],
+    ['same path twice', wrap('*** Delete File: a\n*** Add File: a\n+x'), /more than once/],
+    [
+      'same path spelled differently',
+      wrap('*** Delete File: src/a\n*** Add File: ./src//a\n+x'),
+      /src\/a more than once/,
+    ],
+    ['same path via ./', wrap('*** Update File: a.txt\n@@\n-a\n+b\n*** Delete File: ./a.txt'), /a\.txt more than once/],
+    [
+      'same path via dir/..',
+      wrap('*** Update File: a.txt\n@@\n-a\n+b\n*** Delete File: dir/../a.txt'),
+      /a\.txt more than once/,
+    ],
+    ['empty hunk', wrap('*** Update File: a.txt\n@@'), /empty hunk/],
+    ['empty hunk after a real one', wrap('*** Update File: a.txt\n@@\n-a\n+b\n@@ ctx'), /empty hunk/],
     ['move onto another touched path', wrap('*** Delete File: b\n*** Update File: a\n*** Move to: b'), /once/],
   ])('rejects %s', (_name, patch, message) => {
     expect(() => parsePatch(patch)).toThrow(ApplyPatchError);

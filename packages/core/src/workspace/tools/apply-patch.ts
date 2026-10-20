@@ -21,8 +21,15 @@ export function getApplyPatchWritePaths(input: { patch?: unknown }): string[] {
   }
 }
 
+const PATCH_NOT_APPLIED = 'Patch not applied, no files were changed:';
+
+/** False when the tool returned a validation failure and touched no file. */
+export function applyPatchDidWrite(result: unknown): boolean {
+  return !(typeof result === 'string' && result.startsWith(PATCH_NOT_APPLIED));
+}
+
 type PlannedChange =
-  | { kind: 'write'; path: string; content: string; original?: string }
+  | { kind: 'write'; path: string; content: string | Buffer; original?: string }
   | { kind: 'delete'; path: string; original: string | Buffer };
 
 async function statOrUndefined(filesystem: WorkspaceFilesystem, path: string): Promise<FileStat | undefined> {
@@ -121,6 +128,15 @@ Rules:
             summary.push(`D ${op.path}`);
           } else {
             await requireExistingFile(filesystem, op.path, expectedMtimes);
+            if (op.chunks.length === 0 && op.moveTo) {
+              // Pure rename: copy the raw bytes so binary files survive the move.
+              await requireMissing(filesystem, op.moveTo);
+              const raw = await filesystem.readFile(op.path);
+              changes.push({ kind: 'write', path: op.moveTo, content: raw });
+              changes.push({ kind: 'delete', path: op.path, original: raw });
+              summary.push(`R ${op.path} -> ${op.moveTo}`);
+              continue;
+            }
             const original = await filesystem.readFile(op.path, { encoding: 'utf-8' });
             if (typeof original !== 'string') {
               throw new ApplyPatchError(`${op.path} is a binary file and cannot be patched`);
@@ -140,7 +156,7 @@ Rules:
       } catch (error) {
         if (error instanceof ApplyPatchError) {
           span.end({ success: false });
-          return `Patch not applied, no files were changed: ${error.message}`;
+          return `${PATCH_NOT_APPLIED} ${error.message}`;
         }
         throw error;
       }
