@@ -115,6 +115,46 @@ describe('observeSessionRunReports', () => {
     ]);
   });
 
+  it('reports a usage-limit rejection from the provider body instead of Bad Request', () => {
+    const session = fakeSession();
+    const report = vi.fn(async () => {});
+    observeSessionRunReports(session, report);
+    const error = new Error('Bad Request');
+    Object.assign(error, {
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: { message: 'You have exceeded your current quota, please check your plan.' },
+      }),
+    });
+
+    session.emit({ type: 'error', error } as AgentControllerEvent);
+    session.emit(end('error'));
+
+    expect(report).toHaveBeenCalledWith(
+      {
+        status: 'failed',
+        reason: 'the run ended in error: You have exceeded your current quota, please check your plan.',
+      },
+      expect.any(Date),
+    );
+  });
+
+  it('leaves a plain Bad Request unchanged when the provider body has no usage-limit reason', () => {
+    const session = fakeSession();
+    const report = vi.fn(async () => {});
+    observeSessionRunReports(session, report);
+    const error = new Error('Bad Request');
+    Object.assign(error, { statusCode: 400, responseBody: JSON.stringify({ error: { message: 'Invalid model id' } }) });
+
+    session.emit({ type: 'error', error } as AgentControllerEvent);
+    session.emit(end('error'));
+
+    expect(report).toHaveBeenCalledWith(
+      { status: 'failed', reason: 'the run ended in error: Bad Request' },
+      expect.any(Date),
+    );
+  });
+
   it('keeps listening when a report fails', async () => {
     const session = fakeSession();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
