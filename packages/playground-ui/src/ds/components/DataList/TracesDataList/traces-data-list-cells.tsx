@@ -1,4 +1,4 @@
-import { CornerDownRightIcon, DatabaseIcon, ListTreeIcon, RouteIcon } from 'lucide-react';
+import { CornerDownRightIcon, DatabaseIcon, ListTreeIcon, RouteIcon, SplitIcon } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 import { DataListCell, DataListTextCell } from '../data-list-cells';
 import { Badge } from '@/ds/components/Badge';
@@ -98,6 +98,7 @@ const ENTITY_TYPE_DISPLAY: Record<string, EntityTypeDisplay> = {
   workflow_step: { label: 'Step', Icon: WorkflowIcon },
   tool: { label: 'Tool', Icon: ToolsIcon },
   scorer: { label: 'Scorer', Icon: ScorersIcon },
+  classifier: { label: 'Classifier', Icon: SplitIcon },
   memory: { label: 'Memory', Icon: MemoryIcon },
   mcp_server: { label: 'MCP Server', Icon: McpServerIcon },
   input_processor: { label: 'Processor', Icon: ProcessorIcon },

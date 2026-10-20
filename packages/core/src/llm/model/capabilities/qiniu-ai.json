@@ -137,12 +137,12 @@
     "z-ai/glm-5"
   ],
   "reasoning": {
-    "doubao-seed-2.0-pro": [
+    "qwen3-235b-a22b-thinking-2507": [
       {
         "type": "toggle"
       }
     ],
-    "doubao-seed-2.0-code": [
+    "qwen3-30b-a3b-thinking-2507": [
       {
         "type": "toggle"
       }
@@ -157,42 +157,7 @@
         "type": "toggle"
       }
     ],
-    "doubao-seed-2.0-lite": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-2.0-mini": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-32b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-30b-a3b-thinking-2507": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "MiniMax-M1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-4.5": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen3-30b-a3b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-4.5-air": [
       {
         "type": "toggle"
       }
@@ -202,7 +167,27 @@
         "type": "toggle"
       }
     ],
+    "glm-4.5-air": [
+      {
+        "type": "toggle"
+      }
+    ],
     "qwen3-next-80b-a3b-thinking": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "MiniMax-M1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-32b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-mini": [
       {
         "type": "toggle"
       }
@@ -212,7 +197,22 @@
         "type": "toggle"
       }
     ],
-    "qwen3-235b-a22b-thinking-2507": [
+    "doubao-seed-2.0-code": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-lite": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-4.5": [
       {
         "type": "toggle"
       }
@@ -232,12 +232,12 @@
         "type": "toggle"
       }
     ],
-    "minimax/minimax-m2.5-highspeed": [
+    "minimax/minimax-m2.1": [
       {
         "type": "toggle"
       }
     ],
-    "minimax/minimax-m2.1": [
+    "minimax/minimax-m2.5-highspeed": [
       {
         "type": "toggle"
       }

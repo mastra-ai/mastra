@@ -123,7 +123,7 @@ function addChange(nodes: ChangeTreeNode[], change: WorkspaceChange, prefix: str
 function compactChangeTree(node: ChangeTreeNode): ChangeTreeNode {
   let compacted = { ...node, children: sortChangeTree(node.children) };
   while (!compacted.change && compacted.children.length === 1 && !compacted.children[0]?.change) {
-    const child = compacted.children[0]!;
+    const child = compacted.children[0];
     compacted = {
       path: child.path,
       name: `${compacted.name}/${child.name}`,

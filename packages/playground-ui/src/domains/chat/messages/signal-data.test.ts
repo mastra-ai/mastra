@@ -12,15 +12,14 @@ import {
   toReactiveSignalData,
 } from './signal-data';
 
-const buildSignalMessage = (overrides: Partial<MastraDBMessage> = {}): MastraDBMessage =>
-  ({
-    id: 'msg-1',
-    role: 'signal',
-    type: 'top-level-type',
-    createdAt: new Date('2026-01-01'),
-    content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
-    ...overrides,
-  }) as MastraDBMessage;
+const buildSignalMessage = (overrides: Partial<MastraDBMessage> = {}): MastraDBMessage => ({
+  id: 'msg-1',
+  role: 'signal',
+  type: 'top-level-type',
+  createdAt: new Date('2026-01-01'),
+  content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
+  ...overrides,
+});
 
 describe('isRecord', () => {
   it('accepts plain objects only', () => {
@@ -85,7 +84,7 @@ describe('getSignalType', () => {
   it('prefers content.metadata.signal.type', () => {
     const message = buildSignalMessage({
       content: { format: 2, parts: [], metadata: { signal: { type: 'reactive' } } },
-    } as Partial<MastraDBMessage>);
+    });
     expect(getSignalType(message)).toBe('reactive');
   });
 
@@ -93,7 +92,7 @@ describe('getSignalType', () => {
     expect(getSignalType(buildSignalMessage())).toBe('top-level-type');
     const nonString = buildSignalMessage({
       content: { format: 2, parts: [], metadata: { signal: { type: 1 } } },
-    } as Partial<MastraDBMessage>);
+    });
     expect(getSignalType(nonString)).toBe('top-level-type');
   });
 });
@@ -159,7 +158,7 @@ describe('toReactiveSignalData', () => {
     it('omits attributes and metadata when they are not records', () => {
       const message = buildSignalMessage({
         content: { format: 2, parts: [], metadata: { signal: { attributes: 'x', metadata: [] } } },
-      } as Partial<MastraDBMessage>);
+      });
 
       const data = toReactiveSignalData(message);
       expect('attributes' in data).toBe(false);

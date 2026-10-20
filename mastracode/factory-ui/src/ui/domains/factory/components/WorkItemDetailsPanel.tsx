@@ -8,6 +8,7 @@ import { useParams, useSearchParams } from 'react-router';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { BoardCardStatus } from '../boardCardState';
 import { externalLinkLabel } from '../boardItems';
+import type { BoardLayout } from '../boardLayout';
 import type { CardAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
 import type { AuditEventPage } from '../services/audit';
@@ -30,6 +31,7 @@ export function WorkItemDetailsPanel({
   status,
   actions,
   menu,
+  layout,
 }: {
   item: WorkItem;
   columnStage: BoardStageId;
@@ -40,6 +42,7 @@ export function WorkItemDetailsPanel({
   status: BoardCardStatus;
   actions: CardAction[];
   menu: ReactNode;
+  layout: BoardLayout;
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const titleId = useId();
@@ -56,6 +59,7 @@ export function WorkItemDetailsPanel({
   return (
     <CardDetailsPanel
       morph={morph}
+      layout={layout}
       labelledBy={titleId}
       header={
         <WorkItemCardRows

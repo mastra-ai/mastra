@@ -38,6 +38,7 @@
     "qwen3.6-plus",
     "qwen3.7-max",
     "qwen3.7-plus",
+    "qwen3.8-flash",
     "qwen3.8-max",
     "qwen3.8-max-preview",
     "wan2.7-image",
@@ -67,13 +68,13 @@
     "qwen3.8-max-preview"
   ],
   "reasoning": {
-    "deepseek-v4.1-flash": [
+    "deepseek-v4-pro": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["high", "max"]
       }
     ],
     "deepseek-v4-flash-0731": [
@@ -85,6 +86,11 @@
         "values": ["high", "max"]
       }
     ],
+    "kimi-k2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
     "qwen3.6-plus": [
       {
         "type": "toggle"
@@ -94,23 +100,16 @@
         "max": 131072
       }
     ],
-    "kimi-k2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "kimi-k2.7-code": [
+    "qwen3.6-flash": [
       {
         "type": "toggle"
       },
       {
-        "type": "budget_tokens"
+        "type": "budget_tokens",
+        "max": 131072
       }
     ],
-    "qwen3.8-max": [
-      {
-        "type": "toggle"
-      },
+    "qwen3.8-max-preview": [
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
@@ -119,41 +118,6 @@
         "type": "budget_tokens",
         "min": 0,
         "max": 262144
-      }
-    ],
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "deepseek-v3.2": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4-pro": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "qwen3.7-max": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 262144
-      }
-    ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "qwen3.8-flash": [
@@ -169,16 +133,6 @@
         "max": 262144
       }
     ],
-    "glm-5.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen3.7-plus": [
       {
         "type": "toggle"
@@ -186,15 +140,6 @@
       {
         "type": "budget_tokens",
         "max": 262144
-      }
-    ],
-    "qwen3.6-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 131072
       }
     ],
     "deepseek-v4-pro-0813": [
@@ -206,6 +151,17 @@
         "values": ["high", "max"]
       }
     ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.1": [
+      {
+        "type": "toggle"
+      }
+    ],
     "deepseek-v4-flash": [
       {
         "type": "toggle"
@@ -215,15 +171,22 @@
         "values": ["high", "max"]
       }
     ],
-    "qwen3.8-max-preview": [
+    "glm-5": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "type": "toggle"
+      }
+    ],
+    "kimi-k2.7-code": [
+      {
+        "type": "toggle"
       },
       {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 262144
+        "type": "budget_tokens"
+      }
+    ],
+    "deepseek-v3.2": [
+      {
+        "type": "toggle"
       }
     ],
     "deepseek-v4.1-flash-1017": [
@@ -235,9 +198,47 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "qwen3.7-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "max": 262144
+      }
+    ],
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "kimi-k2.5": [
       {
         "type": "toggle"
+      }
+    ],
+    "qwen3.8-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 262144
       }
     ]
   }

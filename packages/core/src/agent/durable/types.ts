@@ -44,6 +44,7 @@ import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 import type { CreatedAgentSignal } from '../signals';
+import type { TripwireData } from '../trip-wire';
 import type { GoalConfig, StructuredOutputOptions } from '../types';
 import type { ExecutionFence } from './execution-fence';
 
@@ -77,15 +78,11 @@ export interface SerializableModelConfig {
   specificationVersion?: string;
   /** Original model string/config for resolution at runtime (e.g., 'openai/gpt-4o') */
   originalConfig?: string | Record<string, unknown>;
-  /** Additional model settings */
-  settings?: {
-    temperature?: number;
-    maxTokens?: number;
-    topP?: number;
-    frequencyPenalty?: number;
-    presencePenalty?: number;
-    [key: string]: unknown;
-  };
+  /**
+   * Per-entry call settings from a model list entry's `modelSettings`, merged
+   * over call-time `modelSettings` on each attempt. Headers are excluded.
+   */
+  settings?: SerializableModelSettings;
   /** Provider-specific options for the model call */
   providerOptions?: SharedProviderOptions;
 }
@@ -368,6 +365,8 @@ export interface DurableAgenticWorkflowInput {
    * Only plain JSON-safe entries should appear here.
    */
   requestContextEntries?: Record<string, unknown>;
+  /** Initial processor rejection, with metadata snapshotted for cross-process execution. */
+  inputTripwire?: TripwireData;
 }
 
 /**
@@ -735,6 +734,8 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /** Effective public ID of the owning agent; absent on legacy or manually seeded entries. */
+  agentId?: string;
   /**
    * Marks a minimal cross-process placeholder entry (e.g. seeded by
    * @mastra/inngest resume() to carry an abort controller). Placeholder
@@ -918,7 +919,15 @@ export interface RunRegistryEntry {
     messageListState: SerializedMessageListState;
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
-  }) => Promise<void>;
+  }) => Promise<string | undefined>;
+  /**
+   * True for a stream() run whose merged `generateTitle` config sets `emitEvent`. The finish
+   * step then waits for the title and streams it as a transient `data-thread-title` chunk
+   * before FINISH, as the in-process loop does. Cross-process engines lose it and skip the chunk.
+   */
+  streamThreadTitle?: boolean;
+  /** `memory.onTitleGenerated` from the call options. Non-serializable, like generateThreadTitle. */
+  onTitleGenerated?: (title: string) => void | Promise<void>;
   /**
    * Signal messages already present in the `messageList` at run start (from
    * persisted history). These are echoed as `data-signal` stream data parts

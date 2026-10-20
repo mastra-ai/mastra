@@ -1,6 +1,6 @@
 import { getZodTypeName, getZodDef } from '@mastra/core/utils';
 import type { ServerRoute } from '@mastra/server/server-adapter';
-import { z, type ZodSchema } from 'zod';
+import type { z, ZodSchema } from 'zod';
 
 /**
  * Normalizes a route path to ensure consistent formatting.
@@ -41,6 +41,10 @@ export function getRouteSpecificSchemaDefaults(route: ServerRoute): {
 } {
   if (route.path === '/observability/traces/query/values') {
     return { body: { predicateScope: 'trace', path: 'entityName' } };
+  }
+
+  if (route.path === '/agent-controller/:controllerId/sessions' && route.method === 'POST') {
+    return { body: { resourceId: 'test-resource' } };
   }
 
   if (route.path === '/datasets/:datasetId/compare') {
@@ -104,6 +108,7 @@ export function generateContextualValue(fieldName?: string): string {
   if (field.includes('message')) return 'test-message';
   if (field === 'responseid') return 'test-response';
   if (field.includes('transport')) return 'test-transport';
+  if (field === 'reorderedmodelids') return 'id1';
   if (field.includes('model')) return 'openai/gpt-4o';
   if (field.includes('action')) return 'merge-template';
   if (field.includes('entity')) return 'test-entity';
@@ -406,6 +411,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':controllerId')) params.controllerId = 'test-controller';
   if (route.path.includes(':responseId')) params.responseId = 'test-response';
   if (route.path.includes(':resourceId')) params.resourceId = 'test-resource';
+  if (route.path.includes(':sessionId')) params.sessionId = 'test-session';
   if (route.path.includes(':modelConfigId')) params.modelConfigId = 'id1';
   // For stored scorer version routes, use the stored scorer ID to match test context
   if (route.path.includes(':scorerId') && route.path.includes('/stored/scorers/')) {

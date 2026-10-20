@@ -11,17 +11,28 @@ const script = (source: string) => `${node} -e ${JSON.stringify(source)}`;
 
 const IGNORE_TERM = `process.on('SIGTERM', () => console.log('TERM_IGNORED'));`;
 const STAY_ALIVE = `setInterval(() => {}, 1000);`;
+// Tests that need the child to install its SIGTERM handler or print before the deadline get a
+// timeout that outlasts node startup on a loaded machine; 300ms does not.
+const STARTUP_SAFE_TIMEOUT = 2_000;
 
 // `timeout` is GNU coreutils; stock macOS doesn't ship it.
 const hasTimeout = spawnSync('timeout', ['--version'], { stdio: 'ignore' }).status === 0;
 
+// A killed orphan stays a zombie until its new parent reaps it, and containers
+// whose PID 1 doesn't reap (CI runners) keep it forever. Zombies still answer
+// `kill(pid, 0)`, so they have to be ruled out separately.
+function isZombie(pid: number): boolean {
+  const ps = spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' });
+  return (ps.stdout ?? '').trim().startsWith('Z');
+}
+
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
-    return true;
   } catch {
     return false;
   }
+  return !isZombie(pid);
 }
 
 async function waitForExit(pid: number, ms = 2_000): Promise<boolean> {
@@ -73,21 +84,21 @@ describe.skipIf(process.platform === 'win32')('LocalProcessManager timeout termi
   it('kills a process that ignores SIGTERM', async () => {
     const handle = await sandbox.processes.spawn(
       `exec ${script(`${IGNORE_TERM} console.log('READY'); ${STAY_ALIVE}`)}`,
-      { timeout: 300 },
+      { timeout: STARTUP_SAFE_TIMEOUT },
     );
 
     const result = await handle.wait();
 
     expect(result.stdout).toContain('TERM_IGNORED');
     expect(result).toMatchObject({ exitCode: 124, timedOut: true, killed: true });
-    expect(result.executionTimeMs).toBeLessThan(4_000);
+    expect(result.executionTimeMs).toBeLessThan(STARTUP_SAFE_TIMEOUT + 4_000);
     expect(await waitForExit(Number(handle.pid))).toBe(true);
   });
 
   it('kills a descendant that ignores SIGTERM and holds stdout after the shell exits', async () => {
     // The shell exits on SIGTERM; the background child keeps the stdout pipe open.
     const child = script(`${IGNORE_TERM} console.log('CHILD ' + process.pid); ${STAY_ALIVE}`);
-    const handle = await sandbox.processes.spawn(`${child} & wait`, { timeout: 300 });
+    const handle = await sandbox.processes.spawn(`${child} & wait`, { timeout: STARTUP_SAFE_TIMEOUT });
 
     const result = await handle.wait();
 
@@ -95,7 +106,7 @@ describe.skipIf(process.platform === 'win32')('LocalProcessManager timeout termi
     expect(childPid).toBeGreaterThan(0);
     strayPids.push(childPid);
     expect(result).toMatchObject({ exitCode: 124, timedOut: true });
-    expect(result.executionTimeMs).toBeLessThan(4_000);
+    expect(result.executionTimeMs).toBeLessThan(STARTUP_SAFE_TIMEOUT + 4_000);
     expect(await waitForExit(childPid)).toBe(true);
   });
 
@@ -109,7 +120,7 @@ describe.skipIf(process.platform === 'win32')('LocalProcessManager timeout termi
       `console.log('ESCAPED ' + child.pid);`,
       STAY_ALIVE,
     ].join(' ');
-    const handle = await sandbox.processes.spawn(`exec ${script(parent)}`, { timeout: 300 });
+    const handle = await sandbox.processes.spawn(`exec ${script(parent)}`, { timeout: STARTUP_SAFE_TIMEOUT });
 
     const result = await handle.wait();
 
@@ -117,7 +128,7 @@ describe.skipIf(process.platform === 'win32')('LocalProcessManager timeout termi
     expect(escapedPid).toBeGreaterThan(0);
     strayPids.push(escapedPid);
     expect(result).toMatchObject({ exitCode: 124, timedOut: true });
-    expect(result.executionTimeMs).toBeLessThan(6_000);
+    expect(result.executionTimeMs).toBeLessThan(STARTUP_SAFE_TIMEOUT + 6_000);
   });
 
   it('does not time out commands when the timeout is 0', async () => {

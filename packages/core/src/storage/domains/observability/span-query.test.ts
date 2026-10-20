@@ -335,6 +335,45 @@ describe('span cursor ownership', () => {
     }
   });
 
+  it('round trips numeric and empty time to first chunk cursors and rejects other kinds', () => {
+    const request = { timeRange, where, orderBy: [{ field: 'timeToFirstChunkMs', direction: 'asc' }] } as const;
+    const plan = planSpanQuery(request, options);
+    for (const sortValue of [250, 0, null]) {
+      const cursor = encodeSpanQueryCursor(plan, { ...values, sortValue });
+      expect(planSpanQuery({ ...request, page: { after: cursor } }, options).cursor).toEqual({ ...values, sortValue });
+    }
+    const timestampCursor = encodeSpanQueryCursor(plan, values);
+    expect(() => planSpanQuery({ ...request, page: { after: timestampCursor } }, options)).toThrowError(
+      expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
+    );
+    const numericCursor = encodeSpanQueryCursor(initial, { ...values, sortValue: 250 });
+    expect(() => planSpanQuery({ timeRange, where, page: { after: numericCursor } }, options)).toThrowError(
+      expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
+    );
+    for (const orderBy of [
+      [{ field: 'timeToFirstChunkMs', direction: 'desc' }],
+      [{ field: 'startedAt', direction: 'asc' }],
+    ] as const) {
+      const cursor = encodeSpanQueryCursor(plan, { ...values, sortValue: 250 });
+      expect(() =>
+        planSpanQuery({ timeRange, where, orderBy: [...orderBy], page: { after: cursor } }, options),
+      ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
+    }
+  });
+
+  it('encodes an empty time to first chunk as a null cursor value', () => {
+    const plan = planSpanQuery({
+      timeRange,
+      orderBy: [{ field: 'timeToFirstChunkMs', direction: 'desc' }],
+      page: { limit: 1 },
+    });
+    const { inputPreview: _input, outputPreview: _output, errorPreview: _error, ...selected } = row;
+    const rows = ['span-a', 'span-b'].map(spanId => ({ ...selected, spanId, timeToFirstChunkMs: null }));
+    const response = buildSpanQueryResponse(plan, rows, []);
+    const cursor = JSON.parse(Buffer.from(response.page.next!, 'base64url').toString());
+    expect(cursor.values.sortValue).toBeNull();
+  });
+
   it('supports local OSS spans with absent tenant fields without conflating null and empty IDs', () => {
     const plan = planSpanQuery({ timeRange });
     const cursor = encodeSpanQueryCursor(plan, { ...values, organizationId: null, resourceId: null });

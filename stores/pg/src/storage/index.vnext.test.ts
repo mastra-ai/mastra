@@ -8,6 +8,8 @@ import {
   TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES,
   TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
   TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
+  TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_YEAR_FIXTURE_DATA,
   traceAggregateResponseMismatch,
   writeTraceAggregateFixture,
   writeTraceQueryFixture,
@@ -27,14 +29,11 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { PoolAdapter } from './client';
 import { ObservabilityPG } from './domains/observability';
 import { ObservabilityStoragePostgresVNext } from './domains/observability/v-next';
-import { qualifiedTable, TABLE_SPAN_EVENTS } from './domains/observability/v-next/ddl';
-import { SPAN_COLLAPSE_ORDER } from './domains/observability/v-next/sql';
 import { TEST_CONFIG } from './test-utils';
 import { PostgresStore, PostgresStoreVNext } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
-const integrationEnabled = process.env.PG_VNEXT_INTEGRATION_TESTS === '1';
 const TIMESCALE_URL = process.env.PG_VNEXT_TIMESCALE_URL ?? 'postgres://postgres:postgres@localhost:5435/mastra';
 
 /**
@@ -137,12 +136,17 @@ describe('PostgresStoreVNext', () => {
           'trace-aggregate',
           'span-query',
           'span-query-context-fields',
+          'thread-query-rows',
           'trace-query-root-duration',
           'trace-query-discovery',
           'thread-query',
           'trace-query-tenant-scope',
           'feedback',
           'trace-query-context-ids',
+          'trace-query-time-to-first-chunk',
+          'trace-query-time-to-first-chunk-sort',
+          'trace-query-root-span-fields',
+          'trace-query-root-entity-id',
         ]);
 
         coreFeatures.delete('observability-delta-polling');
@@ -159,12 +163,17 @@ describe('PostgresStoreVNext', () => {
           'trace-aggregate',
           'span-query',
           'span-query-context-fields',
+          'thread-query-rows',
           'trace-query-root-duration',
           'trace-query-discovery',
           'thread-query',
           'trace-query-tenant-scope',
           'feedback',
           'trace-query-context-ids',
+          'trace-query-time-to-first-chunk',
+          'trace-query-time-to-first-chunk-sort',
+          'trace-query-root-span-fields',
+          'trace-query-root-entity-id',
         ]);
       } finally {
         coreFeatures.clear();
@@ -230,7 +239,10 @@ describe('PostgresStoreVNext', () => {
   });
 });
 
-describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability suite', () => {
+// Runs on every `pnpm test`: the `pretest` script starts the Timescale service from
+// docker-compose.vnext.yaml. Shared fixtures use fixed historical dates, which native
+// partitioning (today − 1 … today + 14) cannot store.
+describe('PostgresStoreVNext / shared observability suite', () => {
   let sharedSchema: string | undefined;
   let sharedClient: PoolAdapter | undefined;
   let sharedPool: Pool | undefined;
@@ -284,18 +296,6 @@ describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability 
     },
     cleanup: async storage => {
       await storage.dangerouslyClearAll();
-    },
-    readTimeToFirstChunkMs: async (_storage, { traceId, spanId }) => {
-      if (!sharedClient || !sharedSchema) throw new Error('shared observability storage was not initialized');
-      const row = await sharedClient.oneOrNone<{ timeToFirstChunkMs: number | null }>(
-        `SELECT "timeToFirstChunkMs" FROM ${qualifiedTable(sharedSchema, TABLE_SPAN_EVENTS)}
-         WHERE "traceId" = $1 AND "spanId" = $2
-         ORDER BY ${SPAN_COLLAPSE_ORDER}
-         LIMIT 1`,
-        [traceId, spanId],
-      );
-      if (!row) throw new Error(`span ${spanId} was not stored`);
-      return row.timeToFirstChunkMs;
     },
   });
 
@@ -423,6 +423,11 @@ describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability 
       ['the whole window', undefined, undefined],
       ['a where filter', { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } }, undefined],
       ['a metadata filter', { op: 'eq', left: { path: 'metadata.tenant' }, right: { literal: 'acme' } }, undefined],
+      [
+        'a root entityId filter',
+        { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } },
+        undefined,
+      ],
       ['a tenant scope', undefined, { organizationId: 'org-b' }],
     ])('counts the same traces as queryTraces for %s', async (_name, where, scope) => {
       const aggregate = await sharedStorage!.aggregateTraces(
@@ -439,6 +444,26 @@ describe.skipIf(!integrationEnabled)('PostgresStoreVNext / shared observability 
       expect(total).toBeGreaterThan(0);
       expect(aggregate.rows).toEqual([{ measures: { count: total } }]);
     });
+  });
+
+  describe('aggregateTraces over a 365-day window', () => {
+    beforeAll(async () => {
+      if (!sharedStorage) throw new Error('shared observability storage was not initialized');
+      await sharedStorage.dangerouslyClearAll();
+      await writeTraceQueryFixture(sharedStorage, TRACE_AGGREGATE_YEAR_FIXTURE_DATA, 'event-sourced');
+    });
+    afterAll(async () => {
+      await sharedStorage?.dangerouslyClearAll();
+    });
+
+    it.each(TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+      'matches the reference evaluator: %s',
+      async (_name, testCase) => {
+        const plan = planTraceAggregate(parseTraceAggregateRequest(testCase.request), { scope: testCase.scope });
+        const response = await sharedStorage!.aggregateTraces(plan);
+        expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+      },
+    );
   });
 
   describe('aggregateTraces token and cost measures', () => {

@@ -9,6 +9,7 @@
     "whisper-large-v3"
   ],
   "temperature": [
+    "deepseek-ocr-2",
     "glm-5.3",
     "glm-5.3-flash",
     "glm-flash-latest",
@@ -17,7 +18,8 @@
     "kimi-k2.6",
     "kimi-latest",
     "qwen3-embedding-4b",
-    "voxtral-mini-3b"
+    "voxtral-mini-3b",
+    "whisper-large-v3"
   ],
   "structuredOutput": [
     "glm-5.3",
@@ -29,7 +31,7 @@
     "kimi-latest"
   ],
   "reasoning": {
-    "glm-flash-latest": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -40,7 +42,7 @@
         "type": "toggle"
       }
     ],
-    "glm-5.3-flash": [
+    "glm-flash-latest": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -52,10 +54,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-latest": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "kimi-latest": [
@@ -63,10 +65,10 @@
         "type": "toggle"
       }
     ],
-    "gpt-oss-120b": [
+    "glm-latest": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ]
   }

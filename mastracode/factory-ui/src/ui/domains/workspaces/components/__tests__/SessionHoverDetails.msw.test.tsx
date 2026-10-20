@@ -26,7 +26,7 @@ function stubSessionDetails(updatedAt: string, { includeSessionTitles = true, sl
   if (!includeSessionTitles) {
     fixtures.sessionsResponse.sessions = fixtures.sessionsResponse.sessions.map(({ title: _, ...session }) => session);
   }
-  if (slackWorkSession) fixtures.sessionsResponse.sessions[0]!.branch = 'slack/1785354600-536029';
+  if (slackWorkSession) fixtures.sessionsResponse.sessions[0].branch = 'slack/1785354600-536029';
 
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json(fixtures.projectsResponse)),

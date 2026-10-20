@@ -1,12 +1,12 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { VirtualItem, Virtualizer } from '@tanstack/react-virtual';
 import type { ReactNode } from 'react';
 import { Fragment, useRef, useState } from 'react';
 
-import { cn } from '@mastra/playground-ui/utils/cn';
-
 import type { BoardLayout } from '../boardLayout';
 import { BoardRowDetailsContext } from '../context/BoardRowDetailsContext';
+import { useBoardOpenCard } from '../context/useBoardOpenCard';
 import { useBoardScrollRef } from '../context/useBoardScrollRef';
 import { boardVirtualScroll } from '../services/boardVirtualScroll';
 import { SPANS_LIST_GRID } from './BoardList';
@@ -38,7 +38,7 @@ export function VirtualBoardWindow({
   const contentRef = useRef<HTMLDivElement>(null);
   const [focusedKey, setFocusedKey] = useState<string>();
   const [draggingKey, setDraggingKey] = useState<string>();
-  const [detailsOpenKeys, setDetailsOpenKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const { openKey, setCardOpen } = useBoardOpenCard();
   const [scrollOptions] = useState(() => boardVirtualScroll(scrollRef, contentRef));
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     ...scrollOptions,
@@ -50,16 +50,9 @@ export function VirtualBoardWindow({
     useFlushSync: false,
   });
 
-  const retainedIndexes = [focusedKey, draggingKey, pinnedKey, ...detailsOpenKeys].flatMap(key =>
+  const retainedIndexes = [focusedKey, draggingKey, pinnedKey, openKey].flatMap(key =>
     key === undefined ? [] : (itemIndexes.get(key) ?? []),
   );
-  const setRowDetailsOpen = (key: string, open: boolean) =>
-    setDetailsOpenKeys(keys => {
-      const next = new Set(keys);
-      if (open) next.add(key);
-      else next.delete(key);
-      return next;
-    });
   const rows: BoardRow[] = virtualized
     ? windowedRows(virtualizer, retainedIndexes)
     : Array.from({ length: count }, (_, index) => ({ index, start: 0, end: 0 }));
@@ -86,7 +79,7 @@ export function VirtualBoardWindow({
               onDragStart={() => setDraggingKey(key)}
               onDragEnd={() => setDraggingKey(undefined)}
             >
-              <BoardRowDetailsContext value={open => setRowDetailsOpen(key, open)}>
+              <BoardRowDetailsContext value={{ open: openKey === key, setOpen: open => setCardOpen(key, open) }}>
                 {renderItem(row.index)}
               </BoardRowDetailsContext>
             </div>

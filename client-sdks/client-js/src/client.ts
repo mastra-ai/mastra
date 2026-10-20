@@ -340,7 +340,7 @@ export class MastraClient extends BaseResource {
 
   /**
    * Scopes to an agent controller hosted on the connected Mastra instance. Use
-   * `getAgentController(id).session(resourceId)` to create/resume a session,
+   * `getAgentController(id).session(sessionId)` to create/resume a session,
    * stream its events, and send messages.
    * @param controllerId - The id the agent controller is registered under on Mastra
    */
@@ -1168,8 +1168,8 @@ export class MastraClient extends BaseResource {
     return this.observability.getTraceQueryValues(params, options);
   }
 
-  /** Queries thread identities using eligible-trace and cross-trace predicates. */
-  queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
+  /** Queries full-history thread rows using a trace or thread activity window. */
+  queryTraceThreads<T extends QueryTraceThreadsInput>(params: T): Promise<QueryTraceThreadsResult<T>> {
     return this.observability.queryTraceThreads(params);
   }
 

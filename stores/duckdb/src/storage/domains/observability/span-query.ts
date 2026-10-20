@@ -8,6 +8,7 @@ import type {
 } from '@mastra/core/storage';
 import { DuckDBQueryTimeoutError } from '../../db';
 import type { DuckDBConnection } from '../../db';
+import { timeToFirstChunkSupported } from '../../features';
 import { payloadColumnSql } from './helpers';
 import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './preview-compat';
 import { compileSpanQueryPredicate } from './trace-query';
@@ -49,6 +50,7 @@ const fields = [
   'experimentId',
   'environment',
   'executionSource',
+  'timeToFirstChunkMs',
 ];
 
 function keys(rows: SpanQueryIdentity[], values: unknown[], alias = ''): string {
@@ -68,13 +70,19 @@ function keys(rows: SpanQueryIdentity[], values: unknown[], alias = ''): string 
 function afterCursor(plan: TrustedSpanQueryPlan): { sql: string; values: unknown[] } {
   if (!plan.cursor) return { sql: 'TRUE', values: [] };
   const cursor = plan.cursor;
-  const comparisons = [`s.${plan.orderBy.field} ${plan.orderBy.direction === 'asc' ? '>' : '<'} CAST(? AS TIMESTAMP)`];
-  const values: unknown[] = [cursor.sortValue];
+  const sort = `s.${plan.orderBy.field}`;
+  const empty = cursor.sortValue === null;
+  const value = `CAST(? AS ${typeof cursor.sortValue === 'number' ? 'DOUBLE' : 'TIMESTAMP'})`;
+  // Empty values sort last: a set cursor is followed by every empty value, an empty cursor only by its ties.
+  const comparisons = empty
+    ? []
+    : [`${sort} ${plan.orderBy.direction === 'asc' ? '>' : '<'} ${value}`, `${sort} IS NULL`];
+  const values: unknown[] = empty ? [] : [cursor.sortValue];
   for (let i = 0; i < identityFields.length; i++) {
     const field = identityFields[i]!;
     if (cursor[field] === null) continue;
-    const equal = [`s.${plan.orderBy.field} = CAST(? AS TIMESTAMP)`];
-    values.push(cursor.sortValue);
+    const equal = [empty ? `${sort} IS NULL` : `${sort} = ${value}`];
+    if (!empty) values.push(cursor.sortValue);
     for (const prior of identityFields.slice(0, i)) {
       equal.push(`s.${prior} IS NOT DISTINCT FROM ?`);
       values.push(cursor[prior]);
@@ -124,7 +132,7 @@ export function compileDuckDBSpanQuery(plan: TrustedSpanQueryPlan) {
   )
   SELECT ${[...fields, 'startedAt', 'endedAt', 'durationMs', 'status', 'cursorId'].map(field => `s.${field}`).join(', ')}
   FROM ranked s WHERE rank = 1 AND endedAt IS NOT NULL AND startedAt >= CAST(? AS TIMESTAMP) AND startedAt < CAST(? AS TIMESTAMP) AND (${predicate.sql}) AND ${after.sql}
-  ORDER BY s.${plan.orderBy.field} ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'}, ${identityFields.map(field => `s.${field} ASC NULLS LAST`).join(', ')}
+  ORDER BY s.${plan.orderBy.field} ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, ${identityFields.map(field => `s.${field} ASC NULLS LAST`).join(', ')}
   LIMIT ?`;
   return { sql, values };
 }
@@ -157,10 +165,13 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
   };
   const compiled = compileDuckDBSpanQuery(plan);
   const rows = await query<Selected>(compiled.sql, compiled.values);
-  const selected = rows.map(({ cursorId: _cursorId, startedAt, endedAt, ...row }) => ({
+  const selected = rows.map(({ cursorId: _cursorId, startedAt, endedAt, timeToFirstChunkMs, ...row }) => ({
     ...row,
     startedAt: startedAt.toISOString(),
     endedAt: endedAt.toISOString(),
+    ...(timeToFirstChunkSupported && {
+      timeToFirstChunkMs: timeToFirstChunkMs == null ? null : Number(timeToFirstChunkMs),
+    }),
   }));
   const page = rows.slice(0, plan.limit);
   if (!page.length) return buildSpanQueryResponse(plan, [], []);

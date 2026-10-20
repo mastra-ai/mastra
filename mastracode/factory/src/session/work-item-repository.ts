@@ -1,7 +1,5 @@
-import {
-  SourceControlConnectionNotFoundError,
-  type SourceControlStorageHandle,
-} from '../storage/domains/source-control/base.js';
+import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
 
 export type WorkItemRepositoryResolution =

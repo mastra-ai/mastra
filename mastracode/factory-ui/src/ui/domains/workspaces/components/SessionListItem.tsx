@@ -27,6 +27,7 @@ export function SessionListItem({
     <SessionNavRow
       name={row.name}
       url={row.url}
+      source={row.source}
       active={row.active}
       disabled={disabled}
       merged={merged}

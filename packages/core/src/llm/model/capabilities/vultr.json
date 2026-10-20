@@ -39,18 +39,15 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
-    "laguna-s-2.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4.1-flash": [
-      {
-        "type": "toggle"
-      },
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "nemotron-3.5-content-safety": [
+      {
+        "type": "toggle"
       }
     ],
     "deepseek-v4-flash-0731": [
@@ -60,6 +57,28 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "muse-glimmer-30b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "mimo-v2.6-flash-rl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.x-menthol": [
+      {
+        "type": "toggle"
       }
     ],
     "qwen3.8-flash-next": [
@@ -77,18 +96,17 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "mimo-v2.6-flash-rl": [
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
       {
         "type": "toggle"
       }
     ],
-    "glm-5.3-flash": [
+    "minimax-m3": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
-    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+    "mimo-v2.6-pro-rl": [
       {
         "type": "toggle"
       }
@@ -99,34 +117,16 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "glm-5.x-menthol": [
+    "deepseek-v4.1-flash": [
       {
         "type": "toggle"
-      }
-    ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.3": [
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "nemotron-3.5-content-safety": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "muse-glimmer-30b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "mimo-v2.6-pro-rl": [
+    "laguna-s-2.1": [
       {
         "type": "toggle"
       }

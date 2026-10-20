@@ -76,8 +76,8 @@ function ActivityRedirect({ everyEvent = false }: { everyEvent?: boolean }) {
  * Factory-agnostic thread deep link, used by server-built links that don't
  * know a factory id (e.g. the Slack "View Session" card, whose channel
  * sessions are controller-scoped). Forwards to the first factory's workspaces
- * thread route, preserving the query string — the `?resourceId=` override
- * binds the chat surface to the channel session's resource there.
+ * thread route, preserving the query string — the `?sessionId=` override
+ * (`?resourceId=` in older links) binds the chat surface to the channel session there.
  */
 function ChannelThreadRedirect() {
   const { data: factories, isPending } = useFactoriesQuery();

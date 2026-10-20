@@ -40,7 +40,10 @@ import { PrepareStepProcessor } from '../../../processors/processors/prepare-ste
 import { resolveMaxProcessorRetries } from '../../../processors/retry-budget';
 import type { ProcessorState } from '../../../processors/runner';
 import { ProcessorRunner } from '../../../processors/runner';
-import { needsTrailingAssistantGuard } from '../../../processors/trailing-assistant-guard';
+import {
+  needsTrailingAssistantGuard,
+  removeTrailingAssistantGuardContinuations,
+} from '../../../processors/trailing-assistant-guard';
 import { RequestContext } from '../../../request-context';
 import { getToolDefinitionsForTracing } from '../../../stream/aisdk/v5/compat/prepare-tools';
 import { execute, sendsNativeResponseFormat } from '../../../stream/aisdk/v5/execute';
@@ -1906,6 +1909,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           downloadError = error;
           return [];
         });
+        removeTrailingAssistantGuardContinuations(messageList);
         await persistUnavailableAttachments({
           messageList,
           memory: readScoped(scopeCtx, MEMORY_KEY, 'memory'),

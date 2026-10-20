@@ -221,7 +221,8 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
     factoryProjectId,
     userId: tenant.userId,
     sessionId,
-    resourceId: sessionId,
+    // A user session's memory lives under its owner.
+    resourceId: tenant.userId,
     threadId: sessionId,
     kind: 'user',
     // A signed-in person is driving the client: the same reach as a web UI turn.
