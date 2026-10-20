@@ -924,10 +924,22 @@ export class AgentThreadStreamRuntime {
   }
 
   #abortLeaseLostRun(state: AgentThreadRuntimeState, runId: string): void {
+    const record = state.threadRunsById.get(runId);
+    // A parked run calls neither the model nor tools, so there is nothing to stop. Aborting it would
+    // delete the snapshot it resumes from. Its resume must hold the lease again: drop the in-place
+    // continuation so the resume registers (and takes the lease) again. Durable and evented resumes
+    // also call reacquireParkedRunLease before their segment starts, which refuses the resume when a
+    // successor now holds the thread. A run that is still suspending, or a partly resumed run whose
+    // sibling suspensions are pending, is still executing (its lifecycle is not 'suspended'), so it
+    // is aborted.
+    if (record?.lifecycle === 'suspended') {
+      record.continuation = undefined;
+      return;
+    }
     const preparedRun = state.preparedRunsById.get(runId);
     if (preparedRun) preparedRun.abortController.abort(new AgentThreadLeaseLostError(runId));
     // Durable runs own their controller outside the thread runtime.
-    else state.threadRunsById.get(runId)?.agent.abortRunStream(runId);
+    else record?.agent.abortRunStream(runId);
   }
 
   /** Pass `only` to stop that timer alone, never one a later registration of the run started. */
@@ -3324,6 +3336,29 @@ export class AgentThreadStreamRuntime {
     // Drain its native output so completion and subsequent approvals advance.
     void output.consumeStream();
     return true;
+  }
+
+  /**
+   * A parked run whose lease lapsed keeps its record (its snapshot is still needed) but holds no
+   * lease, renewal or deadline. A durable or evented resume starts its workflow segment before it
+   * re-registers, and non-strict registration runs on even when another owner holds the lease, so the
+   * resume must take the lease here, before the segment calls the model or tools. It is a no-op when
+   * this process has no parked record of the run for the thread, or the parked run still holds (and
+   * renews) its lease.
+   *
+   * @throws AgentThreadLeaseConflictError when another run now holds the thread, so the resume is
+   * refused and the run stays parked.
+   */
+  async reacquireParkedRunLease(runId: string, pubsub?: PubSub): Promise<void> {
+    const state = this.#getState(pubsub);
+    const record = state.threadRunsById.get(runId);
+    if (record?.lifecycle !== 'suspended' || state.leaseRenewalTimers.has(runId)) return;
+    const key = this.#threadKey(record.resourceId, record.threadId);
+    if (state.activeThreadRunIds.get(key) !== runId) return;
+    const resolvedPubSub = this.#getPubSub(pubsub);
+    const lease = await this.#getLeaseProvider(resolvedPubSub).acquireLease(key, runId, AGENT_THREAD_LEASE_TTL_MS);
+    if (!lease.acquired) throw new AgentThreadLeaseConflictError(runId, lease.owner ?? 'another owner');
+    this.#startLeaseRenewal(resolvedPubSub, key, runId);
   }
 
   closeRunContinuation<OUTPUT>(ownerOutput: MastraModelOutput<OUTPUT>, pubsub?: PubSub): boolean {
