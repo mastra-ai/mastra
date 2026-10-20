@@ -3,14 +3,15 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { Agent, createSignal } from '@mastra/core/agent';
+import { Agent, createSignal, setRunAgentScopes } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory, Subconscious } from '@mastra/memory';
 import type { EmbeddingModel } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { resolveKnowledgeScopeIds } from '../../src/processors/observational-memory/subconscious/knowledge-tools';
 
 import { RemindContinuationProcessor } from '../../src/processors/observational-memory/subconscious/remind-continuation';
 import {
@@ -42,38 +43,16 @@ const embedder: EmbeddingModel<string> = {
   },
 };
 
-async function createScopeIds(memory: Memory, store: any, resourceId: string, threadId: string): Promise<string[]> {
-  const knowledge = memory.getKnowledgeInstance();
-  if (knowledge) {
-    const organization = await knowledge.materializeScope({
-      address: 'org:acme',
-      contextualScopeAddress: 'org:acme',
-      parameters: { orgId: 'acme' },
-    });
-    const resourceAddress = `resource:${resourceId}`;
-    const resource = await knowledge.materializeScope({
-      address: resourceAddress,
-      parentAddresses: ['org:acme'],
-      contextualScopeAddress: 'org:acme',
-      parameters: { orgId: 'acme', resourceId },
-    });
-    const threadAddress = `${resourceAddress}:thread:${threadId}`;
-    const thread = await knowledge.materializeScope({
-      address: threadAddress,
-      parentAddresses: [resourceAddress],
-      contextualScopeAddress: resourceAddress,
-      parameters: { orgId: 'acme', resourceId, threadId },
-    });
-    return [organization.scopes['org:acme']!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
-  }
-  const organization = await store.createNode({ name: 'Acme', isScope: true, scopeIds: [] });
-  const resource = await store.createNode({
-    name: `Resource ${resourceId}`,
-    isScope: true,
-    scopeIds: [organization.id],
-  });
-  const thread = await store.createNode({ name: `Thread ${threadId}`, isScope: true, scopeIds: [resource.id] });
-  return [organization.id, resource.id, thread.id];
+/** The org → resource → thread scopes Subconscious resolves for this run. */
+async function createScopeIds(
+  memory: Memory,
+  _store: unknown,
+  resourceId: string,
+  threadId: string,
+): Promise<string[]> {
+  const requestContext = new RequestContext();
+  setRunAgentScopes(requestContext, ['org:acme']);
+  return resolveKnowledgeScopeIds(memory, { agent: { threadId, resourceId }, requestContext });
 }
 
 describe('Subconscious LibSQL integration', () => {
@@ -173,7 +152,7 @@ describe('Subconscious LibSQL integration', () => {
     const curatorModel = new MockLanguageModelV2({ doStream: curatorStream });
     const memory = new Memory({
       storage,
-      knowledge: new Knowledge({ id: 'default', storage }),
+      knowledge: new Knowledge({ id: 'default', storage, scopes: memoryScopeTypes }),
       vector,
       embedder,
       options: {
@@ -192,6 +171,7 @@ describe('Subconscious LibSQL integration', () => {
     await memory.saveMessages({ messages: [message(threadId, resourceId)] });
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
+    setRunAgentScopes(requestContext, [`org:${'acme'}`]);
 
     const result = await (await memory.omEngine)!.observe({
       threadId,
@@ -316,7 +296,7 @@ describe('Subconscious LibSQL integration', () => {
     });
     const memory = new Memory({
       storage,
-      knowledge: new Knowledge({ id: 'default', storage }),
+      knowledge: new Knowledge({ id: 'default', storage, scopes: memoryScopeTypes }),
       vector,
       embedder,
       options: {
@@ -347,6 +327,7 @@ describe('Subconscious LibSQL integration', () => {
     await memory.saveMessages({ messages: [message(threadId, resourceId, 'Help me schedule the launch.')] });
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
+    setRunAgentScopes(requestContext, [`org:${'acme'}`]);
     const sendSignal = vi.fn(async () => undefined) as any;
     const mainAgent = new Agent({ id: 'main-agent', name: 'Main Agent', instructions: 'Help the user.', model });
     const parentSendSignal = vi
@@ -382,7 +363,7 @@ describe('Subconscious LibSQL integration', () => {
 
     const reconstructed = new Memory({
       storage,
-      knowledge: new Knowledge({ id: 'default', storage }),
+      knowledge: new Knowledge({ id: 'default', storage, scopes: memoryScopeTypes }),
       vector,
       embedder,
       options: {
@@ -487,7 +468,7 @@ describe('Subconscious LibSQL integration', () => {
     });
     const memory = new Memory({
       storage,
-      knowledge: new Knowledge({ id: 'default', storage }),
+      knowledge: new Knowledge({ id: 'default', storage, scopes: memoryScopeTypes }),
       vector,
       embedder,
       options: {
@@ -526,6 +507,7 @@ describe('Subconscious LibSQL integration', () => {
     }
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
+    setRunAgentScopes(requestContext, [`org:${'acme'}`]);
     const mainAgent = new Agent({ id: 'resource-main-agent', name: 'Main Agent', instructions: 'Help.', model });
     const targetedDeliveries: Array<{
       resourceId?: string;
@@ -576,7 +558,12 @@ describe('Subconscious LibSQL integration', () => {
     const storage = new LibSQLStore({ id: randomUUID(), url: databaseUrl });
     const vector = new LibSQLVector({ id: randomUUID(), url: databaseUrl });
     await storage.init();
-    const memory = new Memory({ storage, vector, embedder, knowledge: new Knowledge({ id: 'default', storage }) });
+    const memory = new Memory({
+      storage,
+      vector,
+      embedder,
+      knowledge: new Knowledge({ id: 'default', storage, scopes: memoryScopeTypes }),
+    });
     const parentThreadId = randomUUID();
     const resourceId = randomUUID();
     await memory.createThread({ threadId: parentThreadId, resourceId, title: 'Parent' });
@@ -660,6 +647,7 @@ describe('Subconscious LibSQL integration', () => {
     });
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
+    setRunAgentScopes(requestContext, [`org:${'acme'}`]);
 
     const result = (await tool.execute?.({ question: 'When does Project Atlas launch?' }, {
       agent: { agentId: parentAgent.id, threadId: parentThreadId, resourceId, messages: [] },
@@ -698,7 +686,10 @@ describe('Subconscious LibSQL integration', () => {
     directories.push(directory);
     const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'memory.db')}` });
     await storage.init();
-    const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
+    const memory = new Memory({
+      storage,
+      knowledge: new Knowledge({ id: 'default', storage, scopes: memoryScopeTypes }),
+    });
     const parentThreadId = randomUUID();
     const resourceId = randomUUID();
     const reminderThread = await ensureOwnedRemindThread({ memory, parentThreadId, resourceId });
@@ -793,7 +784,10 @@ describe('Subconscious LibSQL integration', () => {
     directories.push(directory);
     const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'memory.db')}` });
     await storage.init();
-    const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
+    const memory = new Memory({
+      storage,
+      knowledge: new Knowledge({ id: 'default', storage, scopes: memoryScopeTypes }),
+    });
     const ownedParentId = randomUUID();
     const unmarkedParentId = randomUUID();
     const foreignParentId = randomUUID();

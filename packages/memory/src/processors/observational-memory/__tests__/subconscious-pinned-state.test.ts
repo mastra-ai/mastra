@@ -1,25 +1,34 @@
-import { Knowledge } from '@mastra/core/knowledge';
+import { setRunAgentScopes } from '@mastra/core/agent';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import type { ComputeStateSignalArgs } from '@mastra/core/processors';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
 import { applyPinOps, createPinnedTools, PinnedStateProcessor, stablePinsCacheKey } from '../subconscious';
 import type { PinDeltaOp, PinEntry } from '../subconscious';
-import { resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
+import { resolveRunKnowledgeScopes } from '../subconscious/knowledge-tools';
+
+function orgContext() {
+  const requestContext = new RequestContext();
+  setRunAgentScopes(requestContext, ['org:acme']);
+  return requestContext;
+}
 
 async function createHarness() {
   const storage = new InMemoryStore();
-  const knowledge = new Knowledge({ id: 'default', storage });
+  const knowledge = new Knowledge({ id: 'default', storage, scopes: memoryScopeTypes });
   const memory = {
     getKnowledgeInstance: () => knowledge,
     getKnowledgeStore: async () => (await storage.getStore('knowledge'))!,
   };
-  const scopeIds = await resolveKnowledgeScopeIds(memory, {
+  const { scopeIds, levels } = await resolveRunKnowledgeScopes(memory, {
     agent: { threadId: 'alpha', resourceId: 'user-42' },
-    requestContext: { get: (key: string) => (key === 'organizationId' ? 'acme' : undefined) },
+    requestContext: orgContext(),
   });
   const tools = createPinnedTools(memory, {
     scopeIds,
+    levels,
     sourceThreadId: 'alpha',
     maxPins: 20,
     maxCharacters: 2_000,
@@ -32,14 +41,10 @@ async function createHarness() {
 }
 
 function makeArgs(overrides: Partial<ComputeStateSignalArgs> = {}): ComputeStateSignalArgs {
-  const context = new Map<string, unknown>([['organizationId', 'acme']]);
   return {
     threadId: 'alpha',
     resourceId: 'user-42',
-    requestContext: {
-      get: (key: string) => context.get(key),
-      set: (key: string, value: unknown) => void context.set(key, value),
-    },
+    requestContext: orgContext(),
     contextWindow: { hasSnapshot: false },
     lastSnapshot: undefined,
     deltasSinceSnapshot: [],

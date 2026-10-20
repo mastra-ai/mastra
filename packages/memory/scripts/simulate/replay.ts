@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
 import { Agent } from '@mastra/core/agent';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 
 import { Memory } from '../../src/index';
 import { Subconscious } from '../../src/processors/observational-memory/subconscious';
@@ -102,7 +102,8 @@ async function run(argv: string[]): Promise<void> {
   const target = flags.get('target')?.[0];
   const organizationId = flags.get('org')?.[0];
   const model = flags.get('model')?.[0];
-  const knowledgeResourceId = flags.get('knowledge-resource')?.[0];
+  // One shared resource puts every replayed thread in the same Knowledge graph.
+  const sharedResourceId = flags.get('knowledge-resource')?.[0];
   if (!input || !target || !organizationId || !model) {
     throw new Error('Required flags: --input, --target, --org, --model');
   }
@@ -121,7 +122,11 @@ async function run(argv: string[]): Promise<void> {
 
   const storage = await loadStore(target);
   const vector = await loadVector(target);
-  const memory = new Memory({ storage, vector, knowledge: new Knowledge({ id: 'simulation', storage }) });
+  const memory = new Memory({
+    storage,
+    vector,
+    knowledge: new Knowledge({ id: 'simulation', storage, scopes: memoryScopeTypes }),
+  });
   try {
     const subconscious = new Subconscious({
       model,
@@ -140,12 +145,11 @@ async function run(argv: string[]): Promise<void> {
       const result = await replayCycles({
         cycles: reconstruction.cycles,
         threadId,
-        resourceId: `simulate:${threadId}`,
+        resourceId: sharedResourceId ?? `simulate:${threadId}`,
         organizationId,
         memory,
         subconscious,
         mainAgent,
-        knowledgeResourceId,
         onEvent: console.log,
       });
       console.log(

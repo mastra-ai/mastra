@@ -1,4 +1,4 @@
-import { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { describe, expect, it, vi } from 'vitest';
@@ -126,7 +126,7 @@ describe('Subconscious configuration', () => {
     const storage = new InMemoryStore();
     const memory = new Memory({
       storage,
-      knowledge: new Knowledge({ id: 'default', storage }),
+      knowledge: new Knowledge({ id: 'default', storage, scopes: memoryScopeTypes }),
       ...semanticInfrastructure,
       options: { observationalMemory: { model, experimental_subconscious: new Subconscious() } },
     });

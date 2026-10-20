@@ -141,9 +141,7 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
   // visible context (visibility is subset containment), never a level-narrowed
   // write scope.
   private async resolveScope(args: ComputeStateSignalArgs): Promise<KnowledgeScopeIds | undefined> {
-    const organizationId = args.requestContext?.get?.('organizationId');
-    if (typeof organizationId !== 'string' || !organizationId.trim() || !args.resourceId || !args.threadId)
-      return undefined;
+    if (!args.resourceId || !args.threadId) return undefined;
     return resolveKnowledgeScopeIds(
       {
         getKnowledgeInstance: () => this.deps.getKnowledgeInstance(),

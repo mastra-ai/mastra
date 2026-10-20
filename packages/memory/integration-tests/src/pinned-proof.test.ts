@@ -9,13 +9,14 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { Agent } from '@mastra/core/agent';
+import { Agent, setRunAgentScopes } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory, Subconscious } from '@mastra/memory';
 import type { EmbeddingModel } from 'ai';
 import { afterAll, describe, expect, it } from 'vitest';
 
+import { resolveRunKnowledgeScopes } from '../../src/processors/observational-memory/subconscious/knowledge-tools';
 import { createPinnedTools } from '../../src/processors/observational-memory/subconscious/pinned';
 
 const embedder: EmbeddingModel<string> = {
@@ -91,17 +92,23 @@ describe('Pinned knowledge live proof', () => {
       instructions: 'Help the user.',
       model,
       memory,
+      // Core stamps these (plus the run's resource and thread) as the run's trusted scopes.
+      scopes: ['org:acme'],
     });
 
     const threadId = randomUUID();
     const resourceId = 'proof-user';
-    const requestContext = new RequestContext();
-    requestContext.set('organizationId', 'acme');
-    const turnOptions = { memory: { thread: threadId, resource: resourceId }, requestContext } as any;
+    const turnOptions = { memory: { thread: threadId, resource: resourceId } } as any;
 
-    const scope = [`org:acme`, `resource:${resourceId}`, `thread:${threadId}`];
+    const requestContext = new RequestContext();
+    setRunAgentScopes(requestContext, ['org:acme']);
+    const { scopeIds, levels } = await resolveRunKnowledgeScopes({ storage } as any, {
+      agent: { threadId, resourceId },
+      requestContext,
+    });
     const tools = createPinnedTools({ storage } as any, {
-      scope,
+      scopeIds,
+      levels,
       sourceThreadId: threadId,
       maxPins: 20,
       maxCharacters: 2_000,

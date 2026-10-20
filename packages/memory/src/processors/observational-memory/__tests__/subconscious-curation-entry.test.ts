@@ -1,7 +1,7 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { Agent } from '@mastra/core/agent';
+import { Agent, setRunAgentScopes } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
@@ -48,7 +48,7 @@ function createMemory(options?: { omModel?: ObservationalMemoryModel | false }) 
   const storage = new InMemoryStore();
   return new Memory({
     storage,
-    knowledge: new Knowledge({ id: 'default', storage }),
+    knowledge: new Knowledge({ id: 'default', storage, scopes: memoryScopeTypes }),
     ...semanticInfrastructure,
     options: {
       observationalMemory: {
@@ -63,6 +63,7 @@ function createMemory(options?: { omModel?: ObservationalMemoryModel | false }) 
 function requestContext() {
   const context = new RequestContext();
   context.set('organizationId', 'acme');
+  setRunAgentScopes(context, [`org:${'acme'}`]);
   return context;
 }
 

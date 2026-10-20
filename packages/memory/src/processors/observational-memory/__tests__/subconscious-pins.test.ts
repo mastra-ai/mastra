@@ -27,6 +27,11 @@ function createTools(
 ) {
   return createPinnedTools(memory, {
     scopeIds: threadScope,
+    levels: ['org', 'resource', 'thread'].map((type, index) => ({
+      type,
+      address: `${type}:${['acme', 'user-42', 'alpha'][index]}`,
+      scopeId: threadScope[index]!,
+    })),
     sourceThreadId: 'alpha',
     maxPins: 20,
     maxCharacters: 2_000,

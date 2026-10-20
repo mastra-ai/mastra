@@ -1,6 +1,7 @@
 import type { LanguageModelV2StreamPart } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { Knowledge } from '@mastra/core/knowledge';
+import { setRunAgentScopes } from '@mastra/core/agent';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
@@ -63,9 +64,13 @@ function textStopStream(text: string) {
 
 function createHarness(options: { knowledgeResourceId?: string }) {
   const storage = new InMemoryStore();
-  const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
+  const memory = new Memory({
+    storage,
+    knowledge: new Knowledge({ id: 'default', storage, scopes: memoryScopeTypes }),
+  });
   const requestContext = new RequestContext();
   requestContext.set('organizationId', ORG);
+  setRunAgentScopes(requestContext, [`org:${ORG}`]);
   if (options.knowledgeResourceId) requestContext.set('knowledgeResourceId', options.knowledgeResourceId);
 
   const emitted = { reminder: 0, reply: 0 };

@@ -1,4 +1,5 @@
-import { Knowledge } from '@mastra/core/knowledge';
+import { setRunAgentScopes } from '@mastra/core/agent';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
@@ -43,6 +44,7 @@ function createSemanticDependencies() {
 function toolContext(threadId = 'alpha') {
   const requestContext = new RequestContext();
   requestContext.set('organizationId', 'acme');
+  setRunAgentScopes(requestContext, [`org:${'acme'}`]);
   return { agent: { threadId, resourceId: 'user-42' }, requestContext } as any;
 }
 
@@ -51,7 +53,7 @@ async function createMemory(tools = true) {
   const storage = new InMemoryStore();
   const memory = new Memory({
     storage,
-    knowledge: new Knowledge({ id: 'default', storage }),
+    knowledge: new Knowledge({ id: 'default', storage, scopes: memoryScopeTypes }),
     vector,
     embedder,
     options: {
@@ -217,7 +219,7 @@ describe('Subconscious knowledge read tools', () => {
     const tools = (await createMemory()).listTools();
     await expect(
       tools.knowledge_browse!.execute?.({}, { agent: { threadId: 'alpha', resourceId: 'user-42' } } as any),
-    ).rejects.toThrow(/organizationId/);
+    ).rejects.toThrow(/found no scope for this run/);
   });
 
   it('lets storage decide semantic hit visibility, including scope nodes visible through their own id', async () => {

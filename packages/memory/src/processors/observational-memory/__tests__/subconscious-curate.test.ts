@@ -1,6 +1,6 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { Agent } from '@mastra/core/agent';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Agent, setRunAgentScopes } from '@mastra/core/agent';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -25,7 +25,7 @@ function fixture(knowledge?: Knowledge | string | false) {
   const storage = new InMemoryStore();
   const memory = new Memory({
     storage,
-    knowledge: knowledge ?? new Knowledge({ id: 'curator', storage }),
+    knowledge: knowledge ?? new Knowledge({ id: 'curator', storage, scopes: memoryScopeTypes }),
     ...semanticInfrastructure,
   });
   const subconscious = new Subconscious();
@@ -34,6 +34,7 @@ function fixture(knowledge?: Knowledge | string | false) {
     .find(candidate => candidate.name === 'Curate') as SubconsciousCurateExtractor;
   const requestContext = new RequestContext();
   requestContext.set('organizationId', 'acme');
+  setRunAgentScopes(requestContext, [`org:${'acme'}`]);
   const context = {
     source: 'observer' as const,
     extractor,
@@ -54,7 +55,10 @@ describe('Subconscious observation curator', () => {
   it('fails closed for an unknown Knowledge key without reading fallback storage', async () => {
     const { memory, context, extractor, subconscious } = fixture('unknown');
     memory.__registerMastra(
-      new Mastra({ knowledge: { known: new Knowledge({ id: 'known', storage: new InMemoryStore() }) }, logger: false }),
+      new Mastra({
+        knowledge: { known: new Knowledge({ id: 'known', storage: new InMemoryStore(), scopes: memoryScopeTypes }) },
+        logger: false,
+      }),
     );
     const fallback = vi.spyOn(memory.storage, 'getStore');
     const sendMessage = vi.spyOn(Agent.prototype, 'sendMessage');
@@ -121,7 +125,7 @@ describe('Subconscious observation curator', () => {
   });
 
   it('uses the selected Knowledge runtime for observation and derived agent memory', async () => {
-    const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
+    const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore(), scopes: memoryScopeTypes });
     const { memory, context, extractor } = fixture(knowledge);
     const selectedStore = await knowledge.getStorage();
     const legacyStore = await memory.storage.getStore('knowledge');
@@ -145,6 +149,7 @@ describe('Subconscious observation curator', () => {
       id: 'mastra',
       description: 'Project knowledge separated by organization and active workspace.',
       storage: new InMemoryStore(),
+      scopes: memoryScopeTypes,
       structure: {
         scopes: [
           {
@@ -179,7 +184,7 @@ describe('Subconscious observation curator', () => {
   });
 
   it('gives the curator only Knowledge tools, never the main agent tool set', async () => {
-    const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
+    const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore(), scopes: memoryScopeTypes });
     const { context, extractor } = fixture(knowledge);
     const mainAgent = new Agent({
       id: 'main',
@@ -218,6 +223,7 @@ describe('Subconscious observation curator', () => {
     const knowledge = new Knowledge({
       id: 'mastra',
       storage: new InMemoryStore(),
+      scopes: memoryScopeTypes,
       structure: {
         scopes: [
           { address: 'org:acme', name: 'acme' },
@@ -256,7 +262,7 @@ describe('Subconscious observation curator', () => {
   it.each(['instance', 'key'] as const)(
     'passes selected Knowledge by %s into the configured curator',
     async selection => {
-      const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
+      const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore(), scopes: memoryScopeTypes });
       const memory = new Memory({
         storage: new InMemoryStore(),
         knowledge: selection === 'key' ? 'selected' : knowledge,
@@ -303,12 +309,12 @@ describe('Subconscious observation curator', () => {
 
   it('uses the thread as the resource scope fallback', async () => {
     const { memory, context } = fixture();
-    const scopeIds = await resolveCuratorScope(memory, { ...context, resourceId: undefined });
+    const { scopeIds } = await resolveCuratorScope(memory, { ...context, resourceId: undefined });
     const store = await memory.getKnowledgeStore();
     expect(scopeIds).toEqual([
       (await store.getScopeAddress('org:acme'))!.scopeNodeId,
       (await store.getScopeAddress('resource:alpha'))!.scopeNodeId,
-      (await store.getScopeAddress('resource:alpha:thread:alpha'))!.scopeNodeId,
+      (await store.getScopeAddress('thread:alpha'))!.scopeNodeId,
     ]);
   });
 
@@ -559,7 +565,7 @@ describe('Subconscious observation curator', () => {
     );
   });
 
-  it('fails closed without dispatching when the host does not vouch for an organization', async () => {
+  it('fails closed without dispatching when the run holds no organization scope', async () => {
     const { context, extractor } = fixture();
     const writer = { custom: vi.fn().mockResolvedValue(undefined) };
     const sendMessage = vi.spyOn(Agent.prototype, 'sendMessage');
@@ -571,7 +577,7 @@ describe('Subconscious observation curator', () => {
     await vi.waitFor(() =>
       expect(writer.custom).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ error: expect.stringContaining('require requestContext.organizationId') }),
+          data: expect.objectContaining({ error: expect.stringContaining('found no scope for this run') }),
         }),
       ),
     );

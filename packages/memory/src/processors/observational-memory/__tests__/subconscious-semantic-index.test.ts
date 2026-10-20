@@ -1,4 +1,5 @@
-import { Knowledge } from '@mastra/core/knowledge';
+import { setRunAgentScopes } from '@mastra/core/agent';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
@@ -38,10 +39,14 @@ function createFakes() {
 
 async function fixture() {
   const storage = new InMemoryStore();
-  const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
+  const memory = new Memory({
+    storage,
+    knowledge: new Knowledge({ id: 'default', storage, scopes: memoryScopeTypes }),
+  });
   const store = (await memory.storage.getStore('knowledge'))!;
   const requestContext = new RequestContext();
   requestContext.set('organizationId', 'acme');
+  setRunAgentScopes(requestContext, [`org:${'acme'}`]);
   const scopeIds = await resolveKnowledgeScopeIds(memory, {
     agent: { threadId: 'alpha', resourceId: 'user-42' },
     requestContext,

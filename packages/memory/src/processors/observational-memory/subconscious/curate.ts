@@ -8,11 +8,11 @@ import { Extractor } from '../extractor';
 import type { ExtractorOnExtractedContext } from '../extractor';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
-import { createKnowledgeTools, resolveKnowledgeScopeIds } from './knowledge-tools';
+import { createKnowledgeTools, resolveRunKnowledgeScopes } from './knowledge-tools';
+import type { KnowledgeRunScopes } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
 import { resolveSubconsciousAgentModel } from './model';
 import { createPinnedTools } from './pinned';
-import { resolveKnowledgeResourceId } from './scope';
 import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './types';
 
 export const CURATION_AGENT = 'curate';
@@ -57,8 +57,8 @@ type CuratorContext = Pick<
   'abortSignal' | 'mainAgent' | 'requestContext' | 'resourceId' | 'threadId'
 >;
 
-export function resolveCuratorScope(memory: Memory, context: CuratorContext): Promise<KnowledgeScopeIds> {
-  return resolveKnowledgeScopeIds(memory, {
+export function resolveCuratorScope(memory: Memory, context: CuratorContext): Promise<KnowledgeRunScopes> {
+  return resolveRunKnowledgeScopes(memory, {
     agent: { threadId: context.threadId, resourceId: context.resourceId ?? context.threadId },
     requestContext: context.requestContext,
   });
@@ -113,14 +113,15 @@ async function curateCommittedObservations(
   let store: KnowledgeStorage | undefined;
   let scopeIds: KnowledgeScopeIds | undefined;
   try {
-    scopeIds = await resolveCuratorScope(memory, context);
+    const runScopes = await resolveCuratorScope(memory, context);
+    scopeIds = runScopes.scopeIds;
     store = await memory.getKnowledgeStore();
 
     const agent = await createCuratorAgent(
       memory,
       getCuratorMemory(),
       context,
-      scopeIds,
+      runScopes,
       config,
       subconscious,
       omModel,
@@ -201,19 +202,12 @@ async function reportCuratorError(
   }
 }
 
-function curatorScopeAddresses(context: CuratorContext): string[] {
-  const organizationId = context.requestContext?.get('organizationId');
-  if (typeof organizationId !== 'string' || !organizationId.trim()) return [];
-  const resourceId = resolveKnowledgeResourceId(context.requestContext, context.resourceId) ?? context.threadId;
-  return [`org:${organizationId}`, `resource:${resourceId}`, `resource:${resourceId}:thread:${context.threadId}`];
-}
-
 async function createKnowledgeDescriptionInstructions(
   memory: Memory,
-  context: CuratorContext,
+  runScopes: KnowledgeRunScopes,
 ): Promise<string | undefined> {
   const knowledge = memory.getKnowledgeInstance?.();
-  const visibleScopeAddresses = curatorScopeAddresses(context);
+  const visibleScopeAddresses = runScopes.levels.map(level => level.address);
   if (!knowledge || visibleScopeAddresses.length === 0) return undefined;
 
   const descriptionContext = await knowledge.__getDescriptionContext(visibleScopeAddresses);
@@ -238,7 +232,7 @@ export async function createCuratorAgent(
   memory: Memory,
   curatorMemory: Memory,
   context: CuratorContext,
-  scopeIds: KnowledgeScopeIds,
+  runScopes: KnowledgeRunScopes,
   config: ResolvedSubconsciousAgent,
   subconscious: ResolvedSubconsciousConfig,
   omModel?: ObservationalMemoryModel,
@@ -255,7 +249,7 @@ export async function createCuratorAgent(
     name: 'Subconscious Curate',
     instructions: [
       DEFAULT_INSTRUCTIONS,
-      await createKnowledgeDescriptionInstructions(memory, context),
+      await createKnowledgeDescriptionInstructions(memory, runScopes),
       subconscious.pins ? PINNED_INSTRUCTIONS : undefined,
       config.instructions?.trim(),
     ]
@@ -264,15 +258,16 @@ export async function createCuratorAgent(
     model,
     memory: curatorMemory,
     tools: {
-      ...createKnowledgeTools(memory, scopeIds),
+      ...createKnowledgeTools(memory, runScopes.scopeIds),
       ...createKnowledgeWriteTools(memory, {
-        scopeIds,
-        scopeAddresses: curatorScopeAddresses(context),
+        scopeIds: runScopes.scopeIds,
+        levels: runScopes.levels,
         sourceThreadId: context.threadId,
       }),
       ...(subconscious.pins
         ? createPinnedTools(memory, {
-            scopeIds,
+            scopeIds: runScopes.scopeIds,
+            levels: runScopes.levels,
             sourceThreadId: context.threadId,
             maxPins: subconscious.pins.maxPins,
             maxCharacters: subconscious.pins.maxCharacters,

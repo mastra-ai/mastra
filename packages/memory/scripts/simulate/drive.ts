@@ -1,3 +1,4 @@
+import { setRunAgentScopes } from '@mastra/core/agent';
 import type { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 
@@ -34,15 +35,14 @@ export type ReplayOptions = {
   curatorMemory?: Memory;
   subconscious: ResolvedSubconsciousConfig;
   mainAgent?: Agent;
-  knowledgeResourceId?: string;
   onEvent?: (line: string) => void;
 };
 
-function requestContextWithOrg(organizationId: string, knowledgeResourceId?: string): RequestContext {
+function requestContextWithOrg(organizationId: string): RequestContext {
   if (!organizationId.trim()) throw new Error('Replay requires a non-empty organizationId.');
   const requestContext = new RequestContext();
   requestContext.set('organizationId', organizationId);
-  if (knowledgeResourceId?.trim()) requestContext.set('knowledgeResourceId', knowledgeResourceId);
+  setRunAgentScopes(requestContext, [`org:${organizationId}`]);
   return requestContext;
 }
 
@@ -58,14 +58,15 @@ export async function replayCycles(options: ReplayOptions): Promise<ReplayResult
   const config = options.subconscious.observation.find(agent => agent.name === CURATION_AGENT);
   if (!config) throw new Error(`Replay requires a Subconscious with a "${CURATION_AGENT}" observation agent.`);
 
-  const requestContext = requestContextWithOrg(options.organizationId, options.knowledgeResourceId);
+  const requestContext = requestContextWithOrg(options.organizationId);
   const context = {
     threadId: options.threadId,
     resourceId: options.resourceId,
     requestContext,
     mainAgent: options.mainAgent,
   };
-  const scopeIds = await resolveCuratorScope(options.memory, context);
+  const runScopes = await resolveCuratorScope(options.memory, context);
+  const { scopeIds } = runScopes;
   const curatorOutcomes: ReplayOutcome[] = [];
   const warnings: string[] = [];
 
@@ -80,7 +81,7 @@ export async function replayCycles(options: ReplayOptions): Promise<ReplayResult
         options.memory,
         options.curatorMemory ?? options.memory,
         context,
-        scopeIds,
+        runScopes,
         config,
         options.subconscious,
       );

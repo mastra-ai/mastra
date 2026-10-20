@@ -1,4 +1,6 @@
-import { materializeKnowledgeScopePlan, type Knowledge } from '@mastra/core/knowledge';
+import { getRunAgentScopes } from '@mastra/core/agent';
+import { materializeKnowledgeScopePlan, memoryScopeTypes, planKnowledgeRunScopes } from '@mastra/core/knowledge';
+import type { Knowledge, KnowledgeRunScopePlan } from '@mastra/core/knowledge';
 import type {
   KnowledgeNode,
   KnowledgeRecord,
@@ -11,7 +13,6 @@ import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
-import { resolveKnowledgeResourceId } from './scope';
 import type { KnowledgeSemanticIndexCoordinator, KnowledgeSemanticSearchResult } from './semantic-index';
 
 const DEFAULT_LIMIT = 10;
@@ -49,67 +50,93 @@ export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<K
   return store;
 }
 
+/** One level of the scope chain a run holds, root first. `type` is the scope type's leading segment (`org`, `project`). */
+export interface KnowledgeRunScopeLevel {
+  type: string;
+  address: string;
+  scopeId: string;
+}
+
+export interface KnowledgeRunScopes {
+  /** Every scope the run holds: the chain, root first, then any other held scope. */
+  scopeIds: KnowledgeScopeIds;
+  /** The run's deepest chain of nested scopes, root first; write tiers are named by its types. */
+  levels: KnowledgeRunScopeLevel[];
+}
+
+function trustedRunScopes(context: KnowledgeToolContext | undefined): string[] {
+  const scopes = [...(getRunAgentScopes(context?.requestContext) ?? [])];
+  if (context?.agent?.resourceId) scopes.push(`resource:${context.agent.resourceId}`);
+  if (context?.agent?.threadId) scopes.push(`thread:${context.agent.threadId}`);
+  return [...new Set(scopes)];
+}
+
+/**
+ * The Knowledge scopes a run holds: its Core-trusted agent scopes plus its own Memory resource and
+ * thread, matched against the host's configured scope types (bare storage, with no Knowledge
+ * instance, uses Memory's {@link memoryScopeTypes}). Never trusts request-context strings.
+ */
+export async function resolveRunKnowledgeScopes(
+  memory: KnowledgeStoreMemory,
+  context: KnowledgeToolContext | undefined,
+): Promise<KnowledgeRunScopes> {
+  const scopes = trustedRunScopes(context);
+  const knowledge = memory.getKnowledgeInstance?.();
+  let held: Array<KnowledgeRunScopePlan & { scopeId: string }>;
+  if (knowledge) {
+    held = await knowledge.materializeRunScopes({ scopes });
+  } else {
+    const store = await getKnowledgeStore(memory);
+    held = [];
+    for (const plan of planKnowledgeRunScopes(memoryScopeTypes, scopes)) {
+      const { pattern: _pattern, parentAddress: _parentAddress, ...input } = plan;
+      const result = await store.reconcileStructure(materializeKnowledgeScopePlan(memoryScopeTypes, input));
+      held.push({ ...plan, scopeId: result.scopes[plan.address]! });
+    }
+  }
+  if (held.length === 0) {
+    throw new Error(
+      'Knowledge tools found no scope for this run: configure Knowledge scope types (for example memoryScopeTypes) that match the run’s scopes.',
+    );
+  }
+
+  const byAddress = new Map(held.map(scope => [scope.address, scope]));
+  const chainOf = (scope: KnowledgeRunScopePlan & { scopeId: string }) => {
+    const chain = [scope];
+    for (let current = scope; current.parentAddress;) {
+      current = byAddress.get(current.parentAddress)!;
+      chain.unshift(current);
+    }
+    return chain;
+  };
+  const chains = held.map(chainOf);
+  const depth = Math.max(...chains.map(chain => chain.length));
+  const deepest = chains.filter(chain => chain.length === depth);
+  if (deepest.length > 1) {
+    throw new Error(
+      `Knowledge run scopes form more than one chain of depth ${depth}: ${deepest.map(chain => chain.at(-1)!.address).join(', ')}`,
+    );
+  }
+  const levels = deepest[0]!.map(scope => ({
+    type: scope.address.split(':')[0]!,
+    address: scope.address,
+    scopeId: scope.scopeId,
+  }));
+  const chainIds = new Set(levels.map(level => level.scopeId));
+  return {
+    scopeIds: [
+      ...levels.map(level => level.scopeId),
+      ...held.filter(s => !chainIds.has(s.scopeId)).map(s => s.scopeId),
+    ],
+    levels,
+  };
+}
+
 export async function resolveKnowledgeScopeIds(
   memory: KnowledgeStoreMemory,
   context: KnowledgeToolContext | undefined,
 ): Promise<KnowledgeScopeIds> {
-  const organizationId = context?.requestContext?.get('organizationId');
-  const resourceId = resolveKnowledgeResourceId(context?.requestContext, context?.agent?.resourceId);
-  const threadId = context?.agent?.threadId;
-  if (typeof organizationId !== 'string' || !organizationId.trim()) {
-    throw new Error('Knowledge tools require requestContext.organizationId.');
-  }
-  if (!resourceId) throw new Error('Knowledge tools require an active resourceId.');
-  if (!threadId) throw new Error('Knowledge tools require an active threadId.');
-  const knowledge = memory.getKnowledgeInstance?.();
-
-  const orgAddress = `org:${organizationId}`;
-  const resourceAddress = `resource:${resourceId}`;
-  const threadAddress = `resource:${resourceId}:thread:${threadId}`;
-  if (knowledge) {
-    const org = await knowledge.materializeScope({
-      address: orgAddress,
-      contextualScopeAddress: orgAddress,
-      parameters: { orgId: organizationId },
-    });
-    const resource = await knowledge.materializeScope({
-      address: resourceAddress,
-      parentAddresses: [orgAddress],
-      contextualScopeAddress: orgAddress,
-      parameters: { orgId: organizationId, resourceId },
-    });
-    const thread = await knowledge.materializeScope({
-      address: threadAddress,
-      parentAddresses: [resourceAddress],
-      contextualScopeAddress: resourceAddress,
-      parameters: { orgId: organizationId, resourceId, threadId },
-    });
-    return [org.scopes[orgAddress]!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
-  }
-
-  // Bare-storage Memory: materialize through the storage domain directly, using
-  // the built-in scope types the facade itself defaults to.
-  const store = await getKnowledgeStore(memory);
-  const materialize = (input: Parameters<typeof materializeKnowledgeScopePlan>[1]) =>
-    store.reconcileStructure(materializeKnowledgeScopePlan(undefined, input));
-  const org = await materialize({
-    address: orgAddress,
-    contextualScopeAddress: orgAddress,
-    parameters: { orgId: organizationId },
-  });
-  const resource = await materialize({
-    address: resourceAddress,
-    parentAddresses: [orgAddress],
-    contextualScopeAddress: orgAddress,
-    parameters: { orgId: organizationId, resourceId },
-  });
-  const thread = await materialize({
-    address: threadAddress,
-    parentAddresses: [resourceAddress],
-    contextualScopeAddress: resourceAddress,
-    parameters: { orgId: organizationId, resourceId, threadId },
-  });
-  return [org.scopes[orgAddress]!, resource.scopes[resourceAddress]!, thread.scopes[threadAddress]!];
+  return (await resolveRunKnowledgeScopes(memory, context)).scopeIds;
 }
 
 async function effectiveScopeIds(

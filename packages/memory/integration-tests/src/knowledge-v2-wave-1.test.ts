@@ -3,8 +3,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { setRunAgentScopes } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
@@ -175,6 +176,7 @@ function createRuntime(storage: MastraCompositeStore, vector: LibSQLVector) {
     name: 'Mastra Knowledge',
     description: 'Product architecture, repository work, and operational knowledge for Mastra.',
     storage,
+    scopes: memoryScopeTypes,
     structure,
   });
   const { model, doGenerate } = deterministicObservationModel();
@@ -407,6 +409,7 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     await first.memory.saveMessages({ messages: [message(threadId)] });
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
+    setRunAgentScopes(requestContext, [`org:${'acme'}`]);
     const observed = await (await first.memory.omEngine)!.observe({
       threadId,
       resourceId: 'shipyard',
@@ -539,6 +542,7 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     await upgraded.memory.saveMessages({ messages: [message(threadId)] });
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
+    setRunAgentScopes(requestContext, [`org:${'acme'}`]);
     await (await upgraded.memory.omEngine)!.observe({
       threadId,
       resourceId: 'shipyard',

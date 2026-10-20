@@ -18,6 +18,13 @@ const scopeIds = [
   '10000000-0000-4000-8000-000000000003',
 ];
 
+const LEVEL_TYPES = ['org', 'resource', 'thread'];
+const heldAddresses = ['org:acme', 'resource:user-42', 'thread:alpha'];
+/** The run's org → resource → thread chain, as resolveRunKnowledgeScopes reports it. */
+function levelsOf(ids: string[], addresses = heldAddresses) {
+  return ids.map((scopeId, index) => ({ type: LEVEL_TYPES[index]!, address: addresses[index]!, scopeId }));
+}
+
 async function fixture(toolScopeIds = scopeIds) {
   const storage = new InMemoryStore();
   const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'default', storage }) });
@@ -29,12 +36,11 @@ async function fixture(toolScopeIds = scopeIds) {
   const target = await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds: [scopeIds[2]!] });
   const tools = createKnowledgeWriteTools(memory, {
     scopeIds: toolScopeIds,
+    levels: levelsOf(toolScopeIds),
     sourceThreadId: 'alpha',
   });
   return { memory, store, source, target, tools };
 }
-
-const heldAddresses = ['org:acme', 'resource:user-42', 'resource:user-42:thread:alpha'];
 
 async function structuralFixture() {
   const storage = new InMemoryStore();
@@ -45,7 +51,7 @@ async function structuralFixture() {
       scopes: [
         { address: 'org:acme', name: 'acme' },
         { address: 'resource:user-42', name: 'user-42', parentAddresses: ['org:acme'] },
-        { address: 'resource:user-42:thread:alpha', name: 'alpha', parentAddresses: ['resource:user-42'] },
+        { address: 'thread:alpha', name: 'alpha', parentAddresses: ['resource:user-42'] },
         { address: 'features', name: 'features', parentAddresses: ['org:acme'] },
         {
           address: 'features:memory',
@@ -63,7 +69,7 @@ async function structuralFixture() {
   const store = await knowledge.getStorage();
   const tools = createKnowledgeWriteTools(memory, {
     scopeIds: heldAddresses.map(address => scopes[address]!),
-    scopeAddresses: heldAddresses,
+    levels: levelsOf(heldAddresses.map(address => scopes[address]!)),
     sourceThreadId: 'alpha',
   });
   return { store, scopes, tools };
@@ -162,7 +168,7 @@ describe('Subconscious knowledge write tools', () => {
 
     // Structural placement is additive to the default identity rung.
     expect(await store.getNodeScopeIds(result.node.id)).toEqual(
-      [scopes['resource:user-42:thread:alpha'], scopes['features:memory']].sort(),
+      [scopes['thread:alpha'], scopes['features:memory']].sort(),
     );
   });
 
@@ -171,7 +177,7 @@ describe('Subconscious knowledge write tools', () => {
     for (const [address, parent] of [
       ['org:acme', undefined],
       ['resource:user-42', 'org:acme'],
-      ['resource:user-42:thread:alpha', 'resource:user-42'],
+      ['thread:alpha', 'resource:user-42'],
     ] as const) {
       const { scopes } = await knowledge.materializeScope({
         address,
@@ -182,7 +188,7 @@ describe('Subconscious knowledge write tools', () => {
     }
     const tools = createKnowledgeWriteTools(new Memory({ storage: new InMemoryStore(), knowledge }), {
       scopeIds: ids,
-      scopeAddresses: heldAddresses,
+      levels: levelsOf(ids),
       sourceThreadId: 'alpha',
     });
     return { ids, tools, store: await knowledge.getStorage() };
@@ -501,7 +507,7 @@ describe('Subconscious knowledge write tools', () => {
     // every org-level write. The option no longer exists and must not restrict the curator.
     const legacy = new Subconscious({ defaultScope: 'resource', maxScope: 'resource' } as SubconsciousConfig);
     expect(legacy.resolved).not.toHaveProperty('maxScope');
-    const tools = createKnowledgeWriteTools(memory, { scopeIds, sourceThreadId: 'alpha' });
+    const tools = createKnowledgeWriteTools(memory, { scopeIds, levels: levelsOf(scopeIds), sourceThreadId: 'alpha' });
 
     const created = (await tools.knowledge_create!.execute?.(
       { name: 'Team ritual', kind: 'practice', text: 'Retro every Friday', nodeScope: 'org', scope: 'org' },
@@ -532,7 +538,7 @@ describe('Subconscious knowledge write tools', () => {
     const knowledge = memory.getKnowledgeInstance()!;
     const setRecordScopes = vi.spyOn(knowledge, 'setRecordScopes');
     const createRecord = vi.spyOn(knowledge, 'createRecord');
-    const tools = createKnowledgeWriteTools(memory, { scopeIds, sourceThreadId: 'alpha' });
+    const tools = createKnowledgeWriteTools(memory, { scopeIds, levels: levelsOf(scopeIds), sourceThreadId: 'alpha' });
     const record = (await tools.knowledge_append!.execute?.(
       { node: source.id, text: 'Mentions [[Project Atlas]]', scope: 'thread' },
       {} as any,

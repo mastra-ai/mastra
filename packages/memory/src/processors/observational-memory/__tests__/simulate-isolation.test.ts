@@ -1,5 +1,5 @@
-import { Agent } from '@mastra/core/agent';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Agent, setRunAgentScopes } from '@mastra/core/agent';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
@@ -31,12 +31,12 @@ describe('direct replay isolation', () => {
     const storageB = new InMemoryStore();
     const memoryA = new Memory({
       storage: storageA,
-      knowledge: new Knowledge({ id: 'default', storage: storageA }),
+      knowledge: new Knowledge({ id: 'default', storage: storageA, scopes: memoryScopeTypes }),
       ...semanticInfrastructure,
     });
     const memoryB = new Memory({
       storage: storageB,
-      knowledge: new Knowledge({ id: 'default', storage: storageB }),
+      knowledge: new Knowledge({ id: 'default', storage: storageB, scopes: memoryScopeTypes }),
       ...semanticInfrastructure,
     });
     const subconscious = new Subconscious();
@@ -83,6 +83,7 @@ describe('direct replay isolation', () => {
 
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
+    setRunAgentScopes(requestContext, [`org:${'acme'}`]);
     for (const [memory, expected] of [
       [memoryA, 'Project Atlas'],
       [memoryB, 'Project Beacon'],

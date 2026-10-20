@@ -1,5 +1,5 @@
-import { Agent } from '@mastra/core/agent';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Agent, setRunAgentScopes } from '@mastra/core/agent';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
@@ -49,12 +49,13 @@ describe('direct Subconscious replay', () => {
     const storage = new InMemoryStore();
     const memory = new Memory({
       storage,
-      knowledge: new Knowledge({ id: 'default', storage }),
+      knowledge: new Knowledge({ id: 'default', storage, scopes: memoryScopeTypes }),
       ...semanticInfrastructure,
     });
     const subconscious = new Subconscious();
     const scopeContext = new RequestContext();
     scopeContext.set('organizationId', 'acme');
+    setRunAgentScopes(scopeContext, [`org:${'acme'}`]);
     const scopeIds = await resolveKnowledgeScopeIds(memory, {
       agent: { threadId: 'thread-a', resourceId: 'atlas' },
       requestContext: scopeContext,
@@ -170,6 +171,7 @@ describe('direct Subconscious replay', () => {
     const reminder = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
+    setRunAgentScopes(requestContext, [`org:${'acme'}`]);
     const sendSignal = vi.fn(async () => undefined);
     const hookResult = await applyExtractorHooks({
       source: 'observer',

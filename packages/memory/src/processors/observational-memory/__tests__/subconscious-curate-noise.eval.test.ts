@@ -1,4 +1,5 @@
-import { Knowledge } from '@mastra/core/knowledge';
+import { setRunAgentScopes } from '@mastra/core/agent';
+import { Knowledge, memoryScopeTypes } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { KnowledgeRecord } from '@mastra/core/storage';
@@ -62,13 +63,19 @@ const embedder = {
 describe.skipIf(!runEval)('Subconscious curator on a noisy transcript (live model)', () => {
   it('saves the durable fact and none of the progress, IDs, PIDs, temp paths, or guesses', async () => {
     const storage = new InMemoryStore();
-    const memory = new Memory({ storage, knowledge: new Knowledge({ id: 'eval', storage }), vector, embedder });
+    const memory = new Memory({
+      storage,
+      knowledge: new Knowledge({ id: 'eval', storage, scopes: memoryScopeTypes }),
+      vector,
+      embedder,
+    });
     const subconscious = new Subconscious({ model: 'anthropic/claude-haiku-4-5' });
     const curate = subconscious
       .createObservationExtractors('anthropic/claude-haiku-4-5', () => memory.createSubconsciousMemory())
       .find(extractor => extractor.name === 'Curate')!;
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
+    setRunAgentScopes(requestContext, [`org:${'acme'}`]);
 
     await curate.onExtracted!({
       source: 'observer',

@@ -4,19 +4,20 @@ import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import { knowledgeRecordWriter } from './knowledge-tools';
-
-type SubconsciousScopeSelection = 'org' | 'resource' | 'thread';
+import type { KnowledgeRunScopeLevel } from './knowledge-tools';
 
 const CURATOR_IDENTITY = 'subconscious:curate';
 export const MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH = 400;
 export const MAX_KNOWLEDGE_RECORD_TEXT_LENGTH = 1000;
-const SCOPE_RUNGS = ['org', 'resource', 'thread'] as const;
-const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: [...SCOPE_RUNGS] };
-const nodePlacementSchema: JSONSchema7 = {
-  type: 'string',
-  description:
-    "Placement for the node: an identity rung ('org', 'resource', or 'thread'), or a structural scope address from the host-configured placement context (for example 'features:memory').",
-};
+function scopeLevelSchema(levels: KnowledgeRunScopeLevel[]): JSONSchema7 {
+  return { type: 'string', enum: levels.map(level => level.type) };
+}
+function nodePlacementSchema(levels: KnowledgeRunScopeLevel[]): JSONSchema7 {
+  return {
+    type: 'string',
+    description: `Placement for the node: one of this run's scope levels (${levels.map(level => `'${level.type}'`).join(', ')}), or a structural scope address from the host-configured placement context (for example 'features:memory').`,
+  };
+}
 const recordTextSchema: JSONSchema7 = {
   type: 'string',
   minLength: 1,
@@ -52,9 +53,10 @@ type KnowledgeWriteToolsMemory = {
 };
 
 export interface KnowledgeWriteToolsOptions {
+  /** Every scope the run holds; bounds what the tools can see. */
   scopeIds: KnowledgeScopeIds;
-  /** Host-vouched addresses of `scopeIds`, used to bound structural placement. */
-  scopeAddresses?: string[];
+  /** The run's chain of nested scopes, root first; writes name one of these levels by type. */
+  levels: KnowledgeRunScopeLevel[];
   sourceThreadId: string;
 }
 
@@ -65,11 +67,14 @@ async function getStore(memory: KnowledgeWriteToolsMemory): Promise<KnowledgeSto
   return store;
 }
 
-function resolveWriteScopeIds(
-  options: KnowledgeWriteToolsOptions,
-  scope: SubconsciousScopeSelection = 'thread',
-): KnowledgeScopeIds {
-  return [options.scopeIds[scope === 'org' ? 0 : scope === 'resource' ? 1 : 2]!];
+/** Writes default to the deepest level the run holds (its thread, in Memory's chain). */
+function resolveWriteScopeIds(options: KnowledgeWriteToolsOptions, scope?: string): KnowledgeScopeIds {
+  const level = scope === undefined ? options.levels.at(-1) : options.levels.find(held => held.type === scope);
+  if (!level)
+    throw new Error(
+      `Unknown Knowledge scope level: ${scope}. Use one of ${options.levels.map(held => held.type).join(', ')}.`,
+    );
+  return [level.scopeId];
 }
 
 /**
@@ -82,16 +87,15 @@ async function resolveNodePlacement(
   store: KnowledgeStorage,
   options: KnowledgeWriteToolsOptions,
   placement: string | undefined,
-  recordScope: SubconsciousScopeSelection | undefined,
+  recordScope: string | undefined,
 ): Promise<KnowledgeScopeIds> {
   // Without an explicit placement the node shares its first record's rung, so the record is never
   // stranded on a node that its own readers cannot see.
   if (placement === undefined) return resolveWriteScopeIds(options, recordScope);
-  if ((SCOPE_RUNGS as readonly string[]).includes(placement)) {
-    return resolveWriteScopeIds(options, placement as SubconsciousScopeSelection);
-  }
+  if (options.levels.some(level => level.type === placement)) return resolveWriteScopeIds(options, placement);
   const frontier =
-    (await memory.getKnowledgeInstance?.()?.__getVisibleStructureScopes(options.scopeAddresses ?? [])) ?? [];
+    (await memory.getKnowledgeInstance?.()?.__getVisibleStructureScopes(options.levels.map(level => level.address))) ??
+    [];
   const scope = frontier.some(visible => visible.address === placement) ? await store.getScopeAddress(placement) : null;
   if (!scope) throw new Error(`Structural scope is outside the curator's visible scope: ${placement}`);
   return [...resolveWriteScopeIds(options, recordScope), scope.scopeNodeId];
@@ -178,8 +182,8 @@ export function createKnowledgeWriteTools(
           name: { type: 'string', minLength: 1 },
           kind: { type: 'string', minLength: 1 },
           text: recordTextSchema,
-          nodeScope: nodePlacementSchema,
-          scope: scopeLevelSchema,
+          nodeScope: nodePlacementSchema(options.levels),
+          scope: scopeLevelSchema(options.levels),
           when: dateTimeSchema,
           confirmDistinct: {
             type: 'boolean',
@@ -196,7 +200,7 @@ export function createKnowledgeWriteTools(
           kind: string;
           text: string;
           nodeScope?: string;
-          scope?: SubconsciousScopeSelection;
+          scope?: string;
           when?: string;
           confirmDistinct?: boolean;
         };
@@ -241,14 +245,14 @@ export function createKnowledgeWriteTools(
         properties: {
           node: { type: 'string', minLength: 1 },
           text: recordTextSchema,
-          scope: scopeLevelSchema,
+          scope: scopeLevelSchema(options.levels),
           when: dateTimeSchema,
         },
         required: ['node', 'text'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { node: string; text: string; scope?: SubconsciousScopeSelection; when?: string };
+        const value = input as { node: string; text: string; scope?: string; when?: string };
         requireRecordTextWithinBound(value.text);
         const store = await getStore(memory);
         const parent = await store.getNode(value.node);
@@ -394,13 +398,13 @@ export function createKnowledgeWriteTools(
         properties: {
           recordId: { type: 'string', minLength: 1 },
           expectedVersion: { type: 'integer', minimum: 1 },
-          scope: scopeLevelSchema,
+          scope: scopeLevelSchema(options.levels),
         },
         required: ['recordId', 'expectedVersion', 'scope'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { recordId: string; expectedVersion: number; scope: SubconsciousScopeSelection };
+        const value = input as { recordId: string; expectedVersion: number; scope: string };
         const store = await getStore(memory);
         const record = await store.getRecord({ id: value.recordId });
         if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
@@ -459,7 +463,7 @@ export function createKnowledgeWriteTools(
           name: { type: 'string', minLength: 1 },
           kind: { type: 'string', minLength: 1 },
           content: { type: 'string', minLength: 1 },
-          scope: scopeLevelSchema,
+          scope: scopeLevelSchema(options.levels),
           expectedVersion: { type: 'integer', minimum: 1 },
         },
         required: ['name', 'content'],
@@ -470,7 +474,7 @@ export function createKnowledgeWriteTools(
           name: string;
           kind?: string;
           content: string;
-          scope?: SubconsciousScopeSelection;
+          scope?: string;
           expectedVersion?: number;
         };
         const name = value.name.trim();
