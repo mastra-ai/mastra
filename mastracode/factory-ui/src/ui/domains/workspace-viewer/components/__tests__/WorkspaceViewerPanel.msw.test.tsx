@@ -182,6 +182,41 @@ describe('WorkspaceViewerPanel', () => {
       expect(treeRequests).toEqual(['', 'src']);
     });
 
+    it('hides dotfiles and dot-folders until the eye toggle shows them, even after opening a file', async () => {
+      installHandlers();
+      server.use(
+        http.get(TREE_URL, ({ request }) => {
+          const path = new URL(request.url).searchParams.get('path') ?? '';
+          const entries =
+            path === ''
+              ? [
+                  { name: '.github', path: '.github', type: 'directory' },
+                  { name: '.env.example', path: '.env.example', type: 'file' },
+                  { name: 'README.md', path: 'README.md', type: 'file' },
+                ]
+              : [];
+          return HttpResponse.json({ workspacePath: WORKSPACE, path, available: true, entries });
+        }),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await user.click(await screen.findByRole('button', { name: /^Files/ }));
+      await screen.findByText('README.md');
+      expect(screen.queryByText('.github')).not.toBeInTheDocument();
+      expect(screen.queryByText('.env.example')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Show hidden files' }));
+      expect(screen.getByText('.github')).toBeInTheDocument();
+      expect(screen.getByText('.env.example')).toBeInTheDocument();
+
+      await user.click(screen.getByText('README.md'));
+      await user.click(await screen.findByRole('button', { name: 'Back to workspace files' }));
+      expect(await screen.findByText('.github')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Hide hidden files' }));
+      expect(screen.queryByText('.github')).not.toBeInTheDocument();
+    });
+
     it('refetches every open folder on refresh', async () => {
       const { treeRequests } = installHandlers();
       const user = userEvent.setup();

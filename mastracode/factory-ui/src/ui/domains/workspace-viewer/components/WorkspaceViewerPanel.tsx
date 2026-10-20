@@ -42,6 +42,7 @@ export function WorkspaceViewerPanel({
   const canRecreateSandbox = session.data?.capabilities?.recreateSandbox === true;
   const [view, setView] = useState<WorkspacePanelView>({ type: 'overview' });
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
+  const [showHidden, setShowHidden] = useState(false);
   const selectedFilePath = view.type === 'file' ? view.path : undefined;
   const changes = useWorkspaceChanges(workspacePath, { enabled: visible });
   const factory = useFactoryQuery(factoryProjectId);
@@ -111,6 +112,8 @@ export function WorkspaceViewerPanel({
         selectedFilePath={view.selectedPath}
         onFileSelect={path => setView({ type: 'file', path })}
         openFolders={openFolders}
+        showHidden={showHidden}
+        onShowHiddenChange={setShowHidden}
         onFolderOpenChange={(path, open) => setOpenFolders(previous => ({ ...previous, [path]: open }))}
         onBack={showOverview}
       />

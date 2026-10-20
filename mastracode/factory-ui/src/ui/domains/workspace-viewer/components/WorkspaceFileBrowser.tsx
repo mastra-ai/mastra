@@ -5,6 +5,8 @@ import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   ArrowLeft,
+  Eye,
+  EyeOff,
   File,
   FileCode,
   FileJson,
@@ -69,8 +71,14 @@ function TreeMessage({ children, tone = 'muted' }: { children: ReactNode; tone?:
   );
 }
 
+/** Dotfiles and dot-folders, hidden unless the viewer asks for them. */
+function isHidden(entry: WorkspaceTreeEntry): boolean {
+  return entry.name.startsWith('.');
+}
+
 interface TreeLevelProps {
   workspacePath: string;
+  showHidden: boolean;
   openFolders: Record<string, boolean>;
   onFolderOpenChange: (path: string, open: boolean) => void;
 }
@@ -92,7 +100,7 @@ function FolderChildren({ path, ...props }: TreeLevelProps & { path: string }) {
       </li>
     );
   }
-  const entries = listing.data?.entries ?? [];
+  const entries = (listing.data?.entries ?? []).filter(entry => props.showHidden || !isHidden(entry));
   if (entries.length === 0) {
     return (
       <li className="px-2 py-1">
@@ -136,6 +144,8 @@ interface WorkspaceFileBrowserProps {
   onFileSelect: (filePath: string) => void;
   openFolders: Record<string, boolean>;
   onFolderOpenChange: (path: string, open: boolean) => void;
+  showHidden: boolean;
+  onShowHiddenChange: (showHidden: boolean) => void;
   onBack: () => void;
 }
 
@@ -150,6 +160,8 @@ export function WorkspaceFileBrowser({
   onFileSelect,
   openFolders,
   onFolderOpenChange,
+  showHidden,
+  onShowHiddenChange,
   onBack,
 }: WorkspaceFileBrowserProps) {
   const queryClient = useQueryClient();
@@ -157,7 +169,7 @@ export function WorkspaceFileBrowser({
   const isRefreshing = useIsFetching({ queryKey: queryKeys.workspaceTreeScope(workspacePath) }) > 0;
   const refresh = () =>
     void queryClient.refetchQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath), type: 'active' });
-  const entries = root.data?.entries ?? [];
+  const entries = (root.data?.entries ?? []).filter(entry => showHidden || !isHidden(entry));
 
   let content: ReactNode;
   if (root.isLoading) {
@@ -184,6 +196,15 @@ export function WorkspaceFileBrowser({
           className="ml-auto"
           size="icon-sm"
           variant="ghost"
+          onClick={() => onShowHiddenChange(!showHidden)}
+          aria-pressed={showHidden}
+          aria-label={showHidden ? 'Hide hidden files' : 'Show hidden files'}
+        >
+          {showHidden ? <Eye /> : <EyeOff />}
+        </Button>
+        <Button
+          size="icon-sm"
+          variant="ghost"
           onClick={refresh}
           disabled={isRefreshing}
           aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
@@ -201,6 +222,7 @@ export function WorkspaceFileBrowser({
                 key={entry.path}
                 entry={entry}
                 workspacePath={workspacePath}
+                showHidden={showHidden}
                 openFolders={openFolders}
                 onFolderOpenChange={onFolderOpenChange}
               />
