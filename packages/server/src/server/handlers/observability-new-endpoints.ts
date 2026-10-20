@@ -184,9 +184,12 @@ function createNewRoute<
 
 type TraceQueryErrorBody = { code: ServerErrorCode; message: string; issues?: unknown[] };
 
-/** Adds the `problem` envelope shared by every server error body to a trace-query error body. */
-function withTraceQueryProblem(body: TraceQueryErrorBody) {
-  const problem: ServerProblem = { code: body.code };
+/**
+ * Adds the `problem` envelope shared by every server error body to a trace-query error body.
+ * `problemCode` overrides `problem.code` when it is more specific than the body's legacy top-level `code`.
+ */
+function withTraceQueryProblem(body: TraceQueryErrorBody, problemCode: ServerErrorCode = body.code) {
+  const problem: ServerProblem = { code: problemCode };
   if (body.issues) problem.metadata = { issues: body.issues };
   return { ...body, problem };
 }
@@ -291,11 +294,15 @@ const traceQueryValidationError: ValidationErrorHook = error => ({
   }),
 });
 
-function throwTraceQueryError(status: 400 | 409 | 413 | 422 | 501 | 503 | 504, body: TraceQueryErrorBody): never {
-  const problemBody = withTraceQueryProblem(body);
+function throwTraceQueryError(
+  status: 400 | 409 | 413 | 422 | 501 | 503 | 504,
+  body: TraceQueryErrorBody,
+  problemCode?: ServerErrorCode,
+): never {
+  const problemBody = withTraceQueryProblem(body, problemCode);
   throw new HTTPException(status, {
     message: body.message,
-    code: body.code,
+    code: problemBody.problem.code,
     metadata: problemBody.problem.metadata,
     res: new Response(JSON.stringify(problemBody), {
       status,
@@ -401,12 +408,6 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
       assertObservabilityTraceQueryTimeToFirstChunkSortSupported(observabilityStore, plan.orderBy);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
-      if (plan.paginationMode === 'delta' && !observabilityStore.getFeatures()?.includes('delta-polling')) {
-        throw new HTTPException(501, {
-          message: 'This storage provider does not support observability delta polling',
-          code: SERVER_ERROR_CODES.OBSERVABILITY_DELTA_POLLING_UNSUPPORTED,
-        });
-      }
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
         throwTraceQueryError(422, { code: error.code, message: error.message, issues: error.issues });
@@ -415,6 +416,17 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
         throwTraceQueryError(501, { code: SERVER_ERROR_CODES.TRACE_QUERY_UNSUPPORTED, message: error.message });
       }
       throw error;
+    }
+
+    if (plan.paginationMode === 'delta' && !observabilityStore.getFeatures()?.includes('delta-polling')) {
+      throwTraceQueryError(
+        501,
+        {
+          code: SERVER_ERROR_CODES.TRACE_QUERY_UNSUPPORTED,
+          message: 'This storage provider does not support observability delta polling',
+        },
+        SERVER_ERROR_CODES.OBSERVABILITY_DELTA_POLLING_UNSUPPORTED,
+      );
     }
 
     try {

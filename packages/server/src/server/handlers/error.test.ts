@@ -5,7 +5,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { describe, expect, it } from 'vitest';
 
 import { HTTPException } from '../http-exception';
-import { handleError } from './error';
+import { formatZodError, handleError } from './error';
 import type { HandleErrorFallback } from './error';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -221,6 +221,30 @@ describe('handleError', () => {
       expect(caught!.message).toBe('run is busy');
     });
 
+    it('keeps run ids and the retry hint but drops lease internals from problem metadata', () => {
+      const err = Object.assign(new Error('run is busy'), {
+        id: 'DURABLE_AGENT_RUN_ACTIVE',
+        details: {
+          agentId: 'agent-1',
+          runId: 'run-1',
+          liveBy: 'lease',
+          holder: 'worker-7:pid-42',
+          leaseExpiresAt: '2026-10-20T09:00:00.000Z',
+          retryAt: 1_792_000_000_000,
+        },
+      });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, FALLBACK);
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught!.problem).toEqual({
+        code: 'DURABLE_AGENT_RUN_ACTIVE',
+        metadata: { agentId: 'agent-1', runId: 'run-1', retryAt: 1_792_000_000_000 },
+      });
+    });
+
     it('does not treat a superseded execution as a request conflict', () => {
       const err = Object.assign(new Error('superseded'), { id: 'DURABLE_AGENT_EXECUTION_SUPERSEDED' });
       let caught: HTTPException | undefined;
@@ -407,5 +431,39 @@ describe('HTTPException', () => {
     expect(error.status).toBe(404);
     expect(error.message).toBe('Not here');
     expect(error.problem).toEqual({ code: 'UNCATEGORIZED_ERROR' });
+  });
+});
+
+describe('formatZodError', () => {
+  it('uses REQUEST_VALIDATION_FAILED by default', () => {
+    const body = formatZodError({ issues: [{ path: ['name'], message: 'Required' }] }, 'request body', 'body');
+
+    expect(body.problem).toEqual({
+      code: 'REQUEST_VALIDATION_FAILED',
+      metadata: { issues: [{ field: 'name', message: 'Required' }], location: 'body' },
+    });
+  });
+
+  it('uses the catalog code carried by a custom issue', () => {
+    const body = formatZodError(
+      {
+        issues: [
+          { path: ['name'], message: 'Required' },
+          { path: ['limit'], message: 'bad limit', params: { problemCode: 'AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE' } },
+        ],
+      },
+      'query parameters',
+    );
+
+    expect(body.problem.code).toBe('AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE');
+  });
+
+  it('ignores problem codes that are not in the catalog', () => {
+    const body = formatZodError(
+      { issues: [{ path: ['limit'], message: 'bad limit', params: { problemCode: 'NOT_A_REAL_CODE' } }] },
+      'query parameters',
+    );
+
+    expect(body.problem.code).toBe('REQUEST_VALIDATION_FAILED');
   });
 });

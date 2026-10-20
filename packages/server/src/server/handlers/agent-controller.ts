@@ -332,6 +332,7 @@ const listMessagesQuerySchema = z
           code: 'custom',
           message: `limit cannot be combined with ${field}; use perPage instead`,
           path: ['limit'],
+          params: { problemCode: SERVER_ERROR_CODES.AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE },
         });
       }
     }
@@ -1559,16 +1560,6 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
     requestContext,
   }) => {
     try {
-      if (
-        limit !== undefined &&
-        (perPage !== undefined || orderBy !== undefined || include !== undefined || filter !== undefined)
-      ) {
-        throw new HTTPException(400, {
-          message: 'limit can only be combined with page; use perPage instead',
-          code: SERVER_ERROR_CODES.AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE,
-        });
-      }
-
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const thread = await controller.queryThreadById({ threadId });
       if (!thread || (resourceId && thread.resourceId && thread.resourceId !== resourceId)) {

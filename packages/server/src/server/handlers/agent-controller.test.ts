@@ -38,6 +38,7 @@ import {
   GET_AGENT_CONTROLLER_GOAL_ROUTE,
   GET_AGENT_CONTROLLER_PERMISSIONS_ROUTE,
 } from './agent-controller';
+import { formatZodError } from './error';
 
 function makeAgent(id = 'test-agent') {
   return new Agent({ id, name: id, instructions: 'test', model: {} as any });
@@ -1443,6 +1444,39 @@ describe('agent-controller routes', () => {
 
       const session = await controller.getSessionByResource('user-route-limit');
       expect(session?.state.get().modelRoute).toBeUndefined();
+    });
+  });
+
+  describe('LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE query validation', () => {
+    it.each(['perPage', 'orderBy', 'include', 'filter'])(
+      'reports AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE when limit is combined with %s',
+      field => {
+        const values: Record<string, string> = {
+          perPage: '10',
+          orderBy: JSON.stringify({ field: 'createdAt', direction: 'ASC' }),
+          include: JSON.stringify([{ id: 'message-1' }]),
+          filter: JSON.stringify({ roles: ['user'] }),
+        };
+        const result = LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.queryParamSchema!.safeParse({
+          limit: '2',
+          [field]: values[field],
+        });
+
+        expect(result.success).toBe(false);
+        const body = formatZodError(result.error!, 'query parameters', 'query');
+        expect(body.problem.code).toBe('AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE');
+        expect(body.issues).toContainEqual({
+          field: 'limit',
+          message: `limit cannot be combined with ${field}; use perPage instead`,
+        });
+      },
+    );
+
+    it('keeps REQUEST_VALIDATION_FAILED for other query errors', () => {
+      const result = LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.queryParamSchema!.safeParse({ page: '-1' });
+
+      expect(result.success).toBe(false);
+      expect(formatZodError(result.error!, 'query parameters', 'query').problem.code).toBe('REQUEST_VALIDATION_FAILED');
     });
   });
 

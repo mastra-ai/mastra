@@ -108,13 +108,15 @@ describe('QUERY_TRACES', () => {
 
   it('rejects unsupported delta and maps adapter watermark errors', async () => {
     const unsupported = createHarness();
-    expect(
-      (
-        await captureHttpException(
-          QUERY_TRACES.handler(params(unsupported.mastra, { timeRange: TIME_RANGE, mode: 'delta' })),
-        )
-      ).status,
-    ).toBe(501);
+    const unsupportedError = await captureHttpException(
+      QUERY_TRACES.handler(params(unsupported.mastra, { timeRange: TIME_RANGE, mode: 'delta' })),
+    );
+    expect(unsupportedError.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await unsupportedError.getResponse().json())).toEqual({
+      code: 'TRACE_QUERY_UNSUPPORTED',
+      message: 'This storage provider does not support observability delta polling',
+      problem: { code: 'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED' },
+    });
     const { mastra, observabilityStore } = createHarness(['trace-query', 'delta-polling']);
     for (const [code, status] of [
       ['TRACE_QUERY_CURSOR_MALFORMED', 400],

@@ -14,7 +14,21 @@ export interface ZodErrorLike {
   issues: Array<{
     path: PropertyKey[];
     message: string;
+    params?: Record<string, unknown>;
   }>;
+}
+
+/**
+ * Custom Zod issues can carry a business code through
+ * `ctx.addIssue({ code: 'custom', params: { problemCode } })`; the first one
+ * found replaces `REQUEST_VALIDATION_FAILED`.
+ */
+function getIssueProblemCode(error: ZodErrorLike): ServerErrorCode {
+  for (const issue of error.issues) {
+    const problemCode = issue.params?.problemCode;
+    if (isServerErrorCode(problemCode)) return problemCode;
+  }
+  return SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED;
 }
 
 /**
@@ -135,7 +149,7 @@ export function formatZodError(
     error: `Invalid ${context}`,
     issues,
     problem: {
-      code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+      code: getIssueProblemCode(error),
       metadata: location ? { issues, location } : { issues },
     },
   };
@@ -157,11 +171,15 @@ function getErrorId(error: unknown): string | undefined {
   return typeof id === 'string' ? id : undefined;
 }
 
+/** Durable-run lease internals (execution holder, lease timing) that core puts in `details` but clients must not see. */
+const PRIVATE_DETAIL_KEYS = new Set(['holder', 'liveBy', 'leaseExpiresAt']);
+
 /** Only plain-object MastraError `details` are forwarded; core fills them with ids such as `runId`. */
 function getErrorDetails(error: unknown): Record<string, unknown> | undefined {
   const details = error && typeof error === 'object' && 'details' in error ? error.details : undefined;
   if (!details || typeof details !== 'object' || Array.isArray(details)) return undefined;
-  return details as Record<string, unknown>;
+  const entries = Object.entries(details).filter(([key]) => !PRIVATE_DETAIL_KEYS.has(key));
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 function mergeMetadata(...parts: Array<Record<string, unknown> | undefined>): Record<string, unknown> | undefined {
