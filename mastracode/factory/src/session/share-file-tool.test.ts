@@ -20,7 +20,7 @@ function setup({
   requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { chatThread: { post } });
   requestContext.set('controller', { workspace: { filesystem: fs } });
   const tool = createShareFileTool(requestContext).share_file as {
-    execute: (input: { path: string; comment?: string }, ctx: Record<string, unknown>) => Promise<unknown>;
+    execute: (input: { path: string }, ctx: Record<string, unknown>) => Promise<unknown>;
   };
   return { tool, post, fs };
 }
@@ -35,23 +35,18 @@ describe('share_file', () => {
   it('reads the file through the workspace filesystem and posts it as an attachment', async () => {
     const { tool, post, fs } = setup();
 
-    await expect(tool.execute({ path: '/workspace/report.pdf', comment: 'Here you go' }, {})).resolves.toEqual({
+    await expect(tool.execute({ path: '/workspace/report.pdf' }, {})).resolves.toEqual({
       shared: true,
       filename: 'report.pdf',
       bytes: 12,
     });
 
     expect(fs.readFile).toHaveBeenCalledWith('/workspace/report.pdf');
+    // Empty body: any text here would post as a separate Slack message after the upload.
     expect(post).toHaveBeenCalledWith({
-      markdown: 'Here you go',
+      markdown: '',
       files: [{ data: Buffer.from('hello report'), filename: 'report.pdf', mimeType: 'application/pdf' }],
     });
-  });
-
-  it('posts a blank body when there is no comment', async () => {
-    const { tool, post } = setup();
-    await tool.execute({ path: '/workspace/out.csv' }, {});
-    expect(post.mock.calls[0]![0]).toMatchObject({ markdown: ' ' });
   });
 
   it('refuses directories and oversized files before reading them', async () => {

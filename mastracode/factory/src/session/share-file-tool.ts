@@ -25,12 +25,11 @@ export function createShareFileTool(requestContext: RequestContext): Integration
     share_file: createTool({
       id: 'share_file',
       description:
-        'Attach a file from the workspace to the current chat thread. Use this to deliver anything you generated (reports, exports, images) instead of describing where it is on disk. Provide the absolute workspace path and an optional one-line comment.',
+        'Attach a file from the workspace to the current chat thread. Use this to deliver anything you generated (reports, exports, images) instead of describing where it is on disk. The file posts on its own; say what it is in your reply.',
       inputSchema: z.object({
         path: z.string().min(1).describe('Absolute path of the file inside the workspace'),
-        comment: z.string().max(500).optional().describe('Short message posted with the attachment'),
       }),
-      execute: async ({ path, comment }, context) => {
+      execute: async ({ path }, context) => {
         const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
         const workspace = controller?.workspace ?? context?.workspace;
         const fs = workspace?.filesystem;
@@ -49,8 +48,11 @@ export function createShareFileTool(requestContext: RequestContext): Integration
           throw new Error(`${path} is ${data.length} bytes; the limit is ${SHARE_FILE_MAX_BYTES} bytes.`);
         }
         const filename = path.split('/').pop() || 'file';
+        // File only. The Slack adapter posts any non-empty text as a second
+        // message after the upload, so a comment would land as its own bubble
+        // between the reply and the file; an empty body returns after the upload.
         await render.chatThread.post({
-          markdown: comment?.trim() || ' ',
+          markdown: '',
           files: [{ data, filename, ...(stat.mimeType ? { mimeType: stat.mimeType } : {}) }],
         });
         return { shared: true, filename, bytes: data.length };
