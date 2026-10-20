@@ -218,7 +218,9 @@ if (isMain) {
     }
   });
 
-  await storage.init();
-  await mastra.startWorkers?.().catch(() => {});
-  send({ type: 'ready' });
+  // No top-level await: this workspace isn't "type": "module", so tsx runs the peer as CJS.
+  void storage
+    .init()
+    .then(() => mastra.startWorkers?.().catch(() => {}))
+    .then(() => send({ type: 'ready' }));
 }
