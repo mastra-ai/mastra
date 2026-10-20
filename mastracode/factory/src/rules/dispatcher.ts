@@ -418,12 +418,28 @@ function looksLikeSecret(token: string): boolean {
   return /[A-Z]/.test(token) && /[a-z]/.test(token) && /\d/.test(token) && /[A-Za-z0-9]{16,}/.test(token);
 }
 
+// Base64 keys can contain `/`. A `/`-joined token is redacted whole unless one of its pieces is a
+// lowercase word, which paths and branches nearly always have (`fix`, `packages`, `cache`);
+// those are redacted piece by piece instead.
+function redactSecretRun(token: string): string {
+  if (looksLikeSecret(token) && !token.split('/').some(piece => /^[a-z]{2,}$/.test(piece))) return '[redacted]';
+  return token.replace(/[A-Za-z0-9_+=-]{24,}/g, piece =>
+    looksLikeSecret(piece) || isGroupedKey(piece) ? '[redacted]' : piece,
+  );
+}
+
+// Keys printed in `-`/`_` groups (`x7Kp9-Qm2Rt-…`) have no long unbroken run, but every group mixes
+// upper, lower and digits; branch and identifier words such as `Parked-snapshot-lease2-loss` do not.
+function isGroupedKey(token: string): boolean {
+  const groups = token.split(/[-_]/);
+  return groups.length >= 4 && groups.every(group => /[A-Z]/.test(group) && /[a-z]/.test(group) && /\d/.test(group));
+}
+
 function sanitizeDispatchError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message
     .replace(KEY_SHAPED_TOKEN, '[redacted]')
-    .replace(/\bbearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
-    .replace(/\b[A-Za-z0-9_+=-]{24,}/g, token => (looksLikeSecret(token) ? '[redacted]' : token))
+    .replace(/\b[A-Za-z0-9_+=/-]{24,}/g, redactSecretRun)
     .replace(/\b(?:bearer|token|api[-_ ]?key|authorization)\s*[:=]?\s*[^\s,;]+/gi, '[redacted]')
     .slice(0, MAX_ERROR_LENGTH);
 }

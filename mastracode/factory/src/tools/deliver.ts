@@ -94,8 +94,9 @@ export async function deliverFactorySessionNotification({
     });
   }
 
-  // Read before sending: the send itself starts a run on an idle target.
-  const busy = session.stream.isActive();
+  // Read before sending: the send itself starts a run on an idle target. Delivery is per thread,
+  // so a run on another thread of the same session leaves the target thread idle.
+  const busy = session.stream.isActive() && session.thread.getId() === target.threadId;
   const result = await controller
     .getCurrentAgent(session)
     .sendNotificationSignal(

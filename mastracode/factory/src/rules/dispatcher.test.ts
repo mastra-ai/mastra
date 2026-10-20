@@ -6755,6 +6755,13 @@ describe('a skill run that ends in error (#27740)', () => {
     ['Authorization: Bearer sk-abcSECRET42', 'sk-abcSECRET42'],
     ['x-api-key header is invalid: sk-ant-api03-SECRETxyz', 'sk-ant-api03-SECRETxyz'],
     ['provider rejected token Zm9vYmFyQmF6UXV4MTIzNDU2Nzg5MA', 'Zm9vYmFyQmF6UXV4MTIzNDU2Nzg5MA'],
+    ['secret wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY rejected', 'K7MDENG/bPxRfiCYEXAMPLEKEY'],
+    [
+      'storage rejected AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==',
+      'K1SZFPTOtr/KBHBeksoGMGw',
+    ],
+    ['provider rejected x7Kp9-Qm2Rt-Lw4Zn-Bv8Yc-Hd3Fs', 'x7Kp9-Qm2Rt-Lw4Zn-Bv8Yc-Hd3Fs'],
+    ['provider rejected ab1C_de2F_gh3I_jk4L_mn5O_pq6R', 'ab1C_de2F_gh3I_jk4L_mn5O_pq6R'],
   ])('keeps a key in the run error out of lastError and attention: %s', async (runError, secret) => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
