@@ -314,6 +314,23 @@ The `command` argument is a shell string and is concatenated verbatim into the r
 
 :::
 
+### Background processes
+
+On an E2B-backed sandbox, `sandbox.processes` runs commands in the background through the same lease `executeCommand()` uses:
+
+```typescript
+const handle = await sandbox.processes.spawn('pnpm dev', {
+  onStdout: data => console.log(data),
+})
+
+// Everything running in the VM, plus exited processes not read yet
+const running = await sandbox.processes.list()
+
+await handle.kill()
+```
+
+A process has no time limit unless you pass `timeout` to `spawn()` or the constructor. Call `get(pid)` to attach to a process this manager didn't start, for example after your app restarts; output written before attaching isn't available.
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -457,9 +474,9 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   },
   {
     name: 'processes',
-    type: 'PlatformProcessManager',
+    type: 'SandboxProcessManager',
     description:
-      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+      "Background process manager. On an E2B-backed sandbox, `spawn()` streams output while the process runs, `kill()` stops it, `list()` shows what is running in the VM, and `get(pid)` attaches to a process this manager didn't start. Output keeps flowing when the lease a process started with expires. On other providers, output arrives when the command exits and `kill()` isn't supported. See [Background processes](#background-processes) and the [SandboxProcessManager reference](/reference/workspace/process-manager).",
   },
   {
     name: 'filesystem',

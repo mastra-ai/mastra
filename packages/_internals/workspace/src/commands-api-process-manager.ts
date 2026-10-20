@@ -34,6 +34,21 @@ export interface CommandsApi {
   sendStdin(pid: number, data: string): Promise<void>;
 }
 
+/**
+ * Attaching sets no deadline of its own: without one the SDK cuts the stream
+ * after 60s, and the process's own timeout was set when it was spawned.
+ */
+const ATTACH_TIMEOUT_MS = 0;
+
+/** envd runs every command as `/bin/bash -l -c <command>`; show the command itself. */
+function commandOf(proc: { cmd: string; args: string[] }): string {
+  const [flag, c, command] = proc.args;
+  if (proc.cmd === '/bin/bash' && flag === '-l' && c === '-c' && command !== undefined && proc.args.length === 3) {
+    return command;
+  }
+  return [proc.cmd, ...proc.args].join(' ');
+}
+
 export type CommandsApiOperation = 'spawn' | 'list' | 'connect' | 'kill' | 'sendStdin';
 
 /**
@@ -45,9 +60,11 @@ export class CommandsApiProcessHandle extends ProcessHandle {
   readonly pid: string;
   /** The exit code `wait()` saw, for a handle that doesn't update its own. */
   private waitedExitCode?: number;
+  /** One settle loop shared by every `wait()` caller, so a dropped stream is reattached once. */
+  private settled?: Promise<{ exitCode: number } | { error: unknown }>;
 
   constructor(
-    private readonly inner: CommandsApiHandle,
+    private inner: CommandsApiHandle,
     private readonly manager: CommandsApiProcessManager<any>,
     private readonly startTime: number,
     private readonly stdinMode: SpawnProcessOptions['stdinMode'],
@@ -62,9 +79,40 @@ export class CommandsApiProcessHandle extends ProcessHandle {
     return this.inner.exitCode ?? this.waitedExitCode;
   }
 
+  /**
+   * Wait on the current stream. When the provider says the stream dropped while
+   * the process kept running (a Platform lease expiring), reattach with
+   * `connect` and keep waiting. Output written between the drop and the
+   * reattach is not seen.
+   */
+  private async settle(): Promise<{ exitCode: number } | { error: unknown }> {
+    for (;;) {
+      try {
+        return await this.inner.wait();
+      } catch (error) {
+        if (!this.manager.isStreamDrop(error)) return { error };
+        const pid = this.inner.pid;
+        const reattached = await this.manager
+          .runCommands('connect', async commands => {
+            if (!(await commands.list()).some(proc => proc.pid === pid)) return undefined;
+            return commands.connect(pid, {
+              onStdout: data => this.emitStdout(data),
+              onStderr: data => this.emitStderr(data),
+              timeoutMs: ATTACH_TIMEOUT_MS,
+            });
+          })
+          .catch(() => undefined);
+        if (!reattached) return { error };
+        this.inner = reattached;
+      }
+    }
+  }
+
   async wait(): Promise<CommandResult> {
     try {
-      const result = await this.inner.wait();
+      const outcome = await (this.settled ??= this.settle());
+      if ('error' in outcome) throw outcome.error;
+      const result = outcome;
       this.waitedExitCode = result.exitCode;
       return {
         success: result.exitCode === 0,
@@ -157,6 +205,15 @@ export abstract class CommandsApiProcessManager<
   /** Run `fn` against the provider's current commands handle. */
   abstract runCommands<T>(operation: CommandsApiOperation, fn: (commands: CommandsApi) => Promise<T>): Promise<T>;
 
+  /**
+   * Whether `error` from a handle's `wait()` means only the output stream ended
+   * and the process may still be running. Such a handle reattaches with
+   * `connect`. Off by default.
+   */
+  isStreamDrop(_error: unknown): boolean {
+    return false;
+  }
+
   /** Where a command runs when the caller gives no `cwd`. */
   protected defaultCwd(): string | undefined {
     return this.sandbox.workingDirectory;
@@ -198,7 +255,7 @@ export abstract class CommandsApiProcessManager<
     const running = await this.runCommands('list', commands => commands.list());
     const infos: ProcessInfo[] = running.map(proc => ({
       pid: String(proc.pid),
-      command: [proc.cmd, ...proc.args].join(' '),
+      command: commandOf(proc),
       running: true,
     }));
     const listed = new Set(infos.map(info => info.pid));
@@ -227,6 +284,7 @@ export abstract class CommandsApiProcessManager<
         commands.connect(numericPid, {
           onStdout: data => handle.emitStdout(data),
           onStderr: data => handle.emitStderr(data),
+          timeoutMs: ATTACH_TIMEOUT_MS,
         }),
       );
       handle = new CommandsApiProcessHandle(inner, this, Date.now(), undefined);
