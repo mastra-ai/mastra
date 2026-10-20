@@ -148,8 +148,7 @@ describe.each(['durable', 'evented'] as const)('OM in-flight turn recovered by a
     expect(resumed.state.observedMessageIds).toEqual(beforeKill.observedMessageIds);
   });
 
-  // Fixed by #27800, which #27856 reverted. Flip back to `it` when that fix re-lands.
-  it.fails('stores the same messages as the single-process run', () => {
+  it('stores the same messages as the single-process run', () => {
     expect(shape(resumed.state)).toEqual(shape(solo.state));
     expect(new Set(resumed.state.messages.map(m => m.id)).size).toBe(resumed.state.messages.length);
   });
