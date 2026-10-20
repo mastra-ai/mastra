@@ -69,6 +69,23 @@ export const server: MCPServer = new MCPServer({
 
 `match` decides which subscriptions receive an emitted occurrence. A client subscribed with `{ project: 'web' }` receives the ticket above only when its `project` is `web`. The server rejects subscription arguments that fail `inputSchema` and occurrence data that fails `payloadSchema`.
 
+`match` filters on the arguments the client chooses, so it doesn't control who can subscribe. To restrict callers, add `authorize`. It receives the validated arguments and the caller's `requestContext`, which includes `user` when you set `mapAuthInfoToUser`:
+
+```typescript title="src/mcp/server.ts"
+const ticketCreated = defineEvent({
+  description: 'A support ticket was opened',
+  inputSchema: z.object({ project: z.string() }),
+  payloadSchema: ticket,
+  match: (args, data) => data.project === args.project,
+  authorize: ({ arguments: args, requestContext }) => {
+    const user = requestContext.get('user') as { projects: string[] } | undefined
+    return user?.projects.includes(args.project) ?? false
+  },
+})
+```
+
+Returning `false` rejects the poll or subscription with `-32024`. `authorize` runs on every poll and every subscription open. An open subscription isn't checked again until it reconnects. Visit the [`authorize` reference](/reference/tools/mcp-server#events-experimental) for details.
+
 The server serves events over stdio and Streamable HTTP, the same transports as its tools.
 
 ### Choose an event source
@@ -193,7 +210,7 @@ export const server: MCPServer = new MCPServer({
 })
 ```
 
-The server only accepts webhook subscriptions from authenticated callers over HTTP, because it identifies each subscription by the caller, the URL, the event name, and the arguments. Serve it with [authentication](/docs/guides/mcp-authentication-authorization). By default, callback URLs must use `https` and resolve to public addresses.
+The server only accepts webhook subscriptions from authenticated callers over HTTP, because it identifies each subscription by the caller, the URL, the event name, and the arguments. `authorize` runs on each webhook subscribe and each refresh, and a denied refresh removes the subscription. Serve it with [authentication](/docs/guides/mcp-authentication-authorization). By default, callback URLs must use `https` and resolve to public addresses.
 
 On the client, set `webhook.url` and mount `mcp.events.handleWebhook()` on that route. The handler verifies each request's signature, answers the server's verification challenge, and routes occurrences to the matching subscription:
 
@@ -255,7 +272,9 @@ for await (const event of subscription) {
 }
 ```
 
-The loop handles one occurrence at a time. A slow run delays the next one. Start runs without awaiting them when occurrences are independent and order doesn't matter.
+The loop handles one occurrence at a time. A slow run delays the next one. When occurrences are independent and order doesn't matter, you can start runs without awaiting them. Then save the cursor only once every earlier run has finished. Otherwise a crash loses the occurrences whose runs were still going.
+
+With push or webhook delivery, the client buffers occurrences your loop hasn't read yet. A loop that falls more than `maxBufferedEvents` (1000 by default) behind loses the oldest unread occurrences. The client reports `MCP_EVENTS_BUFFER_OVERFLOW` to `onError` and marks the next occurrence `truncated`. Visit the [`events` reference](/reference/tools/mcp-client#events-property-experimental) to change the limit.
 
 The [MCP events example](https://github.com/mastra-ai/mastra/tree/main/examples/mcp-events) runs this flow end to end against a local stdio server.
 
