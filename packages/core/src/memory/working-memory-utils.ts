@@ -111,6 +111,9 @@ export function extractWorkingMemoryContent(text: string): string | null {
   return text.substring(contentStart, end);
 }
 
+// Google's documented dummy signature for Gemini function calls without a real one.
+const SKIP_THOUGHT_SIGNATURE_VALIDATOR = 'skip_thought_signature_validator';
+
 /**
  * Removes `updateWorkingMemory` tool invocations from stored message parts, one step
  * at a time. A step starts at a `step-start` part, or where a tool part is followed by
@@ -138,9 +141,11 @@ export function removeWorkingMemoryToolInvocationParts(parts: MastraMessagePart[
   return steps.flatMap(step => {
     if (!step.some(isWorkingMemoryCall)) return step;
     const remaining = step.filter(part => !isWorkingMemoryCall(part));
-    // Gemini signs only the first call of a parallel step. When that call is the
-    // working-memory call, move its thought signature to the first surviving call
-    // so the step can still be replayed (#27231). A signature already there wins.
+    // Gemini signs only the first call of a parallel step and rejects a replayed step
+    // whose first call is unsigned. When the signed call was the working-memory call,
+    // mark the first surviving call with Google's documented skip-validator signature
+    // (#27231). The real signature is bound to the removed call, so it is not moved.
+    // A signature already on the surviving call wins.
     const targetIndex = remaining.findIndex(part => part?.type === 'tool-invocation');
     const target = remaining[targetIndex];
     if (target?.type === 'tool-invocation') {
@@ -148,11 +153,11 @@ export function removeWorkingMemoryToolInvocationParts(parts: MastraMessagePart[
       for (const removed of step) {
         if (!isWorkingMemoryCall(removed)) continue;
         for (const [provider, metadata] of Object.entries(removed.providerMetadata ?? {})) {
-          const thoughtSignature = metadata?.thoughtSignature;
-          if (thoughtSignature === undefined || providerMetadata?.[provider]?.thoughtSignature !== undefined) continue;
+          if (metadata?.thoughtSignature === undefined) continue;
+          if (providerMetadata?.[provider]?.thoughtSignature !== undefined) continue;
           providerMetadata = {
             ...providerMetadata,
-            [provider]: { ...providerMetadata?.[provider], thoughtSignature },
+            [provider]: { ...providerMetadata?.[provider], thoughtSignature: SKIP_THOUGHT_SIGNATURE_VALIDATOR },
           };
         }
       }

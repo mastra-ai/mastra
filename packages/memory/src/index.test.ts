@@ -336,7 +336,7 @@ describe('Memory', () => {
           .flatMap(m => (m.role === 'assistant' && Array.isArray(m.content) ? m.content : []))
           .filter(part => part.type === 'tool-call');
 
-      it('keeps the step signature on the first surviving call so it replays signed', () => {
+      it('replays the first surviving call with the skip-validator signature', () => {
         const result = memory.testUpdateMessageToHideWorkingMemoryV2(
           geminiMessage([
             { type: 'step-start' },
@@ -347,13 +347,13 @@ describe('Memory', () => {
         );
         expect(result?.content.parts).toEqual([
           { type: 'step-start' },
-          toolPart('call-1', 'lookupWeather', { google: { thoughtSignature: 'SIG_GEMINI' } }),
+          toolPart('call-1', 'lookupWeather', { google: { thoughtSignature: 'skip_thought_signature_validator' } }),
           toolPart('call-2', 'lookupTime'),
         ]);
 
         const toolCalls = replayedToolCalls(result!);
         expect(toolCalls.map(call => call.providerOptions?.google)).toEqual([
-          { thoughtSignature: 'SIG_GEMINI' },
+          { thoughtSignature: 'skip_thought_signature_validator' },
           undefined,
         ]);
       });

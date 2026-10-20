@@ -11,9 +11,12 @@ import { createTool } from '../../../../tools';
 /**
  * Regression for #27231: Gemini 3 signs only the first function call of a
  * parallel step. When that call is `updateWorkingMemory`, persistence strips
- * it, and the signature must move to the next surviving call in the step.
- * Otherwise the replayed step reaches Gemini unsigned and a same-turn replay
- * is rejected with "Function call is missing a thought_signature".
+ * it, and the stored step must mark the next surviving call with Google's
+ * documented `skip_thought_signature_validator` signature. Otherwise providers
+ * that do not add it themselves (`@ai-sdk/google` before 3.0.80, or other
+ * Gemini clients) replay the step unsigned, and a same-turn replay is rejected
+ * with "Function call is missing a thought_signature". The real signature is
+ * bound to the removed call, so it must not be moved onto another call.
  *
  * AIMock's built-in Gemini fixtures cannot put a `thoughtSignature` on a
  * `functionCall` part, so the Gemini endpoint is served by a scripted handler
@@ -46,6 +49,7 @@ class ScriptedGemini implements Mountable {
 
 const storedMemory = '# User Profile\n- **City**: Paris\n';
 const wmCall = { functionCall: { name: 'updateWorkingMemory', args: { memory: storedMemory } } };
+const SKIP_SIGNATURE = 'skip_thought_signature_validator';
 const weatherCall = { functionCall: { name: 'lookupWeather', args: { city: 'Paris' } } };
 
 describe('AIMock scenario: Gemini thought signature on parallel updateWorkingMemory calls (#27231)', () => {
@@ -68,7 +72,8 @@ describe('AIMock scenario: Gemini thought signature on parallel updateWorkingMem
   /**
    * Turn 1 replies with `firstStep`, then text. Turn 2 is a new prompt on the
    * same thread, so its request replays turn 1 from storage. Returns the
-   * function-call parts Gemini receives in that replay.
+   * stored function-call metadata and the function-call parts Gemini receives
+   * in that replay.
    */
   async function replayedFunctionCalls(firstStep: GeminiPart[]) {
     const memory = new MockMemory({
@@ -105,37 +110,54 @@ describe('AIMock scenario: Gemini thought signature on parallel updateWorkingMem
     expect(gemini.requests).toHaveLength(3);
     expect(await memory.getWorkingMemory({ threadId, resourceId })).toContain('Paris');
 
-    return gemini.requests[2]!.contents.filter(content => content.role === 'model')
+    const { messages } = await memory.recall({ threadId, resourceId });
+    const stored = messages
+      .flatMap(message => message.content.parts)
+      .filter(part => part.type === 'tool-invocation')
+      .map(part => ({ toolName: part.toolInvocation.toolName, google: part.providerMetadata?.google }));
+    const replayed = gemini.requests[2]!.contents.filter(content => content.role === 'model')
       .flatMap(content => content.parts)
       .filter(part => 'functionCall' in part || 'thoughtSignature' in part);
+    return { stored, replayed };
   }
 
-  it('replays the surviving parallel call with the signature from the removed updateWorkingMemory call', async () => {
-    const calls = await replayedFunctionCalls([{ ...wmCall, thoughtSignature: 'SIG_PARALLEL_STEP' }, weatherCall]);
+  it('stores and replays the surviving parallel call with the skip-validator signature', async () => {
+    const { stored, replayed } = await replayedFunctionCalls([
+      { ...wmCall, thoughtSignature: 'SIG_PARALLEL_STEP' },
+      weatherCall,
+    ]);
 
-    expect(calls).toEqual([
+    expect(stored).toEqual([
+      { toolName: 'lookupWeather', google: expect.objectContaining({ thoughtSignature: SKIP_SIGNATURE }) },
+    ]);
+    expect(replayed).toEqual([
       {
         functionCall: expect.objectContaining({ name: 'lookupWeather', args: { city: 'Paris' } }),
-        thoughtSignature: 'SIG_PARALLEL_STEP',
+        thoughtSignature: SKIP_SIGNATURE,
       },
     ]);
+    expect(JSON.stringify(gemini.requests[2])).not.toContain('SIG_PARALLEL_STEP');
   });
 
   it('keeps the signature a surviving call already has', async () => {
-    const calls = await replayedFunctionCalls([
+    const { stored, replayed } = await replayedFunctionCalls([
       { ...wmCall, thoughtSignature: 'SIG_WM' },
       { ...weatherCall, thoughtSignature: 'SIG_WEATHER' },
     ]);
 
-    expect(calls).toEqual([
+    expect(stored).toEqual([
+      { toolName: 'lookupWeather', google: expect.objectContaining({ thoughtSignature: 'SIG_WEATHER' }) },
+    ]);
+    expect(replayed).toEqual([
       { functionCall: expect.objectContaining({ name: 'lookupWeather' }), thoughtSignature: 'SIG_WEATHER' },
     ]);
   });
 
   it('replays nothing from a step whose only call was updateWorkingMemory', async () => {
-    const calls = await replayedFunctionCalls([{ ...wmCall, thoughtSignature: 'SIG_WM_ONLY' }]);
+    const { stored, replayed } = await replayedFunctionCalls([{ ...wmCall, thoughtSignature: 'SIG_WM_ONLY' }]);
 
-    expect(calls).toEqual([]);
+    expect(stored).toEqual([]);
+    expect(replayed).toEqual([]);
     expect(JSON.stringify(gemini.requests[2])).not.toContain('SIG_WM_ONLY');
   });
 });

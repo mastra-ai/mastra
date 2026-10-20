@@ -316,8 +316,9 @@ describe('removeWorkingMemoryToolInvocationParts', () => {
   describe('Gemini thought signatures on parallel calls (#27231)', () => {
     const signed = (part: MastraMessagePart, providerMetadata: Record<string, Record<string, any>>) =>
       ({ ...part, providerMetadata }) as MastraMessagePart;
+    const SKIP = 'skip_thought_signature_validator';
 
-    it('moves the signature from a removed working-memory call to the first surviving call', () => {
+    it('marks the first surviving call with the skip-validator signature, not the removed call signature', () => {
       const wm = signed(call('wm', 'updateWorkingMemory'), {
         google: { thoughtSignature: 'sig-1' },
         mastra: { createdAt: 1 },
@@ -328,7 +329,7 @@ describe('removeWorkingMemoryToolInvocationParts', () => {
 
       expect(removeWorkingMemoryToolInvocationParts(input)).toEqual([
         { type: 'step-start' },
-        signed(call('other', 'lookupWeather'), { mastra: { createdAt: 2 }, google: { thoughtSignature: 'sig-1' } }),
+        signed(call('other', 'lookupWeather'), { mastra: { createdAt: 2 }, google: { thoughtSignature: SKIP } }),
         call('third', 'lookupTime'),
       ]);
       expect(input).toEqual(snapshot);
@@ -343,7 +344,7 @@ describe('removeWorkingMemoryToolInvocationParts', () => {
       ]);
     });
 
-    it('moves only the thought signature, not other provider metadata', () => {
+    it('uses the removed call provider namespace and copies no other provider metadata', () => {
       const wm = signed(call('wm', 'updateWorkingMemory'), {
         vertex: { thoughtSignature: 'sig-vertex', extra: 'wm-only' },
         openai: { itemId: 'fc_wm' },
@@ -352,7 +353,7 @@ describe('removeWorkingMemoryToolInvocationParts', () => {
         removeWorkingMemoryToolInvocationParts([{ type: 'step-start' }, wm, call('other', 'lookupWeather')]),
       ).toEqual([
         { type: 'step-start' },
-        signed(call('other', 'lookupWeather'), { vertex: { thoughtSignature: 'sig-vertex' } }),
+        signed(call('other', 'lookupWeather'), { vertex: { thoughtSignature: SKIP } }),
       ]);
     });
 
@@ -378,7 +379,7 @@ describe('removeWorkingMemoryToolInvocationParts', () => {
       ).toEqual(next);
     });
 
-    it('moves a signature only within its own step', () => {
+    it('marks only the first surviving call of the same step', () => {
       expect(
         removeWorkingMemoryToolInvocationParts([
           { type: 'step-start' },
@@ -389,7 +390,7 @@ describe('removeWorkingMemoryToolInvocationParts', () => {
         ]),
       ).toEqual([
         { type: 'step-start' },
-        signed(call('a', 'lookupWeather'), { google: { thoughtSignature: 'sig-1' } }),
+        signed(call('a', 'lookupWeather'), { google: { thoughtSignature: SKIP } }),
         { type: 'step-start' },
         call('b', 'lookupWeather'),
       ]);
