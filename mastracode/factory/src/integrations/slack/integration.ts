@@ -71,6 +71,29 @@ export interface SlackIntegrationConfig {
   adapterOptions?: SlackAdapterChannelConfig;
 }
 
+/** Slack renders the status inline next to the app name; keep it to one short line. */
+const MAX_STATUS_LENGTH = 80;
+
+/**
+ * Turns a tool's `description` arg ("Listing the repo root") into a status
+ * line that reads after the app name ("<App> is listing the repo root…").
+ * Only the first line counts: issue/PR creators carry whole bodies there.
+ */
+function describeToolCall(args: unknown): string | undefined {
+  if (!args || typeof args !== 'object') return undefined;
+  const { description } = args as { description?: unknown };
+  if (typeof description !== 'string') return undefined;
+  const line = description
+    .split('\n')
+    .map(part => part.replace(/\s+/g, ' ').trim())
+    .find(Boolean);
+  if (!line) return undefined;
+  const text = line.length > MAX_STATUS_LENGTH ? `${line.slice(0, MAX_STATUS_LENGTH - 1)}…` : line;
+  // Drop the sentence-case capital ("Listing" → "listing") but leave acronyms
+  // and identifiers ("PR lookup", "CI status") alone.
+  return `is ${/^[A-Z][a-z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text}`;
+}
+
 const factoryTypingStatus: TypingStatusFn = chunk => {
   switch (chunk.type) {
     case 'reasoning-delta':
@@ -78,7 +101,7 @@ const factoryTypingStatus: TypingStatusFn = chunk => {
     case 'text-delta':
       return 'is typing...';
     case 'tool-call':
-      return 'is working...';
+      return describeToolCall(chunk.payload.args) ?? 'is working...';
     default:
       return undefined;
   }
@@ -92,6 +115,18 @@ function adapterOverrides(options: SlackAdapterChannelConfig | undefined): Slack
   return Object.fromEntries(
     Object.entries(options ?? {}).filter(([, value]) => value !== undefined),
   ) as SlackAdapterChannelConfig;
+}
+
+/**
+ * Factory defaults under the caller's overrides. Tool calls stay out of the
+ * thread: a Factory session runs hundreds of them, and a row per call (or a
+ * card per call) buries the reply. Progress shows through the typing status
+ * instead, which names the tool's current step; the session link carries the
+ * full trace. `grouped` remains available via `adapterOptions` for callers
+ * who want Slack's "Thinking Steps" widget.
+ */
+function factoryAdapterOptions(overrides: SlackAdapterChannelConfig): SlackAdapterChannelConfig {
+  return { typingStatus: factoryTypingStatus, toolDisplay: 'hidden', ...overrides };
 }
 
 export class SlackIntegration implements FactoryIntegration {
@@ -139,11 +174,7 @@ export class SlackIntegration implements FactoryIntegration {
       modelDefaults: ctx.storage.modelDefaults,
       workItems: ctx.runtime?.workItems,
       feed: ctx.feed,
-      adapterOptions: {
-        toolDisplay: 'hidden',
-        typingStatus: factoryTypingStatus,
-        ...adapterOverrides(this.#config.adapterOptions),
-      },
+      adapterOptions: factoryAdapterOptions(adapterOverrides(this.#config.adapterOptions)),
     });
   }
 
