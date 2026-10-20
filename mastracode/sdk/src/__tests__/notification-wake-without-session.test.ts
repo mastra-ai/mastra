@@ -104,39 +104,49 @@ async function startProcess(name: string, storage: InMemoryStore, options: { pub
   return { controller, session, errors };
 }
 
+/**
+ * The owner parks a run on `ask_user` and a high-priority notification arrives
+ * for that thread. Then another process, with its own `pubsub` and a session
+ * only for a different resource, wins five fires of the shared schedule.
+ */
+async function notifyParkedOwnerAndDispatchElsewhere(ownerOptions: { pubsub?: EventEmitterPubSub } = {}) {
+  const modelCalls = await startModelServer();
+  const storage = new InMemoryStore();
+  const owner = await startProcess('owner', storage, ownerOptions);
+  const other = await startProcess('other', storage, { pubsub: new EventEmitterPubSub() });
+  const resourceId = owner.session.identity.getResourceId();
+  const threadId = owner.session.thread.getId()!;
+  expect(other.session.identity.getResourceId()).not.toBe(resourceId);
+
+  await owner.session.sendMessage({ content: 'Pick one for me.' });
+  await vi.waitFor(() => expect(owner.session.displayState.get().pendingSuspensions.size).toBe(1));
+
+  const codeAgent = owner.controller.getMastra()!.getAgentById('code-agent') as any;
+  const sent = await codeAgent.sendNotificationSignal(
+    { source: 'inbox', kind: 'task', priority: 'high', summary: 'New task' },
+    { resourceId, threadId },
+  );
+  expect(sent.decision).toMatchObject({ reason: 'active-high-summary-then-full' });
+
+  const notifications = (await storage.getStore('notifications'))! as any;
+  const dispatchFrom = async (process: { controller: AgentController<any> }, minutesFromNow: number) => {
+    const result = await dispatchDueNotifications({
+      mastra: process.controller.getMastra()!,
+      storage: notifications,
+      now: new Date(Date.now() + 60_000 * minutesFromNow),
+    });
+    return result.failed.map(({ error }) => error);
+  };
+  const failed: string[] = [];
+  for (let pass = 1; pass <= 5; pass++) failed.push(...(await dispatchFrom(other, pass)));
+  const getRecord = () => notifications.getNotification({ threadId, id: sent.record.id });
+  return { modelCalls, owner, other, failed, getRecord, dispatchFrom };
+}
+
 describe('a high-priority notification for a thread parked on ask_user', () => {
   it('is left for the owning process by a process with its own pubsub and no session for the thread', async () => {
-    const modelCalls = await startModelServer();
-    const storage = new InMemoryStore();
-    const owner = await startProcess('owner', storage);
-    const other = await startProcess('other', storage, { pubsub: new EventEmitterPubSub() });
-    const resourceId = owner.session.identity.getResourceId();
-    const threadId = owner.session.thread.getId()!;
-    expect(other.session.identity.getResourceId()).not.toBe(resourceId);
-
-    // The owner's run asks the user a question and parks on it.
-    await owner.session.sendMessage({ content: 'Pick one for me.' });
-    await vi.waitFor(() => expect(owner.session.displayState.get().pendingSuspensions.size).toBe(1));
-
-    const codeAgent = owner.controller.getMastra()!.getAgentById('code-agent') as any;
-    const sent = await codeAgent.sendNotificationSignal(
-      { source: 'inbox', kind: 'task', priority: 'high', summary: 'New task' },
-      { resourceId, threadId },
-    );
-    expect(sent.decision).toMatchObject({ reason: 'active-high-summary-then-full' });
-
-    // The other process wins the shared schedule's fires.
-    const notifications = (await storage.getStore('notifications'))!;
-    const failed: string[] = [];
-    for (let pass = 0; pass < 5; pass++) {
-      const result = await dispatchDueNotifications({
-        mastra: other.controller.getMastra()!,
-        storage: notifications as any,
-        now: new Date(Date.now() + 60_000 * (pass + 1)),
-      });
-      failed.push(...result.failed.map(({ error }) => error));
-    }
-    const record = await (notifications as any).getNotification({ threadId, id: sent.record.id });
+    const { modelCalls, owner, failed, getRecord } = await notifyParkedOwnerAndDispatchElsewhere();
+    const record = await getRecord();
 
     expect(failed).toEqual([]);
     expect(record).toMatchObject({ status: 'pending' });
@@ -146,5 +156,26 @@ describe('a high-priority notification for a thread parked on ask_user', () => {
     expect(owner.errors).toEqual([]);
     // The question is still waiting for its answer.
     expect(owner.session.displayState.get().pendingSuspensions.size).toBe(1);
+  }, 30_000);
+
+  it('is delivered by the owning process once its thread is idle, when the owner also has its own pubsub', async () => {
+    const { modelCalls, owner, other, failed, getRecord, dispatchFrom } = await notifyParkedOwnerAndDispatchElsewhere({
+      pubsub: new EventEmitterPubSub(),
+    });
+    expect(failed).toEqual([]);
+
+    // The user answers, and the owner's run finishes.
+    await owner.session.respondToToolSuspension({ toolCallId: 'ask-1', resumeData: 'the first' });
+    await vi.waitFor(() => expect(modelCalls).toHaveLength(2));
+    await vi.waitFor(() => expect(owner.session.run.isRunning()).toBe(false));
+
+    // The other process still leaves it alone.
+    expect(await dispatchFrom(other, 6)).toEqual([]);
+    expect((await getRecord()).status).toBe('pending');
+
+    // The owner wins a later fire and delivers it.
+    expect(await dispatchFrom(owner, 7)).toEqual([]);
+    expect((await getRecord()).status).toBe('delivered');
+    expect(owner.errors).toEqual([]);
   }, 30_000);
 });
