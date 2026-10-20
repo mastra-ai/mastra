@@ -120,8 +120,10 @@ import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './ses
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
+import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './session/thinking-default.js';
+import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -846,6 +848,7 @@ export class MastraFactory {
           deliverFactorySessionNotification({
             controller: messaging.controller,
             sessions: sourceControlSessions,
+            runs: workItemsStorage,
             target,
             notification,
             ...options,
@@ -860,10 +863,46 @@ export class MastraFactory {
     const reportSessionRunEnd = createSessionRunEndReporter(sessionReports);
     // Repeated attempts of one delivery send one report: identical failures to
     // the same follower are deduplicated.
-    const failWake = async ({ resourceId, threadId }: { resourceId: string; threadId: string }, reason: string) => {
-      const message = `Factory session ${resourceId} can't be woken as its owner: ${reason}.`;
+    // A woken thread under a Factory or user resource names its session with its
+    // stamp, or is the session's own thread; an unmigrated thread still runs
+    // under its session id as its resource.
+    const resolveWakeSession = async ({
+      resourceId,
+      threadId,
+      thread,
+    }: {
+      resourceId: string;
+      threadId: string;
+      thread?: { metadata?: Record<string, unknown> } | null;
+    }) => {
+      const stored =
+        thread === undefined ? await this.#prepared?.base.controller.queryThreadById({ threadId }) : thread;
+      const stamp = stored?.metadata?.factorySessionId;
+      const candidates = [...new Set([typeof stamp === 'string' ? stamp : '', threadId, resourceId])].filter(Boolean);
+      for (const sessionId of candidates) {
+        const row = await sourceControlSessions.getBySessionId(sessionId);
+        // The stamp is client-writable metadata: a session only claims a
+        // thread that runs under its own memory resource, or under its own id
+        // as the resource from before resources were shared.
+        // A stamp (neither the thread's own id nor its legacy resource) only
+        // counts where the session's stamps are trusted.
+        const viaStamp = sessionId !== threadId && sessionId !== resourceId;
+        if (
+          row &&
+          (!viaStamp || sessionStampCounts(row, resourceId)) &&
+          (resourceId === sessionId ||
+            resourceId === (await sessionMemoryResourceId(this.#prepared?.base.controller, row, workItemsStorage)))
+        ) {
+          return { sessionId, row };
+        }
+      }
+      // Unresolved: report on the woken thread, never on a session a stamp merely names.
+      return { sessionId: threadId, row: null };
+    };
+    const failWake = async ({ sessionId, threadId }: { sessionId: string; threadId: string }, reason: string) => {
+      const message = `Factory session ${sessionId} can't be woken as its owner: ${reason}.`;
       await reportSessionRunEnd({
-        sessionId: resourceId,
+        sessionId,
         threadId,
         since: new Date(),
         outcome: { status: 'failed', reason: message, failureCode: 'wake-owner-unresolved' },
@@ -1214,20 +1253,27 @@ export class MastraFactory {
         disableGithubSignals: true,
         // A wake (notification or peer signal) has no signed-in request, so
         // tenant credential resolution would fail closed. Run it as the Factory
-        // session's owner in its org; Factory sessions are keyed by resourceId.
+        // session's owner in its org.
         // With auth on, a wake whose owner can't be resolved must not run (it
         // would fail on credentials with no hint why); it fails, and the
         // session's followers get a failed report naming the reason.
         prepareWakeRequestContext: async ({ requestContext, resourceId, threadId }) => {
           if (!storage.isDomainReady('source-control')) {
-            if (auth) await failWake({ resourceId, threadId }, 'session storage is not ready');
+            if (auth) await failWake({ sessionId: threadId, threadId }, 'session storage is not ready');
             return;
           }
-          const prepared = await prepareSessionRunContext(requestContext, resourceId, {
+          const { sessionId, row } = await resolveWakeSession({ resourceId, threadId });
+          // Only a session that owns the thread's resource may lend its owner;
+          // the unresolved fallback id must never be looked up as a session.
+          if (!row) {
+            if (auth) await failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED['session-not-found']);
+            return;
+          }
+          const prepared = await prepareSessionRunContext(requestContext, sessionId, {
             sessions: sourceControlSessions,
           });
           if (prepared !== 'prepared') {
-            if (auth) await failWake({ resourceId, threadId }, WAKE_OWNER_UNRESOLVED[prepared]);
+            if (auth) await failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED[prepared]);
             return;
           }
           await primeCustomProvidersForRequestContext(requestContext);
@@ -1240,22 +1286,22 @@ export class MastraFactory {
           ? {
               resumeWakeSession: async ({ resourceId, threadId }: { resourceId: string; threadId: string }) => {
                 const controller = this.#prepared?.base.controller;
-                if (!controller) return failWake({ resourceId, threadId }, 'the Factory is not started');
+                if (!controller) return failWake({ sessionId: threadId, threadId }, 'the Factory is not started');
                 const thread = await controller.queryThreadById({ threadId });
                 if (!thread || thread.resourceId !== resourceId) {
-                  return failWake({ resourceId, threadId }, `thread ${threadId} is not the session's`);
+                  return failWake({ sessionId: threadId, threadId }, `thread ${threadId} is not the session's`);
                 }
-                const row = storage.isDomainReady('source-control')
-                  ? await sourceControlSessions.getBySessionId(resourceId)
-                  : null;
+                const { sessionId, row } = storage.isDomainReady('source-control')
+                  ? await resolveWakeSession({ resourceId, threadId, thread })
+                  : { sessionId: threadId, row: null };
                 if (!row?.factoryProjectId)
-                  return failWake({ resourceId, threadId }, WAKE_OWNER_UNRESOLVED['session-not-found']);
+                  return failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED['session-not-found']);
                 if (!hasResolvedOrg(row.orgId)) {
-                  return failWake({ resourceId, threadId }, WAKE_OWNER_UNRESOLVED['organization-unresolved']);
+                  return failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED['organization-unresolved']);
                 }
-                if (await controller.getSession(resourceId)) return;
+                if (await controller.getSession(sessionId)) return;
                 await createSessionAsRowOwner(controller, {
-                  sessionId: resourceId,
+                  sessionId,
                   ownerResourceId: resourceId,
                   row,
                   tags: {
@@ -1779,6 +1825,7 @@ export class MastraFactory {
             }),
         },
       );
+      observeSessionThreadStamp(session);
     });
 
     // Blocking: `createSession` awaits the organization seed so per-invocation

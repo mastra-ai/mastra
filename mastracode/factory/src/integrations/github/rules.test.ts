@@ -991,6 +991,7 @@ describe('GithubRules', () => {
     }
 
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       createSession: vi.fn(async ({ id, threadId }: { id: string; threadId: string }) => makeSession(id, threadId)),
       getSession: vi.fn(async (sessionId: string) => sessions.get(sessionId)),
     };
@@ -2436,6 +2437,7 @@ describe('GithubRules', () => {
       ),
     };
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       createSession: vi.fn(async () => session),
       getSession: vi.fn(async () => session),
     };

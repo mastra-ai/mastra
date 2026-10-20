@@ -11,6 +11,7 @@ import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { seedSessionOrg } from '../session/org-seed.js';
+import { sessionMemoryResourceId, listFactorySessionThreads } from '../session/session-threads.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -57,7 +58,7 @@ export interface SourceControlSessionRoutesOptions {
   filesystem?: Pick<FilesystemStorage, 'deleteResourceFiles'>;
   /** How long recreate waits for an aborted run to settle before destroying. */
   abortSettleTimeoutMs?: number;
-  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'>;
 }
 
 const ABORT_SETTLE_TIMEOUT_MS = 5_000;
@@ -193,7 +194,8 @@ async function resolveSession(
 }
 
 /**
- * Start the live conversation for a user session on its own thread (thread id === session id). Agent-controller
+ * Start the live conversation for a user session on its own thread (thread id === session id), under its owner's
+ * resource. Agent-controller
  * routes only act on started sessions, so the first prompt the page sends right after creation always lands on the
  * thread the page reads, with the org and Factory address already in state. Get-or-create, so retried or repeated
  * creates are safe.
@@ -207,7 +209,7 @@ async function startUserSessionConversation(
   requestContext.set('user', { workosId: session.userId, organizationId: session.orgId });
   const live = await controller.createSession({
     id: session.sessionId,
-    resourceId: session.sessionId,
+    resourceId: session.userId,
     threadId: session.sessionId,
     ownerId: session.userId,
     requestContext,
@@ -478,7 +480,11 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const recreateSandbox =
           canRecreateSandbox(options) &&
           (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
-        return c.json({ session: withCapabilities(withOwnerProfile(session, owners), recreateSandbox) });
+        // The client opens the session by its id and creates it under this resource.
+        const resourceId = await sessionMemoryResourceId(options.controller, session, options.workItems);
+        return c.json({
+          session: { ...withCapabilities(withOwnerProfile(session, owners), recreateSandbox), resourceId },
+        });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId/sandbox/recreate', {
@@ -602,7 +608,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: 'Session not found' }, 404);
         }
         if (!options.controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
-        const threads = await options.controller.queryThreads({ resourceId: sessionId });
+        const threads = await listFactorySessionThreads(options.controller, row, options.workItems);
         const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
         if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
         const stored = await options.memorySettings.get({ orgId: row.orgId, userId: row.userId });

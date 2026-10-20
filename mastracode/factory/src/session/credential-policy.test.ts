@@ -515,6 +515,7 @@ describe('trusted Factory credential policy', () => {
       const { session, state } = recordingSession(sourceSession.sessionId, undefined);
       const coordinator = new FactoryStartCoordinator(
         {
+          queryThreadById: vi.fn(async () => null),
           createSession: vi.fn(async ({ threadId }: { threadId: string }) => {
             await session.thread.switch({ threadId });
             return session;
@@ -548,7 +549,7 @@ describe('trusted Factory credential policy', () => {
       });
       const ctx = context();
       ctx.set('controller', {
-        sessionId: prepared.resourceId,
+        sessionId: prepared.sessionId,
         resourceId: prepared.resourceId,
         threadId: prepared.threadId,
         state: {},

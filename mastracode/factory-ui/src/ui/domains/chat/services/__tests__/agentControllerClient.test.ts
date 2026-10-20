@@ -19,7 +19,7 @@ describe('createAgentControllerClient', () => {
   it('addresses the server session by its session id', () => {
     createAgentControllerClient({
       agentControllerId: 'controller',
-      resourceId: 'session-1',
+      sessionId: 'session-1',
       baseUrl: 'http://session-test',
     });
 
@@ -29,17 +29,17 @@ describe('createAgentControllerClient', () => {
   it('caches one client session per session id', () => {
     const a = createAgentControllerClient({
       agentControllerId: 'controller',
-      resourceId: 'session-a',
+      sessionId: 'session-a',
       baseUrl: 'http://cache-test',
     });
     const b = createAgentControllerClient({
       agentControllerId: 'controller',
-      resourceId: 'session-b',
+      sessionId: 'session-b',
       baseUrl: 'http://cache-test',
     });
     const aAgain = createAgentControllerClient({
       agentControllerId: 'controller',
-      resourceId: 'session-a',
+      sessionId: 'session-a',
       baseUrl: 'http://cache-test',
     });
 

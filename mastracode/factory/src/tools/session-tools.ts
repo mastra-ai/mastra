@@ -64,6 +64,7 @@ export interface FactorySessionToolDependencies {
     | 'listRunBindings'
     | 'findActiveRunBindingForSession'
     | 'findRunBindingByThread'
+    | 'hasRunBindingForSession'
     | 'subscribeToWorkItem'
     | 'unsubscribeFromWorkItem'
     | 'listSessionSubscriptions'
@@ -275,7 +276,9 @@ export function createFactorySessionTools(
       const session = await messaging.controller.createSession({
         id: ensured.sessionId,
         ownerId: scope.userId,
-        resourceId: ensured.sessionId,
+        // A side session works for the Factory, so it shares the Factory's memory
+        // resource; a private one stays with its owner, like a Slack DM.
+        resourceId: parent.visibility === 'private' ? scope.userId : scope.factoryProjectId,
         threadId: ensured.sessionId,
         requestContext: kickoffContext,
         tags,

@@ -1076,6 +1076,51 @@ describe('pat route', () => {
 });
 
 describe('subscriptions route', () => {
+  it('returns pull request links for a thread addressed by its session', async () => {
+    tables.subscriptions.push(
+      {
+        id: 'subscription-a',
+        orgId: 'org1',
+        sessionId: 'run-a',
+        resourceId: 'factory-1',
+        threadId: 'run-a',
+        repoFullName: 'octo/hello',
+        pullRequestNumber: 42,
+        status: 'open',
+      },
+      {
+        id: 'subscription-b',
+        orgId: 'org1',
+        sessionId: 'run-b',
+        resourceId: 'factory-1',
+        threadId: 'run-b',
+        repoFullName: 'octo/hello',
+        pullRequestNumber: 43,
+        status: 'open',
+      },
+    );
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/subscriptions?sessionId=run-a&threadId=run-a');
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      subscriptions: [
+        {
+          id: 'subscription-a',
+          repoFullName: 'octo/hello',
+          pullRequestNumber: 42,
+          status: 'open',
+          url: 'https://github.com/octo/hello/pull/42',
+        },
+      ],
+    });
+  });
+
+  it('requires a thread and a session to read subscriptions', async () => {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/subscriptions?threadId=run-a');
+    expect(res.status).toBe(400);
+  });
+
   it('returns pull request links for the exact thread', async () => {
     tables.subscriptions.push({
       id: 'subscription-1',
@@ -2315,6 +2360,7 @@ describe('Factory session routes', () => {
   it('names a session from its conversation and mirrors the title onto the row', async () => {
     seedMaterializedProject();
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
       generateThreadTitle: vi.fn(async () => 'Log parser rewrite'),
     } as any;
@@ -2344,6 +2390,7 @@ describe('Factory session routes', () => {
   it('names a session whose owner never configured a memory model', async () => {
     seedMaterializedProject();
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
       generateThreadTitle: vi.fn(async () => 'Log parser rewrite'),
     } as any;
@@ -2368,6 +2415,7 @@ describe('Factory session routes', () => {
       release = resolve;
     });
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
       generateThreadTitle: vi.fn(async () => {
         await naming;
@@ -2381,7 +2429,7 @@ describe('Factory session routes', () => {
     const first = app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
     await vi.waitFor(() => expect(controller.generateThreadTitle).toHaveBeenCalledOnce());
     const second = app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
-    await vi.waitFor(() => expect(controller.queryThreads).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(controller.queryThreadById).toHaveBeenCalledTimes(2));
     release();
     const [a, b] = await Promise.all([first, second]);
 
@@ -2395,6 +2443,7 @@ describe('Factory session routes', () => {
   it('caps and tidies the title the model returned', async () => {
     seedMaterializedProject();
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
       generateThreadTitle: vi.fn(async () => `  Rewrite   the log parser ${'and more '.repeat(20)}`),
     } as any;
@@ -2413,6 +2462,7 @@ describe('Factory session routes', () => {
   it('rejects a title the model returned as whitespace', async () => {
     seedMaterializedProject();
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       queryThreads: vi.fn(async () => [{ id: 'thread-1', updatedAt: new Date() }]),
       generateThreadTitle: vi.fn(async () => '   '),
     } as any;
@@ -2428,7 +2478,8 @@ describe('Factory session routes', () => {
 
   it('explains that a session with no conversation cannot be named', async () => {
     seedMaterializedProject();
-    const controller = { queryThreads: vi.fn(async () => []), generateThreadTitle: vi.fn() } as any;
+    const controller = { queryThreadById: vi.fn(async () => null),
+      queryThreads: vi.fn(async () => []), generateThreadTitle: vi.fn() } as any;
     const app = buildApp({ workosId: 'u1' }, { controller });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
@@ -2442,7 +2493,8 @@ describe('Factory session routes', () => {
 
   it('does not name a session belonging to another user', async () => {
     seedMaterializedProject();
-    const controller = { queryThreads: vi.fn(), generateThreadTitle: vi.fn() } as any;
+    const controller = { queryThreadById: vi.fn(async () => null),
+      queryThreads: vi.fn(), generateThreadTitle: vi.fn() } as any;
     const ownerApp = buildApp({ workosId: 'u1' }, { controller });
     const created = await postJson(ownerApp, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;

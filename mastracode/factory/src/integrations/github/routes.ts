@@ -27,6 +27,7 @@ import type { ExecutableSandbox } from '../../sandbox/materialization.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
 import { waitForPendingFilesystemCapture } from '../../session/filesystem-capture.js';
+import { sessionMemoryResourceId, listFactorySessionThreads } from '../../session/session-threads.js';
 import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
@@ -140,7 +141,10 @@ export interface MountGithubRoutesOptions {
   projects?: FactoryProjectsStorage;
   sessionRetirement?: import('../../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Work-items domain — session deletion strips the refs work items hold on it. */
-  workItems?: Pick<import('../../storage/domains/work-items/base.js').WorkItemsStorage, 'clearSessionReferences'>;
+  workItems?: Pick<
+    import('../../storage/domains/work-items/base.js').WorkItemsStorage,
+    'clearSessionReferences' | 'hasRunBindingForSession'
+  >;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
 }
@@ -548,18 +552,20 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const tenant = auth.tenant(loose(c));
         if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
+        // Sessions read by session id; resourceId is the older address.
+        const sessionId = c.req.query('sessionId');
         const resourceId = c.req.query('resourceId');
         const threadId = c.req.query('threadId');
-        if (!resourceId || !threadId) return c.json({ error: 'resourceId and threadId are required' }, 400);
+        const target = !threadId
+          ? null
+          : sessionId
+            ? { orgId: tenant.orgId, sessionId, threadId }
+            : resourceId
+              ? { orgId: tenant.orgId, resourceId, threadId }
+              : null;
+        if (!target) return c.json({ error: 'sessionId (or resourceId) and threadId are required' }, 400);
 
-        const subscriptions = await listPullRequestSubscriptionsForThread(
-          {
-            orgId: tenant.orgId,
-            resourceId,
-            threadId,
-          },
-          github.integrationStorage,
-        );
+        const subscriptions = await listPullRequestSubscriptionsForThread(target, github.integrationStorage);
         return c.json({
           subscriptions: subscriptions.map(subscription => ({
             id: subscription.id,
@@ -1463,7 +1469,7 @@ function buildProjectGitRoutes({
         ) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        return c.json({ session });
+        return c.json({ session: { ...session, resourceId: await sessionMemoryResourceId(controller, session, workItems) } });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {
@@ -1529,7 +1535,7 @@ function buildProjectGitRoutes({
         }
         if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
 
-        const threads = await controller.queryThreads({ resourceId: sessionId });
+        const threads = await listFactorySessionThreads(controller, row, workItems);
         const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
         if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
 
@@ -1768,7 +1774,7 @@ function buildProjectGitRoutes({
                   changeRequestId: pullRequestNumber.toString(),
                   sessionId,
                   ownerId: userId,
-                  resourceId: sessionId,
+                  resourceId: project.factoryProjectId,
                   threadId: sessionId,
                   source: 'factory-pr-create',
                   subscribedByUserId: userId,

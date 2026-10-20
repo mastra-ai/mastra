@@ -192,10 +192,11 @@ describe('captureSessionFilesystem', () => {
       ['-c', 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true', 'sh', '/sessions/s1/worktree'],
       { timeout: 30_000 },
     );
-    // The session sits on a shared resource: its source session is found by its own id.
+    // The session sits on a shared resource: its source session and its listing are keyed by
+    // its own id, which other sessions on the Factory resource never share.
     expect(dependencies.sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
-      resourceId: 'factory-1',
+      resourceId: 'session-1',
       threadId: 'thread-1',
       files: [{ path: '.artifacts/hello-world.md' }, { path: 'new.txt' }, { path: 'src/app.ts' }],
     });

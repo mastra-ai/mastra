@@ -58,22 +58,24 @@ describe('sessionLink', () => {
     else process.env.MASTRACODE_PUBLIC_URL = originalPublicUrl;
   });
 
-  const target = { threadId: 'uuid-thread-1', resourceId: 'us-42', factoryProjectId: 'fp-1' };
+  const target = { threadId: 'uuid-thread-1', sessionId: 'us-42', resourceId: 'fp-1', factoryProjectId: 'fp-1' };
 
-  it('a repo-backed thread deep-links to the user-session workspace route with no resourceId param', () => {
+  it('a repo-backed thread deep-links to the user-session workspace route with no query param', () => {
     expect(sessionLink(target)).toBe('https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1');
   });
 
   it('a chat-only thread keeps the channel workspace segment and names its resource in the query', () => {
-    expect(sessionLink({ ...target, resourceId: 'channel:slack:C-1:1700.42' })).toBe(
+    expect(
+      sessionLink({ ...target, sessionId: 'channel:slack:C-1:1700.42', resourceId: 'channel:slack:C-1:1700.42' }),
+    ).toBe(
       'https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1' +
-        `?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
+        `?sessionId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
     );
   });
 
   it('a session with no factory falls back to the factory-agnostic redirect', () => {
     expect(sessionLink({ ...target, factoryProjectId: undefined })).toBe(
-      'https://mc.example.com/threads/uuid-thread-1?resourceId=us-42',
+      'https://mc.example.com/threads/uuid-thread-1?sessionId=us-42',
     );
   });
 

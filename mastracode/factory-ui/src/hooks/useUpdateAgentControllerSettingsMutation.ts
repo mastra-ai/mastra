@@ -47,14 +47,13 @@ function settingsIncludeUpdates(settings: AgentControllerSessionSettings, update
 
 export function useUpdateAgentControllerSettingsMutation({
   agentControllerId,
-  resourceId,
-  scope,
+  sessionId,
   baseUrl = '',
   enabled = true,
 }: AgentControllerMutationArgs) {
   const queryClient = useQueryClient();
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
-  const settingsQueryKey = queryKeys.agentControllerSettings(agentControllerId, resourceId, scope);
+  const { session } = createAgentControllerClient({ agentControllerId, sessionId, baseUrl, enabled });
+  const settingsQueryKey = queryKeys.agentControllerSettings(agentControllerId, sessionId);
 
   return useMutation({
     mutationFn: async (updates: SettingsUpdates) => {

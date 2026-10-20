@@ -43,6 +43,7 @@ export interface FactoryMessagingToolDependencies {
     WorkItemsStorage,
     | 'findActiveRunBindingForSession'
     | 'getForProject'
+    | 'hasRunBindingForSession'
     | 'listSessionSubscriptions'
     | 'listRunBindings'
     | 'listWorkItemSubscribers'
@@ -189,6 +190,7 @@ export function createFactoryMessagingTools(
       const result = await deliverFactorySessionNotification({
         controller: messaging.controller,
         sessions: deps.sessions,
+        runs: deps.workItems,
         target: { sessionId, threadId },
         notification: {
           kind: 'message',
@@ -272,6 +274,7 @@ export function createFactoryMessagingTools(
       const result = await deliverFactorySessionNotification({
         controller: messaging.controller,
         sessions: deps.sessions,
+        runs: deps.workItems,
         target: { sessionId: fromSession, threadId: fromThread },
         notification: {
           kind: 'reply',
@@ -338,6 +341,7 @@ export function createFactoryMessagingTools(
       const result = await deliverFactorySessionNotification({
         controller: messaging.controller,
         sessions: deps.sessions,
+        runs: deps.workItems,
         target: recipient,
         notification,
       });
