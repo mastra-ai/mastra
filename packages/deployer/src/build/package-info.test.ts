@@ -111,6 +111,24 @@ describe('getPackageRootPath', () => {
     await expect(getPackageRootPath('@repro/versionless', appDir)).resolves.toBe(packageDir);
   });
 
+  it('resolves a file inside a versionless workspace package to that package root (#27134)', async () => {
+    const tempRoot = join(process.cwd(), '.tmp');
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'versionless-file-'));
+    tempDirs.push(tempDir);
+
+    const packageDir = join(tempDir, 'packages', 'dependent');
+    const esmDir = join(packageDir, 'dist', 'esm');
+    await mkdir(esmDir, { recursive: true });
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'workspace', version: '1.0.0' }));
+    await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: '@inner/dependent', private: true }));
+    await writeFile(join(esmDir, 'package.json'), JSON.stringify({ type: 'module' }));
+    const entryFile = join(esmDir, 'index.js');
+    await writeFile(entryFile, 'export const value = 1;');
+
+    await expect(getPackageRootPath(entryFile)).resolves.toBe(packageDir);
+  });
+
   it('returns an absolute path when parentPath is not absolute', async () => {
     const { packageDir, chunkFile } = await createTempPackage();
     const relativeChunkFile = relative(process.cwd(), chunkFile);

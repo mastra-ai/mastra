@@ -4,7 +4,7 @@
  */
 
 import { statSync } from 'node:fs';
-import { dirname, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findUp } from 'find-up-simple';
 import { readJson, readJSON } from 'fs-extra/esm';
@@ -17,6 +17,12 @@ export async function getPackageInfo(
 ): Promise<ReturnType<typeof getOriginalPackageInfo>> {
   const pkgInfo = await getOriginalPackageInfo(packageName, options);
 
+  // A manifest without a version is still the package root when it is named after the requested package. When a
+  // file path is requested there is no package name to compare against, so any named manifest is the root.
+  const isPackageRoot = (pkgJson: { name?: string; version?: string } | undefined) =>
+    Boolean(pkgJson?.version) ||
+    (isAbsolute(packageName) ? Boolean(pkgJson?.name) : pkgJson?.name === getPackageName(packageName));
+
   async function searchUpForPackageJson(rootPath: string) {
     const path = await findUp('package.json', {
       cwd: rootPath,
@@ -28,7 +34,7 @@ export async function getPackageInfo(
 
     const pkgJson = await readJson(path);
 
-    if (!pkgJson.version && pkgJson.name !== getPackageName(packageName)) {
+    if (!isPackageRoot(pkgJson)) {
       return searchUpForPackageJson(dirname(rootPath));
     }
 
@@ -41,9 +47,8 @@ export async function getPackageInfo(
     };
   }
 
-  // A nested manifest (e.g. dist/esm/package.json with only "type") has no version, so search up for the
-  // real package root. A manifest named after the package is already the root, even if it has no version.
-  if (!pkgInfo?.version && pkgInfo?.rootPath && pkgInfo.packageJson?.name !== getPackageName(packageName)) {
+  // A nested manifest (e.g. dist/esm/package.json with only "type") is not the package root, so search up for it.
+  if (pkgInfo?.rootPath && !isPackageRoot(pkgInfo.packageJson)) {
     return searchUpForPackageJson(dirname(pkgInfo.rootPath));
   }
 
