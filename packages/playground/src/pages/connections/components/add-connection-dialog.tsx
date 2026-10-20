@@ -15,11 +15,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { usePendingConnect } from '@mastra/playground-ui/domains/connect';
+import {
+  headlessAuthFieldKey,
+  headlessAuthFields,
+  headlessAuthRequiresForm,
+  supportsHeadlessAuth,
+  usePendingConnect,
+} from '@mastra/playground-ui/domains/connect';
 import type { UserConnectProvider } from '@mastra/playground-ui/domains/connect';
 import { useEffect, useState } from 'react';
 import { ProviderLogo } from './provider-logo';
@@ -31,21 +39,26 @@ export interface AddConnectionDialogProps {
 }
 
 /**
- * Searchable provider picker that drives the platform-hosted auth flow: pick a
- * provider, a connect session is created and the popup opens (inside the click
- * gesture so blockers allow it), then the connection status is polled until it
- * settles. Success closes the dialog; abandoned or failed flows offer a retry.
+ * Searchable provider picker that drives the add-connection flow. Providers
+ * whose headless auth needs collected inputs (API key, Basic, two-step
+ * credentials, flow params) get a form step first; everything else authorizes
+ * immediately — headlessly through the provider's own popup when the launch
+ * gate releases a session token, through the hosted popup otherwise. Success
+ * closes the dialog; abandoned or failed flows offer a retry.
  */
 export function AddConnectionDialog({ providers, open, onOpenChange }: AddConnectionDialogProps) {
-  const { pending, connect, settled, isCreating, createError } = usePendingConnect();
+  const { pending, connect, cancel, settled, isCreating, createError } = usePendingConnect();
   // The provider the user picked in this dialog session; the hook's outcome
   // only drives this dialog when it belongs to this attempt.
   const [attempt, setAttempt] = useState<UserConnectProvider | null>(null);
+  // Whether the attempt is still collecting its fields (form step).
+  const [collecting, setCollecting] = useState(false);
+  const [values, setValues] = useState<Record<string, string>>({});
 
   const failureMessage = attempt
     ? (createError?.message ??
       (settled?.provider === attempt.id && settled.status === 'failed'
-        ? 'The connection was not completed. Close the provider window and try again.'
+        ? (settled.message ?? 'The connection was not completed. Close the provider window and try again.')
         : null))
     : null;
 
@@ -58,14 +71,50 @@ export function AddConnectionDialog({ providers, open, onOpenChange }: AddConnec
     if (open && succeeded) onOpenChange(false);
   }, [open, succeeded, onOpenChange]);
 
+  const resetAttempt = () => {
+    setAttempt(null);
+    setCollecting(false);
+    setValues({});
+  };
+
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) setAttempt(null);
+    if (!nextOpen) {
+      // Abandon an in-flight flow so it cannot settle a future attempt.
+      cancel();
+      resetAttempt();
+    }
     onOpenChange(nextOpen);
   };
 
+  const needsForm = (provider: UserConnectProvider) =>
+    supportsHeadlessAuth(provider.authType, provider.authFields) && headlessAuthRequiresForm(provider);
+
   const startConnect = (provider: UserConnectProvider) => {
     setAttempt(provider);
+    if (needsForm(provider)) {
+      setCollecting(true);
+      return;
+    }
     connect(provider);
+  };
+
+  const fields = attempt && collecting ? headlessAuthFields(attempt) : [];
+  const missingRequired = fields.some(field => !!field.required && !values[headlessAuthFieldKey(field)]?.trim());
+
+  const submitForm = () => {
+    if (!attempt) return;
+    setCollecting(false);
+    connect(attempt, values);
+  };
+
+  const retry = () => {
+    if (!attempt) return;
+    if (needsForm(attempt)) {
+      // Rejected credentials go back to the form with the values kept.
+      setCollecting(true);
+      return;
+    }
+    startConnect(attempt);
   };
 
   return (
@@ -75,7 +124,9 @@ export function AddConnectionDialog({ providers, open, onOpenChange }: AddConnec
           <DialogTitle>Add connection</DialogTitle>
           <DialogDescription>
             {attempt
-              ? `Authorize ${attempt.displayName ?? attempt.id} to link it to your account.`
+              ? collecting
+                ? `Enter the ${attempt.displayName ?? attempt.id} details to link it to your account.`
+                : `Authorize ${attempt.displayName ?? attempt.id} to link it to your account.`
               : 'Connect one of your own accounts to this project.'}
           </DialogDescription>
         </DialogHeader>
@@ -99,6 +150,35 @@ export function AddConnectionDialog({ providers, open, onOpenChange }: AddConnec
               </CommandList>
             </Command>
           </DialogBody>
+        ) : collecting ? (
+          <>
+            <DialogBody>
+              <div className="space-y-4">
+                {fields.map(field => {
+                  const key = headlessAuthFieldKey(field);
+                  return (
+                    <Field key={key}>
+                      <FieldLabel>{field.label ?? field.name}</FieldLabel>
+                      <Input
+                        type={field.secret ? 'password' : 'text'}
+                        placeholder={field.placeholder ?? undefined}
+                        value={values[key] ?? ''}
+                        onChange={event => setValues(previous => ({ ...previous, [key]: event.target.value }))}
+                      />
+                    </Field>
+                  );
+                })}
+              </div>
+            </DialogBody>
+            <DialogFooter>
+              <Button variant="ghost" onClick={resetAttempt}>
+                Back
+              </Button>
+              <Button variant="default" disabled={missingRequired} onClick={submitForm}>
+                Connect
+              </Button>
+            </DialogFooter>
+          </>
         ) : failureMessage ? (
           <>
             <DialogBody>
@@ -107,10 +187,10 @@ export function AddConnectionDialog({ providers, open, onOpenChange }: AddConnec
               </Notice>
             </DialogBody>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setAttempt(null)}>
+              <Button variant="ghost" onClick={resetAttempt}>
                 Back
               </Button>
-              <Button variant="default" onClick={() => startConnect(attempt)}>
+              <Button variant="default" onClick={retry}>
                 Try again
               </Button>
             </DialogFooter>

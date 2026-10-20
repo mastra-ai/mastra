@@ -23,7 +23,24 @@ export const providersResponse: UserConnectProvidersResponse = {
       authType: 'OAUTH2',
       authFields: null,
     },
+    // Needs collected credentials before authorizing: the dialog renders the
+    // (synthesized) API key form before any session is created.
+    {
+      id: 'airtable',
+      displayName: 'Airtable',
+      logoUrl: null,
+      authType: 'API_KEY',
+      authFields: null,
+    },
   ],
+};
+
+/** Session minted for the Airtable credentials flow. */
+export const airtableSessionResponse: UserConnectSessionResponse = {
+  connectionId: 'conn-user-3',
+  integrationId: 'airtable',
+  launchUrl: '/connect/connections/conn-user-3/launch',
+  expiresAt: '2026-10-13T23:59:59.000Z',
 };
 
 export const mixedConnectionsResponse: UserConnectionsResponse = {

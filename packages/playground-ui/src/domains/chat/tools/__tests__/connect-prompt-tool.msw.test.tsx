@@ -114,6 +114,30 @@ describe('ConnectPromptTool', () => {
     });
   });
 
+  describe('when authorization fails in the provider popup', () => {
+    it('shows the failure reason and re-enables the connect action', async () => {
+      server.use(
+        http.post(`${BASE_URL}/connect/linear/sessions`, () => HttpResponse.json(connectPromptSession)),
+        http.get(launchPath, () =>
+          HttpResponse.json({ sessionToken: 'nango_connect_session_t1', expiresAt: connectPromptSession.expiresAt }),
+        ),
+        http.get(`${BASE_URL}/connect/connections/${connectPromptSession.connectionId}/status`, () =>
+          HttpResponse.json({ ...connectPromptStatusActive, status: 'pending' }),
+        ),
+      );
+      const { AuthError } = await import('@nangohq/frontend');
+      nangoMocks.auth.mockRejectedValueOnce(new AuthError('closed', 'window_closed'));
+
+      renderConnectPrompt({ output: connectPromptPayload });
+      fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toMatch(/window was closed/i);
+      // The flow settled, so the action is available to retry.
+      expect((screen.getByRole('button', { name: 'Connect' }) as HTMLButtonElement).disabled).toBe(false);
+    });
+  });
+
   describe('when the gate releases no token and the fallback popup is blocked', () => {
     it('offers a manual launch link to the launch gate', async () => {
       vi.spyOn(window, 'open').mockReturnValue(null);

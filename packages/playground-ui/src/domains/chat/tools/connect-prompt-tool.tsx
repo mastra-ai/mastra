@@ -25,7 +25,13 @@ export const ConnectPromptTool = ({ output, readOnly = false }: ConnectPromptToo
 };
 
 const ConnectPromptCard = ({ payload, readOnly }: { payload: ConnectPromptPayload; readOnly: boolean }) => {
-  const { pending, connect, connectedProviders, isCreating, createError } = usePendingConnect();
+  const { pending, connect, connectedProviders, isCreating, createError, settled } = usePendingConnect();
+
+  const errorMessage =
+    createError?.message ??
+    (settled?.status === 'failed'
+      ? (settled.message ?? 'The connection was not completed. Try connecting again.')
+      : null);
 
   return (
     <section
@@ -77,9 +83,9 @@ const ConnectPromptCard = ({ payload, readOnly }: { payload: ConnectPromptPayloa
           );
         })}
       </ul>
-      {createError ? (
+      {errorMessage ? (
         <Txt as="p" variant="body-sm" className="text-accent2" role="alert">
-          {createError.message}
+          {errorMessage}
         </Txt>
       ) : null}
     </section>

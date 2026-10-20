@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import ConnectionsPage from '../index';
 import {
+  airtableSessionResponse,
   globalOnlyConnectionsResponse,
   launchTokenUnavailable,
   mixedConnectionsResponse,
@@ -267,6 +268,34 @@ describe('ConnectionsPage', () => {
       expect(fallback.getAttribute('href')).toBe(`${BASE_URL}${sessionResponse.launchUrl}`);
     });
 
+    it('closes and fully resets the flow when the user cancels a pending authorization', async () => {
+      vi.spyOn(window, 'open').mockReturnValue(null);
+
+      server.use(
+        http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
+        http.get(`${BASE_URL}/connect/connections`, () => HttpResponse.json(mixedConnectionsResponse)),
+        http.post(`${BASE_URL}/connect/slack/sessions`, () => HttpResponse.json(sessionResponse, { status: 201 })),
+        http.get(`${BASE_URL}${sessionResponse.launchUrl}`, () => HttpResponse.json(launchTokenUnavailable)),
+        http.get(`${BASE_URL}/connect/connections/${sessionResponse.connectionId}/status`, () =>
+          HttpResponse.json(statusPending),
+        ),
+      );
+
+      renderPage();
+
+      const dialog = await pickProvider('Slack');
+      expect(await within(dialog).findByText('Waiting for authorization')).not.toBeNull();
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add connection' })).toBeNull());
+
+      // Reopening starts from the picker — no leftover pending state.
+      fireEvent.click(await screen.findByRole('button', { name: 'Add connection' }));
+      const reopened = await screen.findByRole('dialog', { name: 'Add connection' });
+      expect(await within(reopened).findByRole('option', { name: /Slack/ })).not.toBeNull();
+      expect(within(reopened).queryByText('Waiting for authorization')).toBeNull();
+    });
+
     it('shows the failure with a retry when the session cannot be created', async () => {
       vi.spyOn(window, 'open').mockReturnValue(null);
 
@@ -289,6 +318,60 @@ describe('ConnectionsPage', () => {
 
       fireEvent.click(within(dialog).getByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(sessionCalls).toBe(2));
+    });
+  });
+
+  describe('when the provider needs credentials before authorizing', () => {
+    it('collects the fields first and only then creates the session', async () => {
+      vi.spyOn(window, 'open').mockReturnValue(null);
+
+      const onSession = vi.fn<() => void>();
+      server.use(
+        http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
+        http.get(`${BASE_URL}/connect/connections`, () => HttpResponse.json(mixedConnectionsResponse)),
+        http.post(`${BASE_URL}/connect/airtable/sessions`, () => {
+          onSession();
+          return HttpResponse.json(airtableSessionResponse, { status: 201 });
+        }),
+        // No token released: the credentials flow falls back to the hosted
+        // popup, whose page renders the same form — the headless submission
+        // itself is covered by the playground-ui hook tests.
+        http.get(`${BASE_URL}${airtableSessionResponse.launchUrl}`, () => HttpResponse.json(launchTokenUnavailable)),
+        http.get(`${BASE_URL}/connect/connections/${airtableSessionResponse.connectionId}/status`, () =>
+          HttpResponse.json({ id: airtableSessionResponse.connectionId, status: 'pending', scope: 'user' }),
+        ),
+      );
+
+      renderPage();
+
+      const dialog = await pickProvider('Airtable');
+
+      // The synthesized API key field renders before any session exists.
+      const input = await within(dialog).findByLabelText(/API key/);
+      expect(onSession).not.toHaveBeenCalled();
+
+      fireEvent.change(input, { target: { value: 'pat-test-123' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Connect' }));
+
+      await waitFor(() => expect(onSession).toHaveBeenCalled());
+      expect(await within(dialog).findByText('Waiting for authorization')).not.toBeNull();
+    });
+
+    it('keeps the Connect action disabled until every required field is filled', async () => {
+      server.use(
+        http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
+        http.get(`${BASE_URL}/connect/connections`, () => HttpResponse.json(mixedConnectionsResponse)),
+      );
+
+      renderPage();
+
+      const dialog = await pickProvider('Airtable');
+
+      const submit = (await within(dialog).findByRole('button', { name: 'Connect' })) as HTMLButtonElement;
+      expect(submit.disabled).toBe(true);
+
+      fireEvent.change(within(dialog).getByLabelText(/API key/), { target: { value: 'pat-test-123' } });
+      expect(submit.disabled).toBe(false);
     });
   });
 });
