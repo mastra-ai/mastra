@@ -17,9 +17,11 @@ class FakeChannel implements EventStreamChannel {
   readonly sent: SentRequest[] = [];
   private readonly handlers = new Map<string, (params: unknown) => void>();
 
-  request(params: StreamEventsRequestParams, signal: AbortSignal): Promise<unknown> {
+  /** Mirrors the client's transport: JSON-RPC ids 1, 2, 3… in send order, reported as sent. */
+  request(params: StreamEventsRequestParams, signal: AbortSignal, onSent: (id: string) => void): Promise<unknown> {
     return new Promise((resolve, reject) => {
       this.sent.push({ params, signal, resolve, reject });
+      onSent(String(this.sent.length));
       signal.addEventListener('abort', () => reject(new Error('AbortError')), { once: true });
     });
   }
@@ -75,17 +77,17 @@ describe('EventStreamRouter', () => {
     // B is not sent until A is confirmed, so the next unbound `active` can only be A's.
     expect(channel.sent.map(request => request.params.name)).toEqual(['a']);
 
-    channel.notify(EVENTS_NOTIFICATIONS.active, 7);
+    channel.notify(EVENTS_NOTIFICATIONS.active, 1);
     await openA;
     await vi.advanceTimersByTimeAsync(0);
     expect(channel.sent.map(request => request.params.name)).toEqual(['a', 'b']);
 
-    channel.notify(EVENTS_NOTIFICATIONS.active, 8);
+    channel.notify(EVENTS_NOTIFICATIONS.active, 2);
     await openB;
 
-    channel.event(8, 'for-b');
-    channel.event(7, 'for-a');
-    channel.notify(EVENTS_NOTIFICATIONS.heartbeat, 8, { cursor: null });
+    channel.event(2, 'for-b');
+    channel.event(1, 'for-a');
+    channel.notify(EVENTS_NOTIFICATIONS.heartbeat, 2, { cursor: null });
     expect(a.seen).toEqual(['active', 'event:for-a']);
     expect(b.seen).toEqual(['active', 'event:for-b', 'heartbeat']);
   });
@@ -119,7 +121,7 @@ describe('EventStreamRouter', () => {
     await expect(openA).rejects.toMatchObject({ code: -32602 });
     await vi.advanceTimersByTimeAsync(0);
     expect(channel.sent).toHaveLength(2);
-    channel.notify(EVENTS_NOTIFICATIONS.active, 5);
+    channel.notify(EVENTS_NOTIFICATIONS.active, 2);
     await expect(openB).resolves.toBeDefined();
   });
 
@@ -187,7 +189,40 @@ describe('EventStreamRouter', () => {
     expect(log).toHaveBeenCalledWith('debug', expect.stringContaining('unknown event stream 1'));
   });
 
-  it('retires ids of streams that ended on their own as well as aborted ones', async () => {
+  it('drops a late active for an open that timed out instead of binding the next open to it', async () => {
+    const a = recordingSink();
+    const b = recordingSink();
+    const openA = router.open(params('a'), a.sink, { signal: new AbortController().signal, openTimeoutMs: 500 });
+    const openB = router.open(params('b'), b.sink, { signal: new AbortController().signal, openTimeoutMs: 1000 });
+    const failedA = expect(openA).rejects.toMatchObject({ id: 'MCP_EVENTS_STREAM_OPEN_TIMEOUT' });
+    await vi.advanceTimersByTimeAsync(500);
+    await failedA;
+    expect(channel.sent.map(request => request.params.name)).toEqual(['a', 'b']);
+
+    // Over stdio the server can confirm A after the client gave up on it, while B is pending.
+    channel.notify(EVENTS_NOTIFICATIONS.active, 1);
+    channel.event(1, 'from-a-stream');
+    expect(b.seen).toEqual([]);
+
+    channel.notify(EVENTS_NOTIFICATIONS.active, 2);
+    await openB;
+    channel.event(2, 'for-b');
+    expect(b.seen).toEqual(['active', 'event:for-b']);
+    expect(a.seen).toEqual([]);
+  });
+
+  it('binds a pending open only to the id its request was sent with', async () => {
+    const owner = recordingSink();
+    const open = router.open(params('a'), owner.sink, { signal: new AbortController().signal, openTimeoutMs: 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    channel.notify(EVENTS_NOTIFICATIONS.active, 42);
+    expect(owner.seen).toEqual([]);
+    channel.notify(EVENTS_NOTIFICATIONS.active, 1);
+    await open;
+    expect(owner.seen).toEqual(['active']);
+  });
+
+  it('ignores a late active from a stream that ended on its own', async () => {
     const a = recordingSink();
     const b = recordingSink();
     const openA = router.open(params('a'), a.sink, { signal: new AbortController().signal, openTimeoutMs: 1000 });

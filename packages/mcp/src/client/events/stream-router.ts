@@ -14,31 +14,34 @@ import type { EventStreamHandle, EventStreamSink, EventsPort } from './types';
 
 /** The transport operations the router needs from the MCP client. */
 export interface EventStreamChannel {
-  /** Sends `events/stream` and settles when the request ends. */
-  request(params: StreamEventsRequestParams, signal: AbortSignal): Promise<unknown>;
+  /**
+   * Sends `events/stream` and settles when the request ends. Calls `onSent` with the request's
+   * JSON-RPC id when the message goes out on the transport.
+   */
+  request(params: StreamEventsRequestParams, signal: AbortSignal, onSent: (id: string) => void): Promise<unknown>;
   /** Registers a handler for a notification method; receives the raw `params`. */
   onNotification(method: string, handler: (params: unknown) => void): void;
 }
 
 interface PendingOpen {
   sink: EventStreamSink;
+  /** JSON-RPC id of the pending `events/stream` request, once it is sent. */
+  sentId?: string;
   bind(id: string): void;
 }
 
 /**
  * Routes push-stream notifications for one MCP server to the subscription that owns them.
  *
- * A client cannot learn the JSON-RPC id of its own request before the server echoes it, so opens
- * are serialized: while one `events/stream` is waiting for `notifications/events/active`, no other
- * open is in flight, and the first `active` carrying an id no stream owns yet belongs to it. After
- * that, every notification is routed by `_meta["io.modelcontextprotocol/subscriptionId"]`.
- *
- * Ids of released streams are retired: a late `active` for a cancelled or ended stream must never
- * bind the next pending open. JSON-RPC ids are never reused by one client, so retiring is safe.
+ * The server identifies a stream by the JSON-RPC id of its `events/stream` request. The SDK
+ * doesn't return that id, so the channel reports it as the request is sent, and opens are
+ * serialized so the reported id always belongs to the pending open. A pending open binds only to
+ * an `active` carrying its own id; after that, every notification is routed by
+ * `_meta["io.modelcontextprotocol/subscriptionId"]`. A late `active` for an open that timed out,
+ * was aborted, or was released never matches a pending open's id, so it is dropped.
  */
 export class EventStreamRouter {
   private readonly sinks = new Map<string, EventStreamSink>();
-  private readonly retired = new Set<string>();
   private pending?: PendingOpen;
   private openLock: Promise<void> = Promise.resolve();
   private listening = false;
@@ -46,7 +49,6 @@ export class EventStreamRouter {
   constructor(
     private readonly channel: EventStreamChannel,
     private readonly log: EventsPort['log'],
-    private readonly retiredLimit = 1000,
   ) {}
 
   /** Opens a stream and resolves once the server confirms it with `notifications/events/active`. */
@@ -64,7 +66,23 @@ export class EventStreamRouter {
 
     let boundId: string | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const request = this.channel.request(params, requestAbort.signal);
+    let confirm!: () => void;
+    const confirmed = new Promise<void>(resolve => {
+      confirm = resolve;
+    });
+    const pending: PendingOpen = {
+      sink,
+      bind: id => {
+        boundId = id;
+        this.sinks.set(id, sink);
+        confirm();
+      },
+    };
+    // Set before sending: the transport can report the id synchronously.
+    this.pending = pending;
+    const request = this.channel.request(params, requestAbort.signal, id => {
+      pending.sentId = id;
+    });
     const done = request.then(() => undefined);
     done
       .finally(() => {
@@ -75,14 +93,7 @@ export class EventStreamRouter {
 
     try {
       await new Promise<void>((resolve, reject) => {
-        this.pending = {
-          sink,
-          bind: id => {
-            boundId = id;
-            this.sinks.set(id, sink);
-            resolve();
-          },
-        };
+        void confirmed.then(resolve);
         request.then(
           () =>
             reject(
@@ -126,11 +137,6 @@ export class EventStreamRouter {
   private release(id: string | undefined, sink: EventStreamSink): void {
     if (id === undefined || this.sinks.get(id) !== sink) return;
     this.sinks.delete(id);
-    this.retired.add(id);
-    if (this.retired.size > this.retiredLimit) {
-      const oldest = this.retired.values().next().value;
-      if (oldest !== undefined) this.retired.delete(oldest);
-    }
   }
 
   private acquire(): Promise<() => void> {
@@ -150,7 +156,7 @@ export class EventStreamRouter {
       const sink = this.sinks.get(id);
       if (sink) return sink.active(params);
       const pending = this.pending;
-      if (!pending || this.retired.has(id)) return false;
+      if (!pending || pending.sentId !== id) return false;
       pending.bind(id);
       pending.sink.active(params);
     });

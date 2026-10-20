@@ -99,6 +99,9 @@ export function createEventsFixture() {
         const id = ctx.mcpReq.id;
         const meta = { [EVENTS_SUBSCRIPTION_ID_META_KEY]: id };
         const from = params.cursor === null || params.cursor === undefined ? head() : Number(params.cursor);
+        // Lets a test confirm a stream late, after the client may have given up on it.
+        const delayActiveMs = Number(params.arguments?.delayActiveMs ?? 0);
+        if (delayActiveMs > 0) await new Promise(resolve => setTimeout(resolve, delayActiveMs));
         await ctx.mcpReq.notify({ method: EVENTS_NOTIFICATIONS.active, params: { cursor: String(from), _meta: meta } });
 
         const stream: LiveStream = {

@@ -292,6 +292,35 @@ describe('MCP Events client over stdio', () => {
     expect((await nextEvent(subB)).data).toEqual({ to: 'b', n: 2 });
     await subB.cancel();
   }, 30_000);
+
+  it('drops a late confirmation for a timed-out open instead of handing its stream to the next open', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'events-stdio',
+      server: {
+        command: process.execPath,
+        args: [tsxCli, path.join(__dirname, '__fixtures__/events-stdio-server.ts')],
+      },
+      timeout: 20_000,
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const timedOutArgs = { repo: 'a', delayActiveMs: 1500 };
+    const laterArgs = { repo: 'b', delayActiveMs: 3000 };
+
+    // A gives up at 500 ms; B is sent next and is still waiting when A's `active` arrives at ~1.5 s.
+    const stats = async () => (await tools.stats!.execute!({}, {})) as { streamRequests: number };
+    const subA = client.events.subscribe('repo.push', timedOutArgs, { delivery: 'push', streamOpenTimeoutMs: 500 });
+    await waitFor(async () => (await stats()).streamRequests === 1);
+    const subB = client.events.subscribe('repo.push', laterArgs, { delivery: 'push', streamOpenTimeoutMs: 10_000 });
+    await expect(subA).rejects.toMatchObject({ id: 'MCP_EVENTS_STREAM_OPEN_TIMEOUT' });
+    const b = await subB;
+
+    // A's server-side stream is still live; nothing emitted for it may reach B.
+    await tools.emit!.execute!({ name: 'repo.push', arguments: timedOutArgs, data: { to: 'a' } }, {});
+    await tools.emit!.execute!({ name: 'repo.push', arguments: laterArgs, data: { to: 'b' } }, {});
+    expect((await nextEvent(b)).data).toEqual({ to: 'b' });
+    await b.cancel();
+  }, 30_000);
 });
 
 describe('MCPClient.events', () => {
