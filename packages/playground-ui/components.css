@@ -318,6 +318,16 @@
   }
 }
 
+/* Boneyard bones (ds/components/Bones) animate through inline styles, which only `!important`
+   outranks. Without motion they rest as flat `--muted` blocks. */
+@media (prefers-reduced-motion: reduce) {
+  [data-boneyard-bone] {
+    animation: none !important;
+    background-image: none !important;
+    background-color: var(--muted) !important;
+  }
+}
+
 @keyframes click-ripple {
   0% {
     transform: scale(0);

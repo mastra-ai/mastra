@@ -1,5 +1,6 @@
 import { EntityType } from '@mastra/core/observability';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
+import { BoneSkeleton } from '@mastra/playground-ui/components/Bones';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/FilterBar';
@@ -26,7 +27,6 @@ import {
 } from '@mastra/playground-ui/domains/traces/components/trace-time-range-chip';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
-import { TracesPageSkeleton } from '@mastra/playground-ui/domains/traces/components/traces-page-skeleton';
 import { useTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/hooks/use-trace-column-preferences';
 import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
 import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
@@ -465,7 +465,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       <PageLayout breadcrumbs={breadcrumbs}>
         <h1 className="sr-only">Traces</h1>
         <div>
-          <TracesPageSkeleton columnPreferences={displayedColumnPreferences} />
+          <BoneSkeleton name="traces-page" label="Loading traces" loading />
         </div>
       </PageLayout>
     );

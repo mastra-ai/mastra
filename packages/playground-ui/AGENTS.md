@@ -28,3 +28,5 @@ Include mobile, tablet, and desktop screenshots when handing off UI changes.
 Preserve design-system consistency and existing component APIs where possible.
 Typography: use DS tokens only (`Txt` variants, or `text-ui-*` / `text-header-*` classes). No `text-xs/sm/base/lg/xl/…` and no arbitrary `text-[Npx]`; lint enforces this.
 No new `asChild`; prefer Base UI's native `render` prop.
+
+Page skeletons: use `@/ds/components/Bones`; after changing a `Bones/` story run `bones:capture`, never hand-edit `src/bones`.

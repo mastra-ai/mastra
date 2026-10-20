@@ -1,5 +1,6 @@
 import type { GetAgentResponse } from '@mastra/client-js';
-import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import { BoneSkeleton } from '@mastra/playground-ui/components/Bones';
+import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
@@ -24,7 +25,7 @@ export function AgentsList({ agents, isLoading, hasSearch, sort, onSortChange }:
   const { containerRef, getRowProps } = useDataListKeyboard({ count: agents.length, global: true });
 
   if (isLoading) {
-    return <DataListSkeleton columns={agentsListColumns} fit="container" />;
+    return <BoneSkeleton name="agents-list" label="Loading agents" loading />;
   }
 
   return (

@@ -3,8 +3,13 @@ import { fileURLToPath } from 'node:url';
 import type { StorybookConfig } from '@storybook/react-vite';
 import { mergeConfig } from 'vite';
 
+// `pnpm bones:capture` builds only the `Bones/…` capture stories, without docs, to stay fast.
+const bonesCapture = process.env.BONES_CAPTURE === '1';
+
 const config: StorybookConfig = {
-  stories: ['../src/**/*.mdx', '../src/**/*.stories.@(js|jsx|mjs|ts|tsx)'],
+  stories: bonesCapture
+    ? ['../src/**/*.bones.stories.tsx']
+    : ['../src/**/*.mdx', '../src/**/*.stories.@(js|jsx|mjs|ts|tsx)'],
   addons: [
     getAbsolutePath('@storybook/addon-docs'),
     getAbsolutePath('@storybook/addon-mcp'),
@@ -15,7 +20,7 @@ const config: StorybookConfig = {
     options: {},
   },
   typescript: {
-    reactDocgen: 'react-docgen-typescript',
+    reactDocgen: bonesCapture ? false : 'react-docgen-typescript',
   },
   viteFinal: config =>
     mergeConfig(
