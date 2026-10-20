@@ -492,6 +492,7 @@ interface AggregateRootSpec {
   name?: string;
   /** Root span type; defaults to `agent_run`. */
   spanType?: string;
+  entityId?: string;
   startedAt: string;
   durationMs: number;
   error?: boolean;
@@ -508,6 +509,7 @@ function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
     name: spec.name ?? spec.traceId,
     spanType: spec.spanType ?? 'agent_run',
     entityName: spec.entityName,
+    entityId: spec.entityId ?? null,
     environment: spec.environment ?? 'production',
     organizationId,
     threadId: spec.threadId,
@@ -555,7 +557,10 @@ function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
  * | research-2  | 5   | 12000 | yes | t-10   | acme       | yes    | staging, org-b            |
  * | scheduler-1 | 1   | 1000  |     | t-11   |            |        | percentiles interpolate   |
  * | scheduler-2 | 3   | 3000  |     | t-11   |            |        |                           |
- * | unnamed-1   | 2   | 700   |     | t-12   |            |        | `entityName: null`        |
+ * | unnamed-1   | 2   | 700   |     | t-12   |            |        | `entityName: null`, `entityId: nightly-scorer` |
+ *
+ * `billing-2` also has a child `scorer_run` span with `entityId: nightly-scorer`, which only span-scope
+ * `entityId` predicates match.
  *
  * Whole-window groups by `entityName`: triage 6 (2 errors, p95 8000), billing 5 (1 error,
  * p95 2500), support 4 (1 error, p95 6000), research 2 (1 error, p95 12000), scheduler 2
@@ -666,6 +671,19 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       durationMs: 1500,
       threadId: 't-5',
       tenant: 'globex',
+    }),
+    // A child scorer span reusing a root entityId: trace-scope `entityId` must not match it.
+    span(211, 'billing-2', 'billing-2-scorer', {
+      parentSpanId: 'billing-2',
+      name: 'nightly-scorer',
+      spanType: 'scorer_run',
+      entityType: 'scorer',
+      entityId: 'nightly-scorer',
+      entityName: null,
+      organizationId: 'org-a',
+      threadId: 't-5',
+      startedAt: '2026-08-02T10:00:00.500Z',
+      endedAt: '2026-08-02T10:00:01.000Z',
     }),
     ...aggregateRoot({
       cursorId: 220,
@@ -780,6 +798,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 600,
       traceId: 'unnamed-1',
       entityName: null,
+      entityId: 'nightly-scorer',
       startedAt: '2026-08-02T10:00:00.000Z',
       durationMs: 700,
       threadId: 't-12',
@@ -1222,6 +1241,41 @@ export const TRACE_AGGREGATE_CONFORMANCE_CASES: TraceAggregateConformanceCase[] 
       ],
       truncated: false,
     },
+  },
+  {
+    name: 'entityId groups the traces that have no entityName',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'notExists', path: 'entityName' },
+      groupBy: ['entityId'],
+      measures: ['count'],
+    },
+    expected: {
+      rows: [{ dimensions: { entityId: 'nightly-scorer' }, measures: { count: 1 } }],
+      truncated: false,
+    },
+  },
+  {
+    name: 'drills into an entityId group by filtering on the root entityId only',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } },
+      groupBy: ['entityId'],
+      measures: ['count', 'countDistinct.traceId'],
+    },
+    expected: {
+      rows: [{ dimensions: { entityId: 'nightly-scorer' }, measures: { count: 1, 'countDistinct.traceId': 1 } }],
+      truncated: false,
+    },
+  },
+  {
+    name: 'span-scope entityId also matches child spans that share a root entityId',
+    request: {
+      timeRange: aggregateRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } } } },
+      measures: ['count'],
+    },
+    expected: { rows: [{ measures: { count: 2 } }], truncated: false },
   },
   {
     name: 'null in the second dimension sorts last within the first dimension tie-break',

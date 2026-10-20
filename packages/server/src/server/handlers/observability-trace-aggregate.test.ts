@@ -377,6 +377,58 @@ describe('AGGREGATE_TRACES', () => {
     expect(legacy.observabilityStore.aggregateTraces).toHaveBeenCalledOnce();
   });
 
+  it('rejects root span entityId with 422 on stores that only support root span name and type', async () => {
+    const cases = [
+      {
+        request: {
+          timeRange: TIME_RANGE,
+          where: { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } },
+          measures: ['count'],
+        },
+        path: ['where'],
+      },
+      { request: { timeRange: TIME_RANGE, groupBy: ['name', 'entityId'], measures: ['count'] }, path: ['groupBy', 1] },
+      { request: { timeRange: TIME_RANGE, measures: ['count', 'countDistinct.entityId'] }, path: ['measures', 1] },
+    ];
+    for (const { request, path } of cases) {
+      const { mastra, observabilityStore } = createHarness(['trace-aggregate', 'trace-query-root-span-fields']);
+      const error = await captureHttpException(AGGREGATE_TRACES.handler(params(mastra, request)));
+
+      expect(error.status).toBe(422);
+      const body = getDeclaredErrorSchema(422).parse(await error.getResponse().json());
+      expect(body).toMatchObject({ code: 'TRACE_QUERY_INVALID', issues: [{ code: 'field_not_allowed', path }] });
+      expect(observabilityStore.aggregateTraces).not.toHaveBeenCalled();
+    }
+  });
+
+  it('passes root span entityId to stores that advertise support, and span-scope entityId to any store', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-aggregate', 'trace-query-root-entity-id']);
+    await AGGREGATE_TRACES.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } },
+        groupBy: ['entityId'],
+        measures: ['count', 'countDistinct.entityId'],
+      }),
+    );
+    expect(observabilityStore.aggregateTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { type: 'comparison', field: 'entityId', operator: 'eq', value: 'nightly-scorer' },
+        dimensions: ['entityId'],
+      }),
+    );
+
+    const legacy = createHarness(['trace-aggregate']);
+    await AGGREGATE_TRACES.handler(
+      params(legacy.mastra, {
+        timeRange: TIME_RANGE,
+        where: { spans: { some: { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } } } },
+        measures: ['count'],
+      }),
+    );
+    expect(legacy.observabilityStore.aggregateTraces).toHaveBeenCalledOnce();
+  });
+
   it('scopes the plan to the trusted tenant and never runs a scoped request unscoped', async () => {
     const scopedParams = (mastra: Mastra) => {
       const context = params(mastra, { timeRange: TIME_RANGE, measures: ['count'] });
