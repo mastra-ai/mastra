@@ -23,9 +23,11 @@ export interface ConnectionsTableProps {
   emptyMessage: string;
   loading?: boolean;
   /** Present only for the caller's own connections — global rows are read-only. */
-  onDisconnect?: (connectionId: string) => void;
+  onDisconnect?: (connectionId: string, displayName: string) => void;
   disconnectPendingId?: string | null;
 }
+
+const SKELETON_ROWS = [0, 1, 2];
 
 /** One table of connect-surface connections (used for both Global and Your connections). */
 export function ConnectionsTable({
@@ -40,7 +42,7 @@ export function ConnectionsTable({
   const columnCount = onDisconnect ? 4 : 3;
 
   return (
-    <Table variant="inset" aria-label={label}>
+    <Table variant="inset" aria-label={label} aria-busy={loading || undefined}>
       <Table.Header>
         <Table.Row>
           <Table.Head>Integration</Table.Head>
@@ -55,11 +57,15 @@ export function ConnectionsTable({
       </Table.Header>
       <Table.Body>
         {loading ? (
-          <Table.Row>
-            <Table.Cell colSpan={columnCount}>
-              <SkeletonText />
-            </Table.Cell>
-          </Table.Row>
+          SKELETON_ROWS.map(index => (
+            <Table.Row key={index}>
+              {Array.from({ length: columnCount }, (_, cell) => (
+                <Table.Cell key={cell}>
+                  <SkeletonText />
+                </Table.Cell>
+              ))}
+            </Table.Row>
+          ))
         ) : connections.length === 0 ? (
           <Table.Row>
             <Table.Cell colSpan={columnCount}>
@@ -103,7 +109,7 @@ export function ConnectionsTable({
                         <DropdownMenu.Item
                           variant="destructive"
                           disabled={disconnectPendingId === connection.id}
-                          onSelect={() => onDisconnect(connection.id)}
+                          onSelect={() => onDisconnect(connection.id, displayName)}
                         >
                           <Unplug /> Disconnect
                         </DropdownMenu.Item>

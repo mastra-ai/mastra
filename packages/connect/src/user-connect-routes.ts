@@ -73,7 +73,7 @@ const PROJECT_PROVIDER_POLICY_TTL_MS = 30_000;
 type RouteContext = any;
 
 interface RouteError {
-  status: 400 | 401 | 403 | 404 | 500 | 502;
+  status: 400 | 401 | 403 | 404 | 409 | 429 | 500 | 502;
   code: string;
   message: string;
 }
@@ -92,8 +92,10 @@ function errorResponse(c: RouteContext, error: RouteError): Response {
 
 /**
  * Maps a platform-call failure to a safe end-user response. Platform detail
- * strings never reach the end user — this is an unauthenticated-adjacent
- * surface, and the details describe the developer's platform account.
+ * strings do not reach the end user — this is an unauthenticated-adjacent
+ * surface, and the details describe the developer's platform account. The one
+ * exception is 409 conflicts, whose details describe the caller's own
+ * connection state and are authored by the platform for display.
  */
 function toRouteError(error: unknown): RouteError {
   if (error instanceof MastraConnectError) {
@@ -106,6 +108,20 @@ function toRouteError(error: unknown): RouteError {
       error.code === 'invalid_options'
     ) {
       return { status: 500, code: 'misconfigured', message: 'Connect routes are not configured correctly.' };
+    }
+    if (error.status === 409) {
+      // Conflicts describe the end user's own connection state (per-resource
+      // connection caps, already-pending sessions, coming-soon providers) and
+      // the platform authors their detail strings for display, so forwarding
+      // them gives the user the action to take instead of a dead-end 502.
+      return {
+        status: 409,
+        code: 'conflict',
+        message: error.detail ?? 'The request conflicts with the current state of this connection.',
+      };
+    }
+    if (error.status === 429) {
+      return { status: 429, code: 'rate_limited', message: 'Too many requests. Try again shortly.' };
     }
     return { status: 502, code: 'platform_error', message: 'Platform request failed.' };
   }

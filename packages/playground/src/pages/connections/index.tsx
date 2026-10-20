@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -8,8 +9,9 @@ import {
   useDisconnectUserConnection,
   useUserConnections,
 } from '@mastra/playground-ui/domains/connect';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { PlusIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { AddConnectionDialog } from './components/add-connection-dialog';
 import { ConnectionsTable } from './components/connections-table';
@@ -19,6 +21,16 @@ import { navCrumb } from '@/domains/navigation/crumbs';
 const crumbs = [navCrumb('/connections')];
 
 const DOCS_URL = 'https://mastra.ai/docs/mastra-platform/connect/end-user-connections';
+
+function fetchErrorNotice(message: string) {
+  return (
+    <div role="alert">
+      <Notice variant="destructive" title="Couldn't load connections">
+        <Notice.Message>{message}</Notice.Message>
+      </Notice>
+    </div>
+  );
+}
 
 function docsLink(label: string) {
   return (
@@ -38,6 +50,20 @@ export default function ConnectionsPage() {
   const connectionsQuery = useUserConnections({ enabled: surface.data?.status === 'ready' });
   const disconnect = useDisconnectUserConnection();
   const [addOpen, setAddOpen] = useState(false);
+
+  const { mutate: disconnectMutate } = disconnect;
+  const handleDisconnect = useCallback(
+    (connectionId: string, displayName: string) => {
+      disconnectMutate(
+        { connectionId },
+        {
+          onSuccess: () => toast.success(`Disconnected ${displayName}`),
+          onError: error => toast.error(error.message),
+        },
+      );
+    },
+    [disconnectMutate],
+  );
 
   const connections = useMemo(() => connectionsQuery.data ?? [], [connectionsQuery.data]);
   const globalConnections = useMemo(() => connections.filter(c => c.scope === 'global'), [connections]);
@@ -94,9 +120,7 @@ export default function ConnectionsPage() {
             </Button>
           </div>
           {connectionsQuery.isError ? (
-            <Txt as="p" variant="body" className="text-destructive-foreground" role="alert">
-              {connectionsQuery.error.message}
-            </Txt>
+            fetchErrorNotice(connectionsQuery.error.message)
           ) : (
             <ConnectionsTable
               label="Your connections"
@@ -104,15 +128,10 @@ export default function ConnectionsPage() {
               providersById={providersById}
               emptyMessage="You haven't connected any accounts yet."
               loading={connectionsQuery.isLoading}
-              onDisconnect={connectionId => disconnect.mutate({ connectionId })}
+              onDisconnect={handleDisconnect}
               disconnectPendingId={disconnect.isPending ? (disconnect.variables?.connectionId ?? null) : null}
             />
           )}
-          {disconnect.isError ? (
-            <Txt as="p" variant="body" className="text-destructive-foreground" role="alert">
-              {disconnect.error.message}
-            </Txt>
-          ) : null}
         </section>
 
         <section aria-label="Global connections" className="space-y-3">
@@ -121,9 +140,7 @@ export default function ConnectionsPage() {
           </Txt>
           {connectionsQuery.isError ? (
             // A failed fetch must not masquerade as "no global connections".
-            <Txt as="p" variant="body" className="text-destructive-foreground" role="alert">
-              {connectionsQuery.error.message}
-            </Txt>
+            fetchErrorNotice(connectionsQuery.error.message)
           ) : (
             <ConnectionsTable
               label="Global connections"

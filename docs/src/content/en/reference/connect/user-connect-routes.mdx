@@ -91,7 +91,7 @@ All routes are gated on the caller's resource ID and respond with `Cache-Control
 
 ## Error responses
 
-Errors are JSON: `{ error: { code, message } }`. Platform failure details never reach the end user.
+Errors are JSON: `{ error: { code, message } }`. Platform failure details don't reach the end user, with one exception: 409 conflict details describe the caller's own connection state (for example a per-resource connection limit), so they're forwarded as the message.
 
 | Status | Code | When |
 | - | - | - |
@@ -99,6 +99,8 @@ Errors are JSON: `{ error: { code, message } }`. Platform failure details never 
 | 400 | `invalid_return_to` | `returnTo` isn't a relative path or an allowlisted origin |
 | 403 | `forbidden` | Deleting a global connection |
 | 404 | `provider_not_found`, `connection_not_found` | Provider outside the allowlist (or unknown without one), or an invisible connection |
+| 409 | `conflict` | The platform refused the request as conflicting (for example the per-resource connection limit); the message carries the platform's actionable detail |
+| 429 | `rate_limited` | The platform rate-limited the request |
 | 500 | `misconfigured` | Missing platform token or other configuration problem |
 | 502 | `platform_error` | The platform request failed |
 
