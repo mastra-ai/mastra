@@ -372,6 +372,23 @@ describe('Memory', () => {
         ]);
       });
 
+      it('uses the removed call provider namespace and copies no other provider metadata', () => {
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
+          geminiMessage([
+            { type: 'step-start' },
+            toolPart('wm-1', 'updateWorkingMemory', {
+              vertex: { thoughtSignature: 'SIG_VERTEX', extra: 'wm-only' },
+              openai: { itemId: 'fc_wm' },
+            }),
+            toolPart('call-1', 'lookupWeather'),
+          ]),
+        );
+        expect(result?.content.parts).toEqual([
+          { type: 'step-start' },
+          toolPart('call-1', 'lookupWeather', { vertex: { thoughtSignature: 'skip_thought_signature_validator' } }),
+        ]);
+      });
+
       it('drops the signature with a step whose only call was updateWorkingMemory', () => {
         const result = memory.testUpdateMessageToHideWorkingMemoryV2(
           geminiMessage([
