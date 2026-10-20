@@ -11,6 +11,7 @@ describe('worker entry (@mastra/livekit/worker)', () => {
       'MastraVoiceAgent',
       'VOICE_TEXT_FLUSH',
       'chatContextToMessages',
+      'createDtmfTool',
       'createLiveKitTranscriptPersistence',
       'createLiveKitWorker',
       'createMastraVoiceAgent',

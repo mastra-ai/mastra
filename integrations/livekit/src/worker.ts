@@ -15,6 +15,7 @@ import type {
   VoiceTurnCompleteHook,
   VoiceTurnContext,
 } from './bridge';
+import { createDtmfTool } from './dtmf';
 import { LiveKitSessionMetadataSchema, parseSessionMetadata } from './metadata';
 import type { LiveKitSessionMetadata } from './metadata';
 import { startVoiceCallObservability } from './observability';
@@ -101,6 +102,8 @@ export interface VoiceCallEndArgs {
 export type VoiceCallEndHook = (args: VoiceCallEndArgs) => void | Promise<void>;
 
 export interface CreateLiveKitWorkerOptions {
+  /** Expose sendDtmf to the resolved Mastra agent in a dedicated SIP call. Disabled by default. */
+  dtmf?: boolean;
   /**
    * Opt-in SIP setup using native LiveKit APIs. Outbound dialing waits for an answer before
    * session start/greeting; inbound routing can resolve metadata from the native caller.
@@ -939,6 +942,11 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         if (typeof options.telephony === 'function') telephony = await options.telephony({ metadata, ctx });
         resolvingTelephony = false;
         let participant: Awaited<ReturnType<JobContext['waitForParticipant']>> | undefined;
+        if (options.dtmf && (!telephony || options.workflow || options.generate)) {
+          throw new Error(
+            '@mastra/livekit: dtmf requires telephony with a Mastra agent; custom generators can use createDtmfTool',
+          );
+        }
         if (telephony) validateTelephony(telephony, options.inputOptions?.participantIdentity);
         if (telephony?.direction === 'inbound') {
           await ctx.connect();
@@ -1094,20 +1102,6 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
           voiceObs?.recordTurn(metric);
           notifyVoiceObserver(options.onTurnMetrics, metric);
         };
-        const agent = createMastraVoiceAgent({
-          onTurnMetrics,
-          ...(transcriptPersistence
-            ? { transcriptPersistence }
-            : replyGenerator
-              ? { generate: replyGenerator }
-              : { agent: mastraAgent! }),
-          instructions: mastraAgent ? await resolveInstructions(mastraAgent, requestContext) : undefined,
-          ...(!transcriptPersistence && { memory, requestContext }),
-          toolFeedback: options.toolFeedback,
-          onTurnComplete,
-          greetingReminder,
-          streamOptions: voiceObs ? { tracingContext: voiceObs.tracingContext } : undefined,
-        });
 
         // Per-call STT/TTS: the `configuration.stt` / `configuration.tts` resolvers pick this
         // call's transcriber and voice (per-tenant voices/languages keyed off the dispatch
@@ -1139,6 +1133,35 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
           ...options.sessionOptions,
         });
 
+        let dtmfParticipantIdentity: string | undefined;
+        const agent = createMastraVoiceAgent({
+          onTurnMetrics,
+          ...(transcriptPersistence
+            ? { transcriptPersistence }
+            : replyGenerator
+              ? { generate: replyGenerator }
+              : { agent: mastraAgent! }),
+          instructions: mastraAgent ? await resolveInstructions(mastraAgent, requestContext) : undefined,
+          ...(!transcriptPersistence && { memory, requestContext }),
+          toolFeedback: options.toolFeedback,
+          onTurnComplete,
+          greetingReminder,
+          streamOptions: {
+            ...(voiceObs && { tracingContext: voiceObs.tracingContext }),
+            ...(options.dtmf && {
+              toolsets: {
+                livekit: {
+                  sendDtmf: createDtmfTool({
+                    room: ctx.room,
+                    session,
+                    participantIdentity: () => dtmfParticipantIdentity,
+                  }),
+                },
+              },
+            }),
+          },
+        });
+
         // Subscribe before start so the first turn's metrics are captured.
         if (transcriptPersistence) {
           transcriptPersistence.attach(session);
@@ -1159,6 +1182,7 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
           const sipParticipant =
             telephony?.direction === 'outbound' ? await dialSipParticipant(telephony, roomName) : undefined;
           const participantIdentity = sipParticipant?.participantIdentity ?? participant?.identity;
+          dtmfParticipantIdentity = participantIdentity;
           await session.start({
             agent,
             room: ctx.room,
