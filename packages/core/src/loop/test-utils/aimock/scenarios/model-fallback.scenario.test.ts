@@ -25,6 +25,11 @@ const RATE_LIMITED = {
   status: 429,
 } as const;
 
+const SHORT_TIMEOUT_MS = 200;
+const LONG_TIMEOUT_MS = 30_000;
+const FIRST_CHUNK_DELAY_MS = 800;
+const SLOW_FIRST_CHUNK = { streamingProfile: { ttft: FIRST_CHUNK_DELAY_MS } };
+
 function modelList(
   llm: LLMock,
   entries: Array<{ id: string; maxRetries?: number; enabled?: boolean } & Record<string, unknown>>,
@@ -250,5 +255,49 @@ describeForAllEngines('AIMock loop scenario: model fallback list', engine => {
     for (const request of requests as Array<{ body: Record<string, unknown> }>) {
       expect(request.body).toMatchObject({ temperature: 0.1, max_tokens: 99, user: 'entry-user', store: false });
     }
+  });
+
+  // The primary's first chunk arrives after FIRST_CHUNK_DELAY_MS. Whether that
+  // trips a timeout shows which merged timeout fields the primary request ran with.
+  it('keeps call-time timeout fields the entry does not override', async () => {
+    const { output, requests } = await runLoopScenario({
+      engine,
+      errorProcessors: [],
+      llm: getMock(),
+      prompt: 'hi',
+      modelSettings: { timeout: { firstChunkMs: SHORT_TIMEOUT_MS } },
+      model: modelList(getMock(), [
+        { id: 'primary-model', maxRetries: 0, modelSettings: { timeout: { stepMs: LONG_TIMEOUT_MS } } },
+        { id: 'fallback-model', maxRetries: 0 },
+      ]),
+      fixtures: llm => {
+        llm.on({ model: 'primary-model' }, { content: 'Primary response' }, SLOW_FIRST_CHUNK);
+        llm.on({ model: 'fallback-model' }, { content: 'Fallback response' });
+      },
+    });
+
+    expect(await output.text).toBe('Fallback response');
+    expect(calledModels(requests)).toEqual(['primary-model', 'fallback-model']);
+  });
+
+  it('lets an entry timeout field override the same call-time field', async () => {
+    const { output, requests } = await runLoopScenario({
+      engine,
+      errorProcessors: [],
+      llm: getMock(),
+      prompt: 'hi',
+      modelSettings: { timeout: { stepMs: SHORT_TIMEOUT_MS } },
+      model: modelList(getMock(), [
+        { id: 'primary-model', maxRetries: 0, modelSettings: { timeout: { stepMs: LONG_TIMEOUT_MS } } },
+        { id: 'fallback-model', maxRetries: 0 },
+      ]),
+      fixtures: llm => {
+        llm.on({ model: 'primary-model' }, { content: 'Primary response' }, SLOW_FIRST_CHUNK);
+        llm.on({ model: 'fallback-model' }, { content: 'Fallback response' });
+      },
+    });
+
+    expect(await output.text).toBe('Primary response');
+    expect(calledModels(requests)).toEqual(['primary-model']);
   });
 });
