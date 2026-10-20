@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Approving, declining, or answering a paused tool call now keeps the tool restriction of the mode the run was paused in. Previously, switching modes while a tool call waited (or answering a suspension that belongs to another thread) gave the continuation the session's current mode's tools, so a switch to an unrestricted mode exposed every tool to a run started in a restricted one. Approving a plan still applies the plan's transition mode. Fixes #27873.
+Fixed paused tool calls picking up a different mode's tools when they resume. Approving, declining, or answering a paused tool call now uses the tools of the mode the run was paused in. Before, switching modes while a call waited gave the continuation the new mode's tools. A switch to an unrestricted mode could expose every tool to a run that started in a restricted one. The same applied when answering a suspension from another thread. Approving a plan still moves the run to the plan's transition mode. Fixes #27873.
