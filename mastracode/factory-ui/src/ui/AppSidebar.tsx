@@ -1,6 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
-import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 
 import { SidebarUserMenu } from './domains/auth/components/SidebarUserMenu';
 import { FactorySection } from './domains/factory/components/FactorySection';
@@ -49,6 +49,7 @@ function BetaBadge() {
  */
 export function AppSidebar() {
   const settingsOpen = useSettingsOpen();
+  const { desktopState } = useSidebar();
 
   return (
     <Sidebar aria-label="Main sidebar" className="h-full">
@@ -58,7 +59,8 @@ export function AppSidebar() {
           title={<BetaBadge />}
         />
         <SidebarGlobalSearchButton />
-        <Sidebar.Trigger />
+        {/* Collapsed, the sidebar is hidden and the page header carries the toggle (useSidebarHeaderSlots) */}
+        {desktopState !== 'collapsed' && <Sidebar.Trigger />}
       </Sidebar.CommandHeader>
       <Sidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
         {settingsOpen ? (
