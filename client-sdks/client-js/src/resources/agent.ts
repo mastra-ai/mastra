@@ -1,18 +1,9 @@
-import { parsePartialJson, processDataStream } from '@ai-sdk/ui-utils';
-import type {
-  JSONValue,
-  ReasoningUIPart,
-  TextUIPart,
-  ToolInvocation,
-  UIMessage,
-  UseChatOptions,
-} from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
-import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
+import type { SerializableStructuredOutputOptions, ToolsInput } from '@mastra/core/agent';
 import type { AIV5Type, MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType, FullOutput, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool, ToolObserve } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
@@ -60,6 +51,7 @@ import type {
   PartProviderMetadata,
   MaybeProviderMetadata,
   ToolInvocationUIPartWithMeta,
+  ClientToolsResolver,
 } from '../types';
 
 import {
@@ -69,6 +61,15 @@ import {
   requestContextQueryString,
   toQueryParams,
 } from '../utils';
+import type {
+  JSONValue,
+  ReasoningUIPart,
+  TextUIPart,
+  ToolInvocation,
+  UIMessage,
+  UseChatOptions,
+} from '../utils/ai-sdk-v4';
+import { parsePartialJson, processDataStream } from '../utils/ai-sdk-v4';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
@@ -1642,7 +1643,8 @@ export class Agent extends BaseResource {
         const toolInvocations = message.toolInvocations;
 
         if (toolInvocations == null) {
-          throw new Error('tool_result must be preceded by a tool_call');
+          // The matching tool-call may have been emitted in an earlier stream (e.g. before a resume).
+          return;
         }
 
         // find if there is any tool invocation with the same toolCallId
@@ -1650,7 +1652,7 @@ export class Agent extends BaseResource {
         const toolInvocationIndex = toolInvocations.findIndex(invocation => invocation.toolCallId === value.toolCallId);
 
         if (toolInvocationIndex === -1) {
-          throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
+          return;
         }
 
         const invocation = {
@@ -2121,7 +2123,8 @@ export class Agent extends BaseResource {
             const toolInvocations = message.toolInvocations;
 
             if (toolInvocations == null) {
-              throw new Error('tool_result must be preceded by a tool_call');
+              // The matching tool-call may have been emitted in an earlier stream (e.g. before a resume).
+              break;
             }
 
             // find if there is any tool invocation with the same toolCallId
@@ -2131,7 +2134,7 @@ export class Agent extends BaseResource {
             );
 
             if (toolInvocationIndex === -1) {
-              throw new Error('tool_result must be preceded by a tool_call with the same toolCallId');
+              break;
             }
 
             const invocation = {
@@ -2267,6 +2270,10 @@ export class Agent extends BaseResource {
     try {
       let messages: UIMessage[] = [];
       let streamRunId: string | undefined = processedParams.runId;
+      // The full model-message history the server reported on its last finish chunk. A resumed
+      // run restores the conversation from its snapshot, so this is the only place a stateless
+      // client can recover it for a client-tool continuation.
+      let finishedHistory: unknown[] | undefined;
 
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
@@ -2277,6 +2284,15 @@ export class Agent extends BaseResource {
         pendingText += text;
         const lines = pendingText.split('\n\n');
         pendingText = isFinal ? '' : (lines.pop() ?? '');
+        for (const line of lines) {
+          if (!line.startsWith('data: ') || !line.includes('"type":"finish"')) continue;
+          try {
+            const all = JSON.parse(line.slice(6))?.payload?.messages?.all;
+            if (Array.isArray(all)) finishedHistory = all;
+          } catch {
+            // Not a JSON chunk
+          }
+        }
 
         const readableLines = lines
           .filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]')
@@ -2534,22 +2550,26 @@ export class Agent extends BaseResource {
                 content: toolResultContents,
               };
 
+              const isOneShotResume =
+                route === 'resume-stream' || route === 'approve-tool-call' || route === 'decline-tool-call';
               const updatedMessages = threadId
                 ? [toolResultMessage]
-                : [
-                    ...(Array.isArray(processedParams.messages) ? processedParams.messages : []),
-                    ...messages,
-                    toolResultMessage,
-                  ];
+                : isOneShotResume && finishedHistory
+                  ? [...finishedHistory, toolResultMessage]
+                  : [
+                      ...(Array.isArray(processedParams.messages) ? processedParams.messages : []),
+                      ...messages,
+                      toolResultMessage,
+                    ];
 
               // Recursively call stream with updated messages
               // This will wait for the recursive stream to complete before continuing.
-              // Resume routes are one-shot (they consume server-side resumeData),
+              // Resume routes (including approve/decline) are one-shot (they consume server-side resumeData),
               // so client-tool continuations must fall back to the corresponding
               // non-resume stream endpoint. Other routes (e.g. stream-until-idle)
               // are idempotent continuations and stay on the same endpoint.
               const recursionRoute =
-                route === 'resume-stream'
+                route === 'resume-stream' || route === 'approve-tool-call' || route === 'decline-tool-call'
                   ? 'stream'
                   : route === 'resume-stream-until-idle'
                     ? 'stream-until-idle'
@@ -3039,6 +3059,14 @@ export class Agent extends BaseResource {
     /** Aborts the underlying request and any client-tool continuations. */
     abortSignal?: AbortSignal;
     requestContext?: RequestContext | Record<string, any>;
+    /** Client tools the model may call after the approval decision. */
+    clientTools?: ToolsInput;
+    clientToolsResolver?: ClientToolsResolver;
+    /**
+     * Memory thread/resource of the suspended run. Client-tool continuations go to `/stream`,
+     * so pass the same memory as the original call to keep them on the thread.
+     */
+    memory?: StreamParamsBaseWithoutMessages['memory'];
   }): Promise<
     Response & {
       processDataStream: ({
@@ -3049,7 +3077,11 @@ export class Agent extends BaseResource {
     }
   > {
     const { requestContext, ...rest } = params;
-    const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
+    const processedParams = {
+      ...rest,
+      requestContext: parseClientRequestContext(requestContext),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
+    };
 
     // Create a manually controlled readable stream
     const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
@@ -3111,6 +3143,14 @@ export class Agent extends BaseResource {
     /** Optional explanation surfaced to the model in place of the default decline message. */
     reason?: string;
     requestContext?: RequestContext | Record<string, any>;
+    /** Client tools the model may call after the approval decision. */
+    clientTools?: ToolsInput;
+    clientToolsResolver?: ClientToolsResolver;
+    /**
+     * Memory thread/resource of the suspended run. Client-tool continuations go to `/stream`,
+     * so pass the same memory as the original call to keep them on the thread.
+     */
+    memory?: StreamParamsBaseWithoutMessages['memory'];
   }): Promise<
     Response & {
       processDataStream: ({
@@ -3121,7 +3161,11 @@ export class Agent extends BaseResource {
     }
   > {
     const { requestContext, ...rest } = params;
-    const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
+    const processedParams = {
+      ...rest,
+      requestContext: parseClientRequestContext(requestContext),
+      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
+    };
 
     // Create a manually controlled readable stream
     const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
@@ -3413,15 +3457,31 @@ export class Agent extends BaseResource {
    * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
    */
   async approveToolCallGenerate(
-    params: Omit<Body<'POST /agents/:agentId/approve-tool-call-generate'>, 'requestContext'> & {
+    params: Omit<Body<'POST /agents/:agentId/approve-tool-call-generate'>, 'requestContext' | 'clientTools'> & {
       requestContext?: RequestContext | Record<string, any>;
+      /** Client tools the model may call after the approval decision. */
+      clientTools?: ToolsInput;
+      clientToolsResolver?: ClientToolsResolver;
+      /**
+       * Memory of the original call. When the model calls a client tool after the decision, the
+       * continuation is saved to this thread instead of running stateless.
+       */
+      memory?: StreamParamsBaseWithoutMessages['memory'];
     },
   ): Promise<ToolCallGenerateResponse> {
-    const { requestContext, ...rest } = params;
-    return this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
-      method: 'POST',
-      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
-    });
+    const { requestContext, clientTools, clientToolsResolver, memory, ...rest } = params;
+    const response: ToolCallGenerateResponse = await this.request(
+      `/agents/${this.agentId}/approve-tool-call-generate`,
+      {
+        method: 'POST',
+        body: {
+          ...rest,
+          requestContext: parseClientRequestContext(requestContext),
+          clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
+        },
+      },
+    );
+    return this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver, memory });
   }
 
   /**
@@ -3429,14 +3489,77 @@ export class Agent extends BaseResource {
    * Used when `requireToolApproval` is enabled with generate() to prevent tool execution.
    */
   async declineToolCallGenerate(
-    params: Omit<Body<'POST /agents/:agentId/decline-tool-call-generate'>, 'requestContext'> & {
+    params: Omit<Body<'POST /agents/:agentId/decline-tool-call-generate'>, 'requestContext' | 'clientTools'> & {
       requestContext?: RequestContext | Record<string, any>;
+      /** Client tools the model may call after the approval decision. */
+      clientTools?: ToolsInput;
+      clientToolsResolver?: ClientToolsResolver;
+      /**
+       * Memory of the original call. When the model calls a client tool after the decision, the
+       * continuation is saved to this thread instead of running stateless.
+       */
+      memory?: StreamParamsBaseWithoutMessages['memory'];
     },
   ): Promise<ToolCallGenerateResponse> {
-    const { requestContext, ...rest } = params;
-    return this.request(`/agents/${this.agentId}/decline-tool-call-generate`, {
-      method: 'POST',
-      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
+    const { requestContext, clientTools, clientToolsResolver, memory, ...rest } = params;
+    const response: ToolCallGenerateResponse = await this.request(
+      `/agents/${this.agentId}/decline-tool-call-generate`,
+      {
+        method: 'POST',
+        body: {
+          ...rest,
+          requestContext: parseClientRequestContext(requestContext),
+          clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
+        },
+      },
+    );
+    return this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver, memory });
+  }
+
+  /**
+   * Runs executable client tools the model called after an approval decision and continues on
+   * /generate, like generate() does. With memory the continuation sends only the new messages to the
+   * thread. Without memory it re-sends the conversation up to the last user turn, because the resume
+   * routes keep the earlier history server-side and drop it once the run finishes.
+   */
+  private async continueResumedGenerate(
+    response: ToolCallGenerateResponse,
+    {
+      requestContext,
+      clientTools,
+      clientToolsResolver,
+      memory,
+    }: {
+      requestContext?: RequestContext | Record<string, any>;
+      clientTools?: ToolsInput;
+      clientToolsResolver?: ClientToolsResolver;
+      memory?: StreamParamsBaseWithoutMessages['memory'];
+    },
+  ): Promise<ToolCallGenerateResponse> {
+    if (response.finishReason !== 'tool-calls') return response;
+    const context =
+      requestContext === undefined || requestContext instanceof RequestContext
+        ? requestContext
+        : new RequestContext<unknown>(Object.entries(requestContext));
+    const threadId = typeof memory?.thread === 'string' ? memory.thread : memory?.thread?.id;
+    const history = response.messages ?? [];
+    // response.messages is the whole run; the turns after the last user message are also in
+    // response.response.messages, which executeToolCallAndRespond appends.
+    const priorTurns = history.slice(0, history.findLastIndex(message => message.role === 'user') + 1);
+    return executeToolCallAndRespond<undefined>({
+      response,
+      params: {
+        messages: threadId ? [] : priorTurns,
+        clientTools: clientToolsResolver?.() ?? clientTools,
+        clientToolsResolver,
+        requestContext: context,
+        memory,
+      },
+      agentId: this.agentId,
+      resourceId: memory?.resource,
+      threadId,
+      requestContext: context,
+      respondFn: (messages, options) => this.generate(messages, options),
     });
   }
 

@@ -816,6 +816,7 @@ function upsertMessage(
   if (message.role === 'assistant' && idx === -1) idx = indexOfSameTurn(entries, message);
   if (message.role === 'signal' && idx === -1 && !sentByOther(message, viewerId)) {
     idx = claimOnScreenEntries(entries, [message], isUnconfirmedSteer).get(message) ?? -1;
+    if (idx === -1) idx = indexOfUnclaimedOptimisticCopy(entries, message);
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
@@ -823,7 +824,15 @@ function upsertMessage(
     message.role === 'assistant'
       ? withoutToolPartsDrawnElsewhere(preserveRuntimeToolParts(message, prevEntry?.message), entries, idx)
       : undefined;
-  const nextMessage = filtered?.message ?? preserveOptimisticUserContent(message, prevEntry?.message, viewerId);
+  // The viewer's own message sent from another client (e.g. the TUI) has no optimistic copy to hide behind.
+  const ownSignalWithoutEcho = message.role === 'signal' && idx === -1;
+  const nextMessage =
+    filtered?.message ??
+    preserveOptimisticUserContent(
+      ownSignalWithoutEcho ? withRenderableSignalText(message) : message,
+      prevEntry?.message,
+      viewerId,
+    );
   const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools, viewerId });
   // Changing the entry id remounts open cards.
   const entry = prevEntry
@@ -834,6 +843,19 @@ function upsertMessage(
   else entries[idx] = entry;
   const next = { ...state, entries };
   return message.role === 'assistant' ? reconcileToolResults(next, [message]) : next;
+}
+
+// A composer bubble keeps its local message id until its echo signal claims it, so each send is consumed once.
+function indexOfUnclaimedOptimisticCopy(entries: TimelineEntry[], message: MastraDBMessage): number {
+  const texts = new Set(drawableTexts(message));
+  return entries.findIndex(
+    entry =>
+      entry.kind === 'message' &&
+      entry.message.role === 'user' &&
+      entry.id.startsWith('local-') &&
+      entry.message.id === entry.id &&
+      drawableTexts(entry.message).some(text => texts.has(text)),
+  );
 }
 
 function withoutToolPartsDrawnElsewhere(
@@ -855,7 +877,7 @@ function withoutToolPartsDrawnElsewhere(
   });
   if (sourcePartIndexes.length === message.content.parts.length) return { message };
 
-  const parts = sourcePartIndexes.map(index => message.content.parts[index]!);
+  const parts = sourcePartIndexes.map(index => message.content.parts[index]);
   return { message: { ...message, content: { ...message.content, parts } }, sourcePartIndexes };
 }
 

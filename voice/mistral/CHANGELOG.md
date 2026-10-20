@@ -1,5 +1,11 @@
 # @mastra/voice-mistral
 
+## 0.1.2-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 0.1.1
 
 ### Patch Changes

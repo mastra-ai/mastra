@@ -16,6 +16,8 @@ import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 
 import { channelOrigin, messageAuthor } from '../services/message-author';
+import { replyCredentialLabel } from '../services/reply-credential';
+import type { ThreadOwner } from '../services/reply-credential';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
 import { PROVIDER_AUTH_REQUIRED_ERROR } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
@@ -68,6 +70,7 @@ export function MessageBubble({
   isSubmitting,
   onRespond,
   viewerId,
+  owner,
 }: {
   entry: MessageEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
@@ -75,6 +78,7 @@ export function MessageBubble({
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
   viewerId?: string;
+  owner?: ThreadOwner;
 }) {
   const written = renderableParts(entry);
   const parts = useRevealedParts(written, Boolean(entry.streaming));
@@ -92,8 +96,9 @@ export function MessageBubble({
   const steeringStatus = steeringLabel(entry);
   const steeringPending = entry.deliveryStatus === 'pending';
   const steeringFailed = entry.deliveryStatus === 'failed';
-  const modelId = entry.message.content.metadata?.modelId;
-  const replyModelId = meta && typeof modelId === 'string' ? modelId : undefined;
+  const metadata = entry.message.content.metadata;
+  const replyModelId = meta && typeof metadata?.modelId === 'string' ? metadata.modelId : undefined;
+  const credentialLabel = replyModelId && metadata ? replyCredentialLabel(metadata, owner, viewerId) : undefined;
   const messageActions = meta ? (
     <MessageActions>
       <MessageCopyButton text={meta} />
@@ -137,7 +142,12 @@ export function MessageBubble({
               {replyModelId && (
                 <Tooltip>
                   <TooltipTrigger
-                    render={<MessageMetadata tabIndex={0}>{formatModelName(replyModelId)}</MessageMetadata>}
+                    render={
+                      <MessageMetadata tabIndex={0}>
+                        {formatModelName(replyModelId)}
+                        {credentialLabel && ` · ${credentialLabel}`}
+                      </MessageMetadata>
+                    }
                   />
                   <TooltipContent>{replyModelId}</TooltipContent>
                 </Tooltip>

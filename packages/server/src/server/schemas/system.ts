@@ -41,6 +41,18 @@ export const observabilityStorageCapabilitiesSchema = z.object({
   traceQueryContextIds: z
     .boolean()
     .describe('`runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries'),
+  traceQueryTimeToFirstChunk: z
+    .boolean()
+    .describe(
+      '`timeToFirstChunkMs` in trace and span query results, and predicates on it in trace, thread and span queries',
+    ),
+  traceQueryRootSpanFields: z
+    .boolean()
+    .describe('Root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct`'),
+  traceQueryRootEntityId: z
+    .boolean()
+    .describe('Root span `entityId` in trace-scope predicates, aggregate `groupBy` and `countDistinct`'),
+  traceQueryTimeToFirstChunkSort: z.boolean().describe('Sorting trace and span queries by `timeToFirstChunkMs`'),
   traceQueryDiscovery: z
     .boolean()
     .describe('Trace query field discovery (POST /observability/traces/query/fields and /values)'),
@@ -51,7 +63,19 @@ export const observabilityStorageCapabilitiesSchema = z.object({
       'Trace aggregation (POST /observability/traces/aggregate). Unlike `traceQuery`, clients should treat a missing value as unavailable.',
     ),
   threadQuery: z.boolean().describe('Advanced thread queries (POST /observability/threads/query)'),
+  threadQueryRows: z
+    .boolean()
+    .default(false)
+    .describe(
+      'Full-history thread rows with activity windows, filters and sorting. Treat a missing value as unavailable.',
+    ),
   spanQuery: z.boolean().describe('Span queries (POST /observability/spans/query)'),
+  spanQueryContextFields: z
+    .boolean()
+    .default(false)
+    .describe(
+      'Additional identity, context and parent/root entity predicates in span queries. Treat a missing value as unavailable.',
+    ),
   traceRetentionDays: z
     .number()
     .int()

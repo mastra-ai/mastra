@@ -22,12 +22,13 @@ export { DatasetsList, type DatasetsListProps } from './components/datasets-list
 export { DATASET_EXPERIMENT_OPTIONS, getDatasetTagOptions } from './components/datasets-list/helpers';
 export { NoDatasetsInfo } from './components/datasets-list/no-datasets-info';
 export { DatasetsToolbar, type DatasetsToolbarProps } from './components/datasets-toolbar';
-export { CreateDatasetForm } from './components/create-dataset-form';
+export { CreateDatasetDialog, type CreateDatasetDialogProps } from './components/create-dataset-dialog';
 export { CreateDatasetFromItemsDialog } from './components/create-dataset-from-items-dialog';
 export { AddItemsToDatasetDialog } from './components/add-items-to-dataset-dialog';
 export { DuplicateDatasetDialog } from './components/duplicate-dataset-dialog';
 export { EditDatasetForm } from './components/edit-dataset-form';
 export { DeleteDatasetDialog } from './components/delete-dataset-dialog';
+export { DatasetSchemaDialog } from './components/schema-settings';
 export { EmptyDatasetsTable } from './components/empty-datasets-table';
 export { DatasetCombobox } from './components/dataset-combobox';
 export type { DatasetComboboxProps } from './components/dataset-combobox';
@@ -41,7 +42,6 @@ export { DatasetItemsView } from './components/dataset-detail/dataset-items-view
 export { DatasetTagsEditor } from './components/dataset-detail/dataset-tags-editor';
 export { DatasetItemsList } from './components/items/dataset-items-list';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';
-export { AddItemDialog } from './components/add-item-dialog';
 
 // Item detail components
 export { DatasetItemDetails } from './components/items/dataset-item-details';

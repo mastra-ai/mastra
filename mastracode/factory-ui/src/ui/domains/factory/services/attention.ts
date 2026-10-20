@@ -1,4 +1,3 @@
-import type { FactoryHealthRepair } from '@mastra/factory/supervisor/health';
 import type { FactoryDispatchFailureCode } from '@mastra/factory/storage/domains/work-items/base';
 
 import { boardPath } from '../boardCatalog';
@@ -54,15 +53,6 @@ export interface FactoryActivityAttentionItem extends FactoryAttentionItemBase {
   authorName?: string;
 }
 
-export interface FactorySupervisorFindingAttentionItem extends FactoryAttentionItemBase {
-  kind: 'supervisor-finding';
-  findingKey: string;
-  findingTitle: string;
-  evidence: string;
-  beganAt: string | null;
-  suggestedRepair: FactoryHealthRepair | null;
-}
-
 /** A run parked on a plan or a question: the item lives exactly as long as the answer is owed. */
 export interface FactoryAgentWaitingAttentionItem extends FactoryAttentionItemBase {
   kind: 'agent-waiting';
@@ -78,12 +68,28 @@ export type FactoryAttentionItem =
   | FactoryAutomationFailedAttentionItem
   | FactoryAutomationProposedAttentionItem
   | FactoryMentionAttentionItem
-  | FactoryActivityAttentionItem
-  | FactorySupervisorFindingAttentionItem;
+  | FactoryActivityAttentionItem;
 
 /** Automated attention items have no author; comment-driven kinds carry the person who wrote the comment. */
 export function attentionAuthorName(item: FactoryAttentionItem): string | undefined {
   return item.kind === 'mention' || item.kind === 'activity' ? item.authorName : undefined;
+}
+
+const ISO_INSTANT = /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z\b/g;
+
+const detailDate = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/** Supervisor evidence stamps raw ISO instants for the agent that reads it; people get their own clock. */
+export function readableAttentionDetail(detail: string): string {
+  return detail.replace(ISO_INSTANT, instant => {
+    const at = Date.parse(instant);
+    return Number.isNaN(at) ? instant : detailDate.format(at);
+  });
 }
 
 export function attentionItemSourceId(item: FactoryAttentionItem): string {
@@ -95,8 +101,6 @@ export function attentionItemSourceId(item: FactoryAttentionItem): string {
     case 'automation-failed':
     case 'automation-proposed':
       return item.decisionId;
-    case 'supervisor-finding':
-      return item.findingKey;
     case 'agent-waiting':
       return item.sessionId;
   }
@@ -109,21 +113,23 @@ export type FactoryAttentionGroup = 'attention' | 'queue' | 'activity';
 
 const ATTENTION_GROUP_OF_KIND: Record<FactoryAttentionKind, FactoryAttentionGroup> = {
   'automation-failed': 'attention',
-  'supervisor-finding': 'attention',
   'agent-waiting': 'attention',
   mention: 'attention',
   'automation-proposed': 'queue',
   activity: 'activity',
 };
-const ATTENTION_KINDS = Object.keys(ATTENTION_GROUP_OF_KIND) as FactoryAttentionKind[];
 
-export function attentionGroupOf(kind: FactoryAttentionKind): FactoryAttentionGroup {
-  return ATTENTION_GROUP_OF_KIND[kind];
+function isAttentionKind(key: string): key is FactoryAttentionKind {
+  return Object.hasOwn(ATTENTION_GROUP_OF_KIND, key);
 }
 
-export function attentionKindsIn(group: FactoryAttentionGroup): FactoryAttentionKind[] {
-  return ATTENTION_KINDS.filter(kind => ATTENTION_GROUP_OF_KIND[kind] === group);
-}
+export const ATTENTION_KINDS = Object.keys(ATTENTION_GROUP_OF_KIND).filter(isAttentionKind);
+
+export const INTERRUPTING_KINDS = ATTENTION_KINDS.filter(kind => ATTENTION_GROUP_OF_KIND[kind] === 'attention');
+
+export const NEEDS_YOU_KINDS = ATTENTION_KINDS.filter(kind => ATTENTION_GROUP_OF_KIND[kind] !== 'activity');
+
+export const FOLLOWED_KINDS = ATTENTION_KINDS.filter(kind => ATTENTION_GROUP_OF_KIND[kind] === 'activity');
 
 export interface FactoryAttentionLatest {
   key: string;
@@ -146,24 +152,24 @@ export interface FactoryAttentionResponse {
   nextCursor?: string;
 }
 
-export function attentionCountsIn(
-  kinds: FactoryAttentionKindSummaries,
-  group: FactoryAttentionGroup,
+export function attentionCounts(
+  summaries: FactoryAttentionKindSummaries,
+  kinds: readonly FactoryAttentionKind[],
 ): { open: number; unread: number } {
   let open = 0;
   let unread = 0;
-  for (const kind of attentionKindsIn(group)) {
-    open += kinds[kind].open;
-    unread += kinds[kind].unread;
+  for (const kind of kinds) {
+    open += summaries[kind].open;
+    unread += summaries[kind].unread;
   }
   return { open, unread };
 }
 
 export function latestUnreadOrNewestIn(
-  kinds: FactoryAttentionKindSummaries,
-  group: FactoryAttentionGroup,
+  summaries: FactoryAttentionKindSummaries,
+  kinds: readonly FactoryAttentionKind[],
 ): FactoryAttentionLatest | null {
-  const latests = attentionKindsIn(group).flatMap(kind => kinds[kind].latest ?? []);
+  const latests = kinds.flatMap(kind => summaries[kind].latest ?? []);
   const unread = latests.filter(latest => latest.unread);
   return newestOf(unread.length > 0 ? unread : latests);
 }
@@ -192,22 +198,25 @@ export function fetchFactoryAttention(
   factoryProjectId: string,
   options: {
     view: FactoryAttentionView;
-    kinds?: FactoryAttentionKind[];
+    kinds?: readonly FactoryAttentionKind[];
     before?: string;
     limit?: number;
-    search?: string;
     signal?: AbortSignal;
   },
 ): Promise<FactoryAttentionResponse> {
   const query = new URLSearchParams({ view: options.view });
-  for (const kind of options.kinds ?? []) query.append('kind', kind);
+  // Ask only for kinds this client renders, so pages and cursors never carry a kind it would drop.
+  for (const kind of options.kinds ?? ATTENTION_KINDS) query.append('kind', kind);
   if (options.before) query.set('before', options.before);
   if (options.limit) query.set('limit', String(options.limit));
-  if (options.search) query.set('search', options.search);
   return requestJson<FactoryAttentionResponse>(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/attention?${query}`,
     { signal: options.signal },
-  );
+  ).then(page => ({
+    ...page,
+    // A server can still report kinds this client no longer renders; drop them so views never see them.
+    items: page.items.filter(item => Object.hasOwn(ATTENTION_GROUP_OF_KIND, item.kind)),
+  }));
 }
 
 export function updateFactoryAttentionReceipt(

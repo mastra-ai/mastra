@@ -683,10 +683,14 @@ describe('managed observability', () => {
         projectName: 'my-project',
         resolveVersionTag: vi.fn().mockResolvedValue('latest'),
         analytics: { trackEvent } as never,
+        loginSource: 'create-mastra',
       }),
     ).resolves.toBeUndefined();
 
-    expect(credentials.getToken).toHaveBeenCalledWith(expect.any(AbortSignal), { skipOnInput: true });
+    expect(credentials.getToken).toHaveBeenCalledWith(expect.any(AbortSignal), {
+      skipOnInput: true,
+      source: 'create-mastra',
+    });
     expect(prompts.log.info).toHaveBeenCalledWith('Skipping Mastra platform setup.');
     expect(publishStagedProject).toHaveBeenCalledOnce();
     expect(observability.provisionObservabilityProject).not.toHaveBeenCalled();

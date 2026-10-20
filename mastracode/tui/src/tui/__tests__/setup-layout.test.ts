@@ -123,6 +123,24 @@ function createState(modeCount = 2) {
 }
 
 describe('buildLayout startup header', () => {
+  it('shows the Factory project, repository, and branch instead of local project info in Factory mode', () => {
+    const { state } = createState();
+    state.factory = {
+      projectName: 'mastra',
+      repositorySlug: 'mastra-ai/mastra',
+      branch: 'user/session-1',
+      url: 'https://f',
+    };
+
+    buildLayout(state, vi.fn());
+
+    expect(headerOptionsMock).toHaveBeenLastCalledWith({
+      version: '1.2.3',
+      appName: 'Acme Code',
+      info: ['Factory: mastra', 'Repository: mastra-ai/mastra', 'Branch: user/session-1', 'URL: https://f'],
+    });
+  });
+
   it('renders the header, startup hints, containers, Working row, footer, and editor focus in order', () => {
     const refreshModelAuthStatus = vi.fn();
     const { state, uiChildren, editorChildren, footerChildren, editor } = createState();

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp",
-  "version": "2.4.1-alpha.1",
+  "version": "2.5.0-alpha.1",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -32,8 +32,8 @@
     "test:compat": "bash integration-tests/compat.sh",
     "test:conformance": "tsx ./src/conformance/run.ts",
     "test": "pnpm test:server && pnpm test:client && pnpm test:integration",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "keywords": [],
   "author": "",
@@ -51,6 +51,8 @@
     "@mastra/core": ">=1.76.0-0 <2.0.0-0"
   },
   "devDependencies": {
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.135",
+    "@copilotkit/aimock": "^1.29.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",
@@ -65,7 +67,6 @@
     "@types/semver": "^7.7.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
     "semver": "^7.8.5",
     "tsdown": "0.22.9",
     "tsx": "catalog:",

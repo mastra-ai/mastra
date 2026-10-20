@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Fixed new Factory sessions showing "Failed to load messages: Thread not found" while the session's environment is still starting. The session shows an empty history until it is ready, then loads it, including after a page reload.
+Fixed the first message of a new Factory session sometimes disappearing, both live and after a refresh. If sending the first message fails with a network or server error, the server may already have it. The notice now says it may have been sent, so check the transcript before you retry.

@@ -154,13 +154,21 @@ export class SaveQueueManager {
     messageList: MessageList,
     memoryConfig?: MemoryConfigInternal,
   ) {
-    const newMessages = filterMessagesForPersistence(messageList.drainUnsavedMessages());
+    const drained = messageList.drainUnsavedMessagesForSave();
+    const newMessages = filterMessagesForPersistence(drained.messages);
     if (newMessages.length > 0 && this.memory) {
       const savedAt = Date.now();
-      const saved = await this.memory.saveMessages({
-        messages: newMessages,
-        memoryConfig,
-      });
+      let saved: Awaited<ReturnType<MastraMemory['saveMessages']>>;
+      try {
+        saved = await this.memory.saveMessages({
+          messages: newMessages,
+          memoryConfig,
+        });
+      } catch (error) {
+        // Nothing else writes drained messages, so a later save must retry them.
+        drained.restore();
+        throw error;
+      }
       if (saved?.messages?.length) {
         // Bookkeeping only: a failure here must not turn a successful save into an error.
         try {

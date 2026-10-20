@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowUpDown, CircleDashed, Clock, MessagesSquare, Plus, UserRound } from 'lucide-react';
+import { ArrowUpDown, CircleDashed, Clock, Plus, UserRound } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -32,11 +32,11 @@ import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
 import { SessionListItem } from './SessionListItem';
-import { SessionListProperties } from './SessionListProperties';
+import { PropertiesMenu } from '../../../ui/PropertiesMenu';
 
 export function SessionsSection() {
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
-  const { baseUrl, resourceId, sessionEnabled } = useChatSessionContext();
+  const { baseUrl, sessionId, sessionEnabled } = useChatSessionContext();
   const navigate = useNavigate();
   const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
   const catalog = useBoardCatalog(factoryId);
@@ -52,7 +52,7 @@ export function SessionsSection() {
   } = useSessionListView();
   const viewerUserId = useFactoryAuth().data?.user?.userId;
   const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters(viewerUserId);
-  const deletion = useSessionDeletion(factoryId, resourceId);
+  const deletion = useSessionDeletion(factoryId);
 
   const sortedRows = rows.toSorted(compareSessionRows(view.sort));
   const filteredRows = filterSessionRows(sortedRows, filters, viewerUserId);
@@ -60,10 +60,9 @@ export function SessionsSection() {
   const defaultHeadings = sessionGroupHeadings(sortedRows, view.groupBy, groupContext);
   const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
   const groups = groupSessionRows(filteredRows, view.groupBy, menuGroups, hiddenGroupKeys);
-  const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(resourceId);
+  const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(sessionId);
   const mergedBySessionId = useWorkspacePullRequestMerges({
     baseUrl,
-    resourceId,
     targets: pullRequestMergeTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
     enabled: chatSessionOpen,
   });
@@ -82,7 +81,7 @@ export function SessionsSection() {
   return (
     <section className="flex flex-col gap-2" aria-label="Sessions">
       <Sidebar.NavHeader
-        icon={<MessagesSquare />}
+        className="mt-0"
         action={
           <div className="flex items-center gap-0.5">
             {hasRepositories && (
@@ -96,7 +95,8 @@ export function SessionsSection() {
                 <Plus size={15} />
               </Button>
             )}
-            <SessionListProperties
+            <PropertiesMenu
+              label="Sessions properties"
               changedCount={changedSettingCount + activeFilterCount}
               onReset={() => {
                 resetView();
@@ -139,7 +139,7 @@ export function SessionsSection() {
                 onVisibilityChange={changeGroupVisibility}
                 onOrderChange={keys => changeGroupOrder(keys, defaultHeadings)}
               />
-            </SessionListProperties>
+            </PropertiesMenu>
           </div>
         }
       >

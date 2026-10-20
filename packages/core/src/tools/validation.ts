@@ -22,7 +22,10 @@ export function registerToolOutputValidationSchema(tool: object, schema: unknown
 }
 
 export function resolveToolOutputValidationSchema(tool: ToolWithOutputSchema): StandardSchemaWithJSON | undefined {
-  const outputSchema = typeof tool.outputSchema === 'function' ? tool.outputSchema() : tool.outputSchema;
+  const outputSchema =
+    typeof tool.outputSchema === 'function' && !isStandardSchemaWithJSON(tool.outputSchema)
+      ? tool.outputSchema()
+      : tool.outputSchema;
   if (isStandardSchemaWithJSON(outputSchema)) return outputSchema;
 
   return tool[TOOL_OUTPUT_VALIDATION_SCHEMA];

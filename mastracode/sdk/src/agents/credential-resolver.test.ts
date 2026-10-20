@@ -7,6 +7,7 @@ import {
   withCredentialTenantPreparation,
   resolveCredentialStore,
   resolveTenantFromRequestContext,
+  setCredentialLogger,
   setCredentialStoreProvider,
 } from './credential-resolver.js';
 import { MastraCodeGateway } from './mastracode-gateway.js';
@@ -54,7 +55,7 @@ describe('credential store provider registry', () => {
   });
 
   it('fails closed without an authenticated tenant on the request context', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
     setCredentialStoreProvider(() => fakeStore({}));
     const withoutContext = resolveCredentialStore(undefined);
     const emptyContext = resolveCredentialStore(new RequestContext());
@@ -73,8 +74,23 @@ describe('credential store provider registry', () => {
     warn.mockRestore();
   });
 
+  it('logs failures through a registered logger', () => {
+    const error = vi.fn();
+    setCredentialLogger({ error });
+    try {
+      setCredentialStoreProvider(() => fakeStore({}));
+      resolveCredentialStore(new RequestContext());
+      expect(error).toHaveBeenCalledWith('[MastraCode] Tenant credential resolution failed closed', {
+        reason: 'missing-user-context',
+        hasRequestContext: true,
+      });
+    } finally {
+      setCredentialLogger(undefined);
+    }
+  });
+
   it('fails closed when the tenant store provider cannot resolve a store', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
     setCredentialStoreProvider(() => undefined);
     const ctx = new RequestContext();
     ctx.set('user', { workosId: 'user_1', organizationId: 'org_1' });
@@ -234,7 +250,7 @@ describe('credential store provider registry', () => {
   });
 
   it('says why tenant resolution failed and logs non-secret diagnostics', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       setCredentialStoreProvider(
         () => fakeStore({}),
@@ -252,6 +268,9 @@ describe('credential store provider registry', () => {
           hasUser: false,
           hasControllerResource: true,
           hasControllerThread: true,
+          resourceId: 'session-1',
+          threadId: 'thread-1',
+          contextKeys: expect.arrayContaining(['controller']),
           stack: expect.stringContaining('prepareCredentialTenant'),
         }),
       );

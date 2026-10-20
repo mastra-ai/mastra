@@ -310,7 +310,7 @@ function applyBrowserToAgents(
     const agent = resolveModeAgent(mode, (agentControllerState ??= ctx.state.session.state.get()));
     agent?.setBrowser?.(browser);
   }
-  ctx.controller.setBrowser?.(browser);
+  ctx.state.local?.controller.setBrowser(browser);
   // Track the active browser settings in controller state, plus the model the
   // browser was actually created with (credentials/chat model may change afterwards).
   void ctx.state.session.state.set({

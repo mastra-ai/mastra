@@ -311,6 +311,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       actor: options.actor,
       mcp: options.mcp,
       ...createObservabilityContext({ currentSpan: agentSpan }),
+      agentRunSpan: agentSpan,
       runId,
       toolChoice: result.toolChoice,
       tools: result.tools,

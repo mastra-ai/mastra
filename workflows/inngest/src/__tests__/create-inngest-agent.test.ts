@@ -13,6 +13,7 @@ import {
   AGENT_STREAM_TOPIC,
   AgentControlEventTypes,
   AgentStreamEventTypes,
+  DURABLE_STOP_WHEN_ERROR_ID,
   agentThreadStreamRuntime,
   createDurableAgentStream,
   globalRunRegistry,
@@ -511,6 +512,68 @@ describe('createInngestAgent observe-replay wiring', () => {
         type: AgentStreamEventTypes.ERROR,
         runId,
         data: { error: expect.objectContaining({ message: 'step output size is greater than the limit' }) },
+      }),
+      undefined,
+    );
+  });
+
+  it('publishes marked stopWhen failures with reject delivery', async () => {
+    const customPubsub = new EventEmitterPubSub();
+    const customPublish = vi.spyOn(customPubsub, 'publish');
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('runtime-stop-when-error'),
+      inngest,
+      pubsub: customPubsub,
+    });
+    const workflow = durableAgent
+      .getDurableWorkflows()
+      .find((candidate: any) => candidate.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
+    const execute = vi.spyOn(InngestExecutionEngine.prototype, 'execute').mockResolvedValue({
+      status: 'failed',
+      steps: {},
+      state: {},
+      error: {
+        code: DURABLE_STOP_WHEN_ERROR_ID,
+        message: 'stopWhen failed',
+        details: { name: 'TypeError', message: 'stopWhen failed' },
+      },
+    } as any);
+    const lifecycle = vi
+      .spyOn(InngestExecutionEngine.prototype as any, 'invokeLifecycleCallbacksInternal')
+      .mockResolvedValue(undefined);
+    const runId = 'inngest-runtime-stop-when-error-run';
+    const step = {
+      run: vi.fn(async (_id: string, fn: () => unknown) => fn()),
+    };
+
+    try {
+      await expect(
+        workflow.getFunction().fn({
+          event: {
+            data: {
+              inputData: { __workflowKind: 'durable-agent', runId },
+              runId,
+            },
+          },
+          step,
+          attempt: 0,
+        }),
+      ).rejects.toThrow('Workflow failed');
+    } finally {
+      execute.mockRestore();
+      lifecycle.mockRestore();
+    }
+
+    expect(customPublish).toHaveBeenCalledOnce();
+    expect(customPublish).toHaveBeenCalledWith(
+      AGENT_STREAM_TOPIC(runId),
+      expect.objectContaining({
+        type: AgentStreamEventTypes.ERROR,
+        runId,
+        data: {
+          error: { name: 'TypeError', message: 'stopWhen failed' },
+          delivery: 'reject',
+        },
       }),
       undefined,
     );
@@ -1546,7 +1609,8 @@ describe('InngestAgent parity surface', () => {
     });
 
     try {
-      const result = await durableAgent.resumeGenerate(runId, { approved: true });
+      // Agent signature: resumeGenerate(resumeData, { runId }).
+      const result = await durableAgent.resumeGenerate({ approved: true }, { runId });
 
       expect(result.finishReason).toBe('stop');
       expect(result.text).toBe('Done.');
@@ -2775,8 +2839,8 @@ describe('InngestAgent fork and resume overrides (#24736)', () => {
     await durableAgent.approveToolCallGenerate({ runId: 'r1', toolCallId: 't1' });
     await durableAgent.declineToolCallGenerate({ runId: 'r2', reason: 'no' });
 
-    expect(resumeGenerateSpy).toHaveBeenNthCalledWith(1, 'r1', { approved: true }, { toolCallId: 't1' });
-    expect(resumeGenerateSpy).toHaveBeenNthCalledWith(2, 'r2', { approved: false, reason: 'no' }, {});
+    expect(resumeGenerateSpy).toHaveBeenNthCalledWith(1, { approved: true }, { toolCallId: 't1', runId: 'r1' });
+    expect(resumeGenerateSpy).toHaveBeenNthCalledWith(2, { approved: false, reason: 'no' }, { runId: 'r2' });
   });
 
   it('__fork returns an independent InngestAgent', () => {

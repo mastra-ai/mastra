@@ -26,15 +26,21 @@ import { isLeaseProvider, NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
+import { createRunScope, createRunScopeKey } from '../../mastra/run-scope';
+import type { RunScope, RunScopeKey } from '../../mastra/run-scope';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage/domains/memory/base';
 import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
 import { isRunFenceConflictError, matchesRunFence, runOutsideRunFenceScope } from '../../storage/run-fencing';
 import type { RunFence, RunFenceScope } from '../../storage/run-fencing';
+import { PUBSUB_SYMBOL } from '../../workflows/constants';
+import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
+import { ExecutionOwnershipGuard } from './execution-ownership-guard';
 import { runInRunFenceScope } from './run-fence-scope';
 
-export const EXECUTION_LEASE_TTL_MS = 30_000;
-export const EXECUTION_LEASE_RENEW_INTERVAL_MS = 10_000;
+/** Execution lease timing follows the agent thread lease (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`). */
+export const EXECUTION_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
+export const EXECUTION_LEASE_RENEW_INTERVAL_MS = AGENT_LEASE_RENEW_INTERVAL_MS;
 const VERIFY_RETRY_DELAY_MS = 250;
 const TAKEOVER_ATTEMPTS = 3;
 const EXECUTION_CLAIM_WAIT_MS = 5_000;
@@ -294,6 +300,8 @@ interface OwnershipBackend {
   tryRecover(executionId: string, untracked?: UntrackedRunLiveness): Promise<ClaimAttempt>;
   /** Throws a {@link DurableExecutionFenceError} unless `claim` still owns the run. */
   verify(claim: DurableExecutionClaim, details: ExecutionDetails): Promise<void>;
+  /** Read-only active ownership observation by a worker, never a renewal. */
+  observe(claim: DurableExecutionClaim, details: ExecutionDetails): Promise<void>;
   /** Extend `claim`. `false` once another execution owns the run; throws on backend errors. */
   renew(claim: DurableExecutionClaim): Promise<boolean>;
   /** Whether another execution claimed the run after `claim`. Throws on backend errors. */
@@ -339,6 +347,16 @@ function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): 
         details,
       );
       if (!renewed) throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
+    },
+    async observe(claim, details) {
+      if (provider === NoopLeaseProvider) return;
+      const owner = await provider.getLeaseOwner(key);
+      if (owner !== claim.executionId) {
+        throw new DurableExecutionFenceError(
+          owner === undefined ? EXECUTION_UNVERIFIED_ERROR_ID : EXECUTION_SUPERSEDED_ERROR_ID,
+          details,
+        );
+      }
     },
     renew: claim => provider.renewLease(key, claim.executionId, EXECUTION_LEASE_TTL_MS),
     async isSuperseded(claim) {
@@ -411,6 +429,13 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
       if (!record?.leaseExpiresAt || !matchesRunFence(record, fence(claim))) {
         throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
       }
+    },
+    async observe(claim, details) {
+      const record = await store.getRunOwnership({ runId });
+      if (record && !matchesRunFence(record, fence(claim))) {
+        throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
+      }
+      if (!record?.live) throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details);
     },
     async renew(claim) {
       return (await store.renewRunOwnership({ ...fence(claim), leaseMs: EXECUTION_LEASE_TTL_MS })).renewed;
@@ -629,9 +654,13 @@ export class ExecutionFence implements RunFenceScope {
    * renewal failed, or storage rejected one of its writes. Called right away
    * when the run is already lost.
    */
-  onLost(listener: (error: DurableExecutionFenceError) => void): void {
+  onLost(listener: (error: DurableExecutionFenceError) => void): () => void {
     if (this.#lossError) listener(this.#lossError);
     else this.#lossListeners.push(listener);
+    return () => {
+      const index = this.#lossListeners.indexOf(listener);
+      if (index !== -1) this.#lossListeners.splice(index, 1);
+    };
   }
 
   /**
@@ -905,7 +934,7 @@ export class ExecutionFence implements RunFenceScope {
  * so connections and subscriptions opened lazily here never carry the run's
  * fence into deliveries for other runs.
  */
-export function fencePubSub(pubsub: PubSub, fence: ExecutionFence): PubSub {
+export function fencePubSub(pubsub: PubSub, fence: Pick<ExecutionFence, 'isLost'>): PubSub {
   return new Proxy(pubsub, {
     get(target, property) {
       const value = Reflect.get(target, property, target);
@@ -976,9 +1005,12 @@ export async function assertExecutionOwned(args: {
   const local = fencesByExecutionId.get(claim.executionId);
   if (local) return local.verify();
 
-  const backend = await resolveRemoteBackend(args.mastra, args.agentId, args.runId, claim);
-  if (!backend) return;
-  await backend.verify(claim, { agentId: args.agentId, runId: args.runId, executionId: claim.executionId });
+  const guard = createOwnershipGuard(args, claim);
+  try {
+    await guard.check();
+  } finally {
+    guard.dispose();
+  }
 }
 
 /**
@@ -1007,6 +1039,31 @@ export async function assertExecutionNotSuperseded(args: {
   }
 }
 
+const OWNERSHIP_GUARD = Symbol('durable-execution-ownership-guard');
+type GuardHandle = { scope: RunScope; key: RunScopeKey<ExecutionOwnershipGuard> };
+
+export function getExecutionOwnershipGuard(params: object): ExecutionOwnershipGuard | undefined {
+  const handle = (params as { [OWNERSHIP_GUARD]?: GuardHandle })[OWNERSHIP_GUARD];
+  return handle?.scope.get(handle.key);
+}
+
+function createOwnershipGuard(
+  args: { runId: string; agentId: string; mastra: Mastra | undefined },
+  claim: DurableExecutionClaim,
+): ExecutionOwnershipGuard {
+  const local = fencesByExecutionId.get(claim.executionId);
+  const details = { agentId: args.agentId, runId: args.runId, executionId: claim.executionId };
+  return new ExecutionOwnershipGuard({
+    details,
+    subscribe: local ? listener => local.onLost(listener) : undefined,
+    observe: async () => {
+      if (local) return local.verify();
+      const backend = await resolveRemoteBackend(args.mastra, args.agentId, args.runId, claim);
+      if (backend) await backend.observe(claim, details);
+    },
+  });
+}
+
 type FenceableStep = { execute: (params: any) => Promise<any> };
 
 /**
@@ -1025,14 +1082,76 @@ export function withExecutionFence<TStep extends FenceableStep>(step: TStep): TS
       const initData = params.getInitData?.() as { runId?: string; agentId?: string } | undefined;
       const runId = initData?.runId;
       const agentId = initData?.agentId;
-      const assertOwned = () =>
-        runId && agentId
-          ? assertExecutionOwned({ runId, agentId, requestContext: params.requestContext, mastra: params.mastra })
-          : Promise.resolve();
-      await assertOwned();
-      const output = await execute(params);
-      await assertOwned();
-      return output;
+      const claim = runId && getExecutionClaim(params.requestContext, runId);
+      if (!runId || !agentId || !claim) return execute(params);
+      const guard = createOwnershipGuard({ runId, agentId, mastra: params.mastra }, claim);
+      const scope = params.mastra?.__createRunScope(runId) ?? createRunScope();
+      const key = createRunScopeKey<ExecutionOwnershipGuard>('durable-step-ownership');
+      scope.set(key, guard);
+      try {
+        await guard.check();
+        const pubsub = params[PUBSUB_SYMBOL] as PubSub | undefined;
+        const output = await execute(
+          Object.defineProperties(
+            {},
+            {
+              // Preserve lazy workflow properties, especially the unused step writer.
+              ...Object.getOwnPropertyDescriptors(params),
+              [OWNERSHIP_GUARD]: { enumerable: true, value: { scope, key } },
+              [PUBSUB_SYMBOL]: { enumerable: true, value: pubsub && fencePubSub(pubsub, guard) },
+              writer: {
+                enumerable: true,
+                get() {
+                  const writer = params.writer;
+                  return (
+                    writer &&
+                    new Proxy(writer, {
+                      get(target, property) {
+                        const value = Reflect.get(target, property, target);
+                        if (typeof value !== 'function') return value;
+                        if (property === 'getWriter') {
+                          return () => {
+                            const streamWriter = value.call(target);
+                            return new Proxy(streamWriter, {
+                              get(target, property) {
+                                const method = Reflect.get(target, property, target);
+                                if (typeof method !== 'function') return method;
+                                return (...args: unknown[]) =>
+                                  property === 'write' && guard.isLost()
+                                    ? Promise.resolve()
+                                    : method.apply(target, args);
+                              },
+                            });
+                          };
+                        }
+                        return (...args: unknown[]) => (guard.isLost() ? Promise.resolve() : value.apply(target, args));
+                      },
+                    })
+                  );
+                },
+              },
+              setState: {
+                enumerable: true,
+                value:
+                  params.setState &&
+                  ((...args: unknown[]) => {
+                    guard.throwIfLost();
+                    return params.setState(...args);
+                  }),
+              },
+            },
+          ),
+        );
+        await guard.check();
+        return output;
+      } catch (error) {
+        guard.throwIfLost();
+        throw error;
+      } finally {
+        guard.dispose();
+        scope.delete(key);
+        params.mastra?.__releaseRunScope(runId);
+      }
     },
   };
 }

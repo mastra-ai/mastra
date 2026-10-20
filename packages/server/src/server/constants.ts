@@ -56,7 +56,11 @@ export const MASTRA_PUBLIC_HOST_HEADER = 'x-mastra-public-host';
 
 export const MASTRA_STUDIO_CLIENT_TYPE = 'studio';
 
-const RESERVED_CONTEXT_KEYS = new Set([
+/**
+ * RequestContext keys only trusted server code may set. Request bodies and query
+ * params can never supply them.
+ */
+export const RESERVED_REQUEST_CONTEXT_KEYS = [
   MASTRA_RESOURCE_ID_KEY,
   MASTRA_THREAD_ID_KEY,
   // Agent scopes decide memory identity and what the agent acts as; only
@@ -78,7 +82,9 @@ const RESERVED_CONTEXT_KEYS = new Set([
   // client. The trusted-actor FGA gate keys off `organizationId`, so a
   // body-supplied value must not be merged into the request context.
   'organizationId',
-]);
+] as const;
+
+const RESERVED_CONTEXT_KEYS: ReadonlySet<string> = new Set(RESERVED_REQUEST_CONTEXT_KEYS);
 
 export function isReservedRequestContextKey(key: string): boolean {
   return RESERVED_CONTEXT_KEYS.has(key);

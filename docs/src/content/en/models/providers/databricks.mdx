@@ -7,7 +7,7 @@ description: "Browse Databricks model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/databricks.svg" alt="Databricks logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Databricks
 
-Access 30 Databricks models through Mastra's model router. Authentication is handled automatically using the `DATABRICKS_TOKEN` environment variable. Configure `DATABRICKS_HOST` as well.
+Access 31 Databricks models through Mastra's model router. Authentication is handled automatically using the `DATABRICKS_TOKEN` environment variable. Configure `DATABRICKS_HOST` as well.
 
 Learn more in the [Databricks documentation](https://docs.databricks.com/aws/en/machine-learning/foundation-models/).
 
@@ -189,6 +189,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 2,
     "outputCost": 12
+  },
+  {
+    "model": "databricks/databricks-gemini-3-5-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 1.5,
+    "outputCost": 9
   },
   {
     "model": "databricks/databricks-gemini-3-flash",

@@ -23,10 +23,10 @@ const audit: AuditAgentEmitter = {
 function makeRequestContext() {
   const controller = {
     threadId: THREAD,
-    scope: SCOPE,
     session: { id: 'session-1', ownerId: 'owner-1' },
-    resourceId: 'resource-1',
-    getState: () => ({ factoryProjectId: PROJECT, projectRepositoryId: 'project-repository-1' }),
+    resourceId: PROJECT,
+    sessionId: 'session-1',
+    getState: () => ({ factoryProjectId: PROJECT, projectRepositoryId: 'project-repository-1', projectPath: SCOPE }),
   };
   return { get: (key: string) => (key === 'controller' ? controller : undefined) } as any;
 }
@@ -122,7 +122,7 @@ describe('observeAgentGitAction', () => {
       resolveRepositorySlugs,
     });
 
-    expect(resolveRepositorySlugs).toHaveBeenCalledWith('resource-1');
+    expect(resolveRepositorySlugs).toHaveBeenCalledWith('session-1');
     expect(recorded[0]).toMatchObject({
       action: 'factory.agent.pr_opened',
       metadata: { url: PR_URL, repository: 'Mastra-AI/Mastra' },

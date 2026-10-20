@@ -273,6 +273,7 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     isPending,
     startedAt: toIsoOrDate(span.startedAt),
     endedAt: toIsoOrDate(endedAt),
+    timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
     tags: normalizeTags(span.tags),
     metadataSearch: buildMetadataSearch(metadata as Record<string, unknown> | null),
     metadataRaw: jsonField(metadata),

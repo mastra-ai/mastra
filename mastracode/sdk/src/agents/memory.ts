@@ -12,7 +12,7 @@ import { loadSettings } from '../onboarding/settings.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
-import { getActiveMemoryRoute, resolveModel } from './model.js';
+import { canUseProvider, getActiveMemoryRoute, resolveModel } from './model.js';
 
 /** Route-backed OM fallback entry. */
 type MemoryModelRouteEntry = { id: string; model: ReturnType<typeof resolveModel> };
@@ -114,7 +114,12 @@ function resolveOmRoleModelForRequest(
     // These two keys are declared in the span-context allowlist
     // (`mastracode/sdk/src/index.ts`), so traces can report intent separately from
     // the effective concrete model without either being mistaken for a model ID.
-    requestContext.set(`om.${role}.effectiveModelId`, resolveAutoOMModelId(getMainModelId(requestContext)));
+    requestContext.set(
+      `om.${role}.effectiveModelId`,
+      resolveAutoOMModelId(getMainModelId(requestContext), providerId =>
+        canUseProvider(providerId, { requestContext }),
+      ),
+    );
     return 'auto' as const;
   };
 
@@ -301,7 +306,12 @@ export function getDynamicMemory(
 
     const subconsciousAvailable = subconsciousEnabled && !orgUnresolvedRefusal;
 
-    const omScope = state?.omScope ?? getOmScope(state?.projectPath);
+    // Factory sessions share a memory resource across a Factory's runs and a
+    // user's sessions, so their scope is fixed to thread: one shared record would
+    // hand every run the others' work and invalidate their prompt caches. Recall
+    // search still reaches the whole resource. Neither session state, the env
+    // var, nor a repository's database.json can switch it.
+    const omScope = isFactory ? 'thread' : (state?.omScope ?? getOmScope(state?.projectPath));
 
     // The Factory row is authoritative and read per invocation, so a stored
     // threshold/attachment change reaches the running Memory without a session.
@@ -369,7 +379,12 @@ export function getDynamicMemory(
                 model: ({ requestContext }) => {
                   const resolved = getObserverModel({ requestContext });
                   if (resolved === 'auto') {
-                    return resolveMemoryModel(resolveAutoOMModelId(getMainModelId(requestContext)), { requestContext });
+                    return resolveMemoryModel(
+                      resolveAutoOMModelId(getMainModelId(requestContext), providerId =>
+                        canUseProvider(providerId, { requestContext }),
+                      ),
+                      { requestContext },
+                    );
                   }
                   return Array.isArray(resolved) ? resolved[0]!.model : resolved;
                 },
@@ -380,6 +395,7 @@ export function getDynamicMemory(
             : {
                 enabled: true,
                 autoModels: MASTRACODE_AUTO_OM_MODELS,
+                canUseProvider,
                 resolveModel: resolveMemoryModel,
                 temporalMarkers: true,
                 retrieval: vector ? { vector: true } : true,

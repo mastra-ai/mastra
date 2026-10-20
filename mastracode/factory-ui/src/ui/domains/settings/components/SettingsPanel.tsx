@@ -41,13 +41,11 @@ export function SettingsPanel() {
     if (!hash) return;
     document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
   }, [hash, section]);
-  const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { sessionId: chatSessionId, resourceEnabled, baseUrl } = useChatSessionContext();
   const { permissions, setPermissionForCategory } = useChatPermissions();
-  const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: sessionScope,
+    sessionId: chatSessionId,
     baseUrl,
     enabled: resourceEnabled,
   };
@@ -60,7 +58,7 @@ export function SettingsPanel() {
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const models = modelsQuery.data ?? [];
   const settings = settingsQuery.data ?? null;
-  const sessionResourceId = resourceEnabled ? resourceId : undefined;
+  const sessionId = resourceEnabled ? chatSessionId : undefined;
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
     if (!settings) return Promise.resolve();
@@ -87,9 +85,7 @@ export function SettingsPanel() {
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'environment' && <EnvironmentSection />}
       {section === 'intake' && <IntakeSection />}
-      {section === 'models' && (
-        <FactoryModelsSettings models={models} settings={settings} onBehaviorChange={onBehaviorChange} />
-      )}
+      {section === 'models' && <FactoryModelsSettings models={models} />}
       {section === 'personal-models' && <PersonalModelsSettings />}
       {(section === 'memory' || section === 'factory-memory') && (
         <MemorySettings
@@ -97,8 +93,7 @@ export function SettingsPanel() {
           scope={section === 'factory-memory' ? 'factory' : 'personal'}
           factoryId={factoryId}
           models={models}
-          sessionResourceId={sessionResourceId}
-          sessionScope={sessionScope}
+          sessionId={sessionId}
         />
       )}
       {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}

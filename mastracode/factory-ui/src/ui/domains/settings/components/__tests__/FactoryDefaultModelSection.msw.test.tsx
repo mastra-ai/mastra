@@ -1,6 +1,9 @@
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import type { PathParams } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
@@ -10,9 +13,21 @@ import type { AvailableModelOption } from '../../../../../hooks/useAvailableMode
 import type { ApplyFactoryDefaultModelResult } from '../../../workspaces/services/github';
 import { FactoryDefaultModelSection } from '../FactoryDefaultModelSection';
 
+if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
+const FACTORY_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
+
 const models: AvailableModelOption[] = [
   { id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', hasApiKey: true },
-  { id: 'openai/gpt-5', provider: 'openai', modelName: 'gpt-5', hasApiKey: true },
+  {
+    id: 'openai/gpt-5',
+    provider: 'openai',
+    modelName: 'gpt-5',
+    hasApiKey: true,
+    reasoningOptions: [{ type: 'effort', values: ['minimal', 'low', 'medium', 'high'] }],
+  },
 ];
 
 function renderSection() {
@@ -21,6 +36,7 @@ function renderSection() {
       <Routes>
         <Route path="/factories/:factoryId/settings/models" element={<FactoryDefaultModelSection models={models} />} />
       </Routes>
+      <Toaster position="bottom-right" />
     </MemoryRouter>,
   );
 }
@@ -37,16 +53,14 @@ function stubProject(
   const postRequests: string[] = [];
   let saved = defaultModelId;
   server.use(
-    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
-      HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: saved } }),
-    ),
-    http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async ({ request }) => {
-      const body = (await request.json()) as { defaultModelId: string | null };
+    http.get(FACTORY_URL, () => HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: saved } })),
+    http.patch<PathParams, { defaultModelId: string | null }>(FACTORY_URL, async ({ request }) => {
+      const body = await request.json();
       patchedBodies.push(body);
       saved = body.defaultModelId;
       return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: saved } });
     }),
-    http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/apply-default-model`, () => {
+    http.post(`${FACTORY_URL}/apply-default-model`, () => {
       postRequests.push('apply');
       return HttpResponse.json(applyResult);
     }),
@@ -54,20 +68,24 @@ function stubProject(
   return { patchedBodies, postRequests };
 }
 
-async function pickModel(user: ReturnType<typeof userEvent.setup>, modelId: string) {
-  const combobox = screen.getByRole('combobox');
-  await waitFor(() => expect(combobox).toBeEnabled());
-  await user.click(combobox);
+function modelTrigger() {
+  return screen.getByRole('combobox', { name: 'Factory default model' });
+}
+
+async function pickModel(user: UserEvent, modelId: string) {
+  const trigger = modelTrigger();
+  await waitFor(() => expect(trigger).toBeEnabled());
+  await user.click(trigger);
   const option = await screen.findByRole('option', { name: new RegExp(modelId.replace('/', '\\/')) });
   fireEvent.pointerDown(option, { pointerType: 'mouse' });
   fireEvent.click(option, { detail: 1 });
-  return combobox;
+  return trigger;
 }
 
-describe('FactoryDefaultModelSection', () => {
+describe('FactoryDefaultModelSection model', () => {
   it('stays available in a hybrid Factory and says it drives work items', async () => {
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+      http.get(FACTORY_URL, () =>
         HttpResponse.json({
           project: { id: 'fp-1', name: 'Mastra', defaultModelId: 'openai/gpt-5', modelScope: 'hybrid' },
         }),
@@ -81,9 +99,9 @@ describe('FactoryDefaultModelSection', () => {
         "Work items (triage, board runs) start on this model and run on organization credentials. Interactive sessions start on each owner's personal default instead.",
       ),
     ).toBeInTheDocument();
-    const combobox = screen.getByRole('combobox');
-    await waitFor(() => expect(combobox).toBeEnabled());
-    expect(combobox).toHaveTextContent('GPT-5');
+    const trigger = modelTrigger();
+    await waitFor(() => expect(trigger).toBeEnabled());
+    expect(trigger).toHaveTextContent('GPT-5');
   });
 
   it('keeps the Factory-run copy outside hybrid scope', async () => {
@@ -104,17 +122,16 @@ describe('FactoryDefaultModelSection', () => {
 
     renderSection();
 
-    const combobox = screen.getByRole('combobox');
-    await waitFor(() => expect(combobox).toBeEnabled());
-    expect(combobox).toHaveTextContent('Claude Sonnet 4.5');
+    const trigger = modelTrigger();
+    await waitFor(() => expect(trigger).toBeEnabled());
+    expect(trigger).toHaveTextContent('Claude Sonnet 4.5');
 
-    await user.click(combobox);
+    await user.click(trigger);
     const options = await screen.findAllByRole('option');
     expect(options.map(option => option.textContent)).toEqual([
       expect.stringContaining('anthropic/claude-sonnet-4-5'),
       expect.stringContaining('openai/gpt-5'),
     ]);
-    expect(screen.queryByRole('option', { name: /session default/i })).not.toBeInTheDocument();
   });
 
   it('saves the new default before asking whether to switch running sessions', async () => {
@@ -122,12 +139,12 @@ describe('FactoryDefaultModelSection', () => {
     const user = userEvent.setup();
     const { client } = renderSection();
 
-    const combobox = await pickModel(user, 'openai/gpt-5');
+    const trigger = await pickModel(user, 'openai/gpt-5');
 
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
     expect(screen.getByText('Also switch running sessions to GPT-5?')).toBeInTheDocument();
     expect(patchedBodies).toEqual([{ defaultModelId: 'openai/gpt-5' }]);
-    expect(combobox).toHaveTextContent('GPT-5');
+    expect(trigger).toHaveTextContent('GPT-5');
 
     await user.click(screen.getByRole('button', { name: 'Keep them as-is' }));
     await waitForMutationsIdle(client);
@@ -143,7 +160,7 @@ describe('FactoryDefaultModelSection', () => {
     });
     const { postRequests } = stubProject('anthropic/claude-sonnet-4-5');
     server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/apply-default-model`, async () => {
+      http.post(`${FACTORY_URL}/apply-default-model`, async () => {
         postRequests.push('apply');
         await postGate;
         return HttpResponse.json({
@@ -191,10 +208,10 @@ describe('FactoryDefaultModelSection', () => {
       releasePatch = resolve;
     });
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+      http.get(FACTORY_URL, () =>
         HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: 'anthropic/claude-sonnet-4-5' } }),
       ),
-      http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async () => {
+      http.patch(FACTORY_URL, async () => {
         await patchGate;
         return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: 'openai/gpt-5' } });
       }),
@@ -203,16 +220,188 @@ describe('FactoryDefaultModelSection', () => {
 
     renderSection();
 
-    const combobox = await pickModel(user, 'openai/gpt-5');
+    const trigger = await pickModel(user, 'openai/gpt-5');
 
     expect(await screen.findByLabelText('Saving default model')).toBeInTheDocument();
-    expect(combobox).toBeDisabled();
+    expect(trigger).toBeDisabled();
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
 
     releasePatch();
 
     expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByLabelText('Saving default model')).not.toBeInTheDocument());
-    expect(combobox).toHaveTextContent('GPT-5');
+    expect(trigger).toHaveTextContent('GPT-5');
+  });
+});
+
+describe('FactoryDefaultModelSection thinking', () => {
+  const factory = { id: 'fp-1', name: 'Mastra', defaultThinkingLevel: 'off' };
+  const saved = (defaultThinkingLevel: string) => HttpResponse.json({ project: { ...factory, defaultThinkingLevel } });
+
+  async function openRamp(user: UserEvent, triggerName: string) {
+    await user.click(await screen.findByRole('button', { name: triggerName }));
+    return screen.getByRole('slider', { name: 'Thinking' });
+  }
+
+  const dragTo = (slider: HTMLElement, level: number) => fireEvent.change(slider, { target: { value: String(level) } });
+
+  it('renders the Factory thinking level from the server', async () => {
+    server.use(http.get(FACTORY_URL, () => HttpResponse.json({ project: factory })));
+
+    renderSection();
+
+    expect(await screen.findByRole('button', { name: 'Thinking: Off' })).toBeEnabled();
+  });
+
+  it('shows medium for a Factory without a stored level', async () => {
+    server.use(http.get(FACTORY_URL, () => HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra' } })));
+
+    renderSection();
+
+    expect(await screen.findByRole('button', { name: 'Thinking: Medium' })).toBeEnabled();
+  });
+
+  it('offers every level and shows the stored one, whatever the default model runs', async () => {
+    const patches: unknown[] = [];
+    server.use(
+      http.get(FACTORY_URL, () =>
+        HttpResponse.json({ project: { ...factory, defaultModelId: 'openai/gpt-5', defaultThinkingLevel: 'max' } }),
+      ),
+      http.patch(FACTORY_URL, async ({ request }) => {
+        patches.push(await request.json());
+        return saved('max');
+      }),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderSection();
+
+    const ramp = await openRamp(user, 'Thinking: Max');
+    expect(ramp).toHaveAttribute('aria-valuetext', 'Max');
+    expect(ramp).toHaveAttribute('max', '5');
+    fireEvent.blur(ramp);
+
+    await waitForMutationsIdle(client);
+    expect(patches).toEqual([]);
+  });
+
+  it('saves once, the level the drag ended on', async () => {
+    const requestBodies: unknown[] = [];
+    server.use(
+      http.get(FACTORY_URL, () => HttpResponse.json({ project: factory })),
+      http.patch(FACTORY_URL, async ({ request }) => {
+        requestBodies.push(await request.json());
+        return saved('high');
+      }),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderSection();
+
+    const ramp = await openRamp(user, 'Thinking: Off');
+    dragTo(ramp, 5);
+    dragTo(ramp, 3);
+    fireEvent.pointerUp(ramp);
+    fireEvent.blur(ramp);
+
+    await waitForMutationsIdle(client);
+    expect(requestBodies).toEqual([{ defaultThinkingLevel: 'high' }]);
+    await waitFor(() => expect(ramp).toHaveAttribute('aria-valuetext', 'High'));
+  });
+
+  it('does not resend a level whose write is still in flight', async () => {
+    let writes = 0;
+    let releaseSecondWrite = () => {};
+    const secondWrite = new Promise<void>(resolve => (releaseSecondWrite = resolve));
+    server.use(
+      http.get(FACTORY_URL, () => HttpResponse.json({ project: factory })),
+      http.patch(FACTORY_URL, async () => {
+        writes += 1;
+        if (writes === 2) await secondWrite;
+        return saved(writes === 1 ? 'high' : 'max');
+      }),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderSection();
+
+    const ramp = await openRamp(user, 'Thinking: Off');
+    dragTo(ramp, 3);
+    fireEvent.pointerUp(ramp);
+    dragTo(ramp, 5);
+    fireEvent.pointerUp(ramp);
+
+    await waitFor(() => expect(writes).toBe(2));
+    fireEvent.blur(ramp);
+    releaseSecondWrite();
+
+    await waitForMutationsIdle(client);
+    expect(writes).toBe(2);
+    await waitFor(() => expect(ramp).toHaveAttribute('aria-valuetext', 'Max'));
+  });
+
+  it('keeps a repeated level on screen until its own write lands', async () => {
+    let writes = 0;
+    let releaseFirstWrite = () => {};
+    let releaseThirdWrite = () => {};
+    const firstWrite = new Promise<void>(resolve => (releaseFirstWrite = resolve));
+    const thirdWrite = new Promise<void>(resolve => (releaseThirdWrite = resolve));
+    server.use(
+      http.get(FACTORY_URL, () => HttpResponse.json({ project: factory })),
+      http.patch(FACTORY_URL, async () => {
+        writes += 1;
+        const write = writes;
+        if (write === 1) await firstWrite;
+        if (write === 3) await thirdWrite;
+        return saved(write === 2 ? 'max' : 'high');
+      }),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderSection();
+
+    const ramp = await openRamp(user, 'Thinking: Off');
+    dragTo(ramp, 3);
+    fireEvent.pointerUp(ramp);
+    dragTo(ramp, 5);
+    fireEvent.pointerUp(ramp);
+    dragTo(ramp, 3);
+    fireEvent.pointerUp(ramp);
+
+    await waitFor(() => expect(writes).toBe(1));
+    releaseFirstWrite();
+
+    await waitFor(() => expect(writes).toBe(3));
+    expect(ramp).toHaveAttribute('aria-valuetext', 'High');
+
+    releaseThirdWrite();
+    await waitForMutationsIdle(client);
+    expect(ramp).toHaveAttribute('aria-valuetext', 'High');
+  });
+
+  it('tells a member that only admins can change it', async () => {
+    server.use(
+      http.get(FACTORY_URL, () => HttpResponse.json({ project: factory })),
+      http.patch(FACTORY_URL, () =>
+        HttpResponse.json(
+          {
+            error: 'forbidden',
+            message: 'Organization administrator access is required to change the thinking default.',
+          },
+          { status: 403 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderSection();
+
+    const ramp = await openRamp(user, 'Thinking: Off');
+    dragTo(ramp, 3);
+    fireEvent.pointerUp(ramp);
+
+    await waitForMutationsIdle(client);
+    expect(await screen.findByText('Only organization admins can change the thinking level')).toBeInTheDocument();
+    await waitFor(() => expect(ramp).toHaveAttribute('aria-valuetext', 'Off'));
   });
 });

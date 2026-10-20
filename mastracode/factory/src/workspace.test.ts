@@ -111,6 +111,7 @@ const mocks = vi.hoisted(() => ({
           orgId: 'org-1',
           threadId: mocks.runBindingThreadId ?? sessionId,
           resourceId: sessionId,
+          sessionId,
         }
       : null,
   ),
@@ -227,7 +228,9 @@ function createGithubRequestContext(
   const state: Record<string, unknown> = { factoryProjectId: projectId };
   requestContext.set('controller', {
     modeId: 'build',
-    resourceId: sessionId,
+    // Factory sessions run under the Factory resource and are addressed by their own id.
+    resourceId: projectId,
+    sessionId,
     threadId: sessionId,
     getState: () => state,
     setState: async (updates: Record<string, unknown>) => {
@@ -249,6 +252,7 @@ function createUnscopedGithubRequestContext(projectId: string, projectPath: stri
   requestContext.set('controller', {
     modeId: 'build',
     resourceId: projectId,
+    sessionId: projectId,
     getState,
     session: { id: projectId, state: { get: getState } },
   });
@@ -379,6 +383,7 @@ describe('bundled Factory skill assets', () => {
       'factory-plan',
       'factory-rereview',
       'factory-review',
+      'factory-self-review',
       'factory-triage',
     ]);
     await Promise.all(
@@ -1556,26 +1561,20 @@ describe('GitHub session workspace preparation', () => {
     expect(sandbox.executeCommand).toHaveBeenCalled();
   });
 
-  it('authorizes a workspace-free supervisor session before controller session creation', async () => {
-    const projects = { get: vi.fn().mockResolvedValue({ id: 'project-1', orgId: 'org-1' }) };
-    const resolver = createWorkspaceFactory({ projects: projects as any });
-    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1');
+  it('opens no workspace for a project-keyed resourceId from a retired session kind', async () => {
+    const projects = { get: vi.fn() };
+    const sourceControl = fakeGithubIntegration().sourceControlStorage;
+    const getBySessionId = vi.spyOn(sourceControl.sessions, 'getBySessionId');
+    const resolver = createWorkspaceFactory({
+      projects: projects as any,
+      sourceControls: [{ id: 'github', versionControl: {} as any, storage: sourceControl as any }],
+    });
+    const requestContext = createGithubRequestContext('project-1', 'factory-retired-kind:project-1');
 
     await expect(resolver({ requestContext } as any)).resolves.toBeUndefined();
-    expect(projects.get).toHaveBeenCalledWith({ orgId: 'org-1', id: 'project-1' });
-  });
-
-  it('refuses a workspace-free supervisor session outside the caller organization', async () => {
-    const projects = { get: vi.fn().mockResolvedValue(null) };
-    const resolver = createWorkspaceFactory({ projects: projects as any });
-    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1', {
-      organizationId: 'org-2',
-      workosId: 'user-1',
-    });
-
-    await expect(resolver({ requestContext } as any)).rejects.toThrow(
-      'Factory supervisor project-1 is not available to the current user',
-    );
+    expect(getBySessionId).toHaveBeenCalledWith('factory-retired-kind:project-1');
+    expect(projects.get).not.toHaveBeenCalled();
+    expect(mocks.materializeRepo).not.toHaveBeenCalled();
   });
 
   it('opens the session for a session-shaped auth user, whose org lives on the session half', async () => {
@@ -3169,6 +3168,7 @@ describe('FactorySkillSource layering', () => {
       'factory-plan',
       'factory-rereview',
       'factory-review',
+      'factory-self-review',
       'factory-triage',
     ]);
     expect(await source.exists(path.join(mount, 'my-custom-skill', 'SKILL.md'))).toBe(false);

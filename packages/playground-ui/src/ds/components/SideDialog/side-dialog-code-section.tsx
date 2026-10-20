@@ -1,86 +1,14 @@
 import { json } from '@codemirror/lang-json';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { tags as t } from '@lezer/highlight';
-import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import ReactCodeMirror from '@uiw/react-codemirror';
 import { AlignJustifyIcon, AlignLeftIcon } from 'lucide-react';
 import React, { useState, useMemo } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { Section } from '@/ds/components/Section';
-import { useTheme } from '@/ds/components/ThemeProvider';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-
-/** Dark theme — matches original side-dialog draculaInit settings exactly. */
-function buildSideDialogDarkTheme(): Extension {
-  return draculaInit({
-    settings: {
-      fontFamily: 'var(--font-mono)',
-      fontSize: 'var(--text-body-sm)',
-      lineHighlight: 'transparent',
-      gutterBackground: 'transparent',
-      gutterForeground: 'var(--muted-foreground)',
-      background: 'transparent',
-    },
-    styles: [{ tag: [t.className, t.propertyName] }],
-  });
-}
-
-/** Light theme for side-dialog code sections. */
-function buildSideDialogLightTheme(): Extension {
-  const editorTheme = EditorView.theme({
-    '&': {
-      backgroundColor: 'transparent',
-      color: 'var(--foreground)',
-      fontSize: 'var(--text-body-sm)',
-    },
-    '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--font-mono)',
-    },
-    '.cm-gutters': {
-      backgroundColor: 'transparent',
-      color: 'var(--placeholder)',
-      borderRight: 'none',
-    },
-    '.cm-content': {
-      color: 'var(--foreground)',
-      caretColor: 'var(--foreground)',
-    },
-    '.cm-activeLine': {
-      backgroundColor: 'transparent',
-    },
-    '.cm-activeLineGutter': {
-      backgroundColor: 'transparent',
-    },
-    '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--foreground)',
-    },
-  });
-
-  const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--syntax-string)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--syntax-literal)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--syntax-keyword)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--syntax-name)' },
-    {
-      tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--syntax-link)',
-    },
-    { tag: [t.variableName, t.number], color: 'var(--syntax-name)' },
-    { tag: [t.name, t.quote], color: 'var(--syntax-string)' },
-  ]);
-
-  return [editorTheme, syntaxHighlighting(highlightStyle)];
-}
-
-const useCodemirrorTheme = (): Extension => {
-  const isDark = useTheme().resolvedTheme === 'dark';
-  return useMemo(() => (isDark ? buildSideDialogDarkTheme() : buildSideDialogLightTheme()), [isDark]);
-};
 
 export type SideDialogCodeSectionProps = {
   title: React.ReactNode;

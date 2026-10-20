@@ -16,7 +16,7 @@ import type {
   SkillSourceStat,
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
-import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
+import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
 import { redactCredentials } from './environment/build.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
@@ -59,8 +59,7 @@ import type { SessionEnvironmentRepositoryState } from './session/environment-st
 import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
-import { parseSupervisorResourceId } from './supervisor/session.js';
-import { timedPhase } from './timing.js';
+import { instrumentMethods, timed, timedPhase } from './timing.js';
 import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from './work-item-branch.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
@@ -102,6 +101,7 @@ export const FACTORY_SKILL_NAMES = new Set([
   'factory-plan',
   'factory-rereview',
   'factory-review',
+  'factory-self-review',
   'factory-triage',
 ]);
 
@@ -111,6 +111,7 @@ export const REVIEW_ONLY_FACTORY_SKILLS = new Set([
   'factory-gitlab-review',
   'factory-rereview',
   'factory-review',
+  'factory-self-review',
 ]);
 
 /**
@@ -345,7 +346,7 @@ export interface CreateWorkspaceFactoryOptions {
    * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
    * without it every session uses the default (worker) PAT. */
   workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession'>;
-  /** Projects storage used to authorize workspace-free supervisor sessions. */
+  /** Projects storage used to resolve a session's project environment. */
   projects?: Pick<FactoryProjectsStorage, 'get'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
@@ -584,16 +585,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // than on the context it was constructed with.
   const skillReviewChecks = new Map<string, () => Promise<boolean>>();
 
-  return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
+  const resolve = async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
-    const supervisorProjectId = parseSupervisorResourceId(ctx?.resourceId);
-    if (supervisorProjectId) {
-      const orgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
-      const project = orgId && projects ? await projects.get({ orgId, id: supervisorProjectId }) : null;
-      if (!project) throw new Error(`Factory supervisor ${supervisorProjectId} is not available to the current user`);
-      return undefined;
-    }
-    const resolvedSession = ctx?.resourceId ? await resolveSourceControlSession(sourceControls, ctx.resourceId) : null;
+    const resolvedSession = ctx?.sessionId ? await resolveSourceControlSession(sourceControls, ctx.sessionId) : null;
     const session = resolvedSession?.session ?? null;
     const sourceControl = resolvedSession?.provider;
 
@@ -807,32 +801,36 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         () => {
           // The provider reads its own settings (resources, images) from the
           // project's stored document, never from the context.
-          const sandbox = factorySandbox.create(
-            {
-              sessionId: session.id,
-              // Physical VM id persisted from a prior start (undefined on first
-              // start). Providers that reattach by physical id use it to resume the
-              // original VM instead of provisioning a replacement.
-              sandboxId: session.sandboxId ?? undefined,
-              repoFullName,
-              ...(environment
-                ? environmentSandboxContext(environment, {
-                    orgId: session.orgId,
-                    getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
-                  })
-                : {
-                    // Stored nullable; the context speaks `undefined` for absent.
-                    setupCommand: projectRepository.setupCommand ?? undefined,
-                    // Deferred call, only dereferenced when a provider needs the repo
-                    // outside the VM (template build time).
-                    getRepositoryAccess: () =>
-                      sourceControl.versionControl.getRepositoryAccess({
-                        orgId: session.orgId,
-                        repositoryId: repository.id,
-                      }),
-                  }),
-            },
-            sandboxSettings,
+          const sandbox = instrumentMethods(
+            factorySandbox.create(
+              {
+                sessionId: session.id,
+                // Physical VM id persisted from a prior start (undefined on first
+                // start). Providers that reattach by physical id use it to resume the
+                // original VM instead of provisioning a replacement.
+                sandboxId: session.sandboxId ?? undefined,
+                repoFullName,
+                ...(environment
+                  ? environmentSandboxContext(environment, {
+                      orgId: session.orgId,
+                      getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
+                    })
+                  : {
+                      // Stored nullable; the context speaks `undefined` for absent.
+                      setupCommand: projectRepository.setupCommand ?? undefined,
+                      // Deferred call, only dereferenced when a provider needs the repo
+                      // outside the VM (template build time).
+                      getRepositoryAccess: () =>
+                        sourceControl.versionControl.getRepositoryAccess({
+                          orgId: session.orgId,
+                          repositoryId: repository.id,
+                        }),
+                    }),
+              },
+              sandboxSettings,
+            ),
+            `sandbox(${session.id})`,
+            ['start', 'stop', 'executeCommand', 'reconnect'],
           );
           // Attached inside the construction closure, so exactly once per
           // instance: `constructSessionEntry` runs on every open and would
@@ -910,7 +908,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         sessionId: session.sessionId,
       });
       if (!binding || !ctx?.threadId) return binding;
-      return binding.threadId === ctx.threadId && binding.resourceId === ctx.resourceId ? binding : null;
+      return binding.threadId === ctx.threadId && binding.sessionId === ctx.sessionId ? binding : null;
     };
     // Fails closed: without a readable active review binding, review skills stay hidden.
     const isReviewSession = async (): Promise<boolean> => {
@@ -1537,4 +1535,5 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     fireEagerStart();
     return workspace;
   };
+  return (context: DynamicWorkspaceContext) => timed('workspace.resolve', () => resolve(context));
 }

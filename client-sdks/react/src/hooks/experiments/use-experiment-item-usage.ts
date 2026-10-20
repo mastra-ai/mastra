@@ -1,5 +1,6 @@
 import type { GetMetricBreakdownResponse } from '@mastra/core/storage';
 import { useQueries } from '@tanstack/react-query';
+import type { Query } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
 import type { ExperimentRef } from '../datasets/use-dataset-experiments';
 import { useCombineByIds } from '../shared/combine-by-ids';
@@ -87,12 +88,22 @@ function toExperimentUsage(response: GetMetricBreakdownResponse): ExperimentUsag
   return { summary: toUsage(summary), traces };
 }
 
+/** How many breakdowns to fetch after completion while the exporter may still be flushing metrics. */
+const MAX_EMPTY_ATTEMPTS = 5;
+
+const isEmptyUsage = (usage: ExperimentUsage | undefined) =>
+  !usage ||
+  (Object.keys(usage.traces).length === 0 &&
+    usage.summary.inputTokens === undefined &&
+    usage.summary.outputTokens === undefined);
+
 /**
  * Token and cost usage of several experiments, keyed by experiment id: each entry holds the
  * experiment totals (`summary`) and every item's usage keyed by trace id (`traces`).
  * Sends one metric breakdown request per experiment, filtered by its id rather than by trace ids,
- * so it does not wait for the experiment results. Polls every 2 seconds while an experiment is
- * running or pending. No request is made when the observability store cannot serve metrics.
+ * so it does not wait for the experiment results. Usage is only fetched once an experiment has
+ * finished; while the breakdown is still empty (metrics flushing), it retries every 2 seconds up to
+ * 5 attempts. No request is made when the observability store cannot serve metrics.
  */
 export const useExperimentsItemUsage = ({
   experiments,
@@ -105,20 +116,24 @@ export const useExperimentsItemUsage = ({
   const combine = useCombineByIds<ExperimentUsage>(experiments.map(experiment => experiment.id));
 
   return useQueries({
-    queries: experiments.map(({ id, status }) => ({
-      queryKey: ['experiment-item-usage', id],
-      queryFn: async () =>
-        toExperimentUsage(
-          await client.getMetricBreakdown({
-            name: [INPUT_TOKEN_METRIC, OUTPUT_TOKEN_METRIC],
-            aggregation: 'sum',
-            groupBy: ['traceId', 'name'],
-            filters: { experimentId: id },
-          }),
-        ),
-      enabled: supportsMetrics,
-      refetchInterval: status === 'running' || status === 'pending' ? POLL_INTERVAL_MS : false,
-    })),
+    queries: experiments.map(({ id, status }) => {
+      const finished = status !== 'running' && status !== 'pending';
+      return {
+        queryKey: ['experiment-item-usage', id, finished],
+        queryFn: async () =>
+          toExperimentUsage(
+            await client.getMetricBreakdown({
+              name: [INPUT_TOKEN_METRIC, OUTPUT_TOKEN_METRIC],
+              aggregation: 'sum',
+              groupBy: ['traceId', 'name'],
+              filters: { experimentId: id },
+            }),
+          ),
+        enabled: supportsMetrics && finished,
+        refetchInterval: (query: Query<ExperimentUsage>) =>
+          isEmptyUsage(query.state.data) && query.state.dataUpdateCount < MAX_EMPTY_ATTEMPTS ? POLL_INTERVAL_MS : false,
+      };
+    }),
     combine,
   });
 };

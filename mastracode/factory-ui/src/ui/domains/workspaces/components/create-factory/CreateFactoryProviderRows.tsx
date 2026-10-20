@@ -2,7 +2,7 @@ import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
-import { providerDisplayName } from '../../../settings/components/provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ProviderConnection } from '../../hooks/useProviderConnection';
 import { matchesProviderQuery } from '../../hooks/useProviderConnection';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';

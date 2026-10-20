@@ -1,12 +1,23 @@
 import { createContext } from 'react';
 
+import type { ThreadOwner } from '../services/reply-credential';
+
 export interface FactorySessionState {
   factoryProjectId: string;
   projectRepositoryId?: string;
 }
 
 export interface ChatSessionContextApi {
+  /** Agent-controller session address (=== the session's thread id for Factory sessions). */
+  sessionId: string;
+  /**
+   * Memory resource the session runs under: the Factory for runs and Slack
+   * sessions, the owner for user sessions. Shared with the resource's other
+   * sessions; used only to create the session.
+   */
   resourceId: string;
+  /** Tags that pick this session's threads out of its shared resource. */
+  threadTags?: Record<string, string>;
   /**
    * Alias for `sandboxReady` retained for existing consumers. New code should
    * use `sandboxReady` (mutations, runs) or `resourceReady` (reads/streaming)
@@ -15,7 +26,7 @@ export interface ChatSessionContextApi {
   sessionEnabled: boolean;
   /**
    * Server-side session metadata is resolved and the agent-controller
-   * resourceId is safe to address for reads/streaming. Never waits on a
+   * session is safe to address for reads/streaming. Never waits on a
    * sandbox existing.
    */
   resourceReady: boolean;
@@ -38,7 +49,6 @@ export interface ChatSessionContextApi {
   sessionError?: Error;
   /** Re-runs the failed session query. */
   retrySession?: () => void;
-  projectPath?: string;
   /**
    * The session's conventional thread id (=== its sessionId, seeded by
    * FactoryStartCoordinator). Passing it through session creation makes init
@@ -59,6 +69,8 @@ export interface ChatSessionContextApi {
    * /user/threads/*); its draft can pick a model before the session exists.
    */
   kind: 'factory' | 'user';
+  /** Who the stored session belongs to; absent where no session row backs the chat (supervisor, `?resourceId=` override). */
+  owner?: ThreadOwner;
 }
 
 export const ChatSessionContext = createContext<ChatSessionContextApi | null>(null);

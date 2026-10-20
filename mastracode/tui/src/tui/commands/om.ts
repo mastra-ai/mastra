@@ -10,6 +10,7 @@ import { OMSettingsComponent } from '../components/om-settings.js';
 import { getEffectiveOMRoleModelId } from '../om-model.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
+import { requireLocal } from '../runtime.js';
 import type { SlashCommandContext } from './types.js';
 
 // Re-exported for existing importers/tests; the implementations live in
@@ -53,22 +54,23 @@ function persistOmCavemanObservations(enabled: boolean): void {
 
 export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
   const availableModels = await ctx.state.controller.listAvailableModels();
+  const { session } = requireLocal(ctx.state, '/om');
 
   const agentControllerState = ctx.state.session.state.get() as Record<string, unknown> | undefined;
-  const observerModelId = getEffectiveOMRoleModelId(ctx.state.session, 'observer') ?? '';
-  const reflectorModelId = getEffectiveOMRoleModelId(ctx.state.session, 'reflector') ?? '';
+  const observerModelId = getEffectiveOMRoleModelId(session, 'observer') ?? '';
+  const reflectorModelId = getEffectiveOMRoleModelId(session, 'reflector') ?? '';
   const packMemoryModelId = getActiveRouteMemoryModelId(agentControllerState, ctx.state.session.thread.getId());
   const autoModelId = resolveAutoOMModelId(ctx.state.session.model.get() ?? undefined);
   const config = {
-    observerModel: ctx.state.session.om.observer.model() ?? 'auto',
+    observerModel: session.om.observer.model() ?? 'auto',
     observerModelId,
     observerAutoModelId: autoModelId,
-    reflectorModel: ctx.state.session.om.reflector.model() ?? 'auto',
+    reflectorModel: session.om.reflector.model() ?? 'auto',
     reflectorModelId,
     reflectorAutoModelId: autoModelId,
     packMemoryModelId,
-    observationThreshold: ctx.state.session.om.observer.threshold() ?? 30_000,
-    reflectionThreshold: ctx.state.session.om.reflector.threshold() ?? 40_000,
+    observationThreshold: session.om.observer.threshold() ?? 30_000,
+    reflectionThreshold: session.om.reflector.threshold() ?? 40_000,
     cavemanObservations: (agentControllerState?.cavemanObservations as boolean | undefined) ?? false,
     observeAttachments: (agentControllerState?.observeAttachments as 'auto' | boolean | undefined) ?? 'auto',
   };
@@ -79,29 +81,25 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
       {
         onObserverModelChange: async model => {
           await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-          await ctx.state.session.om.observer.switchModel({ modelId: model.id });
+          await session.om.observer.switchModel({ modelId: model.id });
           persistOmRoleOverride('observer', model.id);
           ctx.showInfo(`Observer model → ${model.id}`);
         },
         onObserverAuto: async () => {
-          await ctx.state.session.om.observer.switchModel({ modelId: 'auto' });
+          await session.om.observer.switchModel({ modelId: 'auto' });
           persistOmRoleAuto('observer');
-          ctx.showInfo(
-            `Observer model → Auto (${getEffectiveOMRoleModelId(ctx.state.session, 'observer') ?? 'unavailable'})`,
-          );
+          ctx.showInfo(`Observer model → Auto (${getEffectiveOMRoleModelId(session, 'observer') ?? 'unavailable'})`);
         },
         onReflectorModelChange: async model => {
           await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-          await ctx.state.session.om.reflector.switchModel({ modelId: model.id });
+          await session.om.reflector.switchModel({ modelId: model.id });
           persistOmRoleOverride('reflector', model.id);
           ctx.showInfo(`Reflector model → ${model.id}`);
         },
         onReflectorAuto: async () => {
-          await ctx.state.session.om.reflector.switchModel({ modelId: 'auto' });
+          await session.om.reflector.switchModel({ modelId: 'auto' });
           persistOmRoleAuto('reflector');
-          ctx.showInfo(
-            `Reflector model → Auto (${getEffectiveOMRoleModelId(ctx.state.session, 'reflector') ?? 'unavailable'})`,
-          );
+          ctx.showInfo(`Reflector model → Auto (${getEffectiveOMRoleModelId(session, 'reflector') ?? 'unavailable'})`);
         },
         onObservationThresholdChange: async value => {
           await ctx.state.session.state.set({ observationThreshold: value } as any);

@@ -105,9 +105,9 @@ The workflow and regulated entrypoints retain their existing persistence behavio
 
 ## Setup
 
-Use Node.js 22.18 or newer for this development project. The tested stable LiveKit combination is Agents, LiveKit plugin, and Silero plugin **1.9.3**, RTC **1.1.0**, and Server SDK **2.19.1**. The demo declares these newer minimums, Zod **4.6.5**, and client SDK **1.55.0**. Its workspace overrides intentionally load the local Mastra branch builds, which may have alpha version labels; these are not published release guarantees.
+Use Node.js 22.18 or newer for this development project. The tested stable LiveKit combination is Agents, LiveKit plugin, and Silero plugin **1.9.3**, RTC **1.1.0**, and Server SDK **2.19.1**. The demo declares these newer minimums, Zod **4.6.7**, and client SDK **1.55.0**. Its workspace overrides intentionally load the local Mastra branch builds, which may have alpha version labels; these are not published release guarantees.
 
-Zod is intentionally linked to the workspace Memory package. Mixing its 4.6.5 public schema types with Zod 4.6.7 causes TypeScript incompatibilities in the summary extractor. Upgrade those together; the LiveKit dependencies above use the latest stable versions verified for this update.
+Zod is intentionally linked to the workspace Memory package so the summary extractor uses the same public schema types. Both now use 4.6.7 after merging the workspace dependency updates. Keep them aligned when upgrading; the LiveKit dependencies above use the latest stable versions verified for this update.
 
 Keep Agents and installed plugins aligned, and ensure one physical Agents/RTC installation. `pnpm-workspace.yaml` links the integration's native dependencies so runtime class checks use the same instances. After installing, inspect `pnpm list --depth 0`. The lockfile records the installed resolution; changing a range alone does not upgrade it.
 

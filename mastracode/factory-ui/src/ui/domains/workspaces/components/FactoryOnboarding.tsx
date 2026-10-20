@@ -18,12 +18,10 @@ import {
   persistOnboardingReviewReturn,
   readOnboardingDraft,
   readOnboardingReviewReturn,
-  type OnboardingDraft,
   persistOnboardingStep,
   readOnboardingStep,
-  type OnboardingModelScope,
-  type OnboardingStep as Step,
 } from '../services/onboardingFlow';
+import type { OnboardingDraft, OnboardingModelScope, OnboardingStep as Step } from '../services/onboardingFlow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowLeft } from 'lucide-react';
@@ -98,8 +96,8 @@ export function FactoryOnboarding({ local }: { local: boolean }) {
   const meta = onboardingStepMeta(step, draft.modelScope, local);
   const companyAccess = useProviderConnection({ scope: 'org' });
   const companyLocked = companyAccountNeedsAdmin(companyAccess);
-  const setupScope = companyLocked ? 'user' : (preview.modelScope ?? draft.modelScope ?? 'factory');
-  const previewScope = step === 'model-setup' ? setupScope : (draft.modelScope ?? 'factory');
+  const setupScope = companyLocked ? 'user' : (preview.modelScope ?? draft.modelScope ?? 'hybrid');
+  const previewScope = step === 'model-setup' ? setupScope : (draft.modelScope ?? 'hybrid');
 
   return (
     <main className="onboarding-page bg-background text-foreground min-h-dvh pb-20">

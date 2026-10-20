@@ -991,8 +991,9 @@ describe('GithubRules', () => {
     }
 
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       createSession: vi.fn(async ({ id, threadId }: { id: string; threadId: string }) => makeSession(id, threadId)),
-      getSessionByResource: vi.fn(async (resourceId: string) => sessions.get(resourceId)),
+      getSession: vi.fn(async (sessionId: string) => sessions.get(sessionId)),
     };
     await sourceControl.sessions.create({
       sessionId: 'session-issue-42',
@@ -1217,7 +1218,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1296,7 +1297,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1601,7 +1602,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1692,7 +1693,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1747,6 +1748,102 @@ describe('GithubRules', () => {
       role: 'review',
       cancelInFlight: true,
     });
+  });
+
+  it('starts the re-review of a pushed commit on that commit, not the one the last verdict covered (#27590)', async () => {
+    const reviewedHeadSha = 'aaaaaaa000000000000000000000000000000000';
+    const pushedHeadSha = 'bbbbbbb000000000000000000000000000000000';
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    // The reviewer requested changes on A and its run ended; the card stays in
+    // Reviewing with the verdict recorded.
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {
+          authorTrusted: true,
+          reviewVerdict: 'request changes',
+          reviewedHeadSha,
+          pullRequestHeadSha: reviewedHeadSha,
+          pullRequestHeadAt: Date.parse('2030-01-01T00:00:00.000Z'),
+        },
+      },
+    });
+    const configVersion = 'factory-config-v1';
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSession: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards: createBoardRegistry() }),
+      storage: workItems,
+      boards: createBoardRegistry(),
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+    // The dispatcher polls on its own timer, so its tick can land as soon as
+    // the push's re-review transition commits, before the webhook handler has
+    // finished. Run it at exactly that point.
+    const commitRuleEvaluation = workItems.commitRuleEvaluation.bind(workItems);
+    const pushStatuses: string[] = [];
+    workItems.commitRuleEvaluation = async input => {
+      const committed = await commitRuleEvaluation(input);
+      if (input.ingress.identity.includes('delivery-push-b')) pushStatuses.push(committed.status);
+      if (committed.status === 'committed' && input.ingress.identity.endsWith('delivery-push-b')) {
+        await dispatcher.runOnce(new Date('2030-01-01T01:00:00Z'));
+      }
+      return committed;
+    };
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion,
+    });
+
+    const push = pullRequest('synchronize', 'delivery-push-b');
+    await expect(
+      service.ingest({
+        ...push,
+        payload: {
+          ...push.payload,
+          pull_request: {
+            ...push.payload.pull_request,
+            head: { ref: 'feature', sha: pushedHeadSha },
+            updated_at: '2030-01-01T01:00:00Z',
+          },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
+    await dispatcher.runOnce(new Date('2030-01-01T01:00:01Z'));
+
+    // The push is evaluated against the card as it is after the head was
+    // recorded, so it commits first time rather than retrying a stale read.
+    expect(pushStatuses).toEqual(['committed']);
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    const invocations = decisions.filter(entry => entry.decision.type === 'invokeSkill');
+    expect(invocations).toHaveLength(1);
+    const kickoff = invocations[0]!.decision;
+    expect(kickoff).toMatchObject({ type: 'invokeSkill', skillName: 'factory-rereview', role: 'review' });
+    const text = kickoff.type === 'invokeSkill' ? (kickoff.arguments ?? '') : '';
+    // The new run names the pushed head as the one to review, and the head the
+    // recorded verdict covered as superseded.
+    expect(text).toContain(`new review pass for head \`${pushedHeadSha}\``);
+    expect(text).toContain(`recorded "request changes" on \`${reviewedHeadSha}\``);
+    expect(text).toContain(`record a verdict for \`${pushedHeadSha}\``);
+    const stored = await workItems.get({ orgId: 'org-1', id: card.item.id });
+    expect(stored?.metadata).toMatchObject({ pullRequestHeadSha: pushedHeadSha, reviewedHeadSha });
   });
 
   it('ignores push events on PRs whose card has not yet completed a review pass', async () => {
@@ -2340,8 +2437,9 @@ describe('GithubRules', () => {
       ),
     };
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       createSession: vi.fn(async () => session),
-      getSessionByResource: vi.fn(async () => session),
+      getSession: vi.fn(async () => session),
     };
     await sourceControl.sessions.create({
       sessionId: 'session-work-42',
@@ -2656,7 +2754,7 @@ describe('GithubRules', () => {
       configVersion: 'factory-config-v1',
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion: 'factory-config-v1',
@@ -2847,7 +2945,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,

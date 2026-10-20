@@ -89,6 +89,7 @@ Mappings use the same validated path grammar as other workflow steps and persist
 - Choice answers expose `answers.<question>.choice` and may include `probabilities`.
 - Score answers expose `answers.<question>.score` and may include `probabilities`.
 - Boolean answers expose the raw `P(true)` value as `answers.<question>.probability`. Apply an explicit threshold when routing.
+- Refused questions are `{ type: 'refusal' }` and have no `choice`, `score`, or `probability`.
 - `usage` contains normalized token usage.
 
 ## Retries and errors

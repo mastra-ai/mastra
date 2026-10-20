@@ -1,7 +1,7 @@
 import { MastraClientError } from '@mastra/client-js';
 import { useTraceQuery } from '@mastra/react/hooks/traces';
 import type { TraceQueryArgs, UseTraceQueryArgs } from '@mastra/react/hooks/traces';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toTracesListViewTraces } from '../components/traces-list-view-adapter';
 
 export const TRACES_LIST_REFETCH_INTERVAL_MS = 10_000;
@@ -65,9 +65,13 @@ export function useTracesListSource({
     return () => clearInterval(timer);
   }, [autoRefetch, rolling, result.error]);
 
+  // A rolling tick moves the query key; keep the previous rows when the data is the same so
+  // consumers keyed on `rows` don't re-render every tick.
+  const rows = useMemo(() => toTracesListViewTraces(result.data ?? []), [result.data]);
+
   return {
     ...result,
-    rows: toTracesListViewTraces(result.data ?? []),
+    rows,
     autoRefetch,
     setAutoRefetch,
   };

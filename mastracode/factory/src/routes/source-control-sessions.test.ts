@@ -9,6 +9,8 @@ import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { getFactorySessionAddress, resolveFactorySessionAddress } from '../rules/binding-context.js';
+import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
+import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import {
   FACTORY_OPEN_RUNS_SETTING,
   listSessionOpenRuns,
@@ -21,6 +23,11 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
+vi.mock('../session/filesystem-capture.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../session/filesystem-capture.js')>();
+  return { ...actual, waitForPendingFilesystemCapture: vi.fn(actual.waitForPendingFilesystemCapture) };
+});
+
 const user = { workosId: 'user-1', organizationId: 'org-1' };
 
 type RouteOptions = Parameters<typeof buildSourceControlSessionRoutes>[0];
@@ -29,6 +36,7 @@ function buildApp(
   sourceControls: readonly SourceControlStorageHandle[],
   { memorySettings, projects, users }: Pick<RouteOptions, 'memorySettings' | 'projects' | 'users'>,
   controller?: RouteOptions['controller'],
+  workItems?: RouteOptions['workItems'],
 ) {
   const app = new Hono();
   app.use('*', async (context, next) => {
@@ -44,6 +52,7 @@ function buildApp(
       memorySettings,
       controller,
       users,
+      ...(workItems ? { workItems } : {}),
     }),
   );
   return app;
@@ -130,7 +139,7 @@ describe('source-control session routes', () => {
       threadId,
     });
     onTestFinished(async () => {
-      await controller.deleteSession({ resourceId: sessionId });
+      await controller.deleteSession({ sessionId });
     });
     expect(session.identity.getId()).toBe(sessionId);
     expect(session.thread.getId()).toBe(threadId);
@@ -247,7 +256,7 @@ describe('source-control session routes', () => {
     expect(queryThreads).toHaveBeenCalledWith({ resourceId: sessionId });
     expect(generateTitle).toHaveBeenCalledWith({
       threadId,
-      resourceId: sessionId,
+      sessionId,
       requestContext: expect.any(RequestContext),
     });
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
@@ -283,6 +292,41 @@ describe('source-control session routes', () => {
     await expect(opened.json()).resolves.toMatchObject({
       session: { sessionId: session.sessionId, projectRepositoryId: projectRepository.id },
     });
+  });
+
+  it('reports the memory resource a session runs under when it is opened', async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const create = (sessionId: string) =>
+      sourceControl.sessions.create({
+        sessionId,
+        projectRepositoryId: projectRepository.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: `user/session-${sessionId}`,
+        baseBranch: 'main',
+        visibility: 'org',
+      });
+    await create('session-new');
+    await create('session-run');
+    const threads: Record<string, { id: string; resourceId: string }> = {
+      'session-run': { id: 'session-run', resourceId: project.id },
+    };
+    const controller = {
+      queryThreadById: async ({ threadId }: { threadId: string }) => threads[threadId] ?? null,
+    } as unknown as RouteOptions['controller'];
+    // Only a run binding lets a session run under its Factory.
+    const workItems = {
+      clearSessionReferences: async () => {},
+      hasRunBindingForSession: async ({ sessionId }: { sessionId: string }) => sessionId === 'session-run',
+    };
+    const app = buildApp([sourceControl], seed, controller, workItems);
+
+    // A session with no thread yet is a new user session: it starts under its owner.
+    const fresh = await app.request('/web/user-sessions/session-new');
+    await expect(fresh.json()).resolves.toMatchObject({ session: { sessionId: 'session-new', resourceId: 'user-1' } });
+    // A run's thread already names its Factory.
+    const run = await app.request('/web/user-sessions/session-run');
+    await expect(run.json()).resolves.toMatchObject({ session: { sessionId: 'session-run', resourceId: project.id } });
   });
 
   it("names the owner when a teammate opens someone else's session", async () => {
@@ -334,6 +378,53 @@ describe('source-control session routes', () => {
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
       projectRepositoryId: projectRepository.id,
     });
+  });
+
+  it('starts the conversation on the session thread so the first prompt can be sent right away', async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const controller = new AgentController<MastraCodeState>({
+      id: 'code',
+      stateSchema,
+      storage: new InMemoryStore({ id: 'factory-user-session-start' }),
+      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          default: true,
+          agent: new Agent({
+            id: 'test-agent',
+            name: 'Test agent',
+            instructions: 'Test.',
+            model: { id: 'openai/gpt-5.5' },
+          }),
+        },
+      ],
+    });
+    await controller.init();
+    const app = buildApp([sourceControl], seed, controller);
+    const sessionId = '22222222-2222-4222-8222-222222222222';
+    const create = () =>
+      app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId, title: 'First prompt' }),
+      });
+
+    expect((await create()).status).toBe(200);
+    // A retried create (the draft resubmitting the same id) must not start a second conversation.
+    expect((await create()).status).toBe(200);
+
+    const live = await controller.getSession(sessionId);
+    expect(live?.thread.getId()).toBe(sessionId);
+    expect(live?.state.get()).toMatchObject({
+      factoryOrgId: 'org-1',
+      factoryProjectId: project.id,
+      projectRepositoryId: projectRepository.id,
+    });
+    // A user session runs under its owner's resource.
+    const threads = await controller.queryThreads({ resourceId: 'user-1' });
+    expect(threads.map(thread => thread.id)).toEqual([sessionId]);
   });
 
   it('stamps the factory of the link on the session it creates', async () => {
@@ -475,5 +566,365 @@ describe('source-control session routes', () => {
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({ error: 'Factory not found' });
+  });
+});
+
+describe('session sandbox recreate', () => {
+  type Coordinator = { recreateSessionSandbox: ReturnType<typeof vi.fn> };
+
+  function fakeCoordinator(
+    impl: () => Promise<'recreated' | 'not-found'> = async () => 'recreated',
+  ): Coordinator & SessionRetirementCoordinator {
+    return { recreateSessionSandbox: vi.fn(impl) } as unknown as Coordinator & SessionRetirementCoordinator;
+  }
+
+  function fakeLiveRun(active: () => boolean) {
+    const live = { stream: { isActive: vi.fn(active) }, abort: vi.fn() };
+    const controller = {
+      getSession: vi.fn(async () => live),
+    } as unknown as NonNullable<RouteOptions['controller']>;
+    return { live, controller };
+  }
+
+  function buildRecreateApp(
+    seed: Pick<RouteOptions, 'memorySettings' | 'projects'>,
+    sourceControl: SourceControlStorageHandle,
+    options: {
+      sessionRetirement?: SessionRetirementCoordinator;
+      sandboxRecreateSupported?: boolean;
+      isOrganizationAdmin?: (orgId: string, userId: string) => Promise<boolean>;
+      controller?: RouteOptions['controller'];
+      abortSettleTimeoutMs?: number;
+      caller?: { workosId: string; organizationId: string };
+      filesystem?: RouteOptions['filesystem'];
+    } = {},
+  ) {
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, (options.caller ?? user) as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      buildSourceControlSessionRoutes({
+        auth: fakeRouteAuth({ isOrganizationAdmin: options.isOrganizationAdmin ?? (async () => false) }),
+        sourceControls: [sourceControl],
+        projects: seed.projects,
+        memorySettings: seed.memorySettings,
+        ...(options.controller ? { controller: options.controller } : {}),
+        ...(options.sessionRetirement ? { sessionRetirement: options.sessionRetirement } : {}),
+        sandboxRecreateSupported: options.sandboxRecreateSupported ?? true,
+        ...(options.abortSettleTimeoutMs !== undefined ? { abortSettleTimeoutMs: options.abortSettleTimeoutMs } : {}),
+        ...(options.filesystem ? { filesystem: options.filesystem } : {}),
+      }),
+    );
+    return app;
+  }
+
+  async function seedRecreateSession(owner = 'user-1', visibility: 'org' | 'private' = 'org') {
+    const repo = await seedGitLabRepository();
+    const session = await repo.sourceControl.sessions.create({
+      sessionId: `recreate-${owner}-${visibility}`,
+      projectRepositoryId: repo.projectRepository.id,
+      orgId: 'org-1',
+      userId: owner,
+      branch: 'user/session-recreate',
+      baseBranch: 'main',
+      visibility,
+    });
+    return { ...repo, session };
+  }
+
+  const recreatePath = (sessionId: string) => `/web/user-sessions/${sessionId}/sandbox/recreate`;
+
+  it('recreates the owner session with the public session id, without an admin check', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession();
+    const sessionRetirement = fakeCoordinator();
+    const isOrganizationAdmin = vi.fn(async () => true);
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, isOrganizationAdmin });
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ recreated: true, aborted: false });
+    expect(sessionRetirement.recreateSessionSandbox).toHaveBeenCalledWith({
+      sourceControl,
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+    });
+    expect(isOrganizationAdmin).not.toHaveBeenCalled();
+  });
+
+  it('aborts an active run and recreates only after it stops', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession();
+    let active = true;
+    const { live, controller } = fakeLiveRun(() => active);
+    live.abort.mockImplementation(() => {
+      setTimeout(() => {
+        active = false;
+      }, 120);
+    });
+    const sessionRetirement = fakeCoordinator(async () => {
+      expect(active).toBe(false);
+      return 'recreated';
+    });
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, controller });
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ recreated: true, aborted: true });
+    expect(controller.getSession).toHaveBeenCalledWith(session.sessionId);
+    expect(live.abort).toHaveBeenCalledTimes(1);
+    expect(sessionRetirement.recreateSessionSandbox).toHaveBeenCalledTimes(1);
+  });
+
+  it('still recreates when the aborted run never settles within the bound', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession();
+    const { live, controller } = fakeLiveRun(() => true);
+    const sessionRetirement = fakeCoordinator();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, controller, abortSettleTimeoutMs: 120 });
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ recreated: true, aborted: true });
+    expect(live.abort).toHaveBeenCalledTimes(1);
+    expect(sessionRetirement.recreateSessionSandbox).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith('[Factory Sessions] Aborted run did not settle before sandbox recreate', {
+      sessionId: session.sessionId,
+    });
+  });
+
+  it('still recreates when aborting the run throws', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession();
+    const controller = {
+      getSession: vi.fn(async () => {
+        throw new Error('controller unavailable');
+      }),
+    } as unknown as NonNullable<RouteOptions['controller']>;
+    const sessionRetirement = fakeCoordinator();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, controller });
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ recreated: true, aborted: false });
+    expect(sessionRetirement.recreateSessionSandbox).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      '[Factory Sessions] Failed to abort the active run before sandbox recreate',
+      expect.anything(),
+    );
+  });
+
+  it('drains a pending filesystem capture before recreating', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession();
+    const order: string[] = [];
+    vi.mocked(waitForPendingFilesystemCapture).mockImplementationOnce(async resourceId => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+      order.push(`drained:${resourceId}`);
+    });
+    const sessionRetirement = fakeCoordinator(async () => {
+      order.push('recreate');
+      return 'recreated';
+    });
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement });
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    expect(order).toEqual([`drained:${session.sessionId}`, 'recreate']);
+  });
+
+  it('lets an org admin recreate a teammate org-visible session', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession('user-2');
+    const sessionRetirement = fakeCoordinator();
+    const isOrganizationAdmin = vi.fn(async () => true);
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, isOrganizationAdmin });
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    expect(isOrganizationAdmin).toHaveBeenCalledWith('org-1', 'user-1');
+    expect(sessionRetirement.recreateSessionSandbox).toHaveBeenCalledTimes(1);
+  });
+
+  it('forbids a non-owner who is not an org admin', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession('user-2');
+    const sessionRetirement = fakeCoordinator();
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement });
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+
+    expect(response.status).toBe(403);
+    expect(sessionRetirement.recreateSessionSandbox).not.toHaveBeenCalled();
+  });
+
+  it("hides another user's private session from an org admin", async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession('user-2', 'private');
+    const sessionRetirement = fakeCoordinator();
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, isOrganizationAdmin: async () => true });
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+
+    expect(response.status).toBe(404);
+    expect(sessionRetirement.recreateSessionSandbox).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 for a session in another organization', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession();
+    const sessionRetirement = fakeCoordinator();
+    const app = buildRecreateApp(seed, sourceControl, {
+      sessionRetirement,
+      isOrganizationAdmin: async () => true,
+      caller: { workosId: 'user-1', organizationId: 'org-2' },
+    });
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+
+    expect(response.status).toBe(404);
+    expect(sessionRetirement.recreateSessionSandbox).not.toHaveBeenCalled();
+  });
+
+  it('returns 503 and hides the capability on a local sandbox host', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession();
+    const sessionRetirement = fakeCoordinator();
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, sandboxRecreateSupported: false });
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ error: 'Recreating sandboxes is not available on this server.' });
+    expect(sessionRetirement.recreateSessionSandbox).not.toHaveBeenCalled();
+
+    const opened = await app.request(`/web/user-sessions/${session.sessionId}`);
+    const body = (await opened.json()) as { session: { capabilities: { recreateSandbox: boolean } } };
+    expect(body.session.capabilities).toEqual({ recreateSandbox: false });
+  });
+
+  it('returns 503 when the server has no retirement coordinator', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession();
+    const app = buildRecreateApp(seed, sourceControl);
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+
+    expect(response.status).toBe(503);
+  });
+
+  it('returns 500 with the message when the recreate fails', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession();
+    const sessionRetirement = fakeCoordinator(async () => {
+      throw new Error('provider unavailable');
+    });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    onTestFinished(() => error.mockRestore());
+    const filesystem = { deleteResourceFiles: vi.fn(async () => 0) };
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, filesystem });
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({ error: 'provider unavailable' });
+    expect(filesystem.deleteResourceFiles).not.toHaveBeenCalled();
+  });
+
+  it('clears the captured file listings once the sandbox is recreated', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession();
+    const order: string[] = [];
+    const sessionRetirement = fakeCoordinator(async () => {
+      order.push('recreate');
+      return 'recreated';
+    });
+    const filesystem = {
+      deleteResourceFiles: vi.fn(async ({ resourceId }: { resourceId: string }) => {
+        order.push(`clear:${resourceId}`);
+        return 2;
+      }),
+    };
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, filesystem });
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    expect(order).toEqual(['recreate', `clear:${session.sessionId}`]);
+  });
+
+  it('still reports the recreate when clearing the file listings fails', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession();
+    const sessionRetirement = fakeCoordinator();
+    const filesystem = {
+      deleteResourceFiles: vi.fn(async () => {
+        throw new Error('db down');
+      }),
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement, filesystem });
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ recreated: true, aborted: false });
+    expect(warn).toHaveBeenCalledWith(
+      '[Factory Sessions] Failed to clear file listings after sandbox recreate',
+      expect.objectContaining({ sessionId: session.sessionId }),
+    );
+  });
+
+  it('returns 404 when the coordinator no longer finds the session', async () => {
+    const { seed, sourceControl, session } = await seedRecreateSession();
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement: fakeCoordinator(async () => 'not-found') });
+
+    const response = await app.request(recreatePath(session.sessionId), { method: 'POST' });
+
+    expect(response.status).toBe(404);
+  });
+
+  it.each([
+    ['the owner', 'user-1', async () => false, true, true],
+    ['an admin on an org session', 'user-2', async () => true, true, true],
+    ['a non-owner non-admin', 'user-2', async () => false, true, false],
+    ['anyone when there is no coordinator', 'user-1', async () => true, false, false],
+  ] as const)(
+    'reports session.capabilities.recreateSandbox on the session GET for %s',
+    async (_label, owner, isOrganizationAdmin, withCoordinator, expected) => {
+      const { seed, sourceControl, session } = await seedRecreateSession(owner);
+      const app = buildRecreateApp(seed, sourceControl, {
+        isOrganizationAdmin,
+        ...(withCoordinator ? { sessionRetirement: fakeCoordinator() } : {}),
+      });
+
+      const opened = await app.request(`/web/user-sessions/${session.sessionId}`);
+
+      expect(opened.status).toBe(200);
+      const body = (await opened.json()) as Record<string, unknown> & {
+        session: { sessionId: string; capabilities: { recreateSandbox: boolean } };
+      };
+      expect(body).not.toHaveProperty('capabilities');
+      expect(body.session.sessionId).toBe(session.sessionId);
+      expect(body.session.capabilities).toEqual({ recreateSandbox: expected });
+    },
+  );
+
+  it('reports the capability on fresh and repeated session creates', async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const app = buildRecreateApp(seed, sourceControl, { sessionRetirement: fakeCoordinator() });
+    const sessionId = '33333333-3333-4333-8333-333333333333';
+    const create = () =>
+      app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+
+    for (const response of [await create(), await create()]) {
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        session: { sessionId, capabilities: { recreateSandbox: true } },
+      });
+    }
   });
 });

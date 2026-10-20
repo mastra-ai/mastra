@@ -45,11 +45,12 @@ import {
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
+import { createFactoryWorkItem } from '../work-items/create-work-item.js';
+import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
-import { buildSupervisorRoutes } from './supervisor.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -284,19 +285,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
   }
 
   /** Releasing a parked run and dropping it: same request, opposite outcomes, both audited as consent. */
-  #proposalRoute({
-    verb,
-    settle,
-  }: {
-    verb: 'approve' | 'dismiss';
-    settle: (
-      orgId: string,
-      factoryProjectId: string,
-      decisionId: string,
-      now: Date,
-      userId: string,
-    ) => Promise<FactoryDeferredDecisionRecord | null>;
-  }): ApiRoute {
+  #proposalRoute({ verb }: { verb: 'approve' | 'dismiss' }): ApiRoute {
     const { audit, workItems } = this.deps;
     const contract =
       verb === 'approve' ? FACTORY_ROUTE_CONTRACTS.decisionApprove : FACTORY_ROUTE_CONTRACTS.decisionDismiss;
@@ -313,24 +302,17 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         });
         if (!parsedPath.success) return c.json({ error: 'invalid_decision_id' }, 422);
         const { decisionId } = parsedPath.data;
-        await workItems.ensureReady();
-        const now = new Date();
-        const decision = await settle(resolved.orgId, resolved.factoryProjectId, decisionId, now, resolved.userId);
-        if (!decision) return c.json({ error: 'decision_not_proposed' }, 409);
-        // Releasing a proposal is a person taking the item on. Approval arms the
-        // item's autonomy inside the same storage transaction (see
-        // approveDeferredDecision), so follow-up runs no longer wait for approval.
-        await audit.emit({
-          context,
-          input: {
-            action: verb === 'approve' ? 'factory.run.approved' : 'factory.run.dismissed',
-            factoryProjectId: resolved.factoryProjectId,
-            targets: decision.workItemId
-              ? [{ type: 'work_item', id: decision.workItemId }]
-              : [{ type: 'rule_decision', id: decision.id }],
-            metadata: { decisionId: decision.id, effect: factoryDecisionType(decision) },
-          },
+        const settled = await resolveFactoryProposal({
+          workItems,
+          audit: input => audit.emit({ context, input }),
+          orgId: resolved.orgId,
+          factoryProjectId: resolved.factoryProjectId,
+          userId: resolved.userId,
+          decisionId,
+          action: verb,
         });
+        if (!settled.ok) return c.json({ error: settled.code }, 409);
+        const { decision } = settled;
         return c.json({ decision: decisionSummary(this.#boards, decision) });
       },
     });
@@ -472,14 +454,8 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
 
-      ...buildSupervisorRoutes({
-        workItems,
-        boards: this.#boards,
-        resolveProject: context => this.#resolveProject(loose(context)),
-      }),
-
-      this.#proposalRoute({ verb: 'approve', settle: workItems.approveDeferredDecision.bind(workItems) }),
-      this.#proposalRoute({ verb: 'dismiss', settle: workItems.dismissDeferredDecision.bind(workItems) }),
+      this.#proposalRoute({ verb: 'approve' }),
+      this.#proposalRoute({ verb: 'dismiss' }),
 
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.decisionRetry.path, {
         method: FACTORY_ROUTE_CONTRACTS.decisionRetry.method,
@@ -494,22 +470,15 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           });
           if (!parsedPath.success) return c.json({ error: 'invalid_decision_id' }, 422);
           const { decisionId } = parsedPath.data;
-          await workItems.ensureReady();
-          const current = await workItems.getDeferredDecision(resolved.orgId, resolved.factoryProjectId, decisionId);
-          if (!current || !decisionRetryable(current, false)) {
-            return c.json({ error: 'decision_not_retryable' }, 409);
-          }
-          // A run decided for a phase the card has left would seat the old role on it.
-          if ((await overtakenDecisionIds(workItems, this.#boards, resolved, [current])).size > 0) {
-            return c.json({ error: 'decision_not_retryable' }, 409);
-          }
-          const decision = await workItems.retryDeferredDecision(
-            resolved.orgId,
-            resolved.factoryProjectId,
+          const retried = await retryFactoryDecision({
+            workItems,
+            boards: this.#boards,
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
             decisionId,
-            new Date(),
-          );
-          if (!decision) return c.json({ error: 'decision_not_retryable' }, 409);
+          });
+          if (!retried.ok) return c.json({ error: retried.code }, 409);
+          const { decision } = retried;
           return c.json({ decision: decisionSummary(this.#boards, decision) });
         },
       }),
@@ -526,72 +495,40 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (body === undefined) return c.json({ error: 'Invalid JSON body' }, 400);
           const input = parseCreateWorkItem(body);
           if (!input) return c.json({ error: 'invalid_work_item' }, 400);
-          const boardId = input.board ?? (input.externalSource?.type === 'pull-request' ? 'review' : 'work');
-          const board = this.#boards.get(boardId);
-          if (!board) return c.json({ error: 'invalid_board', message: `Board '${boardId}' is not installed.` }, 422);
-          const initialStages = input.stages ?? [board.initialPhase];
-          if (initialStages.length !== 1 || initialStages[0] !== board.initialPhase) {
-            return c.json(
-              {
-                error: 'governed_transition_required',
-                message: `New work items must enter through the '${board.initialPhase}' phase of board '${boardId}'.`,
-              },
-              409,
-            );
-          }
-
-          await workItems.ensureReady();
           try {
-            const result = await workItems.upsert({
+            const created = await createFactoryWorkItem({
+              workItems,
+              boards: this.#boards,
+              transitionService,
+              audit: auditInput => audit.emit({ context: loose(c), input: auditInput }),
               orgId: resolved.orgId,
               userId: resolved.userId,
               factoryProjectId: resolved.factoryProjectId,
-              input: { ...input, board: boardId, stages: initialStages },
-              reuseMode: 'non-stage',
+              input,
+              origin: auditRequestOrigin(loose(c)),
             });
-            let item = result.item;
-            if (result.created) {
-              if (!transitionService) {
-                await workItems.delete({ orgId: resolved.orgId, id: item.id });
-                return c.json({ error: 'factory_transitions_unavailable' }, 503);
+            switch (created.status) {
+              case 'refused':
+                if (created.code === 'factory_transitions_unavailable') return c.json({ error: created.code }, 503);
+                return c.json(
+                  { error: created.code, message: created.message },
+                  created.code === 'invalid_board' ? 422 : 409,
+                );
+              case 'rejected':
+                return c.json({ status: 'rejected', code: created.code, reason: created.reason }, 422);
+              case 'reused': {
+                // Source-key reuse: the POST updated an existing card, not created one.
+                const { stages: _stages, sessions: _sessions, ...boundedPatch } = input;
+                await this.#auditWorkItemPatch({
+                  context: loose(c),
+                  item: created.item,
+                  patch: boundedPatch as unknown as Record<string, unknown>,
+                });
+                return c.json({ workItem: toWireWorkItem(created.item) });
               }
-              const entered = await transitionService.transition({
-                orgId: resolved.orgId,
-                factoryProjectId: resolved.factoryProjectId,
-                workItemId: item.id,
-                board: boardId,
-                stage: board.initialPhase,
-                expectedRevision: item.revision,
-                actor: { type: 'human', id: resolved.userId },
-                ...auditRequestOrigin(loose(c)),
-                ingress: { type: 'human', identity: `work-item:${item.id}:initial-entry` },
-                cause: 'work_item_created',
-                initialEntry: true,
-              });
-              if (entered.status === 'rejected') {
-                await workItems.delete({ orgId: resolved.orgId, id: item.id });
-                return c.json({ status: 'rejected', code: entered.code, reason: entered.reason }, 422);
-              }
-              item = (await workItems.getForProject(resolved.orgId, resolved.factoryProjectId, item.id)) ?? item;
-              await audit.emit({
-                context: loose(c),
-                input: {
-                  action: 'factory.work_item.created',
-                  factoryProjectId: resolved.factoryProjectId,
-                  targets: [{ type: 'work_item', id: item.id, name: item.title }],
-                  metadata: { externalSource: item.externalSource, stages: item.stages },
-                },
-              });
-            } else {
-              // Source-key reuse: the POST updated an existing card, not created one.
-              const { stages: _stages, sessions: _sessions, ...boundedPatch } = input;
-              await this.#auditWorkItemPatch({
-                context: loose(c),
-                item,
-                patch: boundedPatch as unknown as Record<string, unknown>,
-              });
+              case 'created':
+                return c.json({ workItem: toWireWorkItem(created.item) });
             }
-            return c.json({ workItem: toWireWorkItem(item) });
           } catch (error) {
             if (error instanceof WorkItemRelationError) {
               return c.json({ error: error.code, message: error.message }, 400);

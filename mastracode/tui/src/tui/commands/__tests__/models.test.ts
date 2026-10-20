@@ -224,6 +224,38 @@ describe('handleModelCommand', () => {
     expect(mocks.selectorOptions.title).toBe('Select Anthropic Model');
   });
 
+  it('switches the Factory session model directly without touching local model packs', async () => {
+    const model = { id: 'openai/gpt-5.5', provider: 'openai', modelName: 'gpt-5.5', hasApiKey: true };
+    const ctx = {
+      state: {
+        factory: { projectName: 'mastra', repositorySlug: 'mastra-ai/mastra', branch: 'b', url: 'https://f' },
+        controller: {
+          listAvailableModels: vi.fn(async () => [model]),
+          invalidateAvailableModelsCache: vi.fn(),
+        },
+        session: {
+          model: { get: vi.fn(() => 'anthropic/claude-opus-4-6'), switch: vi.fn(async () => {}) },
+          thread: { getId: vi.fn(() => 'thread-1'), setSetting: vi.fn(), getSetting: vi.fn() },
+        },
+        ui: { hideOverlay: vi.fn() },
+      },
+      updateStatusLine: vi.fn(),
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+
+    const command = handleModelCommand(ctx);
+    await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
+    await mocks.selectorOptions.onSelect(model);
+    await command;
+
+    expect(ctx.state.session.model.switch).toHaveBeenCalledWith('openai/gpt-5.5');
+    expect(ctx.state.session.thread.setSetting).not.toHaveBeenCalled();
+    expect(mocks.saveSettings).not.toHaveBeenCalled();
+    expect(ctx.showError).not.toHaveBeenCalled();
+    expect(ctx.showInfo).toHaveBeenCalledWith('Switched to openai/gpt-5.5');
+  });
+
   it('rejects a typed cross-provider model while a built-in pack is active', async () => {
     const openai = {
       id: 'openai/gpt-5.4',

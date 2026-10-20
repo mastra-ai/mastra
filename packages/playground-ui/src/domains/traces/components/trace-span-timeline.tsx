@@ -1,5 +1,6 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { UISpan } from '../types';
+import { getOverallLatency } from '../utils/span-timing';
 import { SpanRows } from './span-rows';
 import { SpanTimelineRow } from './span-timeline-row';
 import { SpanTypeLegend } from './span-type-legend';
@@ -44,7 +45,7 @@ export function TraceSpanTimeline({
 }: TraceSpanTimelineProps) {
   if (isLoading) return <TraceSpanTreeLoading />;
 
-  const overallLatency = hierarchicalSpans[0]?.latency || 0;
+  const overallLatency = getOverallLatency(hierarchicalSpans);
 
   return (
     <>

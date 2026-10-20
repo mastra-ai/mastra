@@ -10,12 +10,15 @@ import {
   digestBinding,
   findPredicateComplexityIssue,
   formatTraceQuerySchemaIssues,
+  isTraceQuerySortValueFor,
   normalizeTraceQueryTenantScope,
   planSpanQuerySelectionPredicate,
+  TRACE_QUERY_ORDER_FIELDS,
   TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE,
   TraceQueryCursorError,
   TraceQueryValidationError,
   traceQueryScalarPredicateSchema,
+  traceQuerySortValueSchema,
   traceQueryTimeRangeSchema,
 } from './trace-query';
 import type { TraceQueryIssue, TraceQueryPlanOptions, TrustedTraceQueryScalarPredicate } from './trace-query';
@@ -43,7 +46,7 @@ const requestSchema = z
     timeRange: timeRangeSchema,
     where: traceQueryScalarPredicateSchema.optional(),
     orderBy: z
-      .array(z.object({ field: z.enum(['startedAt', 'endedAt']), direction: z.enum(['asc', 'desc']) }).strict())
+      .array(z.object({ field: z.enum(TRACE_QUERY_ORDER_FIELDS), direction: z.enum(['asc', 'desc']) }).strict())
       .length(1)
       .default([{ field: 'startedAt', direction: 'desc' }]),
     page: z
@@ -99,15 +102,35 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
     entityType: z.string().nullable(),
     entityId: z.string().nullable(),
     entityName: z.string().nullable(),
+    // Older adapters omit these fields; keep mixed-version responses readable.
+    entityVersionId: z.string().nullable().default(null),
+    parentEntityType: z.string().nullable().default(null),
+    parentEntityId: z.string().nullable().default(null),
+    parentEntityName: z.string().nullable().default(null),
+    parentEntityVersionId: z.string().nullable().default(null),
+    rootEntityType: z.string().nullable().default(null),
+    rootEntityId: z.string().nullable().default(null),
+    rootEntityName: z.string().nullable().default(null),
+    rootEntityVersionId: z.string().nullable().default(null),
+    threadId: z.string().nullable().default(null),
+    runId: z.string().nullable().default(null),
+    sessionId: z.string().nullable().default(null),
+    userId: z.string().nullable().default(null),
+    requestId: z.string().nullable().default(null),
+    serviceName: z.string().nullable().default(null),
+    experimentId: z.string().nullable().default(null),
+    environment: z.string().nullable().default(null),
+    executionSource: z.string().nullable().default(null),
     model: z.string().nullable(),
     provider: z.string().nullable(),
     inputPreview: previewSchema,
-    inputTruncated: z.boolean(),
     outputPreview: previewSchema,
-    outputTruncated: z.boolean(),
     errorPreview: previewSchema,
-    errorTruncated: z.boolean(),
-    cost: spanQueryCostSchema,
+    /**
+     * Time from the span's start to its first model response chunk; `null` when it never
+     * streamed one. Absent when the store lacks the `trace-query-time-to-first-chunk` feature.
+     */
+    timeToFirstChunkMs: z.number().nullable().optional(),
   })
   .superRefine((row, context) => {
     const duration = Date.parse(row.endedAt) - Date.parse(row.startedAt);
@@ -119,15 +142,6 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
         path: ['durationMs'],
         message: 'Duration must match the completed span timestamps',
       });
-    }
-    for (const field of ['input', 'output', 'error'] as const) {
-      if (row[`${field}Preview`] === null && row[`${field}Truncated`]) {
-        context.addIssue({
-          code: 'custom',
-          path: [`${field}Truncated`],
-          message: 'An absent preview cannot be truncated',
-        });
-      }
     }
   });
 
@@ -166,7 +180,7 @@ export type SpanQueryIdentity = z.infer<typeof spanQueryIdentitySchema>;
 export type SpanQueryRow = z.infer<typeof spanQueryRowSchema>;
 export type SpanQueryResponse = z.infer<typeof spanQueryResponseSchema>;
 
-const cursorValuesSchema = spanQueryIdentitySchema.extend({ sortValue: timestamp }).strict();
+const cursorValuesSchema = spanQueryIdentitySchema.extend({ sortValue: traceQuerySortValueSchema }).strict();
 const cursorEnvelopeSchema = z
   .object({
     version: z.literal(1),
@@ -180,10 +194,11 @@ const cursorEnvelopeSchema = z
  * Ordering semantics every store compiler must implement:
  * - Sort by `orderBy.field` in the requested direction, then break ties by
  *   organizationId, resourceId, traceId, and spanId, in that order, all ascending.
+ *   Empty `timeToFirstChunkMs` values sort last in both directions and tie with each other.
  * - Compare non-null IDs lexicographically by UTF-8 bytes, without locale collation.
  *   Null organizationId/resourceId values sort last and compare equal to other nulls.
  * - Resume strictly after the cursor using that same complete ordering. Apply the
- *   requested direction only to the timestamp; identity tie-breaks remain ascending.
+ *   requested direction only to the sort value; identity tie-breaks remain ascending.
  *   Use null-safe equality/comparison for tenant fields, not a raw nullable SQL tuple.
  * - Select and page unique current span identities before hydrating previews or cost.
  */
@@ -238,7 +253,13 @@ export function planSpanQuery(input: unknown, options: TraceQueryPlanOptions = {
     const envelope = cursorEnvelopeSchema.safeParse(decoded);
     if (!envelope.success) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
     if (envelope.data.binding !== binding) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
-    cursor = { ...envelope.data.values, sortValue: new Date(envelope.data.values.sortValue).toISOString() };
+    const { sortValue } = envelope.data.values;
+    if (!isTraceQuerySortValueFor(orderBy.field, sortValue))
+      throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+    cursor = {
+      ...envelope.data.values,
+      sortValue: typeof sortValue === 'string' ? new Date(sortValue).toISOString() : sortValue,
+    };
     if (
       scope &&
       (cursor.organizationId !== scope.organizationId ||
@@ -288,7 +309,7 @@ export const SPAN_QUERY_MAX_COST_METRICS = 50_000;
  * A provider-supplied query_total carrier replaces both directional totals.
  * Missing means no token metrics have arrived; partial/unpriced/ambiguous cost is unavailable.
  */
-export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): SpanQueryRow['cost'] {
+export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): z.infer<typeof spanQueryCostSchema> {
   if (!metrics.length) return { state: 'missing' };
   const names = ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'];
   const totals = metrics.filter(metric => names.includes(metric.name));
@@ -321,10 +342,7 @@ export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): SpanQueryR
 }
 
 /** @internal Selected page metadata; adapters normalize dates to ISO strings. */
-export type SpanQuerySelectedRow = Omit<
-  SpanQueryRow,
-  'inputPreview' | 'inputTruncated' | 'outputPreview' | 'outputTruncated' | 'errorPreview' | 'errorTruncated' | 'cost'
->;
+export type SpanQuerySelectedRow = Omit<SpanQueryRow, 'inputPreview' | 'outputPreview' | 'errorPreview'>;
 
 /**
  * @internal Previews built by `buildPreview`: the stored preview columns, or for rows written
@@ -341,16 +359,10 @@ export function buildSpanQueryResponse(
   plan: TrustedSpanQueryPlan,
   selected: SpanQuerySelectedRow[],
   payloads: SpanQueryPayload[],
-  metrics: SpanQueryCostMetric[],
+  // Older adapters pass metrics as a fourth argument. Keep the call shape, without returning costs.
+  _metrics?: SpanQueryCostMetric[],
 ): SpanQueryResponse {
   const byIdentity = new Map(payloads.map(payload => [spanQueryIdentityKey(payload), payload]));
-  const costs = new Map<string, SpanQueryCostMetric[]>();
-  for (const metric of metrics) {
-    const key = spanQueryIdentityKey(metric);
-    const group = costs.get(key) ?? [];
-    group.push(metric);
-    costs.set(key, group);
-  }
   const visible = selected.slice(0, plan.limit);
   const last = visible.at(-1);
   return spanQueryResponseSchema.parse({
@@ -363,12 +375,8 @@ export function buildSpanQueryResponse(
       return {
         ...row,
         inputPreview: input.value,
-        inputTruncated: input.truncated,
         outputPreview: output.value,
-        outputTruncated: output.truncated,
         errorPreview: error.value,
-        errorTruncated: error.truncated,
-        cost: resolveSpanQueryCost(costs.get(key) ?? []),
       };
     }),
     page: {
@@ -379,7 +387,7 @@ export function buildSpanQueryResponse(
               resourceId: last.resourceId,
               traceId: last.traceId,
               spanId: last.spanId,
-              sortValue: last[plan.orderBy.field],
+              sortValue: last[plan.orderBy.field] ?? null,
             })
           : null,
     },

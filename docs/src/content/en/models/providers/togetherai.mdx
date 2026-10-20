@@ -7,7 +7,7 @@ description: "Browse Together AI model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/togetherai.svg" alt="Together AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Together AI
 
-Access 29 Together AI models through Mastra's model router. Authentication is handled automatically using the `TOGETHER_API_KEY` environment variable.
+Access 32 Together AI models through Mastra's model router. Authentication is handled automatically using the `TOGETHER_API_KEY` environment variable.
 
 Learn more in the [Together AI documentation](https://docs.together.ai/docs/serverless-models).
 
@@ -100,6 +100,18 @@ for await (const chunk of stream) {
     "outputCost": 1.04
   },
   {
+    "model": "togetherai/meta-models/Muse-Spark-Open-816B-A42B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.25,
+    "outputCost": 4.25
+  },
+  {
     "model": "togetherai/MiniMaxAI/MiniMax-M2.7",
     "imageInput": false,
     "audioInput": false,
@@ -148,6 +160,18 @@ for await (const chunk of stream) {
     "outputCost": 3.6
   },
   {
+    "model": "togetherai/nvidia/NVIDIA-Nemotron-3.5-Super-VL",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.15,
+    "outputCost": 0.5
+  },
+  {
     "model": "togetherai/openai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
@@ -191,7 +215,7 @@ for await (const chunk of stream) {
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 500000,
+    "maxOutput": 65536,
     "inputCost": 0.5,
     "outputCost": 3
   },
@@ -203,9 +227,21 @@ for await (const chunk of stream) {
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 1000000,
-    "maxOutput": 500000,
+    "maxOutput": 131072,
     "inputCost": 1.25,
     "outputCost": 3.75
+  },
+  {
+    "model": "togetherai/reflection/Beam-1.0-501B-A23B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.4,
+    "outputCost": 1.2
   },
   {
     "model": "togetherai/thinkingmachines/Inkling",

@@ -2,8 +2,10 @@
 
 **Status:** Implemented; PostgreSQL verified; controlled voice-call check pending
 
-**Date:** October 13, 2026  
-**Package:** `@mastra/livekit`  
+**Date:** October 13, 2026
+
+**Package:** `@mastra/livekit`
+
 **Audience:** Mastra maintainers and integration developers
 
 ## Approved implementation adjustments

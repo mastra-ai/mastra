@@ -580,9 +580,9 @@ describe('Account presets', () => {
       sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-setup');
       const user = userEvent.setup();
       renderOnboarding();
+      expect(await screen.findByRole('radio', { name: 'Company work · personal sessions' })).toBeChecked();
       if (scope === 'user') await user.click(await screen.findByRole('radio', { name: 'Personal accounts' }));
-      if (scope === 'hybrid')
-        await user.click(await screen.findByRole('radio', { name: 'Company work · personal sessions' }));
+      if (scope === 'factory') await user.click(await screen.findByRole('radio', { name: 'Company account' }));
       await user.click(await screen.findByRole('button', { name: 'Continue' }));
       const connectWithKey = async (providerName: string) => {
         await user.click(await screen.findByRole('button', { name: providerName }));

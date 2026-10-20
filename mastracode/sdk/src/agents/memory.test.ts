@@ -42,6 +42,7 @@ vi.mock('../utils/project.js', () => ({
 vi.mock('./model.js', async () => ({
   getActiveMemoryRoute: (await vi.importActual<typeof import('./model.js')>('./model.js')).getActiveMemoryRoute,
   resolveModel: resolveModelMock,
+  canUseProvider: () => false,
 }));
 
 vi.mock('../onboarding/settings.js', () => ({
@@ -748,6 +749,18 @@ describe('getDynamicMemory', () => {
     } finally {
       process.off('unhandledRejection', unhandled);
     }
+  });
+
+  it('always gives Factory sessions thread-scoped OM, whatever the session state or config says', async () => {
+    getOmScopeMock.mockReturnValue('resource');
+    const { config } = await createMemoryConfig({
+      projectPath: '/tmp/project',
+      factoryProjectId: 'factory-1',
+      omScope: 'resource',
+    });
+
+    expect(getOmScopeMock).not.toHaveBeenCalled();
+    expect(config.options.observationalMemory.scope).toBe('thread');
   });
 
   it('uses controller state overrides and disables async buffering for resource-scoped OM', async () => {

@@ -282,6 +282,17 @@ function getApiKeyEnvVar(providerConfig: Pick<ProviderConfig, 'apiKeyEnvVar'> | 
   return Array.isArray(envVars) ? envVars[0] : envVars;
 }
 
+/**
+ * Whether the process environment has a key for a models.dev provider. Checks every
+ * env var the registry lists, as the models.dev gateway does when `resolveModel`
+ * gets no gateway credential (e.g. `GOOGLE_API_KEY` or `GOOGLE_GENERATIVE_AI_API_KEY`).
+ */
+export function hasProviderEnvironmentKey(providerId: string): boolean {
+  const envVars = (PROVIDER_REGISTRY as Record<string, ProviderConfig>)[providerId]?.apiKeyEnvVar;
+  if (!envVars) return false;
+  return (Array.isArray(envVars) ? envVars : [envVars]).some(envVar => Boolean(process.env[envVar]?.trim()));
+}
+
 export class MastraCodeGateway extends MastraModelGateway {
   readonly id = MASTRACODE_GATEWAY_ID;
   readonly name = 'MastraCode Gateway';

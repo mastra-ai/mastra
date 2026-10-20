@@ -7,10 +7,16 @@ import { relationshipLabel } from '../../factory/services/relationships';
 import type { WorkItem } from '../../factory/services/workItems';
 import { isTerminalStage } from '../../factory/stages';
 import type { SessionPreviewDetails } from '../components/SessionPreviewCard';
-import { getFactorySessionKind, getSessionOwnerDetails, getUserSessionLabel } from './sessionPresentation';
-import type { SessionOwnerDetails, SessionViewerProfile } from './sessionPresentation';
+import {
+  getFactorySessionKind,
+  getFactorySessionSource,
+  getSessionOwnerDetails,
+  getUserSessionLabel,
+} from './sessionPresentation';
+import type { SessionOwnerDetails, SessionSource, SessionViewerProfile } from './sessionPresentation';
 import { sessionRowStatus } from './sessionStatus';
 import type { SessionRowStatus } from './sessionStatus';
+import { SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
 import type { FactoryUserSession } from './user-sessions';
 
 export type SessionActivityStatus = 'waiting' | 'working' | 'initializing' | 'idle' | 'done';
@@ -53,6 +59,7 @@ export interface SessionListRow {
   origin: 'factory' | 'user';
   board: string | undefined;
   kind: SessionPreviewDetails['kind'];
+  source: SessionSource;
   name: string;
   url: string;
   openPath: string;
@@ -60,6 +67,7 @@ export interface SessionListRow {
   status: SessionActivityStatus;
   owner: SessionOwnerDetails;
   ownedByViewer: boolean;
+  canRegenerateTitle: boolean;
   itemLabel?: string;
   itemTitle?: string;
   threadId?: string;
@@ -105,7 +113,7 @@ function reachedTerminalPhase(item: WorkItem, boards: readonly InstalledBoardInf
 
 function factorySessionName(session: FactoryUserSession, item: WorkItem | undefined): string {
   if (session.title !== undefined) return session.title;
-  if (session.branch.startsWith('slack/') && item?.title !== undefined) return item.title;
+  if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) && item?.title !== undefined) return item.title;
   return session.branch;
 }
 
@@ -157,11 +165,13 @@ export function buildFactorySessionRow({
   viewer,
 }: FactorySessionRowInput): SessionListRow {
   const url = `/factories/${factoryId}/workspaces/${session.sessionId}`;
+  const ownedByViewer = isOwnedByViewer(session, viewer);
   return {
     session,
     origin: 'factory',
     board: sessionBoard(session, item),
     kind: getFactorySessionKind(session, item) === 'review' ? 'Review session' : 'Work session',
+    source: getFactorySessionSource(session, item),
     name: factorySessionName(session, item),
     url,
     openPath: `${url}/threads/${session.sessionId}`,
@@ -173,7 +183,8 @@ export function buildFactorySessionRow({
       settled: isSettled(item, boards, pullRequest),
     }),
     owner: getSessionOwnerDetails(session, viewer),
-    ownedByViewer: isOwnedByViewer(session, viewer),
+    ownedByViewer,
+    canRegenerateTitle: ownedByViewer && session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX),
     itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
     itemTitle: item?.title,
     threadId,
@@ -202,11 +213,13 @@ export function buildUserSessionRow({
   viewer,
 }: UserSessionRowInput): SessionListRow {
   const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
+  const ownedByViewer = isOwnedByViewer(session, viewer);
   return {
     session,
     origin: 'user',
     board: undefined,
     kind: 'User session',
+    source: 'user',
     name: getUserSessionLabel(session),
     url,
     openPath: url,
@@ -218,7 +231,8 @@ export function buildUserSessionRow({
       settled: false,
     }),
     owner: getSessionOwnerDetails(session, viewer),
-    ownedByViewer: isOwnedByViewer(session, viewer),
+    ownedByViewer,
+    canRegenerateTitle: ownedByViewer,
     pinned,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
@@ -231,7 +245,6 @@ function pullRequestMergeTarget({ session, threadId, pullRequest }: SessionListR
     {
       sessionId: session.sessionId,
       threadId,
-      projectPath: session.sessionId,
       pullRequestNumber: pullRequest.number,
       provider: pullRequest.provider,
       knownMerged: pullRequest.knownMerged,

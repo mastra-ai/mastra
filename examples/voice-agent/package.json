@@ -33,7 +33,7 @@
     "@mastra/observability": "latest",
     "livekit-server-sdk": "^2.19.1",
     "mastra": "latest",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

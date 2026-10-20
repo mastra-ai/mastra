@@ -153,4 +153,53 @@ describeForAllEngines('AIMock loop scenario: maxSteps edge cases', engine => {
     // Should stop at 2 (the earlier condition)
     expect(requests).toHaveLength(2);
   });
+
+  it('honors a per-call maxSteps above the default step limit', async () => {
+    const tickTool = createTool({
+      id: 'tick',
+      description: 'Advance a counter.',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ count: z.number() }),
+      execute: async () => ({ count: 1 }),
+    });
+
+    const { requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Keep ticking.',
+      tools: { tick: tickTool },
+      maxSteps: 7,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'call_tick', name: 'tick', arguments: {} }] });
+      },
+    });
+
+    expect(requests).toHaveLength(7);
+  });
+
+  it('awaits an async stopWhen predicate', async () => {
+    const tickTool = createTool({
+      id: 'tick',
+      description: 'Advance a counter.',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ count: z.number() }),
+      execute: async () => ({ count: 1 }),
+    });
+
+    const { requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Keep ticking.',
+      tools: { tick: tickTool },
+      stopWhen: async ({ steps }) => {
+        await new Promise(resolve => setTimeout(resolve, 5));
+        return steps.length >= 2;
+      },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'call_tick', name: 'tick', arguments: {} }] });
+      },
+    });
+
+    expect(requests).toHaveLength(2);
+  });
 });

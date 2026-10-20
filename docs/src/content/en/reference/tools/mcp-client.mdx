@@ -70,7 +70,7 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
 - If `command` is provided, it uses the Stdio transport.
 - If `url` is provided, it uses the Streamable HTTP transport.
 
-The client speaks the MCP `2026-07-28` revision. On connect it asks the server which revisions it offers (`server/discover`) and falls back to the pre-2026 `initialize` handshake for servers that haven't upgraded, so tools, resources and prompts keep working against either. Features the older revisions lack (`resources.subscribe()`, `inputRequests`) fail with an error naming the negotiated revision. Set `protocolVersion` to skip the probe.
+The client speaks the MCP `2026-07-28` revision. On connect it asks the server which revisions it offers (`server/discover`) and falls back to the pre-2026 `initialize` handshake for servers that haven't upgraded, so tools, resources and prompts keep working against either. Features the older revisions lack (`resources.subscribe()`, `inputRequests`) fail with an error naming the negotiated revision. `onListChanged()` handlers work against either revision, since older servers send list-changed notifications without a `subscriptions/listen` stream. Set `protocolVersion` to skip the probe.
 
 <br />
 
@@ -233,7 +233,7 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
     isOptional: true,
     defaultValue: "'throw'",
     description:
-      "How to handle tool execution failures the server reports in-band with `isError: true`. `'throw'` raises a `MastraError` carrying the server's error text, so the failure reaches tool spans, stream chunks, scorers, and the model. `'return'` resolves with the raw result and ignores `isError`.",
+      "How to handle tool execution failures the server reports in-band with `isError: true`. `'throw'` raises a `MastraError` carrying the server's error text, so the failure reaches tool spans, stream chunks, scorers, and the model. Any `structuredContent` is kept on `error.details.structuredContent` as a JSON string. `'return'` resolves with the full `CallToolResult` (`isError`, `content`, and `structuredContent`) instead of throwing.",
   },
   {
     name: 'jsonSchemaValidator',

@@ -89,9 +89,9 @@ describe('workspace repository groups', () => {
       expect.stringContaining('mastra-ai/mastra-website'),
     ]);
     // The icon follows the factory's provider for the slug; an unknown slug gets the GitHub icon.
-    expect(within(groups[0]!).getByTestId('repository-provider-github')).toBeInTheDocument();
-    expect(within(groups[1]!).getByTestId('repository-provider-gitlab')).toBeInTheDocument();
-    expect(within(groups[2]!).getByTestId('repository-provider-github')).toBeInTheDocument();
+    expect(within(groups[0]).getByTestId('repository-provider-github')).toBeInTheDocument();
+    expect(within(groups[1]).getByTestId('repository-provider-gitlab')).toBeInTheDocument();
+    expect(within(groups[2]).getByTestId('repository-provider-github')).toBeInTheDocument();
     expect(groups[0]).toHaveTextContent('2 files');
     expect(groups[0]).toHaveTextContent('+6');
     expect(groups[0]).toHaveTextContent('−2');
@@ -144,9 +144,9 @@ describe('workspace repository groups', () => {
     expect(treeItemIds(panel)).toEqual(['platform/proof.txt', 'mastra-website/proof.txt']);
     expect(within(panel).queryByRole('treeitem', { name: /^platform$/ })).not.toBeInTheDocument();
     const artifacts = within(panel).getByRole('button', { name: '.artifacts' });
-    expect(artifacts.compareDocumentPosition(groups[2]!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(artifacts.compareDocumentPosition(groups[2]) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
 
-    await user.click(within(panel).getAllByText('proof.txt')[0]!);
+    await user.click(within(panel).getAllByText('proof.txt')[0]);
     expect(onFileSelect).toHaveBeenCalledWith('platform/proof.txt');
   });
 

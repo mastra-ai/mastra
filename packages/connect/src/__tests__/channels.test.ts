@@ -99,10 +99,8 @@ let warnSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-  // Teams' wrapper fail-fast requires MASTRA_ENCRYPTION_KEY at construction
-  // time to prevent unencrypted install-store persistence. Set a fake key so
-  // the shared setup here doesn't trip that guard; the coming-soon-key test
-  // unsets it explicitly to exercise the guard.
+  // With MASTRA_ENCRYPTION_KEY set, the Teams wrapper passes no derived
+  // fallback key to the provider. The derived-key tests unset it explicitly.
   vi.stubEnv('MASTRA_ENCRYPTION_KEY', 'test-encryption-key');
   vi.resetModules();
 });
@@ -548,11 +546,13 @@ describe('channels()', () => {
     }
   });
 
-  it('skips the Teams channel with an actionable warning when MASTRA_ENCRYPTION_KEY is unset', async () => {
-    // Defense-in-depth for the Teams install store's at-rest persistence:
-    // without an encryption key, delegated provisioning would silently
-    // downgrade to plaintext. The wrapper refuses to construct in that
-    // shape so the miss is loud instead of subtle.
+  it('derives a Teams install-store encryption key from the platform access token when MASTRA_ENCRYPTION_KEY is unset', async () => {
+    // The Teams install store must never persist bot secrets in plaintext.
+    // Without MASTRA_ENCRYPTION_KEY, the key is derived (HKDF) from the
+    // platform access token — real secret material, never a baked-in
+    // constant — and a one-time warning fires while a Teams connection is
+    // active so operators know rotation of the platform token orphans
+    // stored bot credentials.
     vi.stubEnv('MASTRA_ENCRYPTION_KEY', '');
     const fetchMock = platformFetch({
       connections: [makeConnection({ id: 'c_teams', integrationId: 'microsoft-teams' })],
@@ -561,8 +561,48 @@ describe('channels()', () => {
     const channelsFn = await importChannels();
     const resolver = await channelsFn(options(fetchMock));
     const providers = await resolver();
-    expect(providers['microsoft-teams']).toBeUndefined();
+    expect(providers['microsoft-teams']).toBeDefined();
+
+    const key = teamsConfig().encryptionKey;
+    expect(key).toBeTypeOf('string');
+    expect(key).not.toBe('');
+    // Derived, not the raw platform token.
+    expect(key).not.toBe(TOKEN);
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('MASTRA_ENCRYPTION_KEY is not set'));
+
+    // The fallback warning fires once, not on every resolution.
+    warnSpy.mockClear();
+    await resolver();
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('MASTRA_ENCRYPTION_KEY'));
+  });
+
+  it('passes no encryption key to TeamsProvider when MASTRA_ENCRYPTION_KEY is set', async () => {
+    // With the env var present the provider reads it itself; the wrapper
+    // must not inject a derived key that would shadow it.
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_teams', integrationId: 'microsoft-teams' })],
+      credentials: { c_teams: { type: 'oauth2', accessToken: 'graph-token', expiresAt: null } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock));
+    await resolver();
+    expect(teamsConfig().encryptionKey).toBeUndefined();
+  });
+
+  it('does not warn about MASTRA_ENCRYPTION_KEY when no Teams connection is active', async () => {
+    // A project that doesn't use the Teams channel must never see the
+    // Teams fallback warning.
+    vi.stubEnv('MASTRA_ENCRYPTION_KEY', '');
+    const fetchMock = platformFetch({
+      connections: [makeConnection({ id: 'c_tg', integrationId: 'telegram' })],
+      credentials: { c_tg: { type: 'api_key', apiKey: '123456:bot-token' } },
+    });
+    const channelsFn = await importChannels();
+    const resolver = await channelsFn(options(fetchMock));
+    const providers = await resolver();
+    expect(providers['microsoft-teams']).toBeUndefined();
+    expect(providers['telegram']).toBeDefined();
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('MASTRA_ENCRYPTION_KEY'));
   });
 
   it('builds a TeamsProvider whose tokenResolver serves Graph tokens from the platform credential', async () => {

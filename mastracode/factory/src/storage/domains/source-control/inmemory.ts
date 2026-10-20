@@ -423,10 +423,25 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       // Mirrors base.ts: a session whose project-repository link is gone does not resolve.
       return this.projectRepositoriesRows.some(link => link.id === row.projectRepositoryId) ? row : null;
     },
+    listByOrigin: async ({ orgId, originSessionId }: { orgId: string; originSessionId: string }) =>
+      this.sessionsRows.filter(
+        row =>
+          row.orgId === orgId &&
+          row.originSessionId === originSessionId &&
+          // Mirrors base.ts: only sessions on this integration's links resolve.
+          this.projectRepositoriesRows.some(link => link.id === row.projectRepositoryId),
+      ),
     rename: async ({ sessionId, title }: { sessionId: string; title: string }): Promise<void> => {
       const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
       if (row) {
         row.title = title;
+        row.updatedAt = new Date();
+      }
+    },
+    setOriginMuted: async ({ sessionId, muted }: { sessionId: string; muted: boolean }): Promise<void> => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row) {
+        row.originMutedAt = muted ? new Date() : null;
         row.updatedAt = new Date();
       }
     },
@@ -469,12 +484,16 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         throw new UniqueViolationError('Source-control session branch already exists in this factory');
       }
       const now = new Date();
+      const { origin, ...fields } = input;
       const session: SourceControlSession = {
         id: globalThis.crypto.randomUUID(),
-        ...input,
+        ...fields,
         factoryProjectId,
         title: input.title ?? null,
         visibility: input.visibility ?? 'org',
+        originSessionId: origin?.sessionId ?? null,
+        originThreadId: origin?.threadId ?? null,
+        originMutedAt: null,
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,

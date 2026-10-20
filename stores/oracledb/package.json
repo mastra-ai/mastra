@@ -1,6 +1,6 @@
 {
   "name": "@mastra/oracledb",
-  "version": "0.5.3-alpha.0",
+  "version": "0.5.4-alpha.0",
   "description": "Oracle Database provider for Mastra storage and vector retrieval",
   "type": "module",
   "main": "dist/index.js",
@@ -28,7 +28,7 @@
     "test:integration": "pnpm test:storage-integration && pnpm test:vector-integration",
     "posttest:integration": "docker compose down -v",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
+    "lint": "oxlint --type-aware .",
     "test:vector-integration": "RUN_ORACLE_VECTOR_INTEGRATION=true vitest run src/vector/index.integration.test.ts",
     "test:storage-integration": "RUN_ORACLE_STORAGE_INTEGRATION=true vitest run --fileParallelism=false src/storage/index.test.ts src/storage/index.integration.test.ts src/storage/db/run-fencing.integration.test.ts"
   },
@@ -45,7 +45,6 @@
     "@types/oracledb": "6.5.2",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.4.1",
     "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",

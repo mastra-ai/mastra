@@ -94,7 +94,10 @@ type ActivePhaseSnapshotValue = ActivePhaseSnapshotBase & {
 
 type PhaseSnapshotValue = ActivePhaseSnapshotValue | { bindingId?: string; status: 'none' };
 
-function reviewRuntimeFromRequestContext(requestContext: ComputeStateSignalArgs['requestContext']): RuntimeSnapshot {
+function reviewRuntimeFromRequestContext(
+  requestContext: ComputeStateSignalArgs['requestContext'],
+  factoryThinkingLevel: ThinkingLevel | undefined,
+): RuntimeSnapshot {
   if (!requestContext || typeof requestContext.get !== 'function') {
     throw new Error('Factory review phase requires a controller request context.');
   }
@@ -103,7 +106,10 @@ function reviewRuntimeFromRequestContext(requestContext: ComputeStateSignalArgs[
   if (!modelId) {
     throw new Error('Factory review phase requires a selected session model.');
   }
-  return { modelId, thinkingLevel: resolveRequestThinkingLevel({ state: context?.state }) };
+  return {
+    modelId,
+    thinkingLevel: resolveRequestThinkingLevel({ state: context?.state }, undefined, factoryThinkingLevel),
+  };
 }
 
 function workItemSourceKey(item: WorkItemRow): string | null {
@@ -269,6 +275,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         requestContext: ProcessInputStepArgs['requestContext'];
         binding: FactoryRunBindingRecord | null;
       }) => Promise<void>;
+      /** The Factory's stored thinking default, used when the session has not picked a level. */
+      factoryThinkingLevel?: (factoryProjectId: string) => Promise<ThinkingLevel>;
       transitionService?: Pick<FactoryTransitionService, 'transition'>;
       messageReader?: PersistedMessageReader;
       recordPullRequestProvenance?: (input: {
@@ -409,7 +417,14 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     };
     const value: ActivePhaseSnapshotValue =
       board === 'review'
-        ? { ...baseValue, board, ...reviewRuntimeFromRequestContext(args.requestContext) }
+        ? {
+            ...baseValue,
+            board,
+            ...reviewRuntimeFromRequestContext(
+              args.requestContext,
+              await this.options.factoryThinkingLevel?.(binding.factoryProjectId),
+            ),
+          }
         : { ...baseValue, board };
     const cacheKey = await phaseCacheKey(value, linked);
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
@@ -608,6 +623,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       decisions: decisions.map(entry => ({ ...entry })),
       causalChain: [],
       now: new Date(),
+      // The bound agent's own tool call carries the same consent as its governed moves.
+      consentedBy: `agent:${binding.id}`,
     });
     if (committed.status !== 'committed' || !this.options.transitionService) return;
     for (const entry of decisions) {

@@ -163,25 +163,19 @@
     "zai-org/glm-4.7-flash"
   ],
   "reasoning": {
-    "gemini-2.5-flash-lite-preview-06-17": [
+    "gemini-2.5-pro-preview-06-05": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "gemini-2.5-flash-lite": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
     "gemini-2.5-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "gemini-2.5-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "gemini-2.5-flash-preview-05-20": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
@@ -204,13 +198,19 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "gemini-2.5-pro-preview-06-05": [
+    "gemini-2.5-flash-preview-05-20": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "gemini-2.5-flash-lite": [
+    "gemini-2.5-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "gemini-2.5-flash-lite-preview-06-17": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
@@ -230,16 +230,16 @@
         "max": 262143
       }
     ],
-    "zai-org/glm-4.5": [
-      {
-        "type": "toggle"
-      }
-    ],
     "minimax/minimax-m2.1": [
       {
         "type": "budget_tokens",
         "min": 1024,
         "max": 131071
+      }
+    ],
+    "zai-org/glm-4.5": [
+      {
+        "type": "toggle"
       }
     ]
   }

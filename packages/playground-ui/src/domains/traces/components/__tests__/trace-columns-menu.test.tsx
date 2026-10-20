@@ -44,6 +44,7 @@ describe('TraceColumnsMenu', () => {
 
       expect(await checked('Primitive type')).toBe('true');
       expect(await checked('Input')).toBe('true');
+      expect(await checked('Output')).toBe('true');
       expect(await checked('Duration')).toBe('true');
       expect(await checked('Estimated cost')).toBe('true');
       expect(await checked('Input tokens')).toBe('false');
@@ -57,6 +58,15 @@ describe('TraceColumnsMenu', () => {
       fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Duration' }));
 
       expect(defaultProps.onToggleColumn).toHaveBeenCalledWith('duration');
+    });
+
+    it('lets the user toggle the Output column', async () => {
+      render(<TraceColumnsMenu {...defaultProps} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Output' }));
+
+      expect(defaultProps.onToggleColumn).toHaveBeenCalledWith('output');
     });
 
     it('resets on request', async () => {

@@ -54,6 +54,26 @@ describe('groupSessionRows by board', () => {
     ]);
   });
 
+  it('shows Slack-origin user sessions together, separate from web sessions and boards', () => {
+    const groups = groupRows(
+      [
+        userRow('web-1'),
+        userRow('slack-1', { branch: 'slack/123.456' }),
+        workRow,
+        userRow('slack-2', { branch: 'slack/789.012' }),
+      ],
+      'board',
+      builtinContext,
+      [],
+    );
+
+    expect(groupSummary(groups)).toEqual([
+      { label: 'Work', sessionIds: ['work-1'] },
+      { label: 'User', sessionIds: ['web-1'] },
+      { label: 'Slack', sessionIds: ['slack-1', 'slack-2'] },
+    ]);
+  });
+
   it('names a board missing from the catalog after its id and places it before User', () => {
     const groups = groupRows(
       [userRow('user-1'), opsRow, releaseRow],
@@ -91,7 +111,7 @@ describe('groupSessionRows by board', () => {
 
     const ordered = orderGroupHeadings(defaults, ['user', 'board:gone', 'board:review']);
 
-    expect(ordered.map(heading => heading.label)).toEqual(['User', 'Review', 'Work', 'Release Preview']);
+    expect(ordered.map(heading => heading.label)).toEqual(['User', 'Review', 'Work', 'Release Preview', 'Slack']);
   });
 });
 

@@ -5,7 +5,7 @@ import { createSignal } from '../../agent/signals';
 import { recordTerminalErrorMessage } from '../../loop/shared/record-terminal-error-message';
 import { MemoryRunState } from '../../memory';
 import type { MemoryRuntimeContext } from '../../memory';
-import { RequestContext } from '../../request-context';
+import { MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY, RequestContext } from '../../request-context';
 import { MemoryStorage } from '../../storage';
 import type { StorageListThreadsInput, StorageListThreadsOutput } from '../../storage/types';
 
@@ -214,6 +214,59 @@ describe('MessageHistory', () => {
       }
 
       expect(listMessages).toHaveBeenCalledTimes(1);
+    });
+
+    it('loads continuation tool-call messages that fall outside the history window', async () => {
+      const toolMessage: MastraDBMessage = {
+        id: 'tool-msg',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'call_1', toolName: 'slowAdd', args: {}, result: 3 },
+            },
+          ],
+        },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 10_000),
+      };
+      const later: MastraDBMessage[] = [1, 2, 3].map(i => ({
+        id: `later-${i}`,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: `later ${i}` }] },
+        threadId: 'thread-1',
+        createdAt: new Date(Date.now() - 5_000 + i),
+      }));
+      mockStorage.setMessages([toolMessage, ...later]);
+      processor = new MessageHistory({ storage: mockStorage, lastMessages: 2 });
+
+      const load = async (ids?: string[]) => {
+        const requestContext = createRuntimeContextWithMemory('thread-1');
+        if (ids) requestContext.set(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY, ids);
+        const messageList = new MessageList();
+        await processor.processInput({ messages: [], messageList, abort: mockAbort, requestContext });
+        return messageList.get.all.db().map(m => m.id);
+      };
+
+      expect(await load()).toEqual(['later-2', 'later-3']);
+      expect(await load(['call_1'])).toEqual(['tool-msg', 'later-2', 'later-3']);
+      expect(await load(['call_unknown'])).toEqual(['later-2', 'later-3']);
+
+      // With a token budget the pinned message wins over the oldest unpinned history,
+      // and is skipped when it cannot fit at all.
+      const tokenProcessor = (toolTokens: number) =>
+        new MessageHistory({
+          storage: mockStorage,
+          lastMessages: 2,
+          tokenLimit: { maxTokens: 7, atMaxRemoveTokens: 1 },
+          tokenCounter: { countMessage: (m: MastraDBMessage) => (m.id === 'tool-msg' ? toolTokens : 1) },
+        });
+      processor = tokenProcessor(5);
+      expect(await load(['call_1'])).toEqual(['tool-msg', 'later-3']);
+      processor = tokenProcessor(7);
+      expect(await load(['call_1'])).toEqual(['later-2', 'later-3']);
     });
 
     it('should merge historical messages with new messages', async () => {
@@ -605,6 +658,58 @@ describe('MessageHistory', () => {
       // System message should NOT be saved
       expect(mockStorage.saveMessages).toHaveBeenCalledWith({
         messages: expect.not.arrayContaining([expect.objectContaining({ role: 'system' })]),
+      });
+    });
+
+    it('persists an accumulated response as one message when processors use an iteration-split view', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage });
+      const messageList = new MessageList({ generateMessageId: () => 'earlier-response' }).add(
+        {
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'reasoning', reasoning: 'thinking', details: [] },
+              { type: 'text', text: 'answer' },
+            ],
+          },
+          id: 'response',
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+        },
+        'response',
+      );
+      messageList.splitResponseMessageAtPartOffset('response', 1);
+
+      const result = await processor.processOutputResult({
+        messageList,
+        messages: messageList.get.response.db(),
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      expect(result.get.response.db()).toHaveLength(2);
+      expect(mockStorage.saveMessages).toHaveBeenCalledWith({
+        messages: [
+          expect.objectContaining({
+            id: 'response',
+            content: expect.objectContaining({
+              parts: [
+                expect.objectContaining({ type: 'reasoning', reasoning: 'thinking' }),
+                expect.objectContaining({ type: 'text', text: 'answer' }),
+              ],
+            }),
+          }),
+        ],
       });
     });
 

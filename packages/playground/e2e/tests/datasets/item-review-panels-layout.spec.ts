@@ -11,6 +11,11 @@ function card(panel: Locator, inline = false) {
  * On desktop the experiment result docks inline in the route side panel (a
  * named region); narrower screens keep the drawer dialog.
  */
+/** On desktop the dataset item docks inline in the route side panel. */
+function datasetItem(page: Page, itemId: string) {
+  return page.getByRole('region', { name: `Dataset item ${itemId}` });
+}
+
 function experimentResult(page: Page) {
   return page.getByRole('region', { name: 'Experiment item item-1' });
 }
@@ -36,8 +41,8 @@ async function scrollCardContent(page: Page, panel: Locator, inline = false) {
 }
 
 /**
- * Item details open as a modal drawer, except the experiment result on desktop,
- * which sits inline in the route side panel. Fixtures cross only the network
+ * Item details open as a modal drawer, except dataset items and experiment
+ * results on desktop, which sit inline in the route side panel. Fixtures cross only the network
  * boundary; deep links persist the selection without any data mutation.
  */
 test.describe('Item and review panel layout', () => {
@@ -51,7 +56,12 @@ test.describe('Item and review panel layout', () => {
     { device: 'desktop', viewport: { width: 1440, height: 900 } },
   ]) {
     for (const { surface, url, label, inline = false } of [
-      { surface: 'dataset item', url: '/datasets/ds-1/items/item-a', label: 'Dataset item item-a' },
+      {
+        surface: 'dataset item',
+        url: '/datasets/ds-1/items/item-a',
+        label: 'Dataset item item-a',
+        inline: device === 'desktop',
+      },
       {
         surface: 'experiment result',
         url: '/experiments/exp-1/items/item-1',
@@ -83,9 +93,9 @@ test.describe('Item and review panel layout', () => {
   }
 
   test.describe('when deletion is requested from an open dataset item', () => {
-    test('allows cancelling deletion above the item drawer', async ({ page }) => {
+    test('allows cancelling deletion above the item panel', async ({ page }) => {
       await page.goto('/datasets/ds-1/items/item-a');
-      const panel = page.getByRole('dialog', { name: 'Dataset item item-a' });
+      const panel = datasetItem(page, 'item-a');
       await panel.getByRole('button', { name: 'Open actions menu' }).click();
       await page.getByRole('menuitem', { name: 'Delete Item' }).click();
       const confirmation = page.getByRole('alertdialog', { name: 'Delete Item' });
@@ -96,18 +106,18 @@ test.describe('Item and review panel layout', () => {
     });
   });
 
-  test.describe('when another item is selected after closing the drawer', () => {
+  test.describe('when another item is selected after closing the panel', () => {
     test('restores the previous selection with browser back', async ({ page }) => {
       await page.goto('/datasets/ds-1/items/item-a');
-      const first = page.getByRole('dialog', { name: 'Dataset item item-a' });
+      const first = datasetItem(page, 'item-a');
       await expect(first).toBeVisible();
       await first.getByRole('button', { name: 'Close Panel', exact: true }).click();
       await expect(first).toBeHidden();
       await page.getByText('item-b', { exact: true }).click();
-      await expect(page.getByRole('dialog', { name: 'Dataset item item-b' })).toBeVisible();
+      await expect(datasetItem(page, 'item-b')).toBeVisible();
       await page.goBack();
       await page.goBack();
-      await expect(page.getByRole('dialog', { name: 'Dataset item item-a' })).toBeVisible();
+      await expect(datasetItem(page, 'item-a')).toBeVisible();
       await expect(page).toHaveURL(/\/datasets\/ds-1\/items\/item-a$/);
     });
   });
@@ -119,13 +129,15 @@ test.describe('Item and review panel layout', () => {
 
     test('scrolls inside the card and keeps navigating', async ({ page }) => {
       await page.goto('/datasets/ds-1/items/item-a');
-      const panel = page.getByRole('dialog', { name: 'Dataset item item-a' });
+      const panel = datasetItem(page, 'item-a');
       await expect(panel.getByRole('button', { name: 'Close Panel', exact: true })).toBeVisible();
-      const contentScrollTop = await scrollCardContent(page, panel);
+      // Payloads are clipped until expanded, so open one to overflow the card.
+      await panel.getByRole('region', { name: 'Input' }).getByRole('button', { name: 'Expand' }).click();
+      const contentScrollTop = await scrollCardContent(page, panel, true);
       await expect.poll(contentScrollTop).toBeGreaterThan(0);
       expect(await panel.evaluate(element => element.scrollTop)).toBe(0);
       await panel.getByRole('button', { name: 'Go to next item', exact: true }).click();
-      await expect(page.getByRole('dialog', { name: 'Dataset item item-b' })).toBeVisible();
+      await expect(datasetItem(page, 'item-b')).toBeVisible();
     });
   });
 

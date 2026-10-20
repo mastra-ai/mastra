@@ -349,6 +349,22 @@ describe('SourceControlStorage', () => {
     );
   });
 
+  it('creates sessions already on their memory resource, so the resource migration never reads them', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000003',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000003',
+      baseBranch: 'main',
+    });
+
+    const awaiting = await domain.listSessionsAwaitingResourceMigration();
+    expect(awaiting.map(row => row.sessionId)).not.toContain(session.sessionId);
+  });
+
   it('defaults session visibility to org and round-trips private', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
@@ -401,6 +417,83 @@ describe('SourceControlStorage', () => {
     await backend.ops.updateMany('source_control_sessions', { session_id: session.sessionId }, { visibility: null });
     await expect(github.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
       visibility: 'org',
+    });
+  });
+
+  it('round-trips a side session origin and lists only the children of that origin', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const create = (sessionId: string, origin?: { sessionId: string; threadId: string }, orgId = 'org-1') =>
+      github.sessions.create({
+        sessionId,
+        projectRepositoryId: link.id,
+        orgId,
+        userId: 'user-1',
+        branch: `user/session-${sessionId}`,
+        baseBranch: 'main',
+        ...(origin ? { origin } : {}),
+      });
+    const parent = await create('00000000-0000-4000-8000-000000000021');
+    const child = await create('00000000-0000-4000-8000-000000000022', {
+      sessionId: parent.sessionId,
+      threadId: 'thread-parent',
+    });
+    await create('00000000-0000-4000-8000-000000000023', { sessionId: 'someone-else', threadId: 'thread-x' });
+
+    expect(parent).toMatchObject({ originSessionId: null, originThreadId: null });
+    await expect(github.sessions.getBySessionId(child.sessionId)).resolves.toMatchObject({
+      originSessionId: parent.sessionId,
+      originThreadId: 'thread-parent',
+    });
+    const children = await github.sessions.listByOrigin({ orgId: 'org-1', originSessionId: parent.sessionId });
+    expect(children.map(session => session.sessionId)).toEqual([child.sessionId]);
+    await expect(github.sessions.listByOrigin({ orgId: 'org-2', originSessionId: parent.sessionId })).resolves.toEqual(
+      [],
+    );
+  });
+
+  it("mutes and unmutes a side session's reports to its origin", async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000025',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000025',
+      baseBranch: 'main',
+      origin: { sessionId: 'parent', threadId: 'thread-parent' },
+    });
+    expect(session.originMutedAt).toBeNull();
+
+    await github.sessions.setOriginMuted({ sessionId: session.sessionId, muted: true });
+    const muted = await github.sessions.getBySessionId(session.sessionId);
+    expect(muted?.originMutedAt).toBeInstanceOf(Date);
+
+    await github.sessions.setOriginMuted({ sessionId: session.sessionId, muted: false });
+    await expect(github.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({ originMutedAt: null });
+  });
+
+  it('reads NULL origin columns on rows created before they existed', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000024',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000024',
+      baseBranch: 'main',
+      origin: { sessionId: 'parent', threadId: 'thread-parent' },
+    });
+    await backend.ops.updateMany(
+      'source_control_sessions',
+      { session_id: session.sessionId },
+      { origin_session_id: null, origin_thread_id: null },
+    );
+    await expect(github.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+      originSessionId: null,
+      originThreadId: null,
     });
   });
 
@@ -1382,5 +1475,47 @@ describe('SourceControlStorageInMemory sessions.markMaterialized', () => {
     await store.sessions.markMaterialized({ id: session.id });
     const second = await store.sessions.getBySessionId(session.sessionId);
     expect(second?.materializedAt?.getTime()).toBe(first!.materializedAt!.getTime());
+  });
+
+  it("mutes and unmutes a side session's reports", async () => {
+    const store = new SourceControlStorageInMemory();
+    const installation = await store.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '1',
+    });
+    const repository = await store.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '2', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+    });
+    const connection = await store.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const link = await store.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra',
+    });
+    const session = await store.sessions.create({
+      sessionId: '00000000-0000-4000-8000-00000000bbbb',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-00000000bbbb',
+      baseBranch: 'main',
+      origin: { sessionId: 'parent', threadId: 'thread-parent' },
+    });
+    expect(session.originMutedAt).toBeNull();
+
+    await store.sessions.setOriginMuted({ sessionId: session.sessionId, muted: true });
+    expect((await store.sessions.getBySessionId(session.sessionId))?.originMutedAt).toBeInstanceOf(Date);
+    await store.sessions.setOriginMuted({ sessionId: session.sessionId, muted: false });
+    expect((await store.sessions.getBySessionId(session.sessionId))?.originMutedAt).toBeNull();
   });
 });

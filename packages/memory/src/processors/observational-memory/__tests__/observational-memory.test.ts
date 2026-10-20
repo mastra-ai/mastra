@@ -4093,7 +4093,7 @@ describe('Observer Agent Helpers', () => {
       const observerMessages = [createTestMessage('01234567890', 'user')];
 
       await om.observer.call(undefined, observerMessages);
-      await (om as any).reflector.call('01234567890');
+      await (om as any).reflector.call('obs');
 
       expect(observerResolveSpy).toHaveBeenCalledWith(
         om.getTokenCounter().countMessages(observerMessages),

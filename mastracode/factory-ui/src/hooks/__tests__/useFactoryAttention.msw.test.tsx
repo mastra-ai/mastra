@@ -28,7 +28,7 @@ describe('useFactoryAttentionHistory', () => {
 
     const { result, client } = renderHookWithProviders(
       () => ({
-        history: useFactoryAttentionHistory(PROJECT_ID, 'open', ''),
+        history: useFactoryAttentionHistory(PROJECT_ID, 'open', []),
         connected: useFeedEventsConnected(),
       }),
       {

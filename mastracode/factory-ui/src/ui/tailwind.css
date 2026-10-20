@@ -1,17 +1,6 @@
-/* Tailwind v4 entry for the MastraCode web UI.
- *
- * The compiled Playground UI stylesheet is imported from main.tsx. This file
- * only adds Tailwind utilities and imports raw design tokens for @theme-based
- * utility generation. */
 @import 'tailwindcss';
-@import 'tw-animate-css';
-
-/* Raw design tokens (:root + @theme) shipped by playground-ui. Importing the
- * uncompiled theme lets Tailwind read @theme and generate DS utilities without
- * treating theme.css as the component stylesheet. */
-@import '@mastra/playground-ui/theme.css';
-
-@custom-variant dark (&:is(.dark *));
+@import '@mastra/playground-ui/components.css';
+@import '@mastra/playground-ui/sources.css';
 
 /* Mona Sans everywhere, same as Studio. Faces come from
  * @fontsource-variable/mona-sans, imported in main.tsx. */

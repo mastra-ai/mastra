@@ -150,11 +150,19 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       base_branch: { type: 'text' },
       title: { type: 'text', nullable: true },
       visibility: { type: 'text', nullable: true },
+      // The user session that started this one as a side session, if any.
+      origin_session_id: { type: 'text', nullable: true },
+      origin_thread_id: { type: 'text', nullable: true },
+      // When the origin muted this side session's reports; null while it gets them.
+      origin_muted_at: { type: 'timestamp', nullable: true },
       sandbox_id: { type: 'text', nullable: true },
       sandbox_workdir: { type: 'text', nullable: true },
       materialized_at: { type: 'timestamp', nullable: true },
       first_message_at: { type: 'timestamp', nullable: true },
       first_meaningful_exec_at: { type: 'timestamp', nullable: true },
+      // When the session's threads reached their Factory or owner memory resource.
+      // Null only on sessions from before shared resources, until the startup migration moves them.
+      resources_migrated_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -169,7 +177,10 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
         columns: ['factory_project_id', 'user_id', 'branch'],
       },
     ],
-    indexes: [{ name: 'source_control_sessions_project_idx', columns: ['factory_project_id'] }],
+    indexes: [
+      { name: 'source_control_sessions_project_idx', columns: ['factory_project_id'] },
+      { name: 'source_control_sessions_origin_idx', columns: ['origin_session_id'] },
+    ],
   },
   {
     name: SESSION_REPOSITORIES,
@@ -343,6 +354,12 @@ export interface SourceControlSession {
   branch: string;
   title: string | null;
   visibility: SourceControlSessionVisibility;
+  /** The session that started this one as a side session; null otherwise. */
+  originSessionId: string | null;
+  /** The thread of `originSessionId` that started it. */
+  originThreadId: string | null;
+  /** When the origin muted this side session's reports; null while they are delivered. */
+  originMutedAt: Date | null;
   baseBranch: string;
   sandboxId: string | null;
   sandboxWorkdir: string | null;
@@ -371,6 +388,8 @@ export interface CreateSourceControlSessionInput {
   title?: string | null;
   /** Defaults to 'org' when omitted, matching how NULL rows are read. */
   visibility?: SourceControlSessionVisibility;
+  /** The session and thread that started this one as a side session. */
+  origin?: { sessionId: string; threadId: string };
   baseBranch: string;
 }
 
@@ -483,8 +502,15 @@ export interface SourceControlStorageHandle {
       viewerUserId: string;
     }): Promise<SourceControlSession[]>;
     getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
+    /**
+     * Sessions started as side sessions by `originSessionId`. System-level (no
+     * viewer filter); callers only pass their own session id.
+     */
+    listByOrigin(args: { orgId: string; originSessionId: string }): Promise<SourceControlSession[]>;
     /** Overwrite the session's display title. Keyed by the controller-facing `sessionId`. */
     rename(args: { sessionId: string; title: string }): Promise<void>;
+    /** Mute or unmute the side session's reports to its origin. Keyed by the controller-facing `sessionId`. */
+    setOriginMuted(args: { sessionId: string; muted: boolean }): Promise<void>;
     /** Keyed by the link (today's callers) or by the factory. */
     getForBranch(args: SessionBranchKey): Promise<SourceControlSession | null>;
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
@@ -589,12 +615,16 @@ interface SessionDbRow extends Record<string, unknown> {
   branch: string;
   title: string | null;
   visibility: string | null;
+  origin_session_id?: string | null;
+  origin_thread_id?: string | null;
+  origin_muted_at?: Date | null;
   base_branch: string;
   sandbox_id: string | null;
   sandbox_workdir: string | null;
   materialized_at: Date | null;
   first_message_at: Date | null;
   first_meaningful_exec_at: Date | null;
+  resources_migrated_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -704,6 +734,9 @@ function toSession(row: SessionDbRow): SourceControlSession {
     branch: row.branch,
     title: row.title,
     visibility: row.visibility === 'private' ? 'private' : 'org',
+    originSessionId: row.origin_session_id ?? null,
+    originThreadId: row.origin_thread_id ?? null,
+    originMutedAt: row.origin_muted_at ?? null,
     baseBranch: row.base_branch,
     sandboxId: row.sandbox_id,
     sandboxWorkdir: row.sandbox_workdir,
@@ -730,6 +763,16 @@ function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<str
 export class SourceControlStorage extends FactoryStorageDomain {
   constructor() {
     super('source-control');
+  }
+
+  /** Sessions, across providers and organizations, the memory-resource migration has not finished. */
+  async listSessionsAwaitingResourceMigration(): Promise<SourceControlSession[]> {
+    return (await this.ops.findMany<SessionDbRow>(SESSIONS, { resources_migrated_at: null })).map(toSession);
+  }
+
+  /** Record that a session's threads are on their memory resource, so later starts skip it. */
+  async markResourcesMigrated(sessionId: string): Promise<void> {
+    await this.ops.updateMany(SESSIONS, { session_id: sessionId }, { resources_migrated_at: new Date() });
   }
 
   async init(): Promise<void> {
@@ -1398,9 +1441,23 @@ export class SourceControlStorage extends FactoryStorageDomain {
           const row = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
           return row && (await getProjectRepositoryById(row.project_repository_id)) ? toSession(row) : null;
         },
+        listByOrigin: async ({ orgId, originSessionId }) => {
+          const rows = await db().findMany<SessionDbRow>(SESSIONS, {
+            org_id: orgId,
+            origin_session_id: originSessionId,
+          });
+          const linked = await Promise.all(rows.map(row => getProjectRepositoryById(row.project_repository_id)));
+          return rows.filter((_, index) => linked[index]).map(toSession);
+        },
         rename: async ({ sessionId, title }) => {
           await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
             title,
+            updated_at: new Date(),
+          }));
+        },
+        setOriginMuted: async ({ sessionId, muted }) => {
+          await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
+            origin_muted_at: muted ? new Date() : null,
             updated_at: new Date(),
           }));
         },
@@ -1456,11 +1513,16 @@ export class SourceControlStorage extends FactoryStorageDomain {
               branch: input.branch,
               title: input.title ?? null,
               visibility: input.visibility ?? 'org',
+              origin_session_id: input.origin?.sessionId ?? null,
+              origin_thread_id: input.origin?.threadId ?? null,
+              origin_muted_at: null,
               base_branch: input.baseBranch,
               sandbox_id: null,
               sandbox_workdir: null,
               materialized_at: null,
               first_message_at: null,
+              // New sessions start on their memory resource.
+              resources_migrated_at: now,
               created_at: now,
               updated_at: now,
             });

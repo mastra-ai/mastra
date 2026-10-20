@@ -129,4 +129,65 @@ describe('Inngest agent stopWhen (#25851)', () => {
       { reason: 'tool-calls', isContinued: false },
     ]);
   });
+
+  it('rejects the stream without terminal chunks when stopWhen throws', async () => {
+    let modelCalls = 0;
+    const agent = new Agent({
+      id: `stop-when-error-agent-${Date.now()}`,
+      name: 'Stop When Error Agent',
+      instructions: 'Call ping.',
+      model: alwaysToolCallingModel(() => modelCalls++),
+      tools: {
+        ping: createTool({
+          id: 'ping',
+          description: 'ping',
+          inputSchema: z.object({}),
+          execute: async () => ({ ok: true }),
+        }),
+      },
+    });
+
+    const inngestAgent = createInngestAgent({ agent, inngest: getSharedInngest() });
+    getSharedMastra().addAgent(inngestAgent);
+
+    const result = await inngestAgent.stream([{ role: 'user', content: 'Go.' }], {
+      maxSteps: 5,
+      stopWhen: () => {
+        throw new TypeError('stopWhen failed');
+      },
+    });
+
+    const chunkTypes: string[] = [];
+    let streamError: unknown;
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        (async () => {
+          try {
+            for await (const chunk of result.output.fullStream) {
+              chunkTypes.push((chunk as any).type);
+            }
+          } catch (error) {
+            streamError = error;
+          }
+        })(),
+        new Promise<void>(resolve => {
+          timer = setTimeout(() => {
+            timedOut = true;
+            resolve();
+          }, STREAM_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+      result.cleanup();
+    }
+
+    expect(timedOut).toBe(false);
+    expect(modelCalls).toBe(1);
+    // COR-1467: Inngest's stream envelope does not emit the leading start chunk.
+    expect(chunkTypes).toEqual(['step-start', 'tool-call', 'tool-result']);
+    expect(streamError).toMatchObject({ name: 'TypeError', message: 'stopWhen failed' });
+  });
 });

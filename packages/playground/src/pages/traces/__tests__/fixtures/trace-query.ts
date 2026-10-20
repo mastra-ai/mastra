@@ -90,7 +90,7 @@ export const traceQueryPage: TraceQueryKeysetTraceResponse = {
 export const traceQueryPageWithThreadAndEnvironment: Awaited<ReturnType<MastraClient['queryTraces']>> = {
   traces: [
     {
-      ...traceQueryPage.traces[0]!,
+      ...traceQueryPage.traces[0],
       traceId: 'trace-env',
       rootSpanId: 'span-env',
       environment: 'production',

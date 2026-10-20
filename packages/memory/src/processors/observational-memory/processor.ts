@@ -296,6 +296,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         state.__omTurn = undefined;
       }
 
+      let responseMessageId = messageId;
       if (!this.turn || !state.__omTurn) {
         // End previous turn if state was reset mid-flow
         if (this.turn && !state.__omTurn) {
@@ -318,6 +319,14 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         this.turn.agent = args.agent;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory, runState);
+        // A run recovered by another worker can continue a response message that the dead
+        // worker already observed. That worker rotated the id in memory, but the rotation was
+        // lost with it. Seal and rotate again so the rest of the turn isn't merged into the observed message.
+        if (messageId && this.turn.record.observedMessageIds?.includes(messageId)) {
+          const observed = messageList.get.all.db().find(message => message.id === messageId);
+          if (observed) this.engine.sealMessagesForBuffering([observed]);
+          responseMessageId = rotateResponseMessageId?.() ?? messageId;
+        }
         if (stepNumber === 0 && this.temporalMarkers) {
           await insertTemporalGapMarkers({ messageList, sendSignal: args.sendSignal });
         }
@@ -333,7 +342,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       state.__omObservabilityContext = observabilityContext;
       this.turn.observabilityContext = observabilityContext;
       this.turn.actorModelContext = actorModelContext;
-      this.turn.responseMessageId = messageId;
+      this.turn.responseMessageId = responseMessageId;
 
       // ── Run step preparation (activation, threshold, observation, filtering) ──
       {
@@ -441,6 +450,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         const memoryContext = parseMemoryRequestContext(requestContext);
         if (memoryContext?.memoryConfig?.readOnly) return messageList;
 
+        const persistenceMessageList = messageList.cloneForPersistence();
+
         // Retrieve the turn from shared processor state — in production, the input
         // and output processors are separate instances (see comment in processInputStep).
         const turn = asLiveTurn(state.__omTurn) ?? this.turn;
@@ -455,7 +466,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         if (liveTurn) {
           // Use the pipeline's accepted terminal list as the persistence authority,
           // rather than relying on the list captured when the turn began.
-          await liveTurn.end(messageList);
+          await liveTurn.end(persistenceMessageList);
         }
         this.turn = undefined;
         state.__omTurn = undefined;
@@ -465,8 +476,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           // were skipped (isResume=true), so processInputStep never created a turn, or when the
           // turn was already sealed before finalization. Directly persist any new response
           // messages so the final assistant text from the resumed turn is not lost.
-          const newOutput = messageList.get.response.db();
-          const newInput = messageList.get.input.db();
+          const newOutput = persistenceMessageList.get.response.db();
+          const newInput = persistenceMessageList.get.input.db();
           const messagesToSave = [...newInput, ...newOutput];
           if (messagesToSave.length > 0 && context.threadId) {
             await this.engine.persistMessages(messagesToSave, context.threadId, context.resourceId);

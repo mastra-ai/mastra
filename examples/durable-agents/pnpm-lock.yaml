@@ -24,13 +24,13 @@ overrides:
   hono@<4.13.8: 4.13.8
   better-auth: ^1.6.26
   ioredis@>=5.0.0 <6.0.0: 6.0.0
-  zod@>=4.0.0 <4.6.5: 4.6.5
+  zod@>=4.0.0 <4.6.7: 4.6.7
   es-toolkit@<1.52.0: 1.52.0
   fast-copy@<4.1.1: 4.1.1
   '@opentelemetry/auto-instrumentations-node@<0.80.0': 0.80.0
   yargs@<18.1.0: 18.2.0
   protobufjs@<8.8.0: 8.8.0
-  zod@<4.0.0: 4.6.5
+  zod@<4.0.0: 4.6.7
 
 importers:
 
@@ -38,7 +38,7 @@ importers:
     dependencies:
       '@inngest/realtime':
         specifier: ^0.4.5
-        version: 0.4.7(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(react@19.2.8)(typescript@5.9.3)(zod@4.6.5)
+        version: 0.4.7(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(react@19.2.8)(typescript@5.9.3)(zod@4.6.7)
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
@@ -59,7 +59,7 @@ importers:
         version: link:../../stores/redis
       inngest:
         specifier: ^3.50.0
-        version: 3.54.2(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(typescript@5.9.3)(zod@4.6.5)
+        version: 3.54.2(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(typescript@5.9.3)(zod@4.6.7)
       ioredis:
         specifier: 6.0.0
         version: 6.0.0
@@ -67,8 +67,8 @@ importers:
         specifier: link:../../packages/cli
         version: link:../../packages/cli
       zod:
-        specifier: 4.6.5
-        version: 4.6.5
+        specifier: 4.6.7
+        version: 4.6.7
 
 packages:
 
@@ -92,7 +92,7 @@ packages:
     deprecated: This package is deprecated. Realtime functionality is now built into the inngest package.
     peerDependencies:
       react: '>=18.0.0'
-      zod: 4.6.5
+      zod: 4.6.7
 
   '@ioredis/commands@2.0.0':
     resolution: {integrity: sha512-vrx0AE/T0h7cRZwfo1M39Cr+ZhZrkf0V8mQN75wucKCxCLD9l/VX6no3gFvrLqD1IlG/1LtzWovqEw3t0Vr9zg==}
@@ -902,7 +902,7 @@ packages:
       koa: '>=2.14.2'
       next: '>=12.0.0'
       typescript: '>=5.8.0'
-      zod: 4.6.5
+      zod: 4.6.7
     peerDependenciesMeta:
       '@sveltejs/kit':
         optional: true
@@ -1199,8 +1199,8 @@ packages:
     resolution: {integrity: sha512-9OpKOLeaoNFecEp7P6iYbzze/5CqWoH7N3SMs/6y1XF4nMvFMspEGZzJ6uFi9MmQwXhyzqYoSEKO3tvA3Z/o2w==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=23}
 
-  zod@4.6.5:
-    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
@@ -1223,13 +1223,13 @@ snapshots:
       '@types/node': 22.20.1
       typescript: 5.9.3
 
-  '@inngest/realtime@0.4.7(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(react@19.2.8)(typescript@5.9.3)(zod@4.6.5)':
+  '@inngest/realtime@0.4.7(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(react@19.2.8)(typescript@5.9.3)(zod@4.6.7)':
     dependencies:
       '@standard-schema/spec': 1.1.0
       debug: 4.4.3
-      inngest: 3.54.2(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(typescript@5.9.3)(zod@4.6.5)
+      inngest: 3.54.2(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(typescript@5.9.3)(zod@4.6.7)
       react: 19.2.8
-      zod: 4.6.5
+      zod: 4.6.7
     transitivePeerDependencies:
       - '@opentelemetry/core'
       - '@sveltejs/kit'
@@ -2253,7 +2253,7 @@ snapshots:
 
   inherits@2.0.4: {}
 
-  inngest@3.54.2(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(typescript@5.9.3)(zod@4.6.5):
+  inngest@3.54.2(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(typescript@5.9.3)(zod@4.6.7):
     dependencies:
       '@bufbuild/protobuf': 2.13.0
       '@inngest/ai': 0.1.7
@@ -2280,7 +2280,7 @@ snapshots:
       strip-ansi: 5.2.0
       temporal-polyfill: 0.2.5
       ulid: 2.4.0
-      zod: 4.6.5
+      zod: 4.6.7
     optionalDependencies:
       typescript: 5.9.3
     transitivePeerDependencies:
@@ -2537,4 +2537,4 @@ snapshots:
       y18n: 5.0.8
       yargs-parser: 22.0.0
 
-  zod@4.6.5: {}
+  zod@4.6.7: {}

@@ -5,6 +5,7 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 
 export type ScenarioName =
   | 'startup'
+  | 'factory-client-mode'
   | 'abort-followup'
   | 'abort-escape-off'
   | 'abort-escape-durable'
