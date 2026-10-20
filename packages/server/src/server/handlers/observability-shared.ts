@@ -448,6 +448,7 @@ export type ObservabilityStorageCapabilities = {
   threadQuery: boolean;
   threadQueryRows: boolean;
   spanQuery: boolean;
+  spanQueryContextFields: boolean;
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
   traceRetentionDays?: number;
   feedback: boolean;
@@ -477,6 +478,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   threadQuery: false,
   threadQueryRows: false,
   spanQuery: false,
+  spanQueryContextFields: false,
   feedback: false,
 };
 
@@ -566,6 +568,7 @@ export function getObservabilityStorageCapabilities(
     threadQueryRows:
       threadQuery && typeof coreStorage.planThreadRowsQuery === 'function' && declares('thread-query-rows'),
     spanQuery,
+    spanQueryContextFields: spanQuery && declares('span-query-context-fields'),
     feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
   };
 }
