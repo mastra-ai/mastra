@@ -619,6 +619,13 @@ describe('validateReturnTo', () => {
     expect(validateReturnTo('/\t/evil.test', [])).toEqual({ ok: false });
     expect(validateReturnTo('/\n\\evil.test', [])).toEqual({ ok: false });
     expect(validateReturnTo('/\r/evil.test', [])).toEqual({ ok: false });
+    // Dot-segment normalization can mint a protocol-relative value: these
+    // pass the raw prefix checks but normalize to `//evil.test`.
+    expect(validateReturnTo('/foo/..//evil.test', [])).toEqual({ ok: false });
+    expect(validateReturnTo('/foo/..\\/evil.test', [])).toEqual({ ok: false });
+    expect(validateReturnTo('/foo/.././/evil.test', [])).toEqual({ ok: false });
+    // Dot segments that stay same-origin remain fine.
+    expect(validateReturnTo('/foo/../done', [])).toEqual({ ok: true, value: '/done' });
     expect(validateReturnTo('/done?next=1#frag', [])).toEqual({ ok: true, value: '/done?next=1#frag' });
     expect(validateReturnTo('https://evil.test/x', [])).toEqual({ ok: false });
     expect(validateReturnTo('javascript:alert(1)', [])).toEqual({ ok: false });
