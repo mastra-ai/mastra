@@ -3,7 +3,7 @@ import type { SerializableStructuredOutputOptions, ToolsInput } from '@mastra/co
 import type { AIV5Type, MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType, FullOutput, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool, ToolObserve } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
@@ -2270,6 +2270,10 @@ export class Agent extends BaseResource {
     try {
       let messages: UIMessage[] = [];
       let streamRunId: string | undefined = processedParams.runId;
+      // The full model-message history the server reported on its last finish chunk. A resumed
+      // run restores the conversation from its snapshot, so this is the only place a stateless
+      // client can recover it for a client-tool continuation.
+      let finishedHistory: unknown[] | undefined;
 
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
@@ -2280,6 +2284,15 @@ export class Agent extends BaseResource {
         pendingText += text;
         const lines = pendingText.split('\n\n');
         pendingText = isFinal ? '' : (lines.pop() ?? '');
+        for (const line of lines) {
+          if (!line.startsWith('data: ') || !line.includes('"type":"finish"')) continue;
+          try {
+            const all = JSON.parse(line.slice(6))?.payload?.messages?.all;
+            if (Array.isArray(all)) finishedHistory = all;
+          } catch {
+            // Not a JSON chunk
+          }
+        }
 
         const readableLines = lines
           .filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]')
@@ -2537,13 +2550,17 @@ export class Agent extends BaseResource {
                 content: toolResultContents,
               };
 
+              const isOneShotResume =
+                route === 'resume-stream' || route === 'approve-tool-call' || route === 'decline-tool-call';
               const updatedMessages = threadId
                 ? [toolResultMessage]
-                : [
-                    ...(Array.isArray(processedParams.messages) ? processedParams.messages : []),
-                    ...messages,
-                    toolResultMessage,
-                  ];
+                : isOneShotResume && finishedHistory
+                  ? [...finishedHistory, toolResultMessage]
+                  : [
+                      ...(Array.isArray(processedParams.messages) ? processedParams.messages : []),
+                      ...messages,
+                      toolResultMessage,
+                    ];
 
               // Recursively call stream with updated messages
               // This will wait for the recursive stream to complete before continuing.
@@ -3448,14 +3465,18 @@ export class Agent extends BaseResource {
     },
   ): Promise<ToolCallGenerateResponse> {
     const { requestContext, clientTools, clientToolsResolver, ...rest } = params;
-    return this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
-      method: 'POST',
-      body: {
-        ...rest,
-        requestContext: parseClientRequestContext(requestContext),
-        clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
+    const response: ToolCallGenerateResponse = await this.request(
+      `/agents/${this.agentId}/approve-tool-call-generate`,
+      {
+        method: 'POST',
+        body: {
+          ...rest,
+          requestContext: parseClientRequestContext(requestContext),
+          clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
+        },
       },
-    });
+    );
+    return this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver });
   }
 
   /**
@@ -3471,13 +3492,53 @@ export class Agent extends BaseResource {
     },
   ): Promise<ToolCallGenerateResponse> {
     const { requestContext, clientTools, clientToolsResolver, ...rest } = params;
-    return this.request(`/agents/${this.agentId}/decline-tool-call-generate`, {
-      method: 'POST',
-      body: {
-        ...rest,
-        requestContext: parseClientRequestContext(requestContext),
-        clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
+    const response: ToolCallGenerateResponse = await this.request(
+      `/agents/${this.agentId}/decline-tool-call-generate`,
+      {
+        method: 'POST',
+        body: {
+          ...rest,
+          requestContext: parseClientRequestContext(requestContext),
+          clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
+        },
       },
+    );
+    return this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver });
+  }
+
+  /**
+   * Runs executable client tools the model called after an approval decision and continues on
+   * /generate. The resumed run restored its conversation server-side, so the stateless
+   * continuation re-sends the original user turn alongside the resumed response messages.
+   */
+  private async continueResumedGenerate(
+    response: ToolCallGenerateResponse,
+    {
+      requestContext,
+      clientTools,
+      clientToolsResolver,
+    }: {
+      requestContext?: RequestContext | Record<string, any>;
+      clientTools?: ToolsInput;
+      clientToolsResolver?: ClientToolsResolver;
+    },
+  ): Promise<ToolCallGenerateResponse> {
+    if (response.finishReason !== 'tool-calls') return response;
+    const context =
+      requestContext === undefined || requestContext instanceof RequestContext
+        ? requestContext
+        : new RequestContext<unknown>(Object.entries(requestContext));
+    return executeToolCallAndRespond<undefined>({
+      response,
+      params: {
+        messages: (response.messages ?? []).filter(message => message.role === 'user'),
+        clientTools: clientToolsResolver?.() ?? clientTools,
+        clientToolsResolver,
+        requestContext: context,
+      },
+      agentId: this.agentId,
+      requestContext: context,
+      respondFn: (messages, options) => this.generate(messages, options),
     });
   }
 
