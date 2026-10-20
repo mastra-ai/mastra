@@ -23,8 +23,21 @@ export { CONNECT_PROMPT_TOOL_KEY } from './connect-prompt-tool.js';
 export type { ConnectPromptPayload, ConnectPromptProvider } from './connect-prompt-tool.js';
 export { MastraConnectError } from './errors.js';
 export type { MastraConnectErrorCode } from './errors.js';
-export type { ConnectClientOptions, ConnectionCredential, ProjectConnection } from './client.js';
-export { listProjectConnections, proxyRequest, resolveClient } from './client.js';
-export type { ProxyRequestOptions, ResolvedClient } from './client.js';
+export type {
+  ConnectClientOptions,
+  ConnectionContext,
+  ConnectionCredential,
+  ProjectConnection,
+  ProxyRequestOptions,
+  ProxyResponse,
+  ResolvedClient,
+} from './client.js';
+export {
+  getConnectionContext,
+  listProjectConnections,
+  proxyRequest,
+  proxyRequestWithResponse,
+  resolveClient,
+} from './client.js';
 export { PROVIDERS, CHANNELS } from './registry.js';
 export type { ProviderRegistration } from './registry.js';
