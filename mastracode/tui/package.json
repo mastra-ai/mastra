@@ -75,7 +75,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "cli": "tsx src/cli.ts",
+    "cli": "tsx src/main.ts",
     "check": "tsc --noEmit",
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
