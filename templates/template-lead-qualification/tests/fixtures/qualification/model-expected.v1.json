@@ -1,0 +1,1481 @@
+{
+  "version": 2,
+  "kind": "model_passages",
+  "datasetId": "qualification-model-passages-v1",
+  "profilesDigest": "41e278e7e8ff8ff12c1a5671c7bad684b9d077e27c18a57fb5bc1ff5614bd01a",
+  "provenance": "Proposed synthetic source-grounded model measurement set. Literal passages and submitted inquiries contain the evidence for independently declared expected labels. Not real companies, production data, discovery quality or measured accuracy. Freeze and approve before collection.",
+  "policyVersion": "inbound-saas-v5",
+  "cases": [
+    {
+      "id": "c01",
+      "population": "domain",
+      "coverage": ["qualified"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company01.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 01 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 01 employs exactly 40 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "US",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 01's corporate headquarters are in the United States."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "qualified",
+      "score": 100,
+      "disqualifiers": []
+    },
+    {
+      "id": "c02",
+      "population": "domain",
+      "coverage": ["qualified", "boundary"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company02.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 02 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 20,
+            "max": 20
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 02 employs exactly 20 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "US",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 02's corporate headquarters are in the United States."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "qualified",
+      "score": 100,
+      "disqualifiers": []
+    },
+    {
+      "id": "c03",
+      "population": "domain",
+      "coverage": ["qualified", "boundary"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company03.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 03 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 500,
+            "max": 500
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 03 employs exactly 500 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "US",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 03's corporate headquarters are in the United States."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "qualified",
+      "score": 100,
+      "disqualifiers": []
+    },
+    {
+      "id": "c04",
+      "population": "domain",
+      "coverage": ["qualified"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company04.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 04 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 04 employs exactly 40 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "BR",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 04's corporate headquarters are in Brazil."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "qualified",
+      "score": 100,
+      "disqualifiers": []
+    },
+    {
+      "id": "c05",
+      "population": "domain",
+      "coverage": ["qualified"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company05.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 05 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 05 employs exactly 40 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "DE",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 05's corporate headquarters are in Germany."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "qualified",
+      "score": 100,
+      "disqualifiers": []
+    },
+    {
+      "id": "c06",
+      "population": "domain",
+      "coverage": ["qualified"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company06.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 06 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 06 employs exactly 40 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "GB",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 06's corporate headquarters are in the United Kingdom."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "qualified",
+      "score": 100,
+      "disqualifiers": []
+    },
+    {
+      "id": "c07",
+      "population": "domain",
+      "coverage": ["hard_exclusion"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company07.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 07 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 19,
+            "max": 19
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 07 employs exactly 19 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "US",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 07's corporate headquarters are in the United States."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "disqualified",
+      "score": 75,
+      "disqualifiers": ["employeeCount"]
+    },
+    {
+      "id": "c08",
+      "population": "domain",
+      "coverage": ["hard_exclusion"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company08.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 08 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 501,
+            "max": 501
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 08 employs exactly 501 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "US",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 08's corporate headquarters are in the United States."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "disqualified",
+      "score": 75,
+      "disqualifiers": ["employeeCount"]
+    },
+    {
+      "id": "c09",
+      "population": "domain",
+      "coverage": ["hard_exclusion"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company09.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 09 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 09 employs exactly 40 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "JP",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 09's corporate headquarters are in Japan."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "disqualified",
+      "score": 85,
+      "disqualifiers": ["headquartersCountry"]
+    },
+    {
+      "id": "c10",
+      "population": "domain",
+      "coverage": ["hard_exclusion"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company10.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "other",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 10 manufactures and sells physical office desks. Its core offering is furniture; it does not supply a hosted software service."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 10 employs exactly 40 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "US",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 10's corporate headquarters are in the United States."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "disqualified",
+      "score": 70,
+      "disqualifiers": ["businessModel"]
+    },
+    {
+      "id": "c11",
+      "population": "domain",
+      "coverage": ["nurture"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company11.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 11 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 11 employs exactly 40 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "US",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 11's corporate headquarters are in the United States."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-07-20T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "nurture",
+      "score": 70,
+      "disqualifiers": []
+    },
+    {
+      "id": "c12",
+      "population": "domain",
+      "coverage": ["nurture"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company12.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 12 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 12 employs exactly 40 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "US",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 12's corporate headquarters are in the United States."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2025-10-19T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "nurture",
+      "score": 70,
+      "disqualifiers": []
+    },
+    {
+      "id": "c13",
+      "population": "domain",
+      "coverage": ["missing"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company13.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 13 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "nonaccepted",
+          "allowedDispositions": ["missing", "unsupported"],
+          "value": null,
+          "rationale": "No employee or other workforce cue is provided. A customer count is not a workforce count.",
+          "evidenceBasis": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 13 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "US",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 13's corporate headquarters are in the United States."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "needs_review",
+      "score": 75,
+      "disqualifiers": []
+    },
+    {
+      "id": "c14",
+      "population": "domain",
+      "coverage": ["boundary"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company14.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 14 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 19,
+            "max": 20
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 14 employs between 19 and 20 people, inclusive."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "US",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 14's corporate headquarters are in the United States."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "needs_review",
+      "score": 75,
+      "disqualifiers": []
+    },
+    {
+      "id": "c15",
+      "population": "domain",
+      "coverage": ["conflict"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company15.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 15 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "conflicting",
+          "value": null,
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 15 employs exactly 40 people."
+            },
+            {
+              "materialId": "document-2",
+              "quote": "As of 18 October 2026, Company 15 employs exactly 400 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "US",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 15's corporate headquarters are in the United States."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "needs_review",
+      "score": 75,
+      "disqualifiers": []
+    },
+    {
+      "id": "c16",
+      "population": "domain",
+      "coverage": ["irrelevant"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company16.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 16 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "nonaccepted",
+          "allowedDispositions": ["missing", "unsupported"],
+          "value": null,
+          "rationale": "No employee or other workforce cue is provided. A customer count is not a workforce count.",
+          "evidenceBasis": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 16 serves exactly 40 customer accounts."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "US",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 16's corporate headquarters are in the United States."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "needs_review",
+      "score": 75,
+      "disqualifiers": []
+    },
+    {
+      "id": "c17",
+      "population": "domain",
+      "coverage": ["irrelevant"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company17.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 17 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 17 employs exactly 40 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "nonaccepted",
+          "allowedDispositions": ["missing", "unsupported"],
+          "value": null,
+          "rationale": "A sales office does not establish corporate headquarters.",
+          "evidenceBasis": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 17 operates a sales office in Paris, France."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "needs_review",
+      "score": 85,
+      "disqualifiers": []
+    },
+    {
+      "id": "c18",
+      "population": "domain",
+      "coverage": ["irrelevant"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company18.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "nonaccepted",
+          "allowedDispositions": ["missing", "unsupported"],
+          "value": null,
+          "rationale": "A community event gives no evidence of the company offering or its customers.",
+          "evidenceBasis": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 18's community calendar lists an open meeting on 24 October 2026."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 18 employs exactly 40 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "US",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 18's corporate headquarters are in the United States."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "needs_review",
+      "score": 70,
+      "disqualifiers": []
+    },
+    {
+      "id": "c19",
+      "population": "email",
+      "coverage": ["email_identity"],
+      "identity": {
+        "status": "ambiguous",
+        "domain": null
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        }
+      },
+      "classification": "needs_review",
+      "score": 0,
+      "disqualifiers": []
+    },
+    {
+      "id": "c20",
+      "population": "crm",
+      "coverage": ["crm_identity"],
+      "identity": {
+        "status": "unresolved",
+        "domain": null
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        }
+      },
+      "classification": "needs_review",
+      "score": 0,
+      "disqualifiers": []
+    },
+    {
+      "id": "c21",
+      "population": "domain",
+      "coverage": ["qualified", "business_inference"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company21.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Organizations pay for ongoing access to Company 21's hosted API. Company 21 operates the service in its cloud; customers do not purchase installed software licenses."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 40,
+            "max": 40
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 21 employs exactly 40 people."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "US",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 21's corporate headquarters are in the United States."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "qualified",
+      "score": 100,
+      "disqualifiers": []
+    },
+    {
+      "id": "c22",
+      "population": "domain",
+      "coverage": ["qualified", "observed_range"],
+      "identity": {
+        "status": "resolved",
+        "domain": "company22.example.com"
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "b2b_saas",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 22 provides hosted project-management software to business customers for a monthly subscription."
+            }
+          ]
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": {
+            "min": 30,
+            "max": 50
+          },
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "As of 18 October 2026, Company 22 employs between 30 and 50 people, inclusive."
+            }
+          ]
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": "US",
+          "support": [
+            {
+              "materialId": "document-1",
+              "quote": "Company 22's corporate headquarters are in the United States."
+            }
+          ]
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "accepted",
+          "value": [
+            {
+              "type": "demo_request",
+              "occurredAt": "2026-10-18T12:00:00Z"
+            }
+          ],
+          "support": [
+            {
+              "materialId": "submitted-inquiry",
+              "quote": "We request a demonstration of your sales qualification software."
+            }
+          ]
+        }
+      },
+      "classification": "qualified",
+      "score": 100,
+      "disqualifiers": []
+    },
+    {
+      "id": "c23",
+      "population": "email",
+      "coverage": ["email_identity"],
+      "identity": {
+        "status": "ambiguous",
+        "domain": null
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        }
+      },
+      "classification": "needs_review",
+      "score": 0,
+      "disqualifiers": []
+    },
+    {
+      "id": "c24",
+      "population": "crm",
+      "coverage": ["crm_identity"],
+      "identity": {
+        "status": "unresolved",
+        "domain": null
+      },
+      "attributes": {
+        "businessModel": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        },
+        "employeeCount": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        },
+        "headquartersCountry": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        },
+        "buyingIntent": {
+          "match": "exact",
+          "disposition": "missing",
+          "value": null,
+          "support": []
+        }
+      },
+      "classification": "needs_review",
+      "score": 0,
+      "disqualifiers": []
+    }
+  ]
+}

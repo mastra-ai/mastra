@@ -1,3 +1,4 @@
+import type { Telemetry } from '../telemetry';
 import { randomUUID } from 'node:crypto';
 import type { NormalizedEvent } from '../contracts';
 import type { LeadEventStore } from '../persistence/lead-event-store';
@@ -27,6 +28,7 @@ export class ReviewService {
     private readonly store: LeadEventStore,
     private readonly providers: Map<string, OutputProvider>,
     private readonly config: ReviewConfig,
+    private readonly telemetry?: Telemetry,
   ) {}
   private serial<T>(runId: string, work: () => Promise<T>): Promise<T> {
     const job = (this.jobs.get(runId) ?? Promise.resolve()).catch(() => undefined).then(work);
@@ -281,6 +283,12 @@ export class ReviewService {
             patchDigest: digestValue(patch),
           });
       await this.store.reviews.prepare(runId, assessment.id, packet, authorization);
+      await this.telemetry?.diagnostic({
+        code: 'review.prepared',
+        runId,
+        assessmentId: assessment.id,
+        ...(packet ? { reviewId: packet.id } : {}),
+      });
       cycle = (await this.store.reviews.get(runId))!;
     }
     if (cycle.assessmentId !== assessment.id) throw new ReviewConflictError('Cycle assessment changed');
@@ -531,6 +539,7 @@ export class ReviewService {
           digestValue(projectedPatch(provider, patch, operation.id, operation.expected))
       ) {
         await this.store.reviews.operationState(operation.id, 'applied');
+        await this.telemetry?.diagnostic({ code: 'output.applied', runId });
         return true;
       }
       if (
@@ -554,6 +563,7 @@ export class ReviewService {
         return false;
       }
       await this.store.reviews.operationState(operation.id, 'applied');
+      await this.telemetry?.diagnostic({ code: 'output.applied', runId });
       return true;
     } catch (error) {
       if (provider.retryPolicy) throw error;

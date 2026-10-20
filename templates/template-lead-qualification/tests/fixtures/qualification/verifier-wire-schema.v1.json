@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "supportedCandidateIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "maximum length 100"
+      },
+      "description": "maximum length 30"
+    },
+    "intentCoverageComplete": {
+      "type": "boolean"
+    },
+    "diagnostics": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "candidateId": {
+                "type": "string",
+                "description": "minimum length 1, maximum length 100"
+              },
+              "decision": {
+                "type": "string",
+                "enum": ["supported", "rejected"]
+              },
+              "reasonCode": {
+                "type": "string",
+                "enum": [
+                  "supported_observation",
+                  "supported_inference",
+                  "quote_not_exact",
+                  "source_not_relevant",
+                  "value_not_supported",
+                  "effective_date_not_supported",
+                  "inference_not_supported",
+                  "uncertainty_missing",
+                  "unsupported_restatement",
+                  "insufficient_support"
+                ]
+              },
+              "passageIndexes": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "description": "greater than or equal to 0, lower than or equal to 3"
+                },
+                "description": "maximum length 4"
+              }
+            },
+            "required": ["candidateId", "decision", "reasonCode", "passageIndexes"],
+            "additionalProperties": false
+          },
+          "description": "maximum length 30"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": ["supportedCandidateIds", "intentCoverageComplete", "diagnostics"],
+  "additionalProperties": false
+}

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { Telemetry } from '../telemetry';
 import type { Client } from '@libsql/client';
 import { z } from 'zod';
 import { immutableSnapshot, snapshotSchema } from '../config/qualification';
@@ -12,6 +13,7 @@ export interface Reservation {
   bytes: number;
 }
 export class QualificationStore {
+  measurement?: Telemetry['research'];
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private readonly client: Client) {}
   async init() {

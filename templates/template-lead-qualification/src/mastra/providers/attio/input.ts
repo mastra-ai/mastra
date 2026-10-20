@@ -10,6 +10,7 @@ import type { LeadIntake } from '../../intake';
 import type { EventInputProvider } from '../input';
 import { createAttioRoutes } from './routes';
 import { parseAttioMetadata } from './metadata';
+import { attioRetentionDigest } from './presentation';
 import type { AttioClient, AttioEntry } from './client';
 import type { AttioOutputProvider } from './output';
 import { OutputError } from '../output';
@@ -124,8 +125,8 @@ export class AttioInputProvider implements EventInputProvider {
     if (!created && event.id.attribute_id !== this.config.fields.stage.id) return;
     const delivered = (
       await this.store.client.execute({
-        sql: 'SELECT run_id FROM lead_deliveries WHERE source_id=? AND event_id=?',
-        args: [`attio:${this.config.listId}`, id],
+        sql: 'SELECT run_id FROM lead_deliveries WHERE source_id=? AND event_id=? UNION ALL SELECT run_id FROM lead_delivery_markers WHERE source_id=? AND event_id=? LIMIT 1',
+        args: [`attio:${this.config.listId}`, id, `attio:${this.config.listId}`, id],
       })
     ).rows[0];
     if (delivered) return { runId: z.string().parse(delivered.run_id) };
@@ -193,41 +194,58 @@ export class AttioInputProvider implements EventInputProvider {
         cycle.changedAt || cycle.publishedAt || '1970-01-01T00:00:00Z',
       );
       if (!value) throw new ReviewConflictError('A current human Stage transition is required');
-      const operation = await this.store.reviews.operation(
-        cycle.runId,
-        cycle.state === 'applied' ? 'final' : 'closure',
-        cycle.revision,
-      );
-      if (!operation || operation.state !== 'applied' || fields.operationId !== operation.id)
-        throw new ReviewConflictError('Previous output is unreconciled');
-      const previous = this.output.project(operation.patch, operation.id, operation.expected);
-      const binding = {
-        ...this.output.owned(fields),
-        ...Object.fromEntries(this.output.reviewFields.map(name => [name, previous[name]])),
-      };
-      if (this.config.layoutVersion === 2 && fields.stage === 'Triage') {
-        const currentMetadata = parseAttioMetadata(fields.metadata);
-        const previousMetadata = parseAttioMetadata(previous.metadata);
-        if (digestValue(currentMetadata.output) !== digestValue(previousMetadata.output))
-          throw new ReviewConflictError('Previous machine-owned output changed');
-        // A verified fresh-cycle request may replace submitted input, never the prior output.
-        binding.metadata = previous.metadata;
-      }
-      if (digestValue(binding) !== digestValue(previous))
-        throw new ReviewConflictError('Previous machine-owned output changed');
-      if (fields.stage === 'Needs review') {
-        await this.reviews.reopenFromProvider(
-          this.output.id,
+      const expired = (
+        await this.store.client.execute({
+          sql: 'SELECT operation_id,binding_digest FROM lead_retention_markers WHERE run_id=?',
+          args: [cycle.runId],
+        })
+      ).rows[0];
+      if (expired) {
+        if (
+          fields.stage !== 'Triage' ||
+          fields.operationId !== expired.operation_id ||
+          attioRetentionDigest(this.output.owned(fields), this.output.reviewFields) !== expired.binding_digest
+        )
+          throw new ReviewConflictError(
+            'Expired detail requires unchanged machine output and a fresh Triage transition',
+          );
+      } else {
+        const operation = await this.store.reviews.operation(
           cycle.runId,
-          this.output.owned(fields),
-          this.output.revision(entry),
-          {
-            memberId: value.created_by_actor.id,
-            occurredAt: value.active_from,
-            receivedAt,
-          },
+          cycle.state === 'applied' ? 'final' : 'closure',
+          cycle.revision,
         );
-        return { runId: cycle.runId };
+        if (!operation || operation.state !== 'applied' || fields.operationId !== operation.id)
+          throw new ReviewConflictError('Previous output is unreconciled');
+        const previous = this.output.project(operation.patch, operation.id, operation.expected);
+        const binding = {
+          ...this.output.owned(fields),
+          ...Object.fromEntries(this.output.reviewFields.map(name => [name, previous[name]])),
+        };
+        if (this.config.layoutVersion === 2 && fields.stage === 'Triage') {
+          const currentMetadata = parseAttioMetadata(fields.metadata);
+          const previousMetadata = parseAttioMetadata(previous.metadata);
+          if (digestValue(currentMetadata.output) !== digestValue(previousMetadata.output))
+            throw new ReviewConflictError('Previous machine-owned output changed');
+          // A verified fresh-cycle request may replace submitted input, never the prior output.
+          binding.metadata = previous.metadata;
+        }
+        if (digestValue(binding) !== digestValue(previous))
+          throw new ReviewConflictError('Previous machine-owned output changed');
+        if (fields.stage === 'Needs review') {
+          await this.reviews.reopenFromProvider(
+            this.output.id,
+            cycle.runId,
+            this.output.owned(fields),
+            this.output.revision(entry),
+            {
+              memberId: value.created_by_actor.id,
+              occurredAt: value.active_from,
+              receivedAt,
+            },
+          );
+          return { runId: cycle.runId };
+        }
       }
     } else if (!created || fields.stage !== 'Triage') return;
     const company = await this.client.company(entry.parent_record_id);
@@ -301,10 +319,19 @@ export class AttioInputProvider implements EventInputProvider {
     if (!cycle || cycle.state !== 'applied' || cycle.assessmentId !== assessmentId)
       throw new ReviewConflictError('Sales assessment is not applied');
     const semanticId = digestValue({ entry: entry.id, assessmentId, cycleId, outcome, at: value.active_from });
-    await this.store.client.execute({
-      sql: 'INSERT OR IGNORE INTO lead_sales_outcomes(event_id,assessment_id,cycle_id,outcome,occurred_at) VALUES(?,?,?,?,?)',
-      args: [semanticId, assessmentId, cycleId, outcome, value.active_from],
-    });
+    await this.store.client.batch(
+      [
+        {
+          sql: 'INSERT OR IGNORE INTO lead_sales_outcomes(event_id,assessment_id,cycle_id,outcome,occurred_at) VALUES(?,?,?,?,?)',
+          args: [semanticId, assessmentId, cycleId, outcome, value.active_from],
+        },
+        {
+          sql: 'INSERT OR IGNORE INTO lead_sales_receipts(event_id,received_at) VALUES(?,?)',
+          args: [semanticId, receivedAt],
+        },
+      ],
+      'write',
+    );
     return cycleId;
   }
 }

@@ -1,5 +1,6 @@
 import type { Client, InStatement } from '@libsql/client';
 import { z } from 'zod';
+import { initializeSalesRetention } from '../../reporting';
 import { actorSchema } from './client';
 import { digestValue } from '../../review/contracts';
 export class AttioDeliveryConflictError extends Error {}
@@ -29,6 +30,7 @@ export class AttioStore {
       CREATE TABLE IF NOT EXISTS lead_sales_outcomes (event_id TEXT PRIMARY KEY, assessment_id TEXT NOT NULL,
         cycle_id TEXT NOT NULL, outcome TEXT NOT NULL, occurred_at TEXT NOT NULL);
     `);
+    await initializeSalesRetention(this.client);
   }
   accept(id: string, payload: z.infer<typeof attioDeliverySchema>, receivedAt: string, maxPending: number) {
     const accepted = this.admission.then(() => this.acceptTransaction(id, payload, receivedAt, maxPending));

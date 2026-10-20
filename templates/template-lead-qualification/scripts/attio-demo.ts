@@ -65,8 +65,9 @@ export async function createDemoEntry(client: AttioClient, profile: ReturnType<t
         false,
       ),
     );
+  if (records.length !== 1)
+    throw new OutputError(records.length ? 'attio_demo_company_ambiguous' : 'attio_demo_company_not_found', false);
   if (
-    records.length !== 1 ||
     records[0]!.id.workspace_id !== client.config.workspaceId ||
     records[0]!.id.object_id !== client.config.companyObjectId
   )
@@ -104,6 +105,15 @@ export async function createDemoEntry(client: AttioClient, profile: ReturnType<t
   if (entry.id.workspace_id !== client.config.workspaceId || entry.id.list_id !== client.config.listId)
     throw new Error('Created entry does not match the configured demo destination');
   return entry;
+}
+export function attioDemoErrorMessage(error: unknown) {
+  if (error instanceof OutputError) {
+    if (error.code === 'attio_demo_company_not_found')
+      return 'Attio demo failed: no company matches the supplied domain. Create the company under Companies in the configured Attio workspace, then rerun the demo.';
+    if (error.code === 'attio_demo_company_ambiguous')
+      return 'Attio demo failed: multiple companies match the supplied domain. Resolve the duplicate company domains in the configured Attio workspace, then rerun the demo.';
+  }
+  return 'Attio demo failed. Check the dedicated list mapping, existing company domain and API permissions.';
 }
 async function main() {
   const args = parseArgs({
@@ -153,7 +163,7 @@ async function main() {
   );
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
-  main().catch(() => {
-    console.error('Attio demo failed. Check the dedicated list mapping, existing company domain and API permissions.');
+  main().catch(error => {
+    console.error(attioDemoErrorMessage(error));
     process.exitCode = 1;
   });

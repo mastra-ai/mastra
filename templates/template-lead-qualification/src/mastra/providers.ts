@@ -119,6 +119,7 @@ export function initializeProviders(
     if (!evidence.has(id)) throw new Error('Configured evidence provider is unavailable');
   return {
     config,
+    salesMapped: Boolean(inputSettings?.sales),
     evidence,
     createOutputs(db: Client) {
       const ids = new Set([config.source.destinationProviderId, ...(outputs?.map(provider => provider.id) ?? [])]);

@@ -14,6 +14,7 @@ const environmentSchema = z
 
 export const runtimeSettingsSchema = environmentSchema.safeExtend({
   host: z.string().min(1),
+  port: z.number().int().min(1024).max(65535).default(4111),
   applicationPath: z.string().min(1),
   observabilityPath: z.string().min(1),
 });
@@ -39,8 +40,11 @@ export function runtimeConfig(environment: NodeJS.ProcessEnv = process.env) {
   return {
     ...config,
     host: config.mode === 'local' ? '127.0.0.1' : '0.0.0.0',
+    port: runtimeSettingsSchema.shape.port.parse(
+      environment.LEAD_QUALIFICATION_PORT ? Number(environment.LEAD_QUALIFICATION_PORT) : undefined,
+    ),
     applicationPath: resolve(projectRoot, 'data/application.db'),
     observabilityPath: resolve(projectRoot, 'data/observability.duckdb'),
   };
 }
-export type RuntimeConfig = ReturnType<typeof runtimeConfig>;
+export type RuntimeConfig = Omit<ReturnType<typeof runtimeConfig>, 'port'> & { port?: number };

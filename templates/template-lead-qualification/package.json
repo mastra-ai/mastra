@@ -15,7 +15,8 @@
     "lint": "oxlint --type-aware .",
     "typecheck": "tsc --noEmit",
     "format": "oxfmt .",
-    "format:check": "oxfmt --check ."
+    "format:check": "oxfmt --check .",
+    "eval": "tsx scripts/evaluate.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.0",

@@ -238,10 +238,129 @@ export const extractionSchema = z
     value => new Set(value.candidates.map(candidate => candidate.id)).size === value.candidates.length,
     'Candidate IDs must be unique',
   );
+export const verifierReasonSchema = z.enum([
+  'supported_observation',
+  'supported_inference',
+  'quote_not_exact',
+  'source_not_relevant',
+  'value_not_supported',
+  'effective_date_not_supported',
+  'inference_not_supported',
+  'uncertainty_missing',
+  'unsupported_restatement',
+  'insufficient_support',
+]);
+export const verifierDecisionFields = {
+  candidateId: z.string().min(1).max(100),
+  decision: z.enum(['supported', 'rejected']),
+  reasonCode: verifierReasonSchema,
+  passageIndexes: z.array(z.number().int().min(0).max(3)).max(4),
+};
+export const verifierDecisionSchema = z
+  .strictObject(verifierDecisionFields)
+  .refine(
+    value =>
+      new Set(value.passageIndexes).size === value.passageIndexes.length &&
+      (value.decision === 'supported') === value.reasonCode.startsWith('supported_') &&
+      (value.decision !== 'supported' || value.passageIndexes.length > 0),
+    'Diagnostic decision, reason and unique passage indexes must agree',
+  );
+export const verifierDecisionsSchema = z
+  .array(verifierDecisionSchema)
+  .max(30)
+  .refine(
+    values => new Set(values.map(value => value.candidateId)).size === values.length,
+    'Diagnostic candidate IDs must be unique',
+  );
+// Diagnostic validation is independent: malformed optional metadata cannot change semantic authority.
 export const verificationSchema = z.strictObject({
   supportedCandidateIds: z.array(z.string().max(100)).max(30),
   intentCoverageComplete: z.boolean(),
+  diagnostics: z.unknown().optional(),
 });
+// Strict JSON output requires every property; legacy/custom responses can still omit diagnostics.
+export const verificationWireSchema = verificationSchema.extend({
+  diagnostics: z.array(z.strictObject(verifierDecisionFields)).max(30).nullable(),
+});
+export const verifierLedgerSchema = z
+  .strictObject({
+    version: z.literal(1),
+    candidateId: z.string().regex(/^candidate-[a-f0-9]{24}$/),
+    providerId: z.string().min(1).max(100),
+    roundIndex: z.number().int().min(0).max(9),
+    branch: branchSchema,
+    attribute: researchTargetSchema,
+    verifierSupported: z.boolean(),
+    candidateInferred: z.boolean().optional(),
+    modelReport: z
+      .strictObject({ decision: verifierDecisionFields.decision, reasonCode: verifierReasonSchema })
+      .refine(value => (value.decision === 'supported') === value.reasonCode.startsWith('supported_'))
+      .nullable()
+      .optional(),
+    status: z.enum(['reported', 'missing', 'not_reported', 'invalid']),
+    invalidCode: z
+      .enum([
+        'schema_invalid',
+        'coverage_mismatch',
+        'decision_mismatch',
+        'support_membership_mismatch',
+        'inference_kind_mismatch',
+        'passage_invalid',
+      ])
+      .nullable(),
+    decision: z.enum(['supported', 'rejected']).nullable(),
+    reasonCode: verifierReasonSchema.nullable(),
+    passages: z
+      .array(
+        z.strictObject({
+          index: z.number().int().min(0).max(3),
+          evidenceId: z.string().regex(/^evidence-[a-f0-9]{40}$/),
+          evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/),
+          sourceDigest: z.string().regex(/^[a-f0-9]{64}$/),
+          quoteDigest: z.string().regex(/^[a-f0-9]{64}$/),
+        }),
+      )
+      .max(4),
+    privatePassagesOmitted: z.number().int().min(0).max(4),
+  })
+  .refine(
+    value =>
+      (value.status === 'invalid') === (value.invalidCode !== null) &&
+      (value.status === 'reported'
+        ? value.decision !== null &&
+          value.reasonCode !== null &&
+          value.verifierSupported === (value.decision === 'supported') &&
+          (value.decision === 'supported') === value.reasonCode.startsWith('supported_')
+        : value.decision === null &&
+          value.reasonCode === null &&
+          value.passages.length === 0 &&
+          value.privatePassagesOmitted === 0) &&
+      new Set(value.passages.map(passage => passage.index)).size === value.passages.length &&
+      JSON.stringify(value).length <= 4096,
+    'Persisted diagnostic status, authority, provenance and size must agree',
+  )
+  .refine(value => {
+    const membershipMismatch = value.invalidCode === 'support_membership_mismatch';
+    const inferenceMismatch = value.invalidCode === 'inference_kind_mismatch';
+    if (value.modelReport === undefined) return !membershipMismatch && !inferenceMismatch;
+    if (value.modelReport === null) return value.status !== 'reported' && !membershipMismatch && !inferenceMismatch;
+    if (value.candidateInferred === undefined) return false;
+    const membershipAgrees = value.verifierSupported === (value.modelReport.decision === 'supported');
+    const inferenceAgrees =
+      !value.verifierSupported || (value.modelReport.reasonCode === 'supported_inference') === value.candidateInferred;
+    if (value.status === 'reported')
+      return (
+        membershipAgrees &&
+        inferenceAgrees &&
+        value.decision === value.modelReport.decision &&
+        value.reasonCode === value.modelReport.reasonCode
+      );
+    if (value.status !== 'invalid') return false;
+    if (membershipMismatch) return !membershipAgrees;
+    if (inferenceMismatch) return membershipAgrees && !inferenceAgrees;
+    if (value.invalidCode === 'decision_mismatch') return !membershipAgrees || !inferenceAgrees;
+    return value.invalidCode === 'passage_invalid' && membershipAgrees && inferenceAgrees;
+  }, 'Bounded model report must explain its diagnostic status without changing support authority');
 export const pageFailureSchema = z.strictObject({
   phase: z.enum(['content_length_malformed', 'declared_too_large', 'compressed_overflow', 'decoded_overflow']),
   declaredLength: z.number().int().nonnegative().nullable(),
@@ -343,6 +462,7 @@ export const branchResultSchema = z.strictObject({
   intentCoverageComplete: z.boolean(),
   identityAmbiguous: z.boolean(),
   companyName: z.string().max(200).nullable(),
+  verifierDiagnostics: z.array(verifierLedgerSchema).max(300).optional(),
 });
 export type BranchResult = z.infer<typeof branchResultSchema>;
 export const gapSchema = z.enum([
@@ -510,6 +630,7 @@ export const assessmentSchema = z.strictObject({
   rejections: z.array(candidateRejectionSchema).max(3000),
   inferences: z.array(acceptedInferenceSchema).max(3000),
   rounds: z.array(roundDiagnosticSchema).max(10),
+  verifierDiagnostics: z.array(verifierLedgerSchema).max(3000).optional(),
   result: scoreSchema,
   summary: z.string().min(1).max(10_000),
   completedAt: z.iso.datetime({ offset: true }),

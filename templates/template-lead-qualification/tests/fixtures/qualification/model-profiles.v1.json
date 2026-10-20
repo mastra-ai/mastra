@@ -1,0 +1,473 @@
+{
+  "version": 1,
+  "kind": "model_passages",
+  "assessmentTime": "2026-10-19T12:00:00Z",
+  "cases": [
+    {
+      "id": "c01",
+      "lead": {
+        "reference": "c01",
+        "domain": "company01.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company01.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 01 provides hosted project-management software to business customers for a monthly subscription. As of 18 October 2026, Company 01 employs exactly 40 people. Company 01's corporate headquarters are in the United States."
+        }
+      ]
+    },
+    {
+      "id": "c02",
+      "lead": {
+        "reference": "c02",
+        "domain": "company02.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company02.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 02 provides hosted project-management software to business customers for a monthly subscription. As of 18 October 2026, Company 02 employs exactly 20 people. Company 02's corporate headquarters are in the United States."
+        }
+      ]
+    },
+    {
+      "id": "c03",
+      "lead": {
+        "reference": "c03",
+        "domain": "company03.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company03.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 03 provides hosted project-management software to business customers for a monthly subscription. As of 18 October 2026, Company 03 employs exactly 500 people. Company 03's corporate headquarters are in the United States."
+        }
+      ]
+    },
+    {
+      "id": "c04",
+      "lead": {
+        "reference": "c04",
+        "domain": "company04.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company04.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 04 provides hosted project-management software to business customers for a monthly subscription. As of 18 October 2026, Company 04 employs exactly 40 people. Company 04's corporate headquarters are in Brazil."
+        }
+      ]
+    },
+    {
+      "id": "c05",
+      "lead": {
+        "reference": "c05",
+        "domain": "company05.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company05.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 05 provides hosted project-management software to business customers for a monthly subscription. As of 18 October 2026, Company 05 employs exactly 40 people. Company 05's corporate headquarters are in Germany."
+        }
+      ]
+    },
+    {
+      "id": "c06",
+      "lead": {
+        "reference": "c06",
+        "domain": "company06.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company06.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 06 provides hosted project-management software to business customers for a monthly subscription. As of 18 October 2026, Company 06 employs exactly 40 people. Company 06's corporate headquarters are in the United Kingdom."
+        }
+      ]
+    },
+    {
+      "id": "c07",
+      "lead": {
+        "reference": "c07",
+        "domain": "company07.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company07.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 07 provides hosted project-management software to business customers for a monthly subscription. As of 18 October 2026, Company 07 employs exactly 19 people. Company 07's corporate headquarters are in the United States."
+        }
+      ]
+    },
+    {
+      "id": "c08",
+      "lead": {
+        "reference": "c08",
+        "domain": "company08.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company08.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 08 provides hosted project-management software to business customers for a monthly subscription. As of 18 October 2026, Company 08 employs exactly 501 people. Company 08's corporate headquarters are in the United States."
+        }
+      ]
+    },
+    {
+      "id": "c09",
+      "lead": {
+        "reference": "c09",
+        "domain": "company09.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company09.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 09 provides hosted project-management software to business customers for a monthly subscription. As of 18 October 2026, Company 09 employs exactly 40 people. Company 09's corporate headquarters are in Japan."
+        }
+      ]
+    },
+    {
+      "id": "c10",
+      "lead": {
+        "reference": "c10",
+        "domain": "company10.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company10.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 10 manufactures and sells physical office desks. Its core offering is furniture; it does not supply a hosted software service. As of 18 October 2026, Company 10 employs exactly 40 people. Company 10's corporate headquarters are in the United States."
+        }
+      ]
+    },
+    {
+      "id": "c11",
+      "lead": {
+        "reference": "c11",
+        "domain": "company11.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-07-20T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company11.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 11 provides hosted project-management software to business customers for a monthly subscription. As of 18 October 2026, Company 11 employs exactly 40 people. Company 11's corporate headquarters are in the United States."
+        }
+      ]
+    },
+    {
+      "id": "c12",
+      "lead": {
+        "reference": "c12",
+        "domain": "company12.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2025-10-19T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company12.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 12 provides hosted project-management software to business customers for a monthly subscription. As of 18 October 2026, Company 12 employs exactly 40 people. Company 12's corporate headquarters are in the United States."
+        }
+      ]
+    },
+    {
+      "id": "c13",
+      "lead": {
+        "reference": "c13",
+        "domain": "company13.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company13.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 13 provides hosted project-management software to business customers for a monthly subscription. Company 13's corporate headquarters are in the United States."
+        }
+      ]
+    },
+    {
+      "id": "c14",
+      "lead": {
+        "reference": "c14",
+        "domain": "company14.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company14.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 14 provides hosted project-management software to business customers for a monthly subscription. As of 18 October 2026, Company 14 employs between 19 and 20 people, inclusive. Company 14's corporate headquarters are in the United States."
+        }
+      ]
+    },
+    {
+      "id": "c15",
+      "lead": {
+        "reference": "c15",
+        "domain": "company15.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company15.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 15 provides hosted project-management software to business customers for a monthly subscription. As of 18 October 2026, Company 15 employs exactly 40 people. Company 15's corporate headquarters are in the United States."
+        },
+        {
+          "id": "document-2",
+          "source": "https://company15.example.com/company",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "As of 18 October 2026, Company 15 employs exactly 400 people."
+        }
+      ]
+    },
+    {
+      "id": "c16",
+      "lead": {
+        "reference": "c16",
+        "domain": "company16.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company16.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 16 provides hosted project-management software to business customers for a monthly subscription. Company 16 serves exactly 40 customer accounts. Company 16's corporate headquarters are in the United States."
+        }
+      ]
+    },
+    {
+      "id": "c17",
+      "lead": {
+        "reference": "c17",
+        "domain": "company17.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company17.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 17 provides hosted project-management software to business customers for a monthly subscription. As of 18 October 2026, Company 17 employs exactly 40 people. Company 17 operates a sales office in Paris, France."
+        }
+      ]
+    },
+    {
+      "id": "c18",
+      "lead": {
+        "reference": "c18",
+        "domain": "company18.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company18.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 18's community calendar lists an open meeting on 24 October 2026. As of 18 October 2026, Company 18 employs exactly 40 people. Company 18's corporate headquarters are in the United States."
+        }
+      ]
+    },
+    {
+      "id": "c19",
+      "lead": {
+        "reference": "c19",
+        "email": "candidate@company19.example.com"
+      },
+      "materials": []
+    },
+    {
+      "id": "c20",
+      "lead": {
+        "reference": "c20",
+        "crm": {
+          "providerId": "example-crm",
+          "recordId": "company-record-20"
+        }
+      },
+      "materials": []
+    },
+    {
+      "id": "c21",
+      "lead": {
+        "reference": "c21",
+        "domain": "company21.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company21.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Organizations pay for ongoing access to Company 21's hosted API. Company 21 operates the service in its cloud; customers do not purchase installed software licenses. As of 18 October 2026, Company 21 employs exactly 40 people. Company 21's corporate headquarters are in the United States."
+        }
+      ]
+    },
+    {
+      "id": "c22",
+      "lead": {
+        "reference": "c22",
+        "domain": "company22.example.com",
+        "inquiry": {
+          "type": "demo_request",
+          "occurredAt": "2026-10-18T12:00:00Z",
+          "text": "We request a demonstration of your sales qualification software."
+        }
+      },
+      "materials": [
+        {
+          "id": "document-1",
+          "source": "https://company22.example.com/about",
+          "title": "Company information",
+          "publishedAt": "2026-10-18T00:00:00Z",
+          "excerpt": "Company 22 provides hosted project-management software to business customers for a monthly subscription. As of 18 October 2026, Company 22 employs between 30 and 50 people, inclusive. Company 22's corporate headquarters are in the United States."
+        }
+      ]
+    },
+    {
+      "id": "c23",
+      "lead": {
+        "reference": "c23",
+        "email": "candidate@gmail.com"
+      },
+      "materials": []
+    },
+    {
+      "id": "c24",
+      "lead": {
+        "reference": "c24",
+        "crm": {
+          "providerId": "example-crm",
+          "recordId": "company-record-24"
+        },
+        "declaredCompanyName": "Company 24"
+      },
+      "materials": []
+    }
+  ]
+}

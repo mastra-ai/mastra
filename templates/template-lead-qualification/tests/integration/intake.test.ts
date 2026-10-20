@@ -23,6 +23,44 @@ afterEach(async () => {
 });
 
 describe('durable intake', () => {
+  it('lists_and_opens_persisted_workflow_history_for_the_authenticated_production_operator', async () => {
+    const app = await harness({ production: true, dispatch: true });
+    cleanup.push(() => app.close());
+    const headers = { Authorization: `Bearer ${productionToken}`, 'x-mastra-client-type': 'studio' };
+    const accepted = await app.post(event('studio-history'), headers);
+    expect(accepted.status).toBe(202);
+    const { runId } = await accepted.json();
+    await vi.waitFor(async () => {
+      expect((await app.intake.workflow.getWorkflowRunById(runId))?.status).toBe('suspended');
+    });
+    const foreign = await app.intake.workflow.createRun({ resourceId: 'another-resource' });
+    expect((await foreign.start({ inputData: { runId: foreign.runId } })).status).toBe('failed');
+    await app.close(false);
+
+    const restarted = await harness({ production: true, directory: app.directory });
+    cleanup.push(() => restarted.close());
+    const historyUrl = '/api/workflows/leadIntake/runs';
+    const invalidHeaders: Record<string, string>[] = [
+      {},
+      { Authorization: 'Bearer wrong-token' },
+      { 'x-mastra-client-type': 'studio' },
+    ];
+    for (const invalid of invalidHeaders) {
+      expect((await restarted.http.request(historyUrl, { headers: invalid })).status).toBe(401);
+      expect((await restarted.http.request(`${historyUrl}/${runId}`, { headers: invalid })).status).toBe(401);
+    }
+    const history = await restarted.http.request(historyUrl, { headers });
+    expect(history.status).toBe(200);
+    expect(await history.json()).toMatchObject({
+      total: 1,
+      runs: [{ runId, resourceId: 'lead-qualification' }],
+    });
+    const detail = await restarted.http.request(`${historyUrl}/${runId}`, { headers });
+    expect(detail.status).toBe(200);
+    expect(await detail.json()).toMatchObject({ runId, status: 'suspended', resourceId: 'lead-qualification' });
+    expect((await restarted.http.request(`${historyUrl}/${foreign.runId}`, { headers })).status).toBe(403);
+  });
+
   it('normalizes_a_registered_lead_source_and_reconciles_its_separate_output_destination_with_authenticated_review', async () => {
     const submittedSchema = z.strictObject({ submission: z.string().min(1), company: domainSchema });
     const destinations = new Map<string, DestinationState>();

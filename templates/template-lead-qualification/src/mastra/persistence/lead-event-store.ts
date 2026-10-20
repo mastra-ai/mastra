@@ -1,3 +1,4 @@
+import { initializeSalesRetention } from '../reporting';
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@libsql/client';
 import type { Client, InStatement, Row } from '@libsql/client';
@@ -51,6 +52,8 @@ export class LeadEventStore {
     await this.client.execute('PRAGMA synchronous=FULL');
     await this.client.execute('PRAGMA busy_timeout=1000');
     await this.client.executeMultiple(`
+      CREATE TABLE IF NOT EXISTS lead_retention_markers (run_id TEXT PRIMARY KEY, assessment_id TEXT, completed_at TEXT NOT NULL, pruned_at TEXT NOT NULL, operation_id TEXT, projection_digest TEXT, binding_digest TEXT, native_pending INTEGER NOT NULL DEFAULT 1);
+      CREATE TABLE IF NOT EXISTS lead_delivery_markers (source_id TEXT NOT NULL,event_id TEXT NOT NULL,run_id TEXT NOT NULL,digest TEXT NOT NULL,expires_at TEXT NOT NULL,PRIMARY KEY(source_id,event_id));
       CREATE TABLE IF NOT EXISTS lead_runs (
         run_id TEXT PRIMARY KEY,
         event_json TEXT NOT NULL,
@@ -72,6 +75,7 @@ export class LeadEventStore {
         PRIMARY KEY (source_id, event_id)
       );
     `);
+    await initializeSalesRetention(this.client);
     await this.qualifications.init();
     await this.reviews.init();
     await this.reviews.migrate();
@@ -94,6 +98,24 @@ export class LeadEventStore {
     snapshot?: QualificationSnapshot,
     expected?: DestinationState,
   ): Promise<RunRecord> {
+    const marker = (
+      await this.client.execute({
+        sql: 'SELECT * FROM lead_delivery_markers WHERE source_id=? AND event_id=?',
+        args: [event.sourceId, event.eventId],
+      })
+    ).rows[0];
+    if (marker) {
+      if (marker.digest !== digestValue({ ...event, receivedAt: '' }))
+        throw new DeliveryConflictError('Event identity already belongs to a different payload');
+      return {
+        runId: z.string().parse(marker.run_id),
+        event,
+        status: 'intake_received',
+        acceptedAt: event.receivedAt,
+        updatedAt: event.receivedAt,
+        failureCode: null,
+      };
+    }
     const delivery = await this.client.execute({
       sql: 'SELECT r.*, d.payload_json FROM lead_deliveries d JOIN lead_runs r USING (run_id) WHERE d.source_id=? AND d.event_id=?',
       args: [event.sourceId, event.eventId],
@@ -133,17 +155,27 @@ export class LeadEventStore {
           args: [event.destination.reference],
         })
       ).rows[0];
+      const expired = (
+        await this.client.execute({
+          sql: 'SELECT projection_digest FROM lead_retention_markers WHERE run_id=?',
+          args: [z.string().parse(previous!.run_id)],
+        })
+      ).rows[0];
       const operation = await this.reviews.operation(
         z.string().parse(previous!.run_id),
         previous!.state === 'applied' ? 'final' : 'closure',
       );
       expectedLocal = destination ? z.string().parse(destination.fields_json) : null;
       if (
-        !expectedLocal ||
-        !operation ||
-        operation.state !== 'applied' ||
-        digestValue(localOwnedState(JSON.parse(expectedLocal) as Record<string, unknown>)) !==
-          digestValue(projectLocalPatch(operation.patch))
+        expired
+          ? expectedLocal !== null &&
+            digestValue(localOwnedState(JSON.parse(expectedLocal) as Record<string, unknown>)) !==
+              expired.projection_digest
+          : !expectedLocal ||
+            !operation ||
+            operation.state !== 'applied' ||
+            digestValue(localOwnedState(JSON.parse(expectedLocal) as Record<string, unknown>)) !==
+              digestValue(projectLocalPatch(operation.patch))
       )
         throw new DeliveryConflictError(
           'Destination changed since the previous cycle; resolve the conflict before requalification',

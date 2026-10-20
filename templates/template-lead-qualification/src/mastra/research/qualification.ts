@@ -1,3 +1,4 @@
+import type { Telemetry } from '../telemetry';
 import { createHash, randomUUID } from 'node:crypto';
 import { noopObserve } from '@mastra/core/tools';
 import type { NormalizedEvent } from '../contracts';
@@ -25,8 +26,9 @@ import type {
 } from './contracts';
 import { approvedUrl, PageRetriever, unsupportedPageFormat } from './page-retrieval';
 import { selectionDiagnosticUrl } from './selection-diagnostics';
+import { verifierDiagnostics } from './verifier-diagnostics';
 import { collectFacts, gapReason, missingAttributes } from './facts';
-import { createEvidenceBatch, validateCandidates, validateSource } from './evidence-validation';
+import { createEvidenceBatch, validateCandidates, normalizedCandidateId, validateSource } from './evidence-validation';
 
 function resolveIdentity(event: NormalizedEvent) {
   return identitySchema.parse(
@@ -80,6 +82,7 @@ export class QualificationService {
     private readonly store: QualificationStore,
     private readonly providers: Map<string, EvidenceProvider>,
     private readonly pages = new PageRetriever(),
+    private readonly telemetry?: Telemetry,
   ) {}
   private async hasDiscoveryBudget(context: Omit<ResearchContext, 'round'>) {
     const budget = (await this.store.get(context.runId))!.budget;
@@ -251,6 +254,7 @@ export class QualificationService {
               context,
             );
             decision.reason = 'retrieved';
+            await this.telemetry?.diagnostic({ code: 'research.retrieval', runId: context.runId });
             recordUrl(context.round.counters.urls, sourceUrl, 'retrieved');
             if (!retrievedDigests.has(page.digest)) {
               retrievedDigests.add(page.digest);
@@ -302,19 +306,31 @@ export class QualificationService {
           context.round.counters.extractedCandidates += extracted.candidates.length;
           context.round.counters.selectedCandidates += candidates.length;
         }
-        const verification = verificationSchema.safeParse(
-          await retryWithinBudget(() => provider.verify(branch, candidates, material, context), context),
-        );
-        if (!verification.success) throw new ResearchError('provider_verification_invalid');
-        const verified = verification.data;
-        const accepted = validateCandidates(candidates, verified.supportedCandidateIds, prepared, {
+        const scope = {
           providerId,
           branch,
           roundIndex: context.round.index,
           businessModelLabels: context.snapshot.config.policy.rules.businessModel.categories.map(
             category => category.label,
           ),
-        });
+        };
+        // Apply the same attribution/provenance checks before exposing proposals to the verifier.
+        const preflight = validateCandidates(candidates, [], prepared, scope);
+        const invalid = preflight.rejections.filter(rejection => rejection.reason !== 'semantic_verification_rejected');
+        result.rejections.push(...invalid);
+        const invalidIds = new Set(invalid.map(rejection => rejection.candidateId));
+        const survivors = candidates.filter(candidate => !invalidIds.has(normalizedCandidateId(candidate.id, scope)));
+        // An originally empty extraction can establish negative intent coverage. Rejected proposals cannot.
+        if (extracted.candidates.length && !survivors.length) continue;
+        const verification = verificationSchema.safeParse(
+          await retryWithinBudget(() => provider.verify(branch, survivors, material, context), context),
+        );
+        if (!verification.success) throw new ResearchError('provider_verification_invalid');
+        const verified = verification.data;
+        (result.verifierDiagnostics ??= []).push(
+          ...verifierDiagnostics(verified.diagnostics, survivors, verified.supportedCandidateIds, prepared, scope),
+        );
+        const accepted = validateCandidates(survivors, verified.supportedCandidateIds, prepared, scope);
         result.candidates.push(...accepted.candidates);
         result.rejections.push(...accepted.rejections);
         result.analysisComplete = true;
@@ -432,6 +448,7 @@ export class QualificationService {
     const { snapshot } = stored;
     const deadline = await this.store.start(runId, snapshot);
     const identity = resolveIdentity(event);
+    await this.telemetry?.diagnostic({ code: 'research.identity', runId });
     let branches: BranchResult[] = [];
     let rounds: ResearchRound['diagnostic'][] = [];
     let facts: ReturnType<typeof collectFacts>;
@@ -528,9 +545,15 @@ export class QualificationService {
         : []),
     ].join('\n');
     const failures = branches.flatMap(branch => branch.failures);
+    await this.telemetry?.diagnostic({
+      code: 'research.facts',
+      runId,
+      classification: result.classification,
+      score: result.score,
+    });
     const processingStatus =
       identity.status === 'resolved' && evidence.length === 0 && failures.length > 0 ? 'failed' : 'completed';
-    return this.store.finish(
+    const completed = await this.store.finish(
       assessmentSchema.parse({
         id: randomUUID(),
         runId,
@@ -543,11 +566,21 @@ export class QualificationService {
         failures,
         rejections: branches.flatMap(branch => branch.rejections),
         inferences,
+        verifierDiagnostics: branches.flatMap(branch => branch.verifierDiagnostics ?? []),
         rounds,
         result,
         summary,
         completedAt: new Date().toISOString(),
       }),
     );
+    await this.telemetry?.diagnostic({
+      code: 'qualification.scored',
+      runId,
+      assessmentId: completed.id,
+      classification: completed.result.classification,
+      score: completed.result.score,
+      policyVersion: completed.snapshot.config.policy.version,
+    });
+    return completed;
   }
 }

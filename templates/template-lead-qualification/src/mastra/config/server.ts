@@ -9,7 +9,8 @@ export function createServerConfig(runtime: RuntimeConfig, limits: IntakeConfig[
       ? new SimpleAuth({
           tokens: { [runtime.token!]: { id: 'lead-operator' } },
           headers: ['Authorization'],
-          mapUserToResourceId: user => user.id,
+          // Background dispatch and Studio share the same operator resource.
+          mapUserToResourceId: () => 'lead-qualification',
         })
       : undefined;
   return {
@@ -17,7 +18,7 @@ export function createServerConfig(runtime: RuntimeConfig, limits: IntakeConfig[
     studio: { auth },
     server: {
       host: runtime.host,
-      port: 4111,
+      port: runtime.port ?? 4111,
       auth,
       cors: false,
       bodySizeLimit: limits.maxBodyBytes,

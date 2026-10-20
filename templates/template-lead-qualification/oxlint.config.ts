@@ -21,7 +21,13 @@ export default defineConfig({
   },
   overrides: [
     {
-      files: ['tests/**', 'scripts/attio-demo.ts', 'vitest.config.ts'],
+      files: [
+        'tests/**',
+        'scripts/attio-demo.ts',
+        'scripts/collect-evaluation.ts',
+        'scripts/model-collection.ts',
+        'vitest.config.ts',
+      ],
       rules: { 'no-restricted-imports': 'off', 'vitest/no-focused-tests': 'error' },
     },
   ],

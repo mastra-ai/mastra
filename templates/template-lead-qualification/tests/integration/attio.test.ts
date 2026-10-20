@@ -420,11 +420,9 @@ describe('Attio qualification pipeline', () => {
       },
       fixture,
     );
-    vi.mocked(research.transport.request).mockImplementation(async () =>
-      pageResponse(
-        'Example sells subscription cloud software to businesses. Our workforce: 150+ employees. Headquarters: United States.',
-      ),
-    );
+    const workforcePage =
+      'Example sells subscription cloud software to businesses. Our workforce: 150+ employees. Headquarters: United States.';
+    vi.mocked(research.transport.request).mockImplementation(async () => pageResponse(workforcePage));
     const entry = fixture.add();
     await deliver(app, fixture, [fixture.event(entry)]);
     await app.inputs.get('attio')!.drain!();
@@ -450,8 +448,13 @@ describe('Attio qualification pipeline', () => {
       expect.objectContaining({
         attribute: 'employeeCount',
         rationale,
-        passages: [expect.objectContaining({ quote: '150+ employees' })],
+        passages: [expect.objectContaining({ quote: workforcePage })],
       }),
+    );
+    const employeePassage = assessment.inferences.find(item => item.attribute === 'employeeCount')!.passages[0]!;
+    expect(employeePassage.quote).toContain('150+ employees');
+    expect(assessment.evidence.find(source => source.id === employeePassage.evidenceId)!.excerpt).toContain(
+      employeePassage.quote,
     );
   });
 

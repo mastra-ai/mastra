@@ -1,3 +1,5 @@
+import { digestValue } from '../../review/contracts';
+import { parseAttioMetadata } from './metadata';
 import type { Assessment } from '../../research/contracts';
 import type { OwnedPatch } from '../../review/contracts';
 import { actions, labels, presentAssessment } from '../../review/presentation';
@@ -59,4 +61,15 @@ export function compactAttioSummary(patch: OwnedPatch) {
     presentation.gaps,
     `Next action\n${patch.nextAction}`,
   ].join('\n\n');
+}
+
+/** After detail expiry only an exact machine-output fingerprint authorizes fresh research. */
+export function attioRetentionDigest(fields: Record<string, unknown>, reviewFields: readonly string[]) {
+  return digestValue(
+    Object.fromEntries(
+      Object.entries(fields)
+        .filter(([key]) => !reviewFields.includes(key))
+        .map(([key, value]) => [key, key === 'metadata' ? parseAttioMetadata(value).output : value]),
+    ),
+  );
 }

@@ -124,7 +124,7 @@ export class ProviderDiagnostics {
       this.captureFailure = 'missing_response_body';
       return;
     }
-    const decoder = new TextDecoder();
+    const decoder = new TextDecoder('utf-8', { fatal: true });
     let pending = '';
     let received = 0;
     const json = response.headers.get('content-type')?.includes('application/json');
@@ -135,16 +135,23 @@ export class ProviderDiagnostics {
         received += chunk.value.byteLength;
         if (received > 1_048_576) throw new Error();
         pending += decoder.decode(chunk.value, { stream: true });
-        if (pending.length > 65_536) throw new Error();
-        if (json) continue;
+        if (json) {
+          if (pending.length > 65_536) throw new Error();
+          continue;
+        }
         const events = pending.replaceAll('\r\n', '\n').split('\n\n');
         pending = events.pop()!;
+        // A delimiter may arrive in pieces; its recognized prefix is framing, not event content.
+        const framingSuffix = pending.endsWith('\n\r') ? 2 : /[\n\r]$/.test(pending) ? 1 : 0;
+        if (pending.length - framingSuffix > 65_536 || events.some(event => event.length > 65_536)) throw new Error();
         for (const event of events)
           for (const line of event.split('\n')) {
             if (line.startsWith('data: ') && line.slice(6) !== '[DONE]') this.observe(JSON.parse(line.slice(6)));
           }
       }
+      pending += decoder.decode();
       if (json && pending) this.observe(JSON.parse(pending));
+      else if (pending.trim()) throw new Error();
     } catch {
       this.captureFailure = 'provider_metadata_capture_failed';
     } finally {

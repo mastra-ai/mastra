@@ -1,11 +1,18 @@
+import {
+  sourcePassages,
+  passageExtractionSchema,
+  materializeExtraction,
+  passageSelectionFailure,
+  passageExtractionInstruction,
+} from '../research/source-passages';
 import { Agent } from '@mastra/core/agent';
 import { noopLogger } from '@mastra/core/logger';
 import type { z } from 'zod';
 import type { QualificationSnapshot, researchTargetSchema } from '../config/qualification';
 import type { QualificationStore } from '../persistence/qualification-store';
 import {
-  extractionSchema,
   verificationSchema,
+  verificationWireSchema,
   roundInputSchema,
   providerFailureSchema,
   providerValidationIssueSchema,
@@ -13,6 +20,7 @@ import {
 } from '../research/contracts';
 import type {
   discoverySchema,
+  extractionSchema,
   Candidate,
   Evidence,
   ResearchBranch,
@@ -61,6 +69,25 @@ function roundInput(context: ResearchContext, evidence: Evidence[]) {
       currentEvidenceIds: [...new Set(evidence.filter(source => !previous.has(source.id)).map(source => source.id))],
       previousEvidenceIds: [...new Set(evidence.filter(source => previous.has(source.id)).map(source => source.id))],
     }),
+  };
+}
+/** Shared serialization keeps bounded verifier experiments bound to the shipped provider input. */
+export function interpretationInput(
+  branch: ResearchBranch,
+  evidence: Evidence[],
+  context: ResearchContext,
+  candidates?: Candidate[],
+) {
+  const rules = context.snapshot.config.policy.rules;
+  return {
+    branch,
+    companyDomain: context.domain,
+    assessmentTime: context.snapshot.assessmentTime,
+    ...roundInput(context, evidence),
+    businessModel: candidates ? { categories: rules.businessModel.categories } : rules.businessModel,
+    ...(!candidates ? { employeeCount: rules.employeeCount } : {}),
+    evidence,
+    ...(candidates ? { candidates } : {}),
   };
 }
 export interface EvidenceProvider {
@@ -182,6 +209,32 @@ export async function retryWithinBudget<T>(
   }
 }
 
+// Supplied provider items are checked in every stage, even on otherwise unknown events.
+function allowedOutputItem(item: unknown, search: boolean) {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+  const type = (item as { type?: unknown }).type;
+  return type === 'message' || type === 'reasoning' || (search && type === 'web_search_call');
+}
+function unexpectedToolObservation(event: Record<string, unknown>, search: boolean) {
+  const type = event.type;
+  if (
+    typeof type === 'string' &&
+    (/^response\.(?:code_interpreter_call|code_interpreter_call_code|file_search_call|function_call_arguments|image_generation_call|mcp_call|mcp_call_arguments|mcp_list_tools|custom_tool_call_input|shell_call_command|shell_call_output_content)\./.test(
+      type,
+    ) ||
+      (!search && type.startsWith('response.web_search_call.')))
+  )
+    return true;
+  if (Object.hasOwn(event, 'item') || type === 'response.output_item.added' || type === 'response.output_item.done')
+    if (!allowedOutputItem(event.item, search)) return true;
+  const response = event.response;
+  if (response && typeof response === 'object' && Object.hasOwn(response, 'output')) {
+    const output = (response as { output: unknown }).output;
+    if (!Array.isArray(output) || output.some(item => !allowedOutputItem(item, search))) return true;
+  }
+  return false;
+}
+
 export class OpenAIEvidenceProvider implements EvidenceProvider {
   readonly id = 'openai-web';
   private async invoke(
@@ -203,8 +256,10 @@ export class OpenAIEvidenceProvider implements EvidenceProvider {
     const tokens = Math.min(input.tokens, remaining - (input.downstreamTokens ?? 0));
     if (tokens < 128) throw new ResearchError('resource_budget_exhausted');
     const reservation = await context.store.reserve(context.runId, input.kind, tokens);
+    const started = performance.now();
     const diagnostic: ProviderFailure = { stage: input.stage };
     let measuredOutputTokens: number | undefined;
+    let unexpectedTool = false;
     try {
       const agent = new Agent({
         id: `research-${input.branch}-${input.kind}`,
@@ -230,6 +285,7 @@ export class OpenAIEvidenceProvider implements EvidenceProvider {
       if (Date.now() >= context.deadline) throw new ResearchError('deadline_exhausted');
       const options = {
         maxSteps: 1,
+        maxProcessorRetries: 0,
         includeRawChunks: true,
         abortSignal: AbortSignal.timeout(Math.max(1, context.deadline - Date.now())),
         modelSettings: { maxOutputTokens: reservation.tokens, maxRetries: 0 },
@@ -240,7 +296,7 @@ export class OpenAIEvidenceProvider implements EvidenceProvider {
             reasoningEffort: 'low',
             // The installed SDK adds action.sources on the wire for web_search.
             // Its public include validator rejects that same value as an explicit option.
-            ...(input.kind === 'search' ? { maxToolCalls: 1 } : {}),
+            ...(input.kind === 'search' ? { maxToolCalls: 1, parallelToolCalls: false } : {}),
           },
         },
       };
@@ -253,6 +309,7 @@ export class OpenAIEvidenceProvider implements EvidenceProvider {
       let streamError: unknown;
       for await (const chunk of result.fullStream) {
         if (chunk.type === 'raw') {
+          if (unexpectedToolObservation(chunk.payload, input.kind === 'search')) unexpectedTool = true;
           input.observe?.(chunk.payload);
           const response = chunk.payload.response as
             | {
@@ -281,14 +338,26 @@ export class OpenAIEvidenceProvider implements EvidenceProvider {
         }
         if (chunk.type === 'error') streamError = chunk.payload.error;
       }
+      if (unexpectedTool) throw new ResearchError('provider_tool_unexpected', false, 0, undefined, diagnostic);
       if (diagnostic.responseStatus === 'incomplete')
         throw new ResearchError('provider_response_incomplete', false, 0, undefined, diagnostic);
+      // Optional diagnostic recovery requires a completed response when status is known.
+      if (input.stage === 'verify' && diagnostic.responseStatus && diagnostic.responseStatus !== 'completed')
+        throw new ResearchError(
+          diagnostic.responseStatus === 'failed' || diagnostic.responseStatus === 'cancelled'
+            ? 'provider_failed'
+            : 'provider_response_incomplete',
+          false,
+          0,
+          undefined,
+          diagnostic,
+        );
       if (streamError) {
         const failure = normalizedResearchError(streamError, diagnostic);
         // StandardSchema errors keep the failed JSON but omit Zod issues. Retain only safe issue metadata.
         const rejected = (streamError as { details?: { value?: unknown } })?.details?.value;
         if (
-          failure.provider?.errorClass === 'schema_validation' &&
+          ['schema_validation', 'type_validation'].includes(failure.provider?.errorClass ?? '') &&
           typeof rejected === 'string' &&
           rejected.length <= 65_536 &&
           input.schema
@@ -301,7 +370,24 @@ export class OpenAIEvidenceProvider implements EvidenceProvider {
           }
           if (decoded !== undefined) {
             const parsed = input.schema.safeParse(decoded);
-            if (!parsed.success) throw normalizedResearchError(parsed.error, diagnostic);
+            if (!parsed.success) {
+              if (input.stage === 'extract' && input.schema === passageExtractionSchema) {
+                const selectionFailure = passageSelectionFailure(parsed.error);
+                if (selectionFailure.code === 'provider_passage_duplicate')
+                  throw new ResearchError(
+                    selectionFailure.code,
+                    false,
+                    0,
+                    undefined,
+                    normalizedResearchError(parsed.error, diagnostic).provider,
+                  );
+              }
+              if (input.stage === 'verify') {
+                const core = verificationSchema.safeParse(decoded);
+                if (core.success) return core.data;
+              }
+              throw normalizedResearchError(parsed.error, diagnostic);
+            }
           }
         }
         throw failure;
@@ -310,6 +396,7 @@ export class OpenAIEvidenceProvider implements EvidenceProvider {
         throw new ResearchError('provider_failed', false, 0, undefined, diagnostic);
       return input.schema ? input.schema.parse(await result.object) : null;
     } catch (error) {
+      if (error instanceof ResearchError && error.code === 'provider_passage_duplicate') throw error;
       const failure = normalizedResearchError(error, diagnostic);
       if (
         input.schema &&
@@ -326,53 +413,91 @@ export class OpenAIEvidenceProvider implements EvidenceProvider {
         );
       throw failure;
     } finally {
+      const durationMs = performance.now() - started;
       if (measuredOutputTokens !== undefined)
         await context.store.settle(reservation, { outputTokens: measuredOutputTokens });
+      try {
+        await context.store.measurement?.({
+          usageId: reservation.id,
+          runId: context.runId,
+          stage: input.stage,
+          durationMs,
+          inputTokens: diagnostic.inputTokens ?? null,
+          outputTokens: diagnostic.outputTokens ?? null,
+          reasoningTokens: diagnostic.reasoningTokens ?? null,
+          model: context.snapshot.model,
+        });
+      } catch {
+        /* Telemetry cannot alter completed external work or budget settlement. */
+      }
     }
   }
   async search(branch: ResearchBranch, context: ResearchContext): Promise<z.infer<typeof discoverySchema>> {
     const sources = new Set<string>();
     const preferred = new Set<string>();
-    const citation = (url: string) => {
-      sources.add(url);
-      preferred.add(url);
-    };
-    const completed = new Set<string>();
+    const attempts = new Map<
+      string,
+      { index: number; phase: number; added: boolean; done: boolean; completed: boolean }
+    >();
+    let invalid = false;
+    let exceeded = false;
+    let finalCount = 0;
+    let finalItems: Array<Record<string, unknown>> = [];
+    const validId = (id: unknown): id is string => typeof id === 'string' && id.length <= 512 && id.trim().length > 0;
     const observe = (event: Record<string, unknown>) => {
-      const inspect = (value: unknown) => {
-        const item = value as
-          | {
-              type?: string;
-              id?: string;
-              status?: string;
-              role?: string;
-              content?: Array<{ annotations?: Array<{ type?: string; url?: string }> }>;
-              action?: { type?: string; url?: string; sources?: Array<{ type: string; url?: string }> };
+      if (finalCount > 0) invalid = true;
+      const snapshot = event.response as { output?: unknown } | undefined;
+      if (Array.isArray(snapshot?.output))
+        for (const [output_index, item] of snapshot.output.entries())
+          observe({ type: 'response.snapshot', output_index, item });
+      const item = event.item as Record<string, unknown> | undefined;
+      if (
+        ['response.output_item.added', 'response.output_item.done'].includes(String(event.type)) &&
+        !['message', 'reasoning', 'web_search_call'].includes(String(item?.type))
+      )
+        invalid = true;
+      const lifecycle = typeof event.type === 'string' && event.type.startsWith('response.web_search_call.');
+      if (item?.type === 'web_search_call' || lifecycle) {
+        const id = lifecycle ? event.item_id : item?.id;
+        const index = event.output_index;
+        const status = lifecycle ? String(event.type).slice('response.web_search_call.'.length) : item?.status;
+        const phase = ['in_progress', 'searching', 'completed'].indexOf(String(status));
+        if (item?.action !== undefined && (item.action as { type?: unknown })?.type !== 'search') invalid = true;
+        if (!validId(id) || !Number.isSafeInteger(index) || (index as number) < 0 || phase < 0) invalid = true;
+        else {
+          let attempt = attempts.get(id);
+          if (!attempt) {
+            if (attempts.size >= 1) exceeded = true;
+            if (attempts.size < 2) {
+              attempt = { index: index as number, phase: -1, added: false, done: false, completed: false };
+              attempts.set(id, attempt);
             }
-          | undefined;
-        if (item?.type === 'message' && item.role === 'assistant') {
-          for (const content of item.content ?? [])
-            for (const annotation of content.annotations ?? [])
-              if (annotation.type === 'url_citation' && annotation.url) citation(annotation.url);
+          }
+          if (attempt) {
+            if (attempt.index !== index || phase < attempt.phase) invalid = true;
+            attempt.phase = phase;
+            if (event.type === 'response.output_item.added') {
+              if (attempt.added) invalid = true;
+              attempt.added = true;
+            }
+            if (event.type === 'response.output_item.done') {
+              if (attempt.done || status !== 'completed' || (item?.action as { type?: unknown })?.type !== 'search')
+                invalid = true;
+              attempt.done = true;
+            }
+            if (event.type === 'response.web_search_call.completed') {
+              if (attempt.completed) invalid = true;
+              attempt.completed = true;
+            }
+          }
         }
-        if (item?.type !== 'web_search_call') return;
-        if (item.status === 'completed' && item.id) completed.add(item.id);
-        if (
-          item.status === 'completed' &&
-          ['open_page', 'find_in_page'].includes(item.action?.type ?? '') &&
-          item.action?.url
-        )
-          sources.add(item.action.url);
-        for (const source of item.action?.sources ?? [])
-          if (source.type === 'url' && source.url) sources.add(source.url);
-      };
-      inspect(event.item);
-      const response = event.response as { output?: unknown[] } | undefined;
-      for (const item of response?.output ?? []) inspect(item);
-      if (event.type === 'response.web_search_call.completed' && typeof event.item_id === 'string')
-        completed.add(event.item_id);
-      const annotation = event.annotation as { type?: string; url?: string } | undefined;
-      if (annotation?.type === 'url_citation' && annotation.url) citation(annotation.url);
+      }
+      if (event.type === 'response.completed') {
+        finalCount++;
+        const response = event.response as { status?: unknown; output?: unknown } | undefined;
+        if (response?.status !== 'completed' || !Array.isArray(response.output)) invalid = true;
+        else finalItems = response.output as Array<Record<string, unknown>>;
+      }
     };
     const terms = {
       employeeCount:
@@ -412,40 +537,81 @@ export class OpenAIEvidenceProvider implements EvidenceProvider {
       },
       context,
     );
-    if (completed.size > 1)
+    const searches = finalItems.filter(item => item?.type === 'web_search_call');
+    if (exceeded || searches.length > 1)
       throw new ResearchError('provider_search_limit_exceeded', false, 0, undefined, { stage: 'search' });
-    if (completed.size !== 1)
+    const search = searches[0];
+    const id = search?.id;
+    const index = finalItems.indexOf(search!);
+    const attempt = validId(id) ? attempts.get(id) : undefined;
+    if (
+      invalid ||
+      finalCount !== 1 ||
+      searches.length !== 1 ||
+      !validId(id) ||
+      search?.status !== 'completed' ||
+      (search.action as { type?: unknown })?.type !== 'search' ||
+      finalItems.some(item => !['message', 'reasoning', 'web_search_call'].includes(String(item?.type))) ||
+      (attempts.size > 0 && (!attempt || attempt.index !== index))
+    )
       throw new ResearchError('search_completion_unverified', false, 0, undefined, { stage: 'search' });
+    // Only a validated final search and its completed response can provide discovery URLs.
+    const action = search!.action as { sources?: Array<{ type?: unknown; url?: unknown }> };
+    for (const source of Array.isArray(action.sources) ? action.sources : [])
+      if (source?.type === 'url' && typeof source.url === 'string') sources.add(source.url);
+    for (const item of finalItems) {
+      if (
+        item.type !== 'message' ||
+        item.role !== 'assistant' ||
+        item.status !== 'completed' ||
+        !Array.isArray(item.content)
+      )
+        continue;
+      for (const content of item.content as Array<{ annotations?: Array<{ type?: unknown; url?: unknown }> }>)
+        for (const annotation of Array.isArray(content?.annotations) ? content.annotations : [])
+          if (annotation?.type === 'url_citation' && typeof annotation.url === 'string') {
+            sources.add(annotation.url);
+            preferred.add(annotation.url);
+          }
+    }
     return { sourceUrls: [...sources], preferredSourceUrls: [...preferred], evidence: [] };
   }
-  private interpret(branch: ResearchBranch, evidence: Evidence[], context: ResearchContext, candidates?: Candidate[]) {
+  private interpret(branch: ResearchBranch, evidence: Evidence[], context: ResearchContext, candidates: Candidate[]) {
     return this.invoke(
       {
         branch,
         kind: 'model',
-        stage: candidates ? 'verify' : 'extract',
-        tokens: candidates ? 1000 : 2000,
-        downstreamTokens: candidates ? 0 : 128,
-        instruction: candidates
-          ? context.snapshot.config.prompts.verification
-          : context.snapshot.config.prompts.extraction,
-        data: {
-          branch,
-          companyDomain: context.domain,
-          assessmentTime: context.snapshot.assessmentTime,
-          ...roundInput(context, evidence),
-          businessModel: context.snapshot.config.policy.rules.businessModel,
-          employeeCount: context.snapshot.config.policy.rules.employeeCount,
-          evidence,
-          ...(candidates ? { candidates } : {}),
-        },
-        schema: candidates ? verificationSchema : extractionSchema,
+        stage: 'verify',
+        tokens: 1000,
+        downstreamTokens: 0,
+        instruction: context.snapshot.config.prompts.verification,
+        data: interpretationInput(branch, evidence, context, candidates),
+        schema: verificationWireSchema,
       },
       context,
     );
   }
   async extract(branch: ResearchBranch, evidence: Evidence[], context: ResearchContext) {
-    return extractionSchema.parse(await this.interpret(branch, evidence, context));
+    const passages = sourcePassages(evidence);
+    const data = interpretationInput(branch, evidence, context);
+    const selected = await this.invoke(
+      {
+        branch,
+        kind: 'model',
+        stage: 'extract',
+        tokens: 2000,
+        downstreamTokens: 128,
+        instruction: passageExtractionInstruction(context.snapshot.config.prompts.extraction),
+        data: {
+          ...data,
+          evidence: evidence.map(({ excerpt: _excerpt, ...source }) => source),
+          sourcePassages: passages,
+        },
+        schema: passageExtractionSchema,
+      },
+      context,
+    );
+    return materializeExtraction(selected, passages);
   }
   async verify(branch: ResearchBranch, candidates: Candidate[], evidence: Evidence[], context: ResearchContext) {
     return verificationSchema.parse(await this.interpret(branch, evidence, context, candidates));

@@ -124,3 +124,13 @@ Generate the secretless mapping with `scripts/attio-setup.ts`, which plans by de
 The optional live proof uses three new automatic cases and one linked requalification, plus a read-only verification of an existing Stage-approved, manually reopened review and its archived history selected by `reviewRunId` in a private live-test JSON file. Pass only its path with a transient `ATTIO_LIVE_CONFIG_FILE` for that invocation; keep these test choices outside `.env`. See [live verification](attio.md#verify-the-paths) for prerequisites, deadlines and observation retries.
 
 For JSON lead intake with complete native Attio review, explicitly add `additionalInputs: ['attio']` alongside the generic/Attio selection and supply the signing secret. This starts the full signed Attio input, including its durable command processing and admission of relevant new list entries. Without this additional input, Attio output can apply automatic results, but uncertain packets have no native Stage command listener. No extra transport or secret is enabled implicitly. Additional inputs must provide their own custom transport; input IDs and source IDs remain distinct.
+
+## Port, reports and retention
+
+`LEAD_QUALIFICATION_PORT` optionally selects an integer port from 1024 through 65535 (default 4111). Local mode still binds loopback; production authentication is unchanged. A separate unused port lets the fresh-copy proof run without touching an existing service.
+
+`qualificationConfig.retention.assessmentDays`, `traceDays` and `deliveryMarkerDays` are positive whole-day windows, defaulting to 30,30,90. [Retention](retention.md) explains protected work, current ownership markers and explicit preview/apply. The bounded [business report](observability.md#query-retained-business-results) describes its actual retained cohort; it cannot recover expired historical details. `telemetryPricing` is optional, versioned and explicitly partial; omit it to report unavailable costs.
+
+Customization prompt:
+
+> Adapt [policy, research budget, retention or port] using the existing typed configuration. Keep deterministic bounds in schemas and capture immutable qualification settings per cycle. Preserve prior results, shared resource accounting, human routing for unresolved decisive facts and report missing-data semantics. Add observable isolated examples, freeze evaluation labels before measuring, and update the affected product guide.

@@ -36,6 +36,7 @@ export interface ResearchScenario {
   roundCitations?: Record<string, string[]>;
   employeeQuote?: string;
   rejectEmployee?: boolean;
+  verificationDiagnostics?: unknown;
   rejectRedundantBusiness?: boolean;
   asOf?: string | null | ((source: Evidence) => string | null);
   conflict?: boolean;
@@ -92,9 +93,23 @@ export function controlledResearch(initial: ResearchScenario = {}) {
       target?: string;
       evidence?: Evidence[];
       candidates?: Candidate[];
+      sourcePassages?: Array<{ id: string; evidenceId: string; quote: string }>;
       attribute?: string;
       round?: { target: string };
     };
+    if (data.sourcePassages) {
+      const full = new Map<string, string>();
+      for (const passage of data.sourcePassages as Array<{
+        id: string;
+        evidenceId: string;
+        quote: string;
+        start: number;
+      }>) {
+        const prior = full.get(passage.evidenceId) ?? '';
+        full.set(passage.evidenceId, prior.slice(0, passage.start) + passage.quote);
+      }
+      data.evidence = data.evidence!.map(source => ({ ...source, excerpt: full.get(source.id) ?? '' }));
+    }
     const branch =
       data.branch ??
       (data.attribute
@@ -107,7 +122,7 @@ export function controlledResearch(initial: ResearchScenario = {}) {
     if (scenario.failSignals && branch === 'signals') throw new TypeError('Controlled unavailable provider');
     const id = String(++count);
     let output: unknown = {};
-    const events: unknown[] = [
+    const events: Array<Record<string, unknown>> = [
       {
         type: 'response.created',
         response: { id: `resp_${id}`, model: 'gpt-6-luna', created_at: Math.floor(Date.now() / 1000) },
@@ -146,6 +161,7 @@ export function controlledResearch(initial: ResearchScenario = {}) {
       output = { description: 'Controlled search response; not evidence' };
     } else if (data.candidates) {
       output = {
+        ...('verificationDiagnostics' in scenario ? { diagnostics: scenario.verificationDiagnostics } : {}),
         supportedCandidateIds: scenario.unsupported
           ? []
           : data.candidates
@@ -237,7 +253,25 @@ export function controlledResearch(initial: ResearchScenario = {}) {
       output = {
         companyName: 'Example Company',
         identityAmbiguous: scenario.ambiguous ?? false,
-        candidates,
+        candidates: candidates.map(candidate => {
+          const { evidenceId, quote, inference, ...fields } = candidate as unknown as Candidate;
+          const select = (sourceId: string, text: string) =>
+            data.sourcePassages!.find(passage => passage.evidenceId === sourceId && passage.quote.includes(text))?.id ??
+            `passage-${'0'.repeat(40)}`;
+          const passageId = select(evidenceId, quote);
+          return {
+            ...fields,
+            passageId,
+            inference: inference
+              ? {
+                  rationale: inference.rationale,
+                  additionalPassageIds: [
+                    ...new Set(inference.additionalPassages.map(passage => select(passage.evidenceId, passage.quote))),
+                  ].filter(id => id !== passageId),
+                }
+              : null,
+          };
+        }),
         intentCoverageComplete: true,
       };
     }
@@ -255,6 +289,7 @@ export function controlledResearch(initial: ResearchScenario = {}) {
         item: {
           id: `msg_${id}`,
           type: 'message',
+          status: 'completed',
           role: 'assistant',
           content: [
             {
@@ -276,19 +311,20 @@ export function controlledResearch(initial: ResearchScenario = {}) {
           ],
         },
       },
-      {
-        type: 'response.completed',
-        response: {
-          id: `resp_${id}`,
-          status: 'completed',
-          usage: {
-            input_tokens: 100,
-            output_tokens: Math.min(100, body.max_output_tokens),
-            output_tokens_details: { reasoning_tokens: 0 },
-          },
+    );
+    events.push({
+      type: 'response.completed',
+      response: {
+        id: `resp_${id}`,
+        status: 'completed',
+        output: events.filter(event => event.type === 'response.output_item.done').map(event => event.item),
+        usage: {
+          input_tokens: 100,
+          output_tokens: Math.min(100, body.max_output_tokens),
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       },
-    );
+    });
     return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('') + 'data: [DONE]\n\n', {
       headers: { 'Content-Type': 'text/event-stream' },
     });

@@ -46,7 +46,11 @@ curl -s http://127.0.0.1:4111/lead-qualification/events \
 ## Customization
 
 - Ask your coding agent: “Explore the evidence contracts and policy, then propose a plan to qualify [my target market]. Preserve sourced facts, shared budgets and deterministic scoring. Add functional examples before changing the policy.” See [configuration](docs/configuration.md).
-- Add an approved source domain or adapter using [research sources](docs/research-sources.md), configure [Attio](docs/attio.md), or connect a different [CRM or lead source](docs/crm-adapters.md). See [operations](docs/operations.md) and [observability](docs/observability.md) for recovery and storage.
+- Add an approved source domain or adapter using [research sources](docs/research-sources.md), configure [Attio](docs/attio.md), or connect a different [CRM or lead source](docs/crm-adapters.md). See [operations](docs/operations.md), [observability](docs/observability.md), [evaluation](docs/evaluation.md) and [retention](docs/retention.md) for recovery, measurement and previewed maintenance.
+
+## Measure and maintain
+
+Use the bounded authenticated JSON [report](docs/observability.md#query-retained-business-results) to inspect retained enrichment, qualification, review and separately observed sales outcomes. [Evaluate frozen profiles](docs/evaluation.md) before claiming quality, and preview [retention](docs/retention.md) with the service stopped before removing eligible local details.
 
 ## About Mastra templates
 

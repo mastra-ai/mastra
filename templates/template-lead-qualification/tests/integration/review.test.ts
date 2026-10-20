@@ -1,3 +1,4 @@
+import { sourcePassages } from '../../src/mastra/research/source-passages';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { RequestContext } from '@mastra/core/request-context';
@@ -221,7 +222,9 @@ describe('review and output', () => {
       expect(employeeInference.rationale).toBe(scenario.employeeInference!.rationale);
       expect(employeeInference.passages).toHaveLength(1);
       for (const passage of employeeInference.passages) {
-        expect(passage.quote).toBe(scenario.employeeQuote);
+        const source = assessment.evidence.find(source => source.id === passage.evidenceId)!;
+        expect(passage.quote).toBe(sourcePassages([source])[0]!.quote);
+        expect(passage.quote).toContain(scenario.employeeQuote);
         expect(assessment.facts.employeeCount.evidenceIds).toContain(passage.evidenceId);
         expect(assessment.evidence.find(source => source.id === passage.evidenceId)!.excerpt).toContain(passage.quote);
       }

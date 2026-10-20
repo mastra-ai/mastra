@@ -25,9 +25,11 @@ afterEach(async () => {
 async function researchHarness(
   research: Partial<typeof qualificationConfig.research> = {},
   config = qualificationConfig,
+  evidence?: EvidenceProvider[],
 ) {
   const { app, controlled } = await controlledHarness({
     qualification: { ...config, research: { ...config.research, ...research } },
+    ...(evidence ? { evidence } : {}),
   });
   cleanup.push(() => app.close());
   await app.mastra.startWorkers();
@@ -811,7 +813,28 @@ describe('sourced company qualification', () => {
       const config = structuredClone(qualificationConfig);
       config.research.targeted.order = ['employeeCount'];
       if ('review' in item) config.policy.rules.employeeCount.estimates = 'review';
-      const { app, controlled } = await researchHarness({}, config);
+      const falseQuoteProvider = recordProvider(
+        'openai-web',
+        () => [{ id: 'record-1', source: 'https://example.com/team', excerpt: `Our team: ${item.quote}.` }],
+        () => [
+          candidateSchema.parse({
+            ...proposal('employeeCount', item.value, 'invented quotation'),
+            ...(inferred
+              ? {
+                  inference: {
+                    rationale: 'A grounded but incorrectly quoted estimate with uncertain boundaries.',
+                    additionalPassages: [],
+                  },
+                }
+              : {}),
+          }),
+        ],
+      );
+      const { app, controlled } = await researchHarness(
+        {},
+        config,
+        'falseQuote' in item ? [falseQuoteProvider] : undefined,
+      );
       controlled.setScenario({
         employees: item.value,
         employeeQuote: item.quote,
@@ -1178,23 +1201,37 @@ describe('sourced company qualification', () => {
   });
 
   it('rejects_false_additional_citations_unsupported_inference_and_unconfigured_labels', async () => {
-    const { app, controlled } = await researchHarness();
+    let active = { label: 'b2b_saas', extra: '', unsupported: false, reason: '' };
+    const provider = recordProvider(
+      'openai-web',
+      () => [
+        {
+          id: 'record-1',
+          source: 'https://example.com/about',
+          excerpt: 'The company sells subscription cloud software to businesses and has 40 employees.',
+        },
+      ],
+      () => [
+        {
+          ...proposal('businessModel', active.label, 'sells subscription cloud software to businesses'),
+          inference: {
+            rationale: 'An interpretation requiring exact attribution and independent support.',
+            additionalPassages: [{ evidenceId: 'record-1', quote: active.extra }],
+          },
+        },
+      ],
+    );
+    provider.verify = async (_branch, candidates) => ({
+      supportedCandidateIds: active.unsupported ? [] : candidates.map(candidate => candidate.id),
+      intentCoverageComplete: false,
+    });
+    const { app } = await researchHarness({}, qualificationConfig, [provider]);
     for (const testCase of [
       { label: 'b2b_saas', extra: 'Invented supporting quotation.', unsupported: false, reason: 'exact_quote_absent' },
       { label: 'b2b_saas', extra: '40 employees', unsupported: true, reason: 'semantic_verification_rejected' },
       { label: 'unconfigured', extra: '40 employees', unsupported: false, reason: 'unconfigured_business_model' },
     ]) {
-      controlled.setScenario({
-        employees: null,
-        country: null,
-        unsupported: testCase.unsupported,
-        inferredBusiness: {
-          label: testCase.label,
-          quote: 'sells subscription cloud software to businesses',
-          additionalQuotes: [testCase.extra],
-          rationale: 'A proposed interpretation that still requires exact attribution and independent support.',
-        },
-      });
+      active = testCase;
       const assessment = await submit(app, `invalid-inference-${testCase.reason}`);
       expect(assessment.facts.businessModel.disposition).toBe('unsupported');
       expect(assessment.inferences).toEqual([]);
@@ -1296,13 +1333,18 @@ describe('sourced company qualification', () => {
     expect(controlled.requests).toHaveLength(3);
     for (const request of controlled.requests) {
       const data = providerInput(request);
-      expect(data.businessModel).toEqual(snapshot.config.policy.rules.businessModel);
+      expect(data.businessModel).toEqual(
+        data.candidates
+          ? { categories: snapshot.config.policy.rules.businessModel.categories }
+          : snapshot.config.policy.rules.businessModel,
+      );
       expect(data.target ?? '').not.toContain('B2B subscription software');
     }
     const searchData = providerInput(controlled.requests.find(request => (request.tools as unknown[])?.length)!);
     expect(searchData.target).toBe(snapshot.config.research.targeted.queries.businessModel);
     for (const request of controlled.requests.filter(body => !(body.tools as unknown[])?.length)) {
       const data = providerInput(request);
+      expect(Object.hasOwn(data, 'employeeCount')).toBe(!data.candidates);
       const prompt = data.candidates ? snapshot.config.prompts.verification : snapshot.config.prompts.extraction;
       expect(JSON.stringify(request)).toContain(JSON.stringify(prompt).slice(1, -1));
     }
@@ -1449,17 +1491,43 @@ describe('sourced company qualification', () => {
   });
 
   it('persists_safe_distinct_reasons_for_rejected_candidates', async () => {
-    const { app, controlled } = await researchHarness();
+    let scenario: { unknownEvidence?: boolean; missingQuote?: boolean; unsupported?: boolean } = {};
+    const provider = recordProvider(
+      'openai-web',
+      () => [
+        {
+          id: 'record-1',
+          source: 'https://example.com/about',
+          excerpt:
+            'The company sells subscription cloud software to businesses and has 40 employees. Headquarters: United States.',
+        },
+      ],
+      () =>
+        [
+          proposal('businessModel', 'b2b_saas', 'sells subscription cloud software to businesses'),
+          proposal('employeeCount', { min: 40, max: 40 }, '40 employees'),
+          proposal('headquartersCountry', 'US', 'Headquarters: United States'),
+        ].map(candidate => ({
+          ...candidate,
+          ...(scenario.unknownEvidence ? { evidenceId: 'private-unknown-evidence-id' } : {}),
+          ...(scenario.missingQuote ? { quote: 'invented quotation' } : {}),
+        })),
+    );
+    const verify = vi.fn<EvidenceProvider['verify']>(async (_branch, candidates) => ({
+      supportedCandidateIds: scenario.unsupported ? [] : candidates.map(candidate => candidate.id),
+      intentCoverageComplete: true,
+    }));
+    const { app } = await researchHarness({}, qualificationConfig, [{ ...provider, verify }]);
     for (const testCase of [
       {
         scenario: { unknownEvidence: true },
         reason: 'unknown_evidence_id',
-        checks: { evidenceKnown: false, exactQuotePresent: false, semanticSupported: true },
+        checks: { evidenceKnown: false, exactQuotePresent: false, semanticSupported: false },
       },
       {
         scenario: { missingQuote: true },
         reason: 'exact_quote_absent',
-        checks: { evidenceKnown: true, exactQuotePresent: false, semanticSupported: true },
+        checks: { evidenceKnown: true, exactQuotePresent: false, semanticSupported: false },
       },
       {
         scenario: { unsupported: true },
@@ -1467,9 +1535,11 @@ describe('sourced company qualification', () => {
         checks: { evidenceKnown: true, exactQuotePresent: true, semanticSupported: false },
       },
     ]) {
-      controlled.setScenario(testCase.scenario);
+      scenario = testCase.scenario;
+      verify.mockClear();
       const assessment = await submit(app, `rejection-${testCase.reason}`, true);
       expect(assessment.facts.businessModel.disposition).toBe('unsupported');
+      expect(verify.mock.calls.length > 0).toBe(testCase.reason === 'semantic_verification_rejected');
       expect(assessment.rejections.length).toBeGreaterThanOrEqual(3);
       expect(assessment.rejections.every(rejection => rejection.reason === testCase.reason)).toBe(true);
       expect(assessment.rejections.find(rejection => rejection.attribute === 'businessModel')).toMatchObject({
@@ -1629,22 +1699,36 @@ describe('sourced company qualification', () => {
     expect(controlled.requests.every(body => (body.tools as unknown[])?.length)).toBe(true);
   });
 
-  it('captures_returned_opened_pages_and_final_citations_through_responses_decoder', async () => {
+  it('rejects_returned_open_page_calls_and_captures_final_search_citations_through_responses_decoder', async () => {
     const { app, controlled } = await researchHarness();
-    for (const sourceMode of ['opened_page', 'final_citation'] as const) {
-      controlled.setScenario({ sourceMode });
-      const assessment = await submit(app, `returned-${sourceMode}`, true);
-      expect(assessment.result.classification).toBe('qualified');
-      expect(assessment.evidence.filter(source => source.kind === 'website')).toHaveLength(1);
-      expect(assessment.facts.businessModel.disposition).toBe('accepted');
-    }
+    controlled.setScenario({ sourceMode: 'opened_page' });
+    const rejected = await submit(app, 'returned-opened-page');
+    expect(rejected.result.classification).toBe('needs_review');
+    expect(rejected.failures).toContainEqual({
+      branch: 'firmographics',
+      providerId: 'openai-web',
+      code: 'search_completion_unverified',
+      retryable: false,
+      provider: { stage: 'search' },
+    });
+    expect(rejected.evidence.filter(source => source.kind === 'website')).toHaveLength(0);
+    expect(rejected.facts.businessModel.disposition).toBe('missing');
+    expect(controlled.transport.request).not.toHaveBeenCalled();
+    expect(controlled.requests.every(body => (body.tools as unknown[])?.length)).toBe(true);
+    expect((await app.store.qualifications.get(rejected.runId))!.budget.pageRequests).toBe(0);
+
+    controlled.setScenario({ sourceMode: 'final_citation' });
+    const assessment = await submit(app, 'returned-final-citation', true);
+    expect(assessment.result).toMatchObject({ classification: 'qualified', score: 100, requiresReview: false });
+    expect(assessment.evidence.filter(source => source.kind === 'website')).toHaveLength(1);
+    for (const fact of Object.values(assessment.facts)) expect(fact.disposition).toBe('accepted');
     expect(
       controlled.requests
         .filter(body => (body.tools as unknown[])?.length)
         .every(body => (body.include as string[]).includes('web_search_call.action.sources')),
     ).toBe(true);
     const structured = controlled.requests.filter(body => !(body.tools as unknown[])?.length);
-    expect(structured).toHaveLength(4);
+    expect(structured).toHaveLength(2);
     for (const request of structured)
       expect(request.text).toMatchObject({
         format: { type: 'json_schema', strict: true, schema: { type: 'object', additionalProperties: false } },
@@ -1653,8 +1737,8 @@ describe('sourced company qualification', () => {
       request =>
         (request.text as { format: { schema: { properties: Record<string, unknown> } } }).format.schema.properties,
     );
-    expect(schemas.filter(schema => 'candidates' in schema)).toHaveLength(2);
-    expect(schemas.filter(schema => 'supportedCandidateIds' in schema)).toHaveLength(2);
+    expect(schemas.filter(schema => 'candidates' in schema)).toHaveLength(1);
+    expect(schemas.filter(schema => 'supportedCandidateIds' in schema)).toHaveLength(1);
   });
 
   it('qualifies_a_company_from_approved_evidence', async () => {

@@ -1,3 +1,4 @@
+import { qualificationReport, reportWindowSchema } from '../reporting';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRouteHandler } from '@mastra/core/server';
 import { z, ZodError } from 'zod';
@@ -54,8 +55,26 @@ export function createLeadRoutes(
   provider: EventInputProvider,
   admission: LeadIntake,
   outputs: ReadonlyMap<string, OutputProvider>,
+  salesMapped = false,
 ) {
   return [
+    registerApiRoute('/lead-qualification/report', {
+      method: 'GET',
+      requiresAuth: true,
+      handler: async c => {
+        const window = reportWindowSchema.safeParse({
+          from: c.req.query('from'),
+          to: c.req.query('to'),
+          limit: c.req.query('limit') ? Number(c.req.query('limit')) : undefined,
+        });
+        if (!window.success) return c.json({ error: 'invalid_report_window' }, 400);
+        try {
+          return c.json(await qualificationReport(store.client, window.data, salesMapped));
+        } catch {
+          return c.json({ error: 'report_unavailable' }, 503);
+        }
+      },
+    }),
     registerApiRoute('/lead-qualification/reviews', {
       method: 'POST',
       requiresAuth: true,
@@ -157,6 +176,12 @@ export function createLeadRoutes(
           const run = await store.get(id.data.runId);
           if (!run) return c.json({ error: 'run_not_found' }, 404);
           const qualification = await store.qualifications.get(run.runId);
+          const expiry = (
+            await store.client.execute({
+              sql: 'SELECT assessment_id,pruned_at FROM lead_retention_markers WHERE run_id=?',
+              args: [run.runId],
+            })
+          ).rows[0];
           return c.json({
             runId: run.runId,
             status: run.status,
@@ -166,6 +191,9 @@ export function createLeadRoutes(
             updatedAt: run.updatedAt,
             failureCode: run.failureCode,
             telemetryDegraded: telemetry.isDegraded(),
+            retention: expiry
+              ? { detailsExpired: true, assessmentId: expiry.assessment_id, prunedAt: expiry.pruned_at }
+              : null,
             business: await reviews.read(run.runId),
             qualification: qualification
               ? {

@@ -1,3 +1,5 @@
+import type { z } from 'zod';
+import type { pricingSchema } from './telemetry';
 import type { Config } from '@mastra/core/mastra';
 import type { IntakeConfig } from './config/lead-ingestion';
 import type { QualificationConfig } from './config/qualification';
@@ -23,6 +25,7 @@ import { createReceiveLeadWorkflow } from './workflows/receive-lead';
 
 export interface ApplicationOptions extends ProviderOptions {
   runtime?: RuntimeConfig;
+  telemetryPricing?: z.infer<typeof pricingSchema>;
   config?: IntakeConfig;
   qualification?: QualificationConfig;
   evidence?: EvidenceProvider[];
@@ -36,17 +39,19 @@ export async function createApplicationRuntime(options: ApplicationOptions = {})
   const reviewSettings = reviewConfigSchema.parse(options.review ?? reviewConfig);
   const providers = initializeProviders({ ...options, mode: runtime.mode, qualification: qualificationSettings });
   const config = providers.config;
-  const telemetry = createTelemetry();
+  const telemetry = createTelemetry(options.telemetryPricing);
   let storage: LeadStorage | undefined;
   try {
     storage = await LeadStorage.open(runtime, () => telemetry.observability.flush());
+    storage.leadEvents.qualifications.measurement = telemetry.research;
     const qualification = new QualificationService(
       storage.leadEvents.qualifications,
       providers.evidence,
       options.pages,
+      telemetry,
     );
     const outputs = providers.createOutputs(storage.leadEvents.client);
-    const reviewService = new ReviewService(storage.leadEvents, outputs, reviewSettings);
+    const reviewService = new ReviewService(storage.leadEvents, outputs, reviewSettings, telemetry);
     const admission = new LeadIntake(storage.leadEvents, config, qualificationSettings);
     const inputs = await providers.createInputs({
       store: storage.leadEvents,
@@ -74,6 +79,7 @@ export async function createApplicationRuntime(options: ApplicationOptions = {})
             inputs.get(config.source.inputProviderId)!,
             admission,
             outputs,
+            providers.salesMapped,
           ),
           ...[...inputs.values()].flatMap(provider => provider.routes ?? []),
         ],

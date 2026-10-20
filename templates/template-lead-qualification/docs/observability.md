@@ -14,8 +14,38 @@ Candidate URLs contain only a public DNS HTTPS host and path prefix, capped at 5
 
 Telemetry failure never authorizes or replays work. Diagnostic submission failures emit a fixed warning; `telemetryDegraded` on the run endpoint exposes degradation detected by the application. It is a process health hint, not proof that every export succeeded. Graceful shutdown stops dispatch, flushes observability, closes native stores and releases DuckDB's file lock. Forced termination can lose buffered telemetry; acknowledged operational associations remain recoverable.
 
-There is no retention maintenance command yet. Keep use bounded, inspect both files, and manage dedicated development data with the process stopped. Do not treat an observability purge as an operational reset. Pending work and workflow snapshots must remain together for recovery.
+Use the operator-only [retention preview/apply](retention.md) with the process stopped. DuckDB pruning is independent from operational cleanup and cannot remove pending review/output state.
 
 Customization prompt:
 
 > Extend technical observability for [safe event] using the existing native Mastra exporter and composite storage. Add only explicitly allowed codes, bounded numeric fields and validated correlation IDs. Keep private content, secrets, raw bodies, prompts and contacts out of traces/logs/metric labels. Test persisted DuckDB records, operational separation, export failure isolation and reopen persistence. Update this guide without promising automatic business KPI charts.
+
+## Inspect technical measurements
+
+Each completed OpenAI attempt records observed input/output/reasoning tokens when supplied and measured provider duration in milliseconds. The native exporter stores allowlisted `research.measurement` logs and `lead_research_*` metric events in DuckDB. A stable usage ID and deterministic metric IDs identify one attempt; retries are separate attempts. Shared budget counters remain conservative operational reservations and must not be presented as measured usage. Unknown token counts are nullable in the log and produce no fabricated zero-valued metric.
+
+Safe lifecycle logs identify entity resolution, retrieved material, fact/scoring results, review preparation and applied output with validated IDs, classification, score and policy version. Native span filtering retains only these safe correlation fields and removes bodies, prompts, excerpts, arbitrary attributes, errors, tags, links and previews. Invalid telemetry data degrades telemetry without changing qualification or settlement. Submission failures are isolated from business work; the degraded flag cannot prove all queued exports succeeded.
+
+Cost is unavailable by default. Set `telemetryPricing` on `createApplicationRuntime` to opt into an explicitly partial text-token estimate with a versioned configuration:
+
+```ts
+telemetryPricing: {
+  version: 'openai-standard-2026-10-19',
+  model: 'openai/gpt-6-luna',
+  inputPerMillion: 0.10,
+  outputPerMillion: 0.50,
+  assumption: 'standard_uncached_text_tokens_only',
+}
+```
+
+These [GPT-6 Luna Standard rates](https://developers.openai.com/api/docs/models/gpt-6-luna) were checked on 2026-10-19. The estimate assumes uncached standard text input, excludes tool/search and other charges, and is explicitly partial rather than a billed amount. Cached input, regional pricing, Batch/Flex/Fast tiers and long-context pricing differ. Unknown usage, a mismatched model, absent pricing or input above 272000 tokens returns unavailable. [Web search pricing](https://developers.openai.com/api/docs/pricing) includes a separate tool charge and search-content tokens. Reconcile actual billing externally; do not infer a complete zero-cost run from missing telemetry.
+
+## Query retained business results
+
+GET `/lead-qualification/report?from=2026-10-01T00:00:00Z&to=2026-11-01T00:00:00Z` uses the same production authentication as the run API. `from` is inclusive, `to` exclusive, the window is at most 90 days, and `limit` is 1–1000 assessments. The report identifies truncation, earliest retained detail and observed expired markers. A 90-day request cannot recreate details already removed after 30 days. Historical completeness is always explicitly false; expired counts are retained marker coverage, not a census after markers themselves expire.
+
+Leads enriched counts accepted company attributes (business model, workforce or headquarters), excluding inquiry-only enrichment. Coverage counts accepted requested attributes over all four requested attributes. Classification, original score bands (0–39,40–69,70–79,80–100) and uncertainty use the immutable assessment. Qualification/manual-review rates use completed assessments. Policy authorization and human authorization are separate; Nurture follow-up is not an uncertainty review. Applied SDR disposition overrides retain their reason without changing the original score/classification.
+
+Conversion is available only with the configured separate sales-outcome source and a matching applied assessment/cycle. For each pair the latest observed Won/Lost event before `to` wins, with stable event-ID tie-breaking. Duplicate/reordered observations cannot inflate the denominator. Each original score band reports Won, Lost, sample denominator, rate and open-or-unobserved applied assessments. Without a mapped source or matching closed outcome, rate is null and availability explains why. Qualification, publication and automatic authorization never imply a sale. A later sales close belongs to its original applied assessment's score band. Retained-cohort results can change when evidence/outcome records expire.
+
+The JSON report is the business KPI surface. Native Studio activity, usage, duration and trace inspection do not automatically create business KPI cards. For measurement methodology see [evaluation](evaluation.md).

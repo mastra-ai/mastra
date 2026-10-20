@@ -48,6 +48,16 @@ export function createEvidenceBatch(previous: Evidence[]) {
   };
 }
 
+export function normalizedCandidateId(
+  candidateId: string,
+  scope: { providerId: string; branch: ResearchBranch; roundIndex: number },
+) {
+  return `candidate-${createHash('sha256')
+    .update(`${scope.providerId}:${scope.branch}:${scope.roundIndex}:${candidateId}`)
+    .digest('hex')
+    .slice(0, 24)}`;
+}
+
 export function validateCandidates(
   candidates: Candidate[],
   supportedCandidateIds: string[],
@@ -61,10 +71,7 @@ export function validateCandidates(
   const labels = new Set(scope.businessModelLabels);
   for (const candidate of candidates) {
     const passages = candidatePassages(candidate);
-    const candidateId = `candidate-${createHash('sha256')
-      .update(`${scope.providerId}:${scope.branch}:${scope.roundIndex}:${candidate.id}`)
-      .digest('hex')
-      .slice(0, 24)}`;
+    const candidateId = normalizedCandidateId(candidate.id, scope);
     const normalizedPassages = [
       ...new Map(
         passages.map(passage => {
