@@ -8,6 +8,7 @@ import {
   defaultSessionFilters,
   filterSessionRows,
   sessionOwnerFilterValue,
+  sessionOwnerOptions,
 } from '../sessionFilters';
 import type { SessionFiltersState } from '../sessionFilters';
 import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
@@ -26,6 +27,21 @@ describe('session filters', () => {
     expect(filterSessionRows(rows, filters({ owner: MY_SESSIONS }), 'user-2', now)).toEqual([rows[1]]);
     expect(filterSessionRows(rows, filters({ owner: sessionOwnerFilterValue('user-1') }), 'user-2', now)).toEqual([
       rows[0],
+    ]);
+  });
+
+  it('labels owners by their profile, else the saved owner name, else their user id', () => {
+    const rows = [
+      userRow('session-1', { userId: 'user-1', owner: { id: 'user-1', name: 'Ada' }, ownerName: 'Old Ada' }),
+      userRow('session-2', { userId: 'user-2', ownerName: 'ward@example.com' }),
+      userRow('session-3', { userId: 'user-3', ownerName: null }),
+    ];
+
+    expect(sessionOwnerOptions(rows, undefined).map(option => option.label)).toEqual([
+      'All owners',
+      'Ada',
+      'user-3',
+      'ward@example.com',
     ]);
   });
 

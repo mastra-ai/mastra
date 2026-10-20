@@ -150,6 +150,9 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       base_branch: { type: 'text' },
       title: { type: 'text', nullable: true },
       visibility: { type: 'text', nullable: true },
+      // The owner's name, else email, when the session was created. The auth
+      // provider may not be able to look other users up, so lists show this.
+      owner_name: { type: 'text', nullable: true },
       // The user session that started this one as a side session, if any.
       origin_session_id: { type: 'text', nullable: true },
       origin_thread_id: { type: 'text', nullable: true },
@@ -356,6 +359,8 @@ export interface SourceControlSession {
   branch: string;
   title: string | null;
   visibility: SourceControlSessionVisibility;
+  /** The owner's name, else email, when the session was created; null when unknown. */
+  ownerName: string | null;
   /** The session that started this one as a side session; null otherwise. */
   originSessionId: string | null;
   /** The thread of `originSessionId` that started it. */
@@ -390,6 +395,8 @@ export interface CreateSourceControlSessionInput {
   title?: string | null;
   /** Defaults to 'org' when omitted, matching how NULL rows are read. */
   visibility?: SourceControlSessionVisibility;
+  /** The owner's name, else email, for showing who owns the session. */
+  ownerName?: string | null;
   /** The session and thread that started this one as a side session. */
   origin?: { sessionId: string; threadId: string };
   baseBranch: string;
@@ -622,6 +629,7 @@ interface SessionDbRow extends Record<string, unknown> {
   branch: string;
   title: string | null;
   visibility: string | null;
+  owner_name?: string | null;
   origin_session_id?: string | null;
   origin_thread_id?: string | null;
   origin_muted_at?: Date | null;
@@ -742,6 +750,7 @@ function toSession(row: SessionDbRow): SourceControlSession {
     branch: row.branch,
     title: row.title,
     visibility: row.visibility === 'private' ? 'private' : 'org',
+    ownerName: row.owner_name ?? null,
     originSessionId: row.origin_session_id ?? null,
     originThreadId: row.origin_thread_id ?? null,
     originMutedAt: row.origin_muted_at ?? null,
@@ -1550,6 +1559,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               branch: input.branch,
               title: input.title ?? null,
               visibility: input.visibility ?? 'org',
+              owner_name: input.ownerName ?? null,
               origin_session_id: input.origin?.sessionId ?? null,
               origin_thread_id: input.origin?.threadId ?? null,
               origin_muted_at: null,

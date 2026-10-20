@@ -198,7 +198,7 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
 async function resolveOrgTenant(
   c: RouteContext,
   auth: RouteAuth,
-): Promise<{ tenant: { orgId: string; userId: string } } | { response: Response }> {
+): Promise<{ tenant: { orgId: string; userId: string; displayName?: string } } | { response: Response }> {
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
   if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
@@ -213,7 +213,7 @@ async function resolveOrgTenant(
       ),
     };
   }
-  return { tenant: { orgId: tenant.orgId, userId: tenant.userId } };
+  return { tenant: { orgId: tenant.orgId, userId: tenant.userId, displayName: tenant.displayName } };
 }
 
 /**
@@ -1434,6 +1434,7 @@ function buildProjectGitRoutes({
             baseBranch,
             title: normalizedTitle,
             visibility: 'org',
+            ownerName: resolved.tenant.displayName,
           })
           .catch(async error => {
             if (!(error instanceof UniqueViolationError) || requestedSessionId === undefined) throw error;

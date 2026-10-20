@@ -79,6 +79,8 @@ export interface FactoryAuthTenant {
   orgId?: string;
   /** Stable provider user id. */
   userId: string;
+  /** The user's name, else email, when the provider supplies one. */
+  displayName?: string;
 }
 
 /**
@@ -180,7 +182,8 @@ export function factoryAuthTenant(c: Context): FactoryAuthTenant | undefined {
   const user = getFactoryAuthUser(c);
   const userId = getFactoryAuthUserId(user);
   if (!userId) return undefined;
-  return { orgId: getFactoryAuthOrgId(user), userId };
+  const displayName = user?.name?.trim() || user?.email?.trim();
+  return { orgId: getFactoryAuthOrgId(user), userId, ...(displayName ? { displayName } : {}) };
 }
 
 function messageAuthor(user: FactoryAuthUser): MessageAuthor | undefined {

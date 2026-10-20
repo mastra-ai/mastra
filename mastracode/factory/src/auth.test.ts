@@ -516,6 +516,34 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(mockEnsureOrganization).not.toHaveBeenCalled();
   });
 
+  it("names the tenant by the user's name, else their email", async () => {
+    const app = new Hono();
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => c.json(factoryAuthTenant(c)));
+    const whoami = async (profile: { name?: string; email?: string }) => {
+      mockAuthenticate.mockResolvedValueOnce({
+        workosId: 'user_123',
+        ...profile,
+        memberships: [{ id: 'membership_1', organizationId: 'org_1' }],
+      });
+      const res = await app.request('/web/whoami', {
+        headers: { Accept: 'application/json', Authorization: 'Bearer cli-token', 'X-Mastra-Organization-Id': 'org_1' },
+      });
+      return res.json();
+    };
+
+    await expect(whoami({ name: 'Ward Peeters', email: 'ward@example.com' })).resolves.toEqual({
+      orgId: 'org_1',
+      userId: 'user_123',
+      displayName: 'Ward Peeters',
+    });
+    await expect(whoami({ name: '  ', email: 'ward@example.com' })).resolves.toEqual({
+      orgId: 'org_1',
+      userId: 'user_123',
+      displayName: 'ward@example.com',
+    });
+  });
+
   it('selects a requested bearer organization proven by Studio membership ids', async () => {
     mockAuthenticate.mockResolvedValue({
       id: 'user_123',
@@ -828,7 +856,7 @@ describe('org-tenant identity', () => {
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ orgId: 'org_a', userId: 'user_1' });
+    expect(await res.json()).toEqual({ orgId: 'org_a', userId: 'user_1', displayName: 'u@e.com' });
     // The user already has an org — no bootstrap round-trip.
     expect(mockEnsureOrganization).not.toHaveBeenCalled();
   });
@@ -841,7 +869,7 @@ describe('org-tenant identity', () => {
 
     const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ orgId: 'org_new', userId: 'user_boot' });
+    expect(await res.json()).toEqual({ orgId: 'org_new', userId: 'user_boot', displayName: 'boot@example.com' });
     expect(mockEnsureOrganization).toHaveBeenCalledWith('user_boot');
   });
 
