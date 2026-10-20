@@ -8,7 +8,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-for-coding": [
+    "k3": [
       {
         "type": "toggle"
       },
@@ -17,7 +17,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "k3": [
+    "kimi-for-coding": [
       {
         "type": "toggle"
       },

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../../boards/index.js';
+import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
+import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { FactoryGitLabRuleContext } from '../../rules/types.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { resolveGitLabRules } from './default-rules.js';
@@ -647,6 +649,91 @@ describe('GitLabRules', () => {
         expect(await metadataOf(id)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
       }
     });
+
+    // GitLab documents `… UTC`; offset forms and pushes without an update
+    // time must still record the pushed head before the pass is built.
+    it.each([
+      ['in UTC form', '2030-01-01 01:00:00 UTC', undefined],
+      ['in offset form', '2030-01-01 01:00:00 +0000', undefined],
+      ['missing', '', '2030-01-01T01:00:00+00:00'],
+    ])(
+      'starts the re-review of a pushed commit on that commit, not the one the last verdict covered, with updated_at %s (#27590)',
+      async (_form, updatedAt, commitTimestamp) => {
+      const { seeded, project, service } = await setup();
+      const card = (
+        await seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: project.id,
+          input: {
+            externalSource: { integrationId: 'gitlab', type: 'pull-request', externalId: reviewKey },
+            title: 'MR 17',
+            board: 'review',
+            stages: ['review'],
+            sessions: {},
+            metadata: {
+              authorTrusted: true,
+              reviewVerdict: 'request changes',
+              reviewedHeadSha,
+              pullRequestHeadSha: reviewedHeadSha,
+              pullRequestHeadAt: Date.parse('2030-01-01T00:00:00.000Z'),
+            },
+          },
+        })
+      ).item;
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+        transitionService: new FactoryTransitionService({
+          storage: seeded.workItems,
+          configVersion: 'gitlab-test-v1',
+          boards: createBoardRegistry(),
+        }),
+        storage: seeded.workItems,
+        boards: createBoardRegistry(),
+        isAutoRunEnabled: async () => true,
+        ownerId: 'worker-1',
+      });
+      // Run the dispatcher's poll tick right after the push's re-review
+      // transition commits, before the webhook handler has finished.
+      const commitRuleEvaluation = seeded.workItems.commitRuleEvaluation.bind(seeded.workItems);
+      const pushStatuses: string[] = [];
+      seeded.workItems.commitRuleEvaluation = async input => {
+        const committed = await commitRuleEvaluation(input);
+        if (input.ingress.identity.includes('d-push-b')) pushStatuses.push(committed.status);
+        if (committed.status === 'committed' && input.ingress.identity.includes('d-push-b')) {
+          await dispatcher.runOnce(new Date('2030-01-01T01:00:00Z'));
+        }
+        return committed;
+      };
+
+      const push = mergeRequestUpdated('d-push-b', pushedHeadSha, reviewedHeadSha, updatedAt);
+      if (commitTimestamp) {
+        push.payload.object_attributes.last_commit = { id: pushedHeadSha, timestamp: commitTimestamp } as never;
+      }
+      await expect(service.ingest(push)).resolves.toEqual({
+        status: 'committed',
+      });
+      await dispatcher.runOnce(new Date('2030-01-01T01:00:01Z'));
+
+      // The push is evaluated against the card as it is after the head was
+      // recorded, so it commits first time rather than retrying a stale read.
+      expect(pushStatuses).toEqual(['committed']);
+
+      const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+      const invocations = decisions.filter(entry => entry.decision.type === 'invokeSkill');
+      expect(invocations).toHaveLength(1);
+      const kickoff = invocations[0]!.decision;
+      expect(kickoff).toMatchObject({ type: 'invokeSkill', skillName: 'factory-gitlab-rereview', role: 'review' });
+      const text = kickoff.type === 'invokeSkill' ? (kickoff.arguments ?? '') : '';
+      expect(text).toContain(`new review pass for head \`${pushedHeadSha}\``);
+      expect(text).toContain(`recorded "request changes" on \`${reviewedHeadSha}\``);
+      expect(text).toContain(`record a verdict for \`${pushedHeadSha}\``);
+      expect((await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.metadata).toMatchObject({
+        pullRequestHeadSha: pushedHeadSha,
+        reviewedHeadSha,
+      });
+    },
+    );
 
     it('stamps the new head on the Review card and its authoring Work item without clearing the verdict', async () => {
       const { service, workId, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
