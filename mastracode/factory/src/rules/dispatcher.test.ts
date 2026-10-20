@@ -40,6 +40,8 @@ function createSession(
     agentEndReason?: 'complete' | 'aborted' | 'error' | 'suspended';
     /** Emitted on the run's event stream just before each `agent_end`, modelling an OM failure that aborted the run. */
     omObservationError?: string;
+    /** Emitted as the run's `error` event just before an `agent_end: 'error'`, as the session does. */
+    runError?: string;
     /** Models a signal queued onto an in-flight run that ends before draining it. */
     dropDeliveredSignal?: boolean;
     /** The run that swallowed the dropped signal ends, freeing the session. */
@@ -75,8 +77,13 @@ function createSession(
 ) {
   let threadId = 'thread-1';
   const settings: Record<string, unknown> = {};
-  const agentEndListeners = new Set<(event: { type: string; reason?: string; error?: string }) => void>();
+  const agentEndListeners = new Set<(event: { type: string; reason?: string; error?: unknown }) => void>();
   const emitAgentEnd = (reason = options?.agentEndReason) => {
+    if (reason === 'error' && options?.runError) {
+      for (const listener of agentEndListeners) {
+        listener({ type: 'error', error: new Error(options.runError) });
+      }
+    }
     if (options?.omObservationError) {
       for (const listener of agentEndListeners) {
         listener({ type: 'om_observation_failed', error: options.omObservationError });
@@ -6587,5 +6594,97 @@ describe('run-end backstop report', () => {
 
     await vi.waitFor(() => expect(reportRunEnd).toHaveBeenCalled());
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'failed' });
+  });
+});
+
+describe('a skill run that ends in error (#27740)', () => {
+  const CREDENTIAL_ERROR =
+    'Tenant model credential policy could not be resolved: the request has no authenticated user.';
+
+  it('records the run error as its cause, clears it for the next attempt, and leaves a retryable failure for a person', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-credential-error',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller } = createSession(undefined, { agentEndReason: 'error', runError: CREDENTIAL_ERROR });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      // The clock jumps hours between attempts; keep the sweep from revoking the seat meanwhile.
+      staleBindingTtlMs: Number.MAX_SAFE_INTEGER,
+    });
+    const start = Date.parse('2030-01-01T00:00:00Z');
+
+    await dispatcher.runOnce(new Date(start));
+
+    const [first] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(first).toMatchObject({
+      status: 'retry',
+      failureCode: 'run_credentials_unavailable',
+      lastError: expect.stringContaining('no authenticated user'),
+    });
+
+    // The next attempt is a new run; it must not read as the last one's failure.
+    const leaseNow = new Date(start + 60 * 60_000);
+    const [leased] = await storage.claimDeferredDecisions({
+      ownerId: 'inspector',
+      now: leaseNow,
+      leaseExpiresAt: new Date(leaseNow.getTime() + 1_000),
+      limit: 1,
+    });
+    expect(leased).toMatchObject({ id: first!.id, status: 'leased', lastError: null, failureCode: null });
+
+    for (let attempt = 1; attempt <= FACTORY_DISPATCH_CONSTANTS.maxAttempts; attempt += 1) {
+      await dispatcher.runOnce(new Date(start + attempt * 2 * 60 * 60_000));
+    }
+
+    const [failed] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(failed).toMatchObject({
+      status: 'failed',
+      failureCode: 'run_credentials_unavailable',
+      lastError: expect.stringContaining('no authenticated user'),
+    });
+    const provider = new DecisionAttentionProvider({ workItems: storage }, failedDecisionAttentionSpec);
+    expect(await provider.counts({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 1 });
+    expect(
+      await storage.retryDeferredDecision('org-1', PROJECT_ID, failed!.id, new Date(start + 24 * 60 * 60_000)),
+    ).toMatchObject({ id: failed!.id, status: 'retry', lastError: null, failureCode: null });
+  });
+
+  it('keeps a non-credential run error as a retryable run failure with its message', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-tool-error',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller } = createSession(undefined, {
+      agentEndReason: 'error',
+      runError: 'Provider stream closed unexpectedly (ECONNRESET)',
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      failureCode: 'run_failed',
+      lastError: expect.stringContaining('ECONNRESET'),
+    });
   });
 });

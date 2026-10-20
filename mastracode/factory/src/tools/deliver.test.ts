@@ -21,6 +21,7 @@ function fakeSession(currentThreadId: string) {
   return {
     thread: { getId: vi.fn(() => currentThreadId), switch: vi.fn() },
     state: { get: () => ({}), set: vi.fn() },
+    stream: { isActive: () => false },
     sendNotificationSignal: vi.fn(),
   };
 }

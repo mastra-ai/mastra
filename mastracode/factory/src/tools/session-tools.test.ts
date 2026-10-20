@@ -105,6 +105,7 @@ function fakeController(calls: string[], onSessionCreated: (session: FakeSession
         return () => void listeners.delete(listener);
       },
       permissions: { setForTool: vi.fn(async () => undefined) },
+      stream: { isActive: () => false },
       state: {
         get: () => state,
         set: vi.fn(async (patch: Record<string, unknown>) => {
@@ -233,6 +234,7 @@ async function setup(
     getSessionByResource: async (resourceId: string) =>
       (await controller.getSessionByResource(resourceId)) ?? {
         thread: { getId: () => (resourceId === seeded.scope.sessionId ? seeded.scope.threadId : resourceId) },
+        stream: { isActive: () => false },
       },
     getCurrentAgent: () => ({
       sendNotificationSignal: async (

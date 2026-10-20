@@ -20,6 +20,11 @@ import type { FactorySessionRunState, LastReport } from './side-sessions.js';
 const STATE_ID = 'factory-sessions';
 /** Finished side sessions and items that reached a terminal stage drop out after this long. */
 export const FACTORY_SESSIONS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+/** Asks a long run to show it is still moving; a silent half hour reads the same as a stuck one. */
+const PROGRESS_ASK = 'On long work, send a progress report after each plan step.';
+
+/** A running worker whose thread has not moved for this long is shown as quiet, so a stuck run stands out. */
+export const FACTORY_SESSIONS_QUIET_MS = 10 * 60 * 1000;
 /** Rows shown before the rest collapse into "+N more". */
 export const FACTORY_SESSIONS_MAX_ROWS = 20;
 const EMPTY_CACHE_KEY = 'empty';
@@ -42,6 +47,8 @@ export interface FactorySessionsStateDependencies {
   boards: BoardRegistry;
   /** Whether the session's agent is mid-run in this process; `idle` when it isn't live here. */
   isRunning: (sessionId: string) => Promise<boolean>;
+  /** When a thread last changed; tells a long run that is still moving from one that stopped. */
+  lastActivity?: (threadId: string) => Promise<Date | null>;
   notifications: () => Promise<Pick<NotificationsStorage, 'listNotifications'> | null>;
   now?: () => number;
 }
@@ -59,7 +66,7 @@ interface FollowedRow {
   label: string;
   title: string;
   stage: string;
-  worker: { role: string; sessionId: string; state: FactorySessionRunState } | null;
+  worker: { role: string; sessionId: string; state: FactorySessionRunState; quietSince: string | null } | null;
   lastReport: LastReport | null;
 }
 
@@ -151,7 +158,7 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
 
   async #workerLine(scope: FactoryToolScope): Promise<string | null> {
     if (scope.origin) {
-      return `Started by session ${scope.origin.sessionId} (thread ${scope.origin.threadId}). Report back with factory_message_origin.`;
+      return `Started by session ${scope.origin.sessionId} (thread ${scope.origin.threadId}). Report back with factory_message_origin. ${PROGRESS_ASK}`;
     }
     const binding = await this.#deps.workItems.findActiveRunBindingForSession({
       orgId: scope.orgId,
@@ -168,7 +175,7 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
     // Nobody to report to: nothing worth showing (most board-started workers).
     if (following === 0) return null;
     const label = item ? itemLabel(item) : binding.workItemId;
-    return `Working on ${label} as ${binding.role}. Reports go to ${following} following session${following === 1 ? '' : 's'}.`;
+    return `Working on ${label} as ${binding.role}. Reports go to ${following} following session${following === 1 ? '' : 's'}. ${PROGRESS_ASK}`;
   }
 
   async #userState(scope: FactoryToolScope): Promise<SessionsState> {
@@ -224,6 +231,9 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
           record.attributes?.['work-item'] === label || (record.kind === 'stage' && record.sourceId === item.id),
       );
       const running = active ? await this.#deps.isRunning(active.sessionId) : false;
+      const lastActivity = active && running ? await this.#deps.lastActivity?.(active.threadId) : null;
+      // Only a quiet run is shown with its time; a moving one would change the snapshot on every step.
+      const quiet = lastActivity && now - lastActivity.getTime() >= FACTORY_SESSIONS_QUIET_MS ? lastActivity : null;
       const lastFromWorker = active
         ? newest(records, record => record.attributes?.['from-session'] === active.sessionId)
         : undefined;
@@ -237,6 +247,7 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
               role: active.role,
               sessionId: active.sessionId,
               state: running ? 'running' : lastFromWorker?.kind === 'blocked' ? 'parked' : 'idle',
+              quietSince: quiet ? quiet.toISOString() : null,
             }
           : null,
         lastReport: report(last),
@@ -277,7 +288,7 @@ export class FactorySessionsStateProcessor implements Processor<'factory-session
       lines.push('Work items you follow:');
       for (const row of state.following) {
         const worker = row.worker
-          ? `; ${escapeText(row.worker.role)} session ${row.worker.sessionId} ${row.worker.state}`
+          ? `; ${escapeText(row.worker.role)} session ${row.worker.sessionId} ${row.worker.state}${row.worker.quietSince ? ` but quiet since ${row.worker.quietSince}` : ''}`
           : '';
         lines.push(
           `- ${escapeText(row.label)} "${escapeText(row.title)}": ${escapeText(row.stage)}${worker}${lastReport(row.lastReport)}`,

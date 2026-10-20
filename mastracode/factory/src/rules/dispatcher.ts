@@ -90,7 +90,28 @@ const RECONCILE_INTERVAL_MS = 30_000;
 class FactoryDecisionSuperseded extends Error {}
 
 /** A run that ran and ended in error; the session's own listener reports it to followers. */
-class RunEndedInError extends Error {}
+class RunEndedInError extends FactoryDispatchError {}
+
+/** Credential and auth failures, which a person can fix and retry; checked before any permanent-rejection test. */
+function isCredentialFailure(error: string): boolean {
+  const normalized = error.toLowerCase();
+  return (
+    normalized.includes('credential') ||
+    normalized.includes('no authenticated user') ||
+    normalized.includes('unauthorized') ||
+    normalized.includes('api key') ||
+    /\b(?:401|403)\b/.test(normalized)
+  );
+}
+
+function runErrorFailure(label: string, error: string | undefined): RunEndedInError {
+  const cause = error?.trim();
+  if (!cause) return new RunEndedInError('run_failed', `${label} ended in error.`);
+  return new RunEndedInError(
+    isCredentialFailure(cause) ? 'run_credentials_unavailable' : 'run_failed',
+    `${label} ended in error: ${cause}`,
+  );
+}
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
@@ -147,12 +168,15 @@ function watchRun(
   // reason — so without this the true cause (e.g. a provider rejecting the OM
   // model) is lost and the abort is retried blindly.
   let omFailure: string | undefined;
+  // The run's own error event precedes its `agent_end: 'error'` and is the only place the cause appears.
+  let runError: string | undefined;
   // Re-armed before a redelivery so the second send waits on its own run's
   // ending rather than seeing the one that already resolved.
   const arm = () => {
     endReason = undefined;
     supersededAtEnd = undefined;
     omFailure = undefined;
+    runError = undefined;
     agentEnd = new Promise<void>(resolve => {
       resolveAgentEnd = resolve;
     });
@@ -163,6 +187,10 @@ function watchRun(
       endReason = event.reason;
       supersededAtEnd = onAgentEnd?.();
       resolveAgentEnd();
+      return;
+    }
+    if (event.type === 'error') {
+      runError = event.error instanceof Error ? event.error.message : String(event.error ?? '');
       return;
     }
     if (event.type === 'om_observation_failed' || event.type === 'om_buffering_failed') {
@@ -222,7 +250,7 @@ function watchRun(
           `${label} terminal event was not observed before timeout.`,
         );
       }
-      if (endReason === 'error') throw new RunEndedInError(`${label} ended in error.`);
+      if (endReason === 'error') throw runErrorFailure(label, runError);
       if (endReason === 'aborted') {
         // An abort that follows an observational-memory failure is not the
         // usual "process went away" case — the OM stream deliberately aborted
