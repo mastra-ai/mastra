@@ -7,6 +7,14 @@ import '@/test/inert-resize-observer';
 import { BoneSkeleton } from './bone-skeleton';
 
 describe('BoneSkeleton', () => {
+  it('announces the label when loading starts after mount', () => {
+    const { rerender } = render(<BoneSkeleton name="data-list" loading={false} label="Loading runs" />);
+    const status = screen.getByRole('status');
+    rerender(<BoneSkeleton name="data-list" loading label="Loading runs" />);
+    expect(screen.getByRole('status')).toBe(status);
+    expect(status.textContent).toBe('Loading runs');
+  });
+
   it('marks the named container busy and announces the label while loading', () => {
     const { container } = render(
       <BoneSkeleton name="data-list" loading label="Loading runs">
@@ -20,7 +28,7 @@ describe('BoneSkeleton', () => {
     expect(screen.getByRole('status', { name: 'Loading runs' })).toBeTruthy();
   });
 
-  it('renders the children and drops the status once loaded', () => {
+  it('renders the children and empties the status once loaded', () => {
     const { container } = render(
       <BoneSkeleton name="data-list" loading={false} label="Loading runs">
         <p>Loaded content</p>
@@ -28,7 +36,8 @@ describe('BoneSkeleton', () => {
     );
 
     expect(screen.getByText('Loaded content')).toBeTruthy();
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('status').textContent).toBe('');
+    expect(screen.queryByRole('status', { name: 'Loading runs' })).toBeNull();
     expect(container.querySelector('[data-boneyard="data-list"]')?.getAttribute('aria-busy')).not.toBe('true');
   });
 });

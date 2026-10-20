@@ -51,9 +51,10 @@ export function BoneSkeleton({ label, loading, children = null, ...props }: Bone
       <BoneyardSkeleton loading={loading} {...props}>
         {children}
       </BoneyardSkeleton>
-      {loading && label ? (
-        <span role="status" aria-label={label} className="sr-only">
-          {label}
+      {/* Stays mounted so screen readers announce the label when loading starts after mount. */}
+      {label ? (
+        <span role="status" aria-label={loading ? label : undefined} className="sr-only">
+          {loading ? label : null}
         </span>
       ) : null}
     </>

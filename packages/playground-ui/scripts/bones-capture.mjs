@@ -7,8 +7,22 @@
 //   pnpm bones:capture --check  recapture to a temp dir and fail if it differs from src/bones
 //
 // Needs Playwright Chromium: `pnpm exec playwright install chromium`.
+//
+// Run `bones:check` before pushing; no CI job runs it yet. A unit test (src/bones/bones-coverage.test.ts)
+// fails when a <BoneSkeleton name> has no committed bones. Fixtures use `DataList.RowStatic`:
+// boneyard captures a <button> as one bone, so `RowButton` rows lose their per-cell bones. Small
+// one-off placeholders keep using the ds `Skeleton` / `SkeletonText`.
 import { execFileSync, spawn } from 'node:child_process';
-import { createReadStream, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  createReadStream,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -71,7 +85,9 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 
 const outDir = mkdtempSync(join(tmpdir(), 'bones-'));
 try {
-  const cli = createRequire(import.meta.url).resolve('boneyard-js/package.json').replace(/package\.json$/, 'bin/cli.js');
+  const cli = createRequire(import.meta.url)
+    .resolve('boneyard-js/package.json')
+    .replace(/package\.json$/, 'bin/cli.js');
   const urls = storyIds.map(id => `${origin}/iframe.html?id=${id}&viewMode=story`);
   // Async so the static server keeps answering while the CLI runs.
   await new Promise((done, fail) => {
@@ -97,7 +113,9 @@ try {
       return difference !== undefined;
     });
     if (stale.length > 0) {
-      console.error(`\nBones out of date: ${stale.join(', ')}. Run \`pnpm --filter ./packages/playground-ui bones:capture\` and commit src/bones/.`);
+      console.error(
+        `\nBones out of date: ${stale.join(', ')}. Run \`pnpm --filter ./packages/playground-ui bones:capture\` and commit src/bones/.`,
+      );
       process.exitCode = 1;
     } else {
       console.log(`\nBones up to date (${names.size}).`);
