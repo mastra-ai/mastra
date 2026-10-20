@@ -71,7 +71,7 @@ function pendingChangesHandler() {
 
 describe('WorkspaceViewerPanel', () => {
   describe('when a file preview needs syntax highlighting', () => {
-    it.each([typescriptFile, htmlFile])('renders $path as safe text and then adds dual-theme colors', async file => {
+    it.each([typescriptFile, htmlFile])('renders $path as safe text and then adds syntax colors', async file => {
       installHandlers();
       server.use(
         http.get(FILES_URL, () =>
@@ -88,11 +88,8 @@ describe('WorkspaceViewerPanel', () => {
       const viewer = await screen.findByLabelText('Workspace file viewer');
       await waitFor(() => expect(viewer.querySelector('pre')?.textContent).toBe(file.content));
       expect(viewer.querySelector('script')).toBeNull();
-      await waitFor(() => {
-        const coloredToken = viewer.querySelector<HTMLElement>('pre span[style]');
-        expect(coloredToken?.style.getPropertyValue('--shiki-light')).toMatch(/^#/);
-        expect(coloredToken?.style.getPropertyValue('--shiki-dark')).toMatch(/^#/);
-      });
+      // Tokens carry theme-aware `syntax-*` role classes; colors flip with `.dark` via `--syntax-*` vars.
+      await waitFor(() => expect(viewer.querySelector('pre span[class^="syntax-"]')).not.toBeNull());
       expect(viewer.querySelector('pre')?.textContent).toBe(file.content);
       expect(viewer.querySelector('script')).toBeNull();
     });
@@ -117,7 +114,7 @@ describe('WorkspaceViewerPanel', () => {
       const viewer = await screen.findByLabelText('Workspace file viewer');
       await waitFor(() => expect(viewer.querySelector('pre')?.textContent).toBe(unknownLanguageFile.content));
       expect(viewer.querySelector('script')).toBeNull();
-      expect(viewer.querySelector('pre span[style]')).toBeNull();
+      expect(viewer.querySelector('pre span[class^="syntax-"]')).toBeNull();
     });
 
     it('still renders markdown as a document', async () => {
