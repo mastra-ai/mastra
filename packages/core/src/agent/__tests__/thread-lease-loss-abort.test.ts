@@ -12,6 +12,7 @@
  * renewals reject or never settle instead of returning false, so only a local
  * deadline can tell it the lease may have lapsed.
  */
+import { EventEmitter } from 'node:events';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -40,6 +41,8 @@ const PARTITION_THREAD = 'lease-partition-thread';
 /** One lease table shared by every replica, with real expiry, like Redis. */
 class SharedLeases {
   leases = new Map<string, { owner: string; expiresAt: number }>();
+  /** Confirmed thread-lease renewals, so a test can act right after one. */
+  renewals = 0;
 
   /** The backend forgets the lease, so the owner's next renewal fails. */
   drop(key: string) {
@@ -56,8 +59,12 @@ class ReplicaPubSub extends EventEmitterPubSub {
   /** How this replica's thread-lease calls fail once its connection to the lease backend is down. */
   partition: 'reject' | 'hang' | undefined;
 
-  constructor(private shared: SharedLeases) {
-    super();
+  /** Pass one emitter to several replicas to share thread events between them, as Redis does. */
+  constructor(
+    private shared: SharedLeases,
+    events?: EventEmitter,
+  ) {
+    super(events);
   }
   async #reach(key: string) {
     if (!key.startsWith(`${RESOURCE}\u0000`)) return;
@@ -83,6 +90,7 @@ class ReplicaPubSub extends EventEmitterPubSub {
     await this.#reach(key);
     if (this.shared.owner(key) !== owner) return false;
     this.shared.leases.set(key, { owner, expiresAt: Date.now() + ttlMs });
+    if (key.startsWith(`${RESOURCE}\u0000`)) this.shared.renewals++;
     return true;
   }
   override async transferLease(key: string, fromOwner: string, toOwner: string) {
@@ -284,6 +292,53 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     },
     30_000,
   );
+
+  it('stops a run on an abort request from another replica after its lease is gone', async () => {
+    const thread = 'lease-gone-abort-thread';
+    for (let i = 0; i < 200; i++) {
+      llm.on(
+        { userMessage: 'abort after loss', sequenceIndex: i },
+        { toolCalls: [{ id: `call_abort_loss_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    const events = new EventEmitter();
+    events.setMaxListeners(0);
+    const memory = new MockMemory();
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return 'ticked';
+      },
+    });
+    const oldReplica = replica(shared, memory, { tick }, new ReplicaPubSub(shared, events));
+    const otherReplica = replica(shared, memory, {}, new ReplicaPubSub(shared, events));
+    await otherReplica.subscribeToThread({ resourceId: RESOURCE, threadId: thread });
+
+    const { output: oldRun, drain } = await startStream(oldReplica, 'abort after loss', {
+      maxSteps: 200,
+      memory: { thread, resource: RESOURCE },
+    });
+    const oldDone = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(3), { timeout: 5_000 });
+
+    // Drop the lease right after a confirmed renewal, so the old run only learns
+    // of the loss on its next renewal, a third of a TTL later; the abort must not wait for that.
+    const renewals = shared.renewals;
+    await vi.waitFor(() => expect(shared.renewals).toBeGreaterThan(renewals), { timeout: 5_000 });
+    shared.drop([RESOURCE, thread].join('\u0000'));
+    expect(otherReplica.abortThreadStream({ resourceId: RESOURCE, threadId: thread })).toBe(true);
+    const ticksAtAbort = ticks;
+    await oldDone;
+
+    expect(ticks - ticksAtAbort).toBeLessThanOrEqual(1);
+    expect(await oldRun.finishReason).toBe('aborted');
+  }, 20_000);
 
   it('never aborts a run whose lease stays healthy across many renewals', async () => {
     for (let i = 0; i < 6; i++) {

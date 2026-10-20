@@ -923,6 +923,13 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
       expect(output).not.toMatch(/import\(["']date-fns["']\)/);
     });
 
+    it('should apply explicit custom pnpm settings to the generated deployment workspace', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const workspace = await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8');
+      expect(workspace).toMatch(/^blockExoticSubdeps: false$/m);
+      expect(workspace).toContain("packages:\n  - '.'");
+    });
+
     it('should update the source pnpm lockfile while installing output dependencies', async () => {
       const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
       const outputFiles = await readdir(outputDir);
