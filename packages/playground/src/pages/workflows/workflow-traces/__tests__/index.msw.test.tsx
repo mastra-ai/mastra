@@ -98,7 +98,7 @@ describe('WorkflowTraces page', () => {
         expect(screen.getByTestId('location').textContent).toContain(`filterEntityId=${WORKFLOW_ID}`),
       );
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(result.queryClient.isFetching()).toBe(0);
       });
       return { ...result, onQuery };

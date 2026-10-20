@@ -40,6 +40,13 @@ const restrictedMonoSelectors = [
   },
 ];
 
+// boneyard keeps its bones in a module-level registry; a second import path risks a second copy
+// that never sees them. Everything goes through the themed wrappers in ds/components/Bones.
+const restrictedBoneyardImports = ['boneyard-js', 'boneyard-js/react'].map(name => ({
+  name,
+  message: 'Import BoneSkeleton/BoneSuspense from @/ds/components/Bones instead.',
+}));
+
 export default defineConfig({
   extends: [rootConfig],
   jsPlugins: ['oxlint-tailwindcss', 'eslint-plugin-storybook'],
@@ -72,8 +79,13 @@ export default defineConfig({
     'tailwindcss/enforce-negative-arbitrary-values': 'warn',
     'tailwindcss/enforce-shorthand': 'warn',
     'tailwindcss/no-unnecessary-arbitrary-value': 'warn',
+    'no-restricted-imports': ['error', { paths: restrictedBoneyardImports }],
   },
   overrides: [
+    {
+      files: ['src/ds/components/Bones/**', 'src/bones/**'],
+      rules: { 'no-restricted-imports': 'off' },
+    },
     {
       files: ['src/**/*.{ts,tsx}'],
       rules: {

@@ -152,7 +152,7 @@ describe('Traces page usage columns', () => {
 
       await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalled());
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
       expect(screen.getByText('Input tokens')).not.toBeNull();
@@ -182,7 +182,7 @@ describe('Traces page usage columns', () => {
       const { queryClient } = renderPage();
 
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
       expect(screen.queryByText('Input tokens')).toBeNull();
@@ -211,7 +211,7 @@ describe('Traces page usage columns', () => {
       const { queryClient } = renderPage('/traces?traceId=trace-a');
 
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
       expect(onBreakdownRequest).not.toHaveBeenCalled();
@@ -241,7 +241,7 @@ describe('Traces page usage columns', () => {
       expect(screen.queryByRole('tab', { name: 'Spans' })).toBeNull();
       expect(screen.getByRole('dialog', { name: 'Trace details' }).className).toContain('w-4/5');
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
     });
@@ -260,7 +260,7 @@ describe('Traces page usage columns', () => {
         await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('spanView='));
         expect(screen.queryByLabelText('Trace time axis')).toBeNull();
         await waitFor(() => {
-          expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+          expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
           expect(queryClient.isFetching()).toBe(0);
         });
       });
@@ -325,7 +325,7 @@ describe('Traces page usage columns', () => {
         expect(screen.getByTestId('messages-panel')).not.toBeNull();
         expect(traceDialog().className).toContain('w-4/5');
         await waitFor(() => {
-          expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+          expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
           expect(queryClient.isFetching()).toBe(0);
         });
       });
@@ -338,7 +338,7 @@ describe('Traces page usage columns', () => {
       const { queryClient } = renderPage('/traces?traceId=trace-a');
 
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
       expect(screen.queryByTestId('messages-panel')).toBeNull();
@@ -359,12 +359,44 @@ describe('Traces page usage columns', () => {
       const { queryClient } = renderPage('/traces?listMode=branches');
       await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalled());
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
       expect(branches).not.toHaveBeenCalled();
       expect(screen.queryByRole('checkbox', { name: 'Subtraces' })).toBeNull();
     });
+  });
+});
+
+describe('Traces page loading state', () => {
+  it('shows the captured traces-page bones until the list arrives', async () => {
+    let releaseList!: () => void;
+    const listGate = new Promise<void>(resolve => {
+      releaseList = resolve;
+    });
+    setTracePageHandlers(metricsCapableCapabilities);
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/light`, async () => {
+        await listGate;
+        return HttpResponse.json(traceList);
+      }),
+      http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async () => {
+        await listGate;
+        return HttpResponse.json(traceQueryPage);
+      }),
+    );
+
+    const { container, queryClient } = renderPage();
+
+    expect(await screen.findByRole('status', { name: 'Loading traces' })).not.toBeNull();
+    expect(container.querySelector('[data-boneyard="traces-page"]')?.getAttribute('aria-busy')).toBe('true');
+
+    releaseList();
+    await waitFor(() => {
+      expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
+      expect(queryClient.isFetching()).toBe(0);
+    });
+    expect(container.querySelector('[data-boneyard="traces-page"]')).toBeNull();
   });
 });
 
@@ -410,7 +442,7 @@ describe('Traces page list source', () => {
       const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
       expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -439,7 +471,7 @@ describe('Traces page list source', () => {
       const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
       expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -456,7 +488,7 @@ describe('Traces page auto refresh toggle', () => {
 
     const { queryClient } = renderPage();
     await waitFor(() => {
-      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
       expect(queryClient.isFetching()).toBe(0);
     });
 
@@ -502,7 +534,7 @@ describe('Traces side panel header actions', () => {
       );
       const { queryClient } = renderPage('/traces?traceId=trace-a');
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
       fireEvent.click(await screen.findByRole('button', { name: 'Score trace' }));
@@ -528,7 +560,7 @@ describe('Traces side panel header actions', () => {
 
     const { queryClient } = renderPage('/traces?traceId=trace-a');
     await waitFor(() => {
-      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
       expect(queryClient.isFetching()).toBe(0);
     });
 
@@ -555,7 +587,7 @@ describe('Traces side panel Scores view', () => {
 
     const { queryClient } = renderPage('/traces?traceId=trace-a');
     await waitFor(() => {
-      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
       expect(queryClient.isFetching()).toBe(0);
     });
 
@@ -619,7 +651,7 @@ describe('Traces side panel Scores view', () => {
       const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
       expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -693,7 +725,7 @@ describe('Traces page columns menu', () => {
 
       const first = renderPage();
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(first.queryClient.isFetching()).toBe(0);
       });
       expect(screen.queryByText('Environment')).toBeNull();
@@ -723,7 +755,7 @@ describe('Traces page columns menu', () => {
 
       const { queryClient } = renderPage();
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -740,7 +772,7 @@ describe('Traces page columns menu', () => {
         chips.some(chip => chip.textContent?.includes('Thread ID') && chip.textContent.includes('thread-42')),
       ).toBe(true);
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
       expect(JSON.stringify(requestBodies.at(-1))).toContain(
@@ -760,7 +792,7 @@ describe('Traces page columns menu', () => {
 
       const { queryClient } = renderPage();
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -789,7 +821,7 @@ describe('Traces page columns menu', () => {
 
       const { queryClient } = renderPage();
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -811,7 +843,7 @@ describe('Traces page filter bar', () => {
 
       const { queryClient } = renderPage();
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -830,7 +862,7 @@ describe('Traces page filter bar', () => {
 
       const { queryClient } = renderPage();
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -848,7 +880,7 @@ describe('Traces page filter bar', () => {
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterEnvironment=prod');
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -866,7 +898,7 @@ describe('Traces page filter bar', () => {
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterEnvironment=prod');
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -889,7 +921,7 @@ describe('Traces page filter bar', () => {
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterTags=alpha&filterEnvironment=prod');
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -935,7 +967,7 @@ describe('Traces page filter bar', () => {
 
       const { queryClient } = renderPage('/traces?filterFeedbackComment=wrong%20answer');
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -955,7 +987,7 @@ describe('Traces page filter bar', () => {
 
       const { queryClient } = renderPage('/traces?status=error');
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -984,7 +1016,7 @@ describe('Traces page filter bar', () => {
 
       const { queryClient } = renderPage();
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -1011,7 +1043,7 @@ describe('Traces page filter bar', () => {
       const { onQuery, queryClient } = await commitEnvironmentFilter();
 
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
       const lastBody = onQuery.mock.calls.at(-1)?.[0];
@@ -1033,7 +1065,7 @@ describe('Traces page filter bar', () => {
       );
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterTraceId.op=isNot');
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
       return onQuery;
@@ -1065,7 +1097,7 @@ describe('Traces page filter bar', () => {
     );
     const { queryClient } = renderPage(entry);
     await waitFor(() => {
-      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
       expect(queryClient.isFetching()).toBe(0);
     });
     return onQuery;
@@ -1153,7 +1185,7 @@ describe('Traces page filter bar', () => {
         scopedEntityType: EntityType.AGENT,
       });
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -1177,7 +1209,7 @@ describe('Traces page filter bar', () => {
 
       const { queryClient } = renderPage('/traces?filterSpanDurationMs=1000&filterSpanDurationMs.op=gt');
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -1199,7 +1231,7 @@ describe('Traces page filter bar', () => {
       );
       const { queryClient } = renderPage(entry);
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
       return { onQuery, queryClient };
@@ -1254,7 +1286,7 @@ describe('Traces page filter bar', () => {
       );
       const { queryClient } = renderPage(entry);
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
       return onQuery;
@@ -1306,7 +1338,7 @@ describe('Traces page filter bar', () => {
       );
       const { queryClient } = renderPage('/traces?filterSpanError=&filterSpanError.op=exists');
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
       return onQuery;
@@ -1335,7 +1367,7 @@ describe('Traces page filter bar', () => {
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a');
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -1360,7 +1392,7 @@ describe('Traces page filter bar', () => {
 
       const { queryClient } = renderPage('/traces?filterSpanModel=');
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -1380,7 +1412,7 @@ describe('Traces page filter bar', () => {
       });
       await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent'));
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(result.queryClient.isFetching()).toBe(0);
       });
       return result;
@@ -1425,7 +1457,7 @@ describe('Agent traces page opened from a conversation', () => {
     });
     await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent'));
     await waitFor(() => {
-      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
       expect(result.queryClient.isFetching()).toBe(0);
     });
     return result;
@@ -1487,14 +1519,14 @@ describe('Traces page metadata filter discovery', () => {
 
       const { queryClient } = renderPage();
 
-      expect(screen.getByTestId('traces-page-skeleton')).not.toBeNull();
+      expect(screen.getByRole('status', { name: 'Loading traces' })).not.toBeNull();
       expect(screen.queryByRole('combobox', { name: 'Add filter' })).toBeNull();
 
       releaseFields();
-      await waitFor(() => expect(screen.queryByTestId('traces-page-skeleton')).toBeNull());
+      await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull());
       expect(getFilterInput()).not.toBeNull();
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
     });
@@ -1517,11 +1549,11 @@ describe('Traces page metadata filter discovery', () => {
 
       const { queryClient } = renderPage();
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
-      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
       focusFilterInput();
       await screen.findByRole('option', { name: 'Trace ID' });
       expect(screen.queryByRole('option', { name: 'region' })).toBeNull();
@@ -1551,7 +1583,7 @@ describe('Traces page metadata filter discovery', () => {
 
       const { queryClient } = renderPage();
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -1593,7 +1625,7 @@ describe('Traces page metadata filter discovery', () => {
       const { onQuery, queryClient } = await commitRegionFilter();
 
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
       expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).toContain(
@@ -1613,7 +1645,7 @@ describe('Traces page metadata filter discovery', () => {
 
       const { queryClient } = renderPage('/traces?filterMetadata.region=eu-west');
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -1643,7 +1675,7 @@ describe('Traces page sorting', () => {
       const { queryClient } = renderPage();
 
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
       expect(orderBys.at(-1)).toEqual([{ field: 'startedAt', direction: 'desc' }]);
@@ -1654,7 +1686,7 @@ describe('Traces page sorting', () => {
       captureTraceQueries();
       const { queryClient } = renderPage();
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
 
@@ -1670,7 +1702,7 @@ describe('Traces page sorting', () => {
       const { queryClient } = renderPage('/traces?sort=startedAt&dir=asc');
 
       await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
       });
       expect(orderBys.at(-1)).toEqual([{ field: 'startedAt', direction: 'asc' }]);
@@ -1702,7 +1734,7 @@ describe('Traces page tags filter', () => {
   const renderAndSettle = async (path = '/traces') => {
     const { queryClient } = renderPage(path);
     await waitFor(() => {
-      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(screen.queryByRole('status', { name: 'Loading traces' })).toBeNull();
       expect(queryClient.isFetching()).toBe(0);
     });
   };

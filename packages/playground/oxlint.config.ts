@@ -173,6 +173,14 @@ export default defineConfig({
             name: '@mastra/playground-ui/utils',
             message: 'Import from an exact @mastra/playground-ui subpath instead of a broad barrel.',
           },
+          {
+            name: 'boneyard-js',
+            message: 'Import BoneSkeleton/BoneSuspense from @mastra/playground-ui/components/Bones instead.',
+          },
+          {
+            name: 'boneyard-js/react',
+            message: 'Import BoneSkeleton/BoneSuspense from @mastra/playground-ui/components/Bones instead.',
+          },
         ],
       },
     ],
