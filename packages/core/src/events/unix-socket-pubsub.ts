@@ -1197,10 +1197,10 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       const hex = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(6))).toString('hex');
       const name = nameLength > 1 ? `.${hex.slice(0, nameLength - 1)}` : hex.slice(0, 1);
       if (name === sharedName) continue;
-      // join('.', name) drops the directory, and listen() reads a bare
-      // numeric-looking name such as `.28381e422682` as a TCP port.
-      const directory = dirname(this.socketPath);
-      const privatePath = directory === '.' ? `.${sep}${name}` : join(directory, name);
+      // join() normalizes `.`-equivalent directories away, and listen() reads
+      // a bare numeric-looking name such as `.28381e422682` as a TCP port.
+      const joined = join(dirname(this.socketPath), name);
+      const privatePath = joined.includes(sep) ? joined : `.${sep}${joined}`;
       try {
         return { server: await this.#listen(privatePath), privatePath };
       } catch (error) {

@@ -31,28 +31,33 @@ describe('UnixSocketPubSub - relative socket path', () => {
 
   // `.28381e422682` reads as Infinity and `.0e3034010403` as 0, so a bare
   // private name would be treated by net.Server#listen as a port.
-  it.each([
-    ['events.sock', [0x28, 0x38, 0x1e, 0x42, 0x26, 0x82]],
-    ['./events.sock', [0x28, 0x38, 0x1e, 0x42, 0x26, 0x82]],
-    ['events.sock', [0x0e, 0x30, 0x34, 0x01, 0x04, 0x03]],
-    ['./events.sock', [0x0e, 0x30, 0x34, 0x01, 0x04, 0x03]],
-  ])('starts a broker for %s when the private name looks numeric (%j)', async (socketPath, bytes) => {
-    vi.spyOn(globalThis.crypto, 'getRandomValues').mockImplementation(<T extends ArrayBufferView | null>(values: T) => {
-      (values as unknown as Uint8Array).set(
-        Uint8Array.from(bytes).subarray(0, (values as unknown as Uint8Array).length),
+  const paths = ['events.sock', './events.sock', '././events.sock', 'sub/../events.sock'];
+  const byteSequences = [
+    [0x28, 0x38, 0x1e, 0x42, 0x26, 0x82],
+    [0x0e, 0x30, 0x34, 0x01, 0x04, 0x03],
+  ];
+  it.each(byteSequences.flatMap(bytes => paths.map(path => [path, bytes] as const)))(
+    'starts a broker for %s when the private name looks numeric (%j)',
+    async (socketPath, bytes) => {
+      vi.spyOn(globalThis.crypto, 'getRandomValues').mockImplementation(
+        <T extends ArrayBufferView | null>(values: T) => {
+          (values as unknown as Uint8Array).set(
+            Uint8Array.from(bytes).subarray(0, (values as unknown as Uint8Array).length),
+          );
+          return values;
+        },
       );
-      return values;
-    });
 
-    const pubsub = new UnixSocketPubSub(socketPath);
-    pubsubs.push(pubsub);
+      const pubsub = new UnixSocketPubSub(socketPath);
+      pubsubs.push(pubsub);
 
-    const received: unknown[] = [];
-    await pubsub.subscribe('topic', event => {
-      received.push(event.data);
-    });
-    await pubsub.publish('topic', { type: 'test', data: { ok: true }, runId: 'run-1' });
+      const received: unknown[] = [];
+      await pubsub.subscribe('topic', event => {
+        received.push(event.data);
+      });
+      await pubsub.publish('topic', { type: 'test', data: { ok: true }, runId: 'run-1' });
 
-    await vi.waitFor(() => expect(received).toEqual([{ ok: true }]));
-  });
+      await vi.waitFor(() => expect(received).toEqual([{ ok: true }]));
+    },
+  );
 });
