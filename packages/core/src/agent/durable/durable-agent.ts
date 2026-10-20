@@ -10,6 +10,7 @@ import type { MastraModelConfig } from '../../llm/model/shared.types';
 import { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
 import { createTimeoutAbortSignal } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
+import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../../mastra/run-with-concurrency';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
@@ -693,10 +694,10 @@ export interface DurableAgentRecoveredRun {
    * - `run-active-locally`: this process is executing the run.
    * - `already-in-progress`: this process is already recovering the run.
    * - `transient-error`: recovery hit a transient infrastructure error. Check again at `retryAt`.
-   * - `recovery-timeout`: the 30-second wait expired; the attempt continues without an automatic retry.
+   * - `recovery-timeout`: the attempt is still pending or its 30-second wait expired. Check again at `retryAt`.
    */
   reason?: 'run-active' | 'run-active-locally' | 'already-in-progress' | 'transient-error' | 'recovery-timeout';
-  /** Epoch ms to check again: claim expiry for `run-active`, or a retry delay for `transient-error`. */
+  /** Epoch ms to check again: claim expiry for `run-active`, or a retry delay for `transient-error` / `recovery-timeout`. */
   retryAt?: number;
 }
 
@@ -795,6 +796,7 @@ export class DurableAgent<
 
   /** Registry for per-run non-serializable state */
   readonly #runRegistry: ExtendedRunRegistry;
+  readonly #recoveryAttempts = new Map<string, Promise<DurableAgentRecoveredRun | undefined>>();
 
   /** The durable workflow for agent execution */
   #workflow: ReturnType<typeof createDurableAgenticWorkflow> | null = null;
@@ -4848,95 +4850,111 @@ export class DurableAgent<
       targetRunIds = runs.map(r => r.runId);
     }
 
-    const recovered: DurableAgentRecoveredRun[] = [];
-    let succeeded = 0;
-    let failed = 0;
+    const outcomes: (DurableAgentRecoveredRun | undefined)[] = new Array(targetRunIds.length);
+    const timeoutOutcome = (targetRunId: string): DurableAgentRecoveredRun => ({
+      runId: targetRunId,
+      status: 'skipped',
+      reason: 'recovery-timeout',
+      retryAt: Date.now() + TRANSIENT_RECOVERY_RETRY_DELAY_MS,
+    });
 
-    for (const targetRunId of targetRunIds) {
-      if (this.#mastra?.__shuttingDown) break;
-      const attempt = (async (): Promise<DurableAgentRecoveredRun | undefined> => {
-        let runError: Error | undefined;
-        let started = false;
-        try {
-          // Delegate to the single-run streamable recover path so each run
-          // benefits from the rebuilt registry entry (message list, memory,
-          // saveQueueManager, request context, agent span) and the pubsub
-          // stream / terminal snapshot-cleanup contract stays identical to
-          // `recover()`. We don't surface the per-run stream here — bulk
-          // callers only care about counts — so we just await the workflow
-          // execution promise that `recover()` parks on the registry entry,
-          // capture any failure it surfaces via `onError`, and drop the
-          // stream. `recover()` cleans up on its own after FINISH/ERROR and keeps
-          // suspended runs registered, so thread subscribers still see the
-          // terminal event and a later approval can resume the run (#25891).
-          // With auto-cleanup disabled nothing else releases a finished run, and
-          // bulk callers never get the cleanup handle. Release it once the
-          // terminal event has been delivered; suspended runs never get here.
-          let releaseAfterTerminal: (() => void) | undefined;
-          const onTerminal = () => {
-            if (this.#cleanupTimeoutMs === 0) setTimeout(() => releaseAfterTerminal?.(), 0);
-          };
-          const { cleanup } = await this.recover(targetRunId, {
-            onError: ({ error }) => {
-              runError = error instanceof Error ? error : new Error(String(error));
-              onTerminal();
-            },
-            onFinish: onTerminal,
-            onAbort: onTerminal,
-          });
-          started = true;
-          releaseAfterTerminal = cleanup;
-          try {
-            const workflowExecution = getRunRegistryEntry(targetRunId, this.#mastra)?.workflowExecution;
-            if (workflowExecution) {
-              await workflowExecution;
-            }
-          } catch (error) {
-            cleanup();
-            throw error;
-          }
-          if (runError) throw runError;
-          return { runId: targetRunId, status: 'success' };
-        } catch (error) {
-          const errorId = (error as { id?: unknown })?.id;
-          if (!runError && (errorId === RECOVER_SHUTDOWN_ERROR_ID || errorId === EXECUTION_ABANDONED_ERROR_ID)) {
-            return { runId: targetRunId, status: 'skipped' };
-          }
-          if (!started) {
-            // The run finished or suspended between discovery and its recovery.
-            if (errorId === RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID || errorId === RECOVER_RUN_SUSPENDED_ERROR_ID) return;
-            const skipped = recoverySkip(error);
-            if (skipped) {
-              if (skipped.reason === 'transient-error') {
-                this.#mastra
-                  ?.getLogger()
-                  ?.warn(`[DurableAgent] Deferring recovery of run ${targetRunId} after a transient error`, {
-                    error,
-                    retryAt: skipped.retryAt,
-                  });
-              }
-              return { runId: targetRunId, status: 'skipped', ...skipped };
-            }
-          }
-          const err = runError ?? (error instanceof Error ? error : new Error(String(error)));
-          this.#mastra
-            ?.getLogger?.()
-            ?.error?.(`[DurableAgent] Failed to recover run ${targetRunId}: ${err.message}`, { error: err });
-          return { runId: targetRunId, status: 'failed', error: err };
+    await runWithConcurrency(
+      targetRunIds.map((targetRunId, index) => ({ targetRunId, index })),
+      DEFAULT_RESTART_CONCURRENCY,
+      async ({ targetRunId, index }) => {
+        if (this.#mastra?.__shuttingDown) return;
+        if (this.#recoveryAttempts.has(targetRunId)) {
+          outcomes[index] = timeoutOutcome(targetRunId);
+          return;
         }
-      })();
-      const bounded = this.#mastra
-        ? await this.#mastra.__awaitDurableRecoveryAttempt(attempt, `durable agent ${this.id} run ${targetRunId}`)
-        : { value: await attempt };
-      const outcome = bounded
-        ? bounded.value
-        : { runId: targetRunId, status: 'skipped' as const, reason: 'recovery-timeout' as const };
-      if (!outcome) continue;
-      recovered.push(outcome);
-      if (outcome.status === 'success') succeeded++;
-      if (outcome.status === 'failed') failed++;
-    }
+        // Defer execution until the map is populated, including synchronous re-entrant callers.
+        const attempt = Promise.resolve().then(async (): Promise<DurableAgentRecoveredRun | undefined> => {
+          if (this.#mastra?.__shuttingDown) return;
+          let runError: Error | undefined;
+          let started = false;
+          try {
+            // Delegate to the single-run streamable recover path so each run
+            // benefits from the rebuilt registry entry (message list, memory,
+            // saveQueueManager, request context, agent span) and the pubsub
+            // stream / terminal snapshot-cleanup contract stays identical to
+            // `recover()`. We don't surface the per-run stream here — bulk
+            // callers only care about counts — so we just await the workflow
+            // execution promise that `recover()` parks on the registry entry,
+            // capture any failure it surfaces via `onError`, and drop the
+            // stream. `recover()` cleans up on its own after FINISH/ERROR and keeps
+            // suspended runs registered, so thread subscribers still see the
+            // terminal event and a later approval can resume the run (#25891).
+            // With auto-cleanup disabled nothing else releases a finished run, and
+            // bulk callers never get the cleanup handle. Release it once the
+            // terminal event has been delivered; suspended runs never get here.
+            let releaseAfterTerminal: (() => void) | undefined;
+            const onTerminal = () => {
+              if (this.#cleanupTimeoutMs === 0) setTimeout(() => releaseAfterTerminal?.(), 0);
+            };
+            const { cleanup } = await this.recover(targetRunId, {
+              onError: ({ error }) => {
+                runError = error instanceof Error ? error : new Error(String(error));
+                onTerminal();
+              },
+              onFinish: onTerminal,
+              onAbort: onTerminal,
+            });
+            started = true;
+            releaseAfterTerminal = cleanup;
+            try {
+              const workflowExecution = getRunRegistryEntry(targetRunId, this.#mastra)?.workflowExecution;
+              if (workflowExecution) {
+                await workflowExecution;
+              }
+            } catch (error) {
+              cleanup();
+              throw error;
+            }
+            if (runError) throw runError;
+            return { runId: targetRunId, status: 'success' };
+          } catch (error) {
+            const errorId = (error as { id?: unknown })?.id;
+            if (!runError && (errorId === RECOVER_SHUTDOWN_ERROR_ID || errorId === EXECUTION_ABANDONED_ERROR_ID)) {
+              return { runId: targetRunId, status: 'skipped' };
+            }
+            if (!started) {
+              // The run finished or suspended between discovery and its recovery.
+              if (errorId === RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID || errorId === RECOVER_RUN_SUSPENDED_ERROR_ID) return;
+              const skipped = recoverySkip(error);
+              if (skipped) {
+                if (skipped.reason === 'transient-error') {
+                  this.#mastra
+                    ?.getLogger()
+                    ?.warn(`[DurableAgent] Deferring recovery of run ${targetRunId} after a transient error`, {
+                      error,
+                      retryAt: skipped.retryAt,
+                    });
+                }
+                return { runId: targetRunId, status: 'skipped', ...skipped };
+              }
+            }
+            const err = runError ?? (error instanceof Error ? error : new Error(String(error)));
+            this.#mastra
+              ?.getLogger?.()
+              ?.error?.(`[DurableAgent] Failed to recover run ${targetRunId}: ${err.message}`, { error: err });
+            return { runId: targetRunId, status: 'failed', error: err };
+          }
+        });
+        this.#recoveryAttempts.set(targetRunId, attempt);
+        const removeAttempt = () => {
+          if (this.#recoveryAttempts.get(targetRunId) === attempt) this.#recoveryAttempts.delete(targetRunId);
+        };
+        void attempt.then(removeAttempt, removeAttempt);
+        const bounded = this.#mastra
+          ? await this.#mastra.__awaitDurableRecoveryAttempt(attempt, `durable agent ${this.id} run ${targetRunId}`)
+          : { value: await attempt };
+        outcomes[index] = bounded ? bounded.value : timeoutOutcome(targetRunId);
+      },
+    );
 
+    const recovered = outcomes.filter((outcome): outcome is DurableAgentRecoveredRun => outcome !== undefined);
+    const succeeded = recovered.filter(outcome => outcome.status === 'success').length;
+    const failed = recovered.filter(outcome => outcome.status === 'failed').length;
     return { recovered, succeeded, failed };
   }
 

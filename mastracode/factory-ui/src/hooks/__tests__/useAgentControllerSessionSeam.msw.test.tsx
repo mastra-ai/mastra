@@ -12,88 +12,79 @@ import {
 import { useAgentControllerThreads } from '../useAgentControllerThreads';
 
 const controllerId = 'code';
-const resourceId = 'resource-test';
-const scope = '/sandbox/mastra';
-const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${resourceId}`;
+const sessionId = 'session-test';
+const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${sessionId}`;
 
 /**
- * Every hook that owns a session-scoped write MUST forward the session scope
- * on the wire. If the seam drops the scope, mutations land in one server-side
- * session while reads point at another — the "Failed to switch thread"
- * regression on `/new` (see PR history).
+ * Every hook that owns a session write MUST address the same server-side
+ * session as the reads. If a write lands in another session while reads point
+ * at this one, `/new` fails to switch thread (see PR history). Sessions are
+ * addressed by their id alone; no session scope travels on the wire.
  */
-// Post-rename: the hook seam field is `scope`, matching the SDK's
-// `sessionScope` query param and the factory's `createAgentControllerClient`
-// argument. Callers whose local variable is a project path pass it in as
-// `scope: worktreeProjectPath` (see the app-level ChatSessionProvider).
 const hookArgs = {
   agentControllerId: controllerId,
-  resourceId,
-  scope,
+  sessionId,
   baseUrl: TEST_BASE_URL,
   enabled: true,
 };
 
-describe('agent-controller hook seam forwards session scope on the wire', () => {
+describe('agent-controller hook seam addresses the session by its id', () => {
   it('createThread', async () => {
-    let captured: string | null | undefined;
+    let captured: URL | undefined;
     server.use(
       http.get(sessionUrl, () => HttpResponse.json({ threadId: null })),
       http.post(`${sessionUrl}/threads`, ({ request }) => {
-        captured = new URL(request.url).searchParams.get('sessionScope');
+        captured = new URL(request.url);
         return HttpResponse.json({ id: 't1', title: 'x', updatedAt: '2026-07-21T00:00:00.000Z' });
       }),
     );
     const { result, client } = renderHookWithProviders(() => useCreateAgentControllerThreadMutation(hookArgs));
     await act(async () => result.current.mutateAsync('x'));
     await waitForMutationsIdle(client);
-    expect(captured).toBe(scope);
+    expect(captured?.pathname).toContain(`/sessions/${sessionId}/`);
+    expect(captured?.searchParams.has('sessionScope')).toBe(false);
   });
 
   it('switchThread', async () => {
-    let captured: string | null | undefined;
+    let captured: URL | undefined;
     server.use(
       http.get(sessionUrl, () => HttpResponse.json({ threadId: 'thread-one' })),
       http.post(`${sessionUrl}/thread`, ({ request }) => {
-        captured = new URL(request.url).searchParams.get('sessionScope');
+        captured = new URL(request.url);
         return HttpResponse.json({ ok: true });
       }),
     );
     const { result, client } = renderHookWithProviders(() => useSwitchAgentControllerThreadMutation(hookArgs));
     await act(async () => result.current.mutateAsync('thread-one'));
     await waitForMutationsIdle(client);
-    expect(captured).toBe(scope);
+    expect(captured?.pathname).toContain(`/sessions/${sessionId}/`);
+    expect(captured?.searchParams.has('sessionScope')).toBe(false);
   });
 
   it('setGoal', async () => {
-    let captured: string | null | undefined;
+    let captured: URL | undefined;
     server.use(
       http.get(sessionUrl, () => HttpResponse.json({ threadId: null })),
       http.post(`${sessionUrl}/goal`, ({ request }) => {
-        captured = new URL(request.url).searchParams.get('sessionScope');
+        captured = new URL(request.url);
         return HttpResponse.json({ goal: { objective: 'x', status: 'active' } });
       }),
     );
     const { result, client } = renderHookWithProviders(() => useSetAgentControllerGoalMutation(hookArgs));
     await act(async () => result.current.mutateAsync('x'));
     await waitForMutationsIdle(client);
-    expect(captured).toBe(scope);
+    expect(captured?.pathname).toContain(`/sessions/${sessionId}/`);
+    expect(captured?.searchParams.has('sessionScope')).toBe(false);
   });
 
-  it('createThread lands in the scoped list so /new can navigate to the new thread', async () => {
-    const threadsByScope = new Map<string, Array<{ id: string; title: string; updatedAt: string }>>();
-    threadsByScope.set(scope, []);
+  it('createThread lands in the session thread list so /new can navigate to the new thread', async () => {
+    const threads: Array<{ id: string; title: string; updatedAt: string }> = [];
     server.use(
       http.get(sessionUrl, () => HttpResponse.json({ threadId: null })),
-      http.get(`${sessionUrl}/threads`, ({ request }) => {
-        const s = new URL(request.url).searchParams.get('sessionScope') ?? '';
-        return HttpResponse.json({ threads: threadsByScope.get(s) ?? [] });
-      }),
-      http.post(`${sessionUrl}/threads`, ({ request }) => {
-        const s = new URL(request.url).searchParams.get('sessionScope') ?? '';
-        const bucket = threadsByScope.get(s) ?? [];
+      http.get(`${sessionUrl}/threads`, () => HttpResponse.json({ threads })),
+      http.post(`${sessionUrl}/threads`, () => {
         const created = { id: 'thread-created', title: 'x', updatedAt: '2026-07-21T00:00:00.000Z' };
-        threadsByScope.set(s, [created, ...bucket]);
+        threads.unshift(created);
         return HttpResponse.json(created);
       }),
     );

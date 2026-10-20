@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef } from 'react';
 import {
   hasAnyTraceFilterParams,
   loadTraceFiltersFromStorage,
   saveTraceFiltersToStorage,
   traceFilterOperatorParam,
-} from '../trace-filters';
-import type { SetURLSearchParamsLike } from './use-trace-url-state';
+} from '@mastra/playground-ui/domains/traces/trace-filters';
+import type { SetURLSearchParamsLike } from '@mastra/playground-ui/sort/use-url-sort';
+import { useCallback, useEffect, useRef } from 'react';
 
 export interface TraceFilterPersistenceOptions {
   /** Override the localStorage key. Default: traces filters storage. */
@@ -33,7 +33,7 @@ function withoutParams(params: URLSearchParams, excludeParams: readonly string[]
  *   (so a shared link / direct nav with explicit filters wins over the saved set)
  * - returns a `setSearchParams` wrapper that persists the resulting params as part of the
  *   update itself; only relative date presets are kept (see `saveTraceFiltersToStorage`).
- *   Route every filter mutation through the returned setter (e.g. hand it to `useTraceUrlState`).
+ *   Route every filter mutation through the returned setter (e.g. hand it to `useTracesRouteState`).
  *
  * Pass `storageKey` to scope persistence (e.g. per-entity), and `excludeParams` to keep
  * context filters out of it.

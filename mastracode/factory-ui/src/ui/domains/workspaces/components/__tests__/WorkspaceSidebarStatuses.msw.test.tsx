@@ -183,8 +183,9 @@ function stubWorkspaceStatuses({
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, ({ request }) => {
       const url = new URL(request.url);
       const threadId = url.searchParams.get('threadId');
-      const scope = url.searchParams.get('scope');
-      const key = `${threadId ?? ''}:${scope ?? ''}`;
+      // Each row reads its own session's subscriptions.
+      const sessionId = url.searchParams.get('sessionId');
+      const key = `${threadId ?? ''}:${sessionId ?? ''}`;
       return HttpResponse.json({
         subscriptions: subscriptionsBySession[key] ?? [],
       });

@@ -41,7 +41,6 @@ export { DatasetItemsView } from './components/dataset-detail/dataset-items-view
 export { DatasetTagsEditor } from './components/dataset-detail/dataset-tags-editor';
 export { DatasetItemsList } from './components/items/dataset-items-list';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';
-export { AddItemDialog } from './components/add-item-dialog';
 
 // Item detail components
 export { DatasetItemDetails } from './components/items/dataset-item-details';

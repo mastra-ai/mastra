@@ -28,6 +28,7 @@ import {
   compileClickHouseTraceRowsByKey,
   queryThreads,
   queryTraces,
+  ROOT_VERSION_ORDER,
   runWithClickHouseTraceQueryTimeout,
 } from './trace-query';
 import { ObservabilityStorageClickhouseVNext } from '.';
@@ -479,7 +480,7 @@ describe('ClickHouse advanced trace query', () => {
     );
 
     expect(compiled.query).toMatch(
-      /FROM mastra_trace_roots r\s+WHERE startedAt >= \{trace_query_1:[^}]+\}\s+AND startedAt < \{trace_query_2:[^}]+\}\s+\)/,
+      /FROM mastra_trace_roots r\s+WHERE startedAt >= \{trace_query_1:[^}]+\}\s+AND startedAt < \{trace_query_2:[^}]+\}\s+ORDER BY startedAt, traceId, spanId,/,
     );
   });
 
@@ -535,8 +536,10 @@ describe('ClickHouse advanced trace query', () => {
     // One root per trace: root_scope is the window's root rows, with no current-root re-read.
     expect(compiled.query).not.toContain('current_roots');
     expect(compiled.query).not.toContain('OVER (PARTITION BY traceId)');
-    // Unmerged copies of a root collapse to one row per trace.
-    expect(compiled.query).toContain('GROUP BY traceId');
+    // Unmerged versions of a root collapse to the current one, before any filter.
+    expect(compiled.query).toContain(
+      `ORDER BY startedAt, traceId, spanId, ${ROOT_VERSION_ORDER}\n    LIMIT 1 BY traceId`,
+    );
     // Span relations are existence checks, which duplicate span copies cannot change.
     expect(compiled.query).not.toContain('LIMIT 1 BY dedupeKey');
     expect(compiled.query).toMatch(
@@ -706,13 +709,12 @@ describe('ClickHouse advanced trace query', () => {
     });
     const keys = compileClickHouseTraceQueryKeys(after);
 
-    expect(keys.query).toContain('max(endedAt) AS sortValue');
+    expect(keys.query).toContain('endedAt AS sortValue');
     expect(keys.query).toContain('ORDER BY sortValue DESC NULLS LAST, traceId ASC');
     expect(keys.query).toContain('traceId > {trace_query_4:String}');
     expect(Object.values(keys.query_params).at(-1)).toBe(3);
-    // The cursor applies to each trace's sort value, not to root rows, so a trace with several
-    // roots can't return on a later page.
-    expect(keys.query).toMatch(/GROUP BY traceId\n {2}HAVING \(sortValue < \{trace_query_\d+:DateTime64/);
+    // Candidates hold one current root per trace, so the cursor applies to that root's sort value.
+    expect(keys.query).toMatch(/FROM candidates\nWHERE \(sortValue < \{trace_query_\d+:DateTime64/);
     expect(keys.query).toMatch(/sortValue = \{trace_query_\d+:DateTime64\(3, 'UTC'\)\} AND traceId > \{/);
     expect(keys.query).not.toMatch(/WHERE \(endedAt </);
   });
@@ -730,11 +732,10 @@ describe('ClickHouse advanced trace query', () => {
       'clickhouse',
       JSON.stringify({ cursorId: '0', traceId: '' }),
     );
-    // Delta lists in the default order (startedAt DESC): the row that sorts first, as in the keys
-    // statement; then the lowest dedupeKey, then the latest endedAt.
-    expect(compileClickHouseTraceQuery(plan({ mode: 'delta', after })).query).toContain(
-      'ORDER BY d.latestCursorId ASC, c.traceId ASC, c.startedAt DESC, c.dedupeKey ASC, c.endedAt DESC\nLIMIT 1 BY c.traceId',
-    );
+    // Candidates already hold one current root per trace, so delta needs no per-trace pick.
+    const compiled = compileClickHouseTraceQuery(plan({ mode: 'delta', after })).query;
+    expect(compiled).toContain(`ORDER BY startedAt, traceId, spanId, ${ROOT_VERSION_ORDER}\n    LIMIT 1 BY traceId`);
+    expect(compiled).toMatch(/ORDER BY d\.latestCursorId ASC, c\.traceId ASC\nLIMIT \{trace_query_\d+:UInt64\}$/);
   });
 
   it("looks up each listed row's payload by that row's own identity and tenant", () => {
@@ -788,12 +789,9 @@ describe('ClickHouse advanced trace query', () => {
     });
 
     const keys = compileClickHouseTraceQueryKeys(pagePlan);
-    // One sort value per trace (its first root row, which also gives the key), the page by offset,
-    // and the total on every row.
-    expect(keys.query).toContain('min(endedAt) AS sortValue');
-    expect(keys.query).toContain('argMin((dedupeKey, startedAt), endedAt) AS root');
-    expect(keys.query).toContain('root.1 AS dedupeKey');
-    expect(keys.query).toContain('root.2 AS rootStartedAt');
+    // The key of each trace's current root, the page by offset, and the total on every row.
+    expect(keys.query).toContain('endedAt AS sortValue');
+    expect(keys.query).toContain('startedAt AS rootStartedAt, endedAt AS rootEndedAt');
     expect(keys.query).toContain('count() OVER () AS __total');
     expect(keys.query).toMatch(
       /ORDER BY sortValue ASC NULLS LAST, traceId ASC\nLIMIT \{trace_query_\d+:UInt64\} OFFSET \{trace_query_\d+:UInt64\}$/,
@@ -809,6 +807,7 @@ describe('ClickHouse advanced trace query', () => {
         dedupeKey: 'trace-a:root-a',
         sortValue: '2026-01-01T12:00:00.000Z',
         rootStartedAt: '2026-01-01T11:00:00.000Z',
+        rootEndedAt: '2026-01-01T12:00:00.000Z',
       },
     ]);
     // The keyed roots by full key, with their payloads; root conjuncts are re-applied, relations aren't.
@@ -1098,11 +1097,12 @@ describe('ClickHouse advanced trace query', () => {
     // The page's keys and total, then the page's rows (with payloads) by key.
     expect(query).toHaveBeenCalledTimes(2);
     expect(query.mock.calls[0]![0].clickhouse_settings).toMatchObject({ max_execution_time: 15 });
-    expect(query.mock.calls[1]![0].query).toContain('WHERE (r.startedAt, r.traceId, r.dedupeKey) IN (');
+    expect(query.mock.calls[1]![0].query).toContain('WHERE (r.startedAt, r.traceId, r.dedupeKey, r.endedAt) IN (');
     expect(Object.values(query.mock.calls[1]![0].query_params)).toEqual([
       '2026-01-01 10:00:00.000',
       'trace-c',
       'trace-c:root-trace-c',
+      '2026-01-01 10:00:01.000',
     ]);
     expect(response).toMatchObject({
       traces: [{ traceId: 'trace-c', metadata: { customer: { id: 'customer-1' }, count: 2 } }],
@@ -1201,6 +1201,7 @@ function mockTraceStatements({
           dedupeKey: row.dedupeKey,
           sortValue: row.startedAt,
           rootStartedAt: row.startedAt,
+          rootEndedAt: row.endedAt,
           __total: String(traces),
         }));
       }

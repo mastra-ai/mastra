@@ -146,6 +146,7 @@ describe('PostgresStoreVNext', () => {
           'trace-query-time-to-first-chunk',
           'trace-query-time-to-first-chunk-sort',
           'trace-query-root-span-fields',
+          'trace-query-root-entity-id',
         ]);
 
         coreFeatures.delete('observability-delta-polling');
@@ -172,6 +173,7 @@ describe('PostgresStoreVNext', () => {
           'trace-query-time-to-first-chunk',
           'trace-query-time-to-first-chunk-sort',
           'trace-query-root-span-fields',
+          'trace-query-root-entity-id',
         ]);
       } finally {
         coreFeatures.clear();
@@ -421,6 +423,11 @@ describe('PostgresStoreVNext / shared observability suite', () => {
       ['the whole window', undefined, undefined],
       ['a where filter', { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } }, undefined],
       ['a metadata filter', { op: 'eq', left: { path: 'metadata.tenant' }, right: { literal: 'acme' } }, undefined],
+      [
+        'a root entityId filter',
+        { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } },
+        undefined,
+      ],
       ['a tenant scope', undefined, { organizationId: 'org-b' }],
     ])('counts the same traces as queryTraces for %s', async (_name, where, scope) => {
       const aggregate = await sharedStorage!.aggregateTraces(

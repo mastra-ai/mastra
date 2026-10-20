@@ -600,6 +600,7 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
     timeToFirstChunkMs: orderedField('number'),
+    entityId: stringField(false),
     entityName: stringField(true),
     entityType: stringField(true),
     name: stringField(true),

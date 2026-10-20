@@ -8,16 +8,20 @@ import CodeMirror from '@uiw/react-codemirror';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
+import { Braces } from 'lucide-react';
 import { forwardRef, useMemo } from 'react';
 import type { HTMLAttributes } from 'react';
 import { codeLanguages } from './code-languages';
 import { syntaxHighlighter } from './highlight';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
+import { Button } from '@/ds/components/Button';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { useFieldControlAria } from '@/ds/components/Field/field-control-aria';
 import { fieldErrorRimWithin, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
+import { formatJSON } from '@/lib/formatting';
 import type { JsonSchema } from '@/lib/json-schema';
+import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
 export type CodeEditorLanguage = 'json' | 'markdown';
@@ -171,6 +175,8 @@ export type CodeEditorProps = {
   value?: string;
   onChange?: (value: string) => void;
   showCopyButton?: boolean;
+  /** Offers a button that rewrites the JSON with Prettier. Needs `onChange`; ignored for markdown or read-only editors. */
+  showFormatButton?: boolean;
   className?: string;
   highlightVariables?: boolean;
   language?: CodeEditorLanguage;
@@ -194,6 +200,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       value,
       onChange,
       showCopyButton = true,
+      showFormatButton = false,
       className,
       language = 'json',
       font = 'mono',
@@ -222,6 +229,15 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     const ariaInvalid = ariaInvalidProp ?? fieldAria['aria-invalid'];
     const theme = useCodemirrorTheme(font);
     const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
+    const canFormat = showFormatButton && language === 'json' && editable !== false && Boolean(onChange);
+
+    const handleFormat = async () => {
+      try {
+        onChange?.((await formatJSON(formattedCode)).trimEnd());
+      } catch {
+        toast.error('Can’t format: the JSON is invalid');
+      }
+    };
 
     const extensions = useMemo(() => {
       const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel };
@@ -270,7 +286,16 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
 
     return (
       <div className={cn(codeEditorVariants({ variant }), className)} {...props}>
-        {showCopyButton && <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />}
+        {(showCopyButton || canFormat) && (
+          <div className="absolute top-2 right-2 z-20 flex gap-1">
+            {canFormat && (
+              <Button type="button" size="sm" tooltip="Format JSON" aria-label="Format JSON" onClick={handleFormat}>
+                <Braces />
+              </Button>
+            )}
+            {showCopyButton && <CopyButton content={formattedCode} />}
+          </div>
+        )}
         <CodeMirror
           ref={ref}
           value={formattedCode}

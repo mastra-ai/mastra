@@ -71,7 +71,7 @@ const controllerMock = {
   onSessionCreated: vi.fn(),
   setChannels: vi.fn(),
   queryThreadById: vi.fn(),
-  getSessionByResource: vi.fn(),
+  getSession: vi.fn(),
   createSession: vi.fn(),
 };
 
@@ -291,6 +291,7 @@ async function prepareIntegrationContext(config: ConstructorParameters<typeof Ma
 
 beforeEach(() => {
   vi.clearAllMocks();
+  controllerMock.queryThreadById.mockReset();
   studioInstances.length = 0;
   dispatcherOptions.length = 0;
   terminalCleanups.length = 0;
@@ -298,6 +299,13 @@ beforeEach(() => {
   platformGithubOptions.length = 0;
   runEndReports.length = 0;
 });
+
+/** Serve stored threads by id for the rest of the test. */
+function threadsById(threads: Record<string, { id: string; resourceId: string; metadata: Record<string, unknown> }>) {
+  controllerMock.queryThreadById.mockImplementation(
+    async ({ threadId }: { threadId: string }) => threads[threadId] ?? null,
+  );
+}
 
 describe('MastraFactory constructor', () => {
   it('requires a storage backend', () => {
@@ -554,7 +562,7 @@ describe('MastraFactory.prepare', () => {
     });
 
     const session = {
-      identity: { getResourceId: () => 'session-1' },
+      identity: { getId: () => 'session-1', getResourceId: () => 'session-1' },
       om: {
         observer: { modelId: () => undefined, switchModel: vi.fn().mockResolvedValue(undefined) },
         reflector: { modelId: () => undefined, switchModel: vi.fn().mockResolvedValue(undefined) },
@@ -858,7 +866,7 @@ describe('MastraFactory.prepare', () => {
       },
       role: 'review',
       session: { sessionId: 'session-1', branch: 'review/pr-17', threadId: 'session-1' },
-      resourceId: 'session-1',
+      resourceId: '11111111-2222-4333-8444-555555555555',
       kickoffKey: 'github-review-17',
       kickoffMessage: null,
     });
@@ -867,7 +875,8 @@ describe('MastraFactory.prepare', () => {
     const context = new RequestContext();
     context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
     context.set('controller', {
-      resourceId: 'session-1',
+      resourceId: '11111111-2222-4333-8444-555555555555',
+      sessionId: 'session-1',
       threadId: 'session-1',
       getState: () => state,
       setState: async (updates: Record<string, unknown>) => {
@@ -916,7 +925,7 @@ describe('MastraFactory.prepare', () => {
       },
       role: 'review',
       session: { sessionId: 'session-1', branch: 'review/pr-18', threadId: 'session-1' },
-      resourceId: 'session-1',
+      resourceId: '11111111-2222-4333-8444-555555555555',
       kickoffKey: 'github-review-18',
       kickoffMessage: null,
     });
@@ -930,7 +939,8 @@ describe('MastraFactory.prepare', () => {
     const context = new RequestContext();
     context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
     context.set('controller', {
-      resourceId: 'session-1',
+      resourceId: '11111111-2222-4333-8444-555555555555',
+      sessionId: 'session-1',
       threadId: 'session-1',
       getState: () => state,
       setState: async (updates: Record<string, unknown>) => {
@@ -991,7 +1001,7 @@ describe('MastraFactory.prepare', () => {
         },
         role: 'review',
         session: { sessionId: 'session-1', branch: 'review/mr-17', threadId: 'session-1' },
-        resourceId: 'session-1',
+        resourceId: '11111111-2222-4333-8444-555555555555',
         kickoffKey: 'gitlab-review-prompt-17',
         kickoffMessage: null,
       });
@@ -999,7 +1009,8 @@ describe('MastraFactory.prepare', () => {
       const context = new RequestContext();
       context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
       context.set('controller', {
-        resourceId: 'session-1',
+        resourceId: '11111111-2222-4333-8444-555555555555',
+        sessionId: 'session-1',
         threadId: 'session-1',
         session: { modeId: 'review' },
         getState: () => state,
@@ -1106,8 +1117,8 @@ describe('MastraFactory.prepare', () => {
     requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
     requestContext.set('controller', {
       resourceId: 'resource-1',
+      sessionId: 'session-1',
       threadId: 'thread-1',
-      scope: '/worktree',
       getState: () => ({ factoryProjectId: binding.factoryProjectId }),
     });
 
@@ -1117,7 +1128,10 @@ describe('MastraFactory.prepare', () => {
   });
 
   describe('Factory tools in user sessions', () => {
-    async function seedUserSession(storage: ReturnType<typeof fakeStorage>) {
+    async function seedUserSession(
+      storage: ReturnType<typeof fakeStorage>,
+      session: { visibility?: 'org' | 'private'; origin?: { sessionId: string; threadId: string } } = {},
+    ) {
       await storage.init();
       const sourceControl = storage.getDomain<SourceControlStorage>('source-control').forIntegration('github');
       const project = await storage
@@ -1154,6 +1168,7 @@ describe('MastraFactory.prepare', () => {
         userId: 'user-1',
         branch: 'user/session-1',
         baseBranch: 'main',
+        ...session,
       });
       return project;
     }
@@ -1162,7 +1177,12 @@ describe('MastraFactory.prepare', () => {
       const requestContext = new RequestContext();
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
       if (interactive) requestContext.set('factoryInteractive', true);
-      requestContext.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
+      requestContext.set('controller', {
+        sessionId: 'session-1',
+        resourceId: 'session-1',
+        threadId: 'thread-1',
+        getState: () => ({}),
+      });
       return requestContext;
     }
 
@@ -1240,7 +1260,12 @@ describe('MastraFactory.prepare', () => {
 
       const wake = new RequestContext();
       await prepareWake({ requestContext: wake, resourceId: 'session-1' });
-      wake.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
+      wake.set('controller', {
+        sessionId: 'session-1',
+        resourceId: 'session-1',
+        threadId: 'thread-1',
+        getState: () => ({}),
+      });
       const woken = await extraTools({ requestContext: wake });
       await expect(woken.factory_answer_approval!.execute(answer, {})).rejects.toThrow(
         'Only a person can answer an approval',
@@ -1270,6 +1295,192 @@ describe('MastraFactory.prepare', () => {
       expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     });
 
+    it('wakes a user session under its owner resource through its own thread', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      controllerMock.queryThreadById.mockResolvedValueOnce({ id: 'session-1', resourceId: 'user-1', metadata: {} });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      await prepareWake({ requestContext: wake, resourceId: 'user-1', threadId: 'session-1' });
+
+      expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(runEndReports).toEqual([]);
+    });
+
+    it("wakes a run session on the Factory's resource through its thread's session stamp", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      // A run is bound to the session, so its threads run on the Factory's resource.
+      vi.spyOn(storage.getDomain<WorkItemsStorage>('work-items'), 'hasRunBindingForSession').mockResolvedValue(true);
+      threadsById({
+        'session-1': { id: 'session-1', resourceId: project.id, metadata: {} },
+        'thread-7': { id: 'thread-7', resourceId: project.id, metadata: { factorySessionId: 'session-1' } },
+      });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      await prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'thread-7' });
+
+      expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(runEndReports).toEqual([]);
+    });
+
+    it("refuses a wake on a thread under the Factory stamped with a private run's session id", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage, { visibility: 'private' });
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      // The private run runs on the Factory's resource, where any org member can stamp a thread.
+      vi.spyOn(storage.getDomain<WorkItemsStorage>('work-items'), 'hasRunBindingForSession').mockResolvedValue(true);
+      threadsById({
+        'session-1': { id: 'session-1', resourceId: project.id, metadata: {} },
+        'thread-atk': { id: 'thread-atk', resourceId: project.id, metadata: { factorySessionId: 'session-1' } },
+      });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      await expect(
+        prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'thread-atk' }),
+      ).rejects.toThrow("can't be woken as its owner");
+      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+    });
+
+    it('wakes a private run on its own thread under the Factory as its owner', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage, { visibility: 'private' });
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      vi.spyOn(storage.getDomain<WorkItemsStorage>('work-items'), 'hasRunBindingForSession').mockResolvedValue(true);
+      threadsById({ 'session-1': { id: 'session-1', resourceId: project.id, metadata: {} } });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      await prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'session-1' });
+
+      expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    });
+
+    it("refuses a wake on a thread under the Factory stamped with a user session's id", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      // user-1's session runs under user-1; any org member can stamp a Factory thread.
+      threadsById({
+        'session-1': { id: 'session-1', resourceId: 'user-1', metadata: {} },
+        'thread-atk': { id: 'thread-atk', resourceId: project.id, metadata: { factorySessionId: 'session-1' } },
+      });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      await expect(
+        prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'thread-atk' }),
+      ).rejects.toThrow("can't be woken as its owner");
+      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+    });
+
+    it("refuses a wake on a thread under the Factory stamped with a private side session's id", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage, {
+        visibility: 'private',
+        origin: { sessionId: 'parent-1', threadId: 'parent-1' },
+      });
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      // A private side session runs under its owner; any org member can stamp a Factory thread.
+      threadsById({
+        'session-1': { id: 'session-1', resourceId: 'user-1', metadata: {} },
+        'thread-atk': { id: 'thread-atk', resourceId: project.id, metadata: { factorySessionId: 'session-1' } },
+      });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      await expect(
+        prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'thread-atk' }),
+      ).rejects.toThrow("can't be woken as its owner");
+      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+    });
+
+    it("refuses a wake on a thread created with a session's id under someone else's resource", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      threadsById({ 'session-1': { id: 'session-1', resourceId: 'user-atk', metadata: {} } });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      await expect(
+        prepareWake({ requestContext: wake, resourceId: 'user-atk', threadId: 'session-1' }),
+      ).rejects.toThrow("can't be woken as its owner");
+      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+    });
+
+    it("refuses a wake on a thread another resource stamped with someone else's session", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      // An attacker's own thread, stamped with user-1's session id.
+      controllerMock.queryThreadById.mockResolvedValueOnce({
+        id: 'thread-atk',
+        resourceId: 'user-atk',
+        metadata: { factorySessionId: 'session-1' },
+      });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      await expect(
+        prepareWake({ requestContext: wake, resourceId: 'user-atk', threadId: 'thread-atk' }),
+      ).rejects.toThrow("can't be woken as its owner");
+
+      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+      expect(runEndReports).toEqual([
+        expect.objectContaining({
+          sessionId: 'thread-atk',
+          threadId: 'thread-atk',
+          outcome: expect.objectContaining({ status: 'failed', failureCode: 'wake-owner-unresolved' }),
+        }),
+      ]);
+    });
+
     it("fails a wake whose owner can't be resolved, with a failed report, rather than running it as the sender", async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });
@@ -1284,14 +1495,15 @@ describe('MastraFactory.prepare', () => {
       const wake = new RequestContext();
       wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
       const message = "Factory session session-2 can't be woken as its owner: no Factory session row names its owner.";
-      await expect(
-        prepareWake({ requestContext: wake, resourceId: 'session-2', threadId: 'thread-2' }),
-      ).rejects.toThrow(message);
+      // session-2's own thread, under its owner's resource.
+      await expect(prepareWake({ requestContext: wake, resourceId: 'user-2', threadId: 'session-2' })).rejects.toThrow(
+        message,
+      );
 
       expect(runEndReports).toEqual([
         expect.objectContaining({
           sessionId: 'session-2',
-          threadId: 'thread-2',
+          threadId: 'session-2',
           outcome: { status: 'failed', reason: message, failureCode: 'wake-owner-unresolved' },
         }),
       ]);
@@ -1319,7 +1531,7 @@ describe('MastraFactory.prepare', () => {
       const project = await seedUserSession(storage);
       const resumeWake = config.resumeWakeSession as (args: { resourceId: string; threadId: string }) => Promise<void>;
       controllerMock.queryThreadById.mockResolvedValue({ id: 'thread-1', resourceId: 'session-1' });
-      controllerMock.getSessionByResource.mockResolvedValue(undefined);
+      controllerMock.getSession.mockResolvedValue(undefined);
       controllerMock.createSession.mockResolvedValue({});
 
       await resumeWake({ resourceId: 'session-1', threadId: 'thread-1' });
@@ -1345,7 +1557,7 @@ describe('MastraFactory.prepare', () => {
       controllerMock.queryThreadById.mockResolvedValue({ id: 'thread-9', resourceId: 'session-9' });
 
       await expect(resumeWake({ resourceId: 'session-1', threadId: 'thread-9' })).rejects.toThrow(
-        "Factory session session-1 can't be woken as its owner: thread thread-9 is not the session's.",
+        "Factory session thread-9 can't be woken as its owner: thread thread-9 is not the session's.",
       );
       expect(controllerMock.createSession).not.toHaveBeenCalled();
       expect(runEndReports).toHaveLength(1);

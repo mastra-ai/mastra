@@ -160,6 +160,9 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       materialized_at: { type: 'timestamp', nullable: true },
       first_message_at: { type: 'timestamp', nullable: true },
       first_meaningful_exec_at: { type: 'timestamp', nullable: true },
+      // When the session's threads reached their Factory or owner memory resource.
+      // Null only on sessions from before shared resources, until the startup migration moves them.
+      resources_migrated_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -621,6 +624,7 @@ interface SessionDbRow extends Record<string, unknown> {
   materialized_at: Date | null;
   first_message_at: Date | null;
   first_meaningful_exec_at: Date | null;
+  resources_migrated_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -759,6 +763,16 @@ function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<str
 export class SourceControlStorage extends FactoryStorageDomain {
   constructor() {
     super('source-control');
+  }
+
+  /** Sessions, across providers and organizations, the memory-resource migration has not finished. */
+  async listSessionsAwaitingResourceMigration(): Promise<SourceControlSession[]> {
+    return (await this.ops.findMany<SessionDbRow>(SESSIONS, { resources_migrated_at: null })).map(toSession);
+  }
+
+  /** Record that a session's threads are on their memory resource, so later starts skip it. */
+  async markResourcesMigrated(sessionId: string): Promise<void> {
+    await this.ops.updateMany(SESSIONS, { session_id: sessionId }, { resources_migrated_at: new Date() });
   }
 
   async init(): Promise<void> {
@@ -1507,6 +1521,8 @@ export class SourceControlStorage extends FactoryStorageDomain {
               sandbox_workdir: null,
               materialized_at: null,
               first_message_at: null,
+              // New sessions start on their memory resource.
+              resources_migrated_at: now,
               created_at: now,
               updated_at: now,
             });
