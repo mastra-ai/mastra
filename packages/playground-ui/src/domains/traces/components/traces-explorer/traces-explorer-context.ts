@@ -1,0 +1,136 @@
+import type { EntityType } from '@mastra/core/observability';
+import { createContext, useContext } from 'react';
+import type { useTraceColumnPreferences } from '../../hooks/use-trace-column-preferences';
+import type { useTracesListSource } from '../../hooks/use-traces-list-source';
+import { hasTraceUsageColumn, isTraceUsageColumn } from '../../trace-list-columns';
+import type { TraceColumnPreferences } from '../../trace-list-columns';
+import type { SpanTab, TraceDatePreset } from '../../types';
+import type { TraceSpanView } from '../trace-data-panel-view';
+import type { TracesFilters, TracesSelection, TracesSortDirection } from './traces-explorer-actions';
+import type { DataListSort } from '@/ds/components/DataList';
+import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
+
+export type TracesExplorerScope = { entityId: string; entityType?: EntityType };
+
+export type TracesMetricsSupport = { supported: boolean; isLoading: boolean };
+
+/**
+ * Host switches (e.g. feature flags). Each one can only turn a feature off:
+ * it is combined with what the server supports, and defaults to on.
+ */
+export type TracesExplorerFeatures = { traceQuery?: boolean; feedback?: boolean };
+
+export type TracesConfigContextValue = {
+  listId: string;
+  scopedFieldIds: ReadonlySet<string>;
+  hiddenFieldIds: readonly string[];
+  withQueryTrace: boolean;
+  withFeedback: boolean;
+  withRootDuration: boolean;
+  isCapabilitiesLoading: boolean;
+  metricsSupport: TracesMetricsSupport;
+  filterBarFields: FilterBarField[];
+  availableMetadataKeys: string[];
+  isDiscoveryLoading: boolean;
+};
+
+export type TracesFiltersActions = {
+  onFilterBarChange: (expression: FilterBarExpression) => void;
+  onFlatFilterBarChange: (items: FilterBarItem[]) => void;
+  onFilterByField: (fieldId: string, value: string) => void;
+  setDatePreset: (preset: TraceDatePreset) => void;
+  setDate: (value: Date | undefined, end: 'from' | 'to') => void;
+  setDateRange: (from: Date | undefined, to: Date | undefined) => void;
+};
+
+export type TracesFiltersContextValue = TracesFiltersActions & {
+  /** The host's filters with the entries this server can't query dropped. */
+  filters: TracesFilters;
+  dateFrom?: Date;
+  dateTo?: Date;
+  filtersApplied: boolean;
+  contentFiltersApplied: boolean;
+  filterBarValue: FilterBarExpression;
+  flatFilterBarValue: FilterBarItem[];
+};
+
+export type TracesSelectionActions = {
+  selectTrace: (traceId: string) => void;
+  closeTrace: () => void;
+  selectSpan: (spanId: string | null) => void;
+  setSpanTab: (tab: SpanTab) => void;
+  setSpanView: (view: TraceSpanView) => void;
+  selectScore: (scoreId: string | null) => void;
+  highlightSpans: (spanIds: string[]) => void;
+};
+
+export type TracesSelectionContextValue = TracesSelectionActions & {
+  selection: TracesSelection;
+  selectedTraceId?: string;
+};
+
+type ListSource = ReturnType<typeof useTracesListSource>;
+
+export type TracesListContextValue = Pick<
+  ListSource,
+  | 'rows'
+  | 'isLoading'
+  | 'isFetchingNextPage'
+  | 'hasNextPage'
+  | 'setEndOfListElement'
+  | 'error'
+  | 'autoRefetch'
+  | 'setAutoRefetch'
+> & {
+  sortDirection: TracesSortDirection;
+  onSortChange: (direction: DataListSort) => void;
+};
+
+export type TracesColumnsContextValue = ReturnType<typeof useTraceColumnPreferences>;
+
+export const TracesConfigContext = createContext<TracesConfigContextValue | null>(null);
+export const TracesFiltersContext = createContext<TracesFiltersContextValue | null>(null);
+export const TracesSelectionContext = createContext<TracesSelectionContextValue | null>(null);
+export const TracesListContext = createContext<TracesListContextValue | null>(null);
+export const TracesColumnsContext = createContext<TracesColumnsContextValue | null>(null);
+
+const useRequired = <T>(context: React.Context<T | null>, name: string): T => {
+  const value = useContext(context);
+  if (!value) throw new Error(`${name} must be used inside <TracesExplorer>`);
+  return value;
+};
+
+export const useTracesConfig = () => useRequired(TracesConfigContext, 'useTracesConfig');
+export const useTracesFilters = () => useRequired(TracesFiltersContext, 'useTracesFilters');
+export const useTracesSelection = () => useRequired(TracesSelectionContext, 'useTracesSelection');
+export const useTracesList = () => useRequired(TracesListContext, 'useTracesList');
+export const useTracesColumns = () => useRequired(TracesColumnsContext, 'useTracesColumns');
+
+const CHECKING_USAGE_REASON = 'Checking whether this storage supports usage data.';
+const UNSUPPORTED_USAGE_REASON = 'This observability store does not support token and cost metrics.';
+
+export type TraceUsageColumns = {
+  /** Column preferences with the usage columns removed when the store can't serve them. */
+  displayedPreferences: TraceColumnPreferences;
+  /** Whether usage should be fetched: metrics are supported and a usage column is visible. */
+  usageEnabled: boolean;
+  usageDisabledReason?: string;
+};
+
+export const useTraceUsageColumns = (): TraceUsageColumns => {
+  const { preferences } = useTracesColumns();
+  const { metricsSupport } = useTracesConfig();
+  const unavailable = !metricsSupport.isLoading && !metricsSupport.supported;
+  const displayedPreferences = unavailable
+    ? { ...preferences, visibleColumns: preferences.visibleColumns.filter(column => !isTraceUsageColumn(column)) }
+    : preferences;
+  return {
+    displayedPreferences,
+    usageEnabled: !unavailable && !metricsSupport.isLoading && hasTraceUsageColumn(displayedPreferences),
+    usageDisabledReason: metricsSupport.isLoading
+      ? CHECKING_USAGE_REASON
+      : !metricsSupport.supported
+        ? UNSUPPORTED_USAGE_REASON
+        : undefined,
+  };
+};
