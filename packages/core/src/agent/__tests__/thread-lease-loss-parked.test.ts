@@ -203,6 +203,92 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
     20_000,
   );
 
+  /** Parks a run on an approval, then lets the backend forget its lease past the TTL. */
+  async function parkAndLoseLease(tag: string, execute: () => Promise<unknown>) {
+    const thread = `parked-lease-thread-${tag}`;
+    llm.on(
+      { userMessage: `archive ${tag}`, hasToolResult: false },
+      { toolCalls: [{ id: `call_archive_${tag}`, name: 'archive', arguments: { item: 'a' } }] },
+    );
+    llm.on({ toolCallId: `call_archive_${tag}`, hasToolResult: true }, { content: 'Archived.' });
+    const archive = createTool({
+      id: 'archive',
+      description: 'Archive an item',
+      inputSchema: z.object({ item: z.string() }),
+      requireApproval: true,
+      execute,
+    });
+    const pubsub = new FlakyLeasePubSub();
+    const agent = buildAgent(engine, llm.url, archive, pubsub, new InMemoryStore());
+    const result = await agent.stream(`archive ${tag}`, { memory: { thread, resource: RESOURCE } });
+    const output = isDurableEngineVariant(engine) ? result.output : result;
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call-approval') break;
+    }
+    const runId: string = output.runId ?? result.runId;
+    const leaseKey = [...pubsub.leases.keys()].find(key => key.endsWith(thread));
+    expect(leaseKey).toBeDefined();
+    pubsub.leases.clear();
+    // Several TTLs pass, so the renewal fails and the lease would be free for a successor.
+    await new Promise(resolve => setTimeout(resolve, 600));
+    return { agent, pubsub, runId, leaseKey: leaseKey!, toolCallId: `call_archive_${tag}` };
+  }
+
+  it('holds the thread lease again while the resumed tool runs after a lapse', async () => {
+    let ctx!: Awaited<ReturnType<typeof parkAndLoseLease>>;
+    const owners: (string | undefined)[] = [];
+    ctx = await parkAndLoseLease(`${engine}-relock`, async () => {
+      // Sample across more than three TTLs, so a lease without renewal would have lapsed.
+      for (let i = 0; i < 4; i++) {
+        const lease = ctx.pubsub.leases.get(ctx.leaseKey);
+        owners.push(lease && lease.expiresAt > Date.now() ? lease.owner : undefined);
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+      return { archived: true };
+    });
+
+    const resumed = await ctx.agent.approveToolCall({ runId: ctx.runId, toolCallId: ctx.toolCallId });
+    for await (const _ of resumed.fullStream) {
+      // drain
+    }
+    expect(await resumed.text).toBe('Archived.');
+    expect(owners).toEqual([ctx.runId, ctx.runId, ctx.runId, ctx.runId]);
+  }, 20_000);
+
+  // Normal and fs resumes register through the non-strict registerRun, which deliberately runs on
+  // when another owner holds the lease, so they still run the tool beside a successor. Changing that
+  // is a separate behaviour decision; `it.fails` flags the gap until then.
+  const refuseIt = isDurableEngineVariant(engine) ? it : it.fails;
+  refuseIt(
+    'refuses to resume a parked run whose lapsed lease a successor now holds',
+    async () => {
+      let executions = 0;
+      const ctx = await parkAndLoseLease(`${engine}-taken`, async () => {
+        executions++;
+        return { archived: true };
+      });
+      ctx.pubsub.leases.set(ctx.leaseKey, { owner: 'successor-run', expiresAt: Date.now() + 60_000 });
+
+      let refusal: unknown;
+      try {
+        const resumed = await ctx.agent.approveToolCall({ runId: ctx.runId, toolCallId: ctx.toolCallId });
+        for await (const chunk of resumed.fullStream) {
+          if (chunk.type === 'error') refusal ??= chunk.payload?.error;
+        }
+      } catch (error) {
+        refusal = error;
+      }
+      // Give a resume that slipped through time to reach the tool.
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(executions).toBe(0);
+      expect(String((refusal as Error | undefined)?.message ?? refusal)).toContain(
+        'thread lease is held by successor-run',
+      );
+      expect(ctx.pubsub.leases.get(ctx.leaseKey)?.owner).toBe('successor-run');
+    },
+    20_000,
+  );
+
   it('still stops a partly resumed run that loses its lease while a sibling suspension is pending', async () => {
     const tag = `${engine}-partial`;
     const thread = `parked-lease-thread-${tag}`;
