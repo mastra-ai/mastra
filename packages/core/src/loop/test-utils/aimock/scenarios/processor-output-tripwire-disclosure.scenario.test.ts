@@ -39,42 +39,47 @@ const assistantText = (messages: any[]) =>
     .map((p: any) => (typeof p === 'string' ? p : p.type === 'text' ? p.text : ''))
     .join('');
 
+const uiAssistantText = (messages: any[]) =>
+  messages
+    .filter(m => m.role === 'assistant')
+    .flatMap(m => m.parts ?? [])
+    .map((p: any) => (p.type === 'text' ? p.text : ''))
+    .join('');
+
 describeForAllEngines('Output tripwire result surfaces agree (#24443)', engine => {
   const getMock = useLoopScenarioAimock();
 
   for (const hook of HOOKS) {
-    // Engine gap: after a processOutputResult tripwire, durable and evented return the answer in
-    // `text` and `steps` but drop it from `response.messages`, so the surfaces disagree (#27562).
-    const responseGap = hook === 'processOutputResult' && (engine === 'durable' || engine === 'evented');
-    (responseGap ? it.fails : it)(
-      `stream(): text, steps, response and getFullOutput agree when ${hook} trips`,
-      async () => {
-        const { output, requests } = await runLoopScenario({
-          engine,
-          llm: getMock(),
-          prompt: 'Do you deliver here?',
-          outputProcessors: [rejectAt(hook)],
-          fixtures: llm => {
-            llm.on({ endpoint: 'chat' }, { content: ANSWER });
-          },
-        });
+    // Durable and evented used to drop the answer from `response.messages` here (#27562).
+    it(`stream(): text, steps, response and getFullOutput agree when ${hook} trips`, async () => {
+      const { output, requests } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Do you deliver here?',
+        outputProcessors: [rejectAt(hook)],
+        fixtures: llm => {
+          llm.on({ endpoint: 'chat' }, { content: ANSWER });
+        },
+      });
 
-        const full = await output.getFullOutput();
-        const text = await output.text;
-        const steps = await output.steps;
-        const responseText = assistantText((await output.response)?.messages ?? []);
+      const full = await output.getFullOutput();
+      const text = await output.text;
+      const steps = await output.steps;
+      const response = await output.response;
+      const responseText = assistantText(response?.messages ?? []);
 
-        expect(requests).toHaveLength(1);
-        expect(full.tripwire).toMatchObject({ reason: `rejected at ${hook}`, processorId: `tripwire-${hook}` });
-        expect(full.text).toBe(text);
-        expect(text).toBe(hook === 'processOutputStep' ? '' : ANSWER);
-        if (steps.length > 0) expect(steps.map(s => s.text).join('')).toBe(text);
-        if (hook === 'processOutputResult') expect(steps.length).toBeGreaterThan(0);
-        // Gap-hitting assertion last: the response must carry the same text as `text`.
-        if (hook === 'processOutputResult') expect(responseText).toBe(ANSWER);
-        else if (responseText) expect(responseText).toBe(text);
-      },
-    );
+      expect(requests).toHaveLength(1);
+      expect(full.tripwire).toMatchObject({ reason: `rejected at ${hook}`, processorId: `tripwire-${hook}` });
+      expect(full.text).toBe(text);
+      expect(text).toBe(hook === 'processOutputStep' ? '' : ANSWER);
+      if (steps.length > 0) expect(steps.map(s => s.text).join('')).toBe(text);
+      if (hook === 'processOutputResult') expect(steps.length).toBeGreaterThan(0);
+      // Gap-hitting assertion last: the response must carry the same text as `text`.
+      if (hook === 'processOutputResult') {
+        expect(responseText).toBe(ANSWER);
+        expect(uiAssistantText(response?.uiMessages ?? [])).toBe(ANSWER);
+      } else if (responseText) expect(responseText).toBe(text);
+    });
   }
 });
 
