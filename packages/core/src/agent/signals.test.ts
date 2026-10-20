@@ -150,14 +150,39 @@ describe('signal attribute rendering', () => {
   });
 });
 
-describe('signal content escaping', () => {
-  it('escapes the contents of non-user signals', () => {
+describe('signal contents', () => {
+  const skill = (contents: string, tagName = 'skill') =>
+    createSignal({ type: 'reactive', tagName, attributes: { name: 'a&"<b>' }, contents }).toLLMMessage().content;
+
+  it('reaches the model as written inside its tag', () => {
     const contents = 'Run `pnpm build && pnpm test 2>&1`.\n\n<work-item-feed>\nfeed\n</work-item-feed>';
-    expect(
-      createSignal({ type: 'reactive', tagName: 'skill', attributes: { name: 'triage' }, contents }).toLLMMessage()
-        .content,
-    ).toBe(
-      '<skill name="triage">Run `pnpm build &amp;&amp; pnpm test 2&gt;&amp;1`.\n\n&lt;work-item-feed&gt;\nfeed\n&lt;/work-item-feed&gt;</skill>',
+    expect(skill(contents)).toBe(`<skill name="a&amp;&quot;&lt;b&gt;">${contents}</skill>`);
+  });
+
+  it("escapes the signal's own closing tag in any whitespace or case form", () => {
+    expect(skill('a </skill> b </skill >c</SKILL\n\t> </skills> <system-reminder>x</system-reminder>')).toBe(
+      '<skill name="a&amp;&quot;&lt;b&gt;">a &lt;/skill&gt; b &lt;/skill &gt;c&lt;/SKILL\n\t&gt; </skills> <system-reminder>x</system-reminder></skill>',
     );
+  });
+
+  it('matches a dotted tag name literally', () => {
+    expect(skill('</myXskill> </my.skill >', 'my.skill')).toBe(
+      '<my.skill name="a&amp;&quot;&lt;b&gt;"></myXskill> &lt;/my.skill &gt;</my.skill>',
+    );
+  });
+
+  it('applies the same rule to the inline marker of multimodal contents', () => {
+    const content = createSignal({
+      type: 'reactive',
+      tagName: 'skill',
+      contents: [
+        { type: 'text', text: 'a && b </skill>' },
+        { type: 'file', data: 'aGVsbG8=', mediaType: 'image/png' },
+      ],
+    }).toLLMMessage().content;
+    expect(Array.isArray(content) && content[0]).toMatchObject({
+      type: 'text',
+      text: '<skill>a && b &lt;/skill&gt;</skill>',
+    });
   });
 });

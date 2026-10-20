@@ -215,7 +215,7 @@ The model receives the signal as context like this:
 <notification source="github" pr="123">PR #123 has a new review comment from User X about the API surface.</notification>
 ```
 
-When Mastra wraps a signal in its tag, it XML-escapes the `contents` and attribute values, so `&`, `<` and `>` reach the model as `&amp;`, `&lt;` and `&gt;`. This stops signal text from opening or closing tags.
+When Mastra wraps a signal in its tag, it passes `contents` to the model as written and XML-escapes attribute values. A closing tag that matches the signal's own tag, such as `</skill>` inside a `skill` signal, is escaped to `&lt;/skill&gt;` so the contents can't end the tag early. This keeps the wrapper intact, but it isn't a prompt-injection defense: treat third-party text you forward in a signal as untrusted.
 
 Use XML-safe `tagName` and attribute names. They can contain letters, numbers, periods, hyphens, and the underscore character (`_`). They must start with a letter or underscore.
 
