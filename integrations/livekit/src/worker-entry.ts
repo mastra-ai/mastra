@@ -79,3 +79,11 @@ export type {
   VoiceSpeechResult,
   VoiceSpeechCompleteHook,
 } from './turn-metrics';
+
+export type {
+  LiveKitTelephonyContext,
+  LiveKitTelephonyOptions,
+  LiveKitTelephonyResolver,
+  LiveKitInboundCallOptions,
+  LiveKitOutboundCallOptions,
+} from './telephony';

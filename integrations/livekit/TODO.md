@@ -9,6 +9,20 @@ intake + service-area check, general callback).
 
 ---
 
+## Telephony orchestration (2026-10-20)
+
+- [x] Add opt-in worker setup using native LiveKit SIP clients, types, answer waiting, timeouts, and errors.
+- [x] Resolve inbound routing and Memory identifiers from the native SIP participant before agent selection.
+- [x] Bind session input to the selected caller and preserve browser startup when telephony is omitted.
+- [x] Support explicit cleanup of dedicated call rooms without hiding the original setup failure.
+- [x] Verify 19 HTTP SDK tests and five native-room tests, including real Memory persistence; 361 enabled package tests pass.
+- [x] Prove the answer-wait and caller-selection regressions fail when those behaviors are removed; repeat native caller isolation 20 times.
+- [x] Check supported Zod 3/4, package build/lint/types, and canonical documentation examples.
+- [ ] Verify a controlled carrier/audio call: answer-before-greeting, busy/no-answer behavior, interruptions, and shutdown. No real phone call has been placed by automated tests.
+- [ ] Migrate a Loadsmart worker and remove only its overlapping dialing/startup and inbound metadata glue.
+
+See `telephony-orchestration-prd.md` for the approved boundary, verification commands, and limitations. DTMF, call records, durable completion delivery, and project resolution remain outside this change.
+
 ## Release verification — transcript persistence (2026-10-15)
 
 - [ ] **PostgreSQL verification.** Run `src/transcript-pg.test.ts` against a disposable

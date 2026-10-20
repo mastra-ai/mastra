@@ -528,6 +528,152 @@ await dispatchVoiceSession({
 })
 ```
 
+### Phone call setup
+
+Set `telephony` on `createLiveKitWorker()` to coordinate phone calls through LiveKit's native APIs. Outbound jobs wait for an answer before starting the session and greeting. Inbound jobs can resolve an agent, request context, and memory identifiers from the native SIP participant before starting the conversation.
+
+Use a dedicated room for each call. Configure a [LiveKit outbound trunk](https://docs.livekit.io/telephony/making-calls/outbound-trunk/) or [inbound trunk and dispatch rule](https://docs.livekit.io/telephony/accepting-calls/) first. The worker and its native API clients must use the same LiveKit project.
+
+Install the server SDK for its native clients and configuration types:
+
+```bash npm2yarn
+npm install livekit-server-sdk@^2.19.1
+```
+
+#### Outbound calls
+
+Dispatch a job from trusted application code after authorizing the destination. `dispatchVoiceSession()` returns the native dispatch result. The result confirms dispatch acceptance. Answer confirmation happens later in the worker.
+
+```typescript title="src/start-call.ts"
+import { randomUUID } from 'node:crypto'
+import { dispatchVoiceSession } from '@mastra/livekit'
+
+await dispatchVoiceSession({
+  roomName: `support-call-${randomUUID()}`,
+  metadata: {
+    agentId: 'support',
+    resourceId: 'customer-7',
+    requestContext: { phoneNumber: '+15555550123' },
+  },
+})
+```
+
+Configure the worker to dial using LiveKit's `SipClient`. Alongside the LiveKit credentials, set `SIP_OUTBOUND_TRUNK_ID` to your stored outbound trunk ID. Keep your existing worker runner configuration.
+
+```typescript title="src/mastra/voice-worker.ts"
+import { createLiveKitWorker } from '@mastra/livekit/worker'
+import { LiveKitAPI } from 'livekit-server-sdk'
+import { mastra } from './index'
+
+const livekit = new LiveKitAPI()
+
+export default createLiveKitWorker({
+  mastra,
+  stt: 'deepgram/nova-3',
+  tts: 'cartesia/sonic-3',
+  telephony: ({ metadata }) => {
+    const phoneNumber = metadata.requestContext?.phoneNumber
+    if (typeof phoneNumber !== 'string') throw new Error('Missing authorized destination')
+
+    return {
+      direction: 'outbound',
+      sipClient: livekit.sip,
+      sipTrunkId: process.env.SIP_OUTBOUND_TRUNK_ID!,
+      phoneNumber,
+      participantOptions: {
+        participantIdentity: 'callee',
+        ringingTimeout: 30,
+        maxCallDuration: 600,
+      },
+      deleteRoomOnFailure: livekit.room,
+    }
+  },
+  configuration: { greeting: { text: 'Hello, how can I help?' } },
+})
+```
+
+The worker selects the Mastra agent and validates dialing configuration before dialing. It calls `createSipParticipant()` with `waitUntilAnswered: true`, then binds the native session to the returned participant identity. `participantOptions` accepts LiveKit's `CreateSipParticipantOptions` except `waitUntilAnswered`, which the adapter always enables. Timeouts and durations use LiveKit's native seconds. The SDK sizes the request timeout against the ringing window.
+
+For inline trunk configuration, pass LiveKit's `SIPOutboundConfig` as `outboundTrunkConfig`, use an empty `sipTrunkId`, and provide `participantOptions.fromNumber`. Native clients, trunk configuration, and credentials stay in the worker rather than job metadata.
+
+`onSessionStart` receives `sipParticipant`, the native `SIPParticipantInfo` returned by the answered request. An answered request may reach voicemail or a phone menu. LiveKit reports answer status separately from audio subscription, and neither confirms that a person heard the greeting. See [LiveKit outbound call behavior](https://docs.livekit.io/telephony/making-calls/outbound-calls/).
+
+#### Inbound calls
+
+Use a native SIP dispatch rule to place each caller in a separate room and dispatch `mastra-voice`. Create the rule once as part of your LiveKit setup:
+
+```typescript title="scripts/configure-inbound.ts"
+import { serializeSessionMetadata } from '@mastra/livekit'
+import { LiveKitAPI, RoomConfiguration } from 'livekit-server-sdk'
+
+const livekit = new LiveKitAPI()
+
+await livekit.sip.createSipDispatchRule(
+  { type: 'individual', roomPrefix: 'support-call-' },
+  {
+    trunkIds: [process.env.SIP_INBOUND_TRUNK_ID!],
+    roomConfig: new RoomConfiguration({
+      agents: [
+        {
+          agentName: 'mastra-voice',
+          metadata: serializeSessionMetadata({ agentId: 'support' }),
+        },
+      ],
+    }),
+  },
+)
+```
+
+Add inbound configuration to your worker. `resolveMetadata` receives the native participant after the worker connects, before agent selection or memory setup. Return complete session metadata, using a spread if you want to preserve existing fields:
+
+```typescript title="src/mastra/voice-worker.ts"
+import { createLiveKitWorker } from '@mastra/livekit/worker'
+import { LiveKitAPI } from 'livekit-server-sdk'
+import { mastra } from './index'
+
+const livekit = new LiveKitAPI()
+
+export default createLiveKitWorker({
+  mastra,
+  stt: 'deepgram/nova-3',
+  tts: 'cartesia/sonic-3',
+  sessionConfigFromMetadata: true,
+  telephony: {
+    direction: 'inbound',
+    deleteRoomOnFailure: livekit.room,
+    resolveMetadata: ({ ctx, metadata, participant }) => {
+      const calledNumber = participant.attributes['sip.trunkPhoneNumber']
+      if (!calledNumber || calledNumber !== process.env.SUPPORT_PHONE_NUMBER)
+        throw new Error('Unknown inbound route')
+
+      return {
+        ...metadata,
+        agentId: 'support',
+        threadId: ctx.room.name!,
+        resourceId: `call:${ctx.room.name}`,
+        requestContext: { ...metadata.requestContext, calledNumber },
+      }
+    },
+  },
+})
+```
+
+The resolver owns routing and authorization. Caller-ID attributes don't authenticate a customer. The example isolates memory by call rather than linking caller ID to an existing customer's history. You can return `sessionConfig` to apply the shared native session settings. With `sessionConfigFromMetadata` enabled, resolved metadata is validated before agent selection.
+
+Set `participantIdentity` when the caller's identity is known. Otherwise the worker uses LiveKit's first non-agent participant and rejects it if it isn't a SIP participant. It binds the session's native input to that caller. The native participant is also available to the `agent` and `memory` resolvers and `onSessionStart`. Conflicting identities in `telephony` and `inputOptions` fail during setup.
+
+Omit `resolveMetadata` when dispatch metadata already supplies the routing information. A `telephony` callback can select inbound or outbound configuration per job, or return `undefined` for an ordinary browser session. Throw for unknown routes rather than falling back to another agent or project. Omitting `telephony` preserves existing behavior.
+
+#### Setup failures
+
+The adapter preserves native `SipCallError` details, including carrier status codes, and shuts down failed telephony jobs. It adds no polling, timers, or retry loop. A transport failure can leave the remote call outcome uncertain. Don't report a confirmed carrier rejection or automatically redial after such a failure.
+
+`deleteRoomOnFailure` takes a native `RoomServiceClient` and is optional. Supply it only for a dedicated call room: deletion disconnects every participant in that room. A deletion failure is logged without replacing the original setup error. If the telephony resolver throws before returning configuration, the job shuts down without deleting a room because ownership hasn't been selected.
+
+Cleanup is best effort. Dispatch failure, an unassigned job, worker-process failure, and failed cleanup aren't a durable rollback transaction. Application-level idempotency, call records, and business lifecycle handling remain with your application. Native LiveKit shutdown and room input options continue to control the lifecycle after successful setup.
+
+To verify deployment, use a controlled test destination: check answer-before-greeting ordering, native participant identity, and busy/no-answer cleanup. Test inbound routing with an allowed called number and an unknown route. Real audio and carrier behavior require this deployment check in addition to automated SDK tests.
+
 ### Record calls
 
 Pass `recording` to `dispatchVoiceSession()` or `liveKitConnectionRoute()` to create a room with [LiveKit auto egress](https://docs.livekit.io/transport/media/ingress-egress/egress/autoegress/). Mastra creates the room with recording configured, then dispatches the voice agent. Omitting `recording` preserves the existing behavior and return values.
@@ -581,14 +727,18 @@ const roomName = `support-call-${randomUUID()}`
 
 await dispatchVoiceSession({
   roomName,
-  metadata: { agentId: 'support', resourceId: 'caller-7' },
+  metadata: {
+    agentId: 'support',
+    resourceId: 'caller-7',
+    requestContext: { phoneNumber: '+15555550123' },
+  },
   recording,
 })
 
-// Add the phone participant to roomName through your existing LiveKit SIP code.
+// The outbound telephony worker above dials after the recorded room is created.
 ```
 
-Use a fresh room name for each recorded session and await dispatch before dialing. `dispatchVoiceSession()` throws `LiveKitRecordingRoomConflictError` if the room already exists. Import this error from `@mastra/livekit` to handle the conflict. The existence check and room creation are separate requests, so your application must prevent another process from creating the same room concurrently. This option doesn't start recording in an existing room or capture earlier audio.
+Use a fresh room name for each recorded session. With the outbound worker above, room creation precedes dispatch and dialing. `dispatchVoiceSession()` throws `LiveKitRecordingRoomConflictError` if the room already exists. Import this error from `@mastra/livekit` to handle the conflict. The existence check and room creation are separate requests, so your application must prevent another process from creating the same room concurrently. This option doesn't start recording in an existing room or capture earlier audio.
 
 For browser sessions, pass the same settings to the connection route:
 
