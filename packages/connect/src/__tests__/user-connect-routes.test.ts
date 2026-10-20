@@ -343,7 +343,12 @@ describe('GET /providers', () => {
 });
 
 describe('GET /connections', () => {
-  it('marks scope and hides connections for providers outside the allowlist', async () => {
+  it('marks scope and lists existing connections regardless of the allowlist', async () => {
+    // The provider policy gates what end users can newly connect, not what
+    // already exists: agents keep resolving tools from existing connections,
+    // and a user must be able to see (and disconnect) their own rows even
+    // after an admin narrows the allowlist. 'github' is outside the test
+    // allowlist but its rows stay visible.
     const { fetchMock } = fakePlatform({
       connections: [
         makeConnection(),
@@ -359,6 +364,7 @@ describe('GET /connections', () => {
     expect(body.connections).toEqual([
       { id: 'c_lin1', integrationId: 'linear', status: 'active', accountLabel: 'Acme', scope: 'global' },
       { id: 'c_lin2', integrationId: 'linear', status: 'active', accountLabel: null, scope: 'user' },
+      { id: 'c_gh1', integrationId: 'github', status: 'active', accountLabel: 'Acme', scope: 'global' },
     ]);
   });
 });
@@ -494,6 +500,20 @@ describe('DELETE /connections/:id', () => {
     const deletion = requests.find(request => request.method === 'DELETE')!;
     expect(deletion.url.pathname).toBe('/v2/connections/c_own');
     expect(deletion.headers.get(RESOURCE_ID_HEADER)).toBe('end-user-42');
+  });
+
+  it('disconnects an own connection whose provider left the allowlist', async () => {
+    // Narrowing the allowlist must not orphan existing connections: the user
+    // can no longer add github accounts, but can still disconnect this one.
+    const { fetchMock, requests } = fakePlatform({
+      connections: [makeConnection({ id: 'c_gh_own', integrationId: 'github', resourceId: 'end-user-42' })],
+    });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'DELETE', '/connect/connections/:id') as any).handler(
+      makeCtx({ resourceId: 'end-user-42', params: { id: 'c_gh_own' } }),
+    );
+    expect(response.status).toBe(204);
+    expect(requests.find(request => request.method === 'DELETE')!.url.pathname).toBe('/v2/connections/c_gh_own');
   });
 
   it('refuses to disconnect global connections and 404s invisible ones', async () => {
