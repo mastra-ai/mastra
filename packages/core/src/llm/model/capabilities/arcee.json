@@ -16,13 +16,13 @@
     "zai-org/glm-5.2"
   ],
   "reasoning": {
-    "deepseek/deepseek-v4-pro": [
+    "deepseek/deepseek-v4-pro-0813": [
       {
         "type": "effort",
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-pro-0813": [
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "effort",
         "values": ["high", "max"]

@@ -9,25 +9,25 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "bee-buzz": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "bee-swarm": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "bee-hive": [
+    "bee-buzz": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "bee-comb": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "bee-hive": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
