@@ -1,7 +1,7 @@
 import { EntityType } from '@mastra/core/observability';
 import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { buildTraceQueryRequest } from '../../trace-query-filters';
+import { resolveTraceQueryTimeRange } from '../../trace-query-filters';
 import {
   applyDate,
   applyDatePreset,
@@ -175,7 +175,7 @@ export function TracesExplorerRoot({
   // so its query key (and the skeleton) doesn't churn on every auto-refresh tick.
   const [discoveryNow] = useState(() => new Date());
   const discoveryTimeRange = useMemo(
-    () => buildTraceQueryRequest({ dateFrom, dateTo, tokens: [], now: discoveryNow }).timeRange,
+    () => resolveTraceQueryTimeRange(dateFrom, dateTo, discoveryNow),
     [dateFrom, dateTo, discoveryNow],
   );
 

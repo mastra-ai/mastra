@@ -5,6 +5,8 @@ import {
   applyDatePreset,
   applyDateRange,
   applyFilterTokens,
+  buildTracesLegacyFilters,
+  buildTracesQueryRequest,
   clearSelection,
   getSelectedEntityOption,
   getSelectedStatus,
@@ -294,6 +296,84 @@ describe('resolveTracesDateWindow', () => {
       expect(resolveTracesDateWindow('custom', undefined, new Date(1))).toEqual({
         dateFrom: undefined,
         dateTo: new Date(1),
+      });
+    });
+  });
+});
+
+describe('buildTracesQueryRequest', () => {
+  const now = new Date('2026-09-15T12:00:00.000Z');
+  const durationGroup = {
+    id: 'group-duration',
+    logic: 'or' as const,
+    nodes: [
+      { fieldId: 'durationMs', operatorId: 'gt', value: '1000' },
+      { fieldId: 'threadId', operatorId: 'is', value: 'thread-1' },
+    ],
+  };
+  const filters: TracesFilters = {
+    ...baseFilters,
+    tokens: [
+      { fieldId: 'rootEntityType', value: 'agent' },
+      { fieldId: 'status', value: 'error' },
+      { fieldId: 'durationMs', operatorId: 'gt', value: '500' },
+    ],
+    groups: [durationGroup],
+  };
+
+  describe('when the tokens select a root entity type and a status', () => {
+    it('queries that entity type and status inside the date window', () => {
+      const request = buildTracesQueryRequest({ filters, withRootDuration: true, now });
+
+      expect(request.timeRange).toEqual({ from: '2026-09-08T12:00:00.000Z', to: now.toISOString() });
+      expect(request.where?.args).toContainEqual({
+        op: 'eq',
+        left: { path: 'entityType' },
+        right: { literal: 'agent' },
+      });
+      expect(request.where?.args).toContainEqual({ op: 'eq', left: { path: 'status' }, right: { literal: 'error' } });
+    });
+  });
+
+  describe('when the server supports root duration', () => {
+    it('queries duration conditions in tokens and groups', () => {
+      const body = JSON.stringify(buildTracesQueryRequest({ filters, withRootDuration: true, now }));
+
+      expect(body.match(/durationMs/g)).toHaveLength(2);
+    });
+  });
+
+  describe('when the server lacks root duration', () => {
+    it('leaves duration conditions out of tokens and groups, keeping the rest of the group', () => {
+      const body = JSON.stringify(buildTracesQueryRequest({ filters, withRootDuration: false, now }));
+
+      expect(body).not.toContain('durationMs');
+      expect(body).toContain('thread-1');
+    });
+  });
+});
+
+describe('buildTracesLegacyFilters', () => {
+  describe('when the tokens select a root entity type, a status and a custom range', () => {
+    it('maps them to the light list filters', () => {
+      const dateFrom = new Date('2026-01-01T00:00:00.000Z');
+      const dateTo = new Date('2026-01-02T00:00:00.000Z');
+      const filters: TracesFilters = {
+        ...baseFilters,
+        datePreset: 'custom',
+        dateFrom,
+        dateTo,
+        tokens: [
+          { fieldId: 'rootEntityType', value: 'workflow_run' },
+          { fieldId: 'status', value: 'success' },
+        ],
+      };
+
+      expect(buildTracesLegacyFilters({ filters, dateFrom, dateTo })).toMatchObject({
+        entityType: 'workflow_run',
+        status: 'success',
+        startedAt: { start: dateFrom },
+        endedAt: { end: dateTo },
       });
     });
   });

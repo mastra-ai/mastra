@@ -400,6 +400,53 @@ describe('TracesExplorer', () => {
       expect(onTraceQuery).toHaveBeenCalled();
       expect(JSON.stringify(onTraceQuery.mock.calls.at(-1)?.[0])).not.toContain('durationMs');
     });
+
+    describe('and a filter group holds a duration condition', () => {
+      const durationGroup = {
+        id: 'group-duration',
+        logic: 'or' as const,
+        nodes: [
+          { fieldId: 'durationMs', operatorId: 'gt', value: '1000' },
+          { fieldId: 'status', operatorId: 'is', value: 'error' },
+        ],
+      };
+      const renderWithGroup = async (onChange?: (next: TracesExplorerState) => void) => {
+        setExplorerHandlers(noRootDurationCapabilities);
+        const rendered = renderExplorer({
+          onChange,
+          initialFilters: { ...DEFAULT_TRACES_FILTERS, groups: [durationGroup] },
+        });
+        await settle(rendered.queryClient);
+        return rendered;
+      };
+
+      it('leaves the duration condition out of the trace query', async () => {
+        await renderWithGroup();
+
+        const body = JSON.stringify(onTraceQuery.mock.calls.at(-1)?.[0]);
+        expect(body).not.toContain('durationMs');
+        expect(body).toContain('error');
+      });
+
+      it('still shows the duration condition in the filter bar', async () => {
+        await renderWithGroup();
+
+        expect(screen.getByRole('group', { name: 'Advanced filter, 2 conditions' })).toBeTruthy();
+      });
+
+      it('keeps the group in the host value when another filter is edited', async () => {
+        const onChange = vi.fn<(next: TracesExplorerState) => void>();
+        await renderWithGroup(onChange);
+
+        fireEvent.click(within(getFilterChips()[0]).getByRole('button', { name: 'Value: Last 7 days', hidden: true }));
+        fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
+
+        expect(onChange.mock.calls.at(-1)?.[0].filters).toMatchObject({
+          datePreset: 'last-24h',
+          groups: [durationGroup],
+        });
+      });
+    });
   });
 
   describe('when metricsSupport is unsupported', () => {

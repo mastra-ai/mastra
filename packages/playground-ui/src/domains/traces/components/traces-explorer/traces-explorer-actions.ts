@@ -1,6 +1,6 @@
-import { ROOT_ENTITY_TYPE_OPTIONS, TRACE_STATUS_VALUES } from '../../trace-filters';
+import { buildTraceListFilters, ROOT_ENTITY_TYPE_OPTIONS, TRACE_STATUS_VALUES } from '../../trace-filters';
 import type { EntityOptions, TraceFilterGroup, TraceFilterToken, TraceStatusFilter } from '../../trace-filters';
-import { TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from '../../trace-query-filters';
+import { buildTraceQueryRequest, TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from '../../trace-query-filters';
 import type { SpanTab, TraceDatePreset } from '../../types';
 import type { TraceSpanView } from '../trace-data-panel-view';
 
@@ -104,16 +104,23 @@ export const applyDateRange = (
   dateTo: Date | undefined,
 ): TracesFilters => (filters.datePreset === 'custom' ? { ...filters, dateFrom, dateTo } : filters);
 
+const ROOT_DURATION_FIELD_IDS: ReadonlySet<string> = new Set(['durationMs']);
+const NO_FIELD_IDS: ReadonlySet<string> = new Set();
+
+/** Fields this server can't query on top of the always-unsupported ones: root duration needs its capability. */
+const serverUnqueryableFieldIds = (withRootDuration: boolean) =>
+  withRootDuration ? NO_FIELD_IDS : ROOT_DURATION_FIELD_IDS;
+
 const isQueryableToken = (token: TraceFilterToken, withRootDuration: boolean) => {
   if (token.fieldId === 'status' && token.value === 'running') return false;
   if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId)) return false;
-  if (token.fieldId === 'durationMs' && !withRootDuration) return false;
-  return true;
+  return !serverUnqueryableFieldIds(withRootDuration).has(token.fieldId);
 };
 
 /**
- * Drops the top-level tokens the trace query can't run. Groups pass through: the query builder
- * already skips excluded fields inside them. Returns the same object when nothing is dropped.
+ * Drops the top-level tokens the trace query can't run, so no chip advertises a filter with no effect.
+ * Groups pass through and stay visible in the bar: `buildTracesQueryRequest` leaves their unqueryable
+ * conditions out of the query. Returns the same object when nothing is dropped.
  */
 export const sanitizeTracesFilters = (filters: TracesFilters, withRootDuration: boolean): TracesFilters => {
   const tokens = filters.tokens.filter(token => isQueryableToken(token, withRootDuration));
@@ -134,6 +141,37 @@ export const getSelectedStatus = (tokens: TraceFilterToken[]): TraceStatusFilter
   const value = tokenValue(tokens, 'status');
   return value && TRACE_STATUS_VALUES.has(value as TraceStatusFilter) ? (value as TraceStatusFilter) : undefined;
 };
+
+type TracesQueryWindow = { filters: TracesFilters; dateFrom?: Date; dateTo?: Date };
+
+/** The trace query for the (sanitized) filters and the resolved date window. */
+export const buildTracesQueryRequest = ({
+  filters,
+  dateFrom,
+  dateTo,
+  withRootDuration,
+  now,
+}: TracesQueryWindow & { withRootDuration: boolean; now: Date }) =>
+  buildTraceQueryRequest({
+    rootEntityType: getSelectedEntityOption(filters.tokens)?.entityType,
+    status: getSelectedStatus(filters.tokens),
+    dateFrom,
+    dateTo,
+    tokens: filters.tokens,
+    groups: filters.groups,
+    excludedFieldIds: serverUnqueryableFieldIds(withRootDuration),
+    now,
+  });
+
+/** The `listTracesLight` filters for servers without the trace query API (no groups there). */
+export const buildTracesLegacyFilters = ({ filters, dateFrom, dateTo }: TracesQueryWindow) =>
+  buildTraceListFilters({
+    rootEntityType: getSelectedEntityOption(filters.tokens)?.entityType,
+    status: getSelectedStatus(filters.tokens),
+    dateFrom,
+    dateTo,
+    tokens: filters.tokens,
+  });
 
 /** Rolling presets start `PRESET_MS` before now and stay open-ended; `all` is open on both ends. */
 export const resolveTracesDateWindow = (
