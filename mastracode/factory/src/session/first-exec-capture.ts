@@ -4,7 +4,7 @@ import { WORKSPACE_TOOLS_PREFIX } from '@mastra/core/workspace';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 
 export interface FirstExecCaptureSession {
-  readonly identity: { getResourceId(): string };
+  readonly identity: { getId(): string };
   subscribe(listener: (event: AgentControllerEvent) => void): () => void;
 }
 
@@ -117,7 +117,7 @@ export function observeSessionFirstExec(
         seen = true;
         unsubscribe();
         void sourceControl.sessions
-          .markFirstMeaningfulExec({ sessionId: session.identity.getResourceId() })
+          .markFirstMeaningfulExec({ sessionId: session.identity.getId() })
           .catch(error => console.warn('[Factory first-exec capture] Unable to persist first exec time.', error));
         return;
       }

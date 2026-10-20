@@ -19,34 +19,13 @@
     "umans-qwen3.6-35b-a3b"
   ],
   "reasoning": {
+    "umans-glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "umans-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "umans-kimi-k3": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "umans-deepseek-v4-flash-0731": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "umans-qwen3.6-35b-a3b": [
       {
         "type": "toggle"
       },
@@ -64,10 +43,28 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "umans-kimi-k3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "umans-coder": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "umans-qwen3.6-35b-a3b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "umans-glm-5.3-flash": [
@@ -76,7 +73,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "umans-glm-5.3": [
+    "umans-deepseek-v4-flash-0731": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]

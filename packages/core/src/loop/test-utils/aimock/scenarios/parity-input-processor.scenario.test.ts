@@ -126,7 +126,9 @@ function createInputProbe(id: string, mode: Mode, onInput: () => void): InputPro
     processInput: ({ messages, abort }) => {
       onInput();
 
-      if (mode === 'tripwire') abort(`${id} tripwire at processInput`);
+      if (mode === 'tripwire') {
+        abort(`${id} tripwire at processInput`, { retry: false, metadata: { code: 'rejected', target: 'staging' } });
+      }
       // The harness probe's `act` runs before its mutation, so a throwing processor never mutates.
       if (mode === 'throw') throw new Error(`${id} threw at processInput`);
 
@@ -253,6 +255,12 @@ describeParity('input-processor parity', target => {
 
       // harness: `stream carries a tripwire signal`.
       expect(chunksOfType(turn, 'tripwire'), `${engine}: tripwire chunks`).toBe(1);
+      expect(turn.chunkPayloads[turn.chunkTypes.indexOf('tripwire')]).toEqual({
+        reason: `${PROCESSOR_ID} tripwire at processInput`,
+        processorId: PROCESSOR_ID,
+        retry: false,
+        metadata: { code: 'rejected', target: 'staging' },
+      });
 
       const { messages } = await memories
         .get(engine)!

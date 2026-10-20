@@ -6,20 +6,12 @@
  * sending a different `memory` option. The run must save the conversation to
  * the thread named by the reserved keys, on every engine, and never create the
  * thread the caller asked for.
- *
- * The durable and evented engines ignore the reserved keys today (#27542), so
- * both cases are `it.fails` there.
  */
 
 import { it, expect } from 'vitest';
 import { MockMemory } from '../../../../memory/mock';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../../../request-context';
-import {
-  describeForAllEngines,
-  isDurableEngineVariant,
-  runLoopScenario,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 const REPLY = 'Saved where the middleware said.';
 
@@ -40,10 +32,8 @@ async function threadTexts(memory: MockMemory, threadId: string) {
 
 describeForAllEngines('AIMock loop scenario: reserved request-context keys', engine => {
   const getMock = useLoopScenarioAimock();
-  // #27542: durable/evented resolve the thread from the memory option only.
-  const itFailsOnDurable = isDurableEngineVariant(engine) ? it.fails : it;
 
-  itFailsOnDurable('saves the conversation to the thread and resource named by the reserved keys', async () => {
+  it('saves the conversation to the thread and resource named by the reserved keys', async () => {
     const memory = new MockMemory();
 
     const { output } = await runLoopScenario({
@@ -66,7 +56,7 @@ describeForAllEngines('AIMock loop scenario: reserved request-context keys', eng
     ]);
   });
 
-  itFailsOnDurable('ignores a memory option that names a different thread and resource', async () => {
+  it('ignores a memory option that names a different thread and resource', async () => {
     const memory = new MockMemory();
 
     const { output } = await runLoopScenario({

@@ -41,6 +41,7 @@ function row(sessionId: string, extra: Partial<SourceControlSession> = {}) {
     factoryProjectId: 'project-1',
     projectRepositoryId: 'repo-link-1',
     visibility: 'org',
+    updatedAt: new Date('2026-10-19T00:00:00Z'),
     ...extra,
   } as SourceControlSession;
 }
@@ -58,12 +59,19 @@ const ROWS: Record<string, SourceControlSession> = {
     originSessionId: 'session-1',
     originThreadId: 'thread-session-1',
   }),
+  'session-side-muted': row('session-side-muted', {
+    userId: 'user-1',
+    originSessionId: 'session-1',
+    originThreadId: 'thread-session-1',
+    originMutedAt: new Date('2026-10-19T00:00:00Z'),
+  }),
 };
 
 function setup({
   subscriptions = [] as WorkItemSubscription[],
   bindings = [] as FactoryRunBindingRecord[],
   threads = 'live' as 'live' | 'gone',
+  busy = [] as string[],
 } = {}) {
   const notifications = new InMemoryNotificationsStorage();
   const sent: Array<{ input: SendNotificationSignalInput; target: { resourceId: string; threadId: string } }> = [];
@@ -76,23 +84,34 @@ function setup({
       },
     ),
   };
-  const liveSession = (resourceId: string) => ({ thread: { getId: () => `thread-${resourceId}` } });
+  const liveSession = (resourceId: string) => ({
+    thread: { getId: () => `thread-${resourceId}` },
+    stream: { isActive: () => busy.includes(resourceId) },
+    model: { get: () => '' },
+  });
   const controller = {
     queryThreadById: vi.fn(async ({ threadId }: { threadId: string }) =>
       threads === 'gone' ? undefined : { id: threadId, resourceId: threadId.replace(/^thread-/, '') },
     ),
     queryThreads: vi.fn(async () => []),
-    getSessionByResource: vi.fn(async (resourceId: string) => liveSession(resourceId)),
+    getSession: vi.fn(async (resourceId: string) => liveSession(resourceId)),
     createSession: vi.fn(),
     getCurrentAgent: vi.fn(() => agent),
   };
   const auditRecorder = { record: vi.fn(async () => undefined) };
+  const rows: Record<string, SourceControlSession> = Object.fromEntries(
+    Object.entries(ROWS).map(([id, value]) => [id, { ...value }]),
+  );
   const deps: FactoryMessagingToolDependencies = {
     sessions: {
-      getBySessionId: vi.fn(async (id: string) => ROWS[id] ?? null),
+      getBySessionId: vi.fn(async (id: string) => rows[id] ?? null),
       listByOrigin: vi.fn(async ({ orgId, originSessionId }: { orgId: string; originSessionId: string }) =>
-        Object.values(ROWS).filter(row => row.orgId === orgId && row.originSessionId === originSessionId),
+        Object.values(rows).filter(row => row.orgId === orgId && row.originSessionId === originSessionId),
       ),
+      setOriginMuted: vi.fn(async ({ sessionId, muted }: { sessionId: string; muted: boolean }) => {
+        const target = rows[sessionId];
+        if (target) target.originMutedAt = muted ? new Date() : null;
+      }),
     },
     workItems: {
       findActiveRunBindingForSession: vi.fn(
@@ -100,7 +119,7 @@ function setup({
           bindings.find(binding => binding.sessionId === sessionId && binding.status === 'active') ?? null,
       ),
       getForProject: vi.fn(async (_org: string, _project: string, id: string) =>
-        id === 'item-7' ? ({ id, metadata: { number: 7 } } as never) : null,
+        id === 'item-7' ? ({ id, metadata: { number: 7 }, stages: ['execute'] } as never) : null,
       ),
       listSessionSubscriptions: vi.fn(async ({ sessionId }: { sessionId: string }) =>
         subscriptions.filter(subscription => subscription.sessionId === sessionId),
@@ -168,6 +187,21 @@ describe('factory_signal_session', () => {
     await expect(run(USER, 'factory_signal_session', { sessionId, message: 'hi' })).rejects.toThrow(error);
     expect(sent).toHaveLength(0);
     expect(auditRecorder.record).not.toHaveBeenCalled();
+  });
+
+  it('says mid-run, not woken, when the target was already busy (#27742)', async () => {
+    const busy = setup({ bindings: [binding('item-7', 'session-b')], busy: ['session-b'] });
+    await expect(
+      busy.run(USER, 'factory_signal_session', { sessionId: 'session-b', message: 'status?' }),
+    ).resolves.toEqual({ notificationId: expect.any(String), delivered: 'mid-run' });
+    expect(busy.auditRecorder.record).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ delivery: 'mid-run' }) }),
+    );
+
+    const idle = setup({ bindings: [binding('item-7', 'session-b')] });
+    await expect(
+      idle.run(USER, 'factory_signal_session', { sessionId: 'session-b', message: 'status?' }),
+    ).resolves.toEqual({ notificationId: expect.any(String), delivered: 'woken' });
   });
 
   it('messages a private session its own owner can see', async () => {
@@ -516,6 +550,41 @@ describe('factory_message_origin reports', () => {
     expect(env.auditRecorder.record).toHaveBeenCalledTimes(1);
   });
 
+  it("drops a muted side session's reports without failing its run, but still delivers blocked reports and explicit replies", async () => {
+    const env = setup();
+    const muted = {
+      ...SIDE,
+      sessionId: 'session-side-muted',
+      resourceId: 'session-side-muted',
+      threadId: 'thread-session-side-muted',
+    };
+
+    for (const status of [undefined, 'progress', 'failed', 'done'] as const) {
+      await expect(
+        env.run(muted, 'factory_message_origin', { message: 'update', ...(status ? { status } : {}) }),
+      ).resolves.toEqual({
+        delivered: 0,
+        recipients: [],
+        muted: true,
+        note: 'Your origin muted your reports; keep working.',
+      });
+    }
+    expect(env.sent).toEqual([]);
+    expect(env.auditRecorder.record).not.toHaveBeenCalled();
+
+    await expect(
+      env.run(muted, 'factory_message_origin', { message: 'which repo should I use?', status: 'blocked' }),
+    ).resolves.toMatchObject({ delivered: 1 });
+    expect(env.sent.at(-1)!.target).toEqual({ resourceId: 'session-1', threadId: 'thread-session-1' });
+
+    const { notificationId } = (await env.run(USER, 'factory_signal_session', {
+      sessionId: 'session-side-muted',
+      message: 'status?',
+    })) as { notificationId: string };
+    await env.run(muted, 'factory_message_origin', { message: 'still on it', inReplyTo: notificationId });
+    expect(env.sent.at(-1)!.target).toEqual({ resourceId: 'session-1', threadId: 'thread-session-1' });
+  });
+
   it('caps reports per follower thread, except progress updates', async () => {
     const env = setup();
     for (let i = 0; i < SIGNAL_RATE_LIMIT; i += 1) {
@@ -596,6 +665,159 @@ describe('factory_message_origin reports', () => {
   });
 });
 
+describe('side session tools', () => {
+  const SIDE: FactoryToolScope = {
+    ...USER,
+    sessionId: 'session-side',
+    resourceId: 'session-side',
+    threadId: 'thread-session-side',
+    kind: 'worker',
+    interactive: false,
+    origin: { sessionId: 'session-1', threadId: 'thread-session-1' },
+  };
+
+  it('lists the side sessions this session started, with state, mute, model, work item and last report', async () => {
+    const env = setup({ bindings: [binding('item-7', 'session-side')] });
+    await env.run(SIDE, 'factory_message_origin', { message: 'need a key', status: 'blocked' });
+
+    const { sessions } = (await env.run(USER, 'factory_list_side_sessions', {})) as {
+      sessions: Array<Record<string, unknown>>;
+    };
+    expect(sessions.map(session => session.sessionId).sort()).toEqual(['session-side', 'session-side-muted']);
+    const side = sessions.find(session => session.sessionId === 'session-side')!;
+    expect(side).toMatchObject({
+      state: 'parked',
+      lastReport: { kind: 'blocked' },
+      mutedAt: null,
+      workItem: { id: 'item-7', label: '#7', stage: 'execute' },
+    });
+    expect(sessions.find(session => session.sessionId === 'session-side-muted')).toMatchObject({
+      mutedAt: '2026-10-19T00:00:00.000Z',
+      lastReport: null,
+      workItem: null,
+    });
+
+    await expect(env.run(USER, 'factory_list_side_sessions', { muted: true })).resolves.toMatchObject({
+      sessions: [{ sessionId: 'session-side-muted' }],
+    });
+    await expect(env.run(USER, 'factory_list_side_sessions', { state: 'parked' })).resolves.toMatchObject({
+      sessions: [{ sessionId: 'session-side' }],
+    });
+    // A muted session that blocks still reaches its origin, so it lists as parked rather than idle.
+    await env.run(
+      {
+        ...SIDE,
+        sessionId: 'session-side-muted',
+        resourceId: 'session-side-muted',
+        threadId: 'thread-session-side-muted',
+      },
+      'factory_message_origin',
+      { message: 'which repo?', status: 'blocked' },
+    );
+    await expect(env.run(USER, 'factory_list_side_sessions', { muted: true })).resolves.toMatchObject({
+      sessions: [{ sessionId: 'session-side-muted', state: 'parked', lastReport: { kind: 'blocked' } }],
+    });
+    // A session that started nothing lists nothing.
+    await expect(env.run({ ...USER, sessionId: 'session-b' }, 'factory_list_side_sessions', {})).resolves.toEqual({
+      sessions: [],
+    });
+  });
+
+  it('reports the model a side session uses: the live selection, else the persisted one', async () => {
+    const env = setup();
+    const messaging = (await env.deps.messaging())!;
+    const controller = messaging.controller as unknown as {
+      getSession: ReturnType<typeof vi.fn>;
+      queryThreadById: ReturnType<typeof vi.fn>;
+    };
+    controller.getSession.mockImplementation(async (resourceId: string) => ({
+      thread: { getId: () => `thread-${resourceId}` },
+      stream: { isActive: () => resourceId === 'session-side' },
+      model: { get: () => (resourceId === 'session-side' ? 'openai/gpt-5' : '') },
+    }));
+    controller.queryThreadById.mockImplementation(async ({ threadId }: { threadId: string }) => ({
+      id: threadId,
+      resourceId: threadId.replace(/^thread-/, ''),
+      metadata: { currentModelId: 'anthropic/claude-sonnet-4-5' },
+    }));
+
+    const { sessions } = (await env.run(USER, 'factory_list_side_sessions', {})) as {
+      sessions: Array<{ sessionId: string; model: string | null; state: string }>;
+    };
+    expect(sessions.find(session => session.sessionId === 'session-side')).toMatchObject({
+      model: 'openai/gpt-5',
+      state: 'running',
+    });
+    expect(sessions.find(session => session.sessionId === 'session-side-muted')).toMatchObject({
+      model: 'anthropic/claude-sonnet-4-5',
+      state: 'idle',
+    });
+  });
+
+  it('mutes a side session’s reports without stopping it, then resubscribes', async () => {
+    const env = setup();
+
+    await expect(env.run(USER, 'factory_unsubscribe_session', { sessionId: 'session-side' })).resolves.toMatchObject({
+      sessionId: 'session-side',
+      muted: true,
+      mutedAt: expect.any(String),
+    });
+    await expect(
+      env.run(SIDE, 'factory_message_origin', { message: 'failed again', status: 'failed' }),
+    ).resolves.toMatchObject({ delivered: 0, muted: true });
+    expect(env.sent).toEqual([]);
+
+    await expect(env.run(USER, 'factory_subscribe_session', { sessionId: 'session-side' })).resolves.toEqual({
+      sessionId: 'session-side',
+      muted: false,
+    });
+    await expect(
+      env.run(SIDE, 'factory_message_origin', { message: 'recovered', status: 'done' }),
+    ).resolves.toMatchObject({
+      delivered: 1,
+    });
+    expect(env.sent.map(entry => entry.target)).toEqual([{ resourceId: 'session-1', threadId: 'thread-session-1' }]);
+  });
+
+  it('only lets the starting session mute or unmute a side session', async () => {
+    const env = setup();
+    for (const name of ['factory_unsubscribe_session', 'factory_subscribe_session']) {
+      for (const sessionId of ['session-b', 'session-other-org', 'missing']) {
+        await expect(env.run(USER, name, { sessionId })).rejects.toThrow(
+          `Session ${sessionId} is not a side session you started; see factory_list_side_sessions.`,
+        );
+      }
+      // Another session in the same Factory can't mute what session-1 started.
+      await expect(env.run({ ...USER, sessionId: 'session-b' }, name, { sessionId: 'session-side' })).rejects.toThrow(
+        'is not a side session you started',
+      );
+    }
+    expect(env.deps.sessions.setOriginMuted).not.toHaveBeenCalled();
+  });
+
+  it('refuses to mute or unmute on a turn nobody signed in started, before reading or writing', async () => {
+    const env = setup();
+    const woken = { ...USER, interactive: false };
+    await expect(env.run(woken, 'factory_unsubscribe_session', { sessionId: 'session-side' })).rejects.toThrow(
+      'Only a person can mute a side session.',
+    );
+    await expect(env.run(woken, 'factory_subscribe_session', { sessionId: 'session-side-muted' })).rejects.toThrow(
+      'Only a person can unmute a side session.',
+    );
+    expect(env.deps.sessions.getBySessionId).not.toHaveBeenCalled();
+    expect(env.deps.sessions.setOriginMuted).not.toHaveBeenCalled();
+    expect((await env.deps.sessions.getBySessionId('session-side'))?.originMutedAt ?? null).toBeNull();
+    await expect(env.deps.sessions.getBySessionId('session-side-muted')).resolves.toMatchObject({
+      originMutedAt: new Date('2026-10-19T00:00:00Z'),
+    });
+  });
+
+  it('keeps side session tools away from workers', () => {
+    const tools = createFactoryMessagingTools(SIDE, setup().deps);
+    expect(Object.keys(tools)).toEqual(['factory_message_origin']);
+  });
+});
+
 describe('Factory toolset composition', () => {
   const deps = {
     ...setup().deps,
@@ -627,6 +849,9 @@ describe('Factory toolset composition', () => {
         'factory_unsubscribe_work_item',
         'factory_signal_session',
         'factory_message_origin',
+        'factory_list_side_sessions',
+        'factory_unsubscribe_session',
+        'factory_subscribe_session',
         'factory_start_session',
         'factory_answer_approval',
         'factory_switch_session_model',
@@ -634,21 +859,19 @@ describe('Factory toolset composition', () => {
     );
   });
 
-  it('gives a non-interactive user turn read tools plus messaging', () => {
-    expect(names({ ...USER, interactive: false })).toEqual(
-      [
-        'factory_list_work_items',
-        'factory_inspect_work_item',
-        'factory_list_attention',
-        'factory_signal_session',
-        'factory_message_origin',
-      ].sort(),
-    );
+  it('gives a non-interactive user turn the same tools as a person, each limiting itself', () => {
+    expect(names({ ...USER, interactive: false })).toEqual(names(USER));
   });
 
-  it('runs both messaging tools without approval', () => {
+  it('runs the messaging and side-session tools without approval', () => {
     const tools = createFactoryTools({ scope: USER, deps });
-    for (const name of ['factory_signal_session', 'factory_message_origin']) {
+    for (const name of [
+      'factory_signal_session',
+      'factory_message_origin',
+      'factory_list_side_sessions',
+      'factory_unsubscribe_session',
+      'factory_subscribe_session',
+    ]) {
       expect(tools[name]?.requireApproval).toBeFalsy();
       expect(FACTORY_TOOLS_WITHOUT_APPROVAL).toContain(name);
     }

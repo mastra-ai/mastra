@@ -1,6 +1,6 @@
 {
   "name": "@mastra/code-sdk",
-  "version": "1.15.0-alpha.5",
+  "version": "1.15.0-alpha.11",
   "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
   "publishConfig": {
@@ -57,10 +57,10 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.0",
-    "@ai-sdk/amazon-bedrock": "^3.0.111",
-    "@ai-sdk/anthropic": "^3.0.103",
-    "@ai-sdk/openai": "^3.0.88",
-    "@ai-sdk/openai-compatible": "^2.0.62",
+    "@ai-sdk/amazon-bedrock": "^3.0.140",
+    "@ai-sdk/anthropic": "^3.0.133",
+    "@ai-sdk/openai": "^3.0.130",
+    "@ai-sdk/openai-compatible": "^2.0.85",
     "@ast-grep/napi": "^0.42.0",
     "@aws-sdk/credential-providers": "^3.1095.0",
     "@mastra/agent-browser": "workspace:*",
@@ -78,7 +78,7 @@
     "@mastra/schema-compat": "workspace:*",
     "@mastra/stagehand": "workspace:*",
     "@mastra/tavily": "workspace:*",
-    "ai": "^6.0.236",
+    "ai": "^6.0.309",
     "execa": "^9.6.1",
     "libsql": "^0.5.29",
     "posthog-node": "^5.46.1",
@@ -90,6 +90,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@copilotkit/aimock": "^1.29.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",

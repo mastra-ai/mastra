@@ -8,6 +8,7 @@ import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import {
   createCustomProvidersPrimer,
   invalidateCustomProvidersSnapshots,
+  primeCustomProvidersForRequestContext,
   registerCustomProvidersSource,
   resetCustomProvidersSourceForTests,
 } from './custom-provider-source.js';
@@ -93,6 +94,29 @@ describe('registerCustomProvidersSource (tenant mode)', () => {
     await app.request('/ok');
 
     expect(resolveCustomProviders(ctx)).toHaveLength(1);
+  });
+});
+
+describe('primeCustomProvidersForRequestContext', () => {
+  it('primes the run owner org for a wake with no inbound request', async () => {
+    await seed.customProviders.upsert({ orgId: ORG, userId: USER, input: ACME });
+    registerCustomProvidersSource({ storage: seed.customProviders, authEnabled: true });
+    const ctx = tenantContext({ workosId: USER, organizationId: ORG });
+
+    await primeCustomProvidersForRequestContext(ctx);
+
+    expect(resolveCustomProviders(ctx)).toEqual([
+      { name: 'Acme', url: 'https://llm.acme.dev/v1', apiKey: 'sk-acme', models: ['fast-1'] },
+    ]);
+  });
+
+  it('primes nothing without a run owner', async () => {
+    await seed.customProviders.upsert({ orgId: ORG, userId: USER, input: ACME });
+    registerCustomProvidersSource({ storage: seed.customProviders, authEnabled: true });
+
+    await primeCustomProvidersForRequestContext(new RequestContext());
+
+    expect(resolveCustomProviders(tenantContext({ workosId: USER, organizationId: ORG }))).toEqual([]);
   });
 });
 

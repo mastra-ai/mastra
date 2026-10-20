@@ -1,5 +1,24 @@
 # @mastra/server-adapters-test-suite
 
+## 0.1.3-alpha.2
+
+### Patch Changes
+
+- Fixed run resume and time-travel conflict responses to include a machine-readable code alongside the existing error message across server adapters. HTTP status remains 409, with a JSON body such as: ([#27706](https://github.com/mastra-ai/mastra/pull/27706))
+
+  ```json
+  {
+    "error": "Run conflict",
+    "code": "AGENT_RESUME_ALREADY_CLAIMED"
+  }
+  ```
+
+  The shared handler exposes these conflict codes: `AGENT_RESUME_ALREADY_CLAIMED`, `WORKFLOW_RESUME_ALREADY_CLAIMED`, `AGENT_RESUME_RUN_NOT_SUSPENDED`, `WORKFLOW_RUN_NOT_SUSPENDED`, `WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED`, and `WORKFLOW_TIME_TRAVEL_RUN_RUNNING`.
+
+- Updated dependencies [[`41b7f34`](https://github.com/mastra-ai/mastra/commit/41b7f3422a97f1385a285002b7e6f898eb5c7b06), [`6033024`](https://github.com/mastra-ai/mastra/commit/6033024193441ee88e24b98e9e59de90a6297e6e), [`179964b`](https://github.com/mastra-ai/mastra/commit/179964b95aacac31763a4a1aa2f2d1c652aa529d), [`ba7b0ea`](https://github.com/mastra-ai/mastra/commit/ba7b0eac045755d39d20dcf3a943ea5f8270b009), [`e8d7f8e`](https://github.com/mastra-ai/mastra/commit/e8d7f8e52da32b05f2e8501c1127128ae1a5d450), [`92034fa`](https://github.com/mastra-ai/mastra/commit/92034fa2a46a4f45af416c3201752342ead71d89)]:
+  - @mastra/core@1.79.0-alpha.6
+  - @mastra/server@1.79.0-alpha.6
+
 ## 0.1.3-alpha.1
 
 ### Patch Changes

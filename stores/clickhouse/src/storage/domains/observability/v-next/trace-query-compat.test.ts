@@ -50,6 +50,7 @@ it('neither returns nor advertises time to first chunk when core predates the fi
     dedupeKey: 'trace-a',
     sortValue: '2026-01-01T10:00:00.000Z',
     rootStartedAt: '2026-01-01T10:00:00.000Z',
+    rootEndedAt: '2026-01-01T10:00:01.000Z',
   };
   const query = vi.fn().mockResolvedValue({ json: async () => [row] });
   const result = await queryTraces({ query } as unknown as ClickHouseClient, keyset, 15_000, 'serial');
@@ -91,4 +92,14 @@ it('returns spans without time to first chunk when core predates the field', asy
   const result = await querySpans({ query } as unknown as ClickHouseClient, plan, 15_000);
   expect(result.spans).toHaveLength(1);
   expect(result.spans[0]).not.toHaveProperty('timeToFirstChunkMs');
+});
+
+it('advertises time to first chunk without its sort when core predates the sort', async () => {
+  vi.resetModules();
+  vi.doMock('@mastra/core/storage', async importOriginal => ({
+    ...(await importOriginal<typeof import('@mastra/core/storage')>()),
+    TRACE_QUERY_ORDER_FIELDS: undefined,
+  }));
+  const { timeToFirstChunkFeatures: features } = await import('./trace-query');
+  expect(features).toEqual(['trace-query-time-to-first-chunk']);
 });

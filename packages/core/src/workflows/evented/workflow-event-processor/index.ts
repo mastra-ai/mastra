@@ -35,7 +35,7 @@ import {
 } from '../../utils';
 import { resolveCurrentState, withoutAuthToken } from '../helpers';
 import { StepExecutor } from '../step-executor';
-import { processWorkflowForEach, processWorkflowLoop } from './loop';
+import { isQueuedForeachIteration, processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
 import { processWorkflowSleep, processWorkflowSleepUntil, processWorkflowWaitForEvent } from './sleep';
 import { getNestedWorkflow, getStepId, isExecutableStep, toStepExecutionParentWorkflow } from './utils';
@@ -803,7 +803,18 @@ export class WorkflowEventProcessor extends EventProcessor {
             status: 'running',
             payload: existing?.payload ?? parentWorkflow.input?.output ?? {},
             ...(existing ?? {}), // preserve anything else (suspendPayload, etc.)
-            metadata: { ...(existing?.metadata ?? {}), nestedRunId: runId },
+            // A child start does not own queued siblings from this potentially stale snapshot.
+            ...(parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!]?.type === 'foreach' &&
+            Array.isArray(existing?.output)
+              ? { output: existing.output.map((value: unknown) => (isQueuedForeachIteration(value) ? null : value)) }
+              : {}),
+            metadata: {
+              ...(existing?.metadata ?? {}),
+              nestedRunId: runId,
+              ...(parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!]?.type === 'foreach'
+                ? { foreachNestedRunIds: { [parentWorkflow.executionPath[1]!]: runId } }
+                : {}),
+            },
           },
           requestContext: withoutAuthToken(requestContext),
         });
@@ -1481,7 +1492,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           step,
         },
       );
-    } else if (step?.type === 'foreach' && executionPath.length === 1) {
+    } else if (step?.type === 'foreach' && (executionPath.length === 1 || (restart && !restart.isForeachRestarted))) {
       return processWorkflowForEach(
         {
           workflow,
@@ -1955,7 +1966,12 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (restart && !!restart.activeStepsPath?.[leafId]) {
-        const nestedRunId = stepResults[leafId]?.metadata?.nestedRunId ?? globalThis.crypto.randomUUID();
+        const nestedRunId =
+          (step.type === 'foreach'
+            ? stepResults[leafId]?.metadata?.foreachNestedRunIds?.[executionPath[1]!]
+            : undefined) ??
+          stepResults[leafId]?.metadata?.nestedRunId ??
+          globalThis.crypto.randomUUID();
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: leafId,
@@ -2872,7 +2888,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowName: workflow.id,
         runId,
         stepId: getEntryId(step.step),
-        result: newResult,
+        result: {
+          ...newResult,
+          // Only the coordinator owns queued markers; null leaves persisted siblings unchanged.
+          ...('output' in newResult && Array.isArray(newResult.output)
+            ? { output: newResult.output.map(value => (isQueuedForeachIteration(value) ? null : value)) }
+            : {}),
+        },
         requestContext: withoutAuthToken(requestContext),
         state: currentState,
       });
@@ -2905,7 +2927,8 @@ export class WorkflowEventProcessor extends EventProcessor {
 
         // Emit per-iteration progress event
         const completedCount = iterationResults.filter(
-          (r: any) => r !== null && !(typeof r === 'object' && r.status === 'suspended'),
+          (r: any) =>
+            r !== null && !isQueuedForeachIteration(r) && !(typeof r === 'object' && r.status === 'suspended'),
         ).length;
         const iterationStatus =
           prevResult.status === 'suspended'
@@ -2966,7 +2989,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
         // Check if there are more iterations to start before deciding to suspend
         // This handles partial concurrency: don't suspend until all iterations have been started
-        if (iterationsStarted < targetLen) {
+        if (iterationsStarted < targetLen || iterationResults.some(isQueuedForeachIteration)) {
           // More iterations need to be started - call processWorkflowForEach to continue
           await processWorkflowForEach(
             {

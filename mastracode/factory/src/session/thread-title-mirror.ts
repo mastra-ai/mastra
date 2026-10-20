@@ -4,7 +4,7 @@ import type { SourceControlStorageHandle } from '../storage/domains/source-contr
 import { normalizeSessionTitle } from './session-title.js';
 
 export interface ThreadTitleMirrorSession {
-  readonly identity: { getResourceId(): string };
+  readonly identity: { getId(): string };
   readonly thread: { getById(args: { threadId: string }): Promise<AgentControllerThread | null> };
   subscribe(listener: (event: AgentControllerEvent) => void): () => void;
 }
@@ -34,7 +34,7 @@ export function observeSessionThreadTitle(
   session: ThreadTitleMirrorSession,
   { sourceControl }: ThreadTitleMirrorDependencies,
 ): () => void {
-  const sessionId = session.identity.getResourceId();
+  const sessionId = session.identity.getId();
   let boundThreadId: string | undefined;
   let writes: Promise<void> = Promise.resolve();
 

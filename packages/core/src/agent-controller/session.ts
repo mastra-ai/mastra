@@ -285,7 +285,7 @@ export function isReservedThreadMetadataKey(key: string): boolean {
 
 /**
  * Identifies an in-memory session host. A session is not a durable conversation:
- * it is the process-local handle for `{ id, resourceId, scope, tags, active threadId }`.
+ * it is the process-local handle for `{ id, resourceId, tags, active threadId }`.
  * Conversation settings and run state belong to the active thread and are
  * re-derived whenever the host creates or switches threads.
  *
@@ -4122,7 +4122,7 @@ export class SessionBus {
 }
 
 /**
- * A process-local host for `{ id, resourceId, scope, tags, active threadId }`.
+ * A process-local host for `{ id, resourceId, tags, active threadId }`.
  * It is not the durable conversation record: mode, model, persisted state,
  * token usage, pending runs, and display projections are re-derived from the
  * active thread whenever one is created or selected. Custom `TState` fields

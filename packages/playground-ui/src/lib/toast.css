@@ -46,6 +46,85 @@
   box-shadow: var(--toast-shadow);
 }
 
+/* Type. Sonner pins its own system stack on the toaster and 13px on the toast, so neither the
+   product font nor the text roles reach a toast without this. Title is `text-label`, description
+   `text-body-sm`: the same 13px, told apart by weight. A toast floats like a popover, so fields
+   inside it take the on-surface field material (the Cancel button below wears it). */
+[data-sonner-toaster][data-sonner-theme].mastra-toaster {
+  font-family: var(--font-sans);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] {
+  --field: var(--field-on-surface);
+  --field-rim: var(--field-rim-on-surface);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-title] {
+  font-weight: var(--text-label--font-weight);
+  line-height: var(--text-label--line-height);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-description] {
+  font-weight: var(--text-body-sm--font-weight);
+  line-height: var(--text-body-sm--line-height);
+}
+
+/* Action and cancel buttons follow `Button` at size `sm`: a pill at the small control height with
+   a `text-label` label. Action is the `primary` variant, cancel the `default` one, the same pair
+   a dialog footer uses. `font: inherit` because a <button> does not inherit the font by default.
+   Focus is an outline like `Button`'s, replacing sonner's box-shadow ring, which would also wipe
+   the cancel button's rim. */
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button] {
+  height: var(--spacing-control-sm);
+  padding-inline: 0.9em;
+  border: 0;
+  border-radius: 9999px;
+  font: inherit;
+  font-size: var(--text-label);
+  font-weight: var(--text-label--font-weight);
+  line-height: var(--text-label--line-height);
+  background: var(--fill-inverse);
+  color: var(--background);
+  transition:
+    background-color var(--duration-fast) var(--ease-out-custom),
+    color var(--duration-fast) var(--ease-out-custom);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button]:hover {
+  background: var(--fill-inverse-hover);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button]:active {
+  background: var(--fill-inverse-active);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button]:focus-visible {
+  outline: 1px solid var(--border-focus);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* Cancel: the raised field material `Button`'s default variant wears (see `shadow-input` in
+   components.css). States wash through `--surface-tint` so the fill stays put. The extra
+   [data-cancel] keeps it ahead of sonner's dark-theme cancel rule. */
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button][data-cancel] {
+  --surface-tint: transparent;
+  --surface-rim: var(--field-rim);
+  background: var(--field);
+  color: var(--foreground);
+  box-shadow:
+    var(--elevation-lip),
+    inset 0 0 0 1px var(--surface-rim),
+    inset 0 0 0 9999px var(--surface-tint),
+    var(--elevation-raised);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button][data-cancel]:hover {
+  --surface-tint: var(--fill-subtle);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button][data-cancel]:active {
+  --surface-tint: var(--fill);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-styled='true'] [data-button][data-cancel]:focus-visible {
+  --surface-rim: var(--border-focus);
+  outline: none;
+}
+
 /* Close button — size + transitions are shared. Per-variant rules below own bg/border colors
    and beat sonner's per-type rules on specificity (we add .mastra-toaster + [data-type] for 0,5,0). */
 [data-sonner-toaster].mastra-toaster [data-sonner-toast] [data-close-button] {

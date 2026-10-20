@@ -31,12 +31,14 @@ The configured observability store must support each API. Call `getObservability
 | `traceAggregate` | `trace-aggregate` | `aggregateTraces()` |
 | `traceQueryRootDuration` | `trace-query-root-duration` | Trace-scope `durationMs` predicates |
 | `traceQueryTimeToFirstChunk` | `trace-query-time-to-first-chunk` | `timeToFirstChunkMs` predicates and results |
+| `traceQueryTimeToFirstChunkSort` | `trace-query-time-to-first-chunk-sort` | `orderBy` on `timeToFirstChunkMs` |
 | `traceQueryContextIds` | `trace-query-context-ids` | `runId`, `sessionId`, `userId`, and `organizationId` predicates |
 | `traceQueryRootSpanFields` | `trace-query-root-span-fields` | Trace-scope `name` and `spanType` predicates, dimensions, and `countDistinct` measures |
+| `traceQueryRootEntityId` | `trace-query-root-entity-id` | Trace-scope `entityId` predicates, dimensions, and `countDistinct` measures |
 | `traceQueryDiscovery` | `trace-query-discovery` | [Field and value discovery](#discover-fields-and-values) |
 | `traceQueryTenantScope` | `trace-query-tenant-scope` | [Trusted tenant scope](#trusted-tenant-scope) |
 
-A missing `traceAggregate` value means the server doesn't support aggregation. Servers without the aggregate route return `404`, and stores without the feature return `501 TRACE_AGGREGATE_UNSUPPORTED`. Against a store without a sub-feature, a request that uses a gated field returns `501` before storage runs. Root span `name` and `spanType` are the exception and return `422` with a `field_not_allowed` issue.
+A missing `traceAggregate` value means the server doesn't support aggregation. Servers without the aggregate route return `404`, and stores without the feature return `501 TRACE_AGGREGATE_UNSUPPORTED`. Against a store without a sub-feature, a request that uses a gated field returns `501` before storage runs. Root span `name`, `spanType`, and `entityId` are the exception and return `422` with a `field_not_allowed` issue.
 
 ## Select traces
 
@@ -79,7 +81,7 @@ Span clauses examine the current root span and current child spans. The root `ti
 
 | Predicate context | Fields | Operators |
 | - | - | - |
-| Trace | `traceId`, `threadId`, `resourceId`, `runId`, `sessionId`, `userId`, `organizationId`, `entityName`, `entityType`, `name`, `spanType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace | `traceId`, `threadId`, `resourceId`, `runId`, `sessionId`, `userId`, `organizationId`, `entityId`, `entityName`, `entityType`, `name`, `spanType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace metadata | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace | `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Trace | `tags` | `includes`, `notIncludes`, `exists`, `notExists` |
@@ -88,7 +90,7 @@ Span clauses examine the current root span and current child spans. The root `ti
 | Span | `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Span | `error` | `exists`, `notExists` |
 
-Trace-scope `name` and `spanType` read the current root span, so `{ op: 'eq', left: { path: 'spanType' }, right: { literal: 'workflow_run' } }` selects traces started by a workflow run. Inside `spans.some` or `spans.none`, the same fields match any span in the trace.
+Trace-scope `name`, `spanType`, and `entityId` read the current root span, so `{ op: 'eq', left: { path: 'spanType' }, right: { literal: 'workflow_run' } }` selects traces started by a workflow run. Inside `spans.some` or `spans.none`, the same fields match any span in the trace.
 
 Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`. Tag predicates name the stored tag collection in `path`. `includes` and `notIncludes` also take one tag in `value`, while `exists` and `notExists` take only `op` and `path`. See [Filter by tags](#filter-by-tags). Text predicates use the comparison shape with a string literal. See [Filter by text](#filter-by-text).
 
@@ -132,7 +134,13 @@ const slowFirstChunk = {
 
 The value is `null` when the span didn't stream a chunk, for example a tool call or a workflow run. A `null` value counts as missing, so it matches `notExists` and never matches ordered predicates. A value of `0` isn't missing. It means the first chunk arrived in the same millisecond the span started.
 
-Trace query results include the root span's `timeToFirstChunkMs`, and `querySpans()` results include each span's value. Sorting by this field isn't supported. Stores advertise support through the `trace-query-time-to-first-chunk` feature, and the server reports it as the `traceQueryTimeToFirstChunk` capability. Against an older store, results omit the field, a predicate on it returns `501` before storage runs, and field discovery omits it.
+Trace query results include the root span's `timeToFirstChunkMs`, and `querySpans()` results include each span's value. Stores advertise support through the `trace-query-time-to-first-chunk` feature, and the server reports it as the `traceQueryTimeToFirstChunk` capability. Against an older store, results omit the field, a predicate on it returns `501` before storage runs, and field discovery omits it.
+
+#### Sort by time to first chunk
+
+Pass `orderBy: [{ field: 'timeToFirstChunkMs', direction: 'desc' }]` to list the slowest first chunks first. Traces sort by the root span's value. Missing values sort last in both directions, and `0` sorts as a value. Ties break by `traceId` for traces and by span identity for `querySpans()`.
+
+Stores advertise the sort through the `trace-query-time-to-first-chunk-sort` feature, and the server reports it as the `traceQueryTimeToFirstChunkSort` capability. Against an older store, the sort returns `501` before storage runs.
 
 #### Filter by context identifiers
 
@@ -445,7 +453,7 @@ curl --request POST \
 | - | - | - |
 | `timeRange` | Yes | Trace start-time boundary. `from` is inclusive and `to` is exclusive. Both values must be ISO timestamps, and `from` must be earlier than `to`. |
 | `where` | No | Recursive trace predicate. Supports scalar conditions and `spans.some` or `spans.none` clauses. |
-| `orderBy` | No | One item ordering results by `startedAt` or `endedAt`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted in delta mode. |
+| `orderBy` | No | One item ordering results by `startedAt`, `endedAt`, or `timeToFirstChunkMs`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted in delta mode. |
 | `page` | No | `{ limit, after }`. `limit` defaults to 100 and has a maximum of 1000. Pass the opaque `page.next` value as `after`. |
 | `pagination` | No | Numbered pages: `{ page, perPage }`. Defaults to page 0 and 10 results. `perPage` has a maximum of 100. |
 | `mode` | No | Set to `'delta'` to poll using a delta cursor instead of `page` or `pagination`. |
@@ -666,6 +674,7 @@ Dimensions read the current root span of each selected trace:
 | `entityType`, `entityName`, `environment`, `status`, `serviceName`, `executionSource` | Root span attributes. |
 | `threadId`, `resourceId`, `userId`, `sessionId`, `organizationId`, `experimentId` | Context identifiers recorded on the root span. |
 | `name`, `spanType` | Root span name and type. Requires the `traceQueryRootSpanFields` capability. |
+| `entityId` | Root span entity ID. Groups traces that have no `entityName`, such as scorer runs. Requires the `traceQueryRootEntityId` capability. |
 | `metadata.<key>` | One non-empty top-level metadata key. Values are trimmed. Missing, empty, and non-string values group as `null`. |
 
 Every dimension except `serviceName`, `executionSource`, and `experimentId` is also a trace-scope `where` field, so you can drill into a group by adding its values to the predicate. `traceId`, `spanId`, `runId`, and `requestId` aren't groupable. Traces with no value for a dimension form their own group with a `null` value.

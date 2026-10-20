@@ -5,6 +5,7 @@ export * from './inmemory';
 export * from './logs';
 export * from './metrics';
 export * from './scores';
+export * from './span-aggregate';
 export * from './record-builders';
 export * from './trace-aggregate';
 export * from './trace-aggregate-planner';
@@ -23,6 +24,7 @@ export {
   TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH,
   TRACE_QUERY_DEFAULT_TIMEOUT_MS,
   TRACE_QUERY_MAX_TIMEOUT_MS,
+  TRACE_QUERY_ORDER_FIELDS,
   TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE,
   compareTraceQueryStrings,
   traceQueryScalarPredicateSchema,
@@ -149,6 +151,8 @@ export type {
   TraceQueryObservedFieldsResult,
   TraceQueryCursorPlan,
   TraceQueryCursorValues,
+  TraceQueryOrderField,
+  TraceQuerySortValue,
   TraceQueryIssueCode,
   TraceQueryIssue,
   TraceQueryPlanOptions,

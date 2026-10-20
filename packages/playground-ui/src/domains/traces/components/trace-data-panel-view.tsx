@@ -9,7 +9,6 @@ import {
   MessageSquareTextIcon,
   MoreHorizontalIcon,
   SaveIcon,
-  WrenchIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -59,8 +58,6 @@ export interface TraceDataPanelViewProps {
   onEvaluateTrace?: () => void;
   /** When set, an "Add full trace to dataset" button appears; the consumer owns the dialog. */
   onSaveAsDatasetItem?: (args: { traceId: string; rootSpanId: string | undefined }) => void;
-  /** When set, an "Add tool mocks to item" button appears; the consumer owns the dialog. */
-  onAddTraceMocksToItem?: (args: { traceId: string }) => void;
   initialSpanId?: string | null;
   onPrevious?: () => void;
   onNext?: () => void;
@@ -145,7 +142,6 @@ export function TraceDataPanelView({
   onSpanSelect,
   onEvaluateTrace,
   onSaveAsDatasetItem,
-  onAddTraceMocksToItem,
   initialSpanId,
   onPrevious,
   onNext,
@@ -331,12 +327,6 @@ export function TraceDataPanelView({
             Add full trace to dataset
           </DropdownMenu.Item>
         )}
-        {!isOnTracePage && onAddTraceMocksToItem && (
-          <DropdownMenu.Item onSelect={() => onAddTraceMocksToItem({ traceId })}>
-            <WrenchIcon />
-            Add tool mocks to item
-          </DropdownMenu.Item>
-        )}
         {!isOnTracePage && LinkComponent && traceHref && (
           <DropdownMenu.Item render={<LinkComponent href={traceHref} />}>
             <Link2Icon />
@@ -366,16 +356,20 @@ export function TraceDataPanelView({
           </DataPanel.Header>
         ) : (
           <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
-            <DataPanel.Header className="border-b border-border">
-              <TabList variant="pill-ghost" size="sm">
-                {sideViews.map(view => (
-                  <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
-                    {view.label}
-                  </Tab>
-                ))}
-              </TabList>
+            {/* `flex-nowrap` + a shrinkable tab column: the tab list's scroll wrapper is full-width,
+                so in a wrapping row it would push the actions onto a second line. */}
+            <DataPanel.Header className="flex-nowrap border-b border-border">
+              <div className="min-w-0 flex-1">
+                <TabList variant="pill-ghost" size="sm">
+                  {sideViews.map(view => (
+                    <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
+                      {view.label}
+                    </Tab>
+                  ))}
+                </TabList>
+              </div>
               {sideHeaderActions && (
-                <div className="ml-auto flex shrink-0 items-center whitespace-nowrap">
+                <div className="flex shrink-0 items-center whitespace-nowrap">
                   {sideHeaderActions({ compact: compactSide })}
                 </div>
               )}
@@ -513,18 +507,14 @@ export function TraceDataPanelView({
                   <>
                     {searchHeader}
                     <DataPanel.Content>
-                      {!isOnTracePage &&
-                        !onEvaluateTrace &&
-                        !onSaveAsDatasetItem &&
-                        !onAddTraceMocksToItem &&
-                        showUnavailableFeaturesMsg && (
-                          <Notice variant="info" className="mb-6">
-                            <Notice.Message>
-                              Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
-                              deployed).
-                            </Notice.Message>
-                          </Notice>
-                        )}
+                      {!isOnTracePage && !onEvaluateTrace && !onSaveAsDatasetItem && showUnavailableFeaturesMsg && (
+                        <Notice variant="info" className="mb-6">
+                          <Notice.Message>
+                            Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
+                            deployed).
+                          </Notice.Message>
+                        </Notice>
+                      )}
 
                       {rootSpan && rootError && (
                         <Notice

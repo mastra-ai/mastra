@@ -2,29 +2,24 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { highlight } from '../CodeEditor/highlight';
 import { DataCodeSection } from './data-code-section';
-
-vi.mock('../CodeEditor/highlight', () => ({ highlight: vi.fn() }));
 
 const before = JSON.stringify({ city: 'Paris', unit: 'C' }, null, 2);
 const after = JSON.stringify({ city: 'Lyon', unit: 'C' }, null, 2);
 
 beforeEach(() => {
-  vi.mocked(highlight).mockImplementation(async code => code.split('\n').map(line => [{ content: line }]));
   Element.prototype.scrollIntoView = vi.fn();
 });
 
 afterEach(() => {
   cleanup();
-  vi.mocked(highlight).mockReset();
 });
 
 describe('DataCodeSection', () => {
-  it('renders JSON as Shiki tokens instead of a CodeMirror editor', async () => {
+  it('renders JSON as highlighted tokens instead of a CodeMirror editor', async () => {
     const { container } = render(<DataCodeSection title="Input" codeStr={before} />);
 
-    await vi.waitFor(() => expect(container.querySelector('.shiki-token')).not.toBeNull());
+    await vi.waitFor(() => expect(container.querySelector('.syntax-string')).not.toBeNull());
     expect(container.querySelector('.cm-editor')).toBeNull();
   });
 
