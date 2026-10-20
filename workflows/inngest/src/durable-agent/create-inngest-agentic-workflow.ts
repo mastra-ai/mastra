@@ -19,6 +19,7 @@ import {
   executeDurableAgentScorers,
   getRunRegistryEntry,
   loadRunStoredMessages,
+  takeRunScorerInstances,
   pruneAgentLoopSnapshot,
 } from '@mastra/core/agent/durable';
 import type {
@@ -554,13 +555,17 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       .map(
         async params => {
           const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
+          const initData = getInitData() as DurableAgenticWorkflowInput;
           void executeDurableAgentScorers({
-            initData: getInitData() as DurableAgenticWorkflowInput,
+            initData,
             finalOutput: inputData,
             mastra,
             requestContext,
             tracingContext,
             loadStoredMessages: loadRunStoredMessages(params),
+            // Call-time and defaultOptions scorers are parked in-process by instance; name
+            // resolution alone misses any scorer Mastra never registered (#27579).
+            scorerInstances: takeRunScorerInstances(initData.runId, mastra),
           }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));
 
           return inputData;

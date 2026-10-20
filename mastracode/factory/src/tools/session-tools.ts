@@ -5,10 +5,12 @@ import { z } from 'zod';
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import type { IntegrationTools } from '../integrations/base.js';
+import { buildModelCatalog, listSessionScopedCredentials } from '../routes/config.js';
 import { USER_SESSION_BRANCH_PREFIX } from '../routes/source-control-sessions.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
+import { resolveFactoryModelPolicy } from '../session/credential-policy.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import {
   ensureFactorySourceSession,
@@ -18,6 +20,8 @@ import {
 import { recordSessionRunStart } from '../session/run-audit.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
+import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
@@ -37,7 +41,20 @@ export const FACTORY_TOOLS_OWNER_ID = `factory-tools:${globalThis.crypto.randomU
 
 export interface FactorySessionToolDependencies {
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'getSourceControlBySessionId'>;
-  sessionModel: { projects: FactoryProjectsStorage; modelDefaults: ModelDefaultsStorage };
+  sessionModel: {
+    projects: FactoryProjectsStorage;
+    modelDefaults: ModelDefaultsStorage;
+    /**
+     * Tenant credential stores, present when auth is on. Model switches then
+     * check the target session's credential scope, like the Settings picker;
+     * without them the server's own keys decide.
+     */
+    tenantCatalog?: {
+      credentials: Pick<ModelCredentialsStorage, 'listCredentials'>;
+      customProviders?: Pick<CustomProvidersStorage, 'ensureReady' | 'list'>;
+      deploymentProviders?: ReadonlySet<string>;
+    };
+  };
   /** Resolved lazily: the controller only exists once the mount is up. */
   messaging: () => Promise<FactoryMessaging | null>;
   workItems: Pick<
@@ -46,6 +63,7 @@ export interface FactorySessionToolDependencies {
     | 'getForProject'
     | 'listRunBindings'
     | 'findActiveRunBindingForSession'
+    | 'findRunBindingByThread'
     | 'subscribeToWorkItem'
     | 'unsubscribeFromWorkItem'
     | 'listSessionSubscriptions'
@@ -57,6 +75,8 @@ export interface FactorySessionToolDependencies {
   /** The browser Start's coordinator; absent until the Factory runtime is ready. */
   startCoordinator: () => Pick<FactoryStartCoordinator, 'prepare'> | undefined;
 }
+
+const LISTED_MODELS = 8;
 
 function ambiguousRepository(candidates: readonly string[]): string {
   return `This item has several repositories (${candidates.join(', ')}); v1 can't choose one.`;
@@ -85,10 +105,57 @@ export function createFactorySessionTools(
   scope: FactoryToolScope,
   deps: FactorySessionToolDependencies,
 ): IntegrationTools {
+  /** The models a session can switch to, resolved from the target session's owner and project policy. */
+  async function sessionModelCatalog(
+    controller: FactoryMessaging['controller'],
+    sessionId: string,
+    threadId: string,
+  ): Promise<{ usable: string[]; known: Set<string>; scopeLabel: string }> {
+    const models = await controller.listAvailableModels();
+    const known = new Set(models.flatMap(model => (typeof model.id === 'string' ? [model.id] : [])));
+    const tenantCatalog = deps.sessionModel.tenantCatalog;
+    if (!tenantCatalog) {
+      const usable = (await buildModelCatalog({ controller })).map(model => model.id);
+      return { usable, known, scopeLabel: 'server' };
+    }
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: scope.userId, organizationId: scope.orgId });
+    requestContext.set('controller', { resourceId: sessionId, threadId });
+    const policy = await resolveFactoryModelPolicy(requestContext, {
+      projects: deps.sessionModel.projects,
+      sourceControl: deps.sessions,
+      workItems: deps.workItems,
+    });
+    if (!policy) throw new Error('Session model policy is unavailable.');
+    const modelScope = policy.tenant.credentialScope ?? 'user';
+    const orgId = policy.tenant.orgId ?? scope.orgId;
+    const customProviders = tenantCatalog.customProviders;
+    const usable = (
+      await buildModelCatalog({
+        controller,
+        tenantCredentials: await listSessionScopedCredentials({
+          credentials: tenantCatalog.credentials,
+          orgId,
+          userId: policy.tenant.userId,
+          modelScope,
+        }),
+        deploymentProviders: tenantCatalog.deploymentProviders,
+        listCustomProviders: customProviders
+          ? async () => {
+              await customProviders.ensureReady();
+              return customProviders.list({ orgId });
+            }
+          : undefined,
+      })
+    ).map(model => model.id);
+    for (const id of usable) known.add(id);
+    return { usable, known, scopeLabel: modelScope === 'factory' ? 'Factory' : 'session owner' };
+  }
+
   const switchModel = createTool({
     id: 'factory_switch_session_model',
     description:
-      'Switch the model of a session you own in this Factory (side, work item, or review session) without recreating it. A running session switches immediately; a stopped one uses the model on its next run. The model must be one this server can run. Use a session ID from the Factory session or work item tools.',
+      'Switch the model of a session you own in this Factory (side, work item, or review session) without recreating it. A running session switches immediately; a stopped one uses the model on its next run. The model must be one the session credentials can run: the owner credentials for a user-scoped session, the Factory credentials for a Factory-scoped one. Use a session ID from the Factory session or work item tools.',
     inputSchema: z
       .object({
         sessionId: z.string().trim().min(1).max(200),
@@ -114,9 +181,16 @@ export function createFactorySessionTools(
         sessionId,
       });
       if (!threadId) throw new Error('Session has no conversation thread yet.');
-      const available = await messaging.controller.listAvailableModels();
-      if (!available.some(model => model.id === modelId && model.hasApiKey)) {
-        throw new Error(`Model ${modelId} is not available on this server.`);
+      const catalog = await sessionModelCatalog(messaging.controller, sessionId, threadId);
+      if (!catalog.usable.includes(modelId)) {
+        const options = catalog.usable.length
+          ? ` Models available to it: ${catalog.usable.slice(0, LISTED_MODELS).join(', ')}${catalog.usable.length > LISTED_MODELS ? ', …' : ''}.`
+          : ' No models are available to it; connect a provider credential first.';
+        throw new Error(
+          catalog.known.has(modelId)
+            ? `Model ${modelId} exists, but this session's credential scope (${catalog.scopeLabel}) has no credential for its provider.${options}`
+            : `Unknown model ${modelId}.${options}`,
+        );
       }
       const { live } = await messaging.controller.setThreadModel({ resourceId: sessionId, threadId, modelId });
       return { sessionId, threadId, modelId, live };

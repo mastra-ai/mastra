@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type * as authStudioModule from '@mastra/auth-studio';
+import { resolveCustomProviders } from '@mastra/code-sdk/agents/custom-provider-source';
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
@@ -29,6 +30,7 @@ import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
 import type { FactoryIntegration, IntegrationContext } from './integrations/base.js';
 import type * as platformGithubModule from './integrations/platform/github/integration.js';
+import { invalidateCustomProvidersSnapshots } from './routes/custom-provider-source.js';
 import type * as projectRoutesModule from './routes/projects.js';
 import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
@@ -38,6 +40,7 @@ import type * as transitionServiceModule from './rules/transition-service.js';
 import { DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { createFactorySecretEncryption } from './secret-encryption.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
+import type { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
@@ -189,7 +192,11 @@ function lastStudioProvider():
 const registerTenantCredentialResolverMock = vi.fn();
 vi.mock('./routes/tenant-credentials', async importOriginal => {
   const actual = await importOriginal<typeof tenantCredentialsModule>();
-  return { ...actual, registerTenantCredentialResolver: () => registerTenantCredentialResolverMock() };
+  return {
+    ...actual,
+    registerTenantCredentialResolver: (...args: Parameters<typeof actual.registerTenantCredentialResolver>) =>
+      registerTenantCredentialResolverMock(...args),
+  };
 });
 
 // Wrap the route-surface assembly with a spy so tests can assert the DI deps
@@ -1206,6 +1213,45 @@ describe('MastraFactory.prepare', () => {
       await prepareWake({ requestContext: wake, resourceId: 'session-1' });
 
       expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    });
+
+    it("primes the woken session org's custom providers after resolving its credential policy", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      await storage.getDomain<CustomProvidersStorage>('custom-providers').upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        input: {
+          providerId: 'acme',
+          name: 'Acme',
+          url: 'https://llm.acme.dev/v1',
+          apiKey: 'sk-acme',
+          models: ['fast-1'],
+        },
+      });
+      // Earlier tests share the module-level org-1 snapshot; a provider write invalidates it.
+      invalidateCustomProvidersSnapshots({ orgId: 'org-1' });
+      // Install the resolver the factory registered, so tenant resolution needs
+      // the policy token prepareSessionRunContext sets, as in a deployment.
+      const actual = await vi.importActual<typeof tenantCredentialsModule>('./routes/tenant-credentials');
+      const [credentials, deploymentProviders, resolveTenant] = registerTenantCredentialResolverMock.mock.calls[0]!;
+      actual.registerTenantCredentialResolver(credentials, deploymentProviders, resolveTenant);
+      try {
+        const prepareWake = config.prepareWakeRequestContext as (args: {
+          requestContext: RequestContext;
+          resourceId: string;
+        }) => Promise<void>;
+
+        const wake = new RequestContext();
+        await prepareWake({ requestContext: wake, resourceId: 'session-1' });
+
+        expect(resolveCustomProviders(wake)).toEqual([
+          { name: 'Acme', url: 'https://llm.acme.dev/v1', apiKey: 'sk-acme', models: ['fast-1'] },
+        ]);
+      } finally {
+        actual.resetTenantCredentialResolverForTests();
+      }
     });
 
     it('persists allow for the no-approval tools on a new session, so listing work items runs without asking', async () => {

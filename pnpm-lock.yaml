@@ -5423,9 +5423,6 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
-      '@ai-sdk/openai':
-        specifier: ^1.3.24
-        version: 1.3.24(zod@4.6.7)
       '@ai-sdk/openai-v5':
         specifier: npm:@ai-sdk/openai@2.0.115
         version: '@ai-sdk/openai@2.0.115(zod@4.6.7)'
@@ -5441,6 +5438,9 @@ importers:
       '@internal/ai-v6':
         specifier: workspace:*
         version: link:../_vendored/ai_v6
+      '@internal/ai-v7':
+        specifier: workspace:*
+        version: link:../_vendored/ai_v7
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -6005,6 +6005,18 @@ importers:
       '@ai-sdk/openai':
         specifier: ^1.3.24
         version: 1.3.24(zod@4.6.7)
+      '@ai-sdk/openai-v5':
+        specifier: npm:@ai-sdk/openai@2.0.115
+        version: '@ai-sdk/openai@2.0.115(zod@4.6.7)'
+      '@ai-sdk/openai-v6':
+        specifier: npm:@ai-sdk/openai@3.0.88
+        version: '@ai-sdk/openai@3.0.88(zod@4.6.7)'
+      '@ai-sdk/openai-v7':
+        specifier: npm:@ai-sdk/openai@4.0.21
+        version: '@ai-sdk/openai@4.0.21(zod@4.6.7)'
+      '@copilotkit/aimock':
+        specifier: ^1.29.0
+        version: 1.29.0(vitest@4.1.11)
       '@internal/ai-sdk-v4':
         specifier: workspace:*
         version: link:../_vendored/ai_v4
@@ -6017,6 +6029,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../../stores/libsql
       '@types/big.js':
         specifier: ^6.2.2
         version: 6.2.2
@@ -7565,9 +7580,6 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@mastra/memory':
-        specifier: workspace:*
-        version: link:../../packages/memory
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15

@@ -74,7 +74,11 @@ import { prepareSessionRunContext } from './integrations/subscription-session.js
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
-import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
+import {
+  createCustomProvidersPrimer,
+  primeCustomProvidersForRequestContext,
+  registerCustomProvidersSource,
+} from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
@@ -899,7 +903,19 @@ export class MastraFactory {
       transitionService,
       auditRecorder: auditDomain,
       sessions: sourceControlSessions,
-      sessionModel: { projects: factoryProjectsStorage, modelDefaults: modelDefaultsStorage },
+      sessionModel: {
+        projects: factoryProjectsStorage,
+        modelDefaults: modelDefaultsStorage,
+        ...(auth
+          ? {
+              tenantCatalog: {
+                credentials: modelCredentialsStorage,
+                customProviders: customProvidersStorage,
+                deploymentProviders: deploymentModelProviders,
+              },
+            }
+          : {}),
+      },
       intake: intakeStorage,
       startCoordinator: () => this.#startCoordinator,
       messaging: factoryMessaging,
@@ -1175,6 +1191,7 @@ export class MastraFactory {
         prepareWakeRequestContext: async ({ requestContext, resourceId }) => {
           if (!storage.isDomainReady('source-control')) return;
           await prepareSessionRunContext(requestContext, resourceId, { sessions: sourceControlSessions });
+          await primeCustomProvidersForRequestContext(requestContext);
         },
         // Memory settings live in the factory's `memory-settings` app table (per
         // org/user), so the host machine's TUI settings.json must not seed them.
