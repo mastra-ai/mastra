@@ -420,6 +420,7 @@ export type ObservabilityStorageCapabilities = {
   traceQueryTenantScope: boolean;
   traceAggregate: boolean;
   threadQuery: boolean;
+  threadQueryRows: boolean;
   spanQuery: boolean;
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
   traceRetentionDays?: number;
@@ -447,6 +448,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   traceQueryTenantScope: false,
   traceAggregate: false,
   threadQuery: false,
+  threadQueryRows: false,
   spanQuery: false,
   feedback: false,
 };
@@ -532,6 +534,8 @@ export function getObservabilityStorageCapabilities(
     traceAggregate:
       newApiCore && supportsTraceAggregateCore() && declares(OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE),
     threadQuery,
+    threadQueryRows:
+      threadQuery && typeof coreStorage.planThreadRowsQuery === 'function' && declares('thread-query-rows'),
     spanQuery,
     feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
   };
@@ -614,7 +618,8 @@ export const NEW_ROUTE_DEFS = {
     method: 'POST',
     path: '/observability/threads/query',
     summary: 'Query threads',
-    description: 'Returns thread identities matching eligible trace and cross-trace predicates',
+    description:
+      'Returns full-history thread rows with activity timestamps, first/last traces, previews and context fields',
     requiresPermission: 'observability:read',
   },
 

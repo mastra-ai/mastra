@@ -26,6 +26,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   traceQueryTenantScope: false,
   traceAggregate: false,
   threadQuery: false,
+  threadQueryRows: false,
   spanQuery: false,
   feedback: false,
 };

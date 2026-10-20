@@ -1,4 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
+import { expandDurableSteps } from '@internal/core/durable';
 import { MastraError } from '../../error';
 import { withAck } from '../../events/acking-callback';
 import type { PubSub } from '../../events/pubsub';
@@ -104,6 +105,7 @@ async function withBufferedStepResponses(
 ): Promise<unknown[]> {
   const buffered = ((await output.steps.catch(() => undefined)) ?? []) as Record<string, unknown>[];
   if (!runSteps?.length) return buffered;
+  runSteps = expandDurableSteps(runSteps);
   // An aborted run ends with a step that never finished, so it was never buffered.
   const trailingAborted =
     (runSteps.at(-1) as { finishReason?: string } | undefined)?.finishReason === 'abort' &&

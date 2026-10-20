@@ -42,7 +42,7 @@ export function SpanTypeLegend({ spans }: { spans: UISpan[] }) {
             key={type}
             size="sm"
             emphasis="subtle"
-            icon={<span className="inline-block size-1.5 rounded-full" style={{ backgroundColor: spanUI?.color }} />}
+            icon={<span className="block size-1.5 rounded-full" style={{ backgroundColor: spanUI?.color }} />}
           >
             {spanUI?.label || type}
           </Badge>

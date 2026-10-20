@@ -50,7 +50,7 @@ import {
   validateCompression,
 } from './reflector-agent';
 import type { CompressionLevel } from './reflector-agent';
-import { assertCompleteModelResponse, withRetry } from './retry';
+import { assertCompleteModelResponse, RETRY_CONFIG, withRetry } from './retry';
 import { createTemporaryOmMemoryContext } from './temporary-memory';
 import { getMaxThreshold } from './thresholds';
 import type { TokenCounter } from './token-counter';
@@ -268,6 +268,8 @@ export class ReflectorRunner {
    */
   private readonly syncReflectionSuppression = new Map<string, number>();
 
+  private readonly trackBackgroundWork?: (work: Promise<unknown>, lockKey: string) => void;
+
   constructor(opts: {
     reflectionConfig: ResolvedReflectionConfig;
     observationConfig: ResolvedObservationConfig;
@@ -293,6 +295,8 @@ export class ReflectorRunner {
     memory?: Memory;
     onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
     hooks?: ObserveTransformHooks;
+    /** Registers background work so `settled()` can join it. */
+    trackBackgroundWork?: (work: Promise<unknown>, lockKey: string) => void;
   }) {
     this.reflectionConfig = opts.reflectionConfig;
     this.observationConfig = opts.observationConfig;
@@ -309,6 +313,7 @@ export class ReflectorRunner {
     this.memory = opts.memory;
     this.onReflectionCommitted = opts.onReflectionCommitted;
     this.hooks = opts.hooks;
+    this.trackBackgroundWork = opts.trackBackgroundWork;
   }
 
   __registerMastra(mastra: Mastra): void {
@@ -467,7 +472,7 @@ export class ReflectorRunner {
 
       let chunkCount = 0;
       const result = await withRetry(
-        () =>
+        (attemptSignal, onActivity) =>
           withOmTracingSpan({
             phase: 'reflector',
             model: resolvedModel.model,
@@ -502,23 +507,26 @@ export class ReflectorRunner {
                     },
                     providerOptions: this.reflectionConfig.providerOptions as any,
                     ...(attemptMemory ? { memory: attemptMemory } : {}),
-                    ...(abortSignal ? { abortSignal } : {}),
+                    abortSignal: attemptSignal,
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
+                    // Every chunk resets the idle timer; the debug hooks only run on the first attempt.
+                    onChunk(chunk: any) {
+                      onActivity();
+                      if (attemptNumber !== 1) return;
+                      chunkCount++;
+                      if (chunkCount === 1 || chunkCount % 50 === 0) {
+                        const preview =
+                          chunk.type === 'text-delta'
+                            ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
+                            : chunk.type === 'tool-call'
+                              ? ` tool=${chunk.toolName}`
+                              : '';
+                        omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+                      }
+                    },
                     ...(attemptNumber === 1
                       ? {
-                          onChunk(chunk: any) {
-                            chunkCount++;
-                            if (chunkCount === 1 || chunkCount % 50 === 0) {
-                              const preview =
-                                chunk.type === 'text-delta'
-                                  ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
-                                  : chunk.type === 'tool-call'
-                                    ? ` tool=${chunk.toolName}`
-                                    : '';
-                              omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
-                            }
-                          },
                           onFinish(event: any) {
                             omDebug(
                               `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
@@ -546,6 +554,7 @@ export class ReflectorRunner {
         {
           label: 'reflector',
           abortSignal,
+          idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
           maxRetries: this.reflectionConfig.maxRetries,
         },
       );
@@ -716,11 +725,12 @@ export class ReflectorRunner {
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, observationTokens);
 
     registerOp(record.id, 'bufferingReflection');
-    this.storage.setBufferingReflectionFlag(record.id, true).catch(err => {
+    const flagSet = this.storage.setBufferingReflectionFlag(record.id, true).catch(err => {
       omError('[OM] Failed to set buffering reflection flag', err);
     });
 
     const asyncOp = (async () => {
+      await flagSet;
       let outcome:
         | {
             usage?: ObserveHookUsage;
@@ -783,13 +793,14 @@ export class ReflectorRunner {
 
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
         unregisterOp(record.id, 'bufferingReflection');
-        this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
+        await this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
           omError('[OM] Failed to clear buffering reflection flag', err);
         });
       }
     })();
 
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, asyncOp);
+    this.trackBackgroundWork?.(asyncOp, lockKey);
   }
 
   /**

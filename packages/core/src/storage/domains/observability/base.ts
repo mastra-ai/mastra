@@ -66,6 +66,7 @@ import type {
   GetScorePercentilesResponse,
 } from './scores';
 import type { SpanQueryResponse, TrustedSpanQueryPlan } from './span-query';
+import type { ThreadQueryResponse, TrustedThreadRowsQueryPlan } from './thread-query';
 import type { TraceAggregateResponse } from './trace-aggregate';
 import type { TrustedTraceAggregatePlan } from './trace-aggregate-planner';
 import type {
@@ -144,6 +145,7 @@ export type ObservabilityStorageFeature =
   | 'trace-query-root-duration'
   | 'trace-query-discovery'
   | 'thread-query'
+  | 'thread-query-rows'
   | 'trace-query-tenant-scope'
   | 'feedback'
   | 'trace-query-context-ids'
@@ -463,8 +465,13 @@ export class ObservabilityStorage extends StorageDomain {
 
   /**
    * Executes a validated thread-query plan.
+   * Keep the base return type compatible with identity-only adapters. The server
+   * checks `thread-query-rows` before sending a row plan; capable concrete adapters
+   * provide the more specific row overload.
    */
-  async queryThreads(_plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+  async queryThreads(
+    _plan: TrustedThreadQueryPlan | TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | ThreadQueryResponse> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_QUERY_THREADS_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,

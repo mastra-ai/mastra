@@ -918,7 +918,15 @@ export interface RunRegistryEntry {
     messageListState: SerializedMessageListState;
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
-  }) => Promise<void>;
+  }) => Promise<string | undefined>;
+  /**
+   * True for a stream() run whose merged `generateTitle` config sets `emitEvent`. The finish
+   * step then waits for the title and streams it as a transient `data-thread-title` chunk
+   * before FINISH, as the in-process loop does. Cross-process engines lose it and skip the chunk.
+   */
+  streamThreadTitle?: boolean;
+  /** `memory.onTitleGenerated` from the call options. Non-serializable, like generateThreadTitle. */
+  onTitleGenerated?: (title: string) => void | Promise<void>;
   /**
    * Signal messages already present in the `messageList` at run start (from
    * persisted history). These are echoed as `data-signal` stream data parts
