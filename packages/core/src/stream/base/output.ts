@@ -610,6 +610,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #toolCallStreamingMeta: Record<string, ToolCallStreamingMeta> = Object.create(null);
   /** Recorded calls whose input streams again in a retry; the retry's tool-call replaces them. */
   #replaceableToolCallIds = new Set<string>();
+  /** Calls recorded since the last accepted step; only these can be replaced by a retry. */
+  #attemptToolCallIds = new Set<string>();
   /**
    * Tool calls whose input stream ended without any deltas. Their args only arrive with the
    * final `tool-call` chunk, so they wait here instead of being emitted as a synthetic `{}` call.
@@ -1031,6 +1033,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       };
       self.#toolCalls.push(synthetic);
       self.#bufferedByStep.toolCalls.push(synthetic);
+      self.#attemptToolCallIds.add(synthetic.payload.toolCallId);
       self.#emitChunk(synthetic);
       controller.enqueue(synthetic);
     };
@@ -1144,9 +1147,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               }
               break;
             case 'tool-call-input-streaming-start':
-              // A recorded call whose input streams again comes from a failed attempt being retried
-              // (the failure itself may never reach this stream), so the retry's call replaces it.
-              if (self.#toolCalls.some(tc => tc.payload.toolCallId === chunk.payload.toolCallId)) {
+              // A call recorded in this step whose input streams again comes from a failed attempt being
+              // retried (the failure itself may never reach this stream), so the retry's call replaces it.
+              // Ids reused by a later step are separate calls.
+              if (self.#attemptToolCallIds.has(chunk.payload.toolCallId)) {
                 self.#replaceableToolCallIds.add(chunk.payload.toolCallId);
               }
               self.#toolCallDeltaIdNameMap[chunk.payload.toolCallId] = chunk.payload.toolName;
@@ -1272,17 +1276,19 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               }
               // The retry's real call replaces the one recorded from the failed attempt.
               if (self.#replaceableToolCallIds.delete(chunk.payload.toolCallId)) {
+                self.#attemptToolCallIds.delete(chunk.payload.toolCallId);
                 for (const calls of [self.#toolCalls, self.#bufferedByStep.toolCalls]) {
-                  const index = calls.findIndex(tc => tc.payload.toolCallId === chunk.payload.toolCallId);
+                  const index = calls.findLastIndex(tc => tc.payload.toolCallId === chunk.payload.toolCallId);
                   if (index !== -1) calls.splice(index, 1);
                 }
               }
-              // A call already recorded under this id (a repeated tool-call) is not emitted twice.
-              if (self.#toolCalls.some(tc => tc.payload.toolCallId === chunk.payload.toolCallId)) {
+              // A call already recorded under this id in this step (a repeated tool-call) is not emitted twice.
+              if (self.#attemptToolCallIds.has(chunk.payload.toolCallId)) {
                 return;
               }
               self.#toolCalls.push(chunk);
               self.#bufferedByStep.toolCalls.push(chunk);
+              self.#attemptToolCallIds.add(chunk.payload.toolCallId);
               const toolCallPayload = chunk.payload;
               // @ts-expect-error TODO: What does this mean??? Why is there a nested output, what is the type supposed to be
               if (toolCallPayload?.output?.from === 'AGENT' && toolCallPayload?.output?.type === 'finish') {
@@ -1301,7 +1307,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
             case 'step-finish': {
               // A failed or retried step keeps its no-args calls pending, like an error chunk does.
               const stepReason = chunk.payload.stepResult.reason as string;
-              flushPendingToolCalls(controller, { onlyStreamed: stepReason === 'retry' || stepReason === 'error' });
+              const attemptFailed = stepReason === 'retry' || stepReason === 'error';
+              flushPendingToolCalls(controller, { onlyStreamed: attemptFailed });
+              if (!attemptFailed) {
+                self.#attemptToolCallIds.clear();
+                self.#replaceableToolCallIds.clear();
+              }
               self.updateUsageCount(chunk.payload.output.usage);
               // A resumed suspended step reaches its step-finish here; its usage is now in #usageCount.
               self.#suspendedStepUsage = undefined;
@@ -2791,6 +2802,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#toolCallStreamingMeta = Object.create(null);
     this.#pendingToolCalls = Object.create(null);
     this.#replaceableToolCallIds.clear();
+    this.#attemptToolCallIds.clear();
   }
 
   #createEventedStream() {
@@ -2901,6 +2913,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       toolCallStreamingMeta: this.#toolCallStreamingMeta,
       pendingToolCalls: this.#pendingToolCalls,
       replaceableToolCallIds: [...this.#replaceableToolCallIds],
+      attemptToolCallIds: [...this.#attemptToolCallIds],
       toolCalls: this.#toolCalls,
       toolResults: this.#toolResults,
       warnings: this.#warnings,
@@ -2933,6 +2946,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#toolCallStreamingMeta = Object.assign(Object.create(null), state.toolCallStreamingMeta);
     this.#pendingToolCalls = Object.assign(Object.create(null), state.pendingToolCalls);
     this.#replaceableToolCallIds = new Set(state.replaceableToolCallIds ?? []);
+    this.#attemptToolCallIds = new Set(state.attemptToolCallIds ?? []);
     this.#toolCalls = state.toolCalls;
     this.#toolResults = state.toolResults;
     this.#warnings = state.warnings;

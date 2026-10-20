@@ -3,12 +3,12 @@
  *
  * A tool input stream that ends before its final `tool-call` waits for that call. These cover
  * the edges of that wait: provider-supplied IDs that collide with Object.prototype keys, a
- * provider-executed result that arrives without a final call, and a no-args input stream
- * that fails and is retried.
+ * provider-executed result that arrives without a final call, input streams that fail and are
+ * retried with the same ID, and an ID reused by a later step.
  *
- * Uses the in-process recording model rather than HTTP aimock fixtures: real AI SDK providers
- * emit `tool-call` straight after `tool-input-end` and cannot express a mid-stream error part,
- * so none of these stream shapes are reachable through an HTTP fixture.
+ * The `__proto__` and cross-step cases run through HTTP aimock fixtures. The fallback and retry
+ * cases use the in-process recording model: an HTTP fixture cannot inject an error part mid-stream
+ * or end a tool input stream without the provider's final `tool-call`.
  */
 
 import { stepCountIs } from '@internal/ai-sdk-v5';
@@ -64,22 +64,27 @@ describeForAllEngines('AIMock loop scenario: streamed tool call fallback', engin
   };
 
   it('handles a streamed tool call whose id is "__proto__"', async () => {
-    const chunks = await run([
-      [
-        ...head,
-        { type: 'tool-input-start', id: '__proto__', toolName: 'lookup' },
-        { type: 'tool-input-delta', id: '__proto__', delta: '{"q":"x"}' },
-        { type: 'tool-input-end', id: '__proto__' },
-        { type: 'tool-call', toolCallId: '__proto__', toolName: 'lookup', input: '{"q":"x"}' },
-        { type: 'finish', finishReason: 'tool-calls', usage },
-      ],
-      textTape,
-    ]);
+    executed.length = 0;
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'go',
+      tools: { lookup },
+      stopWhen: stepCountIs(3),
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', sequenceIndex: 0 },
+          { toolCalls: [{ id: '__proto__', name: 'lookup', arguments: { q: 'x' } }] },
+        );
+        llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'done' });
+      },
+    } as any);
 
-    expect(chunks.filter(c => c.type === 'error')).toEqual([]);
-    expect(chunks.filter(c => c.type === 'tool-call').map(c => [c.payload.toolCallId, c.payload.args])).toEqual([
-      ['__proto__', { q: 'x' }],
-    ]);
+    expect((chunks as any[]).filter(c => c.type === 'error')).toEqual([]);
+    expect(
+      (chunks as any[]).filter(c => c.type === 'tool-call').map(c => [c.payload.toolCallId, c.payload.args]),
+    ).toEqual([['__proto__', { q: 'x' }]]);
     expect(executed).toEqual([{ q: 'x' }]);
   });
 
@@ -154,5 +159,31 @@ describeForAllEngines('AIMock loop scenario: streamed tool call fallback', engin
       ['tool-call', { q: 'real' }],
       ['tool-result', { q: 'real' }],
     ]);
+  });
+
+  it('keeps both calls when a later step reuses a streamed tool call id', async () => {
+    executed.length = 0;
+    const { output } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'go',
+      tools: { lookup },
+      stopWhen: stepCountIs(3),
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', sequenceIndex: 0 },
+          { toolCalls: [{ id: 'call_0', name: 'lookup', arguments: { q: 'one' } }] },
+        );
+        llm.on(
+          { endpoint: 'chat', sequenceIndex: 1 },
+          { toolCalls: [{ id: 'call_0', name: 'lookup', arguments: { q: 'two' } }] },
+        );
+        llm.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'done' });
+      },
+    } as any);
+
+    const toolCalls = (await output.toolCalls) as any[];
+    expect(toolCalls.map(c => c.payload.args)).toEqual([{ q: 'one' }, { q: 'two' }]);
+    expect(executed).toEqual([{ q: 'one' }, { q: 'two' }]);
   });
 });
