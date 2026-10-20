@@ -29,7 +29,12 @@ describe('Knowledge importer webhook route under FGA', () => {
   it('checks the caller against the specific importer and denies when the provider refuses', async () => {
     const { fga, mastra, requestContext } = setup(false);
 
-    const result = await checkRouteFGA(mastra as any, RUN_KNOWLEDGE_IMPORTER_WEBHOOK_ROUTE as any, requestContext as any, params);
+    const result = await checkRouteFGA(
+      mastra as any,
+      RUN_KNOWLEDGE_IMPORTER_WEBHOOK_ROUTE as any,
+      requestContext as any,
+      params,
+    );
 
     expect(fga.check).toHaveBeenCalledTimes(1);
     expect(fga.check).toHaveBeenCalledWith(
@@ -45,7 +50,12 @@ describe('Knowledge importer webhook route under FGA', () => {
   it('lets the request through when the provider allows it', async () => {
     const { fga, mastra, requestContext } = setup(true);
 
-    const result = await checkRouteFGA(mastra as any, RUN_KNOWLEDGE_IMPORTER_WEBHOOK_ROUTE as any, requestContext as any, params);
+    const result = await checkRouteFGA(
+      mastra as any,
+      RUN_KNOWLEDGE_IMPORTER_WEBHOOK_ROUTE as any,
+      requestContext as any,
+      params,
+    );
 
     expect(fga.check).toHaveBeenCalledTimes(1);
     expect(result).toBeNull();
