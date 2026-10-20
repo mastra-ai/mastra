@@ -811,6 +811,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const remove = vi.spyOn(durableAgent, 'deleteRunSnapshots');
       vi.useFakeTimers();
       try {
+        const recoveryStartedAt = Date.now();
         const recovery = mastra.recoverAllDurableAgents();
         await vi.waitFor(() => expect(next.calls()).toBe(1));
         const fence = ExecutionFence.getLocalActive(runId)!;
@@ -820,11 +821,14 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
         await vi.advanceTimersByTimeAsync(30_000);
         expect(await recovery).toEqual({ agents: 1, recovered: 0, succeeded: 0, failed: 0, skipped: 1 });
-        expect(await recover.mock.results[0]!.value).toEqual({
-          recovered: [{ runId, status: 'skipped', reason: 'recovery-timeout' }],
+        const batch = await recover.mock.results[0]!.value;
+        expect(batch).toEqual({
+          recovered: [{ runId, status: 'skipped', reason: 'recovery-timeout', retryAt: expect.any(Number) }],
           succeeded: 0,
           failed: 0,
         });
+        expect(batch.recovered[0]!.retryAt).toBeGreaterThanOrEqual(recoveryStartedAt + 60_000);
+        expect(batch.recovered[0]!.retryAt).toBeLessThanOrEqual(Date.now() + 30_000);
         expect(ExecutionFence.getLocalActive(runId)).toBe(fence);
         expect(await foreign.owner(fence.agentId, runId)).toBe(fence.executionId);
         expect(signal.aborted).toBe(false);

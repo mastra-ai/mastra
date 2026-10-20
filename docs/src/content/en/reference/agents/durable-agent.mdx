@@ -499,7 +499,9 @@ interface DurableAgentListActiveRunsResult {
 
 Discovers runs stuck in `running` status for this agent and re-drives them from the last persisted snapshot. Accepts the same filters and pagination as `listActiveRuns()`, plus `runId`. Returns the outcome for each run.
 
-Attempts run serially. Each attempt has a single 30-second wait budget covering both `recover()` setup and settlement of the whole recovered workflow. When the budget expires, recovery moves to the next run and returns `status: 'skipped'` with `reason: 'recovery-timeout'` and no `retryAt`. The timeout doesn't cancel setup or execution, release a live claim, or count as success or failure. The attempt continues in the background, and its eventual outcome doesn't change the returned results. Mastra doesn't automatically retry a timed-out attempt.
+Up to five run waits proceed concurrently, with results returned in discovery order. Each attempt has a single 30-second wait budget covering both `recover()` setup and settlement of the whole recovered workflow. When the budget expires, another run can use the slot. The outcome is `status: 'skipped'` with `reason: 'recovery-timeout'` and `retryAt` set 30 seconds ahead. The timeout doesn't cancel setup or execution, release a live claim, or count as success or failure. The attempt continues in the background, and its eventual outcome doesn't change the returned results. The concurrency limit bounds waiting, not live executions.
+
+[`mastra.recoverAllDurableAgents()`](/reference/core/mastra-class#recoveralldurableagents) schedules timeout re-checks automatically. Direct callers of `recoverActiveRuns()` must schedule their own calls after `retryAt`. While the original bulk attempt remains pending, re-checks defer with another `recovery-timeout` and a future `retryAt`, without invoking `recover()` again. Once it settles, recovery checks the persisted snapshot and ownership before retrying. Finished or suspended runs aren't restarted.
 
 The budget applies only to each run attempt in `recoverActiveRuns()`, not to discovery, a direct `recover()` call, or overridden custom recovery methods. When shutdown begins, recovery stops dispatching new runs. The original attempt remains tracked for Mastra's shared shutdown drain even after the wait times out.
 
@@ -528,7 +530,7 @@ A run that another execution still drives isn't taken over. Its entry has `statu
 | `run-active` | Another execution, possibly in another process, holds the run. Sets `retryAt`. |
 | `run-active-locally` | This process is executing the run. |
 | `already-in-progress` | This process is already recovering the run. |
-| `recovery-timeout` | The 30-second wait budget expired. The attempt continues in the background, with no `retryAt` or automatic retry. |
+| `recovery-timeout` | The wait expired or an earlier bulk recovery attempt is still pending. Sets `retryAt`; re-checks don't duplicate the pending attempt. |
 
 Returns:
 

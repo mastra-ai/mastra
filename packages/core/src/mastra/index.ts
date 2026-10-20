@@ -4376,8 +4376,8 @@ export class Mastra<
         let failed = 0;
         let skipped = 0;
 
-        for (const agent of durableAgents) {
-          if (this.#shuttingDown) break;
+        await runWithConcurrency(durableAgents, DEFAULT_RESTART_CONCURRENCY, async agent => {
+          if (this.#shuttingDown) return;
           try {
             const result = await agent.recoverActiveRuns();
             for (const run of result.recovered) {
@@ -4396,7 +4396,7 @@ export class Mastra<
               error,
             });
           }
-        }
+        });
 
         return { agents: durableAgents.length, recovered, succeeded, failed, skipped };
       })(),
@@ -4421,10 +4421,11 @@ export class Mastra<
   }
 
   /**
-   * Re-check a run another execution drove when it was skipped, once that
-   * execution's claim could have lapsed. Runs this process drives carry no
-   * `retryAt` and are not re-checked. A re-check that throws is retried with
-   * backoff; `failures` counts the consecutive ones.
+   * Re-check skipped runs after a foreign claim could have lapsed or a
+   * recovery wait timed out. Timed-out originals keep their ownership and
+   * defer rechecks until settlement without starting duplicate executions.
+   * A re-check that throws is retried with backoff; `failures` counts the
+   * consecutive ones.
    */
   #scheduleDurableRecoveryRecheck(
     agent: DurableAgentLike,
