@@ -1671,7 +1671,7 @@ const ticketCreated = defineEvent({
 })
 ```
 
-`authorize` runs on every `events/poll` and every `events/stream` open. An open stream isn't checked again until it reconnects. A caller who loses access keeps receiving occurrences on an open stream until then. FGA isn't applied to events; use `authorize` to restrict them.
+`authorize` runs on every `events/poll`, every `events/stream` open, and every webhook `events/subscribe`, including refreshes. An open stream isn't checked again until it reconnects, and a webhook subscription until its next refresh. A caller who loses access keeps receiving occurrences until then. FGA isn't applied to events; use `authorize` to restrict them.
 
 ### `defineEvent()` options
 
@@ -1708,7 +1708,7 @@ const ticketCreated = defineEvent({
     type: '(context) => boolean | Promise<boolean>',
     isOptional: true,
     description:
-      "Decides whether the caller may receive this type with these arguments. Receives `arguments`, `requestContext` and `delivery` (`'poll'` or `'push'`). Runs on every `events/poll`, before a `poll` source is called, and on every `events/stream` open. Returning `false` rejects the request with `-32024`. If it throws, the client gets a generic `-32603` error and the details are logged on the server. Defaults to allowing every caller.",
+      "Decides whether the caller may receive this type with these arguments. Receives `arguments`, `requestContext` and `delivery` (`'poll'`, `'push'` or `'webhook'`). Runs on every `events/poll`, before a `poll` source is called, on every `events/stream` open, and on every webhook `events/subscribe`, including refreshes. Returning `false` rejects the request with `-32024`. A refresh that is denied also removes the webhook subscription. If it throws, the client gets a generic `-32603` error and the details are logged on the server. Defaults to allowing every caller.",
   },
   {
     name: 'poll',
@@ -1817,6 +1817,7 @@ const server = new MCPServer({
 The server enforces these rules:
 
 - **Authentication:** Webhook subscriptions need an authenticated caller. Without `authInfo` on the request, `events/subscribe` fails with `-32024`. A subscription is identified by the caller, the URL, the event name, and the arguments, so repeating `events/subscribe` refreshes the same subscription and returns the same `id`.
+- **Authorization:** `authorize` runs on each subscribe and each refresh. When it denies a refresh, the subscription is removed and no further occurrences are POSTed. A Mastra client can't tell this `-32024` from the one for an unauthenticated caller, so in its default delivery mode it reports `MCP_EVENTS_WEBHOOK_UNAVAILABLE`, tries push, and then rejects with the same `-32024`.
 - **Callback URLs:** The URL must use `https`. Every address it resolves to must be publicly routable: loopback, private, link-local, and other special-purpose ranges are rejected with `-32602` and `data.reason`. The check runs again before every delivery, and the request connects to the address that passed, to prevent DNS rebinding. Redirects are never followed.
 - **Verification:** Before the first delivery to a URL, the server POSTs a signed verification challenge, and the endpoint must echo it. A failed or unreachable endpoint fails `events/subscribe` with `-32027` and a `data.reason` such as `challenge_failed` or `timeout`. The result is cached per caller and URL. URLs accepted by `allowedUrls` skip this step.
 - **Lifetime:** Each subscription expires at the returned `refreshBefore` time unless the client refreshes it. A requested `ttlMs` is clamped to the `ttl` bounds.

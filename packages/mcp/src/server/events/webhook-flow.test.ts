@@ -253,6 +253,43 @@ describe('webhook delivery end to end', () => {
     ).rejects.toMatchObject({ cause: expect.objectContaining({ details: expect.objectContaining({ code: -32025 }) }) });
   });
 
+  it('ends a default-mode subscribe denied by authorize with Forbidden after trying push', async () => {
+    const server = new MCPServer({
+      id: 'webhook-authorize',
+      name: 'Webhook authorize',
+      version: '1.0.0',
+      tools: {},
+      events: {
+        'ticket.created': defineEvent({
+          inputSchema: z.object({ project: z.string() }),
+          payloadSchema: z.object({ id: z.string(), project: z.string() }),
+          authorize: ({ arguments: args }) => args.project !== 'secret',
+        }),
+      },
+      eventsOptions: { webhook: { url: { allowPrivate: true, allowInsecure: true } } },
+    });
+    const served: ServedHTTP = await serveHTTP(server, { auth: authFromHeader });
+    cleanups.push(() => served.close());
+    let mcp: MCPClient | undefined;
+    const receiver = await serveReceiver(request => mcp!.events.handleWebhook(request));
+    cleanups.push(() => receiver.close());
+    mcp = new MCPClient({
+      id: 'webhook-authorize-client',
+      servers: { tickets: { url: served.url, requestInit: { headers: { authorization: 'Bearer alice' } } } },
+      webhook: { url: receiver.url },
+    });
+    cleanups.push(() => mcp!.disconnect());
+
+    // The client can't tell this Forbidden from "webhook needs authentication", so it tries push,
+    // which authorize also denies.
+    await expect(mcp.events.subscribe('tickets', 'ticket.created', { project: 'secret' })).rejects.toMatchObject({
+      cause: expect.objectContaining({ details: expect.objectContaining({ code: -32024 }) }),
+    });
+    expect(server['eventRegistry'].openStreams.size).toBe(0);
+    const allowed = await mcp.events.subscribe('tickets', 'ticket.created', { project: 'open' });
+    expect(allowed.mode).toBe('webhook');
+  });
+
   it('handleWebhook answers 404 when the client has no webhook settings', async () => {
     const mcp = new MCPClient({ id: 'webhook-flow-unconfigured', servers: {} });
     cleanups.push(() => mcp.disconnect());

@@ -204,6 +204,15 @@ export function registerEventHandlers(server: Server, deps: EventHandlerDeps): v
         const principal = requirePrincipal(ctx, requestContext);
         const event = registry.resolve(params.name, 'webhook');
         const args = await registry.validateArguments(event, params.arguments ?? {});
+        try {
+          // Refreshes are repeat subscribes, so a caller who lost access is stopped here.
+          await authorizeOrThrow(event, args, requestContext, 'webhook', deps);
+        } catch (error) {
+          if (error instanceof ProtocolError && error.code === EVENTS_ERROR_CODES.Forbidden) {
+            await webhooks.unsubscribe({ principal, url: params.delivery.url, name: event.name, arguments: args });
+          }
+          throw error;
+        }
         return webhooks.subscribe(event, args, params, principal);
       }),
   );

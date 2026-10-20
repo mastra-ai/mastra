@@ -16,7 +16,7 @@ import { connectClient, serveHTTP } from '../__tests__/harness.mock';
 import type { ServedHTTP } from '../__tests__/harness.mock';
 import { MCPServer } from '../server';
 import { defineEvent } from './define-event';
-import type { MCPServerWebhookOptions } from './types';
+import type { MCPServerEventAuthorizeContext, MCPServerWebhookOptions } from './types';
 import type { WebhookTransportRequest } from './webhook-transport';
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
@@ -39,7 +39,10 @@ afterEach(async () => {
   served = undefined;
 });
 
-async function start(webhook: MCPServerWebhookOptions | undefined) {
+async function start(
+  webhook: MCPServerWebhookOptions | undefined,
+  authorize?: (context: MCPServerEventAuthorizeContext<{ project: string }>) => boolean,
+) {
   const posts: WebhookTransportRequest[] = [];
   const server = new MCPServer({
     id: 'webhooks',
@@ -51,6 +54,7 @@ async function start(webhook: MCPServerWebhookOptions | undefined) {
         inputSchema: z.object({ project: z.string() }),
         payloadSchema: z.object({ id: z.string(), project: z.string() }),
         match: (args, data) => data.project === args.project,
+        authorize,
       }),
       'build.finished': defineEvent({ poll: async () => ({ events: [], cursor: null }) }),
     },
@@ -196,6 +200,37 @@ describe('MCPServer webhook delivery', () => {
     await server.events.emit('ticket.created', { id: 't-3', project: 'alpha' });
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(posts).toHaveLength(2);
+  });
+
+  it('runs authorize on every subscribe and refresh, and drops a subscription that loses access', async () => {
+    const allowed = new Set(['alice']);
+    const seen: string[] = [];
+    const { server, connect, posts } = await start({}, ({ requestContext, delivery }) => {
+      const caller = (requestContext.get('authInfo') as AuthInfo | undefined)?.clientId ?? '';
+      seen.push(`${caller}:${delivery}`);
+      return allowed.has(caller);
+    });
+
+    const bob = await connect('bob');
+    const denied = await rejection(subscribe(bob, subscribeParams()));
+    expect(denied).toBeInstanceOf(ProtocolError);
+    expect((denied as ProtocolError).code).toBe(-32024);
+    // No verification request: a denied caller gets nothing sent to its URL.
+    expect(posts).toHaveLength(0);
+
+    const alice = await connect('alice');
+    await subscribe(alice, subscribeParams());
+    await server.events.emit('ticket.created', { id: 't-1', project: 'alpha' });
+    await vi.waitFor(() => expect(posts).toHaveLength(2));
+    expect(JSON.parse(posts[1]!.body)).toMatchObject({ data: { id: 't-1' } });
+
+    allowed.delete('alice');
+    const refresh = await rejection(subscribe(alice, subscribeParams()));
+    expect((refresh as ProtocolError).code).toBe(-32024);
+    await server.events.emit('ticket.created', { id: 't-2', project: 'alpha' });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(posts).toHaveLength(2);
+    expect(seen).toEqual(['bob:webhook', 'alice:webhook', 'alice:webhook']);
   });
 
   it('keys subscriptions by principal', async () => {

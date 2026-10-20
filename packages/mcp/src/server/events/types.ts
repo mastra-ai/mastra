@@ -98,8 +98,10 @@ export interface MCPServerEventDefinition<
   match?(args: TArgs, data: TData): boolean;
   /**
    * Decides whether the caller may receive this event type with these arguments. Runs on every
-   * `events/poll` and on every `events/stream` open; returning `false` rejects the request with
-   * -32024. An open stream isn't checked again until it reconnects. Defaults to allowing everyone.
+   * `events/poll`, every `events/stream` open and every webhook `events/subscribe`, including
+   * refreshes; returning `false` rejects the request with -32024 and, for a webhook, removes the
+   * existing subscription. An open stream isn't checked again until it reconnects, and a webhook
+   * until its next refresh. Defaults to allowing everyone.
    */
   authorize?(context: MCPServerEventAuthorizeContext<TArgs>): boolean | Promise<boolean>;
   /** Pull source serving `events/poll`. */
