@@ -19,16 +19,15 @@ export const Kbd = ({ children, size = 'default', className }: KbdProps) => {
     <kbd
       className={cn(
         'inline-flex items-center justify-center bg-card font-mono text-foreground shadow-raised',
-        // Center the glyphs, not the line box: an app without CommitMono falls back to a system
-        // mono whose metrics sit the letters high in the fixed height
-        '[text-box:trim-both_cap_alphabetic]',
         sizeClasses[size],
         transitions.transform,
         'active:scale-95 active:shadow-none',
         className,
       )}
     >
-      {children}
+      {/* Trim to cap height so the letters center in the fixed height whatever the font: a system mono
+          (an app without CommitMono) sits them high. An inline box, since trim doesn't apply to the flex box */}
+      <span className="[text-box:trim-both_cap_alphabetic]">{children}</span>
     </kbd>
   );
 };
