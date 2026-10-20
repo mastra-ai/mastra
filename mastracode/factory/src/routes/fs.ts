@@ -466,7 +466,7 @@ export interface SessionFsDeps {
  * matches (the caller should fall back to local-path handling), and throws
  * when a session exists but belongs to another tenant.
  */
-async function resolveAuthorizedSession(
+export async function resolveAuthorizedSession(
   c: Context,
   deps: SessionFsDeps | undefined,
   workspacePath: string,

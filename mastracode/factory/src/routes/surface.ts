@@ -55,6 +55,7 @@ import { buildFsRoutes } from './fs.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
+import { buildProcessRoutes } from './processes.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
@@ -731,6 +732,12 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   return [
     ...buildFsRoutes({
       root: deps.fsRoot,
+      sessionFs: {
+        auth: deps.auth,
+        sessions: sourceControlSessions,
+      },
+    }),
+    ...buildProcessRoutes({
       sessionFs: {
         auth: deps.auth,
         sessions: sourceControlSessions,
