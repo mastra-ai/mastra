@@ -207,7 +207,7 @@ const agent = new Agent({
   },
   {
     name: 'formatToolCall',
-    type: '(args: { toolName: string; args: unknown; result: unknown; isError: boolean }) => PostableMessage | null',
+    type: '(info: { toolName: string; args: Record<string, unknown>; result: unknown; isError?: boolean }) => PostableMessage | null',
     isOptional: true,
     description:
       '**Deprecated** — use `toolDisplay` (function form) instead. When set, runs as a `ToolDisplayFn` that only fires on `result`/`error` events; `running` and `approval` events fall through to no render. Mutually exclusive with `toolDisplay` at the type level.',
@@ -434,6 +434,8 @@ type ChannelHandler = (
 type ChannelHandlerContext = {
   mastra?: Mastra
   requestContext: RequestContext
+  readonly signalMetadata: Record<string, unknown>
+  readonly skipped: readonly Message[]
 }
 ```
 
@@ -456,6 +458,10 @@ onDirectMessage: async (thread, message, defaultHandler, ctx) => {
 ```
 
 Anything the run reads from its request context can be decided per message this way, such as which user a platform sender maps to.
+
+`ctx.signalMetadata` is the metadata attached to this message's Agent Signal, built fresh for every message. Add JSON-serializable, non-sensitive values before calling `defaultHandler`. Mastra may persist signal metadata and publish it through PubSub. Unlike `ctx.requestContext`, it follows the message whether it starts a new run or is delivered to one that is already active.
+
+`ctx.skipped` lists earlier messages from the same sender that the Chat SDK batched into this turn when a `chatOptions.concurrency` strategy such as `burst`, `debounce`, or `queue` is set, oldest first. It's empty when nothing was batched.
 
 ## Resource ID resolution
 

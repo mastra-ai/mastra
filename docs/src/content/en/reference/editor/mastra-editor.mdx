@@ -200,14 +200,15 @@ All namespaces extend a shared CRUD base class, so they expose the same `create`
           },
           {
             name: 'applyStoredOverrides',
-            type: '(agent: Agent, options?: { versionId?: string; status?: "draft" | "published" }) => Promise<Agent>',
+            type: '(agent: Agent, options?: { status?: "draft" | "published" } | { versionId: string }, requestContext?: RequestContext) => Promise<Agent>',
             description:
-              'Mutate a code-defined agent in place to apply any stored overrides (instructions, tools, variables). Called internally by mastra.getAgent() — you rarely call it directly.',
+              'Mutate a code-defined agent in place to apply any stored overrides (instructions, tools, variables). Pass either a status or a specific versionId, not both. Called internally by mastra.getAgent() — you rarely call it directly.',
           },
           {
             name: 'clone',
-            type: '(agent: Agent, options: { newId: string; newName?: string; metadata?: Record<string, unknown>; authorId?: string; requestContext?: RequestContext; }) => Promise<Agent>',
-            description: 'Create a new stored agent by cloning an existing agent.',
+            type: '(agent: Agent, options: { newId: string; newName?: string; metadata?: Record<string, unknown>; authorId?: string; visibility?: "private" | "public"; requestContext?: RequestContext }) => Promise<StorageResolvedAgentType>',
+            description:
+              'Create a new stored agent by cloning an existing agent and return the resolved stored agent record.',
           },
           {
             name: 'clearCache',
@@ -380,17 +381,17 @@ All namespaces extend a shared CRUD base class, so they expose the same `create`
         parameters: [
           {
             name: 'create',
-            type: '(input: StorageCreateScorerInput) => Promise<MastraScorer>',
-            description: 'Create a new stored scorer and return a hydrated MastraScorer instance.',
+            type: '(input: StorageCreateScorerDefinitionInput) => Promise<StorageResolvedScorerDefinitionType>',
+            description: 'Create a new stored scorer definition and return the resolved definition.',
           },
           {
             name: 'getById',
-            type: '(id: string, options?: GetByIdOptions) => Promise<MastraScorer | null>',
-            description: 'Return a hydrated scorer for a given id.',
+            type: '(id: string, options?: GetByIdOptions) => Promise<StorageResolvedScorerDefinitionType | null>',
+            description: 'Return the resolved scorer definition for a given id.',
           },
           {
             name: 'update',
-            type: '(input: StorageUpdateScorerInput) => Promise<MastraScorer>',
+            type: '(input: StorageUpdateScorerDefinitionInput) => Promise<StorageResolvedScorerDefinitionType>',
             description: 'Partially update a stored scorer.',
           },
           {
@@ -400,13 +401,19 @@ All namespaces extend a shared CRUD base class, so they expose the same `create`
           },
           {
             name: 'list',
-            type: '(args?: StorageListScorersInput) => Promise<StorageListScorersOutput>',
+            type: '(args?: StorageListScorerDefinitionsInput) => Promise<StorageListScorerDefinitionsOutput>',
             description: 'List stored scorers with optional pagination and filters.',
           },
           {
             name: 'listResolved',
-            type: '(args?: StorageListScorersInput) => Promise<StorageListScorersResolvedOutput>',
+            type: '(args?: StorageListScorerDefinitionsInput) => Promise<StorageListScorerDefinitionsResolvedOutput>',
             description: 'Same as list, but returns fully resolved scorer configurations.',
+          },
+          {
+            name: 'resolve',
+            type: '(storedScorer: StorageResolvedScorerDefinitionType) => MastraScorer | null',
+            description:
+              'Build a runnable MastraScorer from a resolved stored definition. Supports llm-judge definitions; returns null for preset types or when instructions or model configuration are missing.',
           },
           {
             name: 'clearCache',
