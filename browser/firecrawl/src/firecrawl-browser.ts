@@ -1,8 +1,6 @@
-import type { AgentBrowserConfig } from '@mastra/agent-browser';
-import { AgentBrowser } from '@mastra/agent-browser';
+import type { AgentBrowserConfig, BrowserLaunchOptions } from '@mastra/agent-browser';
+import { AgentBrowser, BrowserManager } from '@mastra/agent-browser';
 import { resolveViewportSize, DEFAULT_BROWSER_VIEWPORT } from '@mastra/core/browser';
-import type { BrowserLaunchOptions } from 'agent-browser';
-import { BrowserManager } from 'agent-browser';
 import { Firecrawl } from 'firecrawl';
 import { FirecrawlAgentBrowserThreadManager } from './firecrawl-thread-manager';
 import { resolveCdpWebSocketUrl } from './resolve-cdp';
