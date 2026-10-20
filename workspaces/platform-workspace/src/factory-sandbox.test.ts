@@ -158,7 +158,9 @@ describe('PlatformFactorySandbox', () => {
         off.definition.operations,
       );
     }
-    const viaDefault = await identity(new PlatformFactorySandbox({ defaults: { docker: true } }).template(listContext(), {}));
+    const viaDefault = await identity(
+      new PlatformFactorySandbox({ defaults: { docker: true } }).template(listContext(), {}),
+    );
     expect(viaDefault.definition.operations).toContainEqual({ method: 'docker', args: [true] });
   });
 
