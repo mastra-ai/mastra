@@ -1,3 +1,4 @@
+import type { QueryClient } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
@@ -17,7 +18,7 @@ import { RouteSidePanelProvider } from '@/lib/route-side-panel';
 import { metricsUnavailableCapabilities } from '@/pages/traces/__tests__/fixtures/traces';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
 const mobileState = vi.hoisted(() => ({ value: false }));
 const handleSpy = vi.hoisted(() => ({ collapse: vi.fn(), expand: vi.fn(), toggle: vi.fn() }));
@@ -78,8 +79,10 @@ function OpenItemButton() {
   );
 }
 
+let queryClient: QueryClient | undefined;
+
 function renderExperimentPage(initialPath: string) {
-  return renderWithProviders(
+  const view = renderWithProviders(
     <TestLinkProvider>
       <RouteSidePanelProvider>
         <ExperimentItemPanelProvider
@@ -99,6 +102,8 @@ function renderExperimentPage(initialPath: string) {
     </TestLinkProvider>,
     { router: { initialEntries: [initialPath] } },
   );
+  queryClient = view.queryClient;
+  return view;
 }
 
 const itemPath = `/experiments/exp-1/items/${agentMarkdownResult.itemId}`;
@@ -122,7 +127,12 @@ beforeEach(() => {
 
 const reportSize = (inPixels: number) => act(() => lastResize.fn?.({ inPixels }));
 
-afterEach(() => {
+// Some tests finish as soon as the panel renders, before its score and capability
+// queries resolve. Let them settle while the tree is mounted, so their updates don't
+// land after jsdom is torn down ("window is not defined").
+afterEach(async () => {
+  if (queryClient) await waitForMutationsIdle(queryClient);
+  queryClient = undefined;
   mobileState.value = false;
   lastResize.fn = null;
   separatorState.value = 'inactive';
