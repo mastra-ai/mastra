@@ -340,6 +340,42 @@ describe('workspace_apply_patch', () => {
       expect(await exists('new.txt')).toBe(false);
     });
 
+    it('does not overwrite an update target that changed after the patch was checked', async () => {
+      await fs.writeFile(path.join(tempDir, 'a.ts'), 'a\n');
+      // Default setup: read-before-write tracking is off.
+      const { workspace, tools } = await setup();
+      const filesystem = workspace.filesystem!;
+      const realWrite = filesystem.writeFile.bind(filesystem);
+      filesystem.writeFile = async (p, content, options) => {
+        if (p === 'a.ts') {
+          // Another process rewrites the update target just before its write.
+          await fs.writeFile(path.join(tempDir, 'a.ts'), 'external\n');
+          const later = new Date(Date.now() + 60_000);
+          await fs.utimes(path.join(tempDir, 'a.ts'), later, later);
+        }
+        return realWrite(p, content, options);
+      };
+
+      await expect(
+        tools[APPLY_PATCH].execute(
+          {
+            patch: `*** Begin Patch
+*** Add File: new.txt
++new
+*** Update File: a.ts
+@@
+-a
++A
+*** End Patch`,
+          },
+          { workspace },
+        ),
+      ).rejects.toThrow(/modified externally/);
+
+      expect(await read('a.ts')).toBe('external\n');
+      expect(await exists('new.txt')).toBe(false);
+    });
+
     it('rejects two spellings of the same path', async () => {
       await fs.writeFile(path.join(tempDir, 'a.ts'), 'a\n');
       const { apply } = await setup();
