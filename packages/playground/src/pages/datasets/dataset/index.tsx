@@ -8,7 +8,7 @@ import { AddDatasetItemDialog } from '@mastra/playground-ui/domains/datasets';
 import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
-import { ArrowLeft, Copy, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Braces, Copy, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
@@ -19,6 +19,7 @@ import {
   DuplicateDatasetDialog,
   ExperimentTriggerDialog,
   DeleteDatasetDialog,
+  DatasetSchemaDialog,
 } from '@/domains/datasets';
 import { DatasetItemSidePanel } from '@/domains/datasets/components/items/dataset-item-side-panel';
 import { DatasetItemPanelProvider } from '@/domains/datasets/context/dataset-item-panel-context';
@@ -51,6 +52,7 @@ function DatasetPage() {
   const [addItemDialogOpen, setAddItemDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
+  const [schemaDialogOpen, setSchemaDialogOpen] = useState(false);
 
   // Fetch dataset for edit dialog
   const {
@@ -147,6 +149,9 @@ function DatasetPage() {
           Experiments
         </Button>
       )}
+      <Button variant="ghost" size="sm" onClick={() => setSchemaDialogOpen(true)} icon={<Braces />}>
+        Schema
+      </Button>
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
           <Button variant="ghost" size="icon-sm" aria-label="Dataset actions menu">
@@ -208,6 +213,8 @@ function DatasetPage() {
           sourceDatasetTargetType={dataset.targetType}
         />
       )}
+
+      {dataset && <DatasetSchemaDialog open={schemaDialogOpen} onOpenChange={setSchemaDialogOpen} dataset={dataset} />}
 
       {/* Dataset delete dialog */}
       {dataset && (
