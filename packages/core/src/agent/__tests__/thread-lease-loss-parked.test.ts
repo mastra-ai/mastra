@@ -4,7 +4,8 @@
  *
  * A parked run calls neither the model nor tools, so a lapsed thread lease
  * gives nothing to stop. Aborting it anyway deletes the snapshot it needs to
- * resume, so a backend blip silently throws away the pending approval.
+ * resume, so a backend blip silently throws away the pending approval. A run
+ * that has been partly resumed is executing again, so it is still stopped.
  */
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
@@ -71,6 +72,48 @@ class FlakyLeasePubSub extends EventEmitterPubSub {
   }
 }
 
+function buildAgent(
+  engine: EngineVariant,
+  llmUrl: string,
+  tool: ReturnType<typeof createTool<any, any, any>>,
+  pubsub: FlakyLeasePubSub,
+  storage: InMemoryStore,
+): any {
+  const memory = new MockMemory();
+  const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llmUrl.replace(/\/+$/, '')}/v1` });
+  const model = openai('gpt-4o-mini');
+  const base =
+    engine === 'fs'
+      ? assembleAgentFromFsEntry({
+          name: 'parked-lease-agent',
+          config: { model, memory },
+          instructionsMd: 'Archive what you are asked to.',
+          tools: [{ key: tool.id, tool }],
+        })
+      : new Agent({
+          id: 'parked-lease-agent',
+          name: 'parked-lease-agent',
+          instructions: 'Archive what you are asked to.',
+          model,
+          memory,
+          tools: { [tool.id]: tool },
+        });
+  const wrapped =
+    engine === 'durable'
+      ? createDurableAgent({ agent: base })
+      : engine === 'evented'
+        ? createEventedAgent({ agent: base, pubsub })
+        : base;
+  const mastra = new Mastra({
+    agents: engine === 'fs' ? {} : { agent: wrapped as any },
+    pubsub,
+    storage,
+    logger: false,
+  });
+  if (engine === 'fs') mastra.__registerFsAgents({ agent: wrapped as any });
+  return mastra.getAgent('agent');
+}
+
 describeForAllEngines('parked run across a lease backend outage', (engine: EngineVariant) => {
   let llm: LLMock;
 
@@ -107,40 +150,8 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
       });
 
       const pubsub = new FlakyLeasePubSub();
-      const memory = new MockMemory();
       const storage = new InMemoryStore();
-      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
-      const model = openai('gpt-4o-mini');
-      const base =
-        engine === 'fs'
-          ? assembleAgentFromFsEntry({
-              name: 'parked-lease-agent',
-              config: { model, memory },
-              instructionsMd: 'Archive what you are asked to.',
-              tools: [{ key: 'archive', tool: archive }],
-            })
-          : new Agent({
-              id: 'parked-lease-agent',
-              name: 'parked-lease-agent',
-              instructions: 'Archive what you are asked to.',
-              model,
-              memory,
-              tools: { archive },
-            });
-      const wrapped =
-        engine === 'durable'
-          ? createDurableAgent({ agent: base })
-          : engine === 'evented'
-            ? createEventedAgent({ agent: base, pubsub })
-            : base;
-      const mastra = new Mastra({
-        agents: engine === 'fs' ? {} : { agent: wrapped as any },
-        pubsub,
-        storage,
-        logger: false,
-      });
-      if (engine === 'fs') mastra.__registerFsAgents({ agent: wrapped as any });
-      const agent = mastra.getAgent('agent') as any;
+      const agent = buildAgent(engine, llm.url, archive, pubsub, storage);
 
       const result = await agent.stream(`archive ${tag}`, { memory: { thread, resource: RESOURCE } });
       const output = isDurableEngineVariant(engine) ? result.output : result;
@@ -181,4 +192,69 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
     },
     20_000,
   );
+
+  it('still stops a partly resumed run that loses its lease while a sibling suspension is pending', async () => {
+    const tag = `${engine}-partial`;
+    const thread = `parked-lease-thread-${tag}`;
+    llm.on(
+      { userMessage: `ask two ${tag}`, hasToolResult: false },
+      {
+        toolCalls: [
+          { id: `call_a_${tag}`, name: 'ask', arguments: { q: 'a' } },
+          { id: `call_b_${tag}`, name: 'ask', arguments: { q: 'b' } },
+        ],
+      },
+    );
+    llm.on({ userMessage: `ask two ${tag}`, hasToolResult: true }, { content: 'Answered.' });
+
+    let toolStarted!: () => void;
+    const started = new Promise<void>(resolve => (toolStarted = resolve));
+    let toolAborted = false;
+    // Suspends at runtime with no suspend schema, so sibling calls run (and suspend) side by side.
+    const ask = createTool({
+      id: 'ask',
+      description: 'Ask the user a question',
+      inputSchema: z.object({ q: z.string() }),
+      execute: async (_input, context) => {
+        if (!context?.agent?.resumeData) return await context?.agent?.suspend({ question: 'ok?' });
+        toolStarted();
+        // Runs until the run is stopped, or gives up after a while.
+        const signal = context?.abortSignal;
+        await new Promise<void>(resolve => {
+          const timer = setTimeout(resolve, 3_000);
+          signal?.addEventListener('abort', () => {
+            toolAborted = true;
+            clearTimeout(timer);
+            resolve();
+          });
+        });
+        return { answered: true };
+      },
+    });
+
+    const pubsub = new FlakyLeasePubSub();
+    const agent = buildAgent(engine, llm.url, ask, pubsub, new InMemoryStore());
+
+    const result = await agent.stream(`ask two ${tag}`, { memory: { thread, resource: RESOURCE } });
+    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const suspended: string[] = [];
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call-suspended') suspended.push(chunk.payload.toolCallId);
+      if (suspended.length === 2) break;
+    }
+    expect(suspended).toHaveLength(2);
+    const runId: string = output.runId ?? result.runId;
+
+    // Resume one call: its tool runs while the sibling suspension stays pending.
+    const resumed = await agent.resumeStream({ answer: 'yes' }, { runId, toolCallId: suspended[0] });
+    void (async () => {
+      for await (const _ of resumed.fullStream) {
+        // drain
+      }
+    })().catch(() => {});
+    await started;
+    // The backend lost the lease, so the next renewal returns false while the resumed tool runs.
+    pubsub.leases.clear();
+    await vi.waitFor(() => expect(toolAborted).toBe(true), { timeout: 2_000 });
+  }, 20_000);
 });
