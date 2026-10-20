@@ -603,17 +603,25 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     details: Record<string, LLMStepResult<OUTPUT>['reasoning'][number]>;
   };
   #bufferedFiles: LLMStepResult<OUTPUT>['files'] = [];
-  #toolCallArgsDeltas: Record<string, LLMStepResult<OUTPUT>['text'][]> = {};
-  #toolCallDeltaIdNameMap: Record<string, string> = {};
-  #toolCallStreamingMeta: Record<string, ToolCallStreamingMeta> = {};
+  // Records keyed by provider-supplied tool call IDs have no prototype, so IDs like "__proto__"
+  // or "constructor" are plain keys.
+  #toolCallArgsDeltas: Record<string, LLMStepResult<OUTPUT>['text'][]> = Object.create(null);
+  #toolCallDeltaIdNameMap: Record<string, string> = Object.create(null);
+  #toolCallStreamingMeta: Record<string, ToolCallStreamingMeta> = Object.create(null);
   /**
    * Tool calls whose input stream ended without any deltas. Their args only arrive with the
    * final `tool-call` chunk, so they wait here instead of being emitted as a synthetic `{}` call.
    */
   #pendingToolCalls: Record<
     string,
-    { meta: ToolCallStreamingMeta; args: Record<string, unknown>; runId: string; from: ToolCallChunk['from'] }
-  > = {};
+    {
+      meta: ToolCallStreamingMeta;
+      args: Record<string, unknown>;
+      streamed: boolean;
+      runId: string;
+      from: ToolCallChunk['from'];
+    }
+  > = Object.create(null);
   #toolCalls: LLMStepResult<OUTPUT>['toolCalls'] = [];
   #toolResults: LLMStepResult<OUTPUT>['toolResults'] = [];
   #warnings: LLMStepResult<OUTPUT>['warnings'] = [];
@@ -1027,20 +1035,36 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
     // A provider that ended a tool input stream without deltas and never sent the final
     // tool-call still gets a (no-args) tool call recorded before the step closes.
-    const flushPendingToolCalls = (controller: TransformStreamDefaultController<ChunkType<OUTPUT>>) => {
-      for (const [toolCallId, { meta, args, runId, from }] of Object.entries(self.#pendingToolCalls)) {
-        emitSyntheticToolCall(controller, toolCallId, meta, args, runId, from);
+    const flushPendingToolCall = (
+      controller: TransformStreamDefaultController<ChunkType<OUTPUT>>,
+      toolCallId: string,
+    ) => {
+      const pending = self.#pendingToolCalls[toolCallId];
+      if (!pending) return;
+      delete self.#pendingToolCalls[toolCallId];
+      emitSyntheticToolCall(controller, toolCallId, pending.meta, pending.args, pending.runId, pending.from);
+    };
+    const flushPendingToolCalls = (
+      controller: TransformStreamDefaultController<ChunkType<OUTPUT>>,
+      { onlyStreamed = false }: { onlyStreamed?: boolean } = {},
+    ) => {
+      for (const [toolCallId, pending] of Object.entries(self.#pendingToolCalls)) {
+        if (!onlyStreamed || pending.streamed) flushPendingToolCall(controller, toolCallId);
       }
-      self.#pendingToolCalls = {};
     };
 
     this.#baseStream = processedStream.pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
           // A stream that fails after a tool input finished but before its final tool-call
-          // still records the call built from the streamed args.
+          // still records the call built from the streamed args. Calls with no streamed args
+          // stay pending: the error may be retried, and the retry delivers the real tool-call.
           if (chunk.type === 'error') {
-            flushPendingToolCalls(controller);
+            flushPendingToolCalls(controller, { onlyStreamed: true });
+          }
+          // A call's outcome must not precede the call itself.
+          if (chunk.type === 'tool-result' || chunk.type === 'tool-error') {
+            flushPendingToolCall(controller, chunk.payload.toolCallId);
           }
           switch (chunk.type) {
             case 'tool-call-suspended':
@@ -1148,7 +1172,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 // Let the real tool-call drive emission: it carries the final args (OpenAI Responses
                 // and Anthropic PTC stream none) and the tool payload transform metadata stamped
                 // upstream. A synthetic call from the deltas is only emitted if it never arrives.
-                self.#pendingToolCalls[toolCallId] = { meta, args, runId: chunk.runId, from: chunk.from };
+                self.#pendingToolCalls[toolCallId] = {
+                  meta,
+                  args,
+                  streamed: Boolean(deltaParts?.length),
+                  runId: chunk.runId,
+                  from: chunk.from,
+                };
               }
               break;
             }
@@ -1221,10 +1251,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               break;
             }
             case 'tool-call': {
-              // Own-property check: provider-supplied IDs like "constructor" must not hit Object.prototype.
-              const pending = Object.hasOwn(self.#pendingToolCalls, chunk.payload.toolCallId)
-                ? self.#pendingToolCalls[chunk.payload.toolCallId]
-                : undefined;
+              const pending = self.#pendingToolCalls[chunk.payload.toolCallId];
               if (pending) {
                 delete self.#pendingToolCalls[chunk.payload.toolCallId];
                 const { meta } = pending;
@@ -1258,7 +1285,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               self.#bufferedByStep.toolResults.push(chunk);
               break;
             case 'step-finish': {
-              flushPendingToolCalls(controller);
+              // A failed or retried step keeps its no-args calls pending, like an error chunk does.
+              const stepReason = chunk.payload.stepResult.reason as string;
+              flushPendingToolCalls(controller, { onlyStreamed: stepReason === 'retry' || stepReason === 'error' });
               self.updateUsageCount(chunk.payload.output.usage);
               // A resumed suspended step reaches its step-finish here; its usage is now in #usageCount.
               self.#suspendedStepUsage = undefined;
@@ -1468,7 +1497,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // A tripwire/abort bail ends the run without the final tool-call; don't record a
               // placeholder no-args call for it.
               if ((chunk.payload.stepResult.reason as string) === 'tripwire') {
-                self.#pendingToolCalls = {};
+                self.#pendingToolCalls = Object.create(null);
               } else {
                 flushPendingToolCalls(controller);
               }
@@ -2743,10 +2772,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedFiles.length = 0;
     this.#toolCalls.length = 0;
     this.#toolResults.length = 0;
-    this.#toolCallArgsDeltas = {};
-    this.#toolCallDeltaIdNameMap = {};
-    this.#toolCallStreamingMeta = {};
-    this.#pendingToolCalls = {};
+    this.#toolCallArgsDeltas = Object.create(null);
+    this.#toolCallDeltaIdNameMap = Object.create(null);
+    this.#toolCallStreamingMeta = Object.create(null);
+    this.#pendingToolCalls = Object.create(null);
   }
 
   #createEventedStream() {
@@ -2883,10 +2912,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedSources = state.bufferedSources;
     this.#bufferedReasoning = state.bufferedReasoning;
     this.#bufferedFiles = state.bufferedFiles;
-    this.#toolCallArgsDeltas = state.toolCallArgsDeltas;
-    this.#toolCallDeltaIdNameMap = state.toolCallDeltaIdNameMap;
-    this.#toolCallStreamingMeta = state.toolCallStreamingMeta ?? {};
-    this.#pendingToolCalls = state.pendingToolCalls ?? {};
+    this.#toolCallArgsDeltas = Object.assign(Object.create(null), state.toolCallArgsDeltas);
+    this.#toolCallDeltaIdNameMap = Object.assign(Object.create(null), state.toolCallDeltaIdNameMap);
+    this.#toolCallStreamingMeta = Object.assign(Object.create(null), state.toolCallStreamingMeta);
+    this.#pendingToolCalls = Object.assign(Object.create(null), state.pendingToolCalls);
     this.#toolCalls = state.toolCalls;
     this.#toolResults = state.toolResults;
     this.#warnings = state.warnings;
