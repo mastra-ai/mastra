@@ -993,7 +993,7 @@ describe('Agent Handlers', () => {
       expect(create).toHaveBeenCalledWith({
         id: 'editor-owned-models',
         name: 'test-agent',
-        instructions: '',
+        instructions: 'test instructions',
         model: { provider: 'openai', name: 'gpt-4o-mini' },
         modelList: [
           { id: 'fallback', provider: 'openai', modelId: 'gpt-4o-mini', enabled: true, maxRetries: 1 },

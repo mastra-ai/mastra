@@ -155,14 +155,34 @@ function toStoredModelList(
   }));
 }
 
+function toStoredInstructions(instructions: unknown): string {
+  if (typeof instructions === 'string') return instructions;
+  if (Array.isArray(instructions)) return instructions.map(toStoredInstructions).join('\n\n');
+  if (!instructions || typeof instructions !== 'object' || !('content' in instructions)) return '';
+
+  const { content } = instructions;
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+
+  return content
+    .map(part => {
+      if (typeof part === 'string') return part;
+      if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') return part.text;
+      return '';
+    })
+    .join('\n\n');
+}
+
 async function persistEditorOwnedModelList({
   mastra,
   agent,
   modelList,
+  requestContext,
 }: {
   mastra: Mastra;
   agent: Agent;
   modelList: NonNullable<Awaited<ReturnType<Agent['getModelList']>>>;
+  requestContext: RequestContext;
 }): Promise<boolean> {
   const editorConfig = agent.__getEditorConfig?.();
   if (!editorConfig || editorConfig.model !== true) return false;
@@ -179,12 +199,22 @@ async function persistEditorOwnedModelList({
   if (storedAgent) {
     await editorAgent.update({ id: agent.id, modelList: storedModelList });
   } else {
-    const primaryModel = storedModelList[0]!;
+    const [instructions, llm] = await Promise.all([
+      agent.getInstructions({ requestContext }),
+      agent.getLLM({ requestContext }),
+    ]);
+    const { provider, modelId } = getAgentModelRef(agent.model, llm);
+    if (!provider || !modelId) {
+      throw new HTTPException(400, {
+        message: 'Agent model could not be resolved for initial Editor persistence',
+      });
+    }
+
     await editorAgent.create({
       id: agent.id,
       name: agent.name,
-      instructions: '',
-      model: { provider: primaryModel.provider, name: primaryModel.modelId },
+      instructions: toStoredInstructions(instructions),
+      model: { provider, name: modelId },
       modelList: storedModelList,
     });
   }
@@ -3736,7 +3766,7 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
 
       const reorderedModelList = await agent.getModelList(requestContext);
       if (reorderedModelList) {
-        await persistEditorOwnedModelList({ mastra, agent, modelList: reorderedModelList });
+        await persistEditorOwnedModelList({ mastra, agent, modelList: reorderedModelList, requestContext });
       }
 
       return { message: 'Model list reordered' };
@@ -3801,7 +3831,7 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
 
       const updatedModelList = await agent.getModelList(requestContext);
       if (updatedModelList) {
-        await persistEditorOwnedModelList({ mastra, agent, modelList: updatedModelList });
+        await persistEditorOwnedModelList({ mastra, agent, modelList: updatedModelList, requestContext });
       }
 
       return { message: 'Model updated in model list' };
