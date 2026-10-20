@@ -504,7 +504,8 @@ export function createSessionRunEndReporter(deps: SessionReportDependencies): Fa
       });
       return;
     }
-    if (audience.mutedAt) return;
+    // A muted origin still hears when the session is blocked: nothing else would tell it the session is waiting.
+    if (audience.mutedAt && outcome.status !== 'blocked') return;
     const resolved = await deps.reporting();
     if (!resolved) return;
     await sendRunEndReport(resolved, {

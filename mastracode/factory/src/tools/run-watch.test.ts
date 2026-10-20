@@ -199,16 +199,26 @@ describe('createSessionRunEndReporter', () => {
     expect(deliver).toHaveBeenCalledWith({ sessionId: 'origin', threadId: 'origin-thread' }, expect.anything());
   });
 
-  it('sends no run-end report once the origin has muted the side session', async () => {
+  it('sends no finished or failed run-end report once the origin has muted the side session', async () => {
     const { reporter, deliver } = sideReporter(new Date());
-    for (const outcome of [
-      { status: 'failed', reason: 'usage limit' },
-      { status: 'blocked' },
-      { status: 'done' },
-    ] as const) {
+    for (const outcome of [{ status: 'failed', reason: 'usage limit' }, { status: 'done' }] as const) {
       await reporter({ sessionId: 'side', threadId: 'side-thread', outcome, since: new Date() });
     }
     expect(deliver).not.toHaveBeenCalled();
+  });
+
+  it('still tells a muted side session origin that the session is blocked waiting on a tool', async () => {
+    const { reporter, deliver } = sideReporter(new Date());
+    await reporter({
+      sessionId: 'side',
+      threadId: 'side-thread',
+      outcome: { status: 'blocked', toolName: 'ask_user' },
+      since: new Date(),
+    });
+    expect(deliver).toHaveBeenCalledWith(
+      { sessionId: 'origin', threadId: 'origin-thread' },
+      expect.objectContaining({ kind: 'blocked' }),
+    );
   });
 });
 

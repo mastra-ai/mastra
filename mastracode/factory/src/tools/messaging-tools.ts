@@ -297,8 +297,9 @@ export function createFactoryMessagingTools(
     let attributes: Record<string, string> = {};
     if (scope.origin) {
       // The origin can mute this side session; the session keeps working, its reports just stop.
+      // Blocked reports still go through, since the session cannot go on until the origin answers.
       const row = await deps.sessions.getBySessionId(scope.sessionId);
-      if (row?.originMutedAt) {
+      if (row?.originMutedAt && status !== 'blocked') {
         return { delivered: 0, recipients: [], muted: true, note: 'Your origin muted your reports; keep working.' };
       }
       recipients = [scope.origin];
@@ -410,7 +411,7 @@ export function createFactoryMessagingTools(
   const unsubscribe = createTool({
     id: 'factory_unsubscribe_session',
     description:
-      "Mute a side session you started: its reports and run-end notices stop reaching you, but it keeps working. Approval requests still arrive, since the session can't go on without an answer. Undo with factory_subscribe_session.",
+      "Mute a side session you started: its reports and run-end notices stop reaching you, but it keeps working. Approval requests and blocked reports still arrive, since the session can't go on without an answer. Undo with factory_subscribe_session.",
     inputSchema: z.object({ sessionId: sideSessionId }).strict(),
     execute: async ({ sessionId }) => {
       const row = await ownSideSession(sessionId);

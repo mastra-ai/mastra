@@ -534,7 +534,7 @@ describe('factory_message_origin reports', () => {
     expect(env.auditRecorder.record).toHaveBeenCalledTimes(1);
   });
 
-  it("drops a muted side session's reports without failing its run, but still delivers explicit replies", async () => {
+  it("drops a muted side session's reports without failing its run, but still delivers blocked reports and explicit replies", async () => {
     const env = setup();
     const muted = {
       ...SIDE,
@@ -543,7 +543,7 @@ describe('factory_message_origin reports', () => {
       threadId: 'thread-session-side-muted',
     };
 
-    for (const status of [undefined, 'progress', 'blocked', 'failed', 'done'] as const) {
+    for (const status of [undefined, 'progress', 'failed', 'done'] as const) {
       await expect(
         env.run(muted, 'factory_message_origin', { message: 'update', ...(status ? { status } : {}) }),
       ).resolves.toEqual({
@@ -555,6 +555,11 @@ describe('factory_message_origin reports', () => {
     }
     expect(env.sent).toEqual([]);
     expect(env.auditRecorder.record).not.toHaveBeenCalled();
+
+    await expect(
+      env.run(muted, 'factory_message_origin', { message: 'which repo should I use?', status: 'blocked' }),
+    ).resolves.toMatchObject({ delivered: 1 });
+    expect(env.sent.at(-1)!.target).toEqual({ resourceId: 'session-1', threadId: 'thread-session-1' });
 
     const { notificationId } = (await env.run(USER, 'factory_signal_session', {
       sessionId: 'session-side-muted',
@@ -681,6 +686,20 @@ describe('side session tools', () => {
     });
     await expect(env.run(USER, 'factory_list_side_sessions', { state: 'parked' })).resolves.toMatchObject({
       sessions: [{ sessionId: 'session-side' }],
+    });
+    // A muted session that blocks still reaches its origin, so it lists as parked rather than idle.
+    await env.run(
+      {
+        ...SIDE,
+        sessionId: 'session-side-muted',
+        resourceId: 'session-side-muted',
+        threadId: 'thread-session-side-muted',
+      },
+      'factory_message_origin',
+      { message: 'which repo?', status: 'blocked' },
+    );
+    await expect(env.run(USER, 'factory_list_side_sessions', { muted: true })).resolves.toMatchObject({
+      sessions: [{ sessionId: 'session-side-muted', state: 'parked', lastReport: { kind: 'blocked' } }],
     });
     // A session that started nothing lists nothing.
     await expect(env.run({ ...USER, sessionId: 'session-b' }, 'factory_list_side_sessions', {})).resolves.toEqual({
