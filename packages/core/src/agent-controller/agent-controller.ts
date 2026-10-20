@@ -2087,7 +2087,8 @@ export class AgentController<TState = {}> {
    * names workspace tools are renamed to via `TOOL_NAME_OVERRIDES`.
    */
   private resolveModeActiveTools(session: Session<TState>, modeId?: string): string[] | undefined {
-    const currentMode = (modeId && this.config.modes.find(mode => mode.id === modeId)) || session.mode.resolve();
+    // An unknown explicit mode throws rather than falling back to the live mode's tools.
+    const currentMode = modeId ? session.mode.resolveId(modeId) : session.mode.resolve();
     const availableTools = currentMode?.availableTools;
     if (!availableTools) {
       return undefined;
@@ -2396,7 +2397,12 @@ export class AgentController<TState = {}> {
    */
   private async buildToolsets(session: Session<TState>, requestContext: RequestContext): Promise<ToolsetsInput> {
     const context = requestContext.get('controller') as AgentControllerRequestContext<TState> | undefined;
-    const resolveMode = () => session.mode.resolveId(context?.session.modeId ?? session.mode.get());
+    // A resumed run keeps the mode it was suspended in, even after the session switched modes.
+    const runModeId = requestContext.getRaw(RUN_MODE_ID_CONTEXT_KEY);
+    const resolveMode = () =>
+      session.mode.resolveId(
+        (typeof runModeId === 'string' ? runModeId : undefined) ?? context?.session.modeId ?? session.mode.get(),
+      );
     const builtInTools: ToolsInput = {
       ask_user: askUserTool,
       submit_plan: submitPlanTool,

@@ -281,3 +281,112 @@ describe('mode availableTools when the mode changes while a tool call is paused'
     expect(env.session.mode.get()).toBe('notes');
   }, 30_000);
 });
+
+describe('mode-level tools when the mode changes while a tool call is paused', () => {
+  async function pausedWithModeTools({ startMode, firstCall }: { startMode: 'safe' | 'open'; firstCall: FirstCall }) {
+    const executed: string[] = [];
+    const deployTool = (impl: string) =>
+      createTool({
+        id: 'deploy',
+        description: 'deploy the app',
+        inputSchema: z.object({ target: z.string() }),
+        requireApproval: true,
+        execute: async () => {
+          executed.push(impl);
+          return { deployed: impl };
+        },
+      });
+    const lookup = createTool({
+      id: 'lookup',
+      description: 'look something up',
+      inputSchema: z.object({ q: z.string() }),
+      requireApproval: true,
+      execute: async () => {
+        executed.push('lookup');
+        return { found: true };
+      },
+    });
+    const opsExtra = createTool({
+      id: 'ops_extra',
+      description: 'an operations-only tool',
+      inputSchema: z.object({}),
+      execute: async () => ({ ok: true }),
+    });
+    const agent = new Agent({
+      id: 'mode-level-tools-agent',
+      name: 'mode-level-tools-agent',
+      instructions: 'test',
+      model: model(firstCall),
+      tools: { lookup },
+    });
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'mode-level-tools-controller',
+      storage: new InMemoryStore(),
+      memory: new MockMemory({ storage: new InMemoryStore() }),
+      agent,
+      modes: [
+        {
+          id: 'safe',
+          name: 'Safe',
+          default: startMode === 'safe',
+          defaultModelId: 'mock-model',
+          availableTools: ['deploy'],
+          tools: { deploy: deployTool('safe-deploy') },
+        },
+        // No availableTools: every tool of the agent and of this mode is visible.
+        { id: 'open', name: 'Open', default: startMode === 'open', defaultModelId: 'mock-model' },
+        {
+          id: 'ops',
+          name: 'Ops',
+          defaultModelId: 'mock-model',
+          tools: { deploy: deployTool('ops-deploy'), ops_extra: opsExtra },
+        },
+      ],
+    });
+    await controller.init();
+    const session = await controller.createSession(ids);
+    await controller.getMastra()?.startWorkers();
+
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
+    void session.sendMessage({ content: 'use the tool' }).catch(() => {});
+    await vi.waitFor(
+      () =>
+        expect(events.some(event => event.type === 'tool_approval_required' && event.toolCallId === 'call-1')).toBe(
+          true,
+        ),
+      { timeout: 10_000 },
+    );
+    return { session, executed };
+  }
+
+  it('runs the suspended mode tool implementation, not the switched-to mode one, after approving', async () => {
+    const env = await pausedWithModeTools({
+      startMode: 'safe',
+      firstCall: { name: 'deploy', arguments: { target: 'prod' } },
+    });
+    await env.session.mode.switch({ modeId: 'ops' });
+
+    expect(env.session.respondToToolApproval({ toolCallId: 'call-1', decision: 'approve' })).toEqual({
+      accepted: true,
+    });
+
+    expect(await continuationToolNames()).toEqual(['deploy']);
+    expect(env.executed).toEqual(['safe-deploy']);
+  }, 30_000);
+
+  it('does not add the switched-to mode tools to an unrestricted run after approving', async () => {
+    const env = await pausedWithModeTools({ startMode: 'open', firstCall: { name: 'lookup', arguments: { q: 'x' } } });
+    await env.session.mode.switch({ modeId: 'ops' });
+
+    expect(env.session.respondToToolApproval({ toolCallId: 'call-1', decision: 'approve' })).toEqual({
+      accepted: true,
+    });
+
+    const tools = await continuationToolNames();
+    expect(env.executed).toEqual(['lookup']);
+    expect(tools).toContain('lookup');
+    expect(tools).not.toContain('ops_extra');
+  }, 30_000);
+});

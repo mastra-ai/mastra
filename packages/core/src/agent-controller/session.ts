@@ -6032,10 +6032,9 @@ export class Session<TState = unknown> {
       execution: true,
     });
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
+    const runModeId = await this.resolveSuspendedRunModeId(agent, runId, requestContext);
     const toolsets = await this.machinery.buildToolsets(requestContext);
-    const activeTools = this.machinery.resolveModeActiveTools(
-      await this.resolveSuspendedRunModeId(agent, runId, requestContext),
-    );
+    const activeTools = this.machinery.resolveModeActiveTools(runModeId);
     onDispatch?.();
     await agent.sendToolApproval({
       threadId,
@@ -6123,10 +6122,9 @@ export class Session<TState = unknown> {
       execution: true,
     });
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
+    const runModeId = await this.resolveSuspendedRunModeId(agent, runId, requestContext);
     const toolsets = await this.machinery.buildToolsets(requestContext);
-    const activeTools = this.machinery.resolveModeActiveTools(
-      await this.resolveSuspendedRunModeId(agent, runId, requestContext),
-    );
+    const activeTools = this.machinery.resolveModeActiveTools(runModeId);
     onDispatch?.();
     await agent.sendToolApproval({
       threadId,
@@ -6424,9 +6422,9 @@ export class Session<TState = unknown> {
       abortSignal,
       execution: true,
     });
-    const toolsets = await this.machinery.buildToolsets(requestContext);
     if (inputModeId) requestContext.setRaw(RUN_MODE_ID_CONTEXT_KEY, inputModeId);
     const modeId = inputModeId ?? (await this.resolveSuspendedRunModeId(agent, address.runId, requestContext));
+    const toolsets = await this.machinery.buildToolsets(requestContext);
     let resumedSubscriptionBoundary: { promise: Promise<void>; cancel: () => void } | undefined;
     let restoreAbortedRun: (() => void) | undefined;
     if (sourceIsActive()) {
