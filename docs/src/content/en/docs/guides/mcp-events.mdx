@@ -108,11 +108,12 @@ const buildFinished = defineEvent({
   inputSchema: z.object({ branch: z.string() }),
   payloadSchema: z.object({ id: z.string(), branch: z.string(), status: z.string() }),
   poll: async ({ arguments: args, cursor }) => {
-    // A null cursor means "start from now".
-    const builds = await db.buildsAfter(cursor ?? (await db.latestBuildId()), args.branch)
+    // A null cursor means "start from now". Return the resolved start so the next poll continues from it.
+    const start = cursor ?? (await db.latestBuildId())
+    const builds = await db.buildsAfter(start, args.branch)
     return {
       events: builds.map(build => ({ eventId: build.id, data: build })),
-      cursor: builds.at(-1)?.id ?? cursor,
+      cursor: builds.at(-1)?.id ?? start,
       nextPollMs: 5000,
     }
   },
@@ -260,7 +261,7 @@ const triage = new Agent({
   id: 'triage',
   name: 'Triage',
   instructions: 'You triage support tickets. Reply with a priority and one sentence of reasoning.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
 })
 
 const subscription = await mcp.events.subscribe('tickets', 'ticket.created', { project: 'web' })

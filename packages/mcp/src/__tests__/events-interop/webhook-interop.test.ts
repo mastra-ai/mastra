@@ -169,11 +169,11 @@ describe('MCPClient ↔ MCPServer webhook delivery over Streamable HTTP', () => 
     await first.cancel();
     await waitFor(() => store.deletes.includes(id), 5000, 'the unsubscribe to reach the server');
 
+    const deliveredBeforeAway = receiver.deliveries().length;
     await emit('r2', 'hook-resume');
     await emit('r3', 'hook-resume');
-    const deliveredWhileAway = receiver.deliveries().length;
     await quietWindow();
-    expect(receiver.deliveries()).toHaveLength(deliveredWhileAway);
+    expect(receiver.deliveries()).toHaveLength(deliveredBeforeAway);
 
     const resumed = await subscribe(args, { cursor });
     await emit('r4', 'hook-resume');

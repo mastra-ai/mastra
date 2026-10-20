@@ -14,6 +14,7 @@ Subscribe to events from a Mastra `MCPServer` and start an agent run for each oc
 Install the dependencies. The example links `@mastra/core` and `@mastra/mcp` from this repository, so build them first (`pnpm turbo build --filter @mastra/mcp` from the repository root):
 
 ```bash
+cd examples/mcp-events
 pnpm install --ignore-workspace
 ```
 
