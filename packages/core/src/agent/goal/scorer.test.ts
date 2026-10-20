@@ -239,16 +239,13 @@ describe('createGoalScorer provider history compatibility', () => {
   });
 });
 
-// Native-first tests need a model the bundled registry lists under `structuredOutput`; otherwise
-// `jsonPromptInjection: 'auto'` goes straight to inline JSON. Use a stable entry, since the
-// registry is regenerated automatically and small providers can disappear.
 describe('createGoalScorer native structured output', () => {
   it.each([undefined, 'Custom judge prompt.'])(
     'keeps native output on the first attempt without handwritten JSON instructions (prompt: %s)',
     async prompt => {
       const model = new MockLanguageModelV2({
-        provider: 'openai',
-        modelId: 'gpt-4o-mini',
+        provider: 'crof',
+        modelId: 'glm-5.3-flash',
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
@@ -295,8 +292,8 @@ describe('goal-only JSON fallback placement', () => {
     let calls = 0;
     const attemptLength = withTools ? 2 : 1;
     const model = new MockLanguageModelV2({
-      provider: 'openai',
-      modelId: 'gpt-4o-mini',
+      provider: 'crof',
+      modelId: 'glm-5.3-flash',
       doStream: async () => {
         calls++;
         const toolCall = withTools && calls % 2 === 1;
@@ -387,8 +384,8 @@ describe('goal-only JSON fallback placement', () => {
     'rejects invalid fallback output without inventing a verdict: %s',
     async text => {
       const model = new MockLanguageModelV2({
-        provider: 'openai',
-        modelId: 'gpt-4o-mini',
+        provider: 'crof',
+        modelId: 'glm-5.3-flash',
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
