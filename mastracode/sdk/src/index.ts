@@ -50,7 +50,6 @@ import {
   MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability';
-import { PostgresStore } from '@mastra/pg';
 
 import { createSessionThreadAdvertisement } from './agent-connections/session-advertisement.js';
 import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
@@ -543,7 +542,8 @@ function resolveInjectedStorageBackend(
 ): 'libsql' | 'pg' {
   if (configuredBackend) return configuredBackend;
   if (storage instanceof LibSQLStore || hasAncestorClassNamed(storage, 'LibSQLStore')) return 'libsql';
-  if (storage instanceof PostgresStore || hasAncestorClassNamed(storage, 'PostgresStore')) return 'pg';
+  // By name only: an `instanceof` check would load `@mastra/pg` for every libsql session.
+  if (hasAncestorClassNamed(storage, 'PostgresStore')) return 'pg';
   throw new Error('storageBackend is required when injecting a custom storage instance.');
 }
 

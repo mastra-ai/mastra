@@ -463,6 +463,7 @@ export class AgentController<TState = {}> {
         }),
       buildStreamOptions: input => this.buildAgentMessageStreamOptions({ session, ...input }),
       buildSharedRunOptions: requestContext => this.buildSharedRunOptions(session, requestContext),
+      resolveModeActiveTools: () => this.resolveModeActiveTools(session),
       onSessionDeleted: listener =>
         this.onSessionDeleted(deleted => {
           if (deleted === session) listener();

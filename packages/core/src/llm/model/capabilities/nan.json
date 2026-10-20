@@ -23,16 +23,16 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "gemma4": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
     "glm5.3": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "gemma4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
       }
     ]
   }

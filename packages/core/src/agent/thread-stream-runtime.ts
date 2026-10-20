@@ -369,6 +369,8 @@ type PreparedThreadRun = {
   threadKey?: string;
   abortController: AbortController;
   cleanup: () => void;
+  cleanupAbortedRun?: () => Promise<boolean>;
+  output?: WeakRef<{ status: string }>;
   finalizerToken?: object;
 };
 
@@ -520,6 +522,7 @@ type AgentThreadRuntimeState = {
   preparedRunsById: Map<string, PreparedThreadRun>;
   resumeTailsByRunId: Map<string, Promise<void>>;
   abortedRunIds: Set<string>;
+  resumeFencedRunIds: Set<string>;
   startingQueuedRunIds: Set<string>;
   /**
    * Active lease-renewal timers keyed by runId. Set when the owner
@@ -538,11 +541,18 @@ type AgentThreadRuntimeState = {
   threadEventListeners: Set<ThreadEventListenerRegistration>;
   threadControlSubscriptions: Map<string, ThreadControlSubscription>;
   /**
-   * Thread subscribers reading a run's stream, by run id. A parked run that
-   * continues across its suspension keeps its stream open; once the thread
-   * moves on without it, its readers stop and read the runs queued behind it.
+   * Thread subscribers reading a run's stream, by run id, with the stream each
+   * reads. A parked run that continues across its suspension keeps its stream
+   * open; once the thread moves on without it, its readers stop and read the
+   * runs queued behind it.
    */
-  runStreamReaders: Map<string, Set<() => void>>;
+  runStreamReaders: Map<string, Set<{ streamId: string; stop: () => void }>>;
+  /**
+   * Parked records the thread moved on without: swept, taken over, released or
+   * aborted. A subscriber that queued one before reading it skips it instead of
+   * waiting on its open stream, and ends an aborted one with an abort.
+   */
+  displacedRecords: WeakMap<AgentThreadRunRecord<any>, 'moved-on' | 'aborted'>;
 };
 
 export type AgentThreadState = 'active' | 'idle';
@@ -695,6 +705,8 @@ function createThreadPeerId(agentId: string, resourceId: string, threadId: strin
 }
 
 const MAX_LOCALLY_QUEUED_SIGNAL_IDS_PER_THREAD = 1000;
+// Resume fences outlive their stream segment until the suspended snapshot is gone, so cap them.
+const MAX_RESUME_FENCED_RUN_IDS = 1000;
 
 function createRuntimeState(): AgentThreadRuntimeState {
   return {
@@ -730,6 +742,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     preparedRunsById: new Map(),
     resumeTailsByRunId: new Map(),
     abortedRunIds: new Set(),
+    resumeFencedRunIds: new Set(),
     startingQueuedRunIds: new Set(),
     leaseRenewalTimers: new Map(),
     leaseDeadlines: new Map(),
@@ -737,6 +750,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     threadEventListeners: new Set(),
     threadControlSubscriptions: new Map(),
     runStreamReaders: new Map(),
+    displacedRecords: new WeakMap(),
   };
 }
 
@@ -2725,7 +2739,11 @@ export class AgentThreadStreamRuntime {
     return { threadId, resourceId };
   }
 
-  prepareRunOptions<OUTPUT>(options: AgentExecutionOptions<OUTPUT>, pubsub?: PubSub): AgentExecutionOptions<OUTPUT> {
+  prepareRunOptions<OUTPUT>(
+    options: AgentExecutionOptions<OUTPUT>,
+    pubsub?: PubSub,
+    cleanupAbortedRun?: () => Promise<boolean>,
+  ): AgentExecutionOptions<OUTPUT> {
     if (!options.runId) return options;
     const { threadId, resourceId } = this.#getThreadTarget(options);
     const key = threadId ? this.#threadKey(resourceId, threadId) : undefined;
@@ -2744,6 +2762,7 @@ export class AgentThreadStreamRuntime {
       ...(key ? { threadKey: key } : {}),
       abortController,
       cleanup: () => upstreamAbortSignal?.removeEventListener('abort', abort),
+      cleanupAbortedRun,
     };
     state.preparedRunsById.set(options.runId, preparedRun);
     this.#preparedRunsByAbortSignal.set(abortController.signal, preparedRun);
@@ -2775,11 +2794,33 @@ export class AgentThreadStreamRuntime {
     return this.#getState(pubsub).abortedRunIds.has(runId);
   }
 
-  abortRun(runId: string, pubsub?: PubSub): boolean {
+  /**
+   * Whether an abort stopped `runId` while it was waiting on a tool approval or
+   * suspension, so that suspension must never be resumed.
+   */
+  isResumeFenced(runId: string, pubsub?: PubSub): boolean {
+    return this.#getState(pubsub).resumeFencedRunIds.has(runId);
+  }
+
+  #fenceResume(state: AgentThreadRuntimeState, runId: string): void {
+    state.resumeFencedRunIds.delete(runId);
+    state.resumeFencedRunIds.add(runId);
+    if (state.resumeFencedRunIds.size > MAX_RESUME_FENCED_RUN_IDS) {
+      state.resumeFencedRunIds.delete(state.resumeFencedRunIds.values().next().value!);
+    }
+  }
+
+  /**
+   * `fenceResume: false` is for lifecycle teardowns (detach, thread switch) that
+   * stop the local segment but leave its parked suspensions answerable.
+   */
+  abortRun(runId: string, pubsub?: PubSub, options: { fenceResume?: boolean } = {}): boolean {
+    const fenceResume = options.fenceResume ?? true;
     const state = this.#getState(pubsub);
     const preparedRun = state.preparedRunsById.get(runId);
     if (!preparedRun) {
       state.abortedRunIds.add(runId);
+      if (fenceResume) this.#fenceResume(state, runId);
       // A run parked on a tool suspension (a question to the user, a pending
       // generation) has no prepared run left to abort, and its completion
       // watcher returned when it suspended, so nothing else frees its thread.
@@ -2788,6 +2829,9 @@ export class AgentThreadStreamRuntime {
 
     preparedRun.abortController.abort();
     state.abortedRunIds.add(runId);
+    // Only a suspension that already existed is fenced. One that parks after the
+    // abort (the loop finishing its in-flight tools) stays answerable (#26871).
+    if (fenceResume && preparedRun.output?.deref()?.status === 'suspended') this.#fenceResume(state, runId);
 
     const key = state.threadKeysByRunId.get(runId);
     if (key) {
@@ -2829,6 +2873,7 @@ export class AgentThreadStreamRuntime {
     const key = state.threadKeysByRunId.get(runId) ?? this.#threadKey(record.resourceId, record.threadId);
     this.#clearSuspendedRun(state, runId);
     record.lifecycle = 'completed';
+    state.displacedRecords.set(record, 'aborted');
     state.threadRunsByStreamId.delete(record.streamId);
     if (state.threadRunsById.get(runId) === record) state.threadRunsById.delete(runId);
     state.threadKeysByRunId.delete(runId);
@@ -2880,11 +2925,17 @@ export class AgentThreadStreamRuntime {
 
   /**
    * A parked run no longer holds its thread, so its answer resumes it on a new
-   * stream. Subscribers still reading its open stream move on to the runs queued
-   * behind it.
+   * stream. Subscribers reading its open stream, or with it still queued, move on
+   * to the runs queued behind it.
    */
-  #stopReadingDisplacedRun(state: AgentThreadRuntimeState, runId: string): void {
-    for (const stop of [...(state.runStreamReaders.get(runId) ?? [])]) stop();
+  #stopReadingDisplacedRun(state: AgentThreadRuntimeState, runId: string, streamId?: string): void {
+    if (streamId === undefined) {
+      const record = state.threadRunsById.get(runId);
+      if (record) state.displacedRecords.set(record, 'moved-on');
+    }
+    for (const reader of [...(state.runStreamReaders.get(runId) ?? [])]) {
+      if (streamId === undefined || reader.streamId === streamId) reader.stop();
+    }
   }
 
   getActiveThreadRunId(options: AgentThreadIdentityOptions, pubsub?: PubSub): string | undefined {
@@ -3040,11 +3091,12 @@ export class AgentThreadStreamRuntime {
     if (options.clearPendingSignals) this.#cancelPendingSignals(state, key);
     try {
       if (!runId) return false;
-      if (state.preparedRunsById.has(runId)) return this.abortRun(runId, resolvedPubSub);
+      const abortOptions = { fenceResume: !options.localOnly };
+      if (state.preparedRunsById.has(runId)) return this.abortRun(runId, resolvedPubSub, abortOptions);
       if (state.threadKeysByRunId.get(runId) === key) {
         // Reserved locally (a sendSignal wake that has not prepared its run yet):
         // record the abort intent so preparation aborts the run before it starts.
-        this.abortRun(runId, resolvedPubSub);
+        this.abortRun(runId, resolvedPubSub, abortOptions);
         return true;
       }
       if (state.remoteThreadKeysByRunId.get(runId) !== key) return false;
@@ -3131,6 +3183,7 @@ export class AgentThreadStreamRuntime {
     state.preparedRunsById.clear();
     state.resumeTailsByRunId.clear();
     state.abortedRunIds.clear();
+    state.resumeFencedRunIds.clear();
   }
 
   #cleanupPreparedRun(state: AgentThreadRuntimeState, runId: string, expectedPreparedRun?: PreparedThreadRun) {
@@ -3147,6 +3200,16 @@ export class AgentThreadStreamRuntime {
     state.preparedRunsById.delete(runId);
     state.pendingSignalListenersByRunId.delete(runId);
     state.abortedRunIds.delete(runId);
+    if (state.resumeFencedRunIds.has(runId) && preparedRun?.cleanupAbortedRun) {
+      // The aborted segment persisted a suspended snapshot. Keep the fence until that
+      // snapshot is deleted; if deletion fails the fence stays (bounded by MAX_RESUME_FENCED_RUN_IDS).
+      void preparedRun.cleanupAbortedRun().then(
+        deleted => {
+          if (deleted) state.resumeFencedRunIds.delete(runId);
+        },
+        () => {},
+      );
+    }
   }
 
   async #persistSignal(
@@ -3335,6 +3398,11 @@ export class AgentThreadStreamRuntime {
       this.#clearSuspendedRun(state, record.runId);
       this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
       state.sweptLeasedRunIds.set(record.runId, now);
+      state.displacedRecords.set(record, 'moved-on');
+      // A run parked across its suspension keeps its stream open, so subscribers
+      // reading it would never reach the runs queued behind it. Only this record's
+      // stream: a subscriber may be reading another instance's resume of the run.
+      this.#stopReadingDisplacedRun(state, record.runId, streamId);
       if (
         state.activeThreadRunIds.get(staleKey) === record.runId &&
         state.activeThreadStreamIds.get(staleKey) === streamId
@@ -3423,14 +3491,16 @@ export class AgentThreadStreamRuntime {
     registrationOptions?: AgentThreadStrictRegistrationOptions | AgentThreadStreamRegistrationOptions,
   ): Promise<void | AgentThreadRunRegistration> | undefined {
     const { threadId, resourceId } = this.#getThreadTarget(streamOptions);
+    const preparedRun = streamOptions.abortSignal
+      ? this.#preparedRunsByAbortSignal.get(streamOptions.abortSignal)
+      : undefined;
+    // Weak, so the threadless finalizer below can still collect an abandoned output.
+    if (preparedRun) preparedRun.output = new WeakRef(output);
     if (!threadId) {
       if (registrationOptions?.strict) return;
       const state = this.#getState(pubsub);
       const runId = output.runId;
       const finalizerToken = {};
-      const preparedRun = streamOptions.abortSignal
-        ? this.#preparedRunsByAbortSignal.get(streamOptions.abortSignal)
-        : undefined;
       if (preparedRun) {
         preparedRun.finalizerToken = finalizerToken;
         this.#threadlessRunFinalizer?.register(output, { state, runId, token: finalizerToken }, finalizerToken);
@@ -5585,8 +5655,12 @@ export class AgentThreadStreamRuntime {
               continue;
             }
             const run = pendingRuns.shift()!;
-            if (isSuperseded(run.runId, run.generation)) {
+            const displaced = state.displacedRecords.get(run);
+            if (isSuperseded(run.runId, run.generation) || displaced) {
               abortedPendingStreamIds.delete(run.streamId);
+              if (displaced === 'aborted' && !isSuperseded(run.runId, run.generation)) {
+                yield { type: 'abort', runId: run.runId } as any;
+              }
               continue;
             }
             // A local run can be read before its `run-registered` event arrives.
@@ -5600,10 +5674,13 @@ export class AgentThreadStreamRuntime {
             currentReader = reader as ReadableStreamDefaultReader<any>;
             activeReaderRunId = run.runId;
             activeReaderStreamId = run.streamId;
-            const stopReading = () => {
-              try {
-                void reader.cancel();
-              } catch {}
+            const stopReading = {
+              streamId: run.streamId,
+              stop: () => {
+                try {
+                  void reader.cancel();
+                } catch {}
+              },
             };
             const readers = state.runStreamReaders.get(run.runId) ?? new Set();
             readers.add(stopReading);
