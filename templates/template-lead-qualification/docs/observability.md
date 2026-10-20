@@ -21,7 +21,9 @@ Add explicitly allowed fields when extending diagnostics. Telemetry failures exp
 `observability/evaluation.ts` compares imported assessments against independently labeled identity, attributes, classification, score, disqualifiers, and citations. Semantic reviews check unsupported summary claims. Use your own dataset and the exported schemas to prepare labels and observations:
 
 ```bash
-npm run eval -- --labels expected.json --observations observed.json --output report.json
+npm run eval -- --labels expected.json --observations observed.json --reviews reviews.json --output report.json
 ```
+
+`--reviews` supplies the `semanticReviews` array defined by `evaluationInputSchema`. Without semantic reviews for the observed cases, the `unsupportedClaims` dimension fails and the command exits non-zero.
 
 The command performs no research. Controlled fixtures establish functional behavior; model observations describe only the evaluated dataset. Keep private evaluation inputs outside the template. [Maintenance](operations.md#maintenance) manages retained detail and telemetry.
