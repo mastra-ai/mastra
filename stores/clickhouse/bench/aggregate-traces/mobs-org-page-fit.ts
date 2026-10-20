@@ -269,7 +269,75 @@ function variantsOf(mods: Mods, shape: string, scope: Scope, to: Date, window: s
       false,
     ),
     'part:repeated': v(`SELECT count() FROM ${repeated}`, false),
+    // Fallback off over a back-filled mastra_model_usage, emulated: the real table plus what
+    // mastra_mv_model_usage would have written for each untagged row under a derived key. Rows are
+    // the MV's output before merges (the compiled max() per usageId collapses them, as with lazy merges).
+    // Reads are an upper bound: mastra_metric_events rows are wider than usage-table rows.
+    'bf-m': backfilled(tableOnly, `concat('m:', metricId)`),
+    'bf-call': backfilled(tableOnly, `concat('c:', spanId, ':', toString(toUnixTimestamp64Milli(timestamp)))`),
+    'bf-span': backfilled(tableOnly, `concat('s:', spanId)`),
+    // A merged usage table of SYN_K rows over SYN_T traces, generated in memory: the grouping and join
+    // cost of a back-filled per-span table without reading mastra_metric_events. Results are meaningless.
+    syn: synthetic(tableOnly, Number(process.env.SYN_K ?? 0), Number(process.env.SYN_T ?? 1)),
   } as Record<string, { query: string; params: Record<string, unknown>; exact: boolean }>;
+}
+
+const USAGE_COLUMNS = `organizationId, projectId, traceId, usageId, timestamp, inputTokens, outputTokens,
+  reasoningTokens, cacheReadTokens, inputCost, outputCost, priced, pricingFailure, costUnitMin, costUnitMax`;
+
+function synthetic(tableOnly: Compiled, keys: number, traces: number) {
+  const from =
+    /FROM mastra_model_usage\n(\s*)WHERE (timestamp >= \{trace_query_\d+:[^}]+\})\n\s*AND organizationId = (\{trace_query_\d+:String\}) AND isNotNull\(projectId\)/;
+  const m = from.exec(tableOnly.query);
+  if (!m) throw new Error('table_usage FROM clause not found');
+  const [, indent, , org] = m;
+  const generated = `FROM (
+    SELECT ${org} AS organizationId, 'p' AS projectId, toString(cityHash64(number % ${traces})) AS traceId,
+      toString(number) AS usageId, now64(3) AS timestamp,
+      toNullable(toFloat64(number % 997)) AS inputTokens, toNullable(toFloat64(number % 991)) AS outputTokens,
+      toNullable(toFloat64(number % 7)) AS reasoningTokens, toNullable(toFloat64(number % 983)) AS cacheReadTokens,
+      toNullable(toFloat64(number % 13) / 1000) AS inputCost, toNullable(toFloat64(number % 11) / 1000) AS outputCost,
+      toUInt8(1) AS priced, toUInt8(0) AS pricingFailure,
+      toNullable('USD') AS costUnitMin, toNullable('USD') AS costUnitMax
+    FROM numbers(${keys})
+  )
+${indent}WHERE 1`;
+  return { query: tableOnly.query.replace(from, generated), params: tableOnly.query_params ?? {}, exact: false };
+}
+
+function backfilled(tableOnly: Compiled, key: string) {
+  const from =
+    /FROM mastra_model_usage\n(\s*)WHERE (timestamp >= \{trace_query_\d+:[^}]+\})\n\s*AND (organizationId = \{trace_query_\d+:String\}) AND isNotNull\(projectId\)/;
+  const m = from.exec(tableOnly.query);
+  if (!m) throw new Error('table_usage FROM clause not found');
+  const [, indent, time, org] = m;
+  const emulated = `FROM (
+    SELECT ${USAGE_COLUMNS} FROM mastra_model_usage WHERE ${time} AND ${org} AND isNotNull(projectId)
+    UNION ALL
+    SELECT assumeNotNull(organizationId) AS organizationId, assumeNotNull(projectId) AS projectId,
+      assumeNotNull(traceId) AS traceId, ${key} AS usageId, timestamp,
+      if(name = 'mastra_model_total_input_tokens', value, NULL) AS inputTokens,
+      if(name = 'mastra_model_total_output_tokens', value, NULL) AS outputTokens,
+      if(name = 'mastra_model_output_reasoning_tokens', value, NULL) AS reasoningTokens,
+      if(name = 'mastra_model_input_cache_read_tokens', value, NULL) AS cacheReadTokens,
+      if(name = 'mastra_model_total_input_tokens' AND isPriced, estimatedCost, NULL) AS inputCost,
+      if(name = 'mastra_model_total_output_tokens' AND isPriced, estimatedCost, NULL) AS outputCost,
+      toUInt8(isPriced) AS priced,
+      toUInt8(isCostRow AND (hasCostError OR (isNotNull(estimatedCost) AND isNull(costUnit)))) AS pricingFailure,
+      if(isPriced, costUnit, NULL) AS costUnitMin, if(isPriced, costUnit, NULL) AS costUnitMax
+    FROM (
+      SELECT *, name IN ('mastra_model_total_input_tokens', 'mastra_model_total_output_tokens') AS isCostRow,
+        isCostRow AND ifNull(JSONHas(costMetadata, 'error') AND JSONType(costMetadata, 'error') != 'Null', 0) AS hasCostError,
+        isCostRow AND isNotNull(estimatedCost) AND isNotNull(costUnit) AND NOT hasCostError AS isPriced
+      FROM mastra_metric_events
+      WHERE ${time} AND ${org} AND isNotNull(projectId) AND isNotNull(traceId)
+        AND (usageId IS NULL OR trimBoth(usageId) = '')
+        AND name IN ('mastra_model_total_input_tokens', 'mastra_model_total_output_tokens',
+                     'mastra_model_output_reasoning_tokens', 'mastra_model_input_cache_read_tokens')
+    )
+  )
+${indent}WHERE 1`;
+  return { query: tableOnly.query.replace(from, emulated), params: tableOnly.query_params ?? {}, exact: false };
 }
 
 /** Order-independent digest of a result with floats rounded to 9 significant digits. */
@@ -361,10 +429,22 @@ async function stmt(options: {
           },
           cold: { ok: calls[0]!.r.ok, errorCode: calls[0]!.r.errorCode, ms: stat(calls[0]!)?.durationMs },
           failed: warm.filter(c => !c.r.ok).map(c => c.r.errorCode),
+          // Relative difference vs `full` per numeric column, for one-row results (e.g. P2).
+          vsFull:
+            referenceRows?.length === 1 && Array.isArray(result) && result.length === 1
+              ? Object.fromEntries(
+                  Object.entries(referenceRows[0]!)
+                    .filter(([, x]) => typeof x === 'number')
+                    .map(([col, x]) => [
+                      col,
+                      (Number((result[0] as Record<string, unknown>)[col]) - (x as number)) / (x as number),
+                    ]),
+                )
+              : undefined,
         };
         appendFileSync(OUT.stmt, `${JSON.stringify(record)}\n`);
         console.log(
-          `${options.shape} ${window} ${name.padEnd(20)} warm ${record.warm.memMiB} MiB ${record.warm.ms} ms read ${record.warm.readRows} rows ${record.warm.readMiB} MiB | cold ${record.cold.ok ? `ok ${record.cold.ms} ms` : record.cold.errorCode} | parity ${parity}${record.failed.length ? ` | warm failed ${record.failed.join(',')}` : ''}`,
+          `${options.shape} ${window} ${name.padEnd(20)} warm ${record.warm.memMiB} MiB ${record.warm.ms} ms read ${record.warm.readRows} rows ${record.warm.readMiB} MiB | cold ${record.cold.ok ? `ok ${record.cold.ms} ms` : record.cold.errorCode} | parity ${parity}${record.vsFull ? ` | vs full ${JSON.stringify(Object.fromEntries(Object.entries(record.vsFull).map(([k, x]) => [k, Number((x * 100).toFixed(3))])))}%` : ''}${record.failed.length ? ` | warm failed ${record.failed.join(',')}` : ''}`,
         );
       }
     }
@@ -1006,6 +1086,54 @@ async function collectorKey(options: { platform: string; label: string }) {
                     countIf(spanId IS NULL OR spanId = '') AS noSpan, countIf(projectId IS NULL) AS noProject
              ${base} AND ${NO_ID}`),
   );
+  // One usage row per (traceId, spanId): rows per span, and the tokens/cost max() per span would drop
+  // (a summing span row drops none). Then the share of tokens/cost a fallback-off read would miss.
+  const org = largest().organizationId;
+  for (const [scope, filter] of [
+    ['largest org', 'organizationId = {org:String}'],
+    ['all orgs', '1'],
+  ] as const)
+    for (const days of [1, 7, 30]) {
+      const [x] = await rows<Record<string, number>>(
+        raw,
+        `SELECT count() AS tokenRows, uniqExact(traceId, spanId) AS spans, uniqExact(traceId) AS traces,
+                sum(v - mx) / sum(v) AS lostTokensMax, sumIf(c - cmx, isCost) / sumIf(c, isCost) AS lostCostMax
+         FROM (SELECT traceId, spanId, name, sum(value) AS v, max(value) AS mx,
+                      name IN ('mastra_model_total_input_tokens', 'mastra_model_total_output_tokens') AS isCost,
+                      sum(ifNull(estimatedCost, 0)) AS c, max(ifNull(estimatedCost, 0)) AS cmx
+               FROM mastra_metric_events
+               WHERE name IN {names:Array(String)} AND ${NO_ID} AND ${filter} AND isNotNull(traceId)
+                 AND timestamp >= now() - INTERVAL ${days} DAY
+               GROUP BY traceId, spanId, name)`,
+        { names, org },
+        { max_execution_time: 300 },
+      );
+      log(`untagged per-span rows, ${scope}, ${days} d`, x);
+    }
+  for (const days of [1, 7, 30])
+    log(
+      `untagged share of tokens/cost, all orgs, ${days} d`,
+      await rows(
+        raw,
+        `SELECT sumIf(value, ${NO_ID}) / sum(value) AS tokens,
+                sumIf(ifNull(estimatedCost, 0), ${NO_ID} AND isCost) / sumIf(ifNull(estimatedCost, 0), isCost) AS cost,
+                uniqExactIf(organizationId, ${NO_ID}) AS orgsWithUntagged, uniqExact(organizationId) AS orgs
+         FROM (SELECT *, name IN ('mastra_model_total_input_tokens', 'mastra_model_total_output_tokens') AS isCost
+               FROM mastra_metric_events WHERE name IN {names:Array(String)} AND timestamp >= now() - INTERVAL ${days} DAY)`,
+        { names },
+        { max_execution_time: 300 },
+      ),
+    );
+  for (const days of [1, 7, 30])
+    log(
+      `usage-table rows and traces, largest org, ${days} d (SYN_K/SYN_T: add per-span rows/untagged traces)`,
+      await rows(
+        raw,
+        `SELECT count() AS tableRows, uniqExact(traceId) AS tableTraces FROM mastra_model_usage
+         WHERE organizationId = {org:String} AND timestamp >= now() - INTERVAL ${days} DAY`,
+        { org },
+      ),
+    );
 }
 
 async function c6(options: { platform: string; label: string; reps: number }) {

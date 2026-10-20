@@ -788,7 +788,57 @@ All 4.89 M untagged rows have `traceId`, `spanId` and `projectId`.
 4. **Rows without `traceId`/`spanId`.** None in 30 days. If one arrives, `mastra_mv_model_usage` skips it (`traceId IS NOT NULL`), and `aggregateTraces()` never counted it (usage joins to trace roots), so nothing changes; `metrics` still sees it in `mastra_metric_events`.
 5. **Rollout.** (1) Collector sets `usageId = 'm:' || metricId` when missing, from time _T_ (exact string, no trimming, so the back-fill reproduces it). From _T_ every new row has a `usageId` in `mastra_metric_events` too, so the fallback (which reads only rows without one) stops seeing new rows and the MV picks them up: a row is in exactly one path, no double count. (2) Back-fill `mastra_model_usage` from `mastra_metric_events` for rows with no `usageId` and `timestamp < T + margin`, with the **same** key (it must: any other key for the same row double-counts it, since `max()` only collapses identical keys). Overlap with the collector's rows is harmless. Until the back-fill reaches them, traces straddling _T_ lose their pre-_T_ untagged rows (the fallback's anti-join is per trace): a transient undercount, so back-fill right after the deploy. (3) Parity fallback on vs off at 24 h / 7 d / 30 d / retention, expect equality. (4) Fallback off, then delete it. With the key set in the collector, the MV `coalesce(...)` change from c6 is unnecessary; keep only the `spanId` column.
 
-**Recommendation:** `'m:' || metricId` in mobs-collector and in the back-fill. Do not derive a per-call key; consumers must not read `usageId` as "one model call" for `m:` keys (count calls by real ids only).
+**Recommendation (superseded by addendum 2):** `'m:' || metricId` in mobs-collector and in the back-fill. Do not derive a per-call key; consumers must not read `usageId` as "one model call" for `m:` keys (count calls by real ids only).
+
+**Addendum 2: one usage row per span, vs fallback off (2026-10-20, `stmt --shape P2` + `collector`).** Decision: approximate usage for older SDKs is acceptable. A back-fill or collector fill is only worth doing if each span collapses to one usage row, and that row must _sum_ the span's calls. `'m:' || metricId` is dropped: it just copies the token rows. Two options compared against today (`full`, fallback on), on P2 (org token/cost KPI) for the largest org, warm median of 3:
+
+- **(a)** One usage row per `(traceId, spanId)` for untagged rows, fallback off.
+- **(b)** Fallback off, no back-fill or collector fill: untagged rows drop out.
+
+How (a) was measured. The replica is read-only, so no table could be built.
+
+- **Memory and time:** `syn` feeds the compiled fallback-off statement a merged usage table generated in memory (`numbers()`), with the real cardinalities: the real table's rows plus one row per untagged span, and the real number of traces. Calibration: with today's table cardinality (22 K rows / 7.1 K traces at 30 d) `syn` uses 148.5 MiB vs the real fallback-off statement's 152.6 MiB. Its `usageId`s are shorter than real ones, so it slightly understates memory.
+- **Reads:** `syn` reads only the selection. Add the table at ~218 B/row uncompressed (today's table: 12.3 MiB / 59 K rows).
+- **Cross-check:** `bf-span` emulates the same table as the MV's unmerged per-row output read from `mastra_metric_events`. Its reads and memory are upper bounds.
+
+| Window | Today (`full`)                  | (b) fallback off           | (a) per-span table (`syn`)      | (a) upper bound (`bf-span`) |
+| ------ | ------------------------------- | -------------------------- | ------------------------------- | --------------------------- |
+| 24 h   | 111 MiB / 0.26 s / 153 MiB read | 50 MiB / 0.08 s / 31 MiB   | 58 MiB / 0.07 s / ~28 MiB       | 102 MiB / 0.22 s / 63 MiB   |
+| 7 d    | 176 MiB / 0.68 s / 662 MiB      | 97 MiB / 0.19 s / 77 MiB   | 93 MiB / 0.13 s / ~70 MiB       | 147 MiB / 0.44 s / 241 MiB  |
+| 30 d   | 410 MiB / 3.5 s / 3,916 MiB     | 153 MiB / 0.62 s / 456 MiB | **454 MiB** / 0.85 s / ~565 MiB | 523 MiB / 1.4 s / 1,531 MiB |
+
+Per-span cardinality, largest org: 1,148 / 4,966 / 541,087 untagged spans (2.8–3.0 token rows each) over 866 / 3,831 / 510,003 traces. At 30 d nearly all of them predate `usageId` (2026-10-09).
+
+What goes missing:
+
+| Option                | Largest org, tokens / cost lost                         | All orgs, tokens / cost lost                                                                                              |
+| --------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| (a) per span, `sum`   | 0                                                       | 0                                                                                                                         |
+| (a) per span, `max()` | 0 / 0                                                   | 0.060% / 0.032% (24 h), 0.018% / 0.006% (7 d), 0.011% / 0.011% (30 d): spans holding several calls                        |
+| (b) fallback off      | 2.5% / 4.2% (24 h), 4.1% / 7.5% (7 d), 68% / 71% (30 d) | 27% / 37% (24 h), 56% / 56% (7 d), 84% / 87% (30 d); 124 of the 203 orgs active in the last 24 h still send untagged rows |
+
+Can the per-span row sum, yet count a retried export (same `metricId`) once?
+
+- **Not in the table engine or MV.** `mastra_mv_model_usage` fires once per insert. `mastra_metric_events` drops duplicate `metricId`s only when it merges (ReplacingMergeTree), so a re-delivered row reaches the MV again. A summing engine (SummingMergeTree or `SimpleAggregateFunction(sum)`) would add it twice, and no engine dedups on a column outside its key. That leaves `max()`, with the loss above.
+- **Safe in the collector, per request.** The SDK retries by resending the identical body: `CloudExporter.batchUpload` reuses one `JSON.stringify` (3 retries), and a batch that still fails is dropped, not re-batched. So the collector can:
+  - dedup the request's untagged token rows by `metricId` and sum them per `(traceId, spanId)`;
+  - key the row `'s:' || spanId || ':' || hash(sorted metricIds)` and write it straight to `mastra_model_usage`, outside the MV;
+  - leave the `mastra_metric_events` rows untagged.
+
+  A retry produces the same key and value, which collapse under `max()`. A span whose rows arrive in two requests gets two keys, which the query already sums per trace. While the fallback is still on, its trace-level anti-join keeps the two paths exclusive.
+
+  Unverified: whether anything between the collector and ClickHouse (queue redelivery, writer retries) can resend a _subset_ of a request. That would double count the overlap. Check before relying on it.
+
+- **Safe in the back-fill.** Take `any()` per `metricId` (to drop unmerged duplicates), then sum per `(organizationId, projectId, traceId, spanId)` with key `'s:' || spanId`, inserted directly. Re-running is safe: a span's sum only grows as late rows land, and `max()` keeps the larger. Two conditions:
+  - Batch by trace (e.g. `cityHash64(traceId) % N` over the whole retention), never by time. Otherwise a span split across batches leaves two partial sums under one key, and `max()` keeps only one.
+  - Take only rows before the collector switch time _T_. A span straddling _T_ then gets one back-fill row and one collector row, under different keys, summed by the query.
+
+Earlier figures corrected:
+
+- **X49 c6's "~650 MiB" was too low.** Its 520 MiB was measured on keys derived on the fly from `mastra_metric_events`, for the usage part only, and the 650 added the selection by hand. On the fly overstates _reads_, not memory. With the real cardinality of an `'m:'` table (1.54 M keys / 517 K traces), `syn` puts the whole 30 d statement at 901 MiB / 1.45 s.
+- **Memory is driven by both keys and traces.** The per-span table has 2.7× fewer keys than `'m:'` but the same number of traces, which is why it still needs 454 MiB.
+
+**Verdict.** Don't do (a) now: at 30 d it doesn't beat today's memory (454 vs 410 MiB, +11%), though it cuts time 4× and reads ~7×. At 24 h / 7 d it halves memory, but those windows already fit, and (b) costs the same there. The 30 d cost is the backlog from before 2026-10-09. It leaves the 6-month TTL by ~April 2027, after which a per-span table is about as cheap as (b) (the largest org adds ~700–1,100 untagged spans a day now, ~30 K per 30 d). (b) is the memory floor at every window, but today it drops 27–87% of all orgs' tokens and cost. It is acceptable only once older SDKs are rare; track that with the adoption query in mobs-query's README. Keep the fallback until then. If (a) is revisited, use `sum` in the collector (per request) and in the back-fill, keyed as above. `max()` would lose ≤ 0.06% of tokens and is the fallback if per-request summing can't be guaranteed.
 
 ### X46: `aggregateSpans()` contract affordability (prod replica, read-only, 2026-10-19)
 
