@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { PROVIDERS, type ProviderRegistration, type ProxyProviderRegistration } from '../registry.js';
+import { PROVIDERS } from '../registry.js';
+import type { ProviderRegistration, ProxyProviderRegistration } from '../registry.js';
 import { __clearSharedToolsStateForTests, __sharedToolsStateCountForTests, tools as connect } from '../tools.js';
 import type { ToolsOptions as ConnectOptions } from '../tools.js';
 
