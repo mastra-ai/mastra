@@ -40,7 +40,7 @@ const TITLE_LENGTH = 120;
 export const FACTORY_TOOLS_OWNER_ID = `factory-tools:${globalThis.crypto.randomUUID()}`;
 
 export interface FactorySessionToolDependencies {
-  sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'getSourceControlBySessionId'>;
+  sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'getSourceControlBySessionId' | 'listByOrigin'>;
   sessionModel: {
     projects: FactoryProjectsStorage;
     modelDefaults: ModelDefaultsStorage;
@@ -78,6 +78,13 @@ export interface FactorySessionToolDependencies {
 
 const LISTED_MODELS = 8;
 
+/**
+ * How many of its side sessions may be running when a turn nobody signed in
+ * started (a notification wake, a webhook) starts another. Those turns carry
+ * other people's text, so a prompt injection can at most fill this many sandboxes.
+ */
+export const UNATTENDED_SIDE_SESSION_LIMIT = 10;
+
 function ambiguousRepository(candidates: readonly string[]): string {
   return `This item has several repositories (${candidates.join(', ')}); v1 can't choose one.`;
 }
@@ -100,7 +107,7 @@ function titleFrom(prompt: string): string {
   return firstLine.trim().slice(0, TITLE_LENGTH);
 }
 
-/** Tools that start sessions on the caller's behalf. Interactive user turns only. */
+/** Tools that start sessions on the caller's behalf, or switch their models. User sessions only. */
 export function createFactorySessionTools(
   scope: FactoryToolScope,
   deps: FactorySessionToolDependencies,
@@ -172,6 +179,12 @@ export function createFactorySessionTools(
       ) {
         throw new Error('Session not found or not owned by you in this Factory.');
       }
+      // A turn nobody signed in started reaches only this session and the side sessions it started.
+      if (!scope.interactive && sessionId !== scope.sessionId && row.originSessionId !== scope.sessionId) {
+        throw new Error(
+          'Without a person in this turn, only this session and the side sessions it started can switch models.',
+        );
+      }
       const messaging = await deps.messaging();
       if (!messaging) throw new Error('Session model switching is not available on this server.');
       const threadId = await resolveSessionThread({
@@ -218,13 +231,34 @@ export function createFactorySessionTools(
         path: ['role'],
       }),
     execute: async ({ prompt, title, workItem, role }) => {
-      if (workItem !== undefined) return startWorkItemRole({ prompt, title, workItem, role });
+      if (workItem !== undefined) {
+        // A role start records a run as the person, so it waits for a turn the person started.
+        if (!scope.interactive) {
+          throw new Error(
+            'Starting a role on a work item needs a person in this turn; start a side session, or ask the person to use the board.',
+          );
+        }
+        return startWorkItemRole({ prompt, title, workItem, role });
+      }
 
       const parent = await deps.sessions.getBySessionId(scope.sessionId);
       const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);
       if (!parent || !sourceControl) throw new Error('This session has no Factory session row to start from.');
       const messaging = await deps.messaging();
       if (!messaging) throw new Error('Starting sessions is not available on this server.');
+      if (!scope.interactive) {
+        const sideSessions = await deps.sessions.listByOrigin({ orgId: scope.orgId, originSessionId: scope.sessionId });
+        const running = await Promise.all(
+          sideSessions.map(
+            async row => (await messaging.controller.getSessionByResource(row.sessionId))?.stream.isActive() ?? false,
+          ),
+        );
+        if (running.filter(Boolean).length >= UNATTENDED_SIDE_SESSION_LIMIT) {
+          throw new Error(
+            `${UNATTENDED_SIDE_SESSION_LIMIT} side sessions started here are already running; without a person in this turn, wait for one to finish.`,
+          );
+        }
+      }
 
       const sessionId = globalThis.crypto.randomUUID();
       const ensured = await ensureFactorySourceSession({

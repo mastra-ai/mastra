@@ -634,16 +634,8 @@ describe('Factory toolset composition', () => {
     );
   });
 
-  it('gives a non-interactive user turn read tools plus messaging', () => {
-    expect(names({ ...USER, interactive: false })).toEqual(
-      [
-        'factory_list_work_items',
-        'factory_inspect_work_item',
-        'factory_list_attention',
-        'factory_signal_session',
-        'factory_message_origin',
-      ].sort(),
-    );
+  it('gives a non-interactive user turn the same tools as a person, each limiting itself', () => {
+    expect(names({ ...USER, interactive: false })).toEqual(names(USER));
   });
 
   it('runs both messaging tools without approval', () => {
