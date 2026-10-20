@@ -33,7 +33,7 @@
     "ws": "^8.21.3"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.115",
+    "@ai-sdk/openai": "^2.0.135",
     "@hono/node-server": "^2.0.0",
     "@hono/swagger-ui": "^0.5.3",
     "@internal/lint": "workspace:*",
