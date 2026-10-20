@@ -32,6 +32,7 @@ import {
   MODEL_PERSISTENCE_VERSION,
   MODEL_PERSISTENCE_VERSION_KEY,
   Session,
+  RUN_MODE_ID_CONTEXT_KEY,
   THREAD_OWNER_ID_CONTEXT_KEY,
   isReservedThreadMetadataKey,
   migratePersistedModelSelection,
@@ -463,7 +464,7 @@ export class AgentController<TState = {}> {
         }),
       buildStreamOptions: input => this.buildAgentMessageStreamOptions({ session, ...input }),
       buildSharedRunOptions: requestContext => this.buildSharedRunOptions(session, requestContext),
-      resolveModeActiveTools: () => this.resolveModeActiveTools(session),
+      resolveModeActiveTools: modeId => this.resolveModeActiveTools(session, modeId),
       onSessionDeleted: listener =>
         this.onSessionDeleted(deleted => {
           if (deleted === session) listener();
@@ -2085,8 +2086,9 @@ export class AgentController<TState = {}> {
    * checks against (e.g. `view`, `write_file`, `ask_user`), which matches the
    * names workspace tools are renamed to via `TOOL_NAME_OVERRIDES`.
    */
-  private resolveModeActiveTools(session: Session<TState>): string[] | undefined {
-    const currentMode = session.mode.resolve();
+  private resolveModeActiveTools(session: Session<TState>, modeId?: string): string[] | undefined {
+    // An unknown explicit mode throws rather than falling back to the live mode's tools.
+    const currentMode = modeId ? session.mode.resolveId(modeId) : session.mode.resolve();
     const availableTools = currentMode?.availableTools;
     if (!availableTools) {
       return undefined;
@@ -2395,7 +2397,12 @@ export class AgentController<TState = {}> {
    */
   private async buildToolsets(session: Session<TState>, requestContext: RequestContext): Promise<ToolsetsInput> {
     const context = requestContext.get('controller') as AgentControllerRequestContext<TState> | undefined;
-    const resolveMode = () => session.mode.resolveId(context?.session.modeId ?? session.mode.get());
+    // A resumed run keeps the mode it was suspended in, even after the session switched modes.
+    const runModeId = requestContext.getRaw(RUN_MODE_ID_CONTEXT_KEY);
+    const resolveMode = () =>
+      session.mode.resolveId(
+        (typeof runModeId === 'string' ? runModeId : undefined) ?? context?.session.modeId ?? session.mode.get(),
+      );
     const builtInTools: ToolsInput = {
       ask_user: askUserTool,
       submit_plan: submitPlanTool,
@@ -2637,6 +2644,7 @@ export class AgentController<TState = {}> {
     this.#executionViews.set(controllerContext, executionView);
     requestContext.set('controller', controllerContext);
     if (threadOwnerId !== undefined) requestContext.setRaw(THREAD_OWNER_ID_CONTEXT_KEY, threadOwnerId);
+    if (scope?.modeId) requestContext.setRaw(RUN_MODE_ID_CONTEXT_KEY, scope.modeId);
     if (resourceId) requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
     if (threadId) requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
 
