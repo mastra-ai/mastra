@@ -125,8 +125,10 @@ describe('ConnectionsPage', () => {
       expect(within(userSection).getByRole('button', { name: 'Actions for Linear' })).not.toBeNull();
 
       const globalSection = await screen.findByRole('region', { name: 'Global connections' });
-      // 'notion' has no catalog entry, so the raw integration id is shown.
-      expect(await within(globalSection).findByText('notion')).not.toBeNull();
+      // 'notion' is outside the policy-filtered provider list, but the row
+      // carries its own display metadata (resolved server-side from the full
+      // catalog), so the proper name still renders.
+      expect(await within(globalSection).findByText('Notion')).not.toBeNull();
       // Global rows are read-only: no row actions at all.
       expect(within(globalSection).queryByRole('button', { name: /^Actions for/ })).toBeNull();
     });

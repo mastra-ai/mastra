@@ -33,6 +33,14 @@ export type UserConnectionScope = 'global' | 'user';
 export interface UserConnection {
   id: string;
   integrationId: string;
+  /**
+   * Display metadata resolved server-side against the FULL platform catalog
+   * (not the policy-filtered provider list), so rows for de-allowlisted
+   * providers still render properly. Null when the catalog has no entry or
+   * the lookup failed.
+   */
+  displayName: string | null;
+  logoUrl: string | null;
   status: string;
   accountLabel: string | null;
   scope: UserConnectionScope;

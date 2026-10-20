@@ -361,10 +361,65 @@ describe('GET /connections', () => {
       makeCtx({ resourceId: 'end-user-42' }),
     );
     const body = await json(response);
+    // Rows carry display metadata from the full catalog (not the policy-
+    // filtered provider list) so clients can render de-allowlisted providers:
+    // 'github' is outside the allowlist yet still gets its name resolved.
     expect(body.connections).toEqual([
-      { id: 'c_lin1', integrationId: 'linear', status: 'active', accountLabel: 'Acme', scope: 'global' },
-      { id: 'c_lin2', integrationId: 'linear', status: 'active', accountLabel: null, scope: 'user' },
-      { id: 'c_gh1', integrationId: 'github', status: 'active', accountLabel: 'Acme', scope: 'global' },
+      {
+        id: 'c_lin1',
+        integrationId: 'linear',
+        displayName: 'Linear',
+        logoUrl: 'https://logos.test/linear.png',
+        status: 'active',
+        accountLabel: 'Acme',
+        scope: 'global',
+      },
+      {
+        id: 'c_lin2',
+        integrationId: 'linear',
+        displayName: 'Linear',
+        logoUrl: 'https://logos.test/linear.png',
+        status: 'active',
+        accountLabel: null,
+        scope: 'user',
+      },
+      {
+        id: 'c_gh1',
+        integrationId: 'github',
+        displayName: 'GitHub',
+        logoUrl: null,
+        status: 'active',
+        accountLabel: 'Acme',
+        scope: 'global',
+      },
+    ]);
+  });
+
+  it('still lists connections when the catalog lookup fails', async () => {
+    // Display metadata is best-effort decoration: a catalog outage must not
+    // take down the listing (or status polling / disconnects behind it).
+    const { fetchMock } = fakePlatform();
+    const failingFetch = vi.fn().mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/v2/integrations') return Response.json({ error: 'boom' }, { status: 500 });
+      return fetchMock(input, init);
+    });
+    const routes = userConnectRoutes(routeOptions(failingFetch as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'GET', '/connect/connections') as any).handler(
+      makeCtx({ resourceId: 'end-user-42' }),
+    );
+    expect(response.status).toBe(200);
+    const body = await json(response);
+    expect(body.connections).toEqual([
+      {
+        id: 'c_lin1',
+        integrationId: 'linear',
+        displayName: null,
+        logoUrl: null,
+        status: 'active',
+        accountLabel: 'Acme',
+        scope: 'global',
+      },
     ]);
   });
 });

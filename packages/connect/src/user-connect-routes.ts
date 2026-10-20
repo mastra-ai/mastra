@@ -378,15 +378,28 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       method: 'GET',
       requiresAuth: true,
       handler: gated(async (c, client) => {
-        const connections = await listVisibleConnections(client);
+        // Display metadata comes from the FULL catalog, not the policy-
+        // filtered provider list: rows for de-allowlisted providers stay
+        // visible, so clients must still be able to render them. Best-effort —
+        // a catalog outage must not take down the listing.
+        const [connections, catalog] = await Promise.all([
+          listVisibleConnections(client),
+          listIntegrations(client).catch(() => [] as IntegrationCatalogEntry[]),
+        ]);
+        const catalogById = new Map(catalog.map(entry => [entry.id.toLowerCase(), entry]));
         return c.json({
-          connections: connections.map(connection => ({
-            id: connection.id,
-            integrationId: connection.integrationId,
-            status: connection.status,
-            accountLabel: connection.accountLabel ?? null,
-            scope: connectionScope(connection),
-          })),
+          connections: connections.map(connection => {
+            const entry = catalogById.get(connection.integrationId.toLowerCase());
+            return {
+              id: connection.id,
+              integrationId: connection.integrationId,
+              displayName: entry?.displayName ?? null,
+              logoUrl: entry?.logoUrl ?? null,
+              status: connection.status,
+              accountLabel: connection.accountLabel ?? null,
+              scope: connectionScope(connection),
+            };
+          }),
         });
       }),
     },
