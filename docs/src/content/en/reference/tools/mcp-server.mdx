@@ -1621,6 +1621,185 @@ const server = new MCPServer({
 
 Link a tool to its app resource by setting `mcp._meta.ui.resourceUri` in `createTool()` to the matching `ui://` URI. The server normalizes this metadata for older hosts when listing tools, and returns the same link on successful tool call results. Visit [MCP Apps](/docs/connections/mcp) for the full app bridge API and usage patterns.
 
+## Events (experimental)
+
+:::warning
+
+Events implement [SEP-3415](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415), a draft MCP extension. The wire format and this API may change in any release.
+
+:::
+
+The `events` option lets clients subscribe to things that happen on your server, such as a ticket being created or a build finishing. The server advertises the `io.modelcontextprotocol/events` extension and answers `events/list`, `events/poll` and `events/stream` over both stdio and Streamable HTTP.
+
+Declare each event type with `defineEvent()` and publish occurrences with `server.events.emit()`:
+
+```typescript
+import { MCPServer, defineEvent } from '@mastra/mcp'
+import { z } from 'zod'
+
+const server = new MCPServer({
+  id: 'tickets',
+  name: 'Tickets',
+  version: '1.0.0',
+  tools: {},
+  events: {
+    'ticket.created': defineEvent({
+      description: 'A ticket was created',
+      inputSchema: z.object({ project: z.string().optional() }),
+      payloadSchema: z.object({ id: z.string(), project: z.string() }),
+      match: (args, data) => !args.project || data.project === args.project,
+    }),
+  },
+})
+
+await server.events.emit('ticket.created', { id: 't-1', project: 'web' })
+```
+
+A client that subscribed with `{ project: 'web' }` receives this occurrence. A client that subscribed with `{ project: 'api' }` doesn't.
+
+`match` filters on the arguments the client chooses, so it doesn't control who can subscribe. To restrict callers, add `authorize`. It receives the validated arguments and the caller's `requestContext`, which includes `user` when you set `mapAuthInfoToUser`:
+
+```typescript
+const ticketCreated = defineEvent({
+  inputSchema: z.object({ project: z.string() }),
+  payloadSchema: z.object({ id: z.string(), project: z.string() }),
+  match: (args, data) => data.project === args.project,
+  authorize: ({ arguments: args, requestContext }) => {
+    const user = requestContext.get('user') as { projects: string[] } | undefined
+    return user?.projects.includes(args.project) ?? false
+  },
+})
+```
+
+`authorize` runs on every `events/poll` and every `events/stream` open. An open stream isn't checked again until it reconnects. A caller who loses access keeps receiving occurrences on an open stream until then. FGA isn't applied to events; use `authorize` to restrict them.
+
+### `defineEvent()` options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'description',
+    type: 'string',
+    isOptional: true,
+    description: 'Description returned by `events/list`.',
+  },
+  {
+    name: 'inputSchema',
+    type: 'StandardSchemaWithJSON',
+    isOptional: true,
+    description:
+      'Schema for the subscription `arguments`. Advertised as JSON Schema. Arguments that fail validation are rejected with error `-32602`, and `match` and `poll` receive the parsed value.',
+  },
+  {
+    name: 'payloadSchema',
+    type: 'StandardSchemaWithJSON',
+    isOptional: true,
+    description: 'Schema for the event `data`. Advertised as JSON Schema and enforced by `server.events.emit()`.',
+  },
+  {
+    name: 'match',
+    type: '(args, data) => boolean',
+    isOptional: true,
+    description:
+      'Decides whether an emitted event reaches a subscription with these arguments. Applies to push streams and to polls served from the buffer. Defaults to delivering every event.',
+  },
+  {
+    name: 'authorize',
+    type: '(context) => boolean | Promise<boolean>',
+    isOptional: true,
+    description:
+      "Decides whether the caller may receive this type with these arguments. Receives `arguments`, `requestContext` and `delivery` (`'poll'` or `'push'`). Runs on every `events/poll`, before a `poll` source is called, and on every `events/stream` open. Returning `false` rejects the request with `-32024`. If it throws, the client gets a generic `-32603` error and the details are logged on the server. Defaults to allowing every caller.",
+  },
+  {
+    name: 'poll',
+    type: '(context) => Promise<MCPServerEventPollResult>',
+    isOptional: true,
+    description:
+      'Pull source for `events/poll`. Receives `arguments`, `cursor` (`null` means start from now), `maxEvents`, `maxAgeMs`, `requestContext` and `signal`. Returns `{ events, cursor, hasMore?, nextPollMs?, truncated? }`. Each event needs `data` and a stable `eventId` (clients dedupe by it, so return the same id whenever the same occurrence is polled); a missing `timestamp` defaults to now. If `poll` or `match` throws, the client gets a generic `-32603` error and the details are logged on the server.',
+  },
+  {
+    name: 'delivery',
+    type: "Array<'poll' | 'push'>",
+    isOptional: true,
+    description:
+      'Restricts the advertised delivery modes to this list. It only narrows the modes from the table below, and a definition left with no mode throws when the server is constructed.',
+  },
+  {
+    name: 'bufferSize',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description: 'Number of emitted events kept in memory for replay and buffered polls.',
+  },
+  {
+    name: 'pollIntervalMs',
+    type: 'number',
+    isOptional: true,
+    description: '`nextPollMs` suggested to clients that poll the buffer.',
+  },
+]}
+/>
+
+### Delivery modes
+
+How a type is served depends on where its events come from:
+
+| Definition | Advertised `delivery` | Source |
+| - | - | - |
+| No `poll` | `['push', 'poll']` | `server.events.emit()`. Polls read the in-memory buffer. |
+| `poll` | `['poll']` | Your `poll` function, called for each `events/poll`. |
+
+A type with a `poll` source can't also be pushed: `delivery` can't add `'push'` to it, and `server.events.emit()` throws for it. The advertised modes never change after the server starts, because clients only learn them from `events/list`. To push events, define a type without `poll` and emit to it.
+
+A request for a mode the type doesn't advertise fails with `-32026`. An unknown event name fails with `-32023`.
+
+### Push streams
+
+Each `events/stream` request is one subscription. The server sends `notifications/events/active` first, then one `notifications/events/event` per matching occurrence. Every notification carries the request id as `_meta["io.modelcontextprotocol/subscriptionId"]`. When the request includes a `cursor`, buffered events after it are replayed before live ones. If that cursor is older than the buffer, `active` reports `truncated: true`.
+
+When no other message has been sent for `heartbeatIntervalMs`, the stream sends `notifications/events/heartbeat` with the current cursor. Cancelling the request, or calling `server.close()`, ends the stream and releases its listener and timer.
+
+### `eventsOptions`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'heartbeatIntervalMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '30000',
+    description: 'Longest gap between messages on a push stream.',
+  },
+  {
+    name: 'listPageSize',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '100',
+    description: 'Number of event types per `events/list` page.',
+  },
+  {
+    name: 'maxStreams',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1024',
+    description:
+      'Most push streams open at once across all clients. Further `events/stream` requests are rejected with `-32025` until one closes. A Mastra client retries the rejection when reconnecting an established subscription; a new `subscribe()` call rejects with it.',
+  },
+]}
+/>
+
+### `server.events.emit(name, data, options?)`
+
+Records an occurrence, delivers it to matching push streams, and returns it with its `eventId`, `timestamp` and `cursor`. `options.eventId` and `options.timestamp` override the defaults (a random UUID and the current time). It throws when `name` isn't configured, when `data` fails `payloadSchema`, or when the type has a `poll` source.
+
+`server.events.list()` returns the descriptors `events/list` serves.
+
+### Limits
+
+- Emitted events stay in the process that emitted them. Push streams and buffered polls only see events emitted by the same `MCPServer` instance, so a serverless or multi-instance deployment needs a `poll` source backed by shared storage.
+- The buffer is in memory. A restarted server treats earlier cursors as a gap and reports `truncated: true`.
+- Changes to the list of event types aren't announced yet. The server doesn't advertise `listChanged` or send `notifications/events/list_changed`, because the MCP TypeScript SDK 2.2.0 doesn't carry the `eventsListChanged` filter on `subscriptions/listen`. Clients should re-run `events/list` to see changed event types.
+
 ## Related information
 
 - For connecting to MCP servers in Mastra, see the [MCPClient documentation](./mcp-client).
