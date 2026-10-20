@@ -468,12 +468,14 @@ export const resolveChannelThreadId: ResolveThreadId = ({ resourceId, defaultThr
 export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSessionResolve {
   const sourceControlSessions = createSourceControlSessionLookup(configuredSourceControls(deps));
   return async ({ controller, thread, requestContext }) => {
-    const sourceControl = thread.resourceId.startsWith('channel:')
+    // A session-bound Slack thread is addressed by its Factory session id.
+    const sessionId = thread.resourceId;
+    const sourceControl = sessionId.startsWith('channel:')
       ? null
-      : await sourceControlSessions.getSourceControlBySessionId(thread.resourceId);
-    const session = sourceControl ? await sourceControl.sessions.getBySessionId(thread.resourceId) : null;
+      : await sourceControlSessions.getSourceControlBySessionId(sessionId);
+    const session = sourceControl ? await sourceControl.sessions.getBySessionId(sessionId) : null;
     return controller.createSession({
-      id: thread.resourceId,
+      id: sessionId,
       ownerId: controller.id,
       resourceId: thread.resourceId,
       // Bind the Slack-created thread itself. Without it the scoped session
@@ -523,17 +525,18 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     if (!projects) return;
     if (thread.resourceId.startsWith('channel:')) return;
 
-    const sourceControl = await sourceControlSessions.getSourceControlBySessionId(thread.resourceId);
+    const sessionId = session.identity.getId();
+    const sourceControl = await sourceControlSessions.getSourceControlBySessionId(sessionId);
     if (!sourceControl) return;
-    const sourceSession = await sourceControl.sessions.getBySessionId(thread.resourceId);
+    const sourceSession = await sourceControl.sessions.getBySessionId(sessionId);
     if (!sourceSession?.factoryProjectId) return;
     const threadId = session.thread.getId();
     const binding =
       threadId && deps.workItems
         ? await deps.workItems.findRunBindingByThread({
             orgId: sourceSession.orgId,
-            resourceId: thread.resourceId,
-            sessionId: thread.resourceId,
+            resourceId: session.identity.getResourceId(),
+            sessionId,
             threadId,
             rejectAmbiguous: true,
           })

@@ -80,7 +80,7 @@ export function createFactoryApprovalTools(
 
       const messaging = await deps.messaging();
       if (!messaging) throw new Error('Answering approvals is not available on this server.');
-      const live = (await messaging.controller.getSessionByResource(sessionId)) as ApprovalGateSession | null;
+      const live = (await messaging.controller.getSession(sessionId)) as ApprovalGateSession | null;
       if (!live?.approval.isArmed({ toolCallId })) {
         throw new Error(
           'Nothing is waiting on that tool call any more: the run that asked has ended or it was already answered. ' +

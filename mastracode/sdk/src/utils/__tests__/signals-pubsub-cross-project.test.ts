@@ -107,7 +107,7 @@ function createProject(
     },
   } as unknown as Session<unknown>;
   const sessions = {
-    getSessionByResource: async (id: string) => (sessionLive && id === resourceId ? session : undefined),
+    getSession: async (id: string) => (sessionLive && id === resourceId ? session : undefined),
   };
   let toolRunning = 0;
   let calls = 0;

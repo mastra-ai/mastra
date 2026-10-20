@@ -39,7 +39,6 @@ export interface SubscribeToMergeRequestInput {
   ownerId: string;
   resourceId: string;
   threadId: string;
-  sessionScope?: string;
   source: GitLabSignalSubscriptionSource;
   subscribedByUserId?: string;
 }
@@ -48,7 +47,6 @@ export interface GitLabThreadSubscriptionTarget {
   orgId: string;
   resourceId: string;
   threadId: string;
-  sessionScope?: string;
 }
 
 export interface MergeRequestSubscriptionTarget {
@@ -77,8 +75,7 @@ function sameSession(row: GitLabSignalSubscriptionRow, input: SubscribeToMergeRe
     row.orgId === input.orgId &&
     row.sessionId === input.sessionId &&
     row.resourceId === input.resourceId &&
-    row.threadId === input.threadId &&
-    (row.sessionScope ?? '') === (input.sessionScope ?? '')
+    row.threadId === input.threadId
   );
 }
 
@@ -99,7 +96,6 @@ export async function subscribeToMergeRequest(
     sessionId: input.sessionId,
     resourceId: input.resourceId,
     threadId: input.threadId,
-    sessionScope: input.sessionScope ?? '',
     status: 'open',
     data: {
       host: normalizeSubscriptionHost(input.host),
@@ -132,14 +128,13 @@ export async function listMergeRequestSubscriptionsForThread(
     row =>
       row.orgId === input.orgId &&
       row.resourceId === input.resourceId &&
-      row.threadId === input.threadId &&
-      (row.sessionScope ?? '') === (input.sessionScope ?? ''),
+      row.threadId === input.threadId,
   );
-  if (matching.length > 0 || input.sessionScope) return matching;
+  if (matching.length > 0) return matching;
   // Same as GitHub: a user session addresses itself by its own id while its
   // rows name the owning Factory project, so fall back to the session's rows.
   const owned = await storage.subscriptions.listBySession(input.resourceId);
-  return owned.filter(row => row.orgId === input.orgId && row.threadId === input.threadId && !row.sessionScope);
+  return owned.filter(row => row.orgId === input.orgId && row.threadId === input.threadId);
 }
 
 export async function listMergeRequestSubscriptions(

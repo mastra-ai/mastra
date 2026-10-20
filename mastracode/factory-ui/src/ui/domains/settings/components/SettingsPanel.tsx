@@ -41,13 +41,11 @@ export function SettingsPanel() {
     if (!hash) return;
     document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
   }, [hash, section]);
-  const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, resourceEnabled, baseUrl } = useChatSessionContext();
   const { permissions, setPermissionForCategory } = useChatPermissions();
-  const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    scope: sessionScope,
     baseUrl,
     enabled: resourceEnabled,
   };
@@ -60,7 +58,8 @@ export function SettingsPanel() {
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const models = modelsQuery.data ?? [];
   const settings = settingsQuery.data ?? null;
-  const sessionResourceId = resourceEnabled ? resourceId : undefined;
+  // Factory sessions still run under their own id, so the resource names the session.
+  const sessionId = resourceEnabled ? resourceId : undefined;
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
     if (!settings) return Promise.resolve();
@@ -95,8 +94,7 @@ export function SettingsPanel() {
           scope={section === 'factory-memory' ? 'factory' : 'personal'}
           factoryId={factoryId}
           models={models}
-          sessionResourceId={sessionResourceId}
-          sessionScope={sessionScope}
+          sessionId={sessionId}
         />
       )}
       {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}

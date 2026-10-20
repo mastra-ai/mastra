@@ -374,8 +374,7 @@ export function createFactoryMessagingTools(
           sessions: deps.sessions,
           workItems: deps.workItems,
           notifications: messaging?.notifications ?? null,
-          isRunning: async sessionId =>
-            (await messaging?.controller.getSessionByResource(sessionId))?.stream.isActive() ?? false,
+          isRunning: async sessionId => (await messaging?.controller.getSession(sessionId))?.stream.isActive() ?? false,
           model: messaging
             ? sessionId => sessionModel(messaging.controller, deps.sessions, deps.workItems, sessionId)
             : undefined,

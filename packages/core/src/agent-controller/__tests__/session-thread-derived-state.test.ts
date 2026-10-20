@@ -353,7 +353,6 @@ describe('AgentController thread-derived session state', () => {
       const first = await controller.createSession({
         id: 'first',
         ownerId: 'shared-resource',
-        scope: 'first',
         createInitialThread: false,
       });
       const consumption = Promise.withResolvers<void>();
@@ -368,7 +367,6 @@ describe('AgentController thread-derived session state', () => {
       const second = await controller.createSession({
         id: 'second',
         ownerId: 'shared-resource',
-        scope: 'second',
         createInitialThread: false,
       });
       expect(second).not.toBe(first);
@@ -933,13 +931,12 @@ describe('AgentController thread-derived session state', () => {
     ]);
   });
 
-  it('hydrates the same thread settings in sessions with different scopes', async () => {
+  it('hydrates the same thread settings in sessions sharing a resource', async () => {
     const storage = new InMemoryStore();
     const controller = await createSettingsController(storage, 'scopes');
     const first = await controller.createSession({
       id: 'first-session',
       resourceId: 'shared-resource',
-      scope: 'scope-a',
       ownerId: 'owner',
       createInitialThread: false,
     });
@@ -952,7 +949,6 @@ describe('AgentController thread-derived session state', () => {
     const second = await controller.createSession({
       id: 'second-session',
       resourceId: 'shared-resource',
-      scope: 'scope-b',
       ownerId: 'owner',
       threadId: thread.id,
     });
@@ -1388,7 +1384,6 @@ describe('AgentController thread-derived session state', () => {
     const source = await controller.createSession({
       id: 'ensure-switch-source',
       resourceId: 'ensure-switch-resource',
-      scope: 'source',
       ownerId: 'owner',
       createInitialThread: false,
     });
@@ -1396,7 +1391,6 @@ describe('AgentController thread-derived session state', () => {
     const session = await controller.createSession({
       id: 'ensure-switch-session',
       resourceId: 'ensure-switch-resource',
-      scope: 'target',
       ownerId: 'owner',
       createInitialThread: false,
     });
@@ -1469,12 +1463,12 @@ describe('AgentController thread-derived session state', () => {
 
     const creating = session.thread.create({ id: 'session-delete-race-b' });
     await saveStarted;
-    const deleting = controller.deleteSession({ resourceId: 'session-delete-race-resource' });
+    const deleting = controller.deleteSession({ sessionId: 'session-delete-race-session' });
     releaseSave();
     await Promise.all([creating, deleting]);
 
     expect(session.thread.getId()).toBeNull();
-    await expect(controller.getSessionByResource('session-delete-race-resource')).resolves.toBeUndefined();
+    await expect(controller.getSession('session-delete-race-session')).resolves.toBeUndefined();
   });
 
   it('serializes a resource change behind an in-flight switch', async () => {
@@ -1543,7 +1537,7 @@ describe('AgentController thread-derived session state', () => {
     expect(session.thread.getId()).toBeNull();
   });
 
-  it('re-keys the session when releasing the previous thread lock fails', async () => {
+  it('keeps the session reachable by id when releasing the previous thread lock fails', async () => {
     const storage = new InMemoryStore();
     const threadLock = {
       acquire: vi.fn(async () => {}),
@@ -1564,8 +1558,7 @@ describe('AgentController thread-derived session state', () => {
 
     expect(session.identity.getResourceId()).toBe('resource-release-failure-new');
     expect(session.thread.getId()).toBeNull();
-    await expect(controller.getSessionByResource('resource-release-failure-old')).resolves.toBeUndefined();
-    await expect(controller.getSessionByResource('resource-release-failure-new')).resolves.toBe(session);
+    await expect(controller.getSession('resource-release-failure-session')).resolves.toBe(session);
     expect(threadLock.release).toHaveBeenCalledWith('resource-release-failure-thread');
   });
 

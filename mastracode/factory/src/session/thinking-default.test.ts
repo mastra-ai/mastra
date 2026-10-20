@@ -19,15 +19,17 @@ function deps({ sessionFactoryId }: { sessionFactoryId?: string } = {}) {
       ),
     },
     sourceControl: {
-      getBySessionId: vi.fn(async () => (sessionFactoryId ? ({ factoryProjectId: sessionFactoryId } as never) : null)),
+      getBySessionId: vi.fn(async (sessionId: string) =>
+        sessionFactoryId && sessionId === 'session-1' ? ({ factoryProjectId: sessionFactoryId } as never) : null,
+      ),
     },
   };
 }
 
 describe('resolveFactoryThinkingLevel', () => {
-  it("uses the default stored on a session's Factory", async () => {
+  it("uses the default stored on a session's Factory, found by session id", async () => {
     const level = await resolveFactoryThinkingLevel(
-      contextFor({ resourceId: 'session-1' }),
+      contextFor({ sessionId: 'session-1', resourceId: 'user-1' }),
       deps({ sessionFactoryId: FACTORY_ID }),
     );
     expect(level).toBe('high');
@@ -35,24 +37,34 @@ describe('resolveFactoryThinkingLevel', () => {
 
   it('reads the Factory from session state when no source-control session exists', async () => {
     const level = await resolveFactoryThinkingLevel(
-      contextFor({ resourceId: 'session-1', getState: () => ({ factoryProjectId: FACTORY_ID }) }),
+      contextFor({
+        sessionId: 'session-2',
+        resourceId: 'user-1',
+        getState: () => ({ factoryProjectId: FACTORY_ID }),
+      }),
       deps(),
     );
     expect(level).toBe('high');
   });
 
   it('resolves Factory-page requests by their resource id', async () => {
-    expect(await resolveFactoryThinkingLevel(contextFor({ resourceId: FACTORY_ID }), deps())).toBe('high');
+    expect(
+      await resolveFactoryThinkingLevel(contextFor({ sessionId: FACTORY_ID, resourceId: FACTORY_ID }), deps()),
+    ).toBe('high');
   });
 
   it('uses medium outside any Factory and when the lookup fails', async () => {
     expect(await resolveFactoryThinkingLevel(contextFor(undefined), deps())).toBe('medium');
-    expect(await resolveFactoryThinkingLevel(contextFor({ resourceId: 'user-1' }), deps())).toBe('medium');
+    expect(await resolveFactoryThinkingLevel(contextFor({ sessionId: 'user-1', resourceId: 'user-1' }), deps())).toBe(
+      'medium',
+    );
 
     const failing = deps();
     failing.sourceControl.getBySessionId.mockRejectedValue(new Error('domain not ready'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    expect(await resolveFactoryThinkingLevel(contextFor({ resourceId: 'session-1' }), failing)).toBe('medium');
+    expect(
+      await resolveFactoryThinkingLevel(contextFor({ sessionId: 'session-1', resourceId: 'session-1' }), failing),
+    ).toBe('medium');
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });

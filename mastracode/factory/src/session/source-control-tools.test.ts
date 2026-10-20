@@ -15,9 +15,10 @@ function requestContext({ orgId = 'org-1', userId = 'user-1' } = {}) {
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: userId, organizationId: orgId });
   requestContext.set('controller', {
-    resourceId: 'session-1',
+    // The session runs under its Factory, so only its session id names the source-control session.
+    sessionId: 'session-1',
+    resourceId: 'project-1',
     threadId: 'thread-1',
-    scope: 'scope-1',
     session: { id: 'session-1', ownerId: userId },
     getState: () => ({ factoryProjectId: 'project-1', projectRepositoryId: 'repo-link-1' }),
   } as unknown as AgentControllerRequestContext);

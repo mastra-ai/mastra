@@ -550,7 +550,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
 
         const resourceId = c.req.query('resourceId');
         const threadId = c.req.query('threadId');
-        const sessionScope = c.req.query('scope');
         if (!resourceId || !threadId) return c.json({ error: 'resourceId and threadId are required' }, 400);
 
         const subscriptions = await listPullRequestSubscriptionsForThread(
@@ -558,7 +557,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             orgId: tenant.orgId,
             resourceId,
             threadId,
-            sessionScope,
           },
           github.integrationStorage,
         );
@@ -1487,7 +1485,7 @@ function buildProjectGitRoutes({
               error,
             });
           });
-          await controller?.deleteSession({ resourceId: session.sessionId });
+          await controller?.deleteSession({ sessionId: session.sessionId });
         } catch (error) {
           console.error('[GitHub Sessions] Failed to tear down live controller session', {
             sessionId: session.sessionId,
@@ -1546,7 +1544,7 @@ function buildProjectGitRoutes({
           const title = await nameSession(sessionId, async () => {
             const generated = await controller.generateThreadTitle({
               threadId: thread.id,
-              resourceId: sessionId,
+              sessionId,
               requestContext,
               ...(stored?.observerModelId ? { model: titleModel(stored.observerModelId) } : {}),
             });

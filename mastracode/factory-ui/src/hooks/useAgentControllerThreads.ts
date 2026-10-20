@@ -28,7 +28,6 @@ export function useAgentControllerThreads({
   const { session } = createAgentControllerClient({
     agentControllerId,
     resourceId,
-    scope,
     baseUrl,
     enabled,
   });

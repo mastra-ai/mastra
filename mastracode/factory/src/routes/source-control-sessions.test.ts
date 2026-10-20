@@ -137,7 +137,7 @@ describe('source-control session routes', () => {
       threadId,
     });
     onTestFinished(async () => {
-      await controller.deleteSession({ resourceId: sessionId });
+      await controller.deleteSession({ sessionId });
     });
     expect(session.identity.getId()).toBe(sessionId);
     expect(session.thread.getId()).toBe(threadId);
@@ -254,7 +254,7 @@ describe('source-control session routes', () => {
     expect(queryThreads).toHaveBeenCalledWith({ resourceId: sessionId });
     expect(generateTitle).toHaveBeenCalledWith({
       threadId,
-      resourceId: sessionId,
+      sessionId,
       requestContext: expect.any(RequestContext),
     });
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
@@ -378,7 +378,7 @@ describe('source-control session routes', () => {
     // A retried create (the draft resubmitting the same id) must not start a second conversation.
     expect((await create()).status).toBe(200);
 
-    const live = await controller.getSessionByResource(sessionId);
+    const live = await controller.getSession(sessionId);
     expect(live?.thread.getId()).toBe(sessionId);
     expect(live?.state.get()).toMatchObject({
       factoryOrgId: 'org-1',
@@ -543,7 +543,7 @@ describe('session sandbox recreate', () => {
   function fakeLiveRun(active: () => boolean) {
     const live = { stream: { isActive: vi.fn(active) }, abort: vi.fn() };
     const controller = {
-      getSessionByResource: vi.fn(async () => live),
+      getSession: vi.fn(async () => live),
     } as unknown as NonNullable<RouteOptions['controller']>;
     return { live, controller };
   }
@@ -636,7 +636,7 @@ describe('session sandbox recreate', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ recreated: true, aborted: true });
-    expect(controller.getSessionByResource).toHaveBeenCalledWith(session.sessionId);
+    expect(controller.getSession).toHaveBeenCalledWith(session.sessionId);
     expect(live.abort).toHaveBeenCalledTimes(1);
     expect(sessionRetirement.recreateSessionSandbox).toHaveBeenCalledTimes(1);
   });
@@ -663,7 +663,7 @@ describe('session sandbox recreate', () => {
   it('still recreates when aborting the run throws', async () => {
     const { seed, sourceControl, session } = await seedRecreateSession();
     const controller = {
-      getSessionByResource: vi.fn(async () => {
+      getSession: vi.fn(async () => {
         throw new Error('controller unavailable');
       }),
     } as unknown as NonNullable<RouteOptions['controller']>;
