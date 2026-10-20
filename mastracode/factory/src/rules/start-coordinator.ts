@@ -268,7 +268,7 @@ export class FactoryStartCoordinator {
       projectRepositoryId: sourceSession.projectRepositoryId,
     };
     // The run is addressed by its session id; its threads and memory belong to
-    // the Factory, so concurrent runs share resource-scoped memory.
+    // the Factory, so concurrent runs share one memory resource.
     const session = await this.#controller.createSession({
       id: sourceSession.sessionId,
       ownerId: request.userId,
