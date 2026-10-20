@@ -198,7 +198,11 @@ function createKnowledge(storage: LibSQLStore, sourceWindow: StaticPayload, onAg
             })),
           ];
           for (const entry of entries) {
-            await importer.upsertNode(entry.address, { name: entry.name, metadata: entry.metadata });
+            await importer.upsertNode(entry.address, {
+              scopes: [importer.scope],
+              name: entry.name,
+              metadata: entry.metadata,
+            });
           }
           for (const entry of entries) {
             const node = await importer.getNode(entry.address);

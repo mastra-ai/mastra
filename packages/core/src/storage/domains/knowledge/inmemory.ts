@@ -5,6 +5,10 @@ import {
   canonicalizeKnowledgeScopeIds,
   createKnowledgeUlid,
   isKnowledgeNodeVisible,
+  knowledgeImportClaimKey,
+  parseKnowledgeImportClaim,
+  reconcileKnowledgeClaimScopes,
+  serializeKnowledgeImportClaim,
   assertKnowledgeSourceProbeLimit,
   assertKnowledgeVisibilityProbeLimit,
   isKnowledgeScopeVisible,
@@ -24,6 +28,12 @@ import {
 } from './base';
 import type {
   ClaimKnowledgeImportRunInput,
+  ClaimKnowledgeRecordInput,
+  KnowledgeImportClaim,
+  KnowledgeImportClaimant,
+  ReleaseKnowledgeRecordClaimInput,
+  ReleaseKnowledgeRecordClaimResult,
+  SetKnowledgeNodeScopesInput,
   CreateKnowledgeRecordInput,
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeNodeInput,
@@ -273,6 +283,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#db.knowledgeNodeKeys.set(key, node.id);
     this.#recordActivity('create', 'node', node.id, input.contextScopeId, input.importRunId);
     this.#enqueue('node', node.id, 'upsert', node.version, scopeIds);
+    if (input.claimant) this.#writeClaim(input.claimant, 'node', node.id, scopeIds, node.version);
     return cloneNode(node);
   }
 
@@ -481,6 +492,228 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     });
   }
 
+  async listImportClaims(input: {
+    targetType: KnowledgeSemanticDocumentType;
+    targetId: string;
+  }): Promise<KnowledgeImportClaim[]> {
+    return this.#claims(input.targetType, input.targetId);
+  }
+
+  async setNodeScopes(input: SetKnowledgeNodeScopesInput): Promise<KnowledgeNode> {
+    this.#assertImportRunExists(input.importRunId);
+    return this.#runAtomicMutation(() => {
+      const existing = this.#db.knowledgeNodes.get(input.id);
+      if (!existing || existing.deletedAt) throw new KnowledgeNotFoundError('node', input.id);
+      if (existing.version !== input.version) throw new KnowledgeConflictError(input.id);
+      const next = canonicalizeKnowledgeScopeIds(input.scopeIds);
+      if (next.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
+      this.#assertScopeNodes(next);
+      const claims = this.#claims('node', input.id);
+      const previous = claims.find(claim => isSameClaimant(claim, input.claimant));
+      const current = this.#nodeScopeIds(input.id);
+      const scopeIds = reconcileKnowledgeClaimScopes({
+        current,
+        previous: previous?.scopeIds ?? [],
+        next,
+        others: claims.filter(claim => !isSameClaimant(claim, input.claimant)).flatMap(claim => claim.scopeIds),
+      });
+      if (knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) {
+        this.#writeClaim(input.claimant, 'node', input.id, next, existing.version);
+        return cloneNode(existing);
+      }
+      const oldKey = recordKey(existing.name, current);
+      const newKey = recordKey(existing.name, scopeIds);
+      const collision = this.#db.knowledgeNodeKeys.get(newKey);
+      if (collision && collision !== input.id) throw new KnowledgeConflictError(collision);
+      const siblingCollision = this.#findSiblingNameCollision(existing.name, scopeIds, input.id);
+      if (siblingCollision) throw new KnowledgeConflictError(siblingCollision.id);
+      const updated: KnowledgeNode = { ...existing, version: existing.version + 1, updatedAt: new Date() };
+      if (oldKey !== newKey) {
+        this.#db.knowledgeNodeKeys.delete(oldKey);
+        this.#db.knowledgeNodeKeys.set(newKey, input.id);
+      }
+      this.#db.knowledgeNodes.set(input.id, updated);
+      this.#db.knowledgeNodeScopes.set(input.id, new Set(scopeIds));
+      this.#recordActivity('move', 'node', input.id, input.contextScopeId ?? next[0], input.importRunId);
+      this.#enqueue('node', input.id, 'delete', updated.version, current);
+      this.#enqueue('node', input.id, 'upsert', updated.version, scopeIds);
+      this.#advanceClaims('node', input.id, existing.version, updated.version);
+      this.#writeClaim(input.claimant, 'node', input.id, next, updated.version);
+      return cloneNode(updated);
+    });
+  }
+
+  async claimRecord(input: ClaimKnowledgeRecordInput): Promise<KnowledgeRecord> {
+    this.#assertImportRunExists(input.importRunId);
+    return this.#runAtomicMutation(() => {
+      const record = this.#db.knowledgeRecords.get(input.id);
+      if (!record || record.deletedAt) throw new KnowledgeNotFoundError('record', input.id);
+      if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
+      const next = canonicalizeKnowledgeScopeIds(input.scopeIds);
+      if (next.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
+      this.#assertScopeNodes(next);
+      const claims = this.#claims('record', input.id);
+      const previous = claims.find(claim => isSameClaimant(claim, input.claimant));
+      const current = this.#recordScopeIds(input.id);
+      const scopeIds = reconcileKnowledgeClaimScopes({
+        current,
+        previous: previous?.scopeIds ?? [],
+        next,
+        others: claims.filter(claim => !isSameClaimant(claim, input.claimant)).flatMap(claim => claim.scopeIds),
+      });
+      const updated = this.#replaceRecordScopes(
+        record,
+        current,
+        scopeIds,
+        input.contextScopeId ?? next[0],
+        input.importRunId,
+      );
+      this.#advanceClaims('record', input.id, record.version, updated.version);
+      this.#writeClaim(input.claimant, 'record', input.id, next, updated.version);
+      return cloneRecord(updated);
+    });
+  }
+
+  async releaseRecordClaim(input: ReleaseKnowledgeRecordClaimInput): Promise<ReleaseKnowledgeRecordClaimResult> {
+    this.#assertImportRunExists(input.importRunId);
+    return this.#runAtomicMutation(() => {
+      const record = this.#db.knowledgeRecords.get(input.id);
+      if (!record) throw new KnowledgeNotFoundError('record', input.id);
+      if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
+      return this.#releaseRecordClaim(record, input.claimant, input.importRunId);
+    });
+  }
+
+  async releaseImportClaims(input: { importerId: string; binding: string; importRunId?: string }): Promise<void> {
+    this.#assertImportRunExists(input.importRunId);
+    const binding = canonicalizeKnowledgeImporterBindingKey(input.binding);
+    this.#runAtomicMutation(() => {
+      const owned = this.#allClaims().filter(
+        claim => claim.importerId === input.importerId && claim.binding === binding,
+      );
+      for (const claim of owned) {
+        if (claim.targetType === 'record') {
+          const record = this.#db.knowledgeRecords.get(claim.targetId);
+          if (record) this.#releaseRecordClaim(record, claim, input.importRunId);
+          else this.#deleteClaim(claim, 'record', claim.targetId);
+          continue;
+        }
+        const node = this.#db.knowledgeNodes.get(claim.targetId);
+        this.#deleteClaim(claim, 'node', claim.targetId);
+        if (!node || node.deletedAt) continue;
+        const current = this.#nodeScopeIds(node.id);
+        const others = this.#claims('node', node.id).flatMap(other => other.scopeIds);
+        const scopeIds = reconcileKnowledgeClaimScopes({ current, previous: claim.scopeIds, next: [], others });
+        // A node keeps at least one membership; one only this binding held stays rather than orphaning it.
+        if (scopeIds.length === 0 || knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) continue;
+        const updated: KnowledgeNode = { ...node, version: node.version + 1, updatedAt: new Date() };
+        this.#db.knowledgeNodeKeys.delete(recordKey(node.name, current));
+        this.#db.knowledgeNodeKeys.set(recordKey(node.name, scopeIds), node.id);
+        this.#db.knowledgeNodes.set(node.id, updated);
+        this.#db.knowledgeNodeScopes.set(node.id, new Set(scopeIds));
+        this.#recordActivity('move', 'node', node.id, scopeIds[0], input.importRunId);
+        this.#enqueue('node', node.id, 'delete', updated.version, current);
+        this.#enqueue('node', node.id, 'upsert', updated.version, scopeIds);
+        this.#advanceClaims('node', node.id, node.version, updated.version);
+      }
+    });
+  }
+
+  #releaseRecordClaim(
+    record: KnowledgeRecord,
+    claimant: KnowledgeImportClaimant,
+    importRunId: string | undefined,
+  ): ReleaseKnowledgeRecordClaimResult {
+    const claims = this.#claims('record', record.id);
+    const previous = claims.find(claim => isSameClaimant(claim, claimant));
+    const others = claims.filter(claim => !isSameClaimant(claim, claimant));
+    this.#deleteClaim(claimant, 'record', record.id);
+    const current = this.#recordScopeIds(record.id);
+    if (others.length === 0) {
+      this.#recordActivity('delete', 'record', record.id, current[0], importRunId);
+      this.#enqueue('record', record.id, 'delete', record.version + 1, current);
+      this.#db.knowledgeMentions.delete(`record:${record.id}`);
+      this.#db.knowledgeRecordScopes.delete(record.id);
+      this.#db.knowledgeRecords.delete(record.id);
+      return { record: cloneRecord(record), deleted: true };
+    }
+    const scopeIds = reconcileKnowledgeClaimScopes({
+      current,
+      previous: previous?.scopeIds ?? [],
+      next: [],
+      others: others.flatMap(claim => claim.scopeIds),
+    });
+    const updated = this.#replaceRecordScopes(record, current, scopeIds, scopeIds[0], importRunId);
+    this.#advanceClaims('record', record.id, record.version, updated.version);
+    return { record: cloneRecord(updated), deleted: false };
+  }
+
+  #replaceRecordScopes(
+    record: KnowledgeRecord,
+    current: KnowledgeScopeIds,
+    scopeIds: KnowledgeScopeIds,
+    contextScopeId: string | undefined,
+    importRunId: string | undefined,
+  ): KnowledgeRecord {
+    if (knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) return record;
+    const updated = { ...record, version: record.version + 1, updatedAt: new Date() };
+    this.#db.knowledgeRecords.set(record.id, updated);
+    this.#db.knowledgeRecordScopes.set(record.id, new Set(scopeIds));
+    this.#recordActivity('move', 'record', record.id, contextScopeId, importRunId);
+    this.#enqueue('record', record.id, 'delete', updated.version, current);
+    if (!record.deletedAt) this.#enqueue('record', record.id, 'upsert', updated.version, scopeIds);
+    return updated;
+  }
+
+  /**
+   * A claim operation bumps its target's version without anyone editing it from outside, so every
+   * claim that was current before the bump stays current after it.
+   */
+  #advanceClaims(targetType: KnowledgeSemanticDocumentType, targetId: string, from: number, to: number): void {
+    if (from === to) return;
+    for (const claim of this.#claims(targetType, targetId)) {
+      if (claim.version === from) this.#writeClaim(claim, targetType, targetId, claim.scopeIds, to);
+    }
+  }
+
+  #allClaims(): KnowledgeImportClaim[] {
+    return [...this.#db.knowledgeImportState.values()]
+      .map(state => parseKnowledgeImportClaim(state))
+      .filter((claim): claim is KnowledgeImportClaim => claim !== null);
+  }
+
+  #claims(targetType: KnowledgeSemanticDocumentType, targetId: string): KnowledgeImportClaim[] {
+    return this.#allClaims().filter(claim => claim.targetType === targetType && claim.targetId === targetId);
+  }
+
+  #writeClaim(
+    claimant: KnowledgeImportClaimant,
+    targetType: KnowledgeSemanticDocumentType,
+    targetId: string,
+    scopeIds: KnowledgeScopeIds,
+    version: number,
+  ): void {
+    const binding = canonicalizeKnowledgeImporterBindingKey(claimant.binding);
+    const key = knowledgeImportClaimKey(targetType, targetId);
+    this.#db.knowledgeImportState.set(JSON.stringify([claimant.importerId, binding, key]), {
+      importerId: claimant.importerId,
+      binding,
+      key,
+      value: serializeKnowledgeImportClaim({ source: claimant.source, scopeIds, version }),
+    });
+  }
+
+  #deleteClaim(
+    claimant: Pick<KnowledgeImportClaimant, 'importerId' | 'binding'>,
+    targetType: KnowledgeSemanticDocumentType,
+    targetId: string,
+  ): void {
+    const binding = canonicalizeKnowledgeImporterBindingKey(claimant.binding);
+    this.#db.knowledgeImportState.delete(
+      JSON.stringify([claimant.importerId, binding, knowledgeImportClaimKey(targetType, targetId)]),
+    );
+  }
+
   async deleteRecordBySource(input: {
     id: string;
     source: string;
@@ -607,6 +840,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       if (record.nodeId !== input.id) continue;
       const updatedRecord = { ...record, version: record.version + 1, updatedAt: updated.updatedAt };
       this.#db.knowledgeRecords.set(record.id, updatedRecord);
+      // A node edit bumps its records without changing them, so importer claims follow the bump.
+      for (const claim of this.#claims('record', record.id)) {
+        if (claim.version === record.version) {
+          this.#writeClaim(claim, 'record', record.id, claim.scopeIds, updatedRecord.version);
+        }
+      }
       this.#enqueue(
         'record',
         record.id,
@@ -616,6 +855,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       );
     }
     this.#enqueue('node', input.id, 'upsert', updated.version, scopeIds);
+    if (input.claimant) {
+      const previous = this.#claims('node', input.id).find(claim => isSameClaimant(claim, input.claimant!));
+      this.#writeClaim(input.claimant, 'node', input.id, previous?.scopeIds ?? [], updated.version);
+    }
     return cloneNode(updated);
   }
 
@@ -740,6 +983,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     parent.updatedAt = now;
     this.#recordActivity('create', 'record', record.id, input.contextScopeId, input.importRunId);
     this.#enqueue('record', record.id, 'upsert', record.version, scopeIds);
+    if (input.claimant) this.#writeClaim(input.claimant, 'record', record.id, scopeIds, record.version);
     return cloneRecord(record);
   }
 
@@ -1343,6 +1587,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         [...this.#db.knowledgeSemanticOutbox].map(([id, entry]) => [id, cloneSemanticOutboxEntry(entry)]),
       ),
       idempotency: new Map(this.#db.knowledgeSemanticIdempotency),
+      importState: new Map([...this.#db.knowledgeImportState].map(([key, state]) => [key, { ...state }])),
     };
 
     try {
@@ -1372,6 +1617,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       snapshot.outbox.forEach((entry, id) => this.#db.knowledgeSemanticOutbox.set(id, entry));
       this.#db.knowledgeSemanticIdempotency.clear();
       snapshot.idempotency.forEach((id, key) => this.#db.knowledgeSemanticIdempotency.set(key, id));
+      this.#db.knowledgeImportState.clear();
+      snapshot.importState.forEach((state, key) => this.#db.knowledgeImportState.set(key, state));
       throw error;
     }
   }
@@ -1563,4 +1810,14 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     this.#db.knowledgeSemanticOutbox.set(entry.id, entry);
     this.#db.knowledgeSemanticIdempotency.set(idempotencyKey, entry.id);
   }
+}
+
+function isSameClaimant(
+  left: Pick<KnowledgeImportClaimant, 'importerId' | 'binding'>,
+  right: Pick<KnowledgeImportClaimant, 'importerId' | 'binding'>,
+): boolean {
+  return (
+    left.importerId === right.importerId &&
+    canonicalizeKnowledgeImporterBindingKey(left.binding) === canonicalizeKnowledgeImporterBindingKey(right.binding)
+  );
 }

@@ -69,7 +69,7 @@ describe('Knowledge import citation resolution', () => {
           handler: async ctx => {
             const repo = (ctx.payload as { repo: string }).repo;
             const importer = await ctx.importer();
-            await importer.upsertNode(`mastra-ai/${repo}:issue:123`, { name: 'issue:123' });
+            await importer.upsertNode(`mastra-ai/${repo}:issue:123`, { scopes: [importer.scope], name: 'issue:123' });
           },
         },
       ],
@@ -153,7 +153,7 @@ describe('Knowledge import citation resolution', () => {
             distilled = result;
             if (!result.complete) return;
             const importer = await ctx.importer();
-            await importer.upsertNode('decision:pr-7', { name: 'decision:pr-7' });
+            await importer.upsertNode('decision:pr-7', { scopes: [importer.scope], name: 'decision:pr-7' });
             await ctx.state.set('cursor', 'merged-7');
           },
         } satisfies KnowledgeImporterDefinition<Payload>,

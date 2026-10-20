@@ -41,7 +41,11 @@ describe('Knowledge importer runner', () => {
               await releaseFirst.promise;
             }
             const importer = await ctx.importer();
-            await importer.upsertNode(payload.address, { name: payload.address, metadata: { kind: 'event' } });
+            await importer.upsertNode(payload.address, {
+              scopes: [importer.scope],
+              name: payload.address,
+              metadata: { kind: 'event' },
+            });
             await ctx.state.set('cursor', payload.address);
             order.push(`end:${payload.address}`);
           },
@@ -451,7 +455,7 @@ describe('Knowledge importer runner', () => {
           access: { 'project:$projectId': 'edit' },
           handler: async ctx => {
             const importer = await ctx.importer();
-            await importer.upsertNode('event:42', { name: 'Architecture review' });
+            await importer.upsertNode('event:42', { scopes: [importer.scope], name: 'Architecture review' });
             await ctx.state.set('cursor', 'event:42');
             if (attempt++ === 0) throw new Error('failure after graph write');
           },

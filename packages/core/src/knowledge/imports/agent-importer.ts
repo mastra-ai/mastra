@@ -62,22 +62,37 @@ function createImporterTools(
     }),
     [`${prefix}_upsertNode`]: createTool({
       id: 'knowledge-import-upsert-node',
-      description: 'Create or update a node owned by this importer binding using a stable external address.',
-      inputSchema: z.object({ address, name: z.string().trim().min(1), metadata }),
-      execute: async ({ address, name, metadata }) => {
-        const handle = await operations.upsertNode(address, { name, ...(metadata ? { metadata } : {}) });
+      description:
+        'Create or update a node owned by this importer binding using a stable external address. `scopes` defaults to the binding scope.',
+      inputSchema: z.object({
+        address,
+        name: z.string().trim().min(1),
+        metadata,
+        scopes: z.array(z.string().trim().min(1)).min(1).optional(),
+        isScope: z.boolean().optional(),
+      }),
+      execute: async ({ address, name, metadata, scopes, isScope }) => {
+        const handle = await operations.upsertNode(address, {
+          name,
+          ...(metadata ? { metadata } : {}),
+          scopes: scopes ?? [operations.scope],
+          ...(isScope === undefined ? {} : { isScope }),
+        });
         writes.nodesUpserted += 1;
         return nodeResult(handle);
       },
     }),
     [`${prefix}_removeNode`]: createTool({
       id: 'knowledge-import-remove-node',
-      description: 'Permanently remove content still owned exclusively by this importer binding.',
+      description: "Remove this binding's records from a node the provider confirmed deleted. The node itself is kept.",
       inputSchema: z.object({ address }),
       execute: async ({ address }) => {
         const removed = await operations.removeNode(address);
-        // Only a node actually deleted counts; a released or missing address wrote nothing.
-        if (removed?.deleted) writes.nodesRemoved += 1;
+        // Only a removal that dropped records counts; a skipped or missing address wrote nothing.
+        if (removed && removed.recordsRemoved > 0) {
+          writes.nodesRemoved += 1;
+          writes.recordsRemoved += removed.recordsRemoved;
+        }
         return removed;
       },
     }),

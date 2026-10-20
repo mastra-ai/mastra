@@ -36,7 +36,7 @@ describe('Knowledge public types', () => {
         expectTypeOf(context.payload).toEqualTypeOf<unknown>();
         const importer = await context.importer();
         expectTypeOf(importer).toEqualTypeOf<StaticKnowledgeImporterOperations>();
-        const node = await importer.upsertNode('event:42', { name: 'Planning' });
+        const node = await importer.upsertNode('event:42', { name: 'Planning', scopes: [importer.scope] });
         expectTypeOf(node).toEqualTypeOf<StaticKnowledgeNodeHandle>();
         await node.appendKnowledge({ text: '10:00–11:00' });
       },

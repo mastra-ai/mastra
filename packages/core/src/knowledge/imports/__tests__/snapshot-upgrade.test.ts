@@ -47,6 +47,7 @@ describe('Knowledge importer snapshot upgrades', () => {
       importRunId: firstRun.id,
     });
     const firstNode = await firstOperations.upsertNode('event:architecture-review', {
+      scopes: [firstOperations.scope],
       name: 'Architecture review',
       metadata: { revision: 1 },
     });
@@ -79,6 +80,7 @@ describe('Knowledge importer snapshot upgrades', () => {
       importRunId: replayRun.id,
     });
     const replayedNode = await replayOperations.upsertNode('event:architecture-review', {
+      scopes: [replayOperations.scope],
       name: 'Architecture review',
       metadata: { revision: 2 },
     });

@@ -46,7 +46,11 @@ function createKnowledge(options: { resolveBindingFromContext?: boolean } = {}) 
         },
         handler: async ctx => {
           const importer = await ctx.importer();
-          const node = await importer.upsertNode('event-1', { name: 'Imported Event', metadata: { kind: 'event' } });
+          const node = await importer.upsertNode('event-1', {
+            scopes: [importer.scope],
+            name: 'Imported Event',
+            metadata: { kind: 'event' },
+          });
           await node.appendKnowledge({ text: 'imported evidence' });
         },
       },

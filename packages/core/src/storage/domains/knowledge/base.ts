@@ -151,6 +151,121 @@ export interface KnowledgeImportState {
   key: string;
   value: string;
 }
+
+/** An importer binding writing on behalf of one source. Claims and ownership are tracked per claimant. */
+export interface KnowledgeImportClaimant {
+  importerId: string;
+  binding: string;
+  source: string;
+}
+
+/**
+ * What one importer binding contributed to a node's memberships or a record. A target's scopes are the
+ * union of its claims (plus memberships nobody claims), so one binding never drops another's. `version`
+ * is the target's version right after this claimant's last write: a target whose version is above every
+ * same-source claim was changed outside the importer.
+ */
+export interface KnowledgeImportClaim extends KnowledgeImportClaimant {
+  targetType: KnowledgeSemanticDocumentType;
+  targetId: string;
+  scopeIds: KnowledgeScopeIds;
+  version: number;
+}
+
+/** Import-state key holding one claimant's claim on a target. Claims share the binding's import state. */
+export function knowledgeImportClaimKey(targetType: KnowledgeSemanticDocumentType, targetId: string): string {
+  return `__mastra_internal/claim/${targetType}/${targetId}`;
+}
+
+export function parseKnowledgeImportClaim(state: KnowledgeImportState): KnowledgeImportClaim | null {
+  const match = /^__mastra_internal\/claim\/(node|record)\/(.+)$/.exec(state.key);
+  if (!match) return null;
+  try {
+    const value = JSON.parse(state.value) as { source?: unknown; scopeIds?: unknown; version?: unknown };
+    if (
+      typeof value.source !== 'string' ||
+      !Array.isArray(value.scopeIds) ||
+      !value.scopeIds.every(id => typeof id === 'string') ||
+      !Number.isSafeInteger(value.version)
+    ) {
+      return null;
+    }
+    return {
+      importerId: state.importerId,
+      binding: state.binding,
+      source: value.source,
+      targetType: match[1] as KnowledgeSemanticDocumentType,
+      targetId: match[2]!,
+      scopeIds: canonicalizeKnowledgeScopeIds(value.scopeIds as string[]),
+      version: Number(value.version),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function serializeKnowledgeImportClaim(claim: { source: string; scopeIds: KnowledgeScopeIds; version: number }) {
+  return JSON.stringify({
+    source: claim.source,
+    scopeIds: canonicalizeKnowledgeScopeIds(claim.scopeIds),
+    version: claim.version,
+  });
+}
+
+/**
+ * Memberships after one claimant replaces its claim: drop what only it claimed before, add what it
+ * claims now, and keep everything other claimants (or no claim at all) hold.
+ */
+export function reconcileKnowledgeClaimScopes(input: {
+  current: KnowledgeScopeIds;
+  previous: KnowledgeScopeIds;
+  next: KnowledgeScopeIds;
+  others: KnowledgeScopeIds;
+}): KnowledgeScopeIds {
+  const keep = new Set([...input.next, ...input.others]);
+  const dropped = new Set(input.previous.filter(id => !keep.has(id)));
+  return canonicalizeKnowledgeScopeIds([...input.current.filter(id => !dropped.has(id)), ...input.next]);
+}
+
+/** True when no write since the last same-source importer write: the target's version is the highest claim's. */
+export function isKnowledgeTargetImporterOwned(
+  targetVersion: number,
+  claims: readonly Pick<KnowledgeImportClaim, 'source' | 'version'>[],
+  source: string,
+): boolean {
+  const versions = claims.filter(claim => claim.source === source).map(claim => claim.version);
+  return versions.length > 0 && Math.max(...versions) === targetVersion;
+}
+
+export interface SetKnowledgeNodeScopesInput {
+  id: string;
+  version: number;
+  claimant: KnowledgeImportClaimant;
+  scopeIds: KnowledgeScopeIds;
+  contextScopeId?: string;
+  importRunId?: string;
+}
+
+export interface ClaimKnowledgeRecordInput {
+  id: string;
+  version: number;
+  claimant: KnowledgeImportClaimant;
+  scopeIds: KnowledgeScopeIds;
+  contextScopeId?: string;
+  importRunId?: string;
+}
+
+export interface ReleaseKnowledgeRecordClaimInput {
+  id: string;
+  version: number;
+  claimant: KnowledgeImportClaimant;
+  importRunId?: string;
+}
+
+export interface ReleaseKnowledgeRecordClaimResult {
+  record: KnowledgeRecord;
+  deleted: boolean;
+}
 export type KnowledgeImportKind = 'static' | 'agentic';
 export type KnowledgeImportTriggerKind = 'cron' | 'webhook' | 'programmatic';
 export type KnowledgeImportRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped' | 'interrupted';
@@ -404,6 +519,8 @@ export interface CreateKnowledgeNodeInput {
   metadata?: Record<string, unknown>;
   scopeIds: KnowledgeScopeIds;
   contextScopeId?: string;
+  /** Importer binding to record as claimant of this write, atomically with it. */
+  claimant?: KnowledgeImportClaimant;
 }
 export interface UpdateKnowledgeNodeInput {
   id: string;
@@ -415,6 +532,8 @@ export interface UpdateKnowledgeNodeInput {
   metadata?: Record<string, unknown>;
   scopeIds?: KnowledgeScopeIds;
   contextScopeId?: string;
+  /** Importer binding to record as claimant of this write, atomically with it. */
+  claimant?: KnowledgeImportClaimant;
 }
 export interface CreateKnowledgeRecordInput {
   id?: string;
@@ -426,6 +545,8 @@ export interface CreateKnowledgeRecordInput {
   scopeIds: KnowledgeScopeIds;
   resolutionScopeIds?: KnowledgeScopeIds;
   contextScopeId?: string;
+  /** Importer binding to record as claimant of this write, atomically with it. */
+  claimant?: KnowledgeImportClaimant;
 }
 export interface ListKnowledgeNodesInput {
   scopeIds: KnowledgeScopeIds;
@@ -874,6 +995,31 @@ export abstract class KnowledgeStorage extends StorageDomain {
     scopeId: string;
     importRunId?: string;
   }): Promise<DeleteKnowledgeNodeAddressResult> {
+    throw new KnowledgeUnsupportedError();
+  }
+  async listImportClaims(_input: {
+    targetType: KnowledgeSemanticDocumentType;
+    targetId: string;
+  }): Promise<KnowledgeImportClaim[]> {
+    throw new KnowledgeUnsupportedError();
+  }
+  /**
+   * Replaces one claimant's membership claim on a node, keeping every other claim. Fenced by node version;
+   * bumps the node version only when membership changes and never touches its records.
+   */
+  async setNodeScopes(_input: SetKnowledgeNodeScopesInput): Promise<KnowledgeNode> {
+    throw new KnowledgeUnsupportedError();
+  }
+  /** Adds or replaces one claimant's claim on an existing record; record scopes become the union of claims. */
+  async claimRecord(_input: ClaimKnowledgeRecordInput): Promise<KnowledgeRecord> {
+    throw new KnowledgeUnsupportedError();
+  }
+  /** Drops one claimant's record claim; deletes the record once no claim is left. */
+  async releaseRecordClaim(_input: ReleaseKnowledgeRecordClaimInput): Promise<ReleaseKnowledgeRecordClaimResult> {
+    throw new KnowledgeUnsupportedError();
+  }
+  /** Drops every claim one importer binding holds, removing only what no other claim keeps. */
+  async releaseImportClaims(_input: { importerId: string; binding: string; importRunId?: string }): Promise<void> {
     throw new KnowledgeUnsupportedError();
   }
   async deleteRecordBySource(_input: {

@@ -92,7 +92,7 @@ const knowledge = new Knowledge({
         }
         const importer = await context.importer();
         for (const event of payload.events ?? []) {
-          const node = await importer.upsertNode(`event:${event.id}`, {
+          const node = await importer.upsertNode(`event:${event.id}`, { scopes: [importer.scope], 
             name: event.title,
             metadata: { kind: 'calendar-event', revision: event.revision },
           });

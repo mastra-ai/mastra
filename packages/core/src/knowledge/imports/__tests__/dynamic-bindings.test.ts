@@ -368,7 +368,7 @@ describe('Knowledge importer dynamic cron bindings', () => {
             triggers: { cron: { schedule: '* * * * * *', resolveBindings: async () => [one, outside] } },
             handler: async ctx => {
               const ops = await ctx.importer().catch(() => null);
-              await ops?.upsertNode('ticket:1', { name: 'Ticket 1' });
+              await ops?.upsertNode('ticket:1', { name: 'Ticket 1', scopes: [ops.scope] });
             },
           },
         ],
