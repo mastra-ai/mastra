@@ -219,6 +219,12 @@ type Root = {
 };
 const rootKey = (row: Root) => JSON.stringify([row.organizationId, row.traceId, row.spanId]);
 const iso = (value: string) => new Date(value.includes('T') ? value : `${value.replace(' ', 'T')}Z`).toISOString();
+const earliestTimestamp = (rows: Root[], field: 'startedAt' | 'endedAt') =>
+  rows
+    .map(row => iso(row[field]))
+    .sort()[0]!
+    .replace('T', ' ')
+    .replace(/Z$/, '');
 
 /** Bound HTTP form parameter size as well as payload rows. Long IDs must not break large pages. */
 function* batches<T extends Root>(rows: T[], maxRows = 256): Generator<T[]> {
@@ -298,7 +304,10 @@ export async function queryThreadRows(
           iso(root.endedAt).replace('T', ' ').replace(/Z$/, ''),
         ]),
     );
-  const rootWhere = `tuple(isNull(organizationId), ifNull(organizationId, ''), isNull(resourceId), ifNull(resourceId, ''),
+  // Prune partitions using the selected versions, including roots outside the request window.
+  // The exact tuple match still determines which rows are hydrated.
+  const rootWhere = `endedAt >= {earliestEndedAt:DateTime64(3, 'UTC')} AND
+    tuple(isNull(organizationId), ifNull(organizationId, ''), isNull(resourceId), ifNull(resourceId, ''),
     traceId, spanId, startedAt, endedAt) IN {roots:Array(Tuple(UInt8, String, UInt8, String, String, String, DateTime64(3, 'UTC'), DateTime64(3, 'UTC')))}`;
   const stored: Array<Root & Record<string, unknown>> = [];
   for (const batch of batches([...roots.values()]))
@@ -309,7 +318,7 @@ export async function queryThreadRows(
       if(isNull(error), 'success', 'error') AS status, ${PREVIEW_COLUMNS.join(', ')}
       FROM ${TABLE_TRACE_ROOTS} WHERE ${rootWhere}
       ORDER BY isNotNull(threadId) DESC LIMIT 1 BY organizationId, traceId, spanId`,
-        query_params: { roots: keys(batch) },
+        query_params: { roots: keys(batch), earliestEndedAt: earliestTimestamp(batch, 'endedAt') },
       })),
     );
   const byRoot = new Map(stored.map(row => [rootKey(row), row]));
@@ -319,7 +328,7 @@ export async function queryThreadRows(
     const payloads = await run<Root & Record<string, unknown>>({
       query: `SELECT organizationId, traceId, spanId, input, output, error FROM ${TABLE_TRACE_ROOTS}
         WHERE ${rootWhere} ORDER BY isNotNull(threadId) DESC LIMIT 1 BY organizationId, traceId, spanId`,
-      query_params: { roots: keys(batch) },
+      query_params: { roots: keys(batch), earliestEndedAt: earliestTimestamp(batch, 'endedAt') },
     });
     for (const payload of payloads) {
       const row = byRoot.get(rootKey(payload));
@@ -328,6 +337,8 @@ export async function queryThreadRows(
   }
   // Only the first root agent's direct model generation supplies display model/provider.
   // Nested processor/scorer agents have a different parent and cannot supply these values.
+  // Child spans end after their root starts; allow one day of clock skew, matching Platform.
+  // Use selected roots, not the request window, and no upper bound for later/resumed activity.
   const firstRoots = page
     .map(row => representative(row, 'first'))
     .filter(root => byRoot.get(rootKey(root))?.spanType === 'agent_run');
@@ -343,11 +354,13 @@ export async function queryThreadRows(
         query: `SELECT organizationId, traceId,
       if(JSONType(attributes, 'model') = 'String', JSONExtractString(attributes, 'model'), NULL) AS model,
       if(JSONType(attributes, 'provider') = 'String', JSONExtractString(attributes, 'provider'), NULL) AS provider
-      FROM ${TABLE_SPAN_EVENTS} WHERE spanType = 'model_generation' AND
+      FROM ${TABLE_SPAN_EVENTS} WHERE spanType = 'model_generation'
+        AND endedAt >= {earliestStartedAt:DateTime64(3, 'UTC')} - INTERVAL 1 DAY AND
       tuple(isNull(organizationId), ifNull(organizationId, ''), isNull(resourceId), ifNull(resourceId, ''), traceId, parentSpanId)
         IN {agents:Array(Tuple(UInt8, String, UInt8, String, String, String))}
       ORDER BY organizationId, traceId, startedAt, spanId LIMIT 1 BY organizationId, traceId`,
         query_params: {
+          earliestStartedAt: earliestTimestamp(batch, 'startedAt'),
           agents: batch.map(
             root =>
               new TupleParam([

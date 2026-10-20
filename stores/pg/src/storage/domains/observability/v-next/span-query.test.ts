@@ -20,6 +20,22 @@ const storage = new ObservabilityStoragePostgresVNext({ client, schemaName });
 beforeAll(async () => {
   await client.none(`CREATE SCHEMA "${schemaName}"`);
   await storage.init();
+  // The shared thread-history case includes retained spans from a month ago.
+  // Native/partman startup creates recent/future partitions; seed the historical test days too.
+  if (storage.partitionMode !== 'timescale') {
+    for (const daysAgo of [30, 31]) {
+      const start = new Date();
+      start.setUTCHours(0, 0, 0, 0);
+      start.setUTCDate(start.getUTCDate() - daysAgo);
+      const end = new Date(start.getTime() + 86_400_000);
+      const suffix = start.toISOString().slice(0, 10).replaceAll('-', '');
+      await client.none(
+        `CREATE TABLE IF NOT EXISTS "${schemaName}"."${TABLE_SPAN_EVENTS}_p${suffix}"
+          PARTITION OF "${schemaName}"."${TABLE_SPAN_EVENTS}"
+          FOR VALUES FROM ('${start.toISOString()}') TO ('${end.toISOString()}')`,
+      );
+    }
+  }
 }, 60_000);
 afterAll(async () => {
   await client.none(`DROP SCHEMA "${schemaName}" CASCADE`);

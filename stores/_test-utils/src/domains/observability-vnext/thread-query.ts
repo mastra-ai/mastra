@@ -329,5 +329,45 @@ export function createThreadQueryTests(
       });
       expect((await query()).threads[0]).toMatchObject({ model: 'first-model', provider: 'first-provider' });
     });
+
+    it('returns old first-trace previews and models despite clock skew or later resumed activity', async () => {
+      const old = -30 * 86_400;
+      await options.writeSpanWithoutPreviews(root('old', old, { input: 'old input' }));
+      await options.writeSpanWithoutPreviews(root('recent', 15, { output: 'recent output' }));
+      await getStorage().batchCreateSpans({
+        records: [
+          // End exactly one day before the root start to exercise the skew allowance inclusively.
+          root('old', old - 86_400 - 1, {
+            spanId: 'skewed-model',
+            parentSpanId: 'root-old',
+            spanType: SpanType.MODEL_GENERATION,
+            attributes: { model: 'gpt-4o', provider: 'openai' },
+          }),
+          root('resumed', old, { threadId: 'resumed-thread' }),
+          root('resumed-recent', 15, { threadId: 'resumed-thread' }),
+          root('resumed', 86_400, {
+            spanId: 'resumed-model',
+            parentSpanId: 'root-resumed',
+            spanType: SpanType.MODEL_GENERATION,
+            attributes: { model: 'gpt-4o', provider: 'openai' },
+          }),
+        ],
+      });
+      const result = await query();
+      expect(result.threads).toHaveLength(2);
+      expect(result.threads.find(row => row.threadId === 'thread-a')).toMatchObject({
+        firstTraceId: 'old',
+        lastTraceId: 'recent',
+        inputPreview: 'old input',
+        outputPreview: 'recent output',
+        model: 'gpt-4o',
+        provider: 'openai',
+      });
+      expect(result.threads.find(row => row.threadId === 'resumed-thread')).toMatchObject({
+        firstTraceId: 'resumed',
+        model: 'gpt-4o',
+        provider: 'openai',
+      });
+    });
   });
 }
