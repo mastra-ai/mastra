@@ -1369,4 +1369,34 @@ describe('AgentControllerChannels native stop', () => {
 
     expect(await controller.getSession('channel:chan-9:t-9')).toBeUndefined();
   }, 30_000);
+
+  it('aborts a resolveSession-routed run without re-resolving the session', async () => {
+    const { model, aborted } = createHangingModel();
+    const resolveSession = vi.fn(async ({ controller, thread, requestContext }: any) =>
+      controller.createSession({
+        resourceId: thread.resourceId,
+        id: `tenant-acme:${thread.resourceId}`,
+        ownerId: controller.id,
+        requestContext,
+      }),
+    );
+    const { adapter, controller, mastra, channels } = await createSetup({ model, resolveSession });
+    const chatThread = createChatThread(adapter, 'chan-1:t-1');
+
+    await (channels as any).processChatMessage(
+      chatThread,
+      createMessage('m-1', 'long task'),
+      mastra,
+      new RequestContext(),
+    );
+    const session = (await controller.getSession('tenant-acme:channel:chan-1:t-1'))!;
+    await waitFor(() => session.run.isRunning() && model.doStreamCalls.length > 0, { what: 'run in flight' });
+    const resolveCalls = resolveSession.mock.calls.length;
+
+    channels.sdk!.processAgentSessionStopped(stopEvent(adapter, 'chan-1:t-1') as any);
+
+    await waitFor(() => aborted.mock.calls.length > 0, { what: 'model stream aborted' });
+    await waitFor(() => !session.run.isRunning(), { what: 'run stopped' });
+    expect(resolveSession).toHaveBeenCalledTimes(resolveCalls);
+  }, 30_000);
 });

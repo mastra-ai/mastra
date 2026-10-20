@@ -195,6 +195,15 @@ export class AgentControllerChannels extends AgentChannels {
    */
   private sessionStartRuns = new WeakMap<Session<any>, Promise<void>>();
 
+  /**
+   * The session that last accepted a message for each mapped thread id, so a
+   * platform stop click can abort it without re-resolving. Re-resolving would
+   * run FGA and `resolveSession` with no sender context (stop events have no
+   * handler hook to stamp a tenant) and could rebind or create a session.
+   * In-memory, matching {@link autoApproveResourceIds}.
+   */
+  private dispatchedSessions = new Map<string, Session<any>>();
+
   constructor(config: AgentControllerChannelsConfig) {
     super(config);
     this.onSessionStart = config.onSessionStart;
@@ -324,6 +333,7 @@ export class AgentControllerChannels extends AgentChannels {
       { requestContext, requireDelivery: true },
     );
     await result.accepted;
+    this.dispatchedSessions.set(thread.id, session);
   }
 
   /**
@@ -386,14 +396,12 @@ export class AgentControllerChannels extends AgentChannels {
   }
 
   /**
-   * Abort the run of the controller session bound to this chat thread. Without
-   * a `resolveSession` hook only a live session is looked up, so a stop click
-   * never creates one; with the hook, the host resolves the session as usual.
+   * Abort the run of the session that last accepted a message for this chat
+   * thread. Never resolves or creates a session, so a stop click can't start
+   * one, rebind one, or trip FGA without the sender's context.
    */
   protected override async dispatchStop({ thread }: { thread: StorageThreadType }): Promise<boolean> {
-    const session = this.resolveSession
-      ? await this.getSessionForThread(thread)
-      : await this.requireController().getSession(thread.resourceId);
+    const session = this.dispatchedSessions.get(thread.id);
     if (!session || session.thread.getId() !== thread.id || !session.run.isRunning()) return false;
     session.abort();
     return true;
