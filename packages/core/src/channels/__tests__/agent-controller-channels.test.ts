@@ -1399,4 +1399,17 @@ describe('AgentControllerChannels native stop', () => {
     await waitFor(() => !session.run.isRunning(), { what: 'run stopped' });
     expect(resolveSession).toHaveBeenCalledTimes(resolveCalls);
   }, 30_000);
+
+  it('releases the stop target when the controller deletes the session', async () => {
+    const { adapter, controller, mastra, channels } = await createSetup();
+    const chatThread = createChatThread(adapter, 'chan-1:t-1');
+
+    await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hi'), mastra, new RequestContext());
+    const dispatched: Map<string, unknown> = (channels as any).dispatchedSessions;
+    expect(dispatched.size).toBe(1);
+
+    await controller.deleteSession({ sessionId: 'channel:chan-1:t-1' });
+
+    expect(dispatched.size).toBe(0);
+  }, 30_000);
 });

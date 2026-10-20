@@ -214,6 +214,11 @@ export class AgentControllerChannels extends AgentChannels {
   /** @internal Called by AgentController's constructor to bind itself. */
   __setController(controller: AgentController<any>): void {
     this.controller = controller;
+    controller.onSessionDeleted(session => {
+      for (const [threadId, dispatched] of this.dispatchedSessions) {
+        if (dispatched === session) this.dispatchedSessions.delete(threadId);
+      }
+    });
   }
 
   /**
