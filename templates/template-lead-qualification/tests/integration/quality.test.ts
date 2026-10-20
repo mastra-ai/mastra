@@ -1,6 +1,12 @@
 import { SpanType } from '@mastra/core/observability';
 import type { PruneResult } from '@mastra/core/storage';
 import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DuckDBStore } from '@mastra/duckdb';
 import { evaluationInputSchema, evaluateQualification, textDigest } from '../../src/mastra/observability/evaluation';
@@ -11,7 +17,7 @@ import { ResearchError } from '../../src/mastra/research/contracts';
 import { safeSpan } from '../../src/mastra/observability/telemetry';
 import { AttioStore } from '../../src/mastra/providers/attio/store';
 import { qualityFixtures, qualityHarness } from '../support/quality';
-import { harness } from '../support/application';
+import { event, harness } from '../support/application';
 import { recordProvider, proposal } from '../support/research';
 
 const cleanup: Array<() => Promise<void>> = [];
@@ -23,6 +29,53 @@ afterEach(async () => {
 const window = { from: '2026-10-01T00:00:00Z', to: '2026-11-01T00:00:00Z' };
 
 describe('qualification quality and operations', () => {
+  it('runs_maintenance_preview_and_apply_after_shutdown_but_refuses_an_active_application', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'lead-maintenance-cli-'));
+    cleanup.push(() => rm(directory, { recursive: true, force: true }));
+    await writeFile(join(directory, 'package.json'), '{}');
+    const app = await harness({ directory: join(directory, 'data') });
+    cleanup.push(() => app.close());
+    const accepted = await (await app.post(event('retained-during-maintenance'))).json();
+    const run = (mode: string, path: string) =>
+      promisify(execFile)(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          fileURLToPath(new URL('../../scripts/observability/maintenance.ts', import.meta.url)),
+          mode,
+          path,
+        ],
+        {
+          cwd: fileURLToPath(new URL('../../', import.meta.url)),
+          env: {
+            ...process.env,
+            MASTRA_PROJECT_ROOT: directory,
+            LEAD_QUALIFICATION_MODE: 'local',
+            LEAD_INPUT_PROVIDER: 'local',
+            LEAD_OUTPUT_PROVIDER: 'local',
+          },
+          timeout: 20_000,
+        },
+      );
+    // PR #27839: maintenance must acquire the native lock once, before operational mutation.
+    const blocked = join(directory, 'blocked.json');
+    await expect(run('--preview', blocked)).rejects.toThrow(/lock/i);
+    await expect(readFile(blocked)).rejects.toThrow('ENOENT');
+    expect((await app.store.get(accepted.runId))!.status).toBe('accepted');
+    await app.close(false);
+    const preview = join(directory, 'preview.json');
+    await run('--preview', preview);
+    expect(JSON.parse(await readFile(preview, 'utf8')).observability).toEqual(
+      expect.arrayContaining(['spans', 'logs', 'metrics'].map(key => expect.objectContaining({ key }))),
+    );
+    const applied = await run('--apply', preview);
+    expect(JSON.parse(applied.stdout.trim().split('\n').at(-1)!).failures).toEqual([]);
+    const reopened = await harness({ directory: join(directory, 'data') });
+    cleanup.push(() => reopened.close());
+    expect((await reopened.store.get(accepted.runId))!.status).toBe('accepted');
+  });
+
   it('reports_all_qualification_eval_dimensions', async () => {
     const { profiles, labelText } = await qualityFixtures();
     const app = await qualityHarness();
