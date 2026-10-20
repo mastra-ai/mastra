@@ -34,7 +34,7 @@ function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): 
 }
 
 function makeAgentController(models: { provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }[]) {
-  return { listAvailableModels: async () => models };
+  return { listAvailableModels: async () => models.map(model => ({ modelName: `${model.provider}-model`, ...model })) };
 }
 
 describe('GET /web/config/features', () => {
@@ -551,7 +551,7 @@ describe('GET /web/config/models', () => {
       listAvailableModels: async () => [
         { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: true },
         { id: 'openai/gpt-5.6', modelName: 'gpt-5.6', provider: 'openai', hasApiKey: false },
-        { provider: 'google', hasApiKey: true }, // no id — dropped
+        { modelName: 'gemini', provider: 'google', hasApiKey: true }, // no id — dropped
       ],
     };
     const app = new Hono();
