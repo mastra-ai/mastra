@@ -1,4 +1,4 @@
-import { RequestContext } from '@mastra/core/di';
+import type { RequestContext } from '@mastra/core/di';
 import { createStep } from '@mastra/core/workflows';
 import type { Client } from '@temporalio/client';
 import { describe, expect, it, vi } from 'vitest';
