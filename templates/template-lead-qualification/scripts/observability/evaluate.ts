@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
-import { evaluateQualification, evaluationInputSchema } from '../src/mastra/evaluation';
+import { evaluateQualification, evaluationInputSchema } from '../../src/mastra/observability/evaluation';
 
 const { values } = parseArgs({
   options: {

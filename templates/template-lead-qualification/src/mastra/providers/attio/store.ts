@@ -1,6 +1,6 @@
 import type { Client, InStatement } from '@libsql/client';
 import { z } from 'zod';
-import { initializeSalesRetention } from '../../reporting';
+import { initializeSalesRetention } from '../../observability/reporting';
 import { actorSchema } from './client';
 import { digestValue } from '../../review/contracts';
 export class AttioDeliveryConflictError extends Error {}

@@ -1,4 +1,4 @@
-import { qualificationReport, reportWindowSchema } from '../reporting';
+import { qualificationReport, reportWindowSchema } from '../observability/reporting';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRouteHandler } from '@mastra/core/server';
 import { z, ZodError } from 'zod';
@@ -11,7 +11,7 @@ import { destinationFields, projectedPatch } from '../providers/output';
 import { AdmissionError, DeliveryConflictError } from '../persistence/lead-event-store';
 import type { LeadEventStore } from '../persistence/lead-event-store';
 import type { EventInputProvider } from '../providers/input';
-import type { Telemetry } from '../telemetry';
+import type { Telemetry } from '../observability/telemetry';
 import { ReviewConflictError } from '../review/service';
 import type { ReviewService } from '../review/service';
 import { decisionInputSchema, digestValue } from '../review/contracts';

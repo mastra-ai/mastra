@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { candidateRejectionSchema, rejectedEvidenceDiagnosticSchema } from '../../src/mastra/research/contracts';
 import type { Candidate, Evidence } from '../../src/mastra/research/contracts';
 import { validateCandidates } from '../../src/mastra/research/evidence-validation';
-import { diagnosticTextLimit } from '../../src/mastra/research/evidence-diagnostics';
+import { diagnosticTextLimit } from '../../src/mastra/observability/evidence-diagnostics';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 function source(excerpt: string, kind: Evidence['kind'] = 'website'): Evidence {

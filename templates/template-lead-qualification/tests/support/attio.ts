@@ -43,7 +43,7 @@ export function attioFixture(compact = false) {
   const member = { type: 'workspace-member' as const, id: randomUUID() };
   const integration = { type: 'api-token' as const, id: randomUUID() };
   const system = { type: 'system' as const, id: null };
-  let fail: { status?: number; after?: boolean; remaining: number; retryAfter?: string } | undefined;
+  let fail: { status?: number; after?: boolean; body?: boolean; remaining: number; retryAfter?: string } | undefined;
   const writes: Array<Record<string, unknown>> = [];
   const value = (
     name: keyof AttioConfig['fields'],
@@ -169,6 +169,18 @@ export function attioFixture(compact = false) {
       }
       if (fail?.remaining && fail.after) {
         fail.remaining--;
+        if (fail.body)
+          return new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.enqueue(new TextEncoder().encode('{"data":'));
+              },
+              pull(controller) {
+                controller.error(new TypeError('Lost response body after write'));
+              },
+            }),
+            { status: 200 },
+          );
         throw new TypeError('Lost response after write');
       }
     }

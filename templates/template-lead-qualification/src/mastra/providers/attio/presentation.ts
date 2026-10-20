@@ -24,10 +24,23 @@ export function finalizeAttioPatch(patch: OwnedPatch): OwnedPatch {
       }
     : patch;
 }
-export function presentAttioPatch(assessment: Assessment, patch: OwnedPatch, compact = false): OwnedPatch {
-  const reviewAction = compact ? 'Review the findings and move Stage to your final outcome.' : actions.policy;
+export function presentAttioPatch(
+  assessment: Assessment,
+  patch: OwnedPatch,
+  compact = false,
+  operatorReview = false,
+): OwnedPatch {
+  const reviewAction = operatorReview
+    ? 'Review the findings with reviewLead in Studio or the review API and confirm a final outcome.'
+    : compact
+      ? 'Review the findings and move Stage to your final outcome.'
+      : actions.policy;
   const nextAction =
-    assessment.identity.status !== 'resolved' ? actions.identity : outcomeAction(patch.classification, false, compact);
+    assessment.identity.status !== 'resolved'
+      ? actions.identity
+      : operatorReview && patch.reviewId
+        ? reviewAction
+        : outcomeAction(patch.classification, false, compact);
   return presentAssessment(assessment, patch, nextAction, reviewAction);
 }
 export function attioPresentation(patch: OwnedPatch) {

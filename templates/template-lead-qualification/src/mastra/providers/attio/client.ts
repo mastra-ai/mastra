@@ -72,13 +72,18 @@ export class AttioApi {
         }
         chunks.push(value);
       }
-      const payload = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { data: unknown };
-      return path === 'self' ? payload : payload.data;
     } catch (error) {
       if (error instanceof OutputError) throw error;
-      throw new OutputError('attio_invalid_response', false);
+      // Headers can arrive before a connection failure. Reconcile any uncertain write on retry.
+      throw new OutputError('attio_unavailable', true);
     } finally {
       reader.releaseLock();
+    }
+    try {
+      const payload = JSON.parse(Buffer.concat(chunks).toString('utf8')) as { data: unknown };
+      return path === 'self' ? payload : payload.data;
+    } catch {
+      throw new OutputError('attio_invalid_response', false);
     }
   }
 }

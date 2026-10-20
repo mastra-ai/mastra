@@ -6,7 +6,6 @@ import { normalizedEventSchema } from '../../src/mastra/contracts';
 import { candidateSchema } from '../../src/mastra/research/contracts';
 import type { Candidate } from '../../src/mastra/research/contracts';
 import type { EvidenceProvider } from '../../src/mastra/providers/evidence';
-import { OpenAIEvidenceProvider } from '../../src/mastra/providers/evidence';
 import { harness } from './application';
 
 export const profilesSchema = z.strictObject({
@@ -37,11 +36,7 @@ export async function qualityFixtures() {
   ]);
   return { profiles: profilesSchema.parse(JSON.parse(profileText)), labelText };
 }
-export function profileProvider(
-  profiles: Map<string, ExampleProfile>,
-  id = 'openai-web',
-  reserveSearch = true,
-): EvidenceProvider {
+function profileProvider(profiles: Map<string, ExampleProfile>): EvidenceProvider {
   const excerpt = (profile: ExampleProfile) =>
     [
       `Business model: ${profile.business ?? 'not established'}.`,
@@ -51,12 +46,10 @@ export function profileProvider(
       profile.intent ? `Inbound demo request received ${profile.intentAt}.` : 'No buying inquiry observed.',
     ].join(' ');
   return {
-    id,
+    id: 'openai-web',
     async search(_branch, context) {
-      if (reserveSearch) {
-        const reservation = await context.store.reserve(context.runId, 'search', 128);
-        await context.store.settle(reservation, { outputTokens: 1 });
-      }
+      const reservation = await context.store.reserve(context.runId, 'search', 128);
+      await context.store.settle(reservation, { outputTokens: 1 });
       const text = excerpt(profiles.get(context.runId)!);
       return {
         sourceUrls: [],
@@ -70,7 +63,7 @@ export function profileProvider(
             publishedAt: null,
             excerpt: text,
             digest: createHash('sha256').update(text).digest('hex'),
-            providerId: id,
+            providerId: 'openai-web',
             retrieval: 'api',
           },
         ],
@@ -121,7 +114,6 @@ export function profileProvider(
           `Inbound demo request received ${profile.intentAt}.`,
         );
       return {
-        companyName: 'Synthetic example',
         identityAmbiguous: profile.ambiguous,
         candidates,
         intentCoverageComplete: !profile.intentUnknown,
@@ -138,7 +130,7 @@ export function profileProvider(
     },
   };
 }
-export async function qualityHarness(liveModel = false) {
+export async function qualityHarness() {
   const profiles = new Map<string, ExampleProfile>();
   const config = {
     ...qualificationConfig,
@@ -150,16 +142,7 @@ export async function qualityHarness(liveModel = false) {
       },
     },
   };
-  const fixed = profileProvider(profiles, 'openai-web', !liveModel);
-  const model = liveModel ? new OpenAIEvidenceProvider() : undefined;
-  const evidenceProvider: EvidenceProvider = model
-    ? {
-        id: fixed.id,
-        search: fixed.search.bind(fixed),
-        extract: model.extract.bind(model),
-        verify: model.verify.bind(model),
-      }
-    : fixed;
+  const evidenceProvider = profileProvider(profiles);
   const app = await harness({
     qualification: {
       ...config,

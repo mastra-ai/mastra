@@ -90,34 +90,29 @@ describe('durable intake', () => {
         ...intakeConfig,
         source: { ...intakeConfig.source, inputProviderId: 'sales-form', destinationProviderId: output.id },
       },
-      input: new Map([
-        [
-          'sales-form',
-          {
-            id: 'sales-form',
-            source: { ...intakeConfig.source, inputProviderId: 'sales-form', destinationProviderId: output.id },
-            transport: 'json',
-            async normalize(payload, source, receivedAt) {
-              const submitted = submittedSchema.parse(payload);
-              return {
-                event: normalizedEventSchema.parse({
-                  version: 1,
-                  type: 'lead.received',
-                  eventId: submitted.submission,
-                  sourceId: source.id,
-                  receivedAt,
-                  lead: { reference: submitted.submission, domain: submitted.company },
-                  destination: {
-                    providerId: source.destinationProviderId,
-                    reference: `directory:${submitted.company}`,
-                  },
-                }),
-              };
-            },
-          },
-        ],
-      ]),
-      output: [output],
+      inputProvider: () => ({
+        id: 'sales-form',
+        source: { ...intakeConfig.source, inputProviderId: 'sales-form', destinationProviderId: output.id },
+        transport: 'json',
+        async normalize(payload, source, receivedAt) {
+          const submitted = submittedSchema.parse(payload);
+          return {
+            event: normalizedEventSchema.parse({
+              version: 1,
+              type: 'lead.received',
+              eventId: submitted.submission,
+              sourceId: source.id,
+              receivedAt,
+              lead: { reference: submitted.submission, domain: submitted.company },
+              destination: {
+                providerId: source.destinationProviderId,
+                reference: `directory:${submitted.company}`,
+              },
+            }),
+          };
+        },
+      }),
+      outputProvider: () => output,
     });
     cleanup.push(() => app.close());
     const headers = { Authorization: `Bearer ${productionToken}` };
@@ -167,6 +162,27 @@ describe('durable intake', () => {
       marker: operation.id,
       fields: { stage: 'Qualified' },
     });
+    const reopened = {
+      ...destinations.get('directory:example.com')!,
+      fields: { ...destinations.get('directory:example.com')!.fields, stage: 'Needs review' },
+      revision: 'directory-review-2',
+    };
+    destinations.set('directory:example.com', reopened);
+    const receivedAt = new Date().toISOString();
+    await app.reviews.reopenFromProvider(output.id, accepted.runId, ownedState(reopened.fields), reopened.revision, {
+      actorId: 'directory-operator',
+      occurredAt: receivedAt,
+      receivedAt,
+    });
+    await vi.waitFor(async () => expect((await app.reviews.read(accepted.runId))?.state).toBe('awaiting_review'));
+    const secondPacket = (await app.reviews.read(accepted.runId))!.packet!;
+    expect(secondPacket.revision).toBe(2);
+    expect((await review(decision)).status).toBe(409);
+    expect(
+      (await review({ ...decision, reviewId: secondPacket.id, revision: 2, digest: secondPacket.digest })).status,
+    ).toBe(200);
+    await vi.waitFor(async () => expect((await app.reviews.read(accepted.runId))?.state).toBe('applied'));
+    expect((await app.store.reviews.operation(accepted.runId, 'final', 2))?.state).toBe('applied');
   });
 
   it('starts_local_json_without_loading_unrelated_invalid_attio_configuration', async () => {
@@ -180,7 +196,7 @@ describe('durable intake', () => {
     const transport = vi.fn<typeof fetch>();
     const app = await harness({ directory, defaultProviders: true, attioTransport: transport });
     cleanup.push(() => app.close());
-    expect([...app.inputs.keys()]).toEqual(['generic']);
+    expect(app.inputProvider.id).toBe('local');
     expect([...app.outputs.keys()]).toEqual(['local']);
     expect((await app.post(event('local-with-stale-attio'))).status).toBe(202);
     expect(transport).not.toHaveBeenCalled();
@@ -189,39 +205,26 @@ describe('durable intake', () => {
     ).toHaveLength(0);
   });
 
-  it('defaults_production_to_signed_attio_and_requires_only_selected_direction_credentials', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'production-provider-selection-'));
-    cleanup.push(() => rm(directory, { recursive: true, force: true }));
-    await writeFile(join(directory, 'package.json'), '{}');
-    vi.stubEnv('MASTRA_PROJECT_ROOT', directory);
-    vi.stubEnv('ATTIO_API_TOKEN', '');
-    vi.stubEnv('ATTIO_WEBHOOK_SECRET', '');
-    await expect(harness({ directory, production: true, defaultProviders: true })).rejects.toThrow(
-      'require Attio configuration',
-    );
+  it('keeps_provider_selection_independent_of_production_and_enables_only_the_selected_input', async () => {
+    const local = await harness({ production: true, defaultProviders: true });
+    cleanup.push(() => local.close());
+    expect(local.inputProvider.id).toBe('local');
+    expect([...local.outputs.keys()]).toEqual(['local']);
     const fixture = attioFixture();
-    const app = await harness({
-      directory,
-      production: true,
-      defaultProviders: true,
-      attio: fixture.config,
-      attioTransport: fixture.transport,
-    });
-    cleanup.push(() => app.close());
-    expect([...app.inputs.keys()]).toEqual(['attio']);
-    expect([...app.outputs.keys()]).toEqual(['attio']);
     const headers = { Authorization: `Bearer ${productionToken}` };
-    expect((await app.post(event('unsigned-attio'), headers)).status).toBe(404);
+    const attio = await harness({ production: true, attio: fixture.config, attioTransport: fixture.transport });
+    cleanup.push(() => attio.close());
+    expect(attio.inputProvider.id).toBe('attio');
+    expect((await attio.post(event('unsigned-attio'), headers)).status).toBe(404);
     expect(
       (
-        await app.http.request('/lead-qualification/webhooks/attio', {
+        await attio.http.request('/lead-qualification/webhooks/attio', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: '{"events":[]}',
         })
       ).status,
     ).toBe(401);
-    expect(fixture.transport).not.toHaveBeenCalled();
     const { webhookSecret: _secret, ...connection } = fixture.config;
     const outputOnly = await harness({
       config: { ...intakeConfig, source: { ...intakeConfig.source, destinationProviderId: 'attio' } },
@@ -229,8 +232,9 @@ describe('durable intake', () => {
       attioTransport: fixture.transport,
     });
     cleanup.push(() => outputOnly.close());
-    expect([...outputOnly.inputs.keys()]).toEqual(['generic']);
+    expect(outputOnly.inputProvider.id).toBe('local');
     expect([...outputOnly.outputs.keys()]).toEqual(['attio']);
+    expect(outputOnly.outputs.get('attio')?.reviewMode).toBe('operator');
     expect((await outputOnly.http.request('/lead-qualification/webhooks/attio', { method: 'POST' })).status).toBe(404);
     expect(fixture.transport).not.toHaveBeenCalled();
   });
@@ -246,7 +250,7 @@ describe('durable intake', () => {
     };
     const app = await harness({
       config: { ...intakeConfig, source: { ...intakeConfig.source, destinationProviderId: 'local-review' } },
-      output: [output],
+      outputProvider: () => output,
     });
     cleanup.push(() => app.close());
     const modelCalls = vi.spyOn(globalThis, 'fetch');
@@ -340,7 +344,6 @@ describe('durable intake', () => {
       event('empty', {}),
       { ...event(), type: 'review.decided' },
       { ...event(), sourceId: 'forged' },
-      event('crm', { crm: { providerId: 'unknown', recordId: 'record-1' } }),
     ]) {
       expect((await app.post(payload, headers)).status).toBe(400);
     }

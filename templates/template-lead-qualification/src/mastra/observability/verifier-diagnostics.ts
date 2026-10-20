@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { candidatePassages, verifierDecisionsSchema, verifierLedgerSchema } from './contracts';
-import type { Candidate, Evidence, ResearchBranch } from './contracts';
-import { normalizedCandidateId } from './evidence-validation';
+import { candidatePassages, verifierDecisionsSchema, verifierLedgerSchema } from '../research/contracts';
+import type { Candidate, Evidence, ResearchBranch } from '../research/contracts';
+import { normalizedCandidateId } from '../research/evidence-validation';
 
 /** Model self-report only. The supported-ID contract and local evidence validation remain authoritative. */
 export function verifierDiagnostics(

@@ -1,7 +1,7 @@
 import { PassThrough } from 'node:stream';
 import { createHash } from 'node:crypto';
 import type { EvidenceProvider, ResearchContext } from '../../src/mastra/providers/evidence';
-import { OpenAIEvidenceProvider } from '../../src/mastra/providers/evidence';
+import { OpenAIEvidenceProvider } from '../../src/mastra/providers/open-ai-evidence/provider';
 import type { IncomingMessage } from 'node:http';
 import { vi } from 'vitest';
 import type { Candidate, Evidence } from '../../src/mastra/research/contracts';
@@ -251,7 +251,6 @@ export function controlledResearch(initial: ResearchScenario = {}) {
         );
       }
       output = {
-        companyName: 'Example Company',
         identityAmbiguous: scenario.ambiguous ?? false,
         candidates: candidates.map(candidate => {
           const { evidenceId, quote, inference, ...fields } = candidate as unknown as Candidate;
@@ -361,7 +360,6 @@ export function recordProvider(
       })),
     })),
     extract: vi.fn<EvidenceProvider['extract']>(async (_branch, evidence, context) => ({
-      companyName: null,
       identityAmbiguous: false,
       intentCoverageComplete: false,
       candidates: extract(evidence, context),

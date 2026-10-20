@@ -22,8 +22,7 @@ export class LeadIntake {
     if (
       event.sourceId !== source.id ||
       event.receivedAt !== receivedAt ||
-      event.destination.providerId !== source.destinationProviderId ||
-      (event.lead.crm && !source.crmProviderIds.includes(event.lead.crm.providerId))
+      event.destination.providerId !== source.destinationProviderId
     )
       throw new DeliveryConflictError('Unconfigured event source or destination');
     return (

@@ -17,7 +17,7 @@ function source(excerpt: string, id = 'source'): Evidence {
     retrieval: 'page',
   };
 }
-const base = { companyName: null, identityAmbiguous: false, intentCoverageComplete: false };
+const base = { identityAmbiguous: false, intentCoverageComplete: false };
 describe('identified literal source passages', () => {
   it('covers_long_rosters_tail_and_unicode_with_stable_source_digest_slice_bindings', () => {
     const evidence = source(('Member 🔒 ação\r\n'.repeat(1300) + 'Our headquarters: France.').slice(0, 24000));

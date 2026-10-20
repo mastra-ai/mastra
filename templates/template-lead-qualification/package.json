@@ -7,7 +7,6 @@
     "node": ">=24.0.0 <25"
   },
   "scripts": {
-    "postinstall": "node scripts/setup.mjs",
     "dev": "mastra dev",
     "build": "mastra build",
     "start": "mastra start",
@@ -16,7 +15,7 @@
     "typecheck": "tsc --noEmit",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
-    "eval": "tsx scripts/evaluate.ts"
+    "eval": "tsx scripts/observability/evaluate.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.0",
@@ -27,7 +26,6 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@mastra/server": "latest",
     "@types/node": "^24.0.0",
     "mastra": "latest",
     "oxfmt": "latest",
@@ -38,8 +36,7 @@
     "vitest": "^4.0.0",
     "@mastra/hono": "latest",
     "hono": "^4.13.0",
-    "@hono/node-server": "^2.0.0",
-    "@faker-js/faker": "^10.6.0"
+    "@hono/node-server": "^2.0.0"
   },
   "description": "Research companies from approved sources and explain deterministic ICP assessments with durable intake and bounded research.",
   "license": "Apache-2.0"

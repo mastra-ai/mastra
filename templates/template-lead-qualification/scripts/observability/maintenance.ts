@@ -1,10 +1,10 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { DuckDBStore } from '@mastra/duckdb';
-import { createApplicationRuntime } from '../src/mastra/application';
-import { runtimeConfig } from '../src/mastra/config/runtime';
-import { qualificationConfig } from '../src/mastra/config/qualification';
-import { LeadMaintenance, maintenancePreviewSchema } from '../src/mastra/maintenance';
+import { createApplicationRuntime } from '../../src/mastra/application';
+import { runtimeConfig } from '../../src/mastra/config/runtime';
+import { qualificationConfig } from '../../src/mastra/config/qualification';
+import { LeadMaintenance, maintenancePreviewSchema } from '../../src/mastra/observability/maintenance';
 
 const { values } = parseArgs({ options: { preview: { type: 'string' }, apply: { type: 'string' } } });
 if (Boolean(values.preview) === Boolean(values.apply))

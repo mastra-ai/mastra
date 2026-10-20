@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { domainSchema } from '../contracts';
-import { selectionDiagnosticUrl } from './selection-diagnostics';
-import { diagnosticTextLimit, safeDiagnosticText } from './evidence-diagnostics';
+import { selectionDiagnosticUrl } from '../observability/selection-diagnostics';
+import { diagnosticTextLimit, safeDiagnosticText } from '../observability/evidence-diagnostics';
 import {
   outcomes,
   signalTypes,
@@ -229,7 +229,6 @@ export const candidateRejectionSchema = z
   );
 export const extractionSchema = z
   .strictObject({
-    companyName: z.string().max(200).nullable(),
     identityAmbiguous: z.boolean(),
     candidates: z.array(candidateSchema).max(30),
     intentCoverageComplete: z.boolean(),
@@ -461,7 +460,6 @@ export const branchResultSchema = z.strictObject({
   analysisComplete: z.boolean(),
   intentCoverageComplete: z.boolean(),
   identityAmbiguous: z.boolean(),
-  companyName: z.string().max(200).nullable(),
   verifierDiagnostics: z.array(verifierLedgerSchema).max(300).optional(),
 });
 export type BranchResult = z.infer<typeof branchResultSchema>;
@@ -542,7 +540,17 @@ export const roundDiagnosticSchema = z.strictObject({
   pageRequests: z.number().int().min(0).max(100),
 });
 export const researchRoundSchema = z
-  .strictObject({ result: branchResultSchema, diagnostic: roundDiagnosticSchema })
+  .strictObject({
+    // Older saved rounds contain an unused extraction name. Keep them resumable.
+    result: z.preprocess(
+      value =>
+        value !== null && typeof value === 'object' && !Array.isArray(value)
+          ? Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'companyName'))
+          : value,
+      branchResultSchema,
+    ),
+    diagnostic: roundDiagnosticSchema,
+  })
   .refine(
     ({ result, diagnostic }) =>
       result.branch === (diagnostic.target === 'buyingIntent' ? 'signals' : 'firmographics') &&

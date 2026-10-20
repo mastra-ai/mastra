@@ -1,20 +1,38 @@
 import type { AttioConfig } from '../../config/attio';
-import { attioOutputNames, attioReviewFields, compactAttioFieldNames } from '../../config/attio';
+import { attioConnectionConfig, attioOutputNames, attioReviewFields, compactAttioFieldNames } from '../../config/attio';
 import type { NormalizedEvent } from '../../contracts';
 import { digestValue } from '../../review/contracts';
 import type { OwnedPatch } from '../../review/contracts';
-import { attioPresentation, compactAttioSummary, finalizeAttioPatch, presentAttioPatch } from './presentation';
+import {
+  attioPresentation,
+  compactAttioSummary,
+  finalizeAttioPatch,
+  presentAttioPatch,
+  attioRetentionDigest,
+} from './presentation';
 import { parseAttioMetadata } from './metadata';
 import { OutputError } from '../output';
 import type { DestinationState, OutputProvider } from '../output';
-import type { AttioClient, AttioEntry } from './client';
+import { AttioClient } from './client';
+import type { AttioEntry } from './client';
 
 export class AttioOutputProvider implements OutputProvider {
   readonly id = 'attio';
-  readonly reviewMode = 'external';
+  reviewMode: 'operator' | 'external' = 'operator';
+  retentionDigest(fields: Record<string, unknown>) {
+    return attioRetentionDigest(fields, this.reviewFields);
+  }
   present(assessment: Parameters<typeof presentAttioPatch>[0], patch: OwnedPatch) {
-    const presented = presentAttioPatch(assessment, patch, this.client.config.layoutVersion === 2);
-    return this.client.config.layoutVersion === 2 ? { ...presented, presentationVersion: 2 as const } : presented;
+    const presented = presentAttioPatch(
+      assessment,
+      patch,
+      this.client.config.layoutVersion === 2,
+      this.reviewMode === 'operator',
+    );
+    return {
+      ...presented,
+      ...(this.client.config.layoutVersion === 2 ? { presentationVersion: 2 as const } : {}),
+    };
   }
   readonly finalize = finalizeAttioPatch;
   get reviewFields(): readonly string[] {
@@ -40,11 +58,7 @@ export class AttioOutputProvider implements OutputProvider {
       ...presentation,
       ...(closure && expected ? { classification: expectedClassification } : {}),
       reviewJustification:
-        presentationVersion && expected && 'reviewJustification' in expected
-          ? expected.reviewJustification
-          : closure
-            ? (expected?.reviewJustification ?? null)
-            : overrideReason,
+        overrideReason ?? (presentationVersion || closure ? (expected?.reviewJustification ?? null) : null),
       operationId,
       outputState: patch.reviewStatus === 'Awaiting review' ? 'Pending' : 'Applied',
       appliedAssessmentId:
@@ -111,4 +125,9 @@ export class AttioOutputProvider implements OutputProvider {
       throw new OutputError('attio_destination_conflict', false);
     await this.client.update(destination.reference, this.project(patch, operationId, expected));
   }
+}
+
+export function createAttioOutputProvider(config = attioConnectionConfig(), transport?: typeof fetch) {
+  if (!config) throw new Error('Attio output requires a mapping and ATTIO_API_TOKEN');
+  return new AttioOutputProvider(new AttioClient(config, transport));
 }

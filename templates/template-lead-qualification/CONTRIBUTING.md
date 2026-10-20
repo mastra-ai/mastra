@@ -1,5 +1,5 @@
 # Contributing
 
-Contribute to `templates/template-lead-qualification` in the [Mastra monorepo](https://github.com/mastra-ai/mastra). Official template distributions are synchronized from that directory.
+Make changes in `templates/template-lead-qualification` in the [Mastra monorepo](https://github.com/mastra-ai/mastra). This directory is synchronized to the standalone template repository.
 
-Run the template's formatter, lint, typecheck, unit and integration tests, and standard Mastra build before submitting changes. Keep tests and fixtures in `tests/`, operational JavaScript or TypeScript in `scripts/`, and extension guides in `docs/`.
+Run `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test`, and `npm run build` before submitting a pull request. Keep regression tests in `tests/` and customization guides in `docs/`.

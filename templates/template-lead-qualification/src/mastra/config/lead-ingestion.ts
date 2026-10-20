@@ -4,7 +4,6 @@ const sourceSchema = z.strictObject({
   id: z.string().min(1).max(100),
   inputProviderId: z.string().min(1).max(100),
   destinationProviderId: z.string().min(1).max(100),
-  crmProviderIds: z.array(z.string().min(1).max(100)).max(20),
 });
 
 export const intakeConfigSchema = z.strictObject({
@@ -20,9 +19,8 @@ export const intakeConfigSchema = z.strictObject({
 export const intakeConfig = intakeConfigSchema.parse({
   source: {
     id: 'local-inbound',
-    inputProviderId: 'generic',
+    inputProviderId: 'local',
     destinationProviderId: 'local',
-    crmProviderIds: ['attio'],
   },
   limits: { maxBodyBytes: 262_144, maxPendingRuns: 100, activeRuns: 2, dispatchIntervalMs: 250 },
 });

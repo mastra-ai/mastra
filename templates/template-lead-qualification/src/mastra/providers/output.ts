@@ -2,6 +2,9 @@ import type { NormalizedEvent } from '../contracts';
 import type { Assessment } from '../research/contracts';
 import type { OwnedPatch } from '../review/contracts';
 import { ownedPatchSchema } from '../review/contracts';
+import type { Client } from '@libsql/client';
+
+export type OutputFactory = (client: Client) => OutputProvider;
 
 /** Readable reports generated from one exact journaled patch. */
 export interface OutputContent {
@@ -61,6 +64,8 @@ export interface OutputProvider {
   owned?(fields: Record<string, unknown>): Record<string, unknown>;
   /** Human command fields permitted to differ from a published packet after authoritative verification. */
   reviewFields?: readonly string[];
+  /** Fingerprint machine-owned state retained after detailed records expire. */
+  retentionDigest?(fields: Record<string, unknown>): string;
   /** Read the configured existing destination and operation marker; null means the record is absent. */
   read(destination: NormalizedEvent['destination']): Promise<DestinationState | null>;
   /**

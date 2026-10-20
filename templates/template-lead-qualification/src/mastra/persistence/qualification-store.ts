@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Telemetry } from '../telemetry';
+import type { Telemetry } from '../observability/telemetry';
 import type { Client } from '@libsql/client';
 import { z } from 'zod';
 import { immutableSnapshot, snapshotSchema } from '../config/qualification';

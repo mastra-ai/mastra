@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { discoverySelectionSchema } from '../../src/mastra/research/contracts';
-import { selectionDiagnosticUrl } from '../../src/mastra/research/selection-diagnostics';
+import { selectionDiagnosticUrl } from '../../src/mastra/observability/selection-diagnostics';
 
 const candidate = {
   providerIndex: 0,

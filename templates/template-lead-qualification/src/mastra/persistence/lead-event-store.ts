@@ -1,4 +1,4 @@
-import { initializeSalesRetention } from '../reporting';
+import { initializeSalesRetention } from '../observability/reporting';
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@libsql/client';
 import type { Client, InStatement, Row } from '@libsql/client';
@@ -9,7 +9,8 @@ import type { QualificationSnapshot } from '../config/qualification';
 import { QualificationStore } from './qualification-store';
 import { ReviewStore } from './review-store';
 import type { DestinationState } from '../providers/output';
-import { localOwnedState, projectLocalPatch } from '../providers/local/output';
+import { localOwnedState } from '../providers/local/output';
+import { projectLocalPatch } from '../observability/local-report';
 import { digestValue } from '../review/contracts';
 
 export type RunStatus = 'accepted' | 'dispatching' | 'intake_received' | 'failed';
@@ -164,6 +165,7 @@ export class LeadEventStore {
       const operation = await this.reviews.operation(
         z.string().parse(previous!.run_id),
         previous!.state === 'applied' ? 'final' : 'closure',
+        (await this.reviews.get(z.string().parse(previous!.run_id)))!.revision,
       );
       expectedLocal = destination ? z.string().parse(destination.fields_json) : null;
       if (

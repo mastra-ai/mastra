@@ -10,6 +10,10 @@ export const qualificationStages = {
   needs_review: 'Needs review',
 } as const;
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
+const commandTime = {
+  occurredAt: z.iso.datetime({ offset: true }),
+  receivedAt: z.iso.datetime({ offset: true }),
+};
 /** Bounded timestamp uncertainty, always measured against the original durable receipt. */
 export function commandWithinReceiptWindow(occurredAt: string, receivedAt: string) {
   return Date.parse(occurredAt) <= Date.parse(receivedAt) + 5000;
@@ -70,11 +74,10 @@ export const reviewPacketSchema = z
     destination: normalizedEventSchema.shape.destination,
     proposedPatch: ownedPatchSchema,
     reopenedBy: z
-      .strictObject({
-        memberId: z.uuid(),
-        occurredAt: z.iso.datetime({ offset: true }),
-        receivedAt: z.iso.datetime({ offset: true }),
-      })
+      .union([
+        z.strictObject({ actorId: z.string().min(1).max(200), ...commandTime }),
+        z.strictObject({ memberId: z.uuid(), ...commandTime }),
+      ])
       .refine(value => commandWithinReceiptWindow(value.occurredAt, value.receivedAt))
       .optional(),
     expiresAt: z.iso.datetime({ offset: true }),
@@ -93,7 +96,7 @@ export const decisionInputSchema = z
   .strictObject({
     runId: z.uuid(),
     reviewId: z.uuid(),
-    revision: z.literal(1),
+    revision: z.number().int().positive(),
     digest,
     decision: z.enum(['approved', 'rejected', 'changes_requested']),
     override: z

@@ -14,11 +14,7 @@ export function createReceiveLeadWorkflow(
   config: IntakeConfig,
   qualification: QualificationService,
   reviews: ReviewService,
-  additionalSources: ReadonlyArray<{ id: string; destinationProviderId: string }> = [],
 ) {
-  const destinations = new Map(
-    [config.source, ...additionalSources].map(source => [source.id, source.destinationProviderId]),
-  );
   // Object identity cannot be supplied through native API request-context JSON.
   const dispatchBinding = Object.freeze({ sourceId: config.source.id });
   const receive = createStep({
@@ -32,7 +28,8 @@ export function createReceiveLeadWorkflow(
         runId !== inputData.runId ||
         !accepted ||
         accepted.status !== 'dispatching' ||
-        destinations.get(accepted.event.sourceId) !== accepted.event.destination.providerId
+        accepted.event.sourceId !== config.source.id ||
+        accepted.event.destination.providerId !== config.source.destinationProviderId
       ) {
         throw new Error('Workflow requires an accepted operational association and trusted dispatch');
       }

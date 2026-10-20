@@ -1,10 +1,10 @@
-import type { Telemetry } from '../telemetry';
+import type { Telemetry } from '../observability/telemetry';
 import { createHash, randomUUID } from 'node:crypto';
 import type { NormalizedEvent } from '../contracts';
 import type { QualificationStore } from '../persistence/qualification-store';
-import { normalizedResearchError, retryWithinBudget } from '../providers/evidence';
+import { normalizedResearchError, retryWithinBudget } from './retry';
 import type { EvidenceProvider, ResearchContext } from '../providers/evidence';
-import { scoreCompany } from '../tools/score-company';
+import { scoreCompany } from './score-company';
 import {
   assessmentSchema,
   branchResultSchema,
@@ -24,8 +24,8 @@ import type {
   DiscoverySelectionCandidate,
 } from './contracts';
 import { approvedUrl, PageRetriever, unsupportedPageFormat } from './page-retrieval';
-import { selectionDiagnosticUrl } from './selection-diagnostics';
-import { verifierDiagnostics } from './verifier-diagnostics';
+import { selectionDiagnosticUrl } from '../observability/selection-diagnostics';
+import { verifierDiagnostics } from '../observability/verifier-diagnostics';
 import { collectFacts, gapReason, missingAttributes } from './facts';
 import { createEvidenceBatch, validateCandidates, normalizedCandidateId, validateSource } from './evidence-validation';
 
@@ -61,7 +61,6 @@ function emptyBranch(branch: ResearchBranch): BranchResult {
     analysisComplete: false,
     intentCoverageComplete: false,
     identityAmbiguous: false,
-    companyName: null,
   };
 }
 function diagnosticUrl(value: string) {
@@ -293,7 +292,6 @@ export class QualificationService {
         );
         if (!extraction.success) throw new ResearchError('provider_extraction_invalid');
         const extracted = extraction.data;
-        result.companyName ??= extracted.companyName;
         // A submitted inquiry cannot contradict the supplied company domain on its own.
         // Validated website or trusted API/CRM research can establish a sticky conflict.
         result.identityAmbiguous ||=

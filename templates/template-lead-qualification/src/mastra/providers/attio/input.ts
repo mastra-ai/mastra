@@ -1,18 +1,20 @@
 import { z } from 'zod';
+import { attioConfig } from '../../config/attio';
 import type { AttioConfig } from '../../config/attio';
 import type { IntakeConfig } from '../../config/lead-ingestion';
 import { domainSchema, normalizedEventSchema } from '../../contracts';
 import { AdmissionError, DeliveryConflictError } from '../../persistence/lead-event-store';
 import type { LeadEventStore } from '../../persistence/lead-event-store';
-import { attioEventSchema } from './store';
-import type { AttioEvent, AttioStore } from './store';
+import { attioEventSchema, AttioStore } from './store';
+import type { AttioEvent } from './store';
 import type { LeadIntake } from '../../intake';
-import type { EventInputProvider } from '../input';
+import type { EventInputProvider, InputContext } from '../input';
 import { createAttioRoutes } from './routes';
 import { parseAttioMetadata } from './metadata';
 import { attioRetentionDigest } from './presentation';
-import type { AttioClient, AttioEntry } from './client';
-import type { AttioOutputProvider } from './output';
+import { AttioClient } from './client';
+import type { AttioEntry } from './client';
+import { AttioOutputProvider } from './output';
 import { OutputError } from '../output';
 import { stageDecisionInputSchema, digestValue, commandWithinReceiptWindow } from '../../review/contracts';
 import { ReviewConflictError } from '../../review/service';
@@ -39,9 +41,11 @@ export class AttioInputProvider implements EventInputProvider {
       id: `attio:${client.config.listId}`,
       inputProviderId: this.id,
       destinationProviderId: intake.source.destinationProviderId,
-      crmProviderIds: ['attio'],
     };
     this.routes = createAttioRoutes(inbox, config, intake.limits.maxBodyBytes, intake.limits.maxPendingRuns);
+  }
+  get salesMapped() {
+    return Boolean(this.config.sales);
   }
   async drain() {
     for (const item of await this.inbox.pending(this.intake.limits.activeRuns)) {
@@ -334,4 +338,27 @@ export class AttioInputProvider implements EventInputProvider {
     );
     return cycleId;
   }
+}
+
+export async function createAttioInputProvider(
+  context: InputContext,
+  config = attioConfig(),
+  transport?: typeof fetch,
+) {
+  if (!config) throw new Error('Attio input requires a mapping, ATTIO_API_TOKEN and ATTIO_WEBHOOK_SECRET');
+  const client = new AttioClient(config, transport);
+  const output = new AttioOutputProvider(client);
+  if (context.output instanceof AttioOutputProvider) context.output.reviewMode = 'external';
+  const inbox = new AttioStore(context.store.client);
+  await inbox.init();
+  return new AttioInputProvider(
+    context.store,
+    client,
+    context.reviews,
+    context.config,
+    context.intake,
+    output,
+    config,
+    inbox,
+  );
 }

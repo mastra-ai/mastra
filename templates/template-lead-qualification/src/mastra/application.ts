@@ -1,29 +1,35 @@
 import type { z } from 'zod';
-import type { pricingSchema } from './telemetry';
 import type { Config } from '@mastra/core/mastra';
+import { inputProvider } from './config/input-providers';
+import { outputProvider } from './config/output-providers';
+import { intakeConfig, intakeConfigSchema } from './config/lead-ingestion';
 import type { IntakeConfig } from './config/lead-ingestion';
-import type { QualificationConfig } from './config/qualification';
 import { qualificationConfig, qualificationConfigSchema } from './config/qualification';
-import type { ReviewConfig } from './config/review';
+import type { QualificationConfig } from './config/qualification';
 import { reviewConfig, reviewConfigSchema } from './config/review';
-import type { RuntimeConfig } from './config/runtime';
+import type { ReviewConfig } from './config/review';
 import { runtimeConfig, runtimeSettingsSchema } from './config/runtime';
+import type { RuntimeConfig } from './config/runtime';
 import { createServerConfig } from './config/server';
 import { LeadStorage } from './persistence/storage';
-import { initializeProviders } from './providers';
-import type { ProviderOptions } from './providers';
 import { LeadIntake } from './intake';
+import { evidenceProviders } from './config/evidence-providers';
 import type { EvidenceProvider } from './providers/evidence';
+import type { InputFactory } from './providers/input';
+import type { OutputFactory } from './providers/output';
 import type { PageRetriever } from './research/page-retrieval';
 import { QualificationService } from './research/qualification';
 import { ReviewService } from './review/service';
 import { createLeadRoutes } from './routes/lead-event-routes';
-import { createTelemetry } from './telemetry';
+import { createTelemetry } from './observability/telemetry';
+import type { pricingSchema } from './observability/telemetry';
 import { reviewLead } from './tools/review-lead';
 import { LeadDispatcher } from './workers/lead-dispatcher';
 import { createReceiveLeadWorkflow } from './workflows/receive-lead';
 
-export interface ApplicationOptions extends ProviderOptions {
+export interface ApplicationOptions {
+  inputProvider?: InputFactory;
+  outputProvider?: OutputFactory;
   runtime?: RuntimeConfig;
   telemetryPricing?: z.infer<typeof pricingSchema>;
   config?: IntakeConfig;
@@ -37,8 +43,11 @@ export async function createApplicationRuntime(options: ApplicationOptions = {})
   const runtime = runtimeSettingsSchema.parse(options.runtime ?? runtimeConfig());
   const qualificationSettings = qualificationConfigSchema.parse(options.qualification ?? qualificationConfig);
   const reviewSettings = reviewConfigSchema.parse(options.review ?? reviewConfig);
-  const providers = initializeProviders({ ...options, mode: runtime.mode, qualification: qualificationSettings });
-  const config = providers.config;
+  const createInput = options.inputProvider ?? inputProvider();
+  const createOutput = options.outputProvider ?? outputProvider();
+  const evidence = evidenceProviders(options.evidence);
+  for (const id of qualificationSettings.sources.providerIds)
+    if (!evidence.has(id)) throw new Error(`Unknown evidence provider: ${id}`);
   const telemetry = createTelemetry(options.telemetryPricing);
   let storage: LeadStorage | undefined;
   try {
@@ -46,25 +55,30 @@ export async function createApplicationRuntime(options: ApplicationOptions = {})
     storage.leadEvents.qualifications.measurement = telemetry.research;
     const qualification = new QualificationService(
       storage.leadEvents.qualifications,
-      providers.evidence,
+      evidence,
       options.pages,
       telemetry,
     );
-    const outputs = providers.createOutputs(storage.leadEvents.client);
+    const output = createOutput(storage.leadEvents.client);
+    const outputs = new Map([[output.id, output]]);
+    const config = intakeConfigSchema.parse({
+      ...(options.config ?? intakeConfig),
+      source: { ...(options.config ?? intakeConfig).source, destinationProviderId: output.id },
+    });
     const reviewService = new ReviewService(storage.leadEvents, outputs, reviewSettings, telemetry);
     const admission = new LeadIntake(storage.leadEvents, config, qualificationSettings);
-    const inputs = await providers.createInputs({
+    const input = await createInput({
       store: storage.leadEvents,
       reviews: reviewService,
       intake: admission,
       config,
+      output,
     });
-    const sources = [...inputs.values()].map(provider => provider.source);
-    const intake = createReceiveLeadWorkflow(storage.leadEvents, config, qualification, reviewService, sources);
-    const dispatcher = new LeadDispatcher(storage.leadEvents, intake, config, telemetry, reviewService, [
-      ...inputs.values(),
-    ]);
-
+    config.source = intakeConfigSchema.shape.source.parse(input.source);
+    if (config.source.inputProviderId !== input.id || config.source.destinationProviderId !== output.id)
+      throw new Error('Input source does not match the configured providers');
+    const intake = createReceiveLeadWorkflow(storage.leadEvents, config, qualification, reviewService);
+    const dispatcher = new LeadDispatcher(storage.leadEvents, intake, config, telemetry, reviewService, input);
     const serverConfig = createServerConfig(runtime, config.limits);
     const mastraConfig: Config = {
       ...serverConfig,
@@ -76,12 +90,12 @@ export async function createApplicationRuntime(options: ApplicationOptions = {})
             config,
             telemetry,
             reviewService,
-            inputs.get(config.source.inputProviderId)!,
+            input,
             admission,
             outputs,
-            providers.salesMapped,
+            input.salesMapped,
           ),
-          ...[...inputs.values()].flatMap(provider => provider.routes ?? []),
+          ...(input.routes ?? []),
         ],
       },
       workflows: { leadIntake: intake.workflow },
@@ -91,7 +105,6 @@ export async function createApplicationRuntime(options: ApplicationOptions = {})
       logger: telemetry.logger,
       observability: telemetry.observability,
     };
-
     return {
       mastraConfig,
       storage,
@@ -100,7 +113,7 @@ export async function createApplicationRuntime(options: ApplicationOptions = {})
       dispatcher,
       qualification,
       reviews: reviewService,
-      inputs,
+      inputProvider: input,
       outputs,
     };
   } catch (error) {

@@ -4,7 +4,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { MastraWorker } from '@mastra/core/worker';
 import type { IntakeConfig } from '../config/lead-ingestion';
 import type { LeadEventStore, RunRecord } from '../persistence/lead-event-store';
-import type { Telemetry } from '../telemetry';
+import type { Telemetry } from '../observability/telemetry';
 import type { ReceiveLeadWorkflow } from '../workflows/receive-lead';
 
 /** Starts with the native server and drains before Mastra closes storage. */
@@ -22,7 +22,7 @@ export class LeadDispatcher extends MastraWorker {
     private readonly config: IntakeConfig,
     private readonly telemetry: Telemetry,
     private readonly reviews: ReviewService,
-    private readonly inputs: readonly EventInputProvider[] = [],
+    private readonly input?: EventInputProvider,
   ) {
     super();
   }
@@ -53,7 +53,7 @@ export class LeadDispatcher extends MastraWorker {
 
   private async tick() {
     try {
-      for (const input of this.inputs) await input.drain?.();
+      await this.input?.drain?.();
       const pending = new Map(
         (await this.store.pending(this.config.limits.activeRuns)).map(record => [record.runId, record]),
       );

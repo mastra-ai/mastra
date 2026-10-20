@@ -1,4 +1,3 @@
-import { intakeConfig } from '../../src/mastra/config/lead-ingestion';
 import type { AttioInputProvider } from '../../src/mastra/providers/attio/input';
 import { createHmac, randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -7,12 +6,13 @@ import { type harness, productionToken } from '../support/application';
 import { attioFixture } from '../support/attio';
 import { controlledHarness, controlledResearch, pageResponse } from '../support/research';
 import type { ResearchScenario } from '../support/research';
-import { observeAttioEntry } from '../../scripts/attio-demo';
 import { AttioOutputProvider } from '../../src/mastra/providers/attio/output';
 import { digestValue } from '../../src/mastra/review/contracts';
 import type { OwnedPatch } from '../../src/mastra/review/contracts';
 import type { Assessment } from '../../src/mastra/research/contracts';
 import type { AttioValue } from '../../src/mastra/providers/attio/client';
+import { LocalInputProvider } from '../../src/mastra/providers/local/input';
+import { LocalOutputProvider } from '../../src/mastra/providers/local/output';
 
 type App = Awaited<ReturnType<typeof harness>>;
 const cleanup: Array<() => Promise<void>> = [];
@@ -97,7 +97,7 @@ async function timestampedCommand(
   const id = randomUUID();
   const events = [fixture.event(entry, 'stage')];
   expect((await deliver(app, fixture, events, id)).status).toBe(202);
-  const input = app.inputs.get('attio') as AttioInputProvider;
+  const input = app.inputProvider as AttioInputProvider;
   const receivedAt = z.iso.datetime({ offset: true }).parse((await input.inbox.delivery(id))!.receivedAt);
   const occurredAt = new Date(Date.parse(receivedAt) + offset).toISOString();
   fixture.set(entry, 'stage', stage, fixture.member, occurredAt);
@@ -163,7 +163,7 @@ async function recoverAuthorizedReview(
 ) {
   await app.dispatcher.stop();
   await approve(app, fixture, entry);
-  await app.inputs.get('attio')!.drain!();
+  await app.inputProvider.drain!();
   fixture.fault({ status: 503, remaining: 1 });
   await app.reviews.advance(runId);
   const prepared = (await app.reviews.read(runId))!;
@@ -201,6 +201,66 @@ async function recoverAuthorizedReview(
   await resumed.app.close();
 }
 describe('Attio qualification pipeline', () => {
+  it('accepts_Attio_input_with_local_output_without_writing_to_the_CRM', async () => {
+    const { app, fixture } = await setup({}, attioFixture(true), {
+      outputProvider: client => new LocalOutputProvider(client),
+    });
+    const entry = fixture.add();
+    expect((await deliver(app, fixture, [fixture.event(entry)])).status).toBe(202);
+    await app.mastra.startWorkers();
+    const runId = await accepted(app, entry);
+    await state(app, runId, 'applied');
+    expect((await app.store.get(runId))?.event.destination).toEqual({ providerId: 'local', reference: entry });
+    const report = await app.http.request(`/lead-qualification/runs/${runId}/output`, {
+      headers: { Authorization: `Bearer ${productionToken}` },
+    });
+    expect(report.status).toBe(200);
+    expect(await report.text()).toContain('Qualified');
+    expect(fixture.writes).toHaveLength(0);
+  });
+
+  it('reviews_JSON_input_with_Attio_output_through_the_operator_API', async () => {
+    const { app, fixture } = await setup({ employees: null }, attioFixture(true), {
+      inputProvider: context => new LocalInputProvider(context.config.source),
+    });
+    const entry = fixture.add();
+    const headers = { Authorization: `Bearer ${productionToken}` };
+    expect((await app.http.request('/lead-qualification/webhooks/attio', { method: 'POST' })).status).toBe(404);
+    const response = await app.post(
+      {
+        version: 1,
+        type: 'lead.received',
+        eventId: 'json-attio',
+        lead: { reference: entry, domain: 'example.com' },
+        destinationReference: entry,
+      },
+      headers,
+    );
+    expect(response.status).toBe(202);
+    const { runId } = await response.json();
+    await app.mastra.startWorkers();
+    const cycle = await state(app, runId, 'awaiting_review');
+    expect(cycle.packet!.proposedPatch.nextAction).toContain('reviewLead');
+    expect(cycle.packet!.proposedPatch.summary).toContain('reviewLead');
+    expect(cycle.packet!.proposedPatch.summary).not.toContain('move Stage');
+    const decision = await app.http.request('/lead-qualification/reviews', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        runId,
+        reviewId: cycle.packet!.id,
+        revision: cycle.revision,
+        digest: cycle.packet!.digest,
+        decision: 'approved',
+        override: { classification: 'qualified', reason: 'Confirmed workforce with the company.' },
+      }),
+    });
+    expect(decision.status).toBe(200);
+    const applied = await state(app, runId, 'applied');
+    expect(applied.decision!.reviewer).toBe('local-operator');
+    expect(fixture.client.fields(fixture.entries.get(entry)!)).toMatchObject({ stage: 'Qualified', cycleId: runId });
+  });
+
   it.each([1335, 5000])('accepts_triage_timestamp_%ims_after_receipt_once', async offset => {
     const { app, fixture, research } = await setup({ country: 'JP' }, attioFixture(true));
     const entry = fixture.add();
@@ -356,57 +416,6 @@ describe('Attio qualification pipeline', () => {
     expect(retryObservations).toMatchObject([{ state: 'pending', attempts: 1 }]);
   });
 
-  it('combines_json_intake_with_explicit_signed_attio_review_transport', async () => {
-    const fixture = attioFixture(true);
-    const { app } = await setup({ employees: null }, fixture, {
-      config: { ...intakeConfig, source: { ...intakeConfig.source, destinationProviderId: 'attio' } },
-      additionalInputs: ['attio'],
-    });
-    const entry = fixture.add();
-    const response = await app.post(
-      {
-        version: 1,
-        type: 'lead.received',
-        eventId: 'json-to-attio',
-        lead: { reference: entry, domain: 'example.com' },
-        destinationReference: entry,
-      },
-      { Authorization: `Bearer ${productionToken}` },
-    );
-    expect(response.status).toBe(202);
-    const { runId } = await response.json();
-    await app.mastra.startWorkers();
-    const cycle = await state(app, runId, 'awaiting_review');
-    expect((await app.store.get(runId))!.event.sourceId).toBe('local-inbound');
-    expect(
-      (
-        await app.http.request('/lead-qualification/reviews', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${productionToken}` },
-          body: JSON.stringify({
-            runId,
-            reviewId: cycle.packet!.id,
-            revision: 1,
-            digest: cycle.packet!.digest,
-            decision: 'approved',
-            override: { classification: 'qualified', reason: 'Operator cannot bypass connected review.' },
-          }),
-        })
-      ).status,
-    ).toBe(409);
-    await new Promise(resolve => setTimeout(resolve, 2));
-    await approve(app, fixture, entry, 'Qualified', 'Confirmed the missing team size with the company.');
-    const completed = await state(app, runId, 'applied');
-    expect(completed.decision!.input).toMatchObject({ kind: 'attio-stage', stage: 'Qualified' });
-    expect(completed.decision!.reviewer).toMatchObject({ provider: 'attio', memberId: fixture.member.id });
-    const operation = (await app.store.reviews.operation(runId, 'final'))!;
-    expect(operation.state).toBe('applied');
-    expect(fixture.client.fields(fixture.entries.get(entry)!)).toMatchObject({
-      operationId: operation.id,
-      stage: 'Qualified',
-    });
-  });
-
   it('preserves_workforce_cue_inference_and_automatic_authorization_in_compact_output', async () => {
     const fixture = attioFixture(true);
     const rationale =
@@ -425,7 +434,7 @@ describe('Attio qualification pipeline', () => {
     vi.mocked(research.transport.request).mockImplementation(async () => pageResponse(workforcePage));
     const entry = fixture.add();
     await deliver(app, fixture, [fixture.event(entry)]);
-    await app.inputs.get('attio')!.drain!();
+    await app.inputProvider.drain!();
     const runId = await accepted(app, entry);
     await app.mastra.startWorkers();
     const cycle = await state(app, runId, 'applied');
@@ -464,7 +473,7 @@ describe('Attio qualification pipeline', () => {
     const entry = fixture.add();
     const submitted = JSON.parse(String(fixture.client.fields(fixture.entries.get(entry)!).metadata)).input;
     await deliver(app, fixture, [fixture.event(entry)]);
-    await app.inputs.get('attio')!.drain!();
+    await app.inputProvider.drain!();
     const runId = await accepted(app, entry);
     fixture.fault({ after: true, remaining: 1 });
     await app.mastra.startWorkers();
@@ -526,10 +535,10 @@ describe('Attio qualification pipeline', () => {
       await new Promise(resolve => setTimeout(resolve, 5));
       const delivery = randomUUID();
       await deliver(resumed.app, fixture, [fixture.event(entry, 'stage')], delivery);
-      await resumed.app.inputs.get('attio')!.drain!();
-      expect(
-        (await (resumed.app.inputs.get('attio') as AttioInputProvider).inbox.delivery(delivery))!.events[0]!.state,
-      ).toBe(outcome);
+      await resumed.app.inputProvider.drain!();
+      expect((await (resumed.app.inputProvider as AttioInputProvider).inbox.delivery(delivery))!.events[0]!.state).toBe(
+        outcome,
+      );
       expect(await accepted(resumed.app, entry)).toBe(runId);
       expect(resumed.research.requests).toHaveLength(paid);
     }
@@ -545,7 +554,7 @@ describe('Attio qualification pipeline', () => {
     await new Promise(resolve => setTimeout(resolve, 5));
     const expectedRevision = new AttioOutputProvider(fixture.client).revision(fixture.entries.get(entry)!);
     await deliver(resumed.app, fixture, [fixture.event(entry, 'stage')]);
-    await resumed.app.inputs.get('attio')!.drain!();
+    await resumed.app.inputProvider.drain!();
     const linked = await accepted(resumed.app, entry);
     expect(linked).not.toBe(runId);
     expect((await resumed.app.store.get(linked))!.event.lead.inquiry).toEqual(correctedInquiry);
@@ -644,17 +653,15 @@ describe('Attio qualification pipeline', () => {
     );
     const delivery = randomUUID();
     await deliver(app, fixture, [fixture.event(invalid)], delivery);
-    await app.inputs.get('attio')!.drain!();
-    expect((await (app.inputs.get('attio') as AttioInputProvider).inbox.delivery(delivery))!.events[0]!.state).toBe(
-      'failed',
-    );
+    await app.inputProvider.drain!();
+    expect((await (app.inputProvider as AttioInputProvider).inbox.delivery(delivery))!.events[0]!.state).toBe('failed');
     expect(research.requests).toHaveLength(paid);
     const counterfeit = fixture.add(false);
     fixture.set(counterfeit, 'metadata', metadata);
     const fakeDelivery = randomUUID();
     await deliver(app, fixture, [fixture.event(counterfeit)], fakeDelivery);
-    await app.inputs.get('attio')!.drain!();
-    expect((await (app.inputs.get('attio') as AttioInputProvider).inbox.delivery(fakeDelivery))!.events[0]!.state).toBe(
+    await app.inputProvider.drain!();
+    expect((await (app.inputProvider as AttioInputProvider).inbox.delivery(fakeDelivery))!.events[0]!.state).toBe(
       'conflict',
     );
     expect(research.requests).toHaveLength(paid);
@@ -773,9 +780,7 @@ describe('Attio qualification pipeline', () => {
     );
     await inboxDone(resumed.app);
     expect(
-      (await (resumed.app.inputs.get('attio') as AttioInputProvider).inbox.delivery(ignored))!.events.map(
-        item => item.state,
-      ),
+      (await (resumed.app.inputProvider as AttioInputProvider).inbox.delivery(ignored))!.events.map(item => item.state),
     ).toEqual(['ignored', 'ignored', 'ignored']);
     expect((await resumed.app.reviews.read(reviewedId))!.decision).toBeNull();
     fixture.set(review, 'stage', 'Triage');
@@ -786,7 +791,7 @@ describe('Attio qualification pipeline', () => {
     await resumed.app.dispatcher.stop();
     await new Promise(resolve => setTimeout(resolve, 2));
     await approve(resumed.app, fixture, review);
-    await resumed.app.inputs.get('attio')!.drain!();
+    await resumed.app.inputProvider.drain!();
     expect((await resumed.app.reviews.read(reviewedId))!.decision!.input).toMatchObject({
       kind: 'attio-stage',
       stage: 'Qualified',
@@ -961,7 +966,7 @@ describe('Attio qualification pipeline', () => {
       const historical = await historicalReview(app, fixture, runId);
       const reason = '  Exact SDR wording.\nDocumentation is optional.  ';
       await approve(app, fixture, entry, 'Disqualified', reason);
-      await app.inputs.get('attio')!.drain!();
+      await app.inputProvider.drain!();
       await app.dispatcher.start();
       const decided = await state(app, runId, 'applied');
       expect(fixture.client.fields(fixture.entries.get(entry)!)).toMatchObject({
@@ -1103,7 +1108,7 @@ describe('Attio qualification pipeline', () => {
     await state(app, editedId, 'awaiting_review');
     await app.dispatcher.stop();
     await approve(app, fixture, edited);
-    await app.inputs.get('attio')!.drain!();
+    await app.inputProvider.drain!();
     const decided = (await app.reviews.read(editedId))!;
     expect(decided.expected).toMatchObject({ stage: 'Qualified', reviewJustification: null });
     fixture.set(edited, 'stage', 'Qualified', fixture.member, new Date(Date.now() + 1).toISOString());
@@ -1111,6 +1116,38 @@ describe('Attio qualification pipeline', () => {
     expect((await app.reviews.read(editedId))!.state).toBe('conflict');
     expect((await app.store.reviews.operation(editedId, 'final'))!.state).toBe('conflict');
   });
+
+  it.each([false, true])(
+    'reconciles_interrupted_response_bodies_without_repeating_writes (compact=%s)',
+    async compact => {
+      const { app, fixture } = await setup({}, attioFixture(compact));
+      const entry = fixture.add();
+      await deliver(app, fixture, [fixture.event(entry)]);
+      await app.inputProvider.drain!();
+      const runId = await accepted(app, entry);
+      fixture.fault({ after: true, body: true, remaining: 1 });
+      await app.mastra.startWorkers();
+      await vi.waitFor(async () =>
+        expect((await app.store.reviews.operation(runId, 'final'))?.state).toBe('uncertain'),
+      );
+      await app.dispatcher.stop();
+      expect(await app.reviews.read(runId)).toMatchObject({
+        state: 'applying',
+        active: true,
+        attempts: 1,
+        failureCode: 'attio_unavailable',
+      });
+      expect(fixture.writes).toHaveLength(1);
+      await app.close(false);
+
+      const restarted = await setup({}, fixture, { directory: app.directory });
+      await restarted.app.mastra.startWorkers();
+      await state(restarted.app, runId, 'applied');
+      expect((await restarted.app.store.reviews.operation(runId, 'final'))?.state).toBe('applied');
+      expect(fixture.writes).toHaveLength(1);
+      expect(restarted.research.requests).toHaveLength(0);
+    },
+  );
 
   it('handles_attio_rate_limits_conflicts_and_uncertain_writes', async () => {
     const { app, fixture, research } = await setup();
@@ -1121,70 +1158,7 @@ describe('Attio qualification pipeline', () => {
     const runId = await accepted(app, entry);
     await state(app, runId, 'applied');
     expect((await app.store.client.execute('SELECT attempts FROM lead_attio_events')).rows[0]!.attempts).toBe(2);
-    const qualification = await app.store.qualifications.get(runId);
     const operation = await app.store.reviews.operation(runId, 'final');
-    const entryCount = fixture.entries.size,
-      writeCount = fixture.writes.length,
-      researchCount = research.requests.length;
-    const beforePoll = fixture.transport.mock.calls.length;
-    fixture.fault({ status: 503, remaining: 1 });
-    const observed = await observeAttioEntry(
-      fixture.client,
-      entry,
-      fields => fields.cycleId === runId && fields.stage === 'Qualified',
-      Date.now() + 2000,
-    );
-    expect(observed.cycleId).toBe(runId);
-    expect(fixture.transport.mock.calls.slice(beforePoll)).toHaveLength(2);
-    expect(
-      fixture.transport.mock.calls
-        .slice(beforePoll)
-        .every(
-          ([url, init]) =>
-            (url instanceof Request ? url.url : url instanceof URL ? url.href : url).endsWith(`/entries/${entry}`) &&
-            init?.method === 'GET',
-        ),
-    ).toBe(true);
-    let lastObserved: Record<string, unknown> = {};
-    const beforeExhaustion = fixture.transport.mock.calls.length;
-    await expect(
-      observeAttioEntry(
-        fixture.client,
-        entry,
-        () => false,
-        Date.now() + 2000,
-        fields => {
-          lastObserved = fields;
-          fixture.fault({ status: 503, remaining: 10 });
-        },
-        0,
-      ),
-    ).rejects.toMatchObject({
-      code: 'attio_http_503',
-      retryable: true,
-    });
-    expect(fixture.transport.mock.calls.length - beforeExhaustion).toBe(fixture.config.limits.maxAttempts + 1);
-    expect(lastObserved.cycleId).toBe(runId);
-    fixture.fault({ status: 429, remaining: 10, retryAfter: new Date(Date.now() + 60_000).toUTCString() });
-    const beforeLongWait = fixture.transport.mock.calls.length;
-    await expect(observeAttioEntry(fixture.client, entry, () => true, Date.now() + 2000)).rejects.toMatchObject({
-      code: 'attio_http_429',
-    });
-    expect(fixture.transport.mock.calls.length - beforeLongWait).toBe(1);
-    fixture.fault({ status: 404, remaining: 10 });
-    const beforePermanent = fixture.transport.mock.calls.length;
-    await expect(observeAttioEntry(fixture.client, entry, () => true, Date.now() + 2000)).rejects.toMatchObject({
-      code: 'attio_http_404',
-      retryable: false,
-    });
-    expect(fixture.transport.mock.calls.length - beforePermanent).toBe(1);
-    fixture.fault(undefined);
-    expect(fixture.entries.size).toBe(entryCount);
-    expect(fixture.writes).toHaveLength(writeCount);
-    expect(research.requests).toHaveLength(researchCount);
-    expect(await app.store.qualifications.get(runId)).toEqual(qualification);
-    expect(await app.store.reviews.operation(runId, 'final')).toEqual(operation);
-
     const missing = randomUUID();
     await deliver(app, fixture, [fixture.event(missing)]);
     await inboxDone(app);
@@ -1194,7 +1168,7 @@ describe('Attio qualification pipeline', () => {
     const conflicted = fixture.add();
     await app.dispatcher.stop();
     await deliver(app, fixture, [fixture.event(conflicted)]);
-    await app.inputs.get('attio')!.drain!();
+    await app.inputProvider.drain!();
     const conflictId = await accepted(app, conflicted);
     fixture.set(conflicted, 'stage', 'Nurture');
     await app.dispatcher.start();
@@ -1203,7 +1177,7 @@ describe('Attio qualification pipeline', () => {
     const uncertain = fixture.add();
     await app.dispatcher.stop();
     await deliver(app, fixture, [fixture.event(uncertain)]);
-    await app.inputs.get('attio')!.drain!();
+    await app.inputProvider.drain!();
     const uncertainId = await accepted(app, uncertain);
     fixture.fault({ after: true, remaining: 1 });
     await app.dispatcher.start();
@@ -1220,7 +1194,7 @@ describe('Attio qualification pipeline', () => {
     const failed = fixture.add();
     await restarted.app.dispatcher.stop();
     await deliver(restarted.app, fixture, [fixture.event(failed)]);
-    await restarted.app.inputs.get('attio')!.drain!();
+    await restarted.app.inputProvider.drain!();
     const failedId = await accepted(restarted.app, failed);
     fixture.fault({ status: 429, remaining: 10, retryAfter: new Date(Date.now() + 60_000).toUTCString() });
     await restarted.app.dispatcher.start();
@@ -1236,7 +1210,7 @@ describe('Attio qualification pipeline', () => {
     const beforeJournal = await setup({}, legacyFixture);
     const legacyEntry = legacyFixture.add();
     await deliver(beforeJournal.app, legacyFixture, [legacyFixture.event(legacyEntry)]);
-    await beforeJournal.app.inputs.get('attio')!.drain!();
+    await beforeJournal.app.inputProvider.drain!();
     const legacyId = await accepted(beforeJournal.app, legacyEntry);
     legacyFixture.fault({ status: 503, remaining: 20 });
     await beforeJournal.app.mastra.startWorkers();

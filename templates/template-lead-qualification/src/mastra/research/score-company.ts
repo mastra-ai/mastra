@@ -1,8 +1,7 @@
-import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { evaluateEmployeeCount } from '../research/employee-count';
+import { evaluateEmployeeCount } from './employee-count';
 import { qualificationConfigSchema } from '../config/qualification';
-import { factsSchema, identitySchema, scoreSchema, signalSchema } from '../research/contracts';
+import { factsSchema, identitySchema, scoreSchema, signalSchema } from './contracts';
 
 const scoreInputSchema = z.strictObject({
   identity: identitySchema,
@@ -111,10 +110,3 @@ function score(input: z.infer<typeof scoreInputSchema>): z.infer<typeof scoreSch
 export function scoreCompany(input: z.infer<typeof scoreInputSchema>) {
   return scoreSchema.parse(score(scoreInputSchema.parse(input)));
 }
-export const scoreCompanyTool = createTool({
-  id: 'score-company-icp',
-  description: 'Apply the captured ICP policy to validated facts deterministically.',
-  inputSchema: scoreInputSchema,
-  outputSchema: scoreSchema,
-  execute: async input => score(input),
-});

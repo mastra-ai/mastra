@@ -1,7 +1,7 @@
 import type { Client } from '@libsql/client';
 import { z } from 'zod';
-import { assessmentSchema } from './research/contracts';
-import { authorizationSchema, ownedPatchSchema } from './review/contracts';
+import { assessmentSchema } from '../research/contracts';
+import { authorizationSchema, ownedPatchSchema } from '../review/contracts';
 
 /** First observation is a retention anchor, not a guessed historical receipt. */
 export async function initializeSalesRetention(client: Client) {

@@ -1,10 +1,10 @@
-import type { Telemetry } from '../telemetry';
+import type { Telemetry } from '../observability/telemetry';
 import { randomUUID } from 'node:crypto';
 import type { NormalizedEvent } from '../contracts';
 import type { LeadEventStore } from '../persistence/lead-event-store';
 import type { OutputProvider } from '../providers/output';
 import { destinationFields, projectedPatch, OutputError, revisionMatches } from '../providers/output';
-import { scoreCompany } from '../tools/score-company';
+import { scoreCompany } from '../research/score-company';
 import type { Assessment } from '../research/contracts';
 import {
   authorizationSchema,

@@ -1,10 +1,9 @@
 import { z } from 'zod';
-import type { QualificationConfig } from './config/qualification';
-import type { LeadStorage } from './persistence/storage';
-import type { OutputProvider } from './providers/output';
-import { projectedPatch } from './providers/output';
-import { attioRetentionDigest } from './providers/attio/presentation';
-import { digestValue, ownedPatchSchema } from './review/contracts';
+import type { QualificationConfig } from '../config/qualification';
+import type { LeadStorage } from '../persistence/storage';
+import type { OutputProvider } from '../providers/output';
+import { projectedPatch } from '../providers/output';
+import { digestValue, ownedPatchSchema } from '../review/contracts';
 
 const day = 86_400_000;
 // The installed public compatibility wrapper does not expose its delegate's static descriptors.
@@ -205,8 +204,7 @@ export class LeadMaintenance {
         operation.id,
         operation.expected,
       );
-      const binding =
-        provider.id === 'attio' ? attioRetentionDigest(fields, provider.reviewFields ?? []) : digestValue(fields);
+      const binding = provider.retentionDigest?.(fields) ?? digestValue(fields);
       const qualification = await this.storage.leadEvents.qualifications.get(runId);
       const deliveries = (
         await client.execute({

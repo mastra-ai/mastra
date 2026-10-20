@@ -374,7 +374,8 @@ describe('review and output', () => {
     const input = await decision(app, runId);
     expect((await review(app, { ...input, digest: '0'.repeat(64) })).status).toBe(409);
     expect((await review(app, { ...input, reviewId: randomUUID() })).status).toBe(409);
-    expect((await review(app, { ...input, revision: 2 })).status).toBe(400);
+    expect((await review(app, { ...input, revision: 2 })).status).toBe(409);
+    expect((await review(app, { ...input, revision: 0 })).status).toBe(400);
     expect((await review(app, { ...input, reviewer: 'invented-reviewer' })).status).toBe(400);
     const run = await app.intake.workflow.createRun({ runId });
     await run.resume({
@@ -464,7 +465,7 @@ describe('review and output', () => {
 
   it('reconciles_uncertain_writes_and_preserves_unowned_fields', async () => {
     const fault = faultOutput();
-    const first = await setup({}, { output: [fault.provider] });
+    const first = await setup({}, { outputProvider: () => fault.provider });
     fault.bind(first.app);
     const runId = await submit(first.app, 'uncertain-write', {}, true);
     await vi.waitFor(async () =>
@@ -487,7 +488,7 @@ describe('review and output', () => {
     expect(fault.apply).toHaveBeenCalledTimes(1);
     expect((await recovered.app.store.reviews.operation(runId, 'final'))?.state).toBe('applied');
     const publishFault = faultOutput();
-    const pending = await setup({ employees: null }, { output: [publishFault.provider] });
+    const pending = await setup({ employees: null }, { outputProvider: () => publishFault.provider });
     publishFault.bind(pending.app);
     const pendingId = await submit(pending.app, 'publication');
     await vi.waitFor(async () =>
@@ -520,7 +521,7 @@ describe('review and output', () => {
         throw new Error('Destination read temporarily unavailable');
       });
       const output: OutputProvider = { id: 'local', read, apply: async (...args) => local.apply(...args) };
-      const first = await setup(scenario, { output: [output] });
+      const first = await setup(scenario, { outputProvider: () => output });
       local = new LocalOutputProvider(first.app.store.client);
       const runId = await submit(first.app, id, {}, true);
       const prepared = await waitState(first.app, runId, preparedState);
@@ -556,7 +557,7 @@ describe('review and output', () => {
       },
       apply: async (...args) => local.apply(...args),
     };
-    const { app } = await setup({}, { output: [output] });
+    const { app } = await setup({}, { outputProvider: () => output });
     local = new LocalOutputProvider(app.store.client);
     for (const id of ['conflict-one', 'conflict-two']) {
       const runId = await submit(app, id, {}, true);

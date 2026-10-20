@@ -49,15 +49,27 @@ function collectFact(
   branches: BranchResult[],
   snapshot: QualificationSnapshot,
 ): Fact {
+  const currentCandidates =
+    attribute === 'buyingIntent'
+      ? candidates
+      : candidates.filter(
+          candidate =>
+            candidate.asOf === null ||
+            (Date.parse(candidate.asOf) <= Date.parse(snapshot.assessmentTime) &&
+              Date.parse(snapshot.assessmentTime) - Date.parse(candidate.asOf) <=
+                snapshot.config.sources.maxEvidenceAgeDays * 86_400_000),
+        );
+  // Expired proposals stay in saved rounds. Only current support contributes to an accepted fact.
+  const contributors = currentCandidates.length ? currentCandidates : candidates;
   const evidenceIds = [
-    ...new Set(candidates.flatMap(candidate => candidatePassages(candidate).map(passage => passage.evidenceId))),
+    ...new Set(contributors.flatMap(candidate => candidatePassages(candidate).map(passage => passage.evidenceId))),
   ].sort();
   const common = {
     evidenceIds,
-    candidateIds: candidates.map(candidate => candidate.id),
+    candidateIds: contributors.map(candidate => candidate.id),
     freshness: 'current' as const,
     basis:
-      candidates.length > 0 && candidates.every(candidate => candidate.inference)
+      contributors.length > 0 && contributors.every(candidate => candidate.inference)
         ? ('inferred' as const)
         : ('observed' as const),
   };
@@ -85,16 +97,7 @@ function collectFact(
       freshness: coverage ? 'current' : 'unknown',
     });
   }
-  if (
-    attribute !== 'buyingIntent' &&
-    candidates.some(
-      candidate =>
-        candidate.asOf !== null &&
-        (Date.parse(candidate.asOf) > Date.parse(snapshot.assessmentTime) ||
-          Date.parse(snapshot.assessmentTime) - Date.parse(candidate.asOf) >
-            snapshot.config.sources.maxEvidenceAgeDays * 86_400_000),
-    )
-  )
+  if (!currentCandidates.length)
     return factSchema.parse({ ...common, value: null, disposition: 'stale', freshness: 'stale' });
   if (attribute === 'employeeCount') {
     const intersect = (items: Candidate[]) => {
@@ -107,10 +110,10 @@ function collectFact(
         ),
       };
     };
-    const value = intersect(candidates);
+    const value = intersect(currentCandidates);
     if (!employeeIntervalSchema.safeParse(value).success)
       return factSchema.parse({ ...common, value: null, disposition: 'conflicting' });
-    const observed = candidates.filter(candidate => !candidate.inference);
+    const observed = currentCandidates.filter(candidate => !candidate.inference);
     const observation = observed.length ? intersect(observed) : null;
     const rule = snapshot.config.policy.rules.employeeCount;
     const decisiveObservation = observation && evaluateEmployeeInterval(observation, rule).state !== 'unknown';
@@ -118,7 +121,9 @@ function collectFact(
     const basis = observation && JSON.stringify(observation) === JSON.stringify(scored) ? 'observed' : 'inferred';
     return factSchema.parse({ ...common, value: scored, basis, disposition: 'accepted' });
   }
-  const unique = [...new Map(candidates.map(candidate => [JSON.stringify(candidate.value), candidate.value])).values()];
+  const unique = [
+    ...new Map(currentCandidates.map(candidate => [JSON.stringify(candidate.value), candidate.value])).values(),
+  ];
   if (attribute !== 'buyingIntent' && unique.length > 1)
     return factSchema.parse({ ...common, value: null, disposition: 'conflicting' });
   if (attribute === 'buyingIntent' && unsupported)

@@ -3,7 +3,7 @@ import type { QualificationConfig } from '../config/qualification';
 import { candidatePassages, candidateSchema, evidenceSchema, ResearchError } from './contracts';
 import type { BranchResult, Candidate, Evidence, ResearchBranch } from './contracts';
 import { approvedUrl } from './page-retrieval';
-import { rejectedEvidenceDiagnostic } from './evidence-diagnostics';
+import { rejectedEvidenceDiagnostic } from '../observability/evidence-diagnostics';
 
 function scopedEvidence(source: Evidence): Evidence {
   const identity = JSON.stringify([source.providerId, source.id, source.kind, source.source, source.digest]);

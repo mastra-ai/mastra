@@ -2,7 +2,6 @@ import { EventEmitter } from 'node:events';
 import https from 'node:https';
 import type { ClientRequest, IncomingMessage } from 'node:http';
 import { gzipSync } from 'node:zlib';
-import { noopObserve } from '@mastra/core/tools';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { qualificationConfig, qualificationConfigSchema } from '../../src/mastra/config/qualification';
 import type { EvidenceProvider } from '../../src/mastra/providers/evidence';
@@ -12,7 +11,7 @@ import { PageRetriever, publicHttpsTransport } from '../../src/mastra/research/p
 import type { PageTransport } from '../../src/mastra/research/page-retrieval';
 import type { Assessment, Evidence, Fact } from '../../src/mastra/research/contracts';
 import { assessmentSchema, candidateSchema, researchRoundSchema } from '../../src/mastra/research/contracts';
-import { scoreCompany, scoreCompanyTool } from '../../src/mastra/tools/score-company';
+import { scoreCompany } from '../../src/mastra/research/score-company';
 import { event, harness } from '../support/application';
 import { controlledHarness, controlledResearch, pageResponse, recordProvider, proposal } from '../support/research';
 
@@ -126,10 +125,9 @@ describe('sourced company qualification', () => {
       );
       provider.extract.mockImplementation(async (_branch, evidence, context) => {
         if (context.round.index === 0)
-          return { companyName: null, identityAmbiguous: true, candidates: [], intentCoverageComplete: false };
+          return { identityAmbiguous: true, candidates: [], intentCoverageComplete: false };
         const source = evidence.find(item => item.source === 'https://example.com/about')!;
         return {
-          companyName: 'Example Company',
           identityAmbiguous: false,
           intentCoverageComplete: false,
           candidates: [
@@ -316,6 +314,68 @@ describe('sourced company qualification', () => {
         );
       }
     }
+  });
+
+  it('uses_current_firmographics_after_a_stale_research_round_without_losing_history', async () => {
+    const config = structuredClone(qualificationConfig);
+    config.sources.providerIds = ['records'];
+    config.research.targeted.order = ['businessModel', 'employeeCount'];
+    const provider = recordProvider(
+      'records',
+      context => [
+        context.round.index === 0
+          ? {
+              id: 'older',
+              source: 'https://example.com/archive',
+              excerpt: 'We sell software to businesses. Headquarters: United States. We have 1000 employees.',
+            }
+          : { id: 'current', source: 'https://example.com/team', excerpt: 'We now have 40 employees.' },
+      ],
+      (evidence, context) => {
+        const older = context.round.index === 0;
+        const source = evidence.find(item => item.source.endsWith(older ? '/archive' : '/team'))!;
+        return [
+          ...(older
+            ? [
+                proposal('businessModel', 'b2b_saas', 'sell software to businesses', source.id),
+                proposal('headquartersCountry', 'US', 'Headquarters: United States', source.id),
+              ]
+            : []),
+          {
+            ...proposal(
+              'employeeCount',
+              { min: older ? 1000 : 40, max: older ? 1000 : 40 },
+              older ? '1000 employees' : '40 employees',
+              source.id,
+            ),
+            asOf: new Date(Date.parse(context.snapshot.assessmentTime) - (older ? 31 : 1) * 86_400_000).toISOString(),
+          },
+        ];
+      },
+    );
+    const { app } = await researchHarness({}, config, [provider]);
+    const assessment = await submit(app, 'current-after-stale', true);
+    const older = (await app.store.qualifications.round(assessment.runId, 0))!;
+    const current = (await app.store.qualifications.round(assessment.runId, 1))!;
+    expect(older.result.candidates.find(candidate => candidate.attribute === 'employeeCount')?.value).toEqual({
+      min: 1000,
+      max: 1000,
+    });
+    expect(assessment.evidence.map(source => source.source)).toContain('https://example.com/archive');
+    expect(assessment.facts.employeeCount).toMatchObject({
+      disposition: 'accepted',
+      freshness: 'current',
+      value: { min: 40, max: 40 },
+      candidateIds: current.result.candidates.map(candidate => candidate.id),
+      evidenceIds: current.result.evidence.map(source => source.id),
+    });
+    expect(assessment.result).toMatchObject({ classification: 'qualified', score: 100 });
+    // A saved round from before the extraction cleanup can still be read on recovery.
+    await app.store.client.execute({
+      sql: "UPDATE lead_research_rounds SET result_json=json_set(result_json,'$.result.companyName',?) WHERE run_id=? AND round_index=0",
+      args: ['Unused legacy name', assessment.runId],
+    });
+    expect(await app.store.qualifications.round(assessment.runId, 0)).toEqual(older);
   });
 
   it('preserves_same_adapter_provenance_for_unchanged_and_changed_round_material', async () => {
@@ -1860,7 +1920,6 @@ describe('sourced company qualification', () => {
       const first = scoreCompany(input);
       expect(first).toMatchObject({ classification: 'qualified', score: 100 });
       expect(JSON.stringify(scoreCompany(input))).toBe(JSON.stringify(first));
-      expect(await scoreCompanyTool.execute!(input, { observe: noopObserve })).toEqual(first);
     }
     for (const employees of [19, 501]) {
       input.facts.employeeCount = accepted({ min: employees, max: employees });

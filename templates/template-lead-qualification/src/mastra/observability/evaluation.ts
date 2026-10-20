@@ -1,16 +1,15 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { businessModelLabelSchema, outcomes } from './config/qualification';
+import { businessModelLabelSchema, outcomes } from '../config/qualification';
 import {
   assessmentSchema,
   employeeIntervalSchema,
   factSchema,
   identitySchema,
   signalSchema,
-} from './research/contracts';
-import { scoreCompany } from './tools/score-company';
-import { approvedUrl } from './research/page-retrieval';
-import { modelLabelsSchema, modelAttributeMatches } from './model-evaluation-data';
+} from '../research/contracts';
+import { scoreCompany } from '../research/score-company';
+import { approvedUrl } from '../research/page-retrieval';
 
 const attributeLabel = z
   .strictObject({ disposition: factSchema.shape.disposition, value: factSchema.shape.value })
@@ -46,59 +45,15 @@ export const evaluationLabelsSchema = z
           disqualifiers: z.array(z.enum(['businessModel', 'employeeCount', 'headquartersCountry'])).max(3),
         }),
       )
-      .min(20)
+      .min(1)
       .max(1000),
   })
   .refine(value => new Set(value.cases.map(item => item.id)).size === value.cases.length, 'Case IDs must be unique');
-export const qualificationEvaluationLabelsSchema = z.union([evaluationLabelsSchema, modelLabelsSchema]);
 export const evaluationInputSchema = z
   .strictObject({
     datasetDigest: z.string().regex(/^[a-f0-9]{64}$/),
     profilesDigest: z.string().regex(/^[a-f0-9]{64}$/),
     mode: z.enum(['controlled_functional', 'live_model']),
-    collection: z
-      .strictObject({
-        executionId: z.uuid(),
-        approvalDigest: z.string().regex(/^[a-f0-9]{64}$/),
-        sourceRevision: z.string().regex(/^[a-f0-9]{40}$/),
-        sourceDigest: z.string().regex(/^[a-f0-9]{64}$/),
-        configurationDigest: z.string().regex(/^[a-f0-9]{64}$/),
-        promptsDigest: z.string().regex(/^[a-f0-9]{64}$/),
-        model: z.literal('openai/gpt-6-luna'),
-        requestsReserved: z.number().int().min(0).max(120),
-        confirmedTransportAttempts: z.number().int().min(0).max(120),
-        responseCount: z.number().int().min(0).max(120),
-        outputTokensReserved: z.number().int().min(0).max(240000),
-        bytesReserved: z.number().int().min(0).max(15728640).optional(),
-        costReservedNanoUsd: z.number().int().min(0).max(5000000000).optional(),
-        costCeilingNanoUsd: z.number().int().min(1).max(5000000000).optional(),
-        failureCode: z
-          .string()
-          .regex(/^model_collection_[a-z_]{1,100}$/)
-          .nullable()
-          .optional(),
-        observedInputTokens: z.number().int().nonnegative().nullable(),
-        observedOutputTokens: z.number().int().nonnegative().nullable(),
-        knownInputTokensSubtotal: z.number().int().nonnegative(),
-        knownOutputTokensSubtotal: z.number().int().nonnegative(),
-        caseRequests: z.record(z.string(), z.number().int().min(0).max(6)),
-      })
-      .superRefine((value, context) => {
-        const fields = [value.bytesReserved, value.costReservedNanoUsd, value.costCeilingNanoUsd, value.failureCode];
-        const present = fields.filter(field => field !== undefined).length;
-        if (
-          (present !== 0 && present !== fields.length) ||
-          (value.costReservedNanoUsd !== undefined &&
-            value.costCeilingNanoUsd !== undefined &&
-            value.costReservedNanoUsd > value.costCeilingNanoUsd) ||
-          (value.bytesReserved !== undefined && value.bytesReserved > value.requestsReserved * 131072)
-        )
-          context.addIssue({
-            code: 'custom',
-            message: 'Collection currency reservations must be complete and bounded',
-          });
-      })
-      .optional(),
     observations: z.array(z.strictObject({ id: z.string().min(1).max(100), assessment: assessmentSchema })).max(1000),
     semanticReviews: z
       .array(
@@ -123,17 +78,12 @@ const equal = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.s
 
 /** Imported observations keep frozen expectations separate from model/provider execution. */
 export function evaluateQualification(labelText: string, input: z.input<typeof evaluationInputSchema>) {
-  const labels = qualificationEvaluationLabelsSchema.parse(JSON.parse(labelText));
+  const labels = evaluationLabelsSchema.parse(JSON.parse(labelText));
   const run = evaluationInputSchema.parse(input);
   if (textDigest(labelText) !== run.datasetDigest || run.profilesDigest !== labels.profilesDigest)
     throw new Error('evaluation_dataset_digest_mismatch');
-  if (
-    (labels.version === 1 && run.mode !== 'controlled_functional') ||
-    (labels.version === 2 && (run.mode !== 'live_model' || !run.collection))
-  )
-    throw new Error('evaluation_dataset_mode_mismatch');
-  if (run.observations.some(item => !labels.cases.some(label => label.id === item.id)))
-    throw new Error('evaluation_unknown_case');
+  const knownIds = new Set(labels.cases.map(label => label.id));
+  if (run.observations.some(item => !knownIds.has(item.id))) throw new Error('evaluation_unknown_case');
   const dimensions = new Map<
     string,
     { target: number; numerator: number; denominator: number; failures: Array<{ id: string; reason: string }> }
@@ -154,9 +104,11 @@ export function evaluateQualification(labelText: string, input: z.input<typeof e
     if (passed) dimension.numerator++;
     else dimension.failures.push({ id, reason });
   }
+  const observations = new Map(run.observations.map(item => [item.id, item.assessment]));
+  const reviews = new Map(run.semanticReviews.map(item => [item.id, item]));
   const unsupportedAccepted: Array<{ id: string; attribute: string }> = [];
   const cases = labels.cases.map(label => {
-    const assessment = run.observations.find(item => item.id === label.id)?.assessment;
+    const assessment = observations.get(label.id);
     if (!assessment) {
       for (const name of ['identity', 'classification', 'scoreConsistency', 'unsupportedClaims'])
         record(name, label.id, false, 'missing_observation');
@@ -177,10 +129,7 @@ export function evaluateQualification(labelText: string, input: z.input<typeof e
     const attributeResults = [];
     for (const [attribute, expected] of Object.entries(label.attributes)) {
       const fact = assessment.facts[attribute as keyof typeof assessment.facts];
-      const matched =
-        'match' in expected
-          ? modelAttributeMatches(expected, fact)
-          : equal({ disposition: fact.disposition, value: fact.value }, expected);
+      const matched = equal({ disposition: fact.disposition, value: fact.value }, expected);
       attributeResults.push({ attribute, actual: { disposition: fact.disposition, value: fact.value }, matched });
       if (fact.disposition === 'accepted' && !matched) unsupportedAccepted.push({ id: label.id, attribute });
       record('attributeExtraction', `${label.id}:${attribute}`, matched, 'attribute_differs');
@@ -240,7 +189,7 @@ export function evaluateQualification(labelText: string, input: z.input<typeof e
       !unsupportedAccepted.some(item => item.id === label.id),
       'unsupported_fact_accepted',
     );
-    const review = run.semanticReviews.find(item => item.id === label.id);
+    const review = reviews.get(label.id);
     record(
       'unsupportedClaims',
       label.id,
@@ -260,7 +209,6 @@ export function evaluateQualification(labelText: string, input: z.input<typeof e
       promptsDigest: textDigest(JSON.stringify(assessment.snapshot.config.prompts)),
       summaryDigest: textDigest(assessment.summary),
       attributeResults,
-      modelRequests: run.collection?.caseRequests[label.id] ?? null,
     };
   });
   const metrics = Object.fromEntries(
@@ -282,21 +230,6 @@ export function evaluateQualification(labelText: string, input: z.input<typeof e
     provenance: labels.provenance,
     mode: run.mode,
     profilesDigest: run.profilesDigest,
-    collection: run.collection ?? null,
-    populations:
-      labels.version === 2
-        ? {
-            labeledIdentityDecisions: 24,
-            plannedDomainResearchCases: labels.cases.filter(item => item.population === 'domain').length,
-            labeledFirmographicOpportunities: labels.cases.filter(item => item.population === 'domain').length * 3,
-            deterministicSubmittedIntentDecisions: labels.cases.filter(item => item.population === 'domain').length,
-            deterministicMissingDecisions: labels.cases.filter(item => item.population !== 'domain').length * 4,
-            emailOnlyWithoutResearch: labels.cases.filter(item => item.population === 'email').length,
-            crmOnlyWithoutResearch: labels.cases.filter(item => item.population === 'crm').length,
-            observedCases: run.observations.length,
-            confirmedTransportAttempts: run.collection?.confirmedTransportAttempts ?? null,
-          }
-        : null,
     observationsDigest: textDigest(JSON.stringify(run.observations)),
     sampleCount: labels.cases.length,
     cases: cases.map(item => ({

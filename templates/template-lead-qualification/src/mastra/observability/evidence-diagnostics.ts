@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Candidate, Evidence } from './contracts';
+import type { Candidate, Evidence } from '../research/contracts';
 
 export const diagnosticTextLimit = 128;
 const fingerprint = (value: string) => createHash('sha256').update(value).digest('hex');

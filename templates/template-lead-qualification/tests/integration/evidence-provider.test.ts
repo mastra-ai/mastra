@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { sourcePassages } from '../../src/mastra/research/source-passages';
 import type { Evidence, Candidate } from '../../src/mastra/research/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { OpenAIEvidenceProvider, normalizedResearchError } from '../../src/mastra/providers/evidence';
+import { OpenAIEvidenceProvider } from '../../src/mastra/providers/open-ai-evidence/provider';
+import { normalizedResearchError } from '../../src/mastra/research/retry';
 import type { ResearchContext } from '../../src/mastra/providers/evidence';
 import { failureSchema, ResearchError } from '../../src/mastra/research/contracts';
 import { event, harness } from '../support/application';
@@ -94,7 +95,7 @@ function stubResponse(make: () => Response | Promise<Response>) {
   );
 }
 const usage = { input_tokens: 30, output_tokens: 40, output_tokens_details: { reasoning_tokens: 10 } };
-const extraction = { companyName: null, identityAmbiguous: false, candidates: [], intentCoverageComplete: false };
+const extraction = { identityAmbiguous: false, candidates: [], intentCoverageComplete: false };
 
 function searchResponse(ids: string[], split: boolean, edit?: (events: Array<Record<string, unknown>>) => void) {
   const items = ids.map(id => ({
