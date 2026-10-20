@@ -319,6 +319,9 @@ export class SandboxDestroyedError extends Error {
   }
 }
 
+/** Cap on one file command (a recursive copy can be large) when the sandbox sets no timeout. */
+const FILE_COMMAND_TIMEOUT_MS = 10 * 60_000;
+
 /**
  * Compose a shell command line from a `command` string and optional `args`.
  *
@@ -1566,7 +1569,13 @@ export class PlatformSandbox extends MastraSandbox {
     this._filesystem ??= new PlatformSandboxFilesystem({
       id: this.id,
       withFiles: (operation, fn) => this._withE2BFiles(operation, fn),
-      runCommand: script => this.executeCommand('sh', ['-c', script]),
+      // A sandbox without a configured timeout would let a hung `cp` block forever.
+      runCommand: script =>
+        this.executeCommand(
+          'sh',
+          ['-c', script],
+          this._timeout === undefined ? { timeout: FILE_COMMAND_TIMEOUT_MS } : {},
+        ),
     });
     return this._filesystem;
   }

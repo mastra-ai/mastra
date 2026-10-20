@@ -420,6 +420,7 @@ describe('PlatformSandbox.filesystem', () => {
       .mockResolvedValueOnce(created())
       .mockResolvedValueOnce(e2bLease());
     const commands: string[] = [];
+    const timeouts: Array<number | undefined> = [];
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
       projectId: 'proj_123',
@@ -427,6 +428,7 @@ describe('PlatformSandbox.filesystem', () => {
       fetch: fetchMock as unknown as typeof fetch,
       e2bExecRunner: async (_lease, options) => {
         commands.push(options.command);
+        timeouts.push(options.timeoutMs);
         return { exitCode: 0, stdout: '', stderr: '', truncated: false, timedOut: false };
       },
       e2bFilesFactory: () => {
@@ -435,6 +437,7 @@ describe('PlatformSandbox.filesystem', () => {
     });
     await sandbox.filesystem.copyFile('/a.txt', '/b.txt');
     expect(commands).toHaveLength(1);
+    expect(timeouts).toEqual([10 * 60_000]);
     expect(commands[0]).toMatch(/^sh -c .*cp "\$src" "\$dest"/s);
     expect(fetchMock.mock.calls.filter(isLeaseCall)).toHaveLength(1);
   });

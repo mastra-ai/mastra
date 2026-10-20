@@ -35,6 +35,20 @@ export function siblingTempPath(path: string): string {
   return posix.join(posix.dirname(path), `.${posix.basename(path)}.mastra-tmp-${suffix}`);
 }
 
+/**
+ * Hard-link `$tmp` to `$dest` and delete `$tmp`, failing with `exists` when
+ * something is at `$dest`. `ln` onto a directory (or a link to one) would
+ * create the link inside it and succeed, so that case is undone and reported
+ * as taken too.
+ */
+function linkTempIntoPlace(): string[] {
+  return [
+    `ln "$tmp" "$dest" 2>/dev/null || { rm -f "$tmp"; ${present('dest')} && exit ${exists}; exit 1; }`,
+    `if [ -d "$dest" ]; then rm -f "$dest/$(basename "$tmp")" "$tmp"; exit ${exists}; fi`,
+    `rm -f "$tmp"`,
+  ];
+}
+
 export interface CopyCommandOptions {
   /** Copy a directory and everything under it. Without it a directory source fails with `isDirectory`. */
   recursive?: boolean;
@@ -53,7 +67,8 @@ export interface CopyCommandOptions {
  * the destination exists).
  *
  * Exits: `notFound` (no source), `isDirectory` (directory source without
- * `recursive`), `destIsDirectory` (a file onto an existing directory), `exists`.
+ * `recursive`), `destIsDirectory` (a file onto an existing directory or a link
+ * to one), `exists`.
  */
 export function copyCommand(src: string, dest: string, options: CopyCommandOptions = {}): string {
   const noClobber = options.overwrite === false;
@@ -69,15 +84,12 @@ export function copyCommand(src: string, dest: string, options: CopyCommandOptio
     `  cp -R -P "$src"/. "$dest"/ || exit 1`,
     `  exit 0`,
     `fi`,
-    noClobber
-      ? `${present('dest')} && exit ${exists}`
-      : `if [ -d "$dest" ] && [ ! -L "$dest" ]; then exit ${destIsDirectory}; fi`,
+    noClobber ? `${present('dest')} && exit ${exists}` : `if [ -d "$dest" ]; then exit ${destIsDirectory}; fi`,
     ...(noClobber
       ? [
           `tmp=${shellQuote(siblingTempPath(dest))}`,
           `cp "$src" "$tmp" || { rm -f "$tmp"; exit 1; }`,
-          `ln "$tmp" "$dest" 2>/dev/null || { rm -f "$tmp"; ${present('dest')} && exit ${exists}; exit 1; }`,
-          `rm -f "$tmp"`,
+          ...linkTempIntoPlace(),
         ]
       : [`cp "$src" "$dest" || exit 1`]),
   ].join('\n');
@@ -85,8 +97,8 @@ export function copyCommand(src: string, dest: string, options: CopyCommandOptio
 
 /**
  * Move `src` to `dest` without replacing anything at `dest`, creating `dest`'s
- * parent. `mv -n` exits 0 even when it skips, so a skipped move is detected by
- * the source surviving; the no-clobber rename itself is atomic.
+ * parent. A skipped `mv -n` is detected by the source surviving, whatever
+ * its exit code; the no-clobber rename itself is atomic.
  *
  * Exits: `notFound` (no source), `exists`.
  */
@@ -97,7 +109,8 @@ export function moveNoClobberCommand(src: string, dest: string): string {
     `${present('src')} || exit ${notFound}`,
     `${present('dest')} && exit ${exists}`,
     `mkdir -p "$(dirname "$dest")" || exit 1`,
-    `mv -n "$src" "$dest" 2>/dev/null || exit 1`,
+    // coreutils 9.2+ exits nonzero when -n skips; older versions exit 0.
+    `mv -n "$src" "$dest" 2>/dev/null || { ${present('src')} && ${present('dest')} && exit ${exists}; exit 1; }`,
     `${present('src')} && exit ${exists}`,
     `exit 0`,
   ].join('\n');
@@ -134,7 +147,7 @@ export function linkNoClobberCommand(tmp: string, dest: string): string {
     `tmp=${shellQuote(tmp)}`,
     `dest=${shellQuote(dest)}`,
     `if [ ! -d "$(dirname "$dest")" ]; then rm -f "$tmp"; exit ${notDirectory}; fi`,
-    `ln "$tmp" "$dest" 2>/dev/null || { rm -f "$tmp"; ${present('dest')} && exit ${exists}; exit 1; }`,
-    `rm -f "$tmp"`,
+    `if ${present('dest')}; then rm -f "$tmp"; exit ${exists}; fi`,
+    ...linkTempIntoPlace(),
   ].join('\n');
 }

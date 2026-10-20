@@ -99,6 +99,11 @@ function matchesExtension(name: string, extension: ListOptions['extension']): bo
  *
  * Providers supply how to reach the files API and the shell, and how to read
  * their SDK's errors.
+ *
+ * If a provider's `runCommand` re-runs a command whose first run already
+ * finished (e.g. a retry after a dropped connection), the second run sees the
+ * first's result: a no-clobber copy, write or move reports `FileExistsError`
+ * or `FileNotFoundError`, and an append fails, even though the work was done.
  */
 export abstract class FilesApiFilesystem extends MastraFilesystem {
   /** Run `fn` with the provider's files API (starting the sandbox, retrying, … as the provider needs). */
@@ -142,7 +147,7 @@ export abstract class FilesApiFilesystem extends MastraFilesystem {
       if (options.recursive === false) await this.#assertParentDirectory(files, abs, path);
       await this.#write(files, tmp, path, toWriteData(content));
     });
-    await this.#command('writeFile', linkNoClobberCommand(tmp, abs), path, {
+    await this.#publishTemp(tmp, 'writeFile', linkNoClobberCommand(tmp, abs), path, {
       exists: () => new FileExistsError(path),
       notDirectory: () => new NotDirectoryError(posix.dirname(path)),
     });
@@ -153,7 +158,7 @@ export abstract class FilesApiFilesystem extends MastraFilesystem {
     // Only the new bytes cross the network; the append itself runs in the VM.
     const tmp = siblingTempPath(abs);
     await this.runFiles('appendFile', files => this.#write(files, tmp, path, toWriteData(content)));
-    await this.#command('appendFile', appendFromCommand(tmp, abs), path, {
+    await this.#publishTemp(tmp, 'appendFile', appendFromCommand(tmp, abs), path, {
       isDirectory: () => new IsDirectoryError(path),
     });
   }
@@ -326,6 +331,26 @@ export abstract class FilesApiFilesystem extends MastraFilesystem {
   }
 
   /** Run a file command and turn its known exit codes into typed errors. */
+  /**
+   * Run a command that consumes the temp file `tmp`. The script deletes it on
+   * every path it controls; if the command never ran or was killed, delete it
+   * here so it doesn't linger in the user's tree.
+   */
+  async #publishTemp(
+    tmp: string,
+    operation: string,
+    script: string,
+    subject: string,
+    errors: Partial<Record<keyof typeof FILE_COMMAND_EXIT, () => Error>>,
+  ): Promise<void> {
+    try {
+      await this.#command(operation, script, subject, errors);
+    } catch (error) {
+      await this.runFiles(operation, files => files.remove(tmp)).catch(() => {});
+      throw error;
+    }
+  }
+
   async #command(
     operation: string,
     script: string,

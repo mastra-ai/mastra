@@ -540,6 +540,17 @@ describe('FilesApiFilesystem', () => {
       expect(files.calls).toEqual([`rename ${W}/fresh.txt ${W}/again.txt`]);
     });
 
+    it.each(['writeFile', 'appendFile'] as const)('deletes the temp file when the %s command never runs', async op => {
+      const lost = new Error('connection dropped');
+      (fs as unknown as { runCommand: () => Promise<never> }).runCommand = async () => {
+        throw lost;
+      };
+      const run =
+        op === 'writeFile' ? fs.writeFile(`${W}/new.txt`, 'x', { overwrite: false }) : fs.appendFile(`${W}/a.txt`, 'x');
+      await expect(run).rejects.toBe(lost);
+      expect((await readdir(W)).filter(name => name.includes('mastra-tmp'))).toEqual([]);
+    });
+
     it('surfaces an unknown command failure with its exit code and stderr', async () => {
       await rm(join(root, 'w/src/b.ts'));
       await mkdir(join(root, 'w/src/b.ts'));

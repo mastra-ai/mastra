@@ -82,7 +82,10 @@ describe('copyCommand', () => {
     expect(await sh(copyCommand(at('src'), at('out')))).toBe(FILE_COMMAND_EXIT.isDirectory);
   });
 
-  it('refuses to copy a file onto a directory', async () => {
+  it('refuses to copy a file onto a directory or a link to one', async () => {
+    await symlink('src', at('dirlink'));
+    expect(await sh(copyCommand(at('a.txt'), at('dirlink')))).toBe(FILE_COMMAND_EXIT.destIsDirectory);
+    expect(await readdir(at('src'))).not.toContain('a.txt');
     expect(await sh(copyCommand(at('a.txt'), at('src')))).toBe(FILE_COMMAND_EXIT.destIsDirectory);
   });
 
@@ -189,6 +192,28 @@ describe('linkNoClobberCommand', () => {
     await writeFile(tmp, 'new');
     expect(await sh(linkNoClobberCommand(tmp, at('a.txt')))).toBe(FILE_COMMAND_EXIT.exists);
     expect(await text('a.txt')).toBe('A');
+    await expect(lstat(tmp)).rejects.toThrow();
+  });
+
+  it.each(['src', 'dirlink'])('refuses %s (a directory) and leaves nothing inside it', async name => {
+    await symlink('src', at('dirlink'));
+    const before = await readdir(at('src'));
+    const tmp = siblingTempPath(at(name));
+    await writeFile(tmp, 'new');
+    expect(await sh(linkNoClobberCommand(tmp, at(name)))).toBe(FILE_COMMAND_EXIT.exists);
+    expect(await readdir(at('src'))).toEqual(before);
+    await expect(lstat(tmp)).rejects.toThrow();
+  });
+
+  it('undoes the link when the destination becomes a directory after the check', async () => {
+    // Skip the pre-check to reach the race path: ln lands inside the directory.
+    const tmp = siblingTempPath(at('src'));
+    await writeFile(tmp, 'new');
+    const lines = linkNoClobberCommand(tmp, at('src')).split('\n');
+    const script = lines.filter(line => !line.startsWith('if { [ -e "$dest" ]')).join('\n');
+    expect(script.split('\n')).toHaveLength(lines.length - 1);
+    expect(await sh(script)).toBe(FILE_COMMAND_EXIT.exists);
+    expect(await readdir(at('src'))).toEqual(['b.ts', 'link.ts', 'nested']);
     await expect(lstat(tmp)).rejects.toThrow();
   });
 });
