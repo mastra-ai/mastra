@@ -1956,6 +1956,7 @@ export class Workflow<
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       evaluatePersistencePredicateBeforeDurableOperation: options.evaluatePersistencePredicateBeforeDurableOperation,
       allowUnclaimedResumes: options.allowUnclaimedResumes,
+      persistResumeClaim: options.persistResumeClaim,
       isOwnershipLostError: options.isOwnershipLostError,
       isForeignExecution: options.isForeignExecution,
       pruneSnapshot: options.pruneSnapshot,
@@ -5001,10 +5002,14 @@ export class Run<
     // The claim is a persisted state transition, so a workflow that opts out of persisting
     // `running` snapshots cannot be claimed: writing one anyway would leave the stored snapshot
     // in a state the caller explicitly asked us never to write.
-    const persistsRunningState = this.executionEngine.options.shouldPersistSnapshot({
-      workflowStatus: 'running',
-      stepResults: (snapshot.context ?? {}) as Record<string, StepResult<any, any, any, any>>,
-    });
+    // `persistResumeClaim` workflows write this one claim even so: their stored status must stop
+    // reading `suspended` once a resume takes the run.
+    const persistsRunningState =
+      (operation === 'resume' && this.executionEngine.options.persistResumeClaim) ||
+      this.executionEngine.options.shouldPersistSnapshot({
+        workflowStatus: 'running',
+        stepResults: (snapshot.context ?? {}) as Record<string, StepResult<any, any, any, any>>,
+      });
 
     const expectedStatus = operation === 'resume' ? 'suspended' : snapshot.status;
 

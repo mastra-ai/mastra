@@ -3765,7 +3765,12 @@ export class DurableAgent<
             // being suspended means a concurrent resume ran it first. The run, its topic and
             // its spans belong to that resume: release the claim without writing run state
             // and report the lost race to this caller only.
-            if (error instanceof MastraError && error.id === 'WORKFLOW_RUN_NOT_SUSPENDED') {
+            // When the resume claim is persisted (`persistResumeClaim`), the losing CAS reports the
+            // race as WORKFLOW_RESUME_ALREADY_CLAIMED instead.
+            if (
+              error instanceof MastraError &&
+              (error.id === 'WORKFLOW_RUN_NOT_SUSPENDED' || error.id === 'WORKFLOW_RESUME_ALREADY_CLAIMED')
+            ) {
               const lost = new MastraError({
                 id: 'AGENT_RESUME_ALREADY_CLAIMED',
                 domain: ErrorDomain.AGENT,

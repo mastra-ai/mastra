@@ -575,6 +575,14 @@ export interface WorkflowOptions {
   allowUnclaimedResumes?: boolean;
 
   /**
+   * Writes the resume claim (`suspended -> running`) even when `shouldPersistSnapshot`
+   * excludes `running`, so a resumed run stops reading back as `suspended` while it runs.
+   *
+   * @internal Set by durable agent loops, whose suspended-run listing reads the stored status.
+   */
+  persistResumeClaim?: boolean;
+
+  /**
    * Identifies step errors raised because this execution lost, or could not
    * confirm, ownership of the run — for example a durable agent run taken
    * over by `recover()`. Another execution may be driving the run from its
