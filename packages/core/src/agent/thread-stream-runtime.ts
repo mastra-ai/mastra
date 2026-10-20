@@ -3091,6 +3091,10 @@ export class AgentThreadStreamRuntime {
     if (options.clearPendingSignals) this.#cancelPendingSignals(state, key);
     try {
       if (!runId) return false;
+      if (options.localOnly && this.#isParkedRun(state, runId) && !state.preparedRunsById.has(runId)) {
+        this.#releaseSupersededParkedRun(state, resolvedPubSub, key, runId);
+        return true;
+      }
       const abortOptions = { fenceResume: !options.localOnly };
       if (state.preparedRunsById.has(runId)) return this.abortRun(runId, resolvedPubSub, abortOptions);
       if (state.threadKeysByRunId.get(runId) === key) {

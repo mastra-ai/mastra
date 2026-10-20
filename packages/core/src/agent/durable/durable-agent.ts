@@ -2691,7 +2691,7 @@ export class DurableAgent<
     const aborted = super.abortThreadStream(options);
     if (!aborted || !runId) return aborted;
 
-    this.#abortDurableRun(runId);
+    if (!options.localOnly) this.#abortDurableRun(runId);
     return true;
   }
 
