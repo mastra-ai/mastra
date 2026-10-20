@@ -317,6 +317,49 @@ describe('MCP event routes', () => {
       expect(() => fake.push({ type: 'event', occurrence })).not.toThrow();
     });
 
+    it('returns a generic 429 for streams past the server limit and frees the slot on abort', async () => {
+      // Mirrors MCPServer: at most `maxStreams` open, further opens fail with the stable id.
+      const maxStreams = 2;
+      const open = new Set<AbortSignal>();
+      const inspector = {
+        ...fakeInspector().inspector,
+        stream: vi.fn<MCPServerEventsInspector['stream']>(async (_name, _params, options) => {
+          if (open.size >= maxStreams) {
+            throw eventError('MCP_SERVER_EVENT_TOO_MANY_STREAMS', 'Too many open event streams (upstream)');
+          }
+          open.add(options.signal);
+          const closed = new Promise<void>(resolve =>
+            options.signal.addEventListener('abort', () => (open.delete(options.signal), resolve()), { once: true }),
+          );
+          options.onFrame({ type: 'active', cursor: 'c0', truncated: false });
+          return { closed };
+        }),
+      };
+      const { mastra, logger } = makeMastra(makeServer(inspector));
+      const request = () => {
+        const controller = new AbortController();
+        const response = STREAM_MCP_SERVER_EVENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          serverId: 'events',
+          eventName: 'ticket.created',
+          abortSignal: controller.signal,
+        });
+        return { controller, response };
+      };
+
+      const first = request();
+      await first.response;
+      await request().response;
+
+      const rejected = await request().response.catch((error: unknown) => error);
+      expect(rejected).toBeInstanceOf(HTTPException);
+      expect(rejected).toMatchObject({ status: 429, message: 'Too many open event streams' });
+      expect(logger.error).not.toHaveBeenCalled();
+
+      first.controller.abort();
+      await expect(request().response).resolves.toBeInstanceOf(ReadableStream);
+    });
+
     it('returns 400 for a poll-only event before opening a stream', async () => {
       const fake = fakeInspector();
       const { mastra } = makeMastra(makeServer(fake.inspector));

@@ -29,11 +29,12 @@ const buildFinished = () =>
     }),
   });
 
-function setup(events: Record<string, MCPServerEventDefinition>) {
+function setup(events: Record<string, MCPServerEventDefinition>, maxStreams?: number) {
   const registry = new ServerEventRegistry(events);
   const inspector = createEventsInspector({
     registry,
     heartbeatIntervalMs: 60_000,
+    maxStreams,
     getLogger: () => noopLogger,
     jsonSchema: () => undefined,
   });
@@ -204,6 +205,25 @@ describe('MCPServer events inspector', () => {
       await server.close();
 
       await expect(closed).resolves.toBeUndefined();
+    });
+
+    it('reports streams past maxStreams with a stable error id until one closes', async () => {
+      const { registry, inspector } = setup({ 'ticket.created': ticketCreated() }, 2);
+      const open = () => {
+        const controller = new AbortController();
+        return inspector
+          .stream('ticket.created', {}, { signal: controller.signal, onFrame: () => {} })
+          .then(({ closed }) => ({ controller, closed }));
+      };
+      const first = await open();
+      await open();
+
+      await expectMastraError(open(), 'MCP_SERVER_EVENT_TOO_MANY_STREAMS');
+      expect(registry.openStreams.size).toBe(2);
+
+      first.controller.abort();
+      await first.closed;
+      await expect(open()).resolves.toBeDefined();
     });
 
     it('rejects a poll-only type', async () => {

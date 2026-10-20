@@ -437,6 +437,7 @@ export const MCP_SERVER_EVENT_ERROR_IDS = {
   invalidArguments: 'MCP_SERVER_EVENT_INVALID_ARGUMENTS',
   notEmittable: 'MCP_SERVER_EVENT_NOT_EMITTABLE',
   invalidPayload: 'MCP_SERVER_EVENT_INVALID_PAYLOAD',
+  tooManyStreams: 'MCP_SERVER_EVENT_TOO_MANY_STREAMS',
 } as const;
 
 /**

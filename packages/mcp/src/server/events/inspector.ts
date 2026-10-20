@@ -135,6 +135,8 @@ function protocolErrorId(
       return MCP_SERVER_EVENT_ERROR_IDS.unsupportedDelivery;
     case EVENTS_ERROR_CODES.InvalidParams:
       return MCP_SERVER_EVENT_ERROR_IDS.invalidArguments;
+    case EVENTS_ERROR_CODES.ResourceExhausted:
+      return MCP_SERVER_EVENT_ERROR_IDS.tooManyStreams;
     default:
       return undefined;
   }
