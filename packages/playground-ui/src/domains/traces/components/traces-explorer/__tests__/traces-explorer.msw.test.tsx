@@ -130,6 +130,7 @@ type HarnessProps = {
   onChange?: (next: TracesExplorerState) => void;
   traceHref?: TracesExplorerPanelProps['traceHref'];
   renderError?: TracesExplorerLayoutProps['renderError'];
+  panelProps?: Partial<TracesExplorerPanelProps>;
 };
 
 // Plain React state stands in for the host: no router, no search params.
@@ -144,6 +145,7 @@ function Harness({
   onChange,
   traceHref,
   renderError,
+  panelProps,
 }: HarnessProps) {
   const [selection, setSelection] = useState(initialSelection);
   const [filters, setFilters] = useState(initialFilters);
@@ -176,7 +178,7 @@ function Harness({
         }
       >
         <TracesExplorer.List />
-        <TracesExplorer.Panel onOpenScore={() => {}} traceHref={traceHref} />
+        <TracesExplorer.Panel onOpenScore={() => {}} traceHref={traceHref} {...panelProps} />
       </TracesExplorer.Layout>
     </TracesExplorer>
   );
@@ -725,6 +727,33 @@ describe('TracesExplorer', () => {
         expect.stringContaining('Time'),
         expect.stringContaining('trace-a'),
       ]);
+    });
+  });
+
+  describe('the trace actions menu', () => {
+    const openTraceActions = async (panelProps?: Partial<TracesExplorerPanelProps>) => {
+      setExplorerHandlers();
+      const { queryClient } = renderExplorer({
+        panelProps,
+        initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
+      });
+      const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
+      await settle(queryClient);
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Open trace actions' }));
+      await screen.findByRole('menuitem', { name: 'Download trace JSON' });
+    };
+
+    it('offers adding the trace to a dataset by default', async () => {
+      await openTraceActions();
+
+      expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).toBeTruthy();
+    });
+
+    it('hides "Add full trace to dataset" when the host turns it off', async () => {
+      await openTraceActions({ withAddTraceToDataset: false });
+
+      expect(screen.queryByRole('menuitem', { name: 'Add full trace to dataset' })).toBeNull();
+      expect(screen.getByRole('menuitem', { name: 'Download trace JSON' })).toBeTruthy();
     });
   });
 

@@ -181,26 +181,6 @@ describe('TraceDataPanelView — className passthrough', () => {
   });
 });
 
-describe('TraceDataPanelView — Add tool mocks to item', () => {
-  it('fires onAddTraceMocksToItem with the traceId when the button is clicked', () => {
-    const onAddTraceMocksToItem = vi.fn();
-    render(<TraceDataPanelView {...baseProps} onAddTraceMocksToItem={onAddTraceMocksToItem} />);
-
-    openTraceActions();
-    fireEvent.click(screen.getByRole('menuitem', { name: /add tool mocks to item/i }));
-
-    expect(onAddTraceMocksToItem).toHaveBeenCalledTimes(1);
-    expect(onAddTraceMocksToItem).toHaveBeenCalledWith({ traceId: 'trace-1' });
-  });
-
-  it('does not render the action when the prop is omitted', () => {
-    render(<TraceDataPanelView {...baseProps} />);
-
-    openTraceActions();
-    expect(screen.queryByRole('menuitem', { name: /add tool mocks to item/i })).toBeNull();
-  });
-});
-
 describe('TraceDataPanelView — header actions', () => {
   it('keeps navigation and close visible while secondary actions stay in the menu', () => {
     render(<TraceDataPanelView {...baseProps} onPrevious={vi.fn()} onNext={vi.fn()} onEvaluateTrace={vi.fn()} />);
@@ -214,20 +194,12 @@ describe('TraceDataPanelView — header actions', () => {
     expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
   });
 
-  it('exposes the dataset and mock actions from the header menu', () => {
-    render(
-      <TraceDataPanelView
-        {...baseProps}
-        onEvaluateTrace={vi.fn()}
-        onSaveAsDatasetItem={vi.fn()}
-        onAddTraceMocksToItem={vi.fn()}
-      />,
-    );
+  it('exposes the dataset action from the header menu', () => {
+    render(<TraceDataPanelView {...baseProps} onEvaluateTrace={vi.fn()} onSaveAsDatasetItem={vi.fn()} />);
 
     openTraceActions();
     expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /add full trace to dataset/i })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /add tool mocks to item/i })).toBeTruthy();
   });
 
   it('still saves the dataset item against the root span from the header', () => {

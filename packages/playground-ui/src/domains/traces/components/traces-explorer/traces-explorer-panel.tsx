@@ -9,7 +9,6 @@ import { TraceFeedbackTab } from '../trace-feedback-tab';
 import { TraceSpanPanel } from '../trace-span-panel';
 import type { TraceSpanPanelProps } from '../trace-span-panel';
 import { useTraceUsageColumns, useTracesConfig, useTracesList, useTracesSelection } from './traces-explorer-context';
-import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { ScoreDataPanel, TraceScoresTab } from '@/domains/scores';
 
@@ -21,6 +20,8 @@ export type TracesExplorerPanelProps = {
   headerActionsSlot?: (args: { traceId: string; spans: TraceSpanPanelProps['spans'] }) => ReactNode;
   /** Builds the href of the dedicated trace page; without it the drawer offers no "Open trace page" link. */
   traceHref?: (traceId: string) => string;
+  /** Shows "Add full trace to dataset" in the trace actions menu. Defaults to `true`. */
+  withAddTraceToDataset?: boolean;
 };
 
 type DatasetDialogTarget = { traceId: string; rootSpanId: string | undefined };
@@ -30,6 +31,7 @@ export function TracesExplorerPanel({
   renderCreateDatasetDialog,
   headerActionsSlot,
   traceHref,
+  withAddTraceToDataset = true,
 }: TracesExplorerPanelProps) {
   const { withQueryTrace, withFeedback } = useTracesConfig();
   const { rows, autoRefetch, isLoading: isListLoading } = useTracesList();
@@ -40,7 +42,6 @@ export function TracesExplorerPanel({
   const spanId = selection.spanId;
 
   const [datasetDialogTarget, setDatasetDialogTarget] = useState<DatasetDialogTarget | null>(null);
-  const [addMocksTarget, setAddMocksTarget] = useState<{ traceId: string } | null>(null);
   // Keyed by trace id so selecting another trace (row click, prev/next) falls back to the trace panel.
   const [fullThreadTraceId, setFullThreadTraceId] = useState<string | null>(null);
 
@@ -86,8 +87,6 @@ export function TracesExplorerPanel({
 
   const { handlePreviousTrace, handleNextTrace } = useTraceListNavigation(rows, traceId, null, selectTrace);
 
-  // Tool mocks only make sense for agent runs.
-  const isAgentTrace = anchorSpan?.entityType === 'agent';
   const isFullThreadOpen = !!traceId && fullThreadTraceId === traceId;
   const depth = isFullThreadOpen ? 3 : 2;
 
@@ -112,8 +111,7 @@ export function TracesExplorerPanel({
         onOpenScore={onOpenScore}
         onFullThreadOpenChange={open => setFullThreadTraceId(open ? (traceId ?? null) : null)}
         onSpanSelect={id => selectSpan(id ?? null)}
-        onSaveAsDatasetItem={setDatasetDialogTarget}
-        onAddTraceMocksToItem={isAgentTrace ? setAddMocksTarget : undefined}
+        onSaveAsDatasetItem={withAddTraceToDataset ? setDatasetDialogTarget : undefined}
         initialSpanId={spanId}
         onPrevious={handlePreviousTrace}
         onNext={handleNextTrace}
@@ -141,18 +139,15 @@ export function TracesExplorerPanel({
         traceHref={traceId && traceHref ? traceHref(traceId) : undefined}
       />
       <ScoreDataPanel depth={depth} score={featuredScore} onClose={() => selectScore(null)} />
-      <TraceAsItemDialog
-        rootSpanId={datasetDialogTarget?.rootSpanId}
-        traceId={datasetDialogTarget?.traceId}
-        isOpen={!!datasetDialogTarget}
-        onClose={() => setDatasetDialogTarget(null)}
-        renderCreateDatasetDialog={renderCreateDatasetDialog}
-      />
-      <AddTraceMocksToItemDialog
-        traceId={addMocksTarget?.traceId}
-        isOpen={!!addMocksTarget}
-        onClose={() => setAddMocksTarget(null)}
-      />
+      {withAddTraceToDataset && (
+        <TraceAsItemDialog
+          rootSpanId={datasetDialogTarget?.rootSpanId}
+          traceId={datasetDialogTarget?.traceId}
+          isOpen={!!datasetDialogTarget}
+          onClose={() => setDatasetDialogTarget(null)}
+          renderCreateDatasetDialog={renderCreateDatasetDialog}
+        />
+      )}
     </>
   );
 }
