@@ -4,6 +4,7 @@ import type { MemoryStorage } from '@mastra/core/storage';
 import { externallyAuthoredWorkItem } from '../rules/types.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
+import { sessionStampCounts } from './session-threads.js';
 
 /** Slack-started sessions live on a `slack/<thread>` branch (see `threadBranch` in the Slack integration). */
 const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
@@ -141,7 +142,7 @@ export async function migrateSessionResources(
 
       // Finish moves a crash interrupted after storage moved the thread.
       const { threads: interrupted } = await deps.memory.listThreads({
-        filter: { metadata: { factorySessionId: sessionId, [MOVE_PENDING_KEY]: true } },
+        filter: { resourceId, metadata: { factorySessionId: sessionId, [MOVE_PENDING_KEY]: true } },
         perPage: false,
       });
       for (const thread of interrupted) {
@@ -150,7 +151,11 @@ export async function migrateSessionResources(
         report.threads += 1;
       }
       const { threads } = await deps.memory.listThreads({ filter: { resourceId: sessionId }, perPage: false });
+      // A private session's stamps don't count under its Factory, so only its own
+      // thread moves there; its other threads stay listed under its id.
+      const stampsCount = sessionStampCounts(session, resourceId);
       for (const thread of threads) {
+        if (!stampsCount && thread.id !== sessionId) continue;
         // Tag before moving: once moved, the thread is no longer found under the session id.
         const metadata = { ...thread.metadata, factorySessionId: sessionId, [MOVE_PENDING_KEY]: true };
         await deps.memory.patchThread({ id: thread.id, metadata });

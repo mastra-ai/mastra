@@ -217,7 +217,7 @@ async function seedLegacyFactory() {
       memory,
       threads: sessionMemory,
     });
-  return { seed, memoryStore, memory, ops, vector, migrate };
+  return { seed, memoryStore, memory, ops, vector, migrate, now };
 }
 
 describe('sessionMemoryResource', () => {
@@ -453,6 +453,42 @@ describe('migrateSessionResources', () => {
       resourceId: FACTORY_ID,
       metadata: { factorySessionId: RUN_SESSION, factoryResourceMovePending: false },
     });
+  });
+
+  it("keeps a private run's other threads listed under the session after moving its own thread", async () => {
+    const { seed, memoryStore, memory, ops, migrate, now } = await seedLegacyFactory();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    await ops.updateMany('source_control_sessions', { session_id: RUN_SESSION }, { visibility: 'private' });
+    await memory.saveThread({
+      thread: { id: 'run-second-thread', resourceId: RUN_SESSION, title: 'Second', createdAt: now, updatedAt: now },
+    });
+
+    await migrate();
+
+    // Its own thread moves onto the Factory; a stamp there wouldn't count for a private session.
+    expect((await memory.getThreadById({ threadId: RUN_SESSION }))?.resourceId).toBe(FACTORY_ID);
+    expect((await memory.getThreadById({ threadId: 'run-second-thread' }))?.resourceId).toBe(RUN_SESSION);
+    const controller = new AgentController({
+      id: 'code',
+      storage: memoryStore,
+      stateSchema: undefined,
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          default: true,
+          defaultModelId: 'openai/gpt-5.5',
+          agent: new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'Test.', model: 'openai/gpt-5.5' }),
+        },
+      ],
+    });
+    await controller.init();
+    const listed = await listFactorySessionThreads(
+      controller,
+      { sessionId: RUN_SESSION, orgId: 'org-1', userId: 'user-1', factoryProjectId: FACTORY_ID, visibility: 'private' },
+      seed.workItems,
+    );
+    expect(listed.map(thread => thread.id).sort()).toEqual([RUN_SESSION, 'run-second-thread'].sort());
   });
 
   it('opens a migrated session by its id with its old conversation', async () => {
