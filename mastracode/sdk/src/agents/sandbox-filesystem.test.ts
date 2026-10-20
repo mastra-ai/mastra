@@ -377,7 +377,7 @@ describe('SandboxFilesystem.walk', () => {
     await fs.walk('.', { maxDepth: 3 });
     const findCall = sandbox.calls.find(c => c.includes('find '))!;
     expect(findCall).toContain('-maxdepth 3');
-    expect(findCall).toContain(`-name '.*' -prune -o`);
+    expect(findCall).toContain(`\\( -name '.*' \\) -prune -o`);
 
     await fs.walk('.', { includeHidden: true });
     const hiddenCall = sandbox.calls.filter(c => c.includes('find ')).at(-1)!;
@@ -417,7 +417,7 @@ describe('SandboxFilesystem.grep', () => {
   it('uses rg --json when ripgrep is available and converts byte offsets to UTF-16 columns', async () => {
     const { fs, sandbox } = makeFs(script => {
       if (isContainmentCheck(script)) return realpathResult(WORKDIR);
-      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: 'rg\ngit\n', stderr: '' };
       if (script.startsWith('rg ')) {
         return {
           exitCode: 0,
@@ -445,7 +445,7 @@ describe('SandboxFilesystem.grep', () => {
   it('assembles before/after context from rg context events', async () => {
     const { fs } = makeFs(script => {
       if (isContainmentCheck(script)) return realpathResult(WORKDIR);
-      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: 'rg\ngit\n', stderr: '' };
       if (script.startsWith('rg ')) {
         return {
           exitCode: 0,
@@ -479,7 +479,7 @@ describe('SandboxFilesystem.grep', () => {
   it('returns [] when rg exits 1 (no matches)', async () => {
     const { fs } = makeFs(script => {
       if (isContainmentCheck(script)) return realpathResult(WORKDIR);
-      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: 'rg\ngit\n', stderr: '' };
       if (script.startsWith('rg ')) return { exitCode: 1, stdout: '', stderr: '' };
       return { exitCode: 0, stdout: '', stderr: '' };
     });
@@ -491,7 +491,7 @@ describe('SandboxFilesystem.grep', () => {
   it('keeps partial matches when rg exits 2 because of a per-file error', async () => {
     const { fs } = makeFs(script => {
       if (isContainmentCheck(script)) return realpathResult(WORKDIR);
-      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: 'rg\ngit\n', stderr: '' };
       if (script.startsWith('rg ')) {
         return {
           exitCode: 2,
@@ -509,7 +509,7 @@ describe('SandboxFilesystem.grep', () => {
   it('signals UnsupportedGrepPatternError when rg exits 2 with no output (bad pattern)', async () => {
     const { fs } = makeFs(script => {
       if (isContainmentCheck(script)) return realpathResult(WORKDIR);
-      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: 'rg\ngit\n', stderr: '' };
       if (script.startsWith('rg ')) return { exitCode: 2, stdout: '', stderr: 'regex parse error' };
       return { exitCode: 0, stdout: '', stderr: '' };
     });
@@ -572,7 +572,7 @@ describe('SandboxFilesystem.grep', () => {
     ).rejects.toMatchObject({ code: 'EUNSUPPORTED_PATTERN' });
   });
 
-  it('signals fallback when context is requested without ripgrep', async () => {
+  it('signals fallback when context is requested and only POSIX grep is available', async () => {
     const { fs } = makeFs(script => {
       if (isContainmentCheck(script)) return realpathResult(WORKDIR);
       if (script.startsWith('command -v rg')) return { exitCode: 1, stdout: '', stderr: '' };
@@ -584,10 +584,204 @@ describe('SandboxFilesystem.grep', () => {
     ).rejects.toMatchObject({ code: 'EUNSUPPORTED_PATTERN' });
   });
 
+  it('runs rg with ignore files applied and node_modules skipped', async () => {
+    const { fs, sandbox } = makeFs(script => {
+      if (isContainmentCheck(script)) {
+        return realpathResult(script.includes('node_modules') ? `${WORKDIR}/node_modules/x` : WORKDIR);
+      }
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: 'rg\n', stderr: '' };
+      return { exitCode: 1, stdout: '', stderr: '' };
+    });
+
+    await fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false });
+    await fs.grep({ pattern: 'foo', path: 'node_modules/x', caseSensitive: true, includeHidden: false });
+
+    const [rootSearch, nodeModulesSearch] = sandbox.calls.filter(c => c.startsWith('rg '));
+    expect(rootSearch).not.toContain('--no-ignore');
+    expect(rootSearch).toContain('--no-require-git');
+    expect(rootSearch).toContain(`-g '!**/node_modules/**'`);
+    // Searching inside node_modules on purpose still works.
+    expect(nodeModulesSearch).not.toContain('node_modules/**');
+  });
+
+  describe('GNU grep without ripgrep', () => {
+    const gnuProbe = { exitCode: 0, stdout: 'gnu-grep\ngit\n', stderr: '' };
+
+    it('retries a failed tool probe on the next search instead of caching it', async () => {
+      let probes = 0;
+      const { fs } = makeFs(script => {
+        if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+        if (script.startsWith('command -v rg')) {
+          probes++;
+          return probes === 1 ? { exitCode: 1, stdout: '', stderr: 'sandbox not ready' } : gnuProbe;
+        }
+        return { exitCode: 0, stdout: '', stderr: '' };
+      });
+      const search = () => fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false });
+
+      await search();
+      await search();
+      await search();
+
+      expect(probes).toBe(2);
+    });
+
+    it('returns matches with context from one command, resolving paths per repository', async () => {
+      const { fs, sandbox } = makeFs(script => {
+        if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+        if (script.startsWith('command -v rg')) return gnuProbe;
+        if (script.startsWith('pat=')) {
+          return {
+            exitCode: 0,
+            stdout: [
+              `\0${WORKDIR}/app`,
+              'src/a.ts\x001-before',
+              'src/a.ts\x002:const foo = 1;',
+              'src/a.ts\x003-after',
+              '--',
+              'src/a.ts\x009:foo again',
+              `\0${WORKDIR}`,
+              `${WORKDIR}/notes.txt\x001:foo: a colon-1-like line`,
+              '',
+            ].join('\n'),
+            stderr: '',
+          };
+        }
+        return { exitCode: 0, stdout: '', stderr: '' };
+      });
+
+      const results = await fs.grep({
+        pattern: 'foo',
+        path: '.',
+        caseSensitive: true,
+        includeHidden: false,
+        contextLines: 1,
+      });
+
+      expect(results).toEqual([
+        {
+          path: 'app/src/a.ts',
+          matches: [
+            { line: 2, column: 6, text: 'const foo = 1;', before: ['before'], after: ['after'] },
+            { line: 9, column: 0, text: 'foo again', before: [], after: [] },
+          ],
+        },
+        {
+          path: 'notes.txt',
+          matches: [{ line: 1, column: 0, text: 'foo: a colon-1-like line', before: [], after: [] }],
+        },
+      ]);
+      const search = sandbox.calls.filter(c => c.startsWith('pat='));
+      expect(search).toHaveLength(1);
+      expect(search[0]).toContain('grep -HnIE --null -C 1');
+      expect(search[0]).toContain('grep -l -z -I --untracked');
+      expect(search[0]).toContain(`':(exclude,glob)**/node_modules/**'`);
+    });
+
+    it('signals fallback when grep rejects the pattern', async () => {
+      const { fs } = makeFs(script => {
+        if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+        if (script.startsWith('command -v rg')) return gnuProbe;
+        if (script.startsWith('pat=')) return { exitCode: 2, stdout: '', stderr: 'grep: invalid regular expression' };
+        return { exitCode: 0, stdout: '', stderr: '' };
+      });
+
+      await expect(
+        fs.grep({ pattern: 'a{1', path: '.', caseSensitive: true, includeHidden: false }),
+      ).rejects.toMatchObject({ code: 'EUNSUPPORTED_PATTERN' });
+    });
+
+    it('signals fallback when grep and the JS regex disagree on a match', async () => {
+      const { fs } = makeFs(script => {
+        if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+        if (script.startsWith('command -v rg')) return gnuProbe;
+        if (script.startsWith('pat=')) return { exitCode: 0, stdout: `\0${WORKDIR}\na.ts\x001:bar\n`, stderr: '' };
+        return { exitCode: 0, stdout: '', stderr: '' };
+      });
+
+      await expect(
+        fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false }),
+      ).rejects.toMatchObject({ code: 'EUNSUPPORTED_PATTERN' });
+    });
+
+    describe('with PCRE support', () => {
+      const pcreProbe = { exitCode: 0, stdout: 'gnu-grep\ngrep-pcre\ngit\ngit-pcre\n', stderr: '' };
+
+      it('runs \\d, \\s, \\b, and lookarounds natively with grep -P', async () => {
+        const { fs, sandbox } = makeFs(script => {
+          if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+          if (script.startsWith('command -v rg')) return pcreProbe;
+          if (script.startsWith('pat=')) {
+            return { exitCode: 0, stdout: `\0${WORKDIR}\na.ts\x003:  isBot: 42\n`, stderr: '' };
+          }
+          return { exitCode: 0, stdout: '', stderr: '' };
+        });
+
+        const results = await fs.grep({
+          pattern: '\\bisBot:\\s(?=\\d)\\d+',
+          path: '.',
+          caseSensitive: true,
+          includeHidden: false,
+        });
+
+        expect(results).toEqual([{ path: 'a.ts', matches: [{ line: 3, column: 2, text: '  isBot: 42' }] }]);
+        const search = sandbox.calls.find(c => c.startsWith('pat='))!;
+        expect(search).toContain('grep -HnIP --null');
+        expect(search).toContain('--untracked -P -e "$pat"');
+        expect(search).toContain('grep -P -e "$pat" </dev/null');
+        expect(search).not.toContain('-E');
+      });
+
+      it('signals fallback for escapes PCRE and JS read differently', async () => {
+        const { fs, sandbox } = makeFs(script => {
+          if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+          if (script.startsWith('command -v rg')) return pcreProbe;
+          return { exitCode: 0, stdout: '', stderr: '' };
+        });
+
+        for (const pattern of ['\\Afoo', 'foo\\z', '\\p{L}+', '[[:alpha:]]']) {
+          await expect(
+            fs.grep({ pattern, path: '.', caseSensitive: true, includeHidden: false }),
+          ).rejects.toMatchObject({ code: 'EUNSUPPORTED_PATTERN' });
+        }
+        expect(sandbox.calls.some(c => c.startsWith('pat='))).toBe(false);
+      });
+
+      it('keeps ERE when git lacks PCRE', async () => {
+        const { fs, sandbox } = makeFs(script => {
+          if (isContainmentCheck(script)) return realpathResult(WORKDIR);
+          if (script.startsWith('command -v rg'))
+            return { exitCode: 0, stdout: 'gnu-grep\ngrep-pcre\ngit\n', stderr: '' };
+          return { exitCode: 0, stdout: '', stderr: '' };
+        });
+
+        await expect(
+          fs.grep({ pattern: '\\d+', path: '.', caseSensitive: true, includeHidden: false }),
+        ).rejects.toMatchObject({ code: 'EUNSUPPORTED_PATTERN' });
+        await fs.grep({ pattern: 'foo', path: '.', caseSensitive: true, includeHidden: false });
+        expect(sandbox.calls.find(c => c.startsWith('pat='))).toContain('grep -HnIE --null');
+      });
+    });
+
+    it('searches node_modules when the path points inside it', async () => {
+      const { fs, sandbox } = makeFs(script => {
+        if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/node_modules/x`);
+        if (script.startsWith('command -v rg')) return gnuProbe;
+        return { exitCode: 0, stdout: '', stderr: '' };
+      });
+
+      await fs.grep({ pattern: 'foo', path: 'node_modules/x', caseSensitive: true, includeHidden: false });
+
+      const search = sandbox.calls.find(c => c.startsWith('pat='))!;
+      expect(search).not.toContain('**/node_modules/**');
+      expect(search).not.toContain('-name node_modules');
+    });
+  });
+
   it('includes the exit code and stderr in the rg failure reason', async () => {
     const { fs } = makeFs(script => {
       if (isContainmentCheck(script)) return realpathResult(WORKDIR);
-      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: 'rg\ngit\n', stderr: '' };
       if (script.startsWith('rg ')) return { exitCode: 2, stdout: '', stderr: '\nregex parse error\nmore' };
       return { exitCode: 0, stdout: '', stderr: '' };
     });
@@ -599,7 +793,7 @@ describe('SandboxFilesystem.grep', () => {
   it('reports a native grep timeout instead of an unsupported pattern', async () => {
     const { fs } = makeFs(script => {
       if (isContainmentCheck(script)) return realpathResult(WORKDIR);
-      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: '/usr/bin/rg', stderr: '' };
+      if (script.startsWith('command -v rg')) return { exitCode: 0, stdout: 'rg\ngit\n', stderr: '' };
       if (script.startsWith('rg ')) return { exitCode: 124, stdout: '', stderr: '' };
       return { exitCode: 0, stdout: '', stderr: '' };
     });

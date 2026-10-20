@@ -643,6 +643,12 @@ const response = await agent.generate("Hello!", {
         "isOptional": true
     },
     {
+        "name": "continuationToken",
+        "type": "string | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
         "name": "sharedRequestType",
         "type": "\"standard\" | \"flex\" | \"priority\" | undefined",
         "description": "",

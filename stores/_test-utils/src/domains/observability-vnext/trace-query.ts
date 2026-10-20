@@ -26,6 +26,7 @@ import {
   type TraceQueryTraceResponse,
   type TrustedThreadPredicate,
   type TrustedThreadQueryPlan,
+  type TraceQuerySortValue,
   type TrustedTraceQueryKeysetTracesPlan,
   type TrustedTraceQueryPlan,
   type TrustedTraceQueryPredicate,
@@ -2830,7 +2831,7 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
     hasNext && last
       ? encodeTraceQueryCursor(plan, {
           result: 'traces',
-          sortValue: last[plan.orderBy.field],
+          sortValue: last[plan.orderBy.field] ?? null,
           traceId: last.traceId,
         })
       : null;
@@ -3226,19 +3227,38 @@ function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
   };
 }
 
+/** Orders sort values in the requested direction; empty values sort last in both directions. */
+export function compareTraceQuerySortValues(
+  left: TraceQuerySortValue | undefined,
+  right: TraceQuerySortValue | undefined,
+  direction: 'asc' | 'desc',
+): number {
+  if (left == null || right == null) return Number(left == null) - Number(right == null);
+  const values =
+    typeof left === 'number' && typeof right === 'number'
+      ? Math.sign(left - right)
+      : compareTraceQueryStrings(String(left), String(right));
+  return direction === 'asc' ? values : -values;
+}
+
 function compareTraces(
   left: TraceQueryTrace,
   right: TraceQueryTrace,
   plan: Extract<TrustedTraceQueryPlan, { result: 'traces' }>,
 ): number {
-  const values = compareTraceQueryStrings(left[plan.orderBy.field], right[plan.orderBy.field]);
-  if (values !== 0) return plan.orderBy.direction === 'asc' ? values : -values;
+  const field = plan.orderBy.field;
+  const values = compareTraceQuerySortValues(left[field], right[field], plan.orderBy.direction);
+  if (values !== 0) return values;
   return compareTraceQueryStrings(left.traceId, right.traceId);
 }
 
 function isTraceAfterCursor(trace: TraceQueryTrace, plan: TrustedTraceQueryKeysetTracesPlan): boolean {
   const cursor = plan.cursor!;
-  const sortComparison = compareTraceQueryStrings(trace[plan.orderBy.field], cursor.sortValue);
+  const sortComparison = compareTraceQuerySortValues(
+    trace[plan.orderBy.field],
+    cursor.sortValue,
+    plan.orderBy.direction,
+  );
   if (sortComparison === 0) return compareTraceQueryStrings(trace.traceId, cursor.traceId) > 0;
-  return plan.orderBy.direction === 'asc' ? sortComparison > 0 : sortComparison < 0;
+  return sortComparison > 0;
 }

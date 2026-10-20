@@ -2660,9 +2660,9 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       // A durable agent subscribes for us so the client never sees what an
       // execution that lost the run still publishes. Agents without it, such as
       // those from an older @mastra/core, are observed through the topic directly.
-      const subscribe = (onEvent: (event: any) => void): Promise<() => Promise<void>> => {
+      const subscribe = (onEvent: (event: any) => void, onComplete: () => void): Promise<() => Promise<void>> => {
         if (typeof durableAgent?.__subscribeToRunStream === 'function') {
-          return durableAgent.__subscribeToRunStream(runId, { offset }, onEvent);
+          return durableAgent.__subscribeToRunStream(runId, { offset, onComplete }, onEvent);
         }
         const subscribed =
           offset !== undefined
@@ -2674,10 +2674,17 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       let closed = false;
       let unsubscribe: (() => Promise<void>) | undefined;
       let idleTimer: ReturnType<typeof setTimeout> | null = null;
+      let onAbort: (() => void) | undefined;
 
       // Idle timeout: close the stream if no events are received within 5 minutes.
       // This prevents subscription leaks when an agent crashes without emitting a terminal event.
       const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+
+      function releaseSubscription(unsubscribeFromRun: () => Promise<void>) {
+        void Promise.resolve()
+          .then(unsubscribeFromRun)
+          .catch(error => console.error(`[ObserveAgentStream] Failed to unsubscribe from ${topic}:`, error));
+      }
 
       function stop() {
         closed = true;
@@ -2685,22 +2692,25 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
           clearTimeout(idleTimer);
           idleTimer = null;
         }
+        if (onAbort) {
+          abortSignal?.removeEventListener('abort', onAbort);
+          onAbort = undefined;
+        }
         if (unsubscribe) {
-          void unsubscribe();
+          const unsubscribeFromRun = unsubscribe;
           unsubscribe = undefined;
+          releaseSubscription(unsubscribeFromRun);
         }
       }
 
       function cleanup(controller: ReadableStreamDefaultController) {
+        if (closed) return;
         stop();
-        try {
-          controller.close();
-        } catch {
-          // Stream may already be closed
-        }
+        controller.close();
       }
 
       function resetIdleTimer(controller: ReadableStreamDefaultController) {
+        if (closed) return;
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = setTimeout(() => cleanup(controller), IDLE_TIMEOUT_MS);
       }
@@ -2713,36 +2723,43 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
               cleanup(controller);
               return;
             }
-            abortSignal.addEventListener('abort', () => cleanup(controller), { once: true });
+            onAbort = () => cleanup(controller);
+            abortSignal.addEventListener('abort', onAbort, { once: true });
           }
 
           resetIdleTimer(controller);
 
-          subscribe(event => {
-            if (closed) return;
-            const isTerminal = event.type === 'finish' || event.type === 'error';
-            try {
-              controller.enqueue(event);
-            } catch {
-              // Stream may be closed
-            }
-            if (isTerminal) {
-              cleanup(controller);
-            } else {
-              resetIdleTimer(controller);
-            }
-          }).then(
-            unsubscribeFromRun => {
-              // The stream may have ended while subscribing.
-              if (closed) void unsubscribeFromRun();
-              else unsubscribe = unsubscribeFromRun;
-            },
-            (error: any) => {
-              console.error(`[ObserveAgentStream] Failed to subscribe to ${topic}:`, error);
-              stop();
-              controller.error(error);
-            },
-          );
+          void Promise.resolve()
+            .then(() => {
+              if (closed) return;
+              return subscribe(
+                event => {
+                  if (closed) return;
+                  const type = event.type === 'chunk' ? event.data?.type : event.type;
+                  controller.enqueue(event);
+                  if (type === 'finish' || type === 'error' || type === 'abort') {
+                    cleanup(controller);
+                  } else {
+                    resetIdleTimer(controller);
+                  }
+                },
+                () => cleanup(controller),
+              );
+            })
+            .then(
+              unsubscribeFromRun => {
+                if (!unsubscribeFromRun) return;
+                // Replay or cancellation may have ended the stream before setup completed.
+                if (closed) releaseSubscription(unsubscribeFromRun);
+                else unsubscribe = unsubscribeFromRun;
+              },
+              (error: unknown) => {
+                if (closed) return;
+                console.error(`[ObserveAgentStream] Failed to subscribe to ${topic}:`, error);
+                stop();
+                controller.error(error);
+              },
+            );
         },
         cancel() {
           stop();

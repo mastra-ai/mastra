@@ -3,7 +3,12 @@ import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
-import { useClearDefaultModel, useDefaultModelQuery, useSetDefaultModel } from '../../../../hooks/use-default-model';
+import {
+  useApplyDefaultModel,
+  useClearDefaultModel,
+  useDefaultModelQuery,
+  useSetDefaultModel,
+} from '../../../../hooks/use-default-model';
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
@@ -50,9 +55,10 @@ function DefaultModelEditor({
 }) {
   const setDefaultModel = useSetDefaultModel();
   const clearDefaultModel = useClearDefaultModel();
+  const applyDefaultModel = useApplyDefaultModel();
   const [modelId, setModelId] = useState(defaultModelId ?? '');
   const [error, setError] = useState<string>();
-  const busy = setDefaultModel.isPending || clearDefaultModel.isPending;
+  const busy = setDefaultModel.isPending || clearDefaultModel.isPending || applyDefaultModel.isPending;
   const defaultUnavailable =
     Boolean(defaultModelId) && modelsLoaded && !models.some(model => model.id === defaultModelId);
 
@@ -70,6 +76,15 @@ function DefaultModelEditor({
     setError(undefined);
     try {
       await clearDefaultModel.mutateAsync();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const apply = async () => {
+    setError(undefined);
+    try {
+      await applyDefaultModel.mutateAsync();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -103,7 +118,16 @@ function DefaultModelEditor({
         <Button size="sm" disabled={busy || !defaultModelId} onClick={() => void clear()}>
           Clear
         </Button>
+        <Button size="sm" disabled={busy || !defaultModelId || modelId !== defaultModelId} onClick={() => void apply()}>
+          Apply to running sessions
+        </Button>
       </div>
+      {applyDefaultModel.data ? (
+        <Txt as="p" variant="caption">
+          Updated {applyDefaultModel.data.applied.length} running session(s); skipped{' '}
+          {applyDefaultModel.data.skipped.length}.
+        </Txt>
+      ) : null}
     </div>
   );
 }

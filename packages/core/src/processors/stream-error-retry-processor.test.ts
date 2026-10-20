@@ -1,3 +1,4 @@
+import { createOpenAI } from '@ai-sdk/openai-v6';
 import { APICallError } from '@internal/ai-sdk-v5';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -222,6 +223,62 @@ describe('StreamErrorRetryProcessor', () => {
     });
 
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toBeUndefined();
+  });
+
+  it('does not retry OpenAI Responses invalid_api_key stream errors through isBadRequestError', async () => {
+    // @ai-sdk/openai >=3.0.130 classifies this frame with a derived statusCode of 400.
+    const errorFrame = {
+      type: 'error',
+      code: 'invalid_api_key',
+      message: 'Incorrect API key provided.',
+      param: null,
+      sequence_number: 2,
+    };
+    const deltaFrame = {
+      type: 'response.output_text.delta',
+      content_index: 0,
+      delta: 'Partial output.',
+      item_id: 'msg-1',
+      logprobs: [],
+      output_index: 0,
+      sequence_number: 1,
+    };
+    const streamOpenAIFrames = async (frames: Array<Record<string, unknown>>) => {
+      const openai = createOpenAI({
+        apiKey: 'test-key',
+        fetch: async () =>
+          new Response(frames.map(frame => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`).join(''), {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      });
+      try {
+        const { stream } = await openai.responses('gpt-5.4-mini').doStream({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        });
+        for await (const chunk of stream) {
+          if (chunk.type === 'error') return chunk.error;
+        }
+      } catch (error) {
+        return error;
+      }
+      throw new Error('Expected the OpenAI stream to surface an error');
+    };
+
+    // Error after partial output arrives as a stream error chunk; error before output is thrown.
+    const midStreamError = await streamOpenAIFrames([deltaFrame, errorFrame]);
+    const beforeOutputError = await streamOpenAIFrames([errorFrame]);
+    expect(midStreamError).toMatchObject({ code: 'invalid_api_key', statusCode: 400, isRetryable: false });
+    expect(APICallError.isInstance(beforeOutputError)).toBe(true);
+    expect(beforeOutputError).toMatchObject({ statusCode: 400, isRetryable: false });
+
+    const processor = new StreamErrorRetryProcessor({
+      matchers: [{ match: isBadRequestError, maxRetries: 1 }],
+    });
+    for (const error of [midStreamError, beforeOutputError]) {
+      expect(isBadRequestError(error)).toBe(false);
+      await expect(processor.processAPIError(makeArgs({ error }))).resolves.toBeUndefined();
+    }
   });
 
   it('respects maxRetries', async () => {

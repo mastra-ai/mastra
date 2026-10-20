@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { WORKSPACE_TOOLS } from '../../constants';
 import { CompositeFilesystem, LocalFilesystem } from '../../filesystem';
-import { loadGitignore } from '../../gitignore';
+import { loadWorkspaceIgnore } from '../../gitignore';
 import { Workspace } from '../../workspace';
 import { createWorkspaceTools } from '../tools';
 
@@ -32,8 +32,9 @@ describe('workspace tools on CompositeFilesystem without a root mount', () => {
     await fs.rm(base, { recursive: true, force: true });
   });
 
-  it('loadGitignore treats the unmounted root .gitignore as absent', async () => {
-    await expect(loadGitignore(filesystem)).resolves.toBeUndefined();
+  it('treats the unmounted root .gitignore as absent', async () => {
+    const workspaceIgnore = await loadWorkspaceIgnore(filesystem, '.');
+    expect(workspaceIgnore.ignores('incoming/report.txt', false)).toBe(false);
   });
 
   it.each([{ pattern: 'NEEDLE' }, { pattern: 'NEEDLE', path: '/incoming' }])('grep %j succeeds', async input => {

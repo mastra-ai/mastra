@@ -3,6 +3,7 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { getShortId } from '@mastra/playground-ui/utils/id';
 import { CalendarClockIcon, CalendarIcon, FingerprintIcon } from 'lucide-react';
@@ -50,12 +51,22 @@ export function DatasetItemDetails({ item, diff }: DatasetItemDetailsProps) {
         const againstStr = diff ? section.value(diff.against) : undefined;
         // In diff mode keep a section that only exists on the other side so the addition/removal stays visible.
         if (codeStr === undefined && againstStr === undefined) return null;
+        if (codeStr === undefined) {
+          return (
+            <div key={section.key} className="flex flex-col gap-2">
+              <DataPanel.SectionHeading icon={section.icon}>{section.title}</DataPanel.SectionHeading>
+              <Txt as="p" variant="body" tone="muted">
+                Not set in this version
+              </Txt>
+            </div>
+          );
+        }
         return (
           <DataPanel.CodeSection
             key={section.key}
             title={section.title}
             icon={section.icon}
-            codeStr={codeStr ?? ''}
+            codeStr={codeStr}
             diff={diff ? { against: againstStr ?? '', side: diff.side } : undefined}
           />
         );
