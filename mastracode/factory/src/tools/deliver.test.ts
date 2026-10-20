@@ -176,6 +176,17 @@ describe('deliverFactorySessionNotification', () => {
     expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
   });
 
+  it("skips a thread under the Factory stamped with a private run's session id", async () => {
+    // Any org member can stamp a Factory thread; a private run's stamp doesn't count there.
+    const { controller, agent, deliver } = setup({
+      row: { ...ROW, visibility: 'private' } as SourceControlSession,
+      thread: { id: 'thread-stamped', resourceId: 'project-1', metadata: { factorySessionId: 'session-b' } },
+    });
+    await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'thread-not-owned' });
+    expect(controller.createSession).not.toHaveBeenCalled();
+    expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
   it('skips a thread under the Factory for a session no run is bound to', async () => {
     // A person's session runs under its owner, so a thread under the Factory isn't its own.
     RUNS.hasRunBindingForSession.mockResolvedValueOnce(false);

@@ -3,7 +3,7 @@ import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 
 import { createSessionAsRowOwner } from '../integrations/subscription-session.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
-import { listFactorySessionThreads, sessionMemoryResourceId } from '../session/session-threads.js';
+import { listFactorySessionThreads, sessionMemoryResourceId, sessionStampCounts } from '../session/session-threads.js';
 import type { FactorySessionOwnership, SessionRunBindings } from '../session/session-threads.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
@@ -198,5 +198,7 @@ async function isSessionThread(
   // Thread ids and stamps are client-writable: either only counts under the
   // session's own memory resource.
   const row = await loadRow();
-  return !!row && thread.resourceId === (await sessionMemoryResourceId(controller, row, runs));
+  if (!row) return false;
+  if (thread.id !== sessionId && !sessionStampCounts(row, thread.resourceId)) return false;
+  return thread.resourceId === (await sessionMemoryResourceId(controller, row, runs));
 }

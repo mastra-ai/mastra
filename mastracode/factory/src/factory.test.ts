@@ -1338,6 +1338,49 @@ describe('MastraFactory.prepare', () => {
       expect(runEndReports).toEqual([]);
     });
 
+    it("refuses a wake on a thread under the Factory stamped with a private run's session id", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage, { visibility: 'private' });
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      // The private run runs on the Factory's resource, where any org member can stamp a thread.
+      vi.spyOn(storage.getDomain<WorkItemsStorage>('work-items'), 'hasRunBindingForSession').mockResolvedValue(true);
+      threadsById({
+        'session-1': { id: 'session-1', resourceId: project.id, metadata: {} },
+        'thread-atk': { id: 'thread-atk', resourceId: project.id, metadata: { factorySessionId: 'session-1' } },
+      });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      await expect(
+        prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'thread-atk' }),
+      ).rejects.toThrow("can't be woken as its owner");
+      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+    });
+
+    it('wakes a private run on its own thread under the Factory as its owner', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage, { visibility: 'private' });
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      vi.spyOn(storage.getDomain<WorkItemsStorage>('work-items'), 'hasRunBindingForSession').mockResolvedValue(true);
+      threadsById({ 'session-1': { id: 'session-1', resourceId: project.id, metadata: {} } });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      await prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'session-1' });
+
+      expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    });
+
     it("refuses a wake on a thread under the Factory stamped with a user session's id", async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });

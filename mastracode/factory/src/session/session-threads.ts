@@ -70,6 +70,16 @@ function memoryResourceOf(
 }
 
 /**
+ * Whether a `factorySessionId` stamp naming this session counts on a thread
+ * under `resourceId`. Any org member can write a stamped thread under the
+ * Factory's resource, so a private session's stamp never counts there: only
+ * its own thread (`thread.id === sessionId`) does.
+ */
+export function sessionStampCounts(session: FactorySessionOwnership, resourceId: string | null | undefined): boolean {
+  return !(session.visibility === 'private' && !!session.factoryProjectId && resourceId === session.factoryProjectId);
+}
+
+/**
  * The threads of one Factory session. Sessions share their Factory's or user's
  * resource, so listing by resource would return every session's threads. A
  * session's own thread carries its id, threads it opens are stamped with
@@ -92,7 +102,10 @@ export async function listFactorySessionThreads(
   ]);
   const resourceId = memoryResourceOf(session, own, runBound);
   const threads = new Map<string, AgentControllerThread>();
-  const owned = [...(own ? [own] : []), ...stamped].filter(thread => thread.resourceId === resourceId);
+  const owned = [
+    ...(own?.resourceId === resourceId ? [own] : []),
+    ...(sessionStampCounts(session, resourceId) ? stamped.filter(thread => thread.resourceId === resourceId) : []),
+  ];
   for (const thread of [...owned, ...legacy]) threads.set(thread.id, thread);
   return [...threads.values()];
 }

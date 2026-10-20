@@ -120,7 +120,7 @@ import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './ses
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
-import { sessionMemoryResourceId } from './session/session-threads.js';
+import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
@@ -884,8 +884,12 @@ export class MastraFactory {
         // The stamp is client-writable metadata: a session only claims a
         // thread that runs under its own memory resource, or under its own id
         // as the resource from before resources were shared.
+        // A stamp (neither the thread's own id nor its legacy resource) only
+        // counts where the session's stamps are trusted.
+        const viaStamp = sessionId !== threadId && sessionId !== resourceId;
         if (
           row &&
+          (!viaStamp || sessionStampCounts(row, resourceId)) &&
           (resourceId === sessionId ||
             resourceId === (await sessionMemoryResourceId(this.#prepared?.base.controller, row, workItemsStorage)))
         ) {
