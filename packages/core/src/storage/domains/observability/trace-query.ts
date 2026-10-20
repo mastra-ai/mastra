@@ -23,6 +23,23 @@ export const TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH = 256;
 export const TRACE_QUERY_DEFAULT_TIMEOUT_MS = 15_000;
 export const TRACE_QUERY_MAX_TIMEOUT_MS = 300_000;
 
+/**
+ * Fields trace and span queries can sort by. `timeToFirstChunkMs` is a number that can be empty;
+ * empty values sort last in both directions.
+ */
+export const TRACE_QUERY_ORDER_FIELDS = ['startedAt', 'endedAt', 'timeToFirstChunkMs'] as const;
+export type TraceQueryOrderField = (typeof TRACE_QUERY_ORDER_FIELDS)[number];
+/** A keyset cursor's sort value: an ISO timestamp, or a number or `null` for `timeToFirstChunkMs`. */
+export type TraceQuerySortValue = string | number | null;
+
+/** @internal Whether a decoded cursor's sort value has the kind its order field produces. */
+export function isTraceQuerySortValueFor(field: TraceQueryOrderField, value: TraceQuerySortValue): boolean {
+  return field === 'timeToFirstChunkMs' ? value === null || typeof value === 'number' : typeof value === 'string';
+}
+
+/** @internal Cursor sort values: ISO timestamps, or finite numbers and `null` for numeric fields. */
+export const traceQuerySortValueSchema = z.union([z.string().datetime({ offset: true }), z.number(), z.null()]);
+
 /** @internal Shared with the trace-aggregate request schema so both report identical complexity issues. */
 export const TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE = `Predicates are limited to ${TRACE_QUERY_MAX_NODES} nodes and ${TRACE_QUERY_MAX_DEPTH} levels`;
 const PREDICATE_COMPLEXITY_MESSAGE = TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE;
@@ -327,7 +344,7 @@ const traceQueryRequestObjectSchema = z
       .array(
         z
           .object({
-            field: z.enum(['startedAt', 'endedAt']),
+            field: z.enum(TRACE_QUERY_ORDER_FIELDS),
             direction: z.enum(['asc', 'desc']),
           })
           .strict(),
@@ -809,14 +826,15 @@ export interface TrustedTraceQueryPagePlan {
 
 interface TrustedTraceQueryTracesBasePlan extends TrustedTraceQueryBasePlan {
   result: 'traces';
+  /** Empty `timeToFirstChunkMs` values sort last in both directions; ties break by ascending `traceId`. */
   orderBy: {
-    field: 'startedAt' | 'endedAt';
+    field: TraceQueryOrderField;
     direction: 'asc' | 'desc';
   };
 }
 
 export type TrustedTraceQueryKeysetTracesPlan = TrustedTraceQueryTracesBasePlan &
-  TrustedTraceQueryKeysetPlan & { cursor?: { sortValue: string; traceId: string } };
+  TrustedTraceQueryKeysetPlan & { cursor?: { sortValue: TraceQuerySortValue; traceId: string } };
 export type TrustedTraceQueryPaginatedTracesPlan = TrustedTraceQueryTracesBasePlan & TrustedTraceQueryPagePlan;
 export type TrustedTraceQueryDeltaTracesPlan = TrustedTraceQueryTracesBasePlan & {
   paginationMode: 'delta';
@@ -877,7 +895,7 @@ export type TraceQueryCursorPlan =
   | TrustedTraceQueryGroupsPlan
   | TrustedThreadQueryPlan;
 export type TraceQueryCursorValues =
-  | { result: 'traces'; sortValue: string; traceId: string }
+  | { result: 'traces'; sortValue: TraceQuerySortValue; traceId: string }
   | { result: 'groups'; threadId: string }
   | { result: 'threads'; threadId: string };
 
@@ -1258,6 +1276,9 @@ export function planTraceQuery(
     scope,
   });
   const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
+  if (cursor?.result === 'traces' && !isTraceQuerySortValueFor(orderBy.field, cursor.sortValue)) {
+    throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+  }
   return {
     result,
     timeRange,
@@ -1404,7 +1425,7 @@ const cursorEnvelopeSchema = z
       z
         .object({
           result: z.literal('traces'),
-          sortValue: z.string().datetime({ offset: true }),
+          sortValue: traceQuerySortValueSchema,
           traceId: z.string().min(1),
         })
         .strict(),

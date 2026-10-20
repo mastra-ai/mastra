@@ -1790,6 +1790,46 @@ describe('trace-query cursors', () => {
     ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
   });
 
+  it('round-trips numeric and empty time to first chunk cursors and rejects other kinds', () => {
+    const request = parsed({ ...baseRequest, orderBy: [{ field: 'timeToFirstChunkMs', direction: 'asc' }] });
+    const plan = planTraceQuery(request);
+    for (const sortValue of [250, 0, null]) {
+      const after = encodeTraceQueryCursor(plan, { result: 'traces', sortValue, traceId: 'trace-3' });
+      expect(planTraceQuery({ ...request, page: { limit: 100, after } })).toMatchObject({
+        cursor: { sortValue, traceId: 'trace-3' },
+      });
+    }
+
+    const forged = encodeTraceQueryCursor(plan, {
+      result: 'traces',
+      sortValue: '2026-08-03T00:00:00.000Z',
+      traceId: 'trace-3',
+    });
+    expect(() => planTraceQuery({ ...request, page: { limit: 100, after: forged } })).toThrowError(
+      expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
+    );
+    const startedAtPlan = planTraceQuery(parsed());
+    const numeric = encodeTraceQueryCursor(startedAtPlan, { result: 'traces', sortValue: 250, traceId: 'trace-3' });
+    expect(() => planTraceQuery(parsed({ ...baseRequest, page: { after: numeric } }))).toThrowError(
+      expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
+    );
+  });
+
+  it('rejects a cursor after the sort field or direction changes', () => {
+    const plan = planTraceQuery(
+      parsed({ ...baseRequest, orderBy: [{ field: 'timeToFirstChunkMs', direction: 'asc' }] }),
+    );
+    const after = encodeTraceQueryCursor(plan, { result: 'traces', sortValue: 250, traceId: 'trace-3' });
+    for (const orderBy of [
+      [{ field: 'timeToFirstChunkMs', direction: 'desc' }],
+      [{ field: 'startedAt', direction: 'asc' }],
+    ] as const) {
+      expect(() => planTraceQuery(parsed({ ...baseRequest, orderBy: [...orderBy], page: { after } }))).toThrowError(
+        expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
+      );
+    }
+  });
+
   it('binds established shared authorization state only when supplied', () => {
     const plan = planTraceQuery(parsed(), { authorizationBinding: 'scope-a' });
     const cursor = encodeTraceQueryCursor(plan, {

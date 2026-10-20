@@ -4,7 +4,7 @@ import type { DbClient } from '../../../client';
 import { queryTraces, timeToFirstChunkFeatures } from './trace-query';
 
 // Older core versions support list delta polling but lack trace-query delta helpers and
-// `timeToFirstChunkMs`, which their strict query result schemas reject.
+// `timeToFirstChunkMs`, which their strict query result schemas reject and cannot sort by.
 vi.mock('@mastra/core/features', () => ({ coreFeatures: new Set(['observability-delta-polling']) }));
 vi.mock('@mastra/core/storage', async importOriginal => {
   const original = await importOriginal<typeof import('@mastra/core/storage')>();
@@ -12,6 +12,7 @@ vi.mock('@mastra/core/storage', async importOriginal => {
   return {
     ...original,
     encodeTraceQueryDeltaCursor: undefined,
+    TRACE_QUERY_ORDER_FIELDS: undefined,
     TRACE_QUERY_FIELD_REGISTRY: { ...original.TRACE_QUERY_FIELD_REGISTRY, trace },
   };
 });
@@ -39,7 +40,7 @@ it('returns numbered pages when core supports list polling but lacks the query c
   });
 });
 
-it('neither returns nor advertises time to first chunk when core predates the field', async () => {
+it('neither returns, advertises nor sorts by time to first chunk when core predates the field', async () => {
   const page = planTraceQuery(
     parseTraceQueryRequest({
       timeRange: { from: '2026-01-01T00:00:00Z', to: '2026-01-02T00:00:00Z' },

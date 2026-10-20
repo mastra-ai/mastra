@@ -49,6 +49,7 @@ export const observabilityStorageCapabilitiesSchema = z.object({
   traceQueryRootSpanFields: z
     .boolean()
     .describe('Root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct`'),
+  traceQueryTimeToFirstChunkSort: z.boolean().describe('Sorting trace and span queries by `timeToFirstChunkMs`'),
   traceQueryDiscovery: z
     .boolean()
     .describe('Trace query field discovery (POST /observability/traces/query/fields and /values)'),

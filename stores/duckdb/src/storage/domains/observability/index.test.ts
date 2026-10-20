@@ -156,6 +156,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'feedback',
         'trace-query-context-ids',
         'trace-query-time-to-first-chunk',
+        'trace-query-time-to-first-chunk-sort',
         'trace-query-root-span-fields',
       ]);
 
@@ -182,6 +183,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'feedback',
         'trace-query-context-ids',
         'trace-query-time-to-first-chunk',
+        'trace-query-time-to-first-chunk-sort',
         'trace-query-root-span-fields',
       ]);
       await expect(storage.listLogs({ mode: 'delta' })).rejects.toThrow(
@@ -223,6 +225,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'feedback',
         'trace-query-context-ids',
         'trace-query-time-to-first-chunk',
+        'trace-query-time-to-first-chunk-sort',
         'trace-query-root-span-fields',
       ]);
 
@@ -248,6 +251,7 @@ describe('ObservabilityStorageDuckDB', () => {
         'feedback',
         'trace-query-context-ids',
         'trace-query-time-to-first-chunk',
+        'trace-query-time-to-first-chunk-sort',
         'trace-query-root-span-fields',
       ]);
     } finally {

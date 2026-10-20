@@ -10,12 +10,15 @@ import {
   digestBinding,
   findPredicateComplexityIssue,
   formatTraceQuerySchemaIssues,
+  isTraceQuerySortValueFor,
   normalizeTraceQueryTenantScope,
   planSpanQuerySelectionPredicate,
+  TRACE_QUERY_ORDER_FIELDS,
   TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE,
   TraceQueryCursorError,
   TraceQueryValidationError,
   traceQueryScalarPredicateSchema,
+  traceQuerySortValueSchema,
   traceQueryTimeRangeSchema,
 } from './trace-query';
 import type { TraceQueryIssue, TraceQueryPlanOptions, TrustedTraceQueryScalarPredicate } from './trace-query';
@@ -43,7 +46,7 @@ const requestSchema = z
     timeRange: timeRangeSchema,
     where: traceQueryScalarPredicateSchema.optional(),
     orderBy: z
-      .array(z.object({ field: z.enum(['startedAt', 'endedAt']), direction: z.enum(['asc', 'desc']) }).strict())
+      .array(z.object({ field: z.enum(TRACE_QUERY_ORDER_FIELDS), direction: z.enum(['asc', 'desc']) }).strict())
       .length(1)
       .default([{ field: 'startedAt', direction: 'desc' }]),
     page: z
@@ -177,7 +180,7 @@ export type SpanQueryIdentity = z.infer<typeof spanQueryIdentitySchema>;
 export type SpanQueryRow = z.infer<typeof spanQueryRowSchema>;
 export type SpanQueryResponse = z.infer<typeof spanQueryResponseSchema>;
 
-const cursorValuesSchema = spanQueryIdentitySchema.extend({ sortValue: timestamp }).strict();
+const cursorValuesSchema = spanQueryIdentitySchema.extend({ sortValue: traceQuerySortValueSchema }).strict();
 const cursorEnvelopeSchema = z
   .object({
     version: z.literal(1),
@@ -191,10 +194,11 @@ const cursorEnvelopeSchema = z
  * Ordering semantics every store compiler must implement:
  * - Sort by `orderBy.field` in the requested direction, then break ties by
  *   organizationId, resourceId, traceId, and spanId, in that order, all ascending.
+ *   Empty `timeToFirstChunkMs` values sort last in both directions and tie with each other.
  * - Compare non-null IDs lexicographically by UTF-8 bytes, without locale collation.
  *   Null organizationId/resourceId values sort last and compare equal to other nulls.
  * - Resume strictly after the cursor using that same complete ordering. Apply the
- *   requested direction only to the timestamp; identity tie-breaks remain ascending.
+ *   requested direction only to the sort value; identity tie-breaks remain ascending.
  *   Use null-safe equality/comparison for tenant fields, not a raw nullable SQL tuple.
  * - Select and page unique current span identities before hydrating previews or cost.
  */
@@ -249,7 +253,13 @@ export function planSpanQuery(input: unknown, options: TraceQueryPlanOptions = {
     const envelope = cursorEnvelopeSchema.safeParse(decoded);
     if (!envelope.success) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
     if (envelope.data.binding !== binding) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
-    cursor = { ...envelope.data.values, sortValue: new Date(envelope.data.values.sortValue).toISOString() };
+    const { sortValue } = envelope.data.values;
+    if (!isTraceQuerySortValueFor(orderBy.field, sortValue))
+      throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+    cursor = {
+      ...envelope.data.values,
+      sortValue: typeof sortValue === 'string' ? new Date(sortValue).toISOString() : sortValue,
+    };
     if (
       scope &&
       (cursor.organizationId !== scope.organizationId ||
@@ -377,7 +387,7 @@ export function buildSpanQueryResponse(
               resourceId: last.resourceId,
               traceId: last.traceId,
               spanId: last.spanId,
-              sortValue: last[plan.orderBy.field],
+              sortValue: last[plan.orderBy.field] ?? null,
             })
           : null,
     },
