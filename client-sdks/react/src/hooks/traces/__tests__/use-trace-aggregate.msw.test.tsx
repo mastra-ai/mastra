@@ -4,7 +4,7 @@ import { MastraClientError } from '@mastra/client-js';
 import { traceAggregateRequestSchema } from '@mastra/core/storage';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MastraReactProvider } from '../../../mastra-react-provider';
@@ -87,6 +87,26 @@ describe('useTraceAggregate', () => {
       expect(result.current.error).toBeInstanceOf(MastraClientError);
       expect(result.current.error instanceof MastraClientError && result.current.error.status).toBe(422);
       expect(requests).toBe(1);
+    });
+  });
+
+  describe('when the caller unmounts before the server answers', () => {
+    it('aborts the request instead of leaving it running', async () => {
+      const sent: Request[] = [];
+      server.use(
+        http.post(AGGREGATE_URL, async ({ request }) => {
+          sent.push(request);
+          await delay('infinite');
+        }),
+      );
+
+      const { unmount } = renderHook(() => useTraceAggregate({ request: groupedByEntityNameRequest }), {
+        wrapper: makeWrapper(),
+      });
+      await waitFor(() => expect(sent).toHaveLength(1));
+      unmount();
+
+      await waitFor(() => expect(sent[0]?.signal.aborted).toBe(true));
     });
   });
 });

@@ -25,7 +25,7 @@ export function useTraceAggregate<TData = AggregateTracesResponse>({
   const client = useMastraClient();
   return useQuery({
     queryKey: ['trace-aggregate', request],
-    queryFn: () => client.aggregateTraces(request),
+    queryFn: ({ signal }) => client.aggregateTraces(request, { signal }),
     enabled,
     retry: false,
     refetchOnWindowFocus: false,
