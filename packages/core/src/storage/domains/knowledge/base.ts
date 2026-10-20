@@ -227,13 +227,19 @@ export function reconcileKnowledgeClaimScopes(input: {
   return canonicalizeKnowledgeScopeIds([...input.current.filter(id => !dropped.has(id)), ...input.next]);
 }
 
-/** True when no write since the last same-source importer write: the target's version is the highest claim's. */
+/**
+ * True when no write since this importer's last write: the target's version is the highest claim held by the
+ * same importer and source. Sibling bindings of one importer share ownership; another importer that names the
+ * same source does not, so it can never take over or rewrite targets this importer created.
+ */
 export function isKnowledgeTargetImporterOwned(
   targetVersion: number,
-  claims: readonly Pick<KnowledgeImportClaim, 'source' | 'version'>[],
-  source: string,
+  claims: readonly Pick<KnowledgeImportClaim, 'importerId' | 'source' | 'version'>[],
+  importer: Pick<KnowledgeImportClaimant, 'importerId' | 'source'>,
 ): boolean {
-  const versions = claims.filter(claim => claim.source === source).map(claim => claim.version);
+  const versions = claims
+    .filter(claim => claim.importerId === importer.importerId && claim.source === importer.source)
+    .map(claim => claim.version);
   return versions.length > 0 && Math.max(...versions) === targetVersion;
 }
 
@@ -379,17 +385,7 @@ export interface KnowledgeCurationCursor {
   updatedAt: Date;
 }
 export type KnowledgeActivityAction =
-  | 'create'
-  | 'edit'
-  | 'delete'
-  | 'restore'
-  | 'move'
-  | 'merge'
-  | 'promote'
-  | 'demote'
-  | 'stamp'
-  | 'rebind'
-  | 'skip';
+  'create' | 'edit' | 'delete' | 'restore' | 'move' | 'merge' | 'promote' | 'demote' | 'stamp' | 'rebind' | 'skip';
 export interface KnowledgeActivityEvent {
   id: string;
   action: KnowledgeActivityAction;

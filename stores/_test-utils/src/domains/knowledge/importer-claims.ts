@@ -32,28 +32,27 @@ function createKnowledge(storage: MastraCompositeStore) {
         { address: 'project:beta', name: 'Beta', parentAddresses: ['org:acme'] },
       ],
     },
-    importers: [
-      {
-        id: 'fireflies',
-        access: { 'project:$projectId': 'owner' },
-        handler: async (ctx: KnowledgeImporterHandlerContext) => {
-          const payload = ctx.payload as Payload | undefined;
-          const importer = await ctx.importer();
-          for (const address of payload?.containers ?? []) {
-            await importer.upsertNode(address, { name: address, isScope: true, scopes: [importer.scope] });
+    // A second importer bound to the same source string: it must never share ownership with `fireflies`.
+    importers: ['fireflies', 'other-importer'].map(id => ({
+      id,
+      access: { 'project:$projectId': 'owner' as const },
+      handler: async (ctx: KnowledgeImporterHandlerContext) => {
+        const payload = ctx.payload as Payload | undefined;
+        const importer = await ctx.importer();
+        for (const address of payload?.containers ?? []) {
+          await importer.upsertNode(address, { name: address, isScope: true, scopes: [importer.scope] });
+        }
+        for (const item of payload?.items ?? []) {
+          const scopes = item.container ? [importer.scope, item.container] : [importer.scope];
+          const node = await importer.upsertNode(item.address, { name: item.name, scopes });
+          const existing = new Set((await node.listKnowledge()).map(record => record.id));
+          for (const record of item.records) {
+            if (!existing.has(record.id)) await node.appendKnowledge(record);
           }
-          for (const item of payload?.items ?? []) {
-            const scopes = item.container ? [importer.scope, item.container] : [importer.scope];
-            const node = await importer.upsertNode(item.address, { name: item.name, scopes });
-            const existing = new Set((await node.listKnowledge()).map(record => record.id));
-            for (const record of item.records) {
-              if (!existing.has(record.id)) await node.appendKnowledge(record);
-            }
-          }
-          for (const address of payload?.removed ?? []) await importer.removeNode(address);
-        },
+        }
+        for (const address of payload?.removed ?? []) await importer.removeNode(address);
       },
-    ],
+    })),
   });
 }
 
@@ -143,6 +142,31 @@ export function createKnowledgeImporterMultiBindingTests(
         expect(run.error).toMatch(/changed outside importer/);
       }
       expect((await storage.getNode(nodeId))!.name).toBe('Renamed by a person');
+    });
+
+    it("does not let a different importer naming the same source rewrite or claim the first one's data", async () => {
+      const { knowledge, storage, importer, alpha } = await setup(createStore);
+      await importer.run(bindingA, { items: [person] });
+      const nodeId = (await storage.getNodeAddress({ source, address: person.address }))!.nodeId;
+      const before = (await storage.getNode(nodeId))!;
+
+      const other = knowledge.getImporter('other-importer')!;
+      const renamed = {
+        ...person,
+        name: 'Mallory',
+        records: [{ id: 'rec-shane-1', text: 'Shane runs the Thursday sync.' }],
+      };
+      const run = await other.run(bindingB, { items: [renamed] });
+      expect(run.error).toMatch(/changed outside importer other-importer/);
+
+      const after = (await storage.getNode(nodeId))!;
+      expect(after).toMatchObject({ name: 'Shane', version: before.version });
+      expect(await storage.getNodeScopeIds(nodeId)).toEqual([alpha]);
+      expect(await storage.getRecordScopeIds('rec-shane-1')).toEqual([alpha]);
+      const claims = await storage.listImportClaims({ targetType: 'node', targetId: nodeId });
+      expect(claims.map(claim => claim.importerId)).toEqual(['fireflies']);
+      // The first importer's own bindings still work.
+      expect((await importer.run(bindingB, { items: [person] })).error).toBeUndefined();
     });
 
     it('shows a node in the binding scope and an imported container to project readers only', async () => {

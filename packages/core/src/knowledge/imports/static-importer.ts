@@ -209,7 +209,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
       if (!current)
         throw new Error(`Knowledge record ${record.id} disappeared while importer ${importer.importerId} claimed it`);
       const claims = await storage.listImportClaims({ targetType: 'record', targetId: current.id });
-      if (!isKnowledgeTargetImporterOwned(current.version, claims, importer.source)) {
+      if (!isKnowledgeTargetImporterOwned(current.version, claims, importer)) {
         throw new Error(`Knowledge record ${current.id} changed outside importer ${importer.importerId}`);
       }
       const mine = claims.find(claim => isClaimant(claim, claimant));
@@ -441,7 +441,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       const existing = nodeId ? await knowledge.getNode(nodeId) : null;
       if (!existing) throw new Error(`Knowledge node address points to a missing node: ${normalized}`);
       const claims = await storage.listImportClaims({ targetType: 'node', targetId: existing.id });
-      if (!isKnowledgeTargetImporterOwned(existing.version, claims, importer.source)) {
+      if (!isKnowledgeTargetImporterOwned(existing.version, claims, importer)) {
         throw new Error(`Knowledge node ${normalized} changed outside importer ${importer.importerId}`);
       }
       const mine = claims.find(claim => isClaimant(claim, claimant));
@@ -537,7 +537,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
     if (!node) return null;
     const claims = await storage.listImportClaims({ targetType: 'node', targetId: node.id });
     if (!claims.some(claim => isClaimant(claim, claimant))) return null;
-    if (!isKnowledgeTargetImporterOwned(node.version, claims, importer.source)) {
+    if (!isKnowledgeTargetImporterOwned(node.version, claims, importer)) {
       await storage.recordImportSkip({
         targetType: 'node',
         targetId: node.id,
@@ -583,7 +583,7 @@ async function releaseRecord(
   claims: KnowledgeImportClaim[],
 ): Promise<KnowledgeRecord | null> {
   const { storage, importer, claimant, importRunId } = context;
-  if (record.deletedAt || !isKnowledgeTargetImporterOwned(record.version, claims, importer.source)) {
+  if (record.deletedAt || !isKnowledgeTargetImporterOwned(record.version, claims, importer)) {
     await storage.recordImportSkip({
       targetType: 'record',
       targetId: record.id,
@@ -681,7 +681,7 @@ function ownsTarget(
   return (
     !target.deletedAt &&
     claims.some(claim => isClaimant(claim, claimant)) &&
-    isKnowledgeTargetImporterOwned(target.version, claims, claimant.source)
+    isKnowledgeTargetImporterOwned(target.version, claims, claimant)
   );
 }
 
