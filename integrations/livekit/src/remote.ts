@@ -1,5 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
 import { APIConnectionError, APIError, APIStatusError, APITimeoutError } from '@livekit/agents';
+import type { ToolsInput } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { mapTurnUsage } from './bridge';
 import type {
@@ -29,6 +30,8 @@ const HITL_UNSUPPORTED_MESSAGE =
  * so `MastraLLM` can accept either source interchangeably.
  */
 export interface RemoteMastraAgentOptions {
+  /** Tools executed in this worker through @mastra/client-js, with results returned to the remote agent. */
+  clientTools?: ToolsInput;
   /** Base URL of the remote Mastra server, e.g. `https://my-app.mastra.cloud`. */
   baseUrl: string;
   /** Agent key in the Mastra config's `agents`. */
@@ -175,6 +178,7 @@ export function createRemoteAgentReplyGenerator(options: RemoteAgentReplyGenerat
     timeoutMs = DEFAULT_REMOTE_TIMEOUT_MS,
     retries = DEFAULT_REMOTE_RETRIES,
     body: extraBody,
+    clientTools,
     toolFeedback,
     onToolCall,
     onTurnComplete,
@@ -260,12 +264,63 @@ export function createRemoteAgentReplyGenerator(options: RemoteAgentReplyGenerat
                 clearWatchdog();
                 break;
               }
-              const response = await fetchImpl(url, {
-                method: 'POST',
-                headers: { 'content-type': 'application/json', accept: 'text/event-stream', ...resolvedHeaders },
-                body: JSON.stringify(requestBody),
-                signal: abortController.signal,
-              });
+              let response: Response;
+              if (clientTools && Object.keys(clientTools).length > 0) {
+                // Use Mastra's existing client-tool execution and continuation protocol. The
+                // ordinary voice path retains its existing transport and optional dependency.
+                const { MastraClient, MastraClientError } = await import('@mastra/client-js');
+                const client = new MastraClient({
+                  baseUrl,
+                  apiPrefix,
+                  headers: resolvedHeaders,
+                  fetch: fetchImpl,
+                  retries: 0,
+                  abortSignal: abortController.signal,
+                });
+                const tools = Object.fromEntries(
+                  Object.entries(clientTools).map(([name, tool]) => {
+                    if (!('execute' in tool) || !tool.execute) return [name, tool];
+                    const execute = tool.execute;
+                    return [
+                      name,
+                      {
+                        ...tool,
+                        execute: (args: Parameters<typeof execute>[0], context: Parameters<typeof execute>[1]) => {
+                          abortController.signal.throwIfAborted();
+                          return execute(args, { ...context, abortSignal: abortController.signal });
+                        },
+                      },
+                    ];
+                  }),
+                );
+                response = await client
+                  .getAgent(agentId)
+                  .stream(ctx.messages, {
+                    ...requestBody,
+                    clientTools: tools,
+                    abortSignal: abortController.signal,
+                  })
+                  .catch(error => {
+                    if (error instanceof MastraClientError) {
+                      throw new APIStatusError({
+                        message: error.message,
+                        options: {
+                          statusCode: error.status,
+                          body: error.body as object | undefined,
+                          retryable,
+                        },
+                      });
+                    }
+                    throw error;
+                  });
+              } else {
+                response = await fetchImpl(url, {
+                  method: 'POST',
+                  headers: { 'content-type': 'application/json', accept: 'text/event-stream', ...resolvedHeaders },
+                  body: JSON.stringify(requestBody),
+                  signal: abortController.signal,
+                });
+              }
               if (!response.ok) {
                 const errorBody = await safeReadBody(response);
                 throw new APIStatusError({

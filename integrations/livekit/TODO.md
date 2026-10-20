@@ -9,6 +9,27 @@ intake + service-area check, general callback).
 
 ---
 
+## DTMF / phone menu navigation (2026-10-20)
+
+- [x] Add opt-in `dtmf: true` for telephony workers and a per-call `createDtmfTool()` factory for custom workers.
+- [x] Use only native `LocalParticipant.publishDtmf()` for keypad publishing; add no tone synthesis, pacing, retries, or menu state machine.
+- [x] Execute call-bound tools through Mastra toolsets locally and the existing client-tool API remotely. Return acknowledged digits and partial failures to the model.
+- [x] Require the intended SIP caller in a dedicated room; reject overlapping sequences and speculative generation. Honor turn cancellation between native publishes.
+- [x] Verify local, remote, and standard-worker paths with 24 native-room integration tests, including real Mastra server authentication, tool continuation, and Memory persistence.
+- [x] Repeat cancellation and simultaneous-call isolation 20 times. Removing native publishing fails all three packet-delivery cases; restoring it passes them.
+- [x] Verify the existing client SDK minimum (1.51.2), both supported Zod majors, build, lint, source/test types, and public documentation examples. All 385 enabled package tests pass; the PostgreSQL check below remains deferred.
+- [ ] Verify actual carrier/phone-menu acceptance: single digits, multi-digit sequences, `*`/`#`, interrupted sequences, and hang-up. Native packet delivery does not prove that a remote menu accepted the keys.
+- [ ] Migrate Loadsmart's worker-side DTMF interception to the call-bound tool and remove only overlapping wrapper logic. Menu strategy and application-specific prompts remain with Loadsmart.
+
+Run the native tests against a disposable local LiveKit server (no SIP trunk or phone number needed):
+
+```sh
+livekit-server --dev --bind 127.0.0.1 --port 17880
+LIVEKIT_TEST_ROOM_URL=ws://127.0.0.1:17880 pnpm --filter @mastra/livekit test src/dtmf-room.test.ts
+```
+
+The fixture uses real native rooms and audio publications with SIP-kind test participants. The paid model and telephone-provider boundaries are simulated. Public usage and result semantics are documented in the canonical LiveKit integration guide under **Navigate phone menus**.
+
 ## Telephony orchestration (2026-10-20)
 
 - [x] Add opt-in worker setup using native LiveKit SIP clients, types, answer waiting, timeouts, and errors.
@@ -21,7 +42,7 @@ intake + service-area check, general callback).
 - [ ] Verify a controlled carrier/audio call: answer-before-greeting, busy/no-answer behavior, interruptions, and shutdown. No real phone call has been placed by automated tests.
 - [ ] Migrate a Loadsmart worker and remove only its overlapping dialing/startup and inbound metadata glue.
 
-See `telephony-orchestration-prd.md` for the approved boundary, verification commands, and limitations. DTMF, call records, durable completion delivery, and project resolution remain outside this change.
+See `telephony-orchestration-prd.md` for the approved boundary, verification commands, and limitations. DTMF is covered by the follow-up above. Call records, durable completion delivery, and project resolution remain outside this change.
 
 ## Release verification — transcript persistence (2026-10-15)
 

@@ -7,6 +7,7 @@ describe('plugin entry (@mastra/livekit/plugin)', () => {
     expect(Object.keys(entry).sort()).toEqual([
       'MastraLLM',
       'VOICE_TEXT_FLUSH',
+      'createDtmfTool',
       'createLiveKitTranscriptPersistence',
       'createRemoteAgentReplyGenerator',
       'mastraLLMNode',

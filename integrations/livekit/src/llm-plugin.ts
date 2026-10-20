@@ -1,6 +1,6 @@
 import { DEFAULT_API_CONNECT_OPTIONS, llm } from '@livekit/agents';
 import type { APIConnectOptions } from '@livekit/agents';
-import type { Agent as MastraAgent } from '@mastra/core/agent';
+import type { Agent as MastraAgent, ToolsInput } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { createAgentReplyGenerator, instrumentVoiceReply } from './bridge';
 import type {
@@ -28,6 +28,8 @@ export type { RemoteMastraAgentOptions } from './remote';
  * by a persistence binding; a `generate` source owns its own hooks.
  */
 export interface MastraLLMOptions {
+  /** Call-scoped Mastra tools, executed in the worker. Remote sources use native client tools. */
+  tools?: ToolsInput;
   /** Supplies the agent source, read-only memory, and request context. Attach it before session.start. */
   transcriptPersistence?: LiveKitTranscriptPersistence;
   /** Per-attempt metrics; use observeVoiceSession for playback metrics. */
@@ -60,7 +62,7 @@ export interface MastraLLMOptions {
   /** Request context forwarded to generation (tenant, dialed number, ...). */
   requestContext?: RequestContext | Record<string, unknown>;
 
-  /** Speak a short filler while a (server-side) tool runs. Applies to the `remote`/`agent` sources. */
+  /** Speak a short filler while a Mastra tool runs. Applies to the `remote`/`agent` sources. */
   toolFeedback?: (toolCall: VoiceToolCall) => string | undefined | void;
   /** Notified as each tool-call chunk arrives, mid-stream. Applies to the `remote`/`agent` sources. */
   onToolCall?: (toolCall: VoiceToolCall) => void;
@@ -104,8 +106,9 @@ function livekitToolNames(toolCtx: object): string[] {
  * customer-owned `voice.AgentSession` and the Mastra app (agent loop, tools, memory, observability)
  * runs wherever it's deployed — most importantly on a **remote** Mastra server reached over HTTP.
  *
- * Tools are defined and executed **server-side** on the Mastra agent; LiveKit-side `toolCtx` is
- * ignored (with a one-time warning). Tool activity surfaces via `toolFeedback` (spoken) and
+ * Agent tools execute with the Mastra agent. Optional `tools` execute in this worker, including
+ * through Mastra client tools for remote agents. LiveKit-side `toolCtx` is ignored (with a one-time
+ * warning). Tool activity surfaces via `toolFeedback` (spoken) and
  * `onToolCall` / `onTurnComplete` (programmatic). `voice.Agent` instructions do **not** reach the
  * Mastra agent — put instructions on the Mastra agent instead.
  *
@@ -167,6 +170,9 @@ export class MastraLLM extends llm.LLM {
       options.agent ? 'agent' : undefined,
       options.generate ? 'generate' : undefined,
     ].filter(Boolean) as string[];
+    if (options.tools && options.generate) {
+      throw new Error('@mastra/livekit: a custom generator must supply its own tools');
+    }
     if (sources.length !== 1) {
       throw new Error(
         `@mastra/livekit: MastraLLM requires exactly one reply source — \`remote\`, \`agent\`, or \`generate\` — ` +
@@ -181,6 +187,7 @@ export class MastraLLM extends llm.LLM {
       this.#model = options.remote.agentId;
       this.#remoteOptions = {
         ...options.remote,
+        clientTools: { ...options.remote.clientTools, ...options.tools },
         toolFeedback: options.toolFeedback,
         onToolCall: options.onToolCall,
         onTurnComplete: options.onTurnComplete,
@@ -189,6 +196,7 @@ export class MastraLLM extends llm.LLM {
       this.#model = options.agent.id ?? options.agent.name;
       this.#staticGenerator = createAgentReplyGenerator({
         agent: options.agent,
+        streamOptions: options.tools ? { toolsets: { livekit: options.tools } } : undefined,
         toolFeedback: options.toolFeedback,
         onToolCall: options.onToolCall,
         onTurnComplete: options.onTurnComplete,

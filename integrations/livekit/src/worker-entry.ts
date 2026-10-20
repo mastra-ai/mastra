@@ -87,3 +87,6 @@ export type {
   LiveKitInboundCallOptions,
   LiveKitOutboundCallOptions,
 } from './telephony';
+
+export { createDtmfTool } from './dtmf';
+export type { DtmfToolOptions } from './dtmf';

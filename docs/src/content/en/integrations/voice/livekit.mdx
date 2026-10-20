@@ -674,6 +674,87 @@ Cleanup is best effort. Dispatch failure, an unassigned job, worker-process fail
 
 To verify deployment, use a controlled test destination: check answer-before-greeting ordering, native participant identity, and busy/no-answer cleanup. Test inbound routing with an allowed called number and an unknown route. Real audio and carrier behavior require this deployment check in addition to automated SDK tests.
 
+### Navigate phone menus
+
+Enable dual-tone multi-frequency (DTMF) input to let a Mastra agent press telephone keys during a call. The adapter publishes each key through [LiveKit's native `LocalParticipant.publishDtmf()` API](https://docs.livekit.io/telephony/features/dtmf/). The Mastra agent decides which keys to press from the menu prompts it hears.
+
+For the standard worker, add `dtmf: true` to a telephony configuration:
+
+```typescript title="src/mastra/voice-worker.ts"
+import { createLiveKitWorker } from '@mastra/livekit/worker'
+import { mastra } from './index'
+
+export default createLiveKitWorker({
+  mastra,
+  agent: 'support',
+  stt: 'deepgram/nova-3',
+  tts: 'cartesia/sonic-3',
+  telephony: { direction: 'inbound' },
+  dtmf: true,
+})
+```
+
+This adds a `sendDtmf` tool to the selected Mastra agent for that call. It also works with the outbound telephony configuration above. The tool accepts `{ digits: '123#' }`, with digits `0` through `9`, `*`, `#`, and uppercase `A` through `D`. Put navigation instructions on the **Mastra agent**, including when to press a key and when to wait without speaking for the next prompt.
+
+Use a separate room for each call. Native DTMF broadcasts to the room. The tool refuses to publish unless exactly one SIP participant is present and matches the intended caller. The tool also refuses overlapping sequences and execution with preemptive generation enabled. The standard worker disables preemptive generation by default. Omitting `dtmf` leaves the feature disabled and adds no tool execution to ordinary turns.
+
+#### Use a custom or remote worker
+
+Create one `createDtmfTool()` instance per call and pass it to `MastraLLM.tools`. It binds the keypad action to the native room, session, and caller. Local agents execute it through Mastra toolsets. Remote agents use the existing Mastra client-tool API to execute it in the worker and return the result to the remote agent. Install `@mastra/client-js` for remote client tools.
+
+The following worker accepts an inbound SIP caller. Set `MASTRA_URL` and `MASTRA_API_TOKEN` for your authenticated Mastra server, alongside the LiveKit credentials:
+
+```typescript title="src/mastra/voice-worker.ts"
+import { defineAgent, voice } from '@livekit/agents'
+import { ParticipantInfo_Kind } from '@livekit/protocol'
+import { createDtmfTool, MastraLLM } from '@mastra/livekit/plugin'
+
+export default defineAgent({
+  entry: async ctx => {
+    await ctx.connect()
+    const caller = await ctx.waitForParticipant()
+    if (Number(caller.kind) !== ParticipantInfo_Kind.SIP) throw new Error('Expected a SIP caller')
+
+    const session = new voice.AgentSession({
+      stt: 'deepgram/nova-3',
+      tts: 'cartesia/sonic-3',
+      turnHandling: { preemptiveGeneration: { enabled: false } },
+    })
+    ctx.addShutdownCallback(() => session.close())
+
+    const sendDtmf = createDtmfTool({
+      room: ctx.room,
+      session,
+      participantIdentity: caller.identity,
+    })
+    const llm = new MastraLLM({
+      remote: {
+        baseUrl: process.env.MASTRA_URL!,
+        agentId: 'support',
+        headers: { Authorization: `Bearer ${process.env.MASTRA_API_TOKEN!}` },
+      },
+      tools: { sendDtmf },
+    })
+
+    await session.start({
+      room: ctx.room,
+      agent: new voice.Agent({ instructions: '', llm }),
+      inputOptions: { participantIdentity: caller.identity },
+    })
+  },
+})
+```
+
+Replace `remote` with `agent: yourMastraAgent` for an in-process agent. Custom reply generators own their tool registration. `MastraLLM` rejects combining `generate` with `tools`. The standard worker's `dtmf` option requires a Mastra agent and telephony configuration.
+
+#### Interpret the result
+
+The tool returns `{ published: '123#', complete: true }` after LiveKit acknowledges publishing every digit. This confirms publication, not acceptance by the remote phone menu. A runtime failure returns `complete: false`, an `error`, and the prefix acknowledged before the failure. That prefix can be empty. Cancellation stops further digits after an in-flight publish settles. It can't undo a key already sent. Don't automatically repeat a failed or partial sequence.
+
+The adapter adds no tone synthesis, pauses, retries, or menu state machine. Use agent instructions to handle menu choices, and verify the next prompt before continuing. When transcript persistence is enabled, completed tool calls and their results are saved with the conversation.
+
+Before deploying, call a controlled phone menu and verify single digits, sequences, `*` and `#`, interruptions, and hang-up. Automated tests verify native LiveKit packets and Mastra tool continuation. Carrier timing and menu acceptance need a real call.
+
 ### Record calls
 
 Pass `recording` to `dispatchVoiceSession()` or `liveKitConnectionRoute()` to create a room with [LiveKit auto egress](https://docs.livekit.io/transport/media/ingress-egress/egress/autoegress/). Mastra creates the room with recording configured, then dispatches the voice agent. Omitting `recording` preserves the existing behavior and return values.

@@ -39,3 +39,6 @@ export type {
   VoiceSpeechResult,
   VoiceSpeechCompleteHook,
 } from './turn-metrics';
+
+export { createDtmfTool } from './dtmf';
+export type { DtmfToolOptions } from './dtmf';
