@@ -11,9 +11,8 @@ import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durab
 import { Mastra } from '@mastra/core/mastra';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
+import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-
-import { LibSQLStore } from '../../../storage';
 
 export const USER_REQUEST = 'USER_REQUEST_MARKER: look up the order status for order 4471 and report it back.';
 export const FINAL_ANSWER = 'Order 4471 has shipped.';
