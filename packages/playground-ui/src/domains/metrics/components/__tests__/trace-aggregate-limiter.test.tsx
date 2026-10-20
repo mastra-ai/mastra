@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import type { AggregateTracesArgs } from '@mastra/client-js';
 import { screen, waitFor } from '@testing-library/react';
-import { delay } from 'msw';
+import { delay, http } from 'msw';
 import { describe, expect, it } from 'vitest';
 import { useMetricsTraceAggregate } from '../../hooks/use-metrics-trace-aggregate';
 import { MAX_TRACE_AGGREGATES_IN_FLIGHT } from '../../lib/request-limiter';
 import { emptyTraceAggregateFixture } from './fixtures/trace-aggregate';
-import { renderInMetrics, serveTraceAggregate } from './metrics-msw';
+import { renderInMetrics, serveTraceAggregate, TRACE_AGGREGATE_API } from './metrics-msw';
+import { server } from '@/test/msw-server';
 
 const timeRange = { from: '2026-10-19T12:00:00.000Z', to: '2026-10-20T12:00:00.000Z' };
 
@@ -48,6 +49,32 @@ describe('trace aggregate request limiter', () => {
 
       await waitFor(() => expect(screen.getAllByText(/ loaded$/)).toHaveLength(MEASURES.length), { timeout: 2000 });
       expect(peak).toBe(MAX_TRACE_AGGREGATES_IN_FLIGHT);
+    });
+  });
+
+  describe('when the cards unmount while their requests are open', () => {
+    it('aborts the sent requests and never sends the queued ones', async () => {
+      const sent: Request[] = [];
+      server.use(
+        http.post(TRACE_AGGREGATE_API, async ({ request }) => {
+          sent.push(request);
+          await delay('infinite');
+        }),
+      );
+
+      const { unmount } = renderInMetrics(
+        <>
+          {MEASURES.map(measure => (
+            <Probe key={measure} measure={measure} />
+          ))}
+        </>,
+      );
+      await waitFor(() => expect(sent).toHaveLength(MAX_TRACE_AGGREGATES_IN_FLIGHT));
+      unmount();
+
+      await waitFor(() => expect(sent.every(request => request.signal.aborted)).toBe(true));
+      await delay(50);
+      expect(sent).toHaveLength(MAX_TRACE_AGGREGATES_IN_FLIGHT);
     });
   });
 });

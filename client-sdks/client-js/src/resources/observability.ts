@@ -330,8 +330,8 @@ export class Observability extends BaseResource {
    * Groups and measures the traces selected by a time range and optional trace-query predicate.
    * Check `capabilities.traceAggregate` from `getObservabilityCapabilities()` first; servers without it return 404 or 501.
    */
-  aggregateTraces(params: AggregateTracesArgs): Promise<AggregateTracesResponse> {
-    return this.request('/observability/traces/aggregate', { method: 'POST', body: params });
+  aggregateTraces(params: AggregateTracesArgs, options?: { signal?: AbortSignal }): Promise<AggregateTracesResponse> {
+    return this.request('/observability/traces/aggregate', { method: 'POST', body: params, signal: options?.signal });
   }
 
   /** Returns canonical and observed fields available to the advanced trace-query grammar. */
