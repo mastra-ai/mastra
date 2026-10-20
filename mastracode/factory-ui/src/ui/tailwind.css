@@ -2,14 +2,18 @@
 @import '@mastra/playground-ui/components.css';
 @import '@mastra/playground-ui/sources.css';
 
-/* Mona Sans everywhere, same as Studio. Faces come from
- * @fontsource-variable/mona-sans, imported in main.tsx. */
+/* Mona Sans and Commit Mono, same as Studio. Faces come from
+ * @fontsource-variable/mona-sans and @fontsource/commit-mono, imported in main.tsx. */
 @layer base {
   :root {
     --font-display:
       'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
       'Segoe UI Symbol', 'Noto Color Emoji';
     --font-body: var(--font-display);
+    --font-mono:
+      'Commit Mono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
+    /* Mona Sans's x-height, so mono text looks the same size as the text around it. */
+    --font-mono-size-adjust: ex-height 0.508;
   }
 }
 
