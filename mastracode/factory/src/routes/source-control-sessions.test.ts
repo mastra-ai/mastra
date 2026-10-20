@@ -634,6 +634,10 @@ describe('source-control session routes', () => {
 
   describe('PUT /web/user-sessions/:sessionId/visibility', () => {
     const teammate = { workosId: 'user-2', organizationId: 'org-1' };
+    const noRuns: RouteOptions['workItems'] = {
+      clearSessionReferences: async () => 0,
+      hasRunBindingForSession: async () => false,
+    };
     const putVisibility = (app: Hono, sessionId: string, body: unknown) =>
       app.request(`/web/user-sessions/${sessionId}/visibility`, {
         method: 'PUT',
@@ -658,8 +662,8 @@ describe('source-control session routes', () => {
 
     it('lets the owner share a private session with the org and make it private again', async () => {
       const { seed, sourceControl, projectRepository, session } = await seedPrivateSession();
-      const owner = buildApp([sourceControl], seed);
-      const viewer = buildApp([sourceControl], seed, undefined, undefined, teammate);
+      const owner = buildApp([sourceControl], seed, undefined, noRuns);
+      const viewer = buildApp([sourceControl], seed, undefined, noRuns, teammate);
       expect(session.visibility).toBe('private');
       expect((await viewer.request(`/web/user-sessions/${session.sessionId}`)).status).toBe(404);
 
@@ -681,7 +685,7 @@ describe('source-control session routes', () => {
     it('404s non-owners, including teammates who can see an org session', async () => {
       const { seed, sourceControl, session } = await seedPrivateSession();
       await sourceControl.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'org' });
-      const viewer = buildApp([sourceControl], seed, undefined, undefined, teammate);
+      const viewer = buildApp([sourceControl], seed, undefined, noRuns, teammate);
 
       const res = await putVisibility(viewer, session.sessionId, { visibility: 'private' });
       expect(res.status).toBe(404);
@@ -715,7 +719,7 @@ describe('source-control session routes', () => {
       });
       await controller.init();
       const memory = (await storage.getStore('memory'))!;
-      const owner = buildApp([sourceControl], seed, controller, undefined, user, input =>
+      const owner = buildApp([sourceControl], seed, controller, noRuns, user, input =>
         memory.updateThreadResourceId(input),
       );
       const sessionId = '33333333-3333-4333-8333-333333333333';
@@ -768,7 +772,7 @@ describe('source-control session routes', () => {
         listActiveThreadRuns: () => [{ runId: 'run-1', resourceId: 'user-1', threadId: session.sessionId }],
       } as unknown as RouteOptions['controller'];
       const moveThread = vi.fn(async () => undefined);
-      const owner = buildApp([sourceControl], seed, controller, undefined, user, moveThread);
+      const owner = buildApp([sourceControl], seed, controller, noRuns, user, moveThread);
 
       const res = await putVisibility(owner, session.sessionId, { visibility: 'org' });
       expect(res.status).toBe(409);
@@ -780,7 +784,9 @@ describe('source-control session routes', () => {
 
     it('rejects an unknown visibility value', async () => {
       const { seed, sourceControl, session } = await seedPrivateSession();
-      const res = await putVisibility(buildApp([sourceControl], seed), session.sessionId, { visibility: 'public' });
+      const res = await putVisibility(buildApp([sourceControl], seed, undefined, noRuns), session.sessionId, {
+        visibility: 'public',
+      });
       expect(res.status).toBe(400);
       await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
         visibility: 'private',
@@ -806,13 +812,29 @@ describe('source-control session routes', () => {
       });
     });
 
+    it('answers 503 and leaves the session alone while work-item storage is not ready', async () => {
+      const { seed, sourceControl, session } = await seedPrivateSession();
+
+      const res = await putVisibility(buildApp([sourceControl], seed), session.sessionId, { visibility: 'org' });
+
+      expect(res.status).toBe(503);
+      await expect(res.json()).resolves.toEqual({
+        error: "Session visibility can't be changed yet: Factory storage is still starting up. Try again in a moment.",
+      });
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        visibility: 'private',
+      });
+    });
+
     it('refuses to change a Slack thread session', async () => {
       const { seed, sourceControl, session } = await seedPrivateSession({
         branch: 'slack/1700000000-000100',
         visibility: 'org',
       });
 
-      const res = await putVisibility(buildApp([sourceControl], seed), session.sessionId, { visibility: 'private' });
+      const res = await putVisibility(buildApp([sourceControl], seed, undefined, noRuns), session.sessionId, {
+        visibility: 'private',
+      });
       expect(res.status).toBe(409);
       await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
         visibility: 'org',

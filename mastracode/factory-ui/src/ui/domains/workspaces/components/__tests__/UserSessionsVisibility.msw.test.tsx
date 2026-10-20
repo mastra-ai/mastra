@@ -176,11 +176,17 @@ describe('User session visibility', () => {
     expect(requested).toEqual(['org']);
   });
 
-  it('reports a failed change and keeps the session private', async () => {
+  it("shows the server's reason for a refused change and keeps the session private", async () => {
     useFactoryFixtures(() => [session]);
     server.use(
       http.put(`${TEST_BASE_URL}/web/user-sessions/:sessionId/visibility`, () =>
-        HttpResponse.json({ error: 'Session not found' }, { status: 404 }),
+        HttpResponse.json(
+          {
+            error:
+              "Session visibility can't be changed yet: Factory storage is still starting up. Try again in a moment.",
+          },
+          { status: 503 },
+        ),
       ),
     );
 
@@ -190,7 +196,11 @@ describe('User session visibility', () => {
     await openActions(user, name);
     await user.click(await screen.findByRole('menuitem', { name: 'Share with organization' }));
     await waitForMutationsIdle(client);
-    expect(await screen.findByText('Failed to change session visibility (404)')).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "Session visibility can't be changed yet: Factory storage is still starting up. Try again in a moment.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText(`${name} shared with organization`)).not.toBeInTheDocument();
   });
 });

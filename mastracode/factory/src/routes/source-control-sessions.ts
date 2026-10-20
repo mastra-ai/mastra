@@ -627,13 +627,24 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if (!match || !row || row.orgId !== resolved.tenant.orgId || row.userId !== resolved.tenant.userId) {
           return c.json({ error: 'Session not found' }, 404);
         }
+        // Without work-item storage there's no telling whether this is a Factory
+        // run, so refuse rather than let a run be made private.
+        if (!options.workItems) {
+          return c.json(
+            {
+              error:
+                "Session visibility can't be changed yet: Factory storage is still starting up. Try again in a moment.",
+            },
+            503,
+          );
+        }
         // Only sessions a person started in the UI can change. Factory runs and
         // Slack threads keep the visibility they were created with: runs and
         // channel threads stay with the team, Slack DMs stay private.
         if (
           row.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) ||
           (row.factoryProjectId !== null &&
-            (await options.workItems?.hasRunBindingForSession({
+            (await options.workItems.hasRunBindingForSession({
               orgId: row.orgId,
               factoryProjectId: row.factoryProjectId,
               sessionId,

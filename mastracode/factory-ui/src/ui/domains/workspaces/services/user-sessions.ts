@@ -139,6 +139,14 @@ export async function setUserSessionVisibility(
     credentials: 'include',
     body: JSON.stringify({ visibility }),
   });
+  // The server explains refusals (a running session, a Factory run, storage still starting); show its words.
+  if (!res.ok) {
+    const reason = await res
+      .json()
+      .then((payload: { error?: unknown }) => (typeof payload.error === 'string' ? payload.error : null))
+      .catch(() => null);
+    if (reason) throw Object.assign(new Error(reason), { status: res.status });
+  }
   const body = await readJsonOrThrow<{ session: FactoryUserSessionPayload }>(
     res,
     'Failed to change session visibility',
