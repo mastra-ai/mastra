@@ -241,7 +241,7 @@ const response = await agent.generate("Hello!", {
   content={[
     {
         "name": "reasoningEffort",
-        "type": "\"none\" | \"low\" | \"medium\" | \"high\" | undefined",
+        "type": "\"none\" | \"low\" | \"medium\" | \"high\" | \"xhigh\" | undefined",
         "description": "",
         "isOptional": true
     },
@@ -254,6 +254,12 @@ const response = await agent.generate("Hello!", {
     {
         "name": "topLogprobs",
         "type": "number | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "serviceTier",
+        "type": "\"default\" | \"priority\" | undefined",
         "description": "",
         "isOptional": true
     },

@@ -660,6 +660,12 @@ const response = await agent.generate("Hello!", {
         "isOptional": true
     },
     {
+        "name": "reasoningEffortUpdate",
+        "type": "\"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
         "name": "reasoningMode",
         "type": "\"standard\" | \"pro\" | undefined",
         "description": "",
@@ -685,7 +691,7 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "serviceTier",
-        "type": "\"auto\" | \"default\" | \"flex\" | \"priority\" | null | undefined",
+        "type": "\"auto\" | \"default\" | \"flex\" | \"priority\" | \"fast\" | \"ultrafast\" | null | undefined",
         "description": "",
         "isOptional": true
     },
