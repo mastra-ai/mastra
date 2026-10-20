@@ -403,6 +403,8 @@ async function assertRecovered(
   });
   expect(snapshot).toMatchObject({ status: 'success', result: { status: 'success', output: spec.expected } });
   expect(snapshot.context.input).toEqual(spec.input ?? { n: 1 });
+  expect(JSON.stringify(recovered.result)).not.toContain('__restartConditional');
+  expect(JSON.stringify(snapshot)).not.toContain('__restartConditional');
 }
 
 describe('evented restart after a saved completed entry (COR-1354)', () => {
