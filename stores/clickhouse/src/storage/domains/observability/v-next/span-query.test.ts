@@ -78,6 +78,75 @@ it('keeps completed threads visible before pending and completed root copies mer
   }
 });
 const runThreadRows = threadQueryOps.queryThreadRows;
+it.each([null, 'org-a'])(
+  'returns thread models within a read budget despite older span history (organization %s)',
+  async organizationId => {
+    await storage.dangerouslyClearAll();
+    const startedAt = new Date();
+    const endedAt = new Date(startedAt.getTime() + 1000);
+    await storage.batchCreateSpans({
+      records: [
+        {
+          organizationId,
+          traceId: 'hydration-trace',
+          spanId: 'root',
+          parentSpanId: null,
+          name: 'agent',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          threadId: 'thread',
+          startedAt,
+          endedAt,
+        },
+        {
+          organizationId,
+          traceId: 'hydration-trace',
+          spanId: 'model',
+          parentSpanId: 'root',
+          name: 'model',
+          spanType: SpanType.MODEL_GENERATION,
+          isEvent: false,
+          startedAt,
+          endedAt,
+          attributes: { model: 'gpt-4o', provider: 'openai' },
+        },
+      ],
+    });
+    // Old model spans share the trace identity but cannot supply the selected root's model.
+    // A read budget detects scanning their partition without depending on wall-clock timing.
+    await client.command({
+      query: `INSERT INTO ${TABLE_SPAN_EVENTS}
+        (organizationId, traceId, spanId, parentSpanId, dedupeKey, name, spanType, startedAt, endedAt)
+        SELECT {org:Nullable(String)}, 'hydration-trace', concat('old-',toString(number)), 'other-root',
+          concat('old-',toString(number)), 'model', 'model_generation',
+          now64(3) - INTERVAL 30 DAY, now64(3) - INTERVAL 30 DAY FROM numbers(100000)`,
+      query_params: { org: organizationId },
+    });
+    const limitedClient = createClient({
+      ...config,
+      database,
+      clickhouse_settings: { max_rows_to_read: '50000' },
+    });
+    const limitedStorage = new ObservabilityStorageClickhouseVNext({ client: limitedClient });
+    try {
+      const result = await limitedStorage.queryThreads(
+        planThreadRowsQuery({
+          timeRange: { traces: { from: startedAt.toISOString(), to: endedAt.toISOString() } },
+        }),
+      );
+      expect(result.threads).toHaveLength(1);
+      expect(result.threads[0]).toMatchObject({
+        organizationId,
+        threadId: 'thread',
+        traceCount: 1,
+        model: 'gpt-4o',
+        provider: 'openai',
+      });
+    } finally {
+      await limitedClient.close();
+    }
+  },
+);
 it('rejects broad queries over large histories while allowing narrow queries and smaller scopes', async () => {
   await storage.dangerouslyClearAll();
   await client.command({
