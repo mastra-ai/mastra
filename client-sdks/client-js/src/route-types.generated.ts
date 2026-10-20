@@ -2214,6 +2214,7 @@ type InputShared_Type_113 = {
           | undefined;
       }
     | undefined;
+  requireClaimedOwner?: boolean | undefined;
 };
 
 type Shared_Type_0 = {
@@ -4658,6 +4659,7 @@ type Shared_Type_99 = {
           | undefined;
       }
     | undefined;
+  requireClaimedOwner?: boolean | undefined;
 };
 
 type Shared_Type_100 = {
