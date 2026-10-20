@@ -323,16 +323,16 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       }
     };
 
-  /** Lists the caller's visible connections (global + own), filtered to the effective project policy. */
-  const listVisibleConnections = async (
-    client: ResolvedClient,
-    policy: ProviderPolicy,
-  ): Promise<ProjectConnection[]> => {
-    const connections = await listProjectConnections(client, projectId);
-    const { allowlist } = policy;
-    if (allowlist === undefined) return connections;
-    return connections.filter(connection => allowlist.has(connection.integrationId.toLowerCase()));
-  };
+  /**
+   * Lists the caller's visible connections (global + own, scoped by the
+   * platform via the resource header). Deliberately NOT filtered to the
+   * provider policy: the allowlist gates what end users can newly connect,
+   * not what already exists — agents keep resolving tools from existing
+   * connections, and narrowing the allowlist must not hide (or orphan) a
+   * user's own rows, which they still need to see and disconnect.
+   */
+  const listVisibleConnections = async (client: ResolvedClient): Promise<ProjectConnection[]> =>
+    listProjectConnections(client, projectId);
 
   const providerParam = (c: RouteContext, policy: ProviderPolicy): string | null => {
     const provider = String(c.req.param('provider') ?? '')
@@ -378,8 +378,7 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       method: 'GET',
       requiresAuth: true,
       handler: gated(async (c, client) => {
-        const policy = await resolveProviderPolicy(client);
-        const connections = await listVisibleConnections(client, policy);
+        const connections = await listVisibleConnections(client);
         return c.json({
           connections: connections.map(connection => ({
             id: connection.id,
@@ -397,8 +396,7 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       requiresAuth: true,
       handler: gated(async (c, client) => {
         const id = String(c.req.param('id') ?? '');
-        const policy = await resolveProviderPolicy(client);
-        const connection = (await listVisibleConnections(client, policy)).find(candidate => candidate.id === id);
+        const connection = (await listVisibleConnections(client)).find(candidate => candidate.id === id);
         // 404 parity: an invisible connection (another resource's, another
         // project's, or nonexistent) is indistinguishable from an unknown id.
         if (!connection) return notFound(c, 'connection_not_found', 'Connection not found.');
@@ -411,8 +409,7 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       requiresAuth: true,
       handler: gated(async (c, client) => {
         const id = String(c.req.param('id') ?? '');
-        const policy = await resolveProviderPolicy(client);
-        const connection = (await listVisibleConnections(client, policy)).find(candidate => candidate.id === id);
+        const connection = (await listVisibleConnections(client)).find(candidate => candidate.id === id);
         if (!connection) return notFound(c, 'connection_not_found', 'Connection not found.');
         if (connectionScope(connection) === 'global') {
           return errorResponse(c, {

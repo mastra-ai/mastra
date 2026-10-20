@@ -31,6 +31,8 @@ Code-level and project policies have different empty-list behavior:
 
 Provider IDs are matched case-insensitively.
 
+The policy gates new end-user connects: the provider catalog, session creation, and the hosted connect page. Existing connections are unaffected — they stay visible on the connections routes, remain disconnectable, and `tools()` keeps resolving them.
+
 ## Use the project policy
 
 Omit `providers` to use the project setting from Mastra Platform:
