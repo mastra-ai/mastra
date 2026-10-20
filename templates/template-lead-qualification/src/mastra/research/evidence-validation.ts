@@ -18,10 +18,16 @@ export function validateSource(
 ) {
   const source = evidenceSchema.parse(material);
   const validDigest = createHash('sha256').update(source.excerpt).digest('hex') === source.digest;
-  const trusted =
-    source.kind === 'website'
-      ? Boolean(approvedUrl(source.source, domains))
-      : policy.trustedReferences.includes(source.source);
+  let trusted = policy.trustedReferences.includes(source.source);
+  if (source.kind === 'website') {
+    try {
+      approvedUrl(source.source, domains);
+      trusted = true;
+    } catch (error) {
+      if (!(error instanceof ResearchError) || error.code !== 'unapproved_source') throw error;
+      trusted = false;
+    }
+  }
   return validDigest && trusted && source.providerId === providerId ? source : null;
 }
 

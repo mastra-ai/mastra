@@ -100,6 +100,39 @@ function accepted(value: Fact['value']): Fact {
 }
 
 describe('sourced company qualification', () => {
+  it.each(['https://off-policy.example.org/about', 'malformed-url'])(
+    'keeps_valid_provider_evidence_after_rejecting_an_unapproved_record: %s',
+    async source => {
+      const config = structuredClone(qualificationConfig);
+      config.sources.providerIds = ['records'];
+      config.research.targeted.order = ['employeeCount'];
+      const provider = recordProvider(
+        'records',
+        () => [
+          { id: 'untrusted', source, excerpt: 'Unapproved source claims 400 employees.' },
+          { id: 'valid', source: 'https://example.com/team', excerpt: 'Our company has 40 employees.' },
+        ],
+        material =>
+          material
+            .filter(item => item.source === 'https://example.com/team')
+            .map(item => proposal('employeeCount', { min: 40, max: 40 }, '40 employees', item.id)),
+      );
+      const app = await harness({ qualification: config, evidence: [provider] });
+      cleanup.push(() => app.close());
+      const { runId } = await (await app.post(event('mixed-provider-records'))).json();
+      const assessment = (await app.qualification.qualify(runId, (await app.store.get(runId))!.event))!;
+      expect(assessment.facts.employeeCount).toMatchObject({
+        disposition: 'accepted',
+        value: { min: 40, max: 40 },
+      });
+      expect(assessment.evidence.map(item => item.source)).toEqual(['https://example.com/team']);
+      const round = (await app.store.qualifications.round(runId, 0))!;
+      expect(round.result.failures).toContainEqual(
+        expect.objectContaining({ providerId: 'records', code: 'unapproved_source' }),
+      );
+    },
+  );
+
   it('allows_automatic_nurture_after_inquiry_only_ambiguity_but_keeps_research_conflicts_sticky', async () => {
     for (const sourceConflict of [false, true]) {
       const config = structuredClone(qualificationConfig);
