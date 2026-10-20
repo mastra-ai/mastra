@@ -1174,7 +1174,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     },
 
     async resume(runId, resumeData, resumeOptions): Promise<InngestAgentStreamResult<TOutput>> {
-      if (agentThreadStreamRuntime.isRunAborted(runId, agent.getPubSub())) {
+      if (agentThreadStreamRuntime.isResumeFenced(runId, agent.getPubSub())) {
         throw new MastraError({
           id: 'AGENT_RESUME_ABORTED_RUN',
           domain: ErrorDomain.AGENT,
