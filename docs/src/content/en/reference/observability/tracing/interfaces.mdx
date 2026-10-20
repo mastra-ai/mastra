@@ -819,7 +819,7 @@ interface ModelInferenceAttributes {
   /** Whether this was a streaming response */
   streaming?: boolean
 
-  /** When the first token/chunk of the completion was received */
+  /** When this provider call returned its first chunk. Each inference records its own value. */
   completionStartTime?: Date
 
   /** Result warnings */

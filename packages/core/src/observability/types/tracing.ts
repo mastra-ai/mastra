@@ -394,9 +394,9 @@ export interface ModelInferenceAttributes extends AIBaseAttributes {
   /** Whether this was a streaming response */
   streaming?: boolean;
   /**
-   * When the first token/chunk of the completion was received.
-   * Used to calculate time-to-first-token (TTFT) metrics.
-   * Only applicable for streaming responses.
+   * When this provider call returned its first chunk. Each inference in a
+   * multi-step generation records its own value, so time to first chunk is
+   * `completionStartTime - startTime` on this span. Absent when no chunk was streamed.
    */
   completionStartTime?: Date;
   /** Result warnings */

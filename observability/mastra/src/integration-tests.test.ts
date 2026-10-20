@@ -1214,6 +1214,74 @@ describe('Tracing Integration Tests', () => {
       expect(clockOf(runOf('helper-agent'))).toBeGreaterThan(clockOf(runOf('outer-agent'))!);
     });
 
+    it('gives each model inference its own first chunk clock across a model → tool → model run', async () => {
+      const lookup = createTool({
+        id: 'lookup',
+        description: 'look something up',
+        inputSchema: z.object({}),
+        execute: async () => {
+          await new Promise(resolve => setTimeout(resolve, 30));
+          return { found: true };
+        },
+      });
+      let call = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async () => {
+          await new Promise(resolve => setTimeout(resolve, 40));
+          return {
+            stream: convertArrayToReadableStream(
+              call++ === 0
+                ? [
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: 'checking' },
+                    { type: 'text-end', id: '1' },
+                    { type: 'tool-call', toolCallId: 'c1', toolName: 'lookup', input: '{}' },
+                    {
+                      type: 'finish',
+                      finishReason: 'tool-calls',
+                      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                    },
+                  ]
+                : [
+                    { type: 'text-start', id: '2' },
+                    { type: 'text-delta', id: '2', delta: 'done' },
+                    { type: 'text-end', id: '2' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                    },
+                  ],
+            ),
+          };
+        },
+      });
+      const agent = new Agent({
+        id: 'multi-step-agent',
+        name: 'multi-step-agent',
+        instructions: 'x',
+        model,
+        tools: { lookup },
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { agent } });
+
+      const result = await mastra.getAgent('agent').stream('go');
+      await result.consumeStream();
+
+      const inferences = testExporter
+        .getSpansByType(SpanType.MODEL_INFERENCE)
+        .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+      expect(inferences).toHaveLength(2);
+      for (const inference of inferences) {
+        expect(clockOf(inference)).toBeGreaterThanOrEqual(inference.startTime.getTime());
+        expect(clockOf(inference)).toBeLessThanOrEqual(inference.endTime!.getTime());
+        expect(getTimeToFirstChunkMs(inference)).toBeGreaterThanOrEqual(35);
+      }
+      // The second call starts after the tool ran, so its clock is its own, not the generation's.
+      expect(clockOf(inferences[1])).toBeGreaterThan(clockOf(inferences[0])!);
+      expect(clockOf(testExporter.getSpansByType(SpanType.MODEL_GENERATION)[0])).toBe(clockOf(inferences[0]));
+    });
+
     it('ignores data chunks a processor writes before the model responds', async () => {
       const progressProcessor: Processor = {
         id: 'progress',
