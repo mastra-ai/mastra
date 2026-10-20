@@ -208,7 +208,13 @@ function ackBackgroundSessionWork({
 
 const controllerIdPathParams = z.object({ controllerId: z.string() });
 const sessionPathParams = z.object({ controllerId: z.string(), sessionId: z.string() });
-const sessionStateQuerySchema = z.object({ threadId: z.string().optional() });
+/**
+ * Sessions used to be addressed by `resourceId` plus `sessionScope`. The param is gone: reject it
+ * rather than drop it, so an older client's scoped session can't quietly merge into another one.
+ */
+const removedSessionScope = z.never({ error: 'sessionScope was removed; address the session by sessionId' }).optional();
+const sessionQuerySchema = z.object({ sessionScope: removedSessionScope });
+const sessionStateQuerySchema = sessionQuerySchema.extend({ threadId: z.string().optional() });
 
 const createSessionBodySchema = z
   .object({
@@ -221,6 +227,7 @@ const createSessionBodySchema = z
     resourceId: z.string().optional(),
     /** Address of the session. Defaults to `resourceId`. */
     sessionId: z.string().optional(),
+    sessionScope: removedSessionScope,
     tags: z.record(z.string(), z.string()).optional(),
     threadId: z.string().optional(),
   })
@@ -305,6 +312,7 @@ const cloneThreadBodySchema = z.object({
 const controllerPaginationNumber = z.coerce.number().int().min(0);
 const listMessagesQuerySchema = z
   .object({
+    sessionScope: removedSessionScope,
     /** @deprecated Use page and perPage instead. */
     limit: controllerPaginationNumber.optional(),
     page: controllerPaginationNumber.optional(),
@@ -335,6 +343,7 @@ const listMessagesQuerySchema = z
  * only their own threads. Malformed JSON is treated as "no filter".
  */
 const listThreadsQuerySchema = z.object({
+  sessionScope: removedSessionScope,
   limit: z.coerce.number().optional(),
   tags: z
     .preprocess(value => {
@@ -558,6 +567,7 @@ export const LIST_AGENT_CONTROLLERS_ROUTE = createRoute({
 export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: controllerIdPathParams,
   bodySchema: createSessionBodySchema,
@@ -632,6 +642,7 @@ function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent
 export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   method: 'GET',
   path: '/agent-controller/:controllerId/sessions/:sessionId/stream',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   sseFlushOnConnect: true,
@@ -731,6 +742,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
 export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/messages',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: sendMessageBodySchema,
@@ -769,6 +781,7 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
 export const ABORT_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/abort',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   responseSchema: ackResponseSchema,
@@ -792,6 +805,7 @@ export const ABORT_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
 export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/tool-approval',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: toolApprovalBodySchema,
@@ -849,6 +863,7 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
 export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/tool-suspension',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: toolSuspensionBodySchema,
@@ -888,6 +903,7 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
 export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/steer',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: steerBodySchema,
@@ -918,6 +934,7 @@ export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
 export const SWITCH_AGENT_CONTROLLER_MODE_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/mode',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: switchModeBodySchema,
@@ -942,6 +959,7 @@ export const SWITCH_AGENT_CONTROLLER_MODE_ROUTE = createRoute({
 export const SWITCH_AGENT_CONTROLLER_MODEL_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/model',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: switchModelBodySchema,
@@ -967,6 +985,7 @@ export const SWITCH_AGENT_CONTROLLER_MODEL_ROUTE = createRoute({
 export const SWITCH_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/thread',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: switchThreadBodySchema,
@@ -993,6 +1012,7 @@ export const SWITCH_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
 export const TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/threads/:threadId/owner',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: threadPathParams,
   responseSchema: transferOwnershipResponseSchema,
@@ -1249,6 +1269,7 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
 export const SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/notifications',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: sendNotificationBodySchema,
@@ -1317,6 +1338,7 @@ export const SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE = createRoute({
 export const CREATE_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/threads',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: createThreadBodySchema,
@@ -1347,6 +1369,7 @@ export const CREATE_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
 export const DELETE_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
   method: 'DELETE',
   path: '/agent-controller/:controllerId/sessions/:sessionId/threads/:threadId',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: threadPathParams,
   responseSchema: ackResponseSchema,
@@ -1370,6 +1393,7 @@ export const DELETE_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
 export const RENAME_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
   method: 'PUT',
   path: '/agent-controller/:controllerId/sessions/:sessionId/threads/:threadId',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: threadPathParams,
   bodySchema: renameThreadBodySchema,
@@ -1398,6 +1422,7 @@ export const RENAME_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
 export const CLONE_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/threads/clone',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: cloneThreadBodySchema,
@@ -1522,6 +1547,7 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
 export const FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/follow-up',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: followUpBodySchema,
@@ -1620,6 +1646,7 @@ export const GET_AGENT_CONTROLLER_WORKSPACE_STATUS_ROUTE = createRoute({
 export const GET_AGENT_CONTROLLER_OM_RECORD_ROUTE = createRoute({
   method: 'GET',
   path: '/agent-controller/:controllerId/sessions/:sessionId/om',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   responseSchema: omRecordResponseSchema,
@@ -1647,6 +1674,7 @@ export const GET_AGENT_CONTROLLER_OM_RECORD_ROUTE = createRoute({
 export const SET_AGENT_CONTROLLER_RESOURCE_ID_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/resource',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: z.object({ newResourceId: z.string() }),
@@ -1671,6 +1699,7 @@ export const SET_AGENT_CONTROLLER_RESOURCE_ID_ROUTE = createRoute({
 export const GET_AGENT_CONTROLLER_RESOURCE_IDS_ROUTE = createRoute({
   method: 'GET',
   path: '/agent-controller/:controllerId/sessions/:sessionId/resources',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   responseSchema: z.object({ resourceIds: z.array(z.string()) }),
@@ -1725,6 +1754,7 @@ function getAgentForSession(controller: AgentController<any>, session: Session<a
 export const GET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
   method: 'GET',
   path: '/agent-controller/:controllerId/sessions/:sessionId/goal',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   responseSchema: goalResponseSchema,
@@ -1751,6 +1781,7 @@ export const GET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
 export const SET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
   method: 'POST',
   path: '/agent-controller/:controllerId/sessions/:sessionId/goal',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: setGoalBodySchema,
@@ -1784,6 +1815,7 @@ export const SET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
 export const UPDATE_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
   method: 'PUT',
   path: '/agent-controller/:controllerId/sessions/:sessionId/goal',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: updateGoalBodySchema,
@@ -1816,6 +1848,7 @@ export const UPDATE_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
 export const CLEAR_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
   method: 'DELETE',
   path: '/agent-controller/:controllerId/sessions/:sessionId/goal',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   responseSchema: ackResponseSchema,
@@ -1846,6 +1879,7 @@ export const CLEAR_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
 export const GET_AGENT_CONTROLLER_PERMISSIONS_ROUTE = createRoute({
   method: 'GET',
   path: '/agent-controller/:controllerId/sessions/:sessionId/permissions',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   responseSchema: permissionRulesResponseSchema,
@@ -1872,6 +1906,7 @@ export const GET_AGENT_CONTROLLER_PERMISSIONS_ROUTE = createRoute({
 export const SET_AGENT_CONTROLLER_CATEGORY_PERMISSION_ROUTE = createRoute({
   method: 'PUT',
   path: '/agent-controller/:controllerId/sessions/:sessionId/permissions/category',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: setCategoryPermissionBodySchema,
@@ -1896,6 +1931,7 @@ export const SET_AGENT_CONTROLLER_CATEGORY_PERMISSION_ROUTE = createRoute({
 export const SET_AGENT_CONTROLLER_TOOL_PERMISSION_ROUTE = createRoute({
   method: 'PUT',
   path: '/agent-controller/:controllerId/sessions/:sessionId/permissions/tool',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: setToolPermissionBodySchema,
@@ -1927,6 +1963,7 @@ const setSessionStateBodySchema = z.object({ state: z.record(z.string(), z.unkno
 export const SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
   method: 'PUT',
   path: '/agent-controller/:controllerId/sessions/:sessionId/state',
+  queryParamSchema: sessionQuerySchema,
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: setSessionStateBodySchema,

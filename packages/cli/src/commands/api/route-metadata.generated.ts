@@ -6483,14 +6483,17 @@ export const API_ROUTE_METADATA = {
     "pathParams": [
       "controllerId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "resourceId",
       "sessionId",
+      "sessionScope",
       "tags",
       "threadId"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6504,6 +6507,7 @@ export const API_ROUTE_METADATA = {
       "sessionId"
     ],
     "queryParams": [
+      "sessionScope",
       "threadId"
     ],
     "bodyParams": [],
@@ -6522,6 +6526,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [
       "limit",
+      "sessionScope",
       "tags"
     ],
     "bodyParams": [],
@@ -6539,11 +6544,13 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "title"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6557,9 +6564,11 @@ export const API_ROUTE_METADATA = {
       "sessionId",
       "threadId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -6573,11 +6582,13 @@ export const API_ROUTE_METADATA = {
       "sessionId",
       "threadId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "title"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6590,12 +6601,14 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "sourceThreadId",
       "title"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6615,7 +6628,8 @@ export const API_ROUTE_METADATA = {
       "limit",
       "orderBy",
       "page",
-      "perPage"
+      "perPage",
+      "sessionScope"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -6633,13 +6647,15 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "files",
       "message",
       "requestContext"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6652,13 +6668,15 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "files",
       "message",
       "requestContext"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6671,13 +6689,15 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "files",
       "message",
       "requestContext"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6690,9 +6710,11 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -6705,14 +6727,16 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "alwaysAllowCategory",
       "approved",
       "requestContext",
       "toolCallId"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6725,14 +6749,16 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "requestContext",
       "resumeData",
       "runId",
       "toolCallId"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6745,11 +6771,13 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "modeId"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6762,12 +6790,14 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "modelId",
       "thinkingLevel"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6780,11 +6810,13 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "threadId"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6798,9 +6830,11 @@ export const API_ROUTE_METADATA = {
       "sessionId",
       "threadId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -6813,7 +6847,9 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "attributes",
       "coalesceKey",
@@ -6826,7 +6862,7 @@ export const API_ROUTE_METADATA = {
       "sourceId",
       "summary"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6853,9 +6889,11 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -6868,11 +6906,13 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "newResourceId"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6885,9 +6925,11 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "object-property",
@@ -6901,9 +6943,11 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -6916,13 +6960,15 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "judgeModelId",
       "maxRuns",
       "objective"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6935,13 +6981,15 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "judgeModelId",
       "maxRuns",
       "status"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -6954,9 +7002,11 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -6969,9 +7019,11 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -6984,12 +7036,14 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "category",
       "policy"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -7002,12 +7056,14 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "policy",
       "toolName"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -7020,11 +7076,13 @@ export const API_ROUTE_METADATA = {
       "controllerId",
       "sessionId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "sessionScope"
+    ],
     "bodyParams": [
       "state"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"

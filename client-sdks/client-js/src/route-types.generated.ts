@@ -22888,9 +22888,14 @@ export interface GetAgentControllerControllerIdActiveRuns_RouteContract {
 // ============================================================================
 export type PostAgentControllerControllerIdSessions_PathParams = GetAgentControllerControllerIdModes_PathParams;
 
+export type PostAgentControllerControllerIdSessions_QueryParams = {
+  sessionScope?: never | undefined;
+};
+
 export type PostAgentControllerControllerIdSessions_Body = {
   resourceId?: string | undefined;
   sessionId?: string | undefined;
+  sessionScope?: never | undefined;
   tags?:
     | {
         [key: string]: string;
@@ -22910,7 +22915,11 @@ export type PostAgentControllerControllerIdSessions_Request = Simplify<
   (PostAgentControllerControllerIdSessions_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessions_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessions_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessions_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessions_QueryParams }
+        : { query: PostAgentControllerControllerIdSessions_QueryParams }) &
     (PostAgentControllerControllerIdSessions_Body extends never
       ? {}
       : {} extends PostAgentControllerControllerIdSessions_Body
@@ -22920,7 +22929,7 @@ export type PostAgentControllerControllerIdSessions_Request = Simplify<
 
 export interface PostAgentControllerControllerIdSessions_RouteContract {
   pathParams: PostAgentControllerControllerIdSessions_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessions_QueryParams;
   body: PostAgentControllerControllerIdSessions_Body;
   request: PostAgentControllerControllerIdSessions_Request;
   response: PostAgentControllerControllerIdSessions_Response;
@@ -22936,6 +22945,7 @@ export type GetAgentControllerControllerIdSessionsSessionId_PathParams = {
 };
 
 export type GetAgentControllerControllerIdSessionsSessionId_QueryParams = {
+  sessionScope?: never | undefined;
   threadId?: string | undefined;
 };
 
@@ -23019,6 +23029,7 @@ export type GetAgentControllerControllerIdSessionsSessionIdThreads_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsSessionIdThreads_QueryParams = {
+  sessionScope?: never | undefined;
   limit?: number | undefined;
   tags?:
     | (
@@ -23071,6 +23082,9 @@ export interface GetAgentControllerControllerIdSessionsSessionIdThreads_RouteCon
 export type PostAgentControllerControllerIdSessionsSessionIdThreads_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
+export type PostAgentControllerControllerIdSessionsSessionIdThreads_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
+
 export type PostAgentControllerControllerIdSessionsSessionIdThreads_Body = {
   title?: string | undefined;
 };
@@ -23087,7 +23101,11 @@ export type PostAgentControllerControllerIdSessionsSessionIdThreads_Request = Si
   (PostAgentControllerControllerIdSessionsSessionIdThreads_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessionsSessionIdThreads_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsSessionIdThreads_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsSessionIdThreads_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsSessionIdThreads_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsSessionIdThreads_QueryParams }) &
     (PostAgentControllerControllerIdSessionsSessionIdThreads_Body extends never
       ? {}
       : {} extends PostAgentControllerControllerIdSessionsSessionIdThreads_Body
@@ -23097,7 +23115,7 @@ export type PostAgentControllerControllerIdSessionsSessionIdThreads_Request = Si
 
 export interface PostAgentControllerControllerIdSessionsSessionIdThreads_RouteContract {
   pathParams: PostAgentControllerControllerIdSessionsSessionIdThreads_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessionsSessionIdThreads_QueryParams;
   body: PostAgentControllerControllerIdSessionsSessionIdThreads_Body;
   request: PostAgentControllerControllerIdSessionsSessionIdThreads_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdThreads_Response;
@@ -23113,6 +23131,9 @@ export type DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Pa
   threadId: string;
 };
 
+export type DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
+
 export type DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Response = {
   ok: boolean;
 };
@@ -23121,13 +23142,17 @@ export type DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Re
   (DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_PathParams extends never
     ? {}
     : { params: DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams extends never
+      ? {}
+      : {} extends DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams
+        ? { query?: DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams }
+        : { query: DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_RouteContract {
   pathParams: DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_PathParams;
-  queryParams: never;
+  queryParams: DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams;
   body: never;
   request: DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Request;
   response: DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Response;
@@ -23140,6 +23165,9 @@ export interface DeleteAgentControllerControllerIdSessionsSessionIdThreadsThread
 export type PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_PathParams =
   DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_PathParams;
 
+export type PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
+
 export type PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Body = {
   title: string;
 };
@@ -23151,7 +23179,11 @@ export type PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Reque
   (PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_PathParams extends never
     ? {}
     : { params: PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams extends never
+      ? {}
+      : {} extends PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams
+        ? { query?: PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams }
+        : { query: PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams }) &
     (PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Body extends never
       ? {}
       : {} extends PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Body
@@ -23161,7 +23193,7 @@ export type PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Reque
 
 export interface PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_RouteContract {
   pathParams: PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_PathParams;
-  queryParams: never;
+  queryParams: PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams;
   body: PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Body;
   request: PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Request;
   response: PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Response;
@@ -23173,6 +23205,9 @@ export interface PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_
 // ============================================================================
 export type PostAgentControllerControllerIdSessionsSessionIdThreadsClone_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
+
+export type PostAgentControllerControllerIdSessionsSessionIdThreadsClone_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsSessionIdThreadsClone_Body = {
   sourceThreadId?: string | undefined;
@@ -23186,7 +23221,11 @@ export type PostAgentControllerControllerIdSessionsSessionIdThreadsClone_Request
   (PostAgentControllerControllerIdSessionsSessionIdThreadsClone_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessionsSessionIdThreadsClone_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsSessionIdThreadsClone_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsSessionIdThreadsClone_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsSessionIdThreadsClone_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsSessionIdThreadsClone_QueryParams }) &
     (PostAgentControllerControllerIdSessionsSessionIdThreadsClone_Body extends never
       ? {}
       : {} extends PostAgentControllerControllerIdSessionsSessionIdThreadsClone_Body
@@ -23196,7 +23235,7 @@ export type PostAgentControllerControllerIdSessionsSessionIdThreadsClone_Request
 
 export interface PostAgentControllerControllerIdSessionsSessionIdThreadsClone_RouteContract {
   pathParams: PostAgentControllerControllerIdSessionsSessionIdThreadsClone_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessionsSessionIdThreadsClone_QueryParams;
   body: PostAgentControllerControllerIdSessionsSessionIdThreadsClone_Body;
   request: PostAgentControllerControllerIdSessionsSessionIdThreadsClone_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdThreadsClone_Response;
@@ -23210,6 +23249,7 @@ export type GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdMessag
   DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_PathParams;
 
 export type GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdMessages_QueryParams = {
+  sessionScope?: never | undefined;
   limit?: number | undefined;
   page?: number | undefined;
   perPage?: (false | number) | undefined;
@@ -23283,17 +23323,24 @@ export interface GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdM
 export type GetAgentControllerControllerIdSessionsSessionIdStream_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
+export type GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
+
 export type GetAgentControllerControllerIdSessionsSessionIdStream_Request = Simplify<
   (GetAgentControllerControllerIdSessionsSessionIdStream_PathParams extends never
     ? {}
     : { params: GetAgentControllerControllerIdSessionsSessionIdStream_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentControllerControllerIdSessionsSessionIdStream_RouteContract {
   pathParams: GetAgentControllerControllerIdSessionsSessionIdStream_PathParams;
-  queryParams: never;
+  queryParams: GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams;
   body: never;
   request: GetAgentControllerControllerIdSessionsSessionIdStream_Request;
   response: unknown;
@@ -23305,6 +23352,9 @@ export interface GetAgentControllerControllerIdSessionsSessionIdStream_RouteCont
 // ============================================================================
 export type PostAgentControllerControllerIdSessionsSessionIdMessages_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
+
+export type PostAgentControllerControllerIdSessionsSessionIdMessages_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsSessionIdMessages_Body = {
   message: string;
@@ -23329,7 +23379,11 @@ export type PostAgentControllerControllerIdSessionsSessionIdMessages_Request = S
   (PostAgentControllerControllerIdSessionsSessionIdMessages_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessionsSessionIdMessages_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsSessionIdMessages_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsSessionIdMessages_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsSessionIdMessages_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsSessionIdMessages_QueryParams }) &
     (PostAgentControllerControllerIdSessionsSessionIdMessages_Body extends never
       ? {}
       : {} extends PostAgentControllerControllerIdSessionsSessionIdMessages_Body
@@ -23339,7 +23393,7 @@ export type PostAgentControllerControllerIdSessionsSessionIdMessages_Request = S
 
 export interface PostAgentControllerControllerIdSessionsSessionIdMessages_RouteContract {
   pathParams: PostAgentControllerControllerIdSessionsSessionIdMessages_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessionsSessionIdMessages_QueryParams;
   body: PostAgentControllerControllerIdSessionsSessionIdMessages_Body;
   request: PostAgentControllerControllerIdSessionsSessionIdMessages_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdMessages_Response;
@@ -23352,6 +23406,9 @@ export interface PostAgentControllerControllerIdSessionsSessionIdMessages_RouteC
 export type PostAgentControllerControllerIdSessionsSessionIdSteer_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
+export type PostAgentControllerControllerIdSessionsSessionIdSteer_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
+
 export type PostAgentControllerControllerIdSessionsSessionIdSteer_Body =
   PostAgentControllerControllerIdSessionsSessionIdMessages_Body;
 
@@ -23362,7 +23419,11 @@ export type PostAgentControllerControllerIdSessionsSessionIdSteer_Request = Simp
   (PostAgentControllerControllerIdSessionsSessionIdSteer_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessionsSessionIdSteer_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsSessionIdSteer_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsSessionIdSteer_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsSessionIdSteer_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsSessionIdSteer_QueryParams }) &
     (PostAgentControllerControllerIdSessionsSessionIdSteer_Body extends never
       ? {}
       : {} extends PostAgentControllerControllerIdSessionsSessionIdSteer_Body
@@ -23372,7 +23433,7 @@ export type PostAgentControllerControllerIdSessionsSessionIdSteer_Request = Simp
 
 export interface PostAgentControllerControllerIdSessionsSessionIdSteer_RouteContract {
   pathParams: PostAgentControllerControllerIdSessionsSessionIdSteer_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessionsSessionIdSteer_QueryParams;
   body: PostAgentControllerControllerIdSessionsSessionIdSteer_Body;
   request: PostAgentControllerControllerIdSessionsSessionIdSteer_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdSteer_Response;
@@ -23385,6 +23446,9 @@ export interface PostAgentControllerControllerIdSessionsSessionIdSteer_RouteCont
 export type PostAgentControllerControllerIdSessionsSessionIdFollowUp_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
+export type PostAgentControllerControllerIdSessionsSessionIdFollowUp_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
+
 export type PostAgentControllerControllerIdSessionsSessionIdFollowUp_Body =
   PostAgentControllerControllerIdSessionsSessionIdMessages_Body;
 
@@ -23395,7 +23459,11 @@ export type PostAgentControllerControllerIdSessionsSessionIdFollowUp_Request = S
   (PostAgentControllerControllerIdSessionsSessionIdFollowUp_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessionsSessionIdFollowUp_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsSessionIdFollowUp_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsSessionIdFollowUp_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsSessionIdFollowUp_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsSessionIdFollowUp_QueryParams }) &
     (PostAgentControllerControllerIdSessionsSessionIdFollowUp_Body extends never
       ? {}
       : {} extends PostAgentControllerControllerIdSessionsSessionIdFollowUp_Body
@@ -23405,7 +23473,7 @@ export type PostAgentControllerControllerIdSessionsSessionIdFollowUp_Request = S
 
 export interface PostAgentControllerControllerIdSessionsSessionIdFollowUp_RouteContract {
   pathParams: PostAgentControllerControllerIdSessionsSessionIdFollowUp_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessionsSessionIdFollowUp_QueryParams;
   body: PostAgentControllerControllerIdSessionsSessionIdFollowUp_Body;
   request: PostAgentControllerControllerIdSessionsSessionIdFollowUp_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdFollowUp_Response;
@@ -23418,6 +23486,9 @@ export interface PostAgentControllerControllerIdSessionsSessionIdFollowUp_RouteC
 export type PostAgentControllerControllerIdSessionsSessionIdAbort_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
+export type PostAgentControllerControllerIdSessionsSessionIdAbort_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
+
 export type PostAgentControllerControllerIdSessionsSessionIdAbort_Response =
   DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Response;
 
@@ -23425,13 +23496,17 @@ export type PostAgentControllerControllerIdSessionsSessionIdAbort_Request = Simp
   (PostAgentControllerControllerIdSessionsSessionIdAbort_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessionsSessionIdAbort_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsSessionIdAbort_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsSessionIdAbort_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsSessionIdAbort_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsSessionIdAbort_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface PostAgentControllerControllerIdSessionsSessionIdAbort_RouteContract {
   pathParams: PostAgentControllerControllerIdSessionsSessionIdAbort_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessionsSessionIdAbort_QueryParams;
   body: never;
   request: PostAgentControllerControllerIdSessionsSessionIdAbort_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdAbort_Response;
@@ -23443,6 +23518,9 @@ export interface PostAgentControllerControllerIdSessionsSessionIdAbort_RouteCont
 // ============================================================================
 export type PostAgentControllerControllerIdSessionsSessionIdToolApproval_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
+
+export type PostAgentControllerControllerIdSessionsSessionIdToolApproval_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsSessionIdToolApproval_Body = {
   toolCallId: string;
@@ -23464,7 +23542,11 @@ export type PostAgentControllerControllerIdSessionsSessionIdToolApproval_Request
   (PostAgentControllerControllerIdSessionsSessionIdToolApproval_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessionsSessionIdToolApproval_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsSessionIdToolApproval_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsSessionIdToolApproval_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsSessionIdToolApproval_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsSessionIdToolApproval_QueryParams }) &
     (PostAgentControllerControllerIdSessionsSessionIdToolApproval_Body extends never
       ? {}
       : {} extends PostAgentControllerControllerIdSessionsSessionIdToolApproval_Body
@@ -23474,7 +23556,7 @@ export type PostAgentControllerControllerIdSessionsSessionIdToolApproval_Request
 
 export interface PostAgentControllerControllerIdSessionsSessionIdToolApproval_RouteContract {
   pathParams: PostAgentControllerControllerIdSessionsSessionIdToolApproval_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessionsSessionIdToolApproval_QueryParams;
   body: PostAgentControllerControllerIdSessionsSessionIdToolApproval_Body;
   request: PostAgentControllerControllerIdSessionsSessionIdToolApproval_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdToolApproval_Response;
@@ -23486,6 +23568,9 @@ export interface PostAgentControllerControllerIdSessionsSessionIdToolApproval_Ro
 // ============================================================================
 export type PostAgentControllerControllerIdSessionsSessionIdToolSuspension_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
+
+export type PostAgentControllerControllerIdSessionsSessionIdToolSuspension_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsSessionIdToolSuspension_Body = {
   toolCallId: string;
@@ -23505,7 +23590,11 @@ export type PostAgentControllerControllerIdSessionsSessionIdToolSuspension_Reque
   (PostAgentControllerControllerIdSessionsSessionIdToolSuspension_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessionsSessionIdToolSuspension_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsSessionIdToolSuspension_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsSessionIdToolSuspension_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsSessionIdToolSuspension_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsSessionIdToolSuspension_QueryParams }) &
     (PostAgentControllerControllerIdSessionsSessionIdToolSuspension_Body extends never
       ? {}
       : {} extends PostAgentControllerControllerIdSessionsSessionIdToolSuspension_Body
@@ -23515,7 +23604,7 @@ export type PostAgentControllerControllerIdSessionsSessionIdToolSuspension_Reque
 
 export interface PostAgentControllerControllerIdSessionsSessionIdToolSuspension_RouteContract {
   pathParams: PostAgentControllerControllerIdSessionsSessionIdToolSuspension_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessionsSessionIdToolSuspension_QueryParams;
   body: PostAgentControllerControllerIdSessionsSessionIdToolSuspension_Body;
   request: PostAgentControllerControllerIdSessionsSessionIdToolSuspension_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdToolSuspension_Response;
@@ -23528,6 +23617,9 @@ export interface PostAgentControllerControllerIdSessionsSessionIdToolSuspension_
 export type PostAgentControllerControllerIdSessionsSessionIdMode_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
+export type PostAgentControllerControllerIdSessionsSessionIdMode_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
+
 export type PostAgentControllerControllerIdSessionsSessionIdMode_Body = {
   modeId: string;
 };
@@ -23539,7 +23631,11 @@ export type PostAgentControllerControllerIdSessionsSessionIdMode_Request = Simpl
   (PostAgentControllerControllerIdSessionsSessionIdMode_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessionsSessionIdMode_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsSessionIdMode_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsSessionIdMode_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsSessionIdMode_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsSessionIdMode_QueryParams }) &
     (PostAgentControllerControllerIdSessionsSessionIdMode_Body extends never
       ? {}
       : {} extends PostAgentControllerControllerIdSessionsSessionIdMode_Body
@@ -23549,7 +23645,7 @@ export type PostAgentControllerControllerIdSessionsSessionIdMode_Request = Simpl
 
 export interface PostAgentControllerControllerIdSessionsSessionIdMode_RouteContract {
   pathParams: PostAgentControllerControllerIdSessionsSessionIdMode_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessionsSessionIdMode_QueryParams;
   body: PostAgentControllerControllerIdSessionsSessionIdMode_Body;
   request: PostAgentControllerControllerIdSessionsSessionIdMode_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdMode_Response;
@@ -23561,6 +23657,9 @@ export interface PostAgentControllerControllerIdSessionsSessionIdMode_RouteContr
 // ============================================================================
 export type PostAgentControllerControllerIdSessionsSessionIdModel_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
+
+export type PostAgentControllerControllerIdSessionsSessionIdModel_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsSessionIdModel_Body = {
   modelId: string;
@@ -23574,7 +23673,11 @@ export type PostAgentControllerControllerIdSessionsSessionIdModel_Request = Simp
   (PostAgentControllerControllerIdSessionsSessionIdModel_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessionsSessionIdModel_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsSessionIdModel_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsSessionIdModel_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsSessionIdModel_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsSessionIdModel_QueryParams }) &
     (PostAgentControllerControllerIdSessionsSessionIdModel_Body extends never
       ? {}
       : {} extends PostAgentControllerControllerIdSessionsSessionIdModel_Body
@@ -23584,7 +23687,7 @@ export type PostAgentControllerControllerIdSessionsSessionIdModel_Request = Simp
 
 export interface PostAgentControllerControllerIdSessionsSessionIdModel_RouteContract {
   pathParams: PostAgentControllerControllerIdSessionsSessionIdModel_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessionsSessionIdModel_QueryParams;
   body: PostAgentControllerControllerIdSessionsSessionIdModel_Body;
   request: PostAgentControllerControllerIdSessionsSessionIdModel_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdModel_Response;
@@ -23597,6 +23700,9 @@ export interface PostAgentControllerControllerIdSessionsSessionIdModel_RouteCont
 export type PostAgentControllerControllerIdSessionsSessionIdThread_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
+export type PostAgentControllerControllerIdSessionsSessionIdThread_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
+
 export type PostAgentControllerControllerIdSessionsSessionIdThread_Body = {
   threadId: string;
 };
@@ -23608,7 +23714,11 @@ export type PostAgentControllerControllerIdSessionsSessionIdThread_Request = Sim
   (PostAgentControllerControllerIdSessionsSessionIdThread_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessionsSessionIdThread_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsSessionIdThread_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsSessionIdThread_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsSessionIdThread_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsSessionIdThread_QueryParams }) &
     (PostAgentControllerControllerIdSessionsSessionIdThread_Body extends never
       ? {}
       : {} extends PostAgentControllerControllerIdSessionsSessionIdThread_Body
@@ -23618,7 +23728,7 @@ export type PostAgentControllerControllerIdSessionsSessionIdThread_Request = Sim
 
 export interface PostAgentControllerControllerIdSessionsSessionIdThread_RouteContract {
   pathParams: PostAgentControllerControllerIdSessionsSessionIdThread_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessionsSessionIdThread_QueryParams;
   body: PostAgentControllerControllerIdSessionsSessionIdThread_Body;
   request: PostAgentControllerControllerIdSessionsSessionIdThread_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdThread_Response;
@@ -23631,6 +23741,9 @@ export interface PostAgentControllerControllerIdSessionsSessionIdThread_RouteCon
 export type PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_PathParams =
   DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_PathParams;
 
+export type PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
+
 export type PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_Response = {
   ok: boolean;
   ownerId: string;
@@ -23640,13 +23753,17 @@ export type PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner
   (PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_RouteContract {
   pathParams: PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_QueryParams;
   body: never;
   request: PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_Response;
@@ -23658,6 +23775,9 @@ export interface PostAgentControllerControllerIdSessionsSessionIdThreadsThreadId
 // ============================================================================
 export type PostAgentControllerControllerIdSessionsSessionIdNotifications_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
+
+export type PostAgentControllerControllerIdSessionsSessionIdNotifications_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsSessionIdNotifications_Body = {
   source: string;
@@ -23691,7 +23811,11 @@ export type PostAgentControllerControllerIdSessionsSessionIdNotifications_Reques
   (PostAgentControllerControllerIdSessionsSessionIdNotifications_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessionsSessionIdNotifications_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsSessionIdNotifications_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsSessionIdNotifications_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsSessionIdNotifications_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsSessionIdNotifications_QueryParams }) &
     (PostAgentControllerControllerIdSessionsSessionIdNotifications_Body extends never
       ? {}
       : {} extends PostAgentControllerControllerIdSessionsSessionIdNotifications_Body
@@ -23701,7 +23825,7 @@ export type PostAgentControllerControllerIdSessionsSessionIdNotifications_Reques
 
 export interface PostAgentControllerControllerIdSessionsSessionIdNotifications_RouteContract {
   pathParams: PostAgentControllerControllerIdSessionsSessionIdNotifications_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessionsSessionIdNotifications_QueryParams;
   body: PostAgentControllerControllerIdSessionsSessionIdNotifications_Body;
   request: PostAgentControllerControllerIdSessionsSessionIdNotifications_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdNotifications_Response;
@@ -23741,6 +23865,9 @@ export interface GetAgentControllerControllerIdWorkspace_RouteContract {
 export type GetAgentControllerControllerIdSessionsSessionIdOm_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
+export type GetAgentControllerControllerIdSessionsSessionIdOm_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
+
 export type GetAgentControllerControllerIdSessionsSessionIdOm_Response = {
   record?: unknown | undefined;
 };
@@ -23749,13 +23876,17 @@ export type GetAgentControllerControllerIdSessionsSessionIdOm_Request = Simplify
   (GetAgentControllerControllerIdSessionsSessionIdOm_PathParams extends never
     ? {}
     : { params: GetAgentControllerControllerIdSessionsSessionIdOm_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (GetAgentControllerControllerIdSessionsSessionIdOm_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerControllerIdSessionsSessionIdOm_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsSessionIdOm_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsSessionIdOm_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentControllerControllerIdSessionsSessionIdOm_RouteContract {
   pathParams: GetAgentControllerControllerIdSessionsSessionIdOm_PathParams;
-  queryParams: never;
+  queryParams: GetAgentControllerControllerIdSessionsSessionIdOm_QueryParams;
   body: never;
   request: GetAgentControllerControllerIdSessionsSessionIdOm_Request;
   response: GetAgentControllerControllerIdSessionsSessionIdOm_Response;
@@ -23768,6 +23899,9 @@ export interface GetAgentControllerControllerIdSessionsSessionIdOm_RouteContract
 export type PostAgentControllerControllerIdSessionsSessionIdResource_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
+export type PostAgentControllerControllerIdSessionsSessionIdResource_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
+
 export type PostAgentControllerControllerIdSessionsSessionIdResource_Body = {
   newResourceId: string;
 };
@@ -23779,7 +23913,11 @@ export type PostAgentControllerControllerIdSessionsSessionIdResource_Request = S
   (PostAgentControllerControllerIdSessionsSessionIdResource_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessionsSessionIdResource_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsSessionIdResource_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsSessionIdResource_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsSessionIdResource_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsSessionIdResource_QueryParams }) &
     (PostAgentControllerControllerIdSessionsSessionIdResource_Body extends never
       ? {}
       : {} extends PostAgentControllerControllerIdSessionsSessionIdResource_Body
@@ -23789,7 +23927,7 @@ export type PostAgentControllerControllerIdSessionsSessionIdResource_Request = S
 
 export interface PostAgentControllerControllerIdSessionsSessionIdResource_RouteContract {
   pathParams: PostAgentControllerControllerIdSessionsSessionIdResource_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessionsSessionIdResource_QueryParams;
   body: PostAgentControllerControllerIdSessionsSessionIdResource_Body;
   request: PostAgentControllerControllerIdSessionsSessionIdResource_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdResource_Response;
@@ -23802,6 +23940,9 @@ export interface PostAgentControllerControllerIdSessionsSessionIdResource_RouteC
 export type GetAgentControllerControllerIdSessionsSessionIdResources_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
+export type GetAgentControllerControllerIdSessionsSessionIdResources_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
+
 export type GetAgentControllerControllerIdSessionsSessionIdResources_Response = {
   resourceIds: string[];
 };
@@ -23810,13 +23951,17 @@ export type GetAgentControllerControllerIdSessionsSessionIdResources_Request = S
   (GetAgentControllerControllerIdSessionsSessionIdResources_PathParams extends never
     ? {}
     : { params: GetAgentControllerControllerIdSessionsSessionIdResources_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (GetAgentControllerControllerIdSessionsSessionIdResources_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerControllerIdSessionsSessionIdResources_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsSessionIdResources_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsSessionIdResources_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentControllerControllerIdSessionsSessionIdResources_RouteContract {
   pathParams: GetAgentControllerControllerIdSessionsSessionIdResources_PathParams;
-  queryParams: never;
+  queryParams: GetAgentControllerControllerIdSessionsSessionIdResources_QueryParams;
   body: never;
   request: GetAgentControllerControllerIdSessionsSessionIdResources_Request;
   response: GetAgentControllerControllerIdSessionsSessionIdResources_Response;
@@ -23828,6 +23973,9 @@ export interface GetAgentControllerControllerIdSessionsSessionIdResources_RouteC
 // ============================================================================
 export type GetAgentControllerControllerIdSessionsSessionIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
+
+export type GetAgentControllerControllerIdSessionsSessionIdGoal_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsSessionIdGoal_Response = {
   goal?:
@@ -23849,13 +23997,17 @@ export type GetAgentControllerControllerIdSessionsSessionIdGoal_Request = Simpli
   (GetAgentControllerControllerIdSessionsSessionIdGoal_PathParams extends never
     ? {}
     : { params: GetAgentControllerControllerIdSessionsSessionIdGoal_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (GetAgentControllerControllerIdSessionsSessionIdGoal_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerControllerIdSessionsSessionIdGoal_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsSessionIdGoal_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsSessionIdGoal_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentControllerControllerIdSessionsSessionIdGoal_RouteContract {
   pathParams: GetAgentControllerControllerIdSessionsSessionIdGoal_PathParams;
-  queryParams: never;
+  queryParams: GetAgentControllerControllerIdSessionsSessionIdGoal_QueryParams;
   body: never;
   request: GetAgentControllerControllerIdSessionsSessionIdGoal_Request;
   response: GetAgentControllerControllerIdSessionsSessionIdGoal_Response;
@@ -23867,6 +24019,9 @@ export interface GetAgentControllerControllerIdSessionsSessionIdGoal_RouteContra
 // ============================================================================
 export type PostAgentControllerControllerIdSessionsSessionIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
+
+export type PostAgentControllerControllerIdSessionsSessionIdGoal_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsSessionIdGoal_Body = {
   objective: string;
@@ -23881,7 +24036,11 @@ export type PostAgentControllerControllerIdSessionsSessionIdGoal_Request = Simpl
   (PostAgentControllerControllerIdSessionsSessionIdGoal_PathParams extends never
     ? {}
     : { params: PostAgentControllerControllerIdSessionsSessionIdGoal_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsSessionIdGoal_QueryParams extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsSessionIdGoal_QueryParams
+        ? { query?: PostAgentControllerControllerIdSessionsSessionIdGoal_QueryParams }
+        : { query: PostAgentControllerControllerIdSessionsSessionIdGoal_QueryParams }) &
     (PostAgentControllerControllerIdSessionsSessionIdGoal_Body extends never
       ? {}
       : {} extends PostAgentControllerControllerIdSessionsSessionIdGoal_Body
@@ -23891,7 +24050,7 @@ export type PostAgentControllerControllerIdSessionsSessionIdGoal_Request = Simpl
 
 export interface PostAgentControllerControllerIdSessionsSessionIdGoal_RouteContract {
   pathParams: PostAgentControllerControllerIdSessionsSessionIdGoal_PathParams;
-  queryParams: never;
+  queryParams: PostAgentControllerControllerIdSessionsSessionIdGoal_QueryParams;
   body: PostAgentControllerControllerIdSessionsSessionIdGoal_Body;
   request: PostAgentControllerControllerIdSessionsSessionIdGoal_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdGoal_Response;
@@ -23903,6 +24062,9 @@ export interface PostAgentControllerControllerIdSessionsSessionIdGoal_RouteContr
 // ============================================================================
 export type PutAgentControllerControllerIdSessionsSessionIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
+
+export type PutAgentControllerControllerIdSessionsSessionIdGoal_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsSessionIdGoal_Body = {
   judgeModelId?: string | undefined;
@@ -23917,7 +24079,11 @@ export type PutAgentControllerControllerIdSessionsSessionIdGoal_Request = Simpli
   (PutAgentControllerControllerIdSessionsSessionIdGoal_PathParams extends never
     ? {}
     : { params: PutAgentControllerControllerIdSessionsSessionIdGoal_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutAgentControllerControllerIdSessionsSessionIdGoal_QueryParams extends never
+      ? {}
+      : {} extends PutAgentControllerControllerIdSessionsSessionIdGoal_QueryParams
+        ? { query?: PutAgentControllerControllerIdSessionsSessionIdGoal_QueryParams }
+        : { query: PutAgentControllerControllerIdSessionsSessionIdGoal_QueryParams }) &
     (PutAgentControllerControllerIdSessionsSessionIdGoal_Body extends never
       ? {}
       : {} extends PutAgentControllerControllerIdSessionsSessionIdGoal_Body
@@ -23927,7 +24093,7 @@ export type PutAgentControllerControllerIdSessionsSessionIdGoal_Request = Simpli
 
 export interface PutAgentControllerControllerIdSessionsSessionIdGoal_RouteContract {
   pathParams: PutAgentControllerControllerIdSessionsSessionIdGoal_PathParams;
-  queryParams: never;
+  queryParams: PutAgentControllerControllerIdSessionsSessionIdGoal_QueryParams;
   body: PutAgentControllerControllerIdSessionsSessionIdGoal_Body;
   request: PutAgentControllerControllerIdSessionsSessionIdGoal_Request;
   response: PutAgentControllerControllerIdSessionsSessionIdGoal_Response;
@@ -23940,6 +24106,9 @@ export interface PutAgentControllerControllerIdSessionsSessionIdGoal_RouteContra
 export type DeleteAgentControllerControllerIdSessionsSessionIdGoal_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
+export type DeleteAgentControllerControllerIdSessionsSessionIdGoal_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
+
 export type DeleteAgentControllerControllerIdSessionsSessionIdGoal_Response =
   DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Response;
 
@@ -23947,13 +24116,17 @@ export type DeleteAgentControllerControllerIdSessionsSessionIdGoal_Request = Sim
   (DeleteAgentControllerControllerIdSessionsSessionIdGoal_PathParams extends never
     ? {}
     : { params: DeleteAgentControllerControllerIdSessionsSessionIdGoal_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (DeleteAgentControllerControllerIdSessionsSessionIdGoal_QueryParams extends never
+      ? {}
+      : {} extends DeleteAgentControllerControllerIdSessionsSessionIdGoal_QueryParams
+        ? { query?: DeleteAgentControllerControllerIdSessionsSessionIdGoal_QueryParams }
+        : { query: DeleteAgentControllerControllerIdSessionsSessionIdGoal_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteAgentControllerControllerIdSessionsSessionIdGoal_RouteContract {
   pathParams: DeleteAgentControllerControllerIdSessionsSessionIdGoal_PathParams;
-  queryParams: never;
+  queryParams: DeleteAgentControllerControllerIdSessionsSessionIdGoal_QueryParams;
   body: never;
   request: DeleteAgentControllerControllerIdSessionsSessionIdGoal_Request;
   response: DeleteAgentControllerControllerIdSessionsSessionIdGoal_Response;
@@ -23965,6 +24138,9 @@ export interface DeleteAgentControllerControllerIdSessionsSessionIdGoal_RouteCon
 // ============================================================================
 export type GetAgentControllerControllerIdSessionsSessionIdPermissions_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
+
+export type GetAgentControllerControllerIdSessionsSessionIdPermissions_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
 
 export type GetAgentControllerControllerIdSessionsSessionIdPermissions_Response = {
   categories?:
@@ -23983,13 +24159,17 @@ export type GetAgentControllerControllerIdSessionsSessionIdPermissions_Request =
   (GetAgentControllerControllerIdSessionsSessionIdPermissions_PathParams extends never
     ? {}
     : { params: GetAgentControllerControllerIdSessionsSessionIdPermissions_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (GetAgentControllerControllerIdSessionsSessionIdPermissions_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerControllerIdSessionsSessionIdPermissions_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsSessionIdPermissions_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsSessionIdPermissions_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentControllerControllerIdSessionsSessionIdPermissions_RouteContract {
   pathParams: GetAgentControllerControllerIdSessionsSessionIdPermissions_PathParams;
-  queryParams: never;
+  queryParams: GetAgentControllerControllerIdSessionsSessionIdPermissions_QueryParams;
   body: never;
   request: GetAgentControllerControllerIdSessionsSessionIdPermissions_Request;
   response: GetAgentControllerControllerIdSessionsSessionIdPermissions_Response;
@@ -24001,6 +24181,9 @@ export interface GetAgentControllerControllerIdSessionsSessionIdPermissions_Rout
 // ============================================================================
 export type PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
+
+export type PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_Body = {
   category: 'read' | 'edit' | 'execute' | 'mcp' | 'other';
@@ -24014,7 +24197,11 @@ export type PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_R
   (PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_PathParams extends never
     ? {}
     : { params: PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_QueryParams extends never
+      ? {}
+      : {} extends PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_QueryParams
+        ? { query?: PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_QueryParams }
+        : { query: PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_QueryParams }) &
     (PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_Body extends never
       ? {}
       : {} extends PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_Body
@@ -24024,7 +24211,7 @@ export type PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_R
 
 export interface PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_RouteContract {
   pathParams: PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_PathParams;
-  queryParams: never;
+  queryParams: PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_QueryParams;
   body: PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_Body;
   request: PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_Request;
   response: PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_Response;
@@ -24036,6 +24223,9 @@ export interface PutAgentControllerControllerIdSessionsSessionIdPermissionsCateg
 // ============================================================================
 export type PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
+
+export type PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_Body = {
   toolName: string;
@@ -24049,7 +24239,11 @@ export type PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_Reque
   (PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_PathParams extends never
     ? {}
     : { params: PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_QueryParams extends never
+      ? {}
+      : {} extends PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_QueryParams
+        ? { query?: PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_QueryParams }
+        : { query: PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_QueryParams }) &
     (PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_Body extends never
       ? {}
       : {} extends PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_Body
@@ -24059,7 +24253,7 @@ export type PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_Reque
 
 export interface PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_RouteContract {
   pathParams: PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_PathParams;
-  queryParams: never;
+  queryParams: PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_QueryParams;
   body: PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_Body;
   request: PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_Request;
   response: PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_Response;
@@ -24071,6 +24265,9 @@ export interface PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_
 // ============================================================================
 export type PutAgentControllerControllerIdSessionsSessionIdState_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
+
+export type PutAgentControllerControllerIdSessionsSessionIdState_QueryParams =
+  PostAgentControllerControllerIdSessions_QueryParams;
 
 export type PutAgentControllerControllerIdSessionsSessionIdState_Body = {
   state: {
@@ -24085,7 +24282,11 @@ export type PutAgentControllerControllerIdSessionsSessionIdState_Request = Simpl
   (PutAgentControllerControllerIdSessionsSessionIdState_PathParams extends never
     ? {}
     : { params: PutAgentControllerControllerIdSessionsSessionIdState_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutAgentControllerControllerIdSessionsSessionIdState_QueryParams extends never
+      ? {}
+      : {} extends PutAgentControllerControllerIdSessionsSessionIdState_QueryParams
+        ? { query?: PutAgentControllerControllerIdSessionsSessionIdState_QueryParams }
+        : { query: PutAgentControllerControllerIdSessionsSessionIdState_QueryParams }) &
     (PutAgentControllerControllerIdSessionsSessionIdState_Body extends never
       ? {}
       : {} extends PutAgentControllerControllerIdSessionsSessionIdState_Body
@@ -24095,7 +24296,7 @@ export type PutAgentControllerControllerIdSessionsSessionIdState_Request = Simpl
 
 export interface PutAgentControllerControllerIdSessionsSessionIdState_RouteContract {
   pathParams: PutAgentControllerControllerIdSessionsSessionIdState_PathParams;
-  queryParams: never;
+  queryParams: PutAgentControllerControllerIdSessionsSessionIdState_QueryParams;
   body: PutAgentControllerControllerIdSessionsSessionIdState_Body;
   request: PutAgentControllerControllerIdSessionsSessionIdState_Request;
   response: PutAgentControllerControllerIdSessionsSessionIdState_Response;
