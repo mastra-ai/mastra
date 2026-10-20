@@ -2454,7 +2454,7 @@ const versionRange = { from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' 
  *
  * Current population: 5 traces, 2 errors; alpha 2 (1 error, max 3000), beta 2 (0 errors,
  * max 4000), gamma 1 (1 error, max 6000). A filter applied to every version instead of the current
- * one counts alpha 3 and beta 4, and `status` 3 errors + 4 successes.
+ * one counts alpha 3 and beta 4, and `status` 4 errors + 5 successes.
  */
 export const TRACE_AGGREGATE_VERSION_FIXTURE_DATA: TraceAggregateFixtureData = {
   spans: [

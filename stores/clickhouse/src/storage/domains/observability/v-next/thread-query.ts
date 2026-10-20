@@ -311,7 +311,7 @@ export async function queryThreadRows(
       ${contextFields.join(', ')}, if(spanType = 'agent_run', timeToFirstChunkMs, NULL) AS timeToFirstChunkMs,
       if(isNull(error), 'success', 'error') AS status, ${PREVIEW_COLUMNS.join(', ')}
       FROM ${TABLE_TRACE_ROOTS} WHERE ${rootWhere}
-      ORDER BY isNotNull(threadId) DESC LIMIT 1 BY organizationId, traceId, spanId`,
+      ORDER BY ${ROOT_VERSION_ORDER} LIMIT 1 BY organizationId, traceId, spanId`,
         query_params: { roots: keys(batch) },
       })),
     );
@@ -321,7 +321,7 @@ export async function queryThreadRows(
   for (const batch of batches(missing, 32)) {
     const payloads = await run<Root & Record<string, unknown>>({
       query: `SELECT organizationId, traceId, spanId, input, output, error FROM ${TABLE_TRACE_ROOTS}
-        WHERE ${rootWhere} ORDER BY isNotNull(threadId) DESC LIMIT 1 BY organizationId, traceId, spanId`,
+        WHERE ${rootWhere} ORDER BY ${ROOT_VERSION_ORDER} LIMIT 1 BY organizationId, traceId, spanId`,
       query_params: { roots: keys(batch) },
     });
     for (const payload of payloads) {

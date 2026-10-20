@@ -34,6 +34,7 @@ import {
   parseTraceAggregateRequest,
   parseTraceQueryRequest,
   planTraceAggregate,
+  planThreadRowsQuery,
   planTraceQuery,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
@@ -7440,6 +7441,67 @@ describe('ObservabilityStorageClickhouseVNext root versions without background m
         const response = await storage.aggregateTraces(plan);
         expect(traceAggregateResponseMismatch(response, testCase), testCase.name).toBeNull();
       }
+    });
+  });
+
+  // Versions that end at the same instant, both with a thread, share a partition and sort key, so a
+  // merge keeps the last insert. Reads pick that version before and after the merge.
+  describe.each([
+    ['alpha', 'beta'],
+    ['beta', 'alpha'],
+  ] as const)('tied versions written %s then %s', (first, last) => {
+    const version = (entityName: 'alpha' | 'beta') =>
+      ({
+        traceId: 'tie-trace',
+        spanId: 'tie-root',
+        parentSpanId: null,
+        name: 'agent run',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        entityType: EntityType.AGENT,
+        entityName,
+        threadId: 'tie-thread',
+        startedAt: new Date('2026-09-02T10:00:00.000Z'),
+        endedAt: new Date('2026-09-02T10:00:05.000Z'),
+        input: `${entityName} input`,
+        error: entityName === 'beta' ? { message: 'beta failed' } : null,
+      }) as const;
+    const status = last === 'beta' ? 'error' : 'success';
+
+    const expectLastInsert = async () => {
+      const byStatus = await storage.aggregateTraces(
+        planTraceAggregate(
+          parseTraceAggregateRequest({ timeRange: VERSION_RANGE, measures: ['count'], groupBy: ['status'] }),
+        ),
+      );
+      expect(byStatus.rows).toMatchObject([{ dimensions: { status }, measures: { count: 1 } }]);
+      for (const request of [{ page: { limit: 10 } }, { pagination: { page: 0, perPage: 10 } }]) {
+        const response = await storage.queryTraces(
+          planTraceQuery(parseTraceQueryRequest({ timeRange: VERSION_RANGE, ...request })),
+        );
+        expect('traces' in response ? response.traces : undefined).toMatchObject([
+          { traceId: 'tie-trace', entityName: last, status, inputPreview: `${last} input` },
+        ]);
+      }
+      const threads = await storage.queryThreads(planThreadRowsQuery({ timeRange: { traces: VERSION_RANGE } }));
+      expect(threads.threads).toMatchObject([{ threadId: 'tie-thread', status, inputPreview: `${last} input` }]);
+    };
+
+    it('reads the last insert before and after the merge', async () => {
+      await storage.dangerouslyClearAll();
+      await storage.createSpan({ span: version(first) });
+      await storage.createSpan({ span: version(last) });
+      expect(await physicalRoots()).toEqual({ rows: 2, traces: 1 });
+      for (let run = 0; run < 5; run++) await expectLastInsert();
+
+      await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
+      try {
+        await client.command({ query: `OPTIMIZE TABLE ${TABLE_TRACE_ROOTS} FINAL` });
+      } finally {
+        await client.command({ query: `SYSTEM STOP MERGES ${TABLE_TRACE_ROOTS}` });
+      }
+      expect(await physicalRoots()).toEqual({ rows: 1, traces: 1 });
+      await expectLastInsert();
     });
   });
 });

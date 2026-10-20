@@ -395,17 +395,27 @@ export function compileTenantScope(scope: TraceQueryTenantScope | undefined, par
  * same sort key, and merges never meet versions that ended on different days (it is partitioned by
  * `endedAt`). The version that ended last is current, as a resumed or completed root is exported
  * again with a later `endedAt`; a pending copy stores `endedAt = startedAt` and can lack `threadId`,
- * so a copy with a thread wins an equal-time tie. The final hash orders divergent versions that end at
- * the same instant, so every read picks the same one. It hashes the narrow filterable columns only
- * (`error` through its null map), so the collapse reads no payload or metadata blobs. Every root collapse uses this order: trace
- * rows, aggregates, thread rows and the discovery reads.
+ * so a copy with a thread wins an equal-time tie. Remaining ties are broken by insertion order, last
+ * insert first: the part's first block number, then the row's offset in the part. Tied versions
+ * share a partition and sort key, so a merge meets them and keeps the last insert too, and reads
+ * pick the same version before and after it. Both are virtual columns, so the order reads nothing
+ * beyond `endedAt` and `threadId`.
+ *
+ * Merges don't follow this order across `endedAt`: within one day's partition a merge keeps the last
+ * insert, not the version that ended last. If an outdated export of a root is redelivered after its
+ * current version, on the same day, reads pick the current version until a merge, and the outdated
+ * one afterwards (last write wins, as in the PG and DuckDB stores). Making merges keep the version
+ * that ended last needs `ReplacingMergeTree(endedAt)`, a schema change.
+ *
+ * Every root collapse uses this order: trace rows, aggregates, thread rows and the discovery reads.
  */
-export const ROOT_VERSION_ORDER = `endedAt DESC, isNotNull(threadId) DESC, cityHash64(tuple(isNotNull(error), name,
-      spanType, entityType, entityId, entityName, entityVersionId, environment, serviceName, executionSource, resourceId,
-      userId, sessionId, runId, experimentId, threadId, tags))`;
+export const ROOT_VERSION_ORDER = `endedAt DESC, isNotNull(threadId) DESC, toUInt64(splitByChar('_', _part)[2]) DESC,
+      _part_offset DESC`;
 
 /**
- * Trace scope options. `queryTraces()` uses all of them; `aggregateTraces()` can opt into `oneRootPerTrace`.
+ * Trace scope options. `queryTraces()` uses all of them; `aggregateTraces()` uses `oneRootPerTrace`.
+ * Thread qualification and the discovery reads use none: their `root_scope` keeps each trace's
+ * earliest-started root (`current_roots`), re-read across the trace's roots outside the window.
  * - `oneRootPerTrace`: a trace has exactly one root span, so `root_scope` is collapsed from the
  *   window's root rows alone, without re-reading the trace's roots outside the window. It holds one
  *   row per trace. A trace written with several root spans (a writer bug) is listed under one of them.
@@ -742,6 +752,11 @@ export type ClickHouseTraceRootKey = {
  * that end at the same instant are ordered as in the keys statement (ROOT_VERSION_ORDER). The
  * relation-free `where` conjuncts are re-applied, so a version written between the two statements
  * that doesn't match isn't returned.
+ *
+ * Trade-off of matching on `endedAt`: if a newer version is written between the two statements and
+ * a same-day merge then drops the keyed version, the trace has no row and drops off the page. Without
+ * `endedAt` the lookup would find the replacement, but could also return a version other than the
+ * keyed one whenever both are unmerged. The window is the gap between the two statements.
  */
 export function compileClickHouseTraceRowsByKey(
   plan: TrustedTraceQueryTracesPlan,
