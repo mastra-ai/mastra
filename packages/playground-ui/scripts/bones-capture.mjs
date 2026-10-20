@@ -100,8 +100,12 @@ try {
   });
 
   const captured = readBones(outDir);
-  if (Object.keys(captured).length === 0) {
-    throw new Error('boneyard captured no skeletons. Does each Bones/ story render a <BoneSkeleton name=…>?');
+  // boneyard only fails when nothing at all is captured, so a story that didn't mount its skeleton
+  // would otherwise drop that bone file silently. Each Bones/ story renders exactly one named skeleton.
+  if (Object.keys(captured).length !== storyIds.length) {
+    throw new Error(
+      `boneyard captured ${Object.keys(captured).length} skeletons from ${storyIds.length} Bones/ stories. Each Bones/ story must render one <BoneSkeleton> with a unique name.`,
+    );
   }
 
   if (check) {
