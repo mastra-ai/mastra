@@ -29,6 +29,20 @@ export interface MCPServerEventPollContext<TArgs extends MCPServerEventArgs = MC
 }
 
 /**
+ * What `authorize` receives when a client polls or subscribes to an event type.
+ *
+ * @experimental SEP-3415 is a draft; this API may change.
+ */
+export interface MCPServerEventAuthorizeContext<TArgs extends MCPServerEventArgs = MCPServerEventArgs> {
+  /** Subscription arguments, validated against `inputSchema` when one is set. */
+  arguments: TArgs;
+  /** The caller's request context, including `user` when the server maps one from the request's auth info. */
+  requestContext: RequestContext;
+  /** How the caller asked to receive events. */
+  delivery: EventDeliveryMode;
+}
+
+/**
  * An event returned by a `poll` source. The server fills in `eventId` (random UUID) and
  * `timestamp` (now) when they are absent.
  *
@@ -74,8 +88,18 @@ export interface MCPServerEventDefinition<
   inputSchema?: PublicSchema<TArgs>;
   /** Schema for event `data`. Advertised in `events/list` and enforced by `emit()`. */
   payloadSchema?: PublicSchema<TData>;
-  /** Decides whether an emitted event reaches a subscription with these arguments. Defaults to all. */
+  /**
+   * Decides whether an emitted event reaches a subscription with these arguments. Defaults to all.
+   * The client chooses the arguments, so `match` doesn't restrict who can subscribe; use
+   * `authorize` for that.
+   */
   match?(args: TArgs, data: TData): boolean;
+  /**
+   * Decides whether the caller may receive this event type with these arguments. Runs on every
+   * `events/poll` and on every `events/stream` open; returning `false` rejects the request with
+   * -32024. An open stream isn't checked again until it reconnects. Defaults to allowing everyone.
+   */
+  authorize?(context: MCPServerEventAuthorizeContext<TArgs>): boolean | Promise<boolean>;
   /** Pull source serving `events/poll`. */
   poll?(context: MCPServerEventPollContext<TArgs>): Promise<MCPServerEventPollResult<TData>>;
   /**

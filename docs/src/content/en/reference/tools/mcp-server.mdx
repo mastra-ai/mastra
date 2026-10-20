@@ -1657,6 +1657,22 @@ await server.events.emit('ticket.created', { id: 't-1', project: 'web' })
 
 A client that subscribed with `{ project: 'web' }` receives this occurrence. A client that subscribed with `{ project: 'api' }` doesn't.
 
+`match` filters on the arguments the client chooses, so it doesn't control who can subscribe. To restrict callers, add `authorize`. It receives the validated arguments and the caller's `requestContext`, which includes `user` when you set `mapAuthInfoToUser`:
+
+```typescript
+const ticketCreated = defineEvent({
+  inputSchema: z.object({ project: z.string() }),
+  payloadSchema: z.object({ id: z.string(), project: z.string() }),
+  match: (args, data) => data.project === args.project,
+  authorize: ({ arguments: args, requestContext }) => {
+    const user = requestContext.get('user') as { projects: string[] } | undefined
+    return user?.projects.includes(args.project) ?? false
+  },
+})
+```
+
+`authorize` runs on every `events/poll` and every `events/stream` open. An open stream isn't checked again until it reconnects. A caller who loses access keeps receiving occurrences on an open stream until then. FGA isn't applied to events; use `authorize` to restrict them.
+
 ### `defineEvent()` options
 
 <PropertiesTable
@@ -1686,6 +1702,13 @@ A client that subscribed with `{ project: 'web' }` receives this occurrence. A c
     isOptional: true,
     description:
       'Decides whether an emitted event reaches a subscription with these arguments. Applies to push streams and to polls served from the buffer. Defaults to delivering every event.',
+  },
+  {
+    name: 'authorize',
+    type: '(context) => boolean | Promise<boolean>',
+    isOptional: true,
+    description:
+      "Decides whether the caller may receive this type with these arguments. Receives `arguments`, `requestContext` and `delivery` (`'poll'` or `'push'`). Runs on every `events/poll`, before a `poll` source is called, and on every `events/stream` open. Returning `false` rejects the request with `-32024`. If it throws, the client gets a generic `-32603` error and the details are logged on the server. Defaults to allowing every caller.",
   },
   {
     name: 'poll',

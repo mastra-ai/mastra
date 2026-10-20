@@ -391,6 +391,129 @@ describe('MCPServer events over Streamable HTTP', () => {
     });
   });
 
+  describe('authorize', () => {
+    // Each caller sends its own token; the server maps it to `user` like any authenticated request.
+    const tokenOf = (req: { headers: Record<string, unknown> }) => String(req.headers['x-test-user'] ?? '');
+    const projectsOf: Record<string, string[]> = { alice: ['a', 'b'], bob: ['b'] };
+
+    function tenantServer(extra: Partial<MCPServerEventDefinition> = {}) {
+      const contexts: { user: unknown; delivery: string }[] = [];
+      const server = makeServer(
+        {
+          'ticket.created': defineEvent({
+            ...ticketCreated(),
+            inputSchema: z.object({ project: z.string() }),
+            authorize: ({ arguments: args, requestContext, delivery }) => {
+              const user = requestContext.get('user') as { id: string } | undefined;
+              contexts.push({ user, delivery });
+              return projectsOf[user?.id ?? '']?.includes(args.project) ?? false;
+            },
+            ...extra,
+          }),
+        },
+        { mapAuthInfoToUser: ({ authInfo }) => ({ id: authInfo.token }) },
+      );
+      return { server, contexts };
+    }
+
+    async function connectAs(url: URL, user: string) {
+      const caller = await connectClient(url, {}, { 'x-test-user': user });
+      callers.push(caller);
+      return caller;
+    }
+    const callers: Client[] = [];
+    afterEach(async () => {
+      await Promise.all(callers.splice(0).map(caller => caller.close().catch(() => {})));
+    });
+
+    it('lets only permitted callers poll or stream a type, with -32024 for the rest', async () => {
+      const { server, contexts } = tenantServer();
+      served = await serveHTTP(server, {
+        auth: req => ({ token: tokenOf(req), clientId: tokenOf(req), scopes: [] }),
+      });
+      const alice = await connectAs(served.url, 'alice');
+      const bob = await connectAs(served.url, 'bob');
+      const registry = registryOf(server);
+      const params = { name: 'ticket.created', arguments: { project: 'a' } };
+
+      const bobPoll = await rejection(
+        bob.request({ method: 'events/poll', params: { ...params, cursor: null } }, PollEventsResultSchema),
+      );
+      expect(bobPoll.code).toBe(-32024);
+      const bobStream = await rejection(bob.request({ method: 'events/stream', params }, StreamEventsResultSchema));
+      expect(bobStream.code).toBe(-32024);
+      expect(registry.openStreams.size).toBe(0);
+
+      const start = await alice.request(
+        { method: 'events/poll', params: { ...params, cursor: null } },
+        PollEventsResultSchema,
+      );
+      const { received, methods } = recordNotifications(alice);
+      const stream = openStream(alice, params);
+      await vi.waitFor(() => expect(methods(received)).toEqual(['active']));
+      await server.events.emit('ticket.created', { id: 't1', project: 'a' });
+      await vi.waitFor(() => expect(methods(received)).toEqual(['active', 'event']));
+      const polled = await alice.request(
+        { method: 'events/poll', params: { ...params, cursor: start.cursor } },
+        PollEventsResultSchema,
+      );
+      expect(polled.events.map(event => event.data.id)).toEqual(['t1']);
+      stream.abort();
+
+      // Bob may still use the project he belongs to.
+      await expect(
+        bob.request(
+          { method: 'events/poll', params: { name: 'ticket.created', arguments: { project: 'b' }, cursor: null } },
+          PollEventsResultSchema,
+        ),
+      ).resolves.toBeDefined();
+      expect(contexts).toContainEqual({ user: { id: 'bob' }, delivery: 'push' });
+      expect(contexts).toContainEqual({ user: { id: 'alice' }, delivery: 'poll' });
+    });
+
+    it('checks a poll source before calling it', async () => {
+      const pollSource = vi.fn();
+      const server = makeServer({
+        'build.finished': {
+          ...buildFinished(pollSource),
+          authorize: () => false,
+        } as MCPServerEventDefinition,
+      });
+      const c = await connect(server);
+      const error = await rejection(
+        c.request(
+          { method: 'events/poll', params: { name: 'build.finished', arguments: { branch: 'main' }, cursor: null } },
+          PollEventsResultSchema,
+        ),
+      );
+      expect(error.code).toBe(-32024);
+      expect(pollSource).not.toHaveBeenCalled();
+    });
+
+    it('answers a throwing authorize with a generic -32603 and logs the details', async () => {
+      const { server } = tenantServer({
+        authorize: () => {
+          throw new Error('directory lookup failed: secret-host');
+        },
+      });
+      const errors = spyOnErrors(server);
+      const c = await connect(server);
+      const error = await rejection(
+        c.request(
+          { method: 'events/stream', params: { name: 'ticket.created', arguments: { project: 'a' } } },
+          StreamEventsResultSchema,
+        ),
+      );
+      expect(error.code).toBe(-32603);
+      expect(error.message).not.toContain('secret-host');
+      expect(errors).toHaveBeenCalledWith(
+        'Authorization check for event "ticket.created" failed',
+        expect.objectContaining({ error: expect.any(Error) }),
+      );
+      expect(registryOf(server).openStreams.size).toBe(0);
+    });
+  });
+
   describe('events/stream', () => {
     it('sends active first, then only the events matching each subscription', async () => {
       const server = makeServer({ 'ticket.created': ticketCreated() });
