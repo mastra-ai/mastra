@@ -443,6 +443,20 @@ describe('live session file tree', () => {
     );
   });
 
+  it('serves files whose names start with two dots, directly and through a symlink', async () => {
+    const { parent } = await seedHostCheckouts();
+    const repo = join(parent, 'repo');
+    await writeFile(join(repo, '..notes.md'), 'dots');
+    await symlink('../..notes.md', join(repo, 'src', 'notes-link.md'));
+
+    expect(names(await listSessionWorkspaceTree(makeSession(), ''))).toContain('f ..notes.md');
+    expect(names(await listSessionWorkspaceTree(makeSession(), 'src'))).toContain('f notes-link.md');
+    await expect(readSessionWorkspaceFile(makeSession(), '..notes.md')).resolves.toMatchObject({ content: 'dots' });
+    await expect(readSessionWorkspaceFile(makeSession(), 'src/notes-link.md')).resolves.toMatchObject({
+      content: 'dots',
+    });
+  });
+
   it('hides and refuses symlinks that lead to ignored files inside the checkout', async () => {
     const { parent } = await seedHostCheckouts();
     const repo = join(parent, 'repo');

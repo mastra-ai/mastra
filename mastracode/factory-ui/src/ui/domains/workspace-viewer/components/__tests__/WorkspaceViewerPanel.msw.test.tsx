@@ -92,7 +92,7 @@ function pendingChangesHandler() {
 
 describe('WorkspaceViewerPanel', () => {
   describe('when a file preview needs syntax highlighting', () => {
-    it.each([typescriptFile, htmlFile])('renders $path as safe text and then adds dual-theme colors', async file => {
+    it.each([typescriptFile, htmlFile])('renders $path as safe text and then colors its tokens', async file => {
       installHandlers();
       server.use(
         treeHolding(file.path),
@@ -107,11 +107,9 @@ describe('WorkspaceViewerPanel', () => {
       const viewer = await screen.findByLabelText('Workspace file viewer');
       await waitFor(() => expect(viewer.querySelector('pre')?.textContent).toBe(file.content));
       expect(viewer.querySelector('script')).toBeNull();
-      await waitFor(() => {
-        const coloredToken = viewer.querySelector<HTMLElement>('pre span[style]');
-        expect(coloredToken?.style.getPropertyValue('--shiki-light')).toMatch(/^#/);
-        expect(coloredToken?.style.getPropertyValue('--shiki-dark')).toMatch(/^#/);
-      });
+      // Tokens carry `syntax-*` role classes; colors come from theme CSS, not inline styles.
+      await waitFor(() => expect(viewer.querySelector('pre span[class^="syntax-"]')).not.toBeNull());
+      expect(viewer.querySelector('pre span[style]')).toBeNull();
       expect(viewer.querySelector('pre')?.textContent).toBe(file.content);
       expect(viewer.querySelector('script')).toBeNull();
     });

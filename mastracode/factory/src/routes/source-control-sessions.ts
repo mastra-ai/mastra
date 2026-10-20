@@ -213,14 +213,15 @@ async function resolveSession(
 async function startUserSessionConversation(
   controller: SourceControlSessionRoutesOptions['controller'],
   session: SourceControlSession,
-): Promise<void> {
-  if (!controller) return;
+  // Its owner's resource while private, its Factory's when created shared (a run from a board card).
+  resourceId: string = userSessionResourceFor(session, session.visibility === 'org' ? 'org' : 'private'),
+) {
+  if (!controller) return undefined;
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: session.userId, organizationId: session.orgId });
   const live = await controller.createSession({
     id: session.sessionId,
-    // Its owner's resource while private, its Factory's when created shared (a run from a board card).
-    resourceId: userSessionResourceFor(session, session.visibility === 'org' ? 'org' : 'private'),
+    resourceId,
     threadId: session.sessionId,
     ownerId: session.userId,
     requestContext,
@@ -234,6 +235,7 @@ async function startUserSessionConversation(
       ...(session.projectRepositoryId ? { projectRepositoryId: session.projectRepositoryId } : {}),
     });
   }
+  return live;
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
@@ -524,20 +526,14 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
 
         try {
-          let live = await controller.getSession(session.sessionId);
-          if (!live) {
-            const requestContext = new RequestContext();
-            requestContext.set('user', { workosId: session.userId, organizationId: session.orgId });
-            live = await controller.createSession({
-              id: session.sessionId,
-              resourceId: await sessionMemoryResourceId(controller, session, options.workItems),
-              threadId: session.sessionId,
-              ownerId: session.userId,
-              requestContext,
-            });
-            await seedSessionOrg(live, session.orgId);
-          }
-          const sandbox = live.getWorkspace()?.sandbox;
+          const live =
+            (await controller.getSession(session.sessionId)) ??
+            (await startUserSessionConversation(
+              controller,
+              session,
+              await sessionMemoryResourceId(controller, session, options.workItems),
+            ));
+          const sandbox = live?.getWorkspace()?.sandbox;
           if (!sandbox?.start) return c.json({ error: 'This session has no sandbox to start.' }, 409);
           await sandbox.start();
           return c.json({ started: true });

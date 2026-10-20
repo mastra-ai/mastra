@@ -1002,12 +1002,15 @@ describe('session sandbox recreate', () => {
     const startPath = (sessionId: string) => `/web/user-sessions/${sessionId}/sandbox/start`;
 
     function fakeController(live: { getWorkspace: () => unknown } | null, created = live) {
+      const setState = vi.fn();
       return {
+        setState,
         getSession: vi.fn(async () => live),
-        createSession: vi.fn(async () => ({ ...created, state: { get: () => ({}), set: vi.fn() } })),
+        createSession: vi.fn(async () => ({ ...created, state: { get: () => ({}), set: setState } })),
         queryThreadById: vi.fn(async () => null),
       } as unknown as NonNullable<RouteOptions['controller']> & {
         createSession: ReturnType<typeof vi.fn>;
+        setState: ReturnType<typeof vi.fn>;
       };
     }
 
@@ -1037,6 +1040,13 @@ describe('session sandbox recreate', () => {
       const created = controller.createSession.mock.calls[0]![0];
       expect(created).toMatchObject({ id: session.sessionId, threadId: session.sessionId, ownerId: 'user-1' });
       expect(created.requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      // The session's Factory address is seeded, same as when the page starts the conversation.
+      expect(controller.setState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          factoryProjectId: session.factoryProjectId,
+          projectRepositoryId: session.projectRepositoryId,
+        }),
+      );
       expect(start).toHaveBeenCalledTimes(1);
     });
 

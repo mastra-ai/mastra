@@ -692,7 +692,7 @@ async function realPaths(
 function treePathOf(layout: SessionLayout, physicalRoot: string, real: string): string | undefined {
   if (!real) return undefined;
   const relative = posixPath.relative(physicalRoot, real);
-  if (relative.startsWith('..') || posixPath.isAbsolute(relative)) return undefined;
+  if (relative === '..' || relative.startsWith('../') || posixPath.isAbsolute(relative)) return undefined;
   try {
     treeLocation(layout, relative);
   } catch {
