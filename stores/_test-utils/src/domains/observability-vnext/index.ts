@@ -13,6 +13,7 @@ import {
   planTraceQuery,
   planTraceQueryObservedFields,
   planTraceQueryValues,
+  TraceQueryCursorError,
 } from '@mastra/core/storage';
 import type {
   TraceQueryTenantScope,
@@ -31,6 +32,7 @@ import {
   TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE,
 } from './trace-query-discovery';
 import {
+  collectTraceQueryPages,
   normalizeTraceQueryResponse,
   THREAD_QUERY_CONFORMANCE_CASES,
   THREAD_QUERY_FIXTURE_DATA,
@@ -2422,6 +2424,89 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
             spans: { some: { op: 'lt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 100 } } },
           });
           expect(Object.keys(fast).sort()).toEqual(['ttfc-agent', 'ttfc-zero']);
+        });
+      });
+
+      describe('sort by time to first chunk on traces', () => {
+        const at = (ms: number) => new Date(VNEXT_BASE_DATE.getTime() + ms);
+        const timeRange = { from: at(-60_000).toISOString(), to: at(60_000).toISOString() };
+        // Ties break by traceId; empty values sort last in both directions.
+        const expected = {
+          asc: ['sort-zero', 'sort-fast', 'sort-fraction', 'sort-tie-a', 'sort-tie-b', 'sort-empty-a', 'sort-empty-b'],
+          desc: ['sort-tie-a', 'sort-tie-b', 'sort-fraction', 'sort-fast', 'sort-zero', 'sort-empty-a', 'sort-empty-b'],
+        };
+        const orderBy = (direction: 'asc' | 'desc') => [{ field: 'timeToFirstChunkMs' as const, direction }];
+
+        beforeEach(async () => {
+          const root = (traceId: string, timeToFirstChunkMs: number | null, offsetMs: number) =>
+            makeSpan({ traceId, spanId: `${traceId}-root`, timeToFirstChunkMs, startedAt: at(offsetMs) });
+          await storage.batchCreateSpans({
+            records: [
+              root('sort-tie-b', 300, 1000),
+              root('sort-empty-b', null, 2000),
+              root('sort-fraction', 120.5, 3000),
+              root('sort-tie-a', 300, 4000),
+              root('sort-zero', 0, 5000),
+              root('sort-empty-a', null, 6000),
+              root('sort-fast', 50, 7000),
+              // Only the root's value counts, never a child's.
+              makeSpan({
+                traceId: 'sort-empty-a',
+                spanId: 'sort-empty-a-child',
+                parentSpanId: 'sort-empty-a-root',
+                timeToFirstChunkMs: 1,
+                startedAt: at(6000),
+              }),
+            ],
+          });
+          if (flushPendingMerges) await flushPendingMerges(storage);
+        });
+
+        it('advertises the sort', () => {
+          expect(storage.getFeatures()).toContain('trace-query-time-to-first-chunk-sort');
+        });
+
+        it.each(['asc', 'desc'] as const)('pages %s with empty values last at every page size', async direction => {
+          for (const limit of [1, 2, 3, 7]) {
+            const pages = await collectTraceQueryPages(request => storage.queryTraces(planTraceQuery(request)), {
+              timeRange,
+              orderBy: orderBy(direction),
+              page: { limit },
+            });
+            expect(pages, `limit ${limit}`).toEqual(expected[direction].map(traceId => ({ traceId })));
+          }
+        });
+
+        it.each(['asc', 'desc'] as const)('numbers pages %s in the same order', async direction => {
+          const traceIds: string[] = [];
+          for (let page = 0; page < 4; page++) {
+            const response = await storage.queryTraces(
+              planTraceQuery(
+                parseTraceQueryRequest({ timeRange, orderBy: orderBy(direction), pagination: { page, perPage: 2 } }),
+              ),
+            );
+            if (!('traces' in response)) throw new Error('Expected traces');
+            traceIds.push(...response.traces.map(trace => trace.traceId));
+          }
+          expect(traceIds).toEqual(expected[direction]);
+        });
+
+        it('resumes after an empty value and rejects the cursor once the sort changes', async () => {
+          const request = { timeRange, orderBy: orderBy('asc'), page: { limit: 6 } };
+          const first = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest(request)));
+          if (!('page' in first) || !('traces' in first)) throw new Error('Expected a keyset trace page');
+          expect(first.traces.at(-1)).toMatchObject({ traceId: 'sort-empty-a', timeToFirstChunkMs: null });
+          const after = first.page.next!;
+          const rest = await storage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ ...request, page: { limit: 6, after } })),
+          );
+          expect('traces' in rest && rest.traces.map(trace => trace.traceId)).toEqual(['sort-empty-b']);
+
+          for (const changed of [orderBy('desc'), [{ field: 'startedAt' as const, direction: 'asc' as const }]]) {
+            expect(() =>
+              planTraceQuery(parseTraceQueryRequest({ ...request, orderBy: changed, page: { limit: 6, after } })),
+            ).toThrowError(TraceQueryCursorError);
+          }
         });
       });
     }

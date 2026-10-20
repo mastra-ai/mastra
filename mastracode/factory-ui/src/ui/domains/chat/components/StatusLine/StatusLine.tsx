@@ -9,6 +9,7 @@ import { ModelPicker } from './ModelPicker';
 import { ConnectionActivity } from './ConnectionActivity';
 import { GoalStatus } from './GoalStatus';
 import { OperationalMemoryStatus } from './OperationalMemoryStatus';
+import { ModelCredential } from './ModelCredential';
 import { QueuedFollowUps } from './QueuedFollowUps';
 import { RuntimeActivity } from './RuntimeActivity';
 
@@ -39,6 +40,7 @@ export function StatusLine() {
       className="text-caption text-muted-foreground flex h-fit shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1"
     >
       <ModelPicker />
+      <ModelCredential />
       <OperationalMemoryStatus />
       <RuntimeActivity />
       <ConnectionActivity />

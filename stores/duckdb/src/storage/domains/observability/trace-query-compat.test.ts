@@ -12,6 +12,7 @@ vi.mock('@mastra/core/storage', async importOriginal => {
   return {
     ...core,
     encodeTraceQueryDeltaCursor: undefined,
+    TRACE_QUERY_ORDER_FIELDS: undefined,
     TRACE_QUERY_FIELD_REGISTRY: { ...core.TRACE_QUERY_FIELD_REGISTRY, trace },
   };
 });
@@ -56,4 +57,14 @@ it('neither returns nor advertises time to first chunk when core predates the fi
   if (!('traces' in result)) throw new Error('Expected traces');
   expect(result.traces[0]).not.toHaveProperty('timeToFirstChunkMs');
   expect(timeToFirstChunkFeatures).toEqual([]);
+});
+
+it('returns time to first chunk without advertising its sort when core cannot plan the sort', async () => {
+  vi.resetModules();
+  vi.doMock('@mastra/core/storage', async importOriginal => ({
+    ...(await importOriginal<typeof import('@mastra/core/storage')>()),
+    TRACE_QUERY_ORDER_FIELDS: undefined,
+  }));
+  const features = await import('../../features');
+  expect(features.timeToFirstChunkFeatures).toEqual(['trace-query-time-to-first-chunk']);
 });

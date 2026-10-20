@@ -710,7 +710,7 @@ describe('ClickHouse advanced trace query', () => {
     const keys = compileClickHouseTraceQueryKeys(after);
 
     expect(keys.query).toContain('endedAt AS sortValue');
-    expect(keys.query).toContain('ORDER BY sortValue DESC, traceId ASC');
+    expect(keys.query).toContain('ORDER BY sortValue DESC NULLS LAST, traceId ASC');
     expect(keys.query).toContain('traceId > {trace_query_4:String}');
     expect(Object.values(keys.query_params).at(-1)).toBe(3);
     // Candidates hold one current root per trace, so the cursor applies to that root's sort value.
@@ -794,7 +794,7 @@ describe('ClickHouse advanced trace query', () => {
     expect(keys.query).toContain('startedAt AS rootStartedAt, endedAt AS rootEndedAt');
     expect(keys.query).toContain('count() OVER () AS __total');
     expect(keys.query).toMatch(
-      /ORDER BY sortValue ASC, traceId ASC\nLIMIT \{trace_query_\d+:UInt64\} OFFSET \{trace_query_\d+:UInt64\}$/,
+      /ORDER BY sortValue ASC NULLS LAST, traceId ASC\nLIMIT \{trace_query_\d+:UInt64\} OFFSET \{trace_query_\d+:UInt64\}$/,
     );
     expect(Object.values(keys.query_params).slice(-2)).toEqual([25, 50]);
     // No blob columns are read to pick the page.

@@ -305,6 +305,23 @@ describe('factory_inspect_work_item', () => {
     expect((byId.feed as Array<{ body: string }>)[0]!.body).toHaveLength(MAX_TEXT);
   });
 
+  it('shows whether each session is mid-run and when its thread last moved (#27742)', async () => {
+    const { run, deps } = setup({ items: [target], bindings: [binding(TARGET, 'work')] });
+    const lastMoved = new Date('2026-10-20T01:38:00Z');
+    deps.messaging = async () => ({
+      controller: {
+        getSessionByResource: async (sessionId: string) =>
+          sessionId === `session-${TARGET}` ? { stream: { isActive: () => true } } : undefined,
+        queryThreadById: async ({ threadId }: { threadId: string }) =>
+          threadId === 't' ? { id: 't', updatedAt: lastMoved } : null,
+      } as never,
+    });
+    const result = await run<{ sessions: unknown[] }>('factory_inspect_work_item', { workItem: TARGET });
+    expect(result.sessions).toEqual([
+      expect.objectContaining({ role: 'work', active: true, running: true, lastActivityAt: lastMoved.toISOString() }),
+    ]);
+  });
+
   it('lists the sessions following the item and marks the caller', async () => {
     const { run } = setup({
       items: [target],

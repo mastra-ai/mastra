@@ -10,6 +10,7 @@ import type {
   TraceQueryPredicateField,
   TraceQueryResponse,
   TraceQueryScoreField,
+  TraceQuerySortValue,
   TraceQuerySpanField,
   TraceQueryTenantScope,
   TrustedThreadPredicate,
@@ -49,8 +50,13 @@ export const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
  */
 export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {});
 
+/** Core before the sort rejects `orderBy` on the field, so the sort is only declared when core plans it. */
+const timeToFirstChunkSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstChunkMs') === true;
+
 export const timeToFirstChunkFeatures = timeToFirstChunkSupported
-  ? (['trace-query-time-to-first-chunk'] as const)
+  ? timeToFirstChunkSortSupported
+    ? (['trace-query-time-to-first-chunk', 'trace-query-time-to-first-chunk-sort'] as const)
+    : (['trace-query-time-to-first-chunk'] as const)
   : ([] as const);
 
 export function durationMsSql(startedAt: string, endedAt: string): string {
@@ -194,8 +200,8 @@ function fieldDefinition<TField extends string>(
   return definition;
 }
 
-function resolveOrderField(field: string): 'startedAt' | 'endedAt' {
-  if (field === 'startedAt' || field === 'endedAt') return field;
+function resolveOrderField(field: string): TraceOrder['field'] {
+  if (field === 'startedAt' || field === 'endedAt' || field === 'timeToFirstChunkMs') return field;
   throw new Error(`Unsupported trusted trace-query field: ${field}`);
 }
 
@@ -664,7 +670,7 @@ const TRACE_LIST_SELECT = TRACE_SELECT.split('\n')
   .filter(line => !/ AS (metadata|inputPreview|outputPreview|errorPreview),$/.test(line))
   .join('\n');
 
-type TraceOrder = { field: 'startedAt' | 'endedAt'; direction: 'ASC' | 'DESC' };
+type TraceOrder = { field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs'; direction: 'ASC' | 'DESC' };
 
 function traceOrder(plan: TrustedTraceQueryTracesPlan): TraceOrder {
   return {
@@ -680,10 +686,14 @@ function keysetCursorCondition(
   parameters: ParameterBuilder,
 ): string {
   if (plan.paginationMode !== 'keyset' || !plan.cursor) return '';
+  // Empty values sort last in both directions: after an empty value only empty values remain.
+  if (plan.cursor.sortValue === null)
+    return `(isNull(sortValue) AND traceId > ${parameters.add(plan.cursor.traceId, 'String')})`;
+  const numeric = order.field === 'timeToFirstChunkMs';
   const comparison = order.direction === 'ASC' ? '>' : '<';
-  const sortValue = parameters.add(plan.cursor.sortValue, "DateTime64(3, 'UTC')");
+  const sortValue = parameters.add(plan.cursor.sortValue, numeric ? 'Float64' : "DateTime64(3, 'UTC')");
   const traceId = parameters.add(plan.cursor.traceId, 'String');
-  return `(sortValue ${comparison} ${sortValue} OR (sortValue = ${sortValue} AND traceId > ${traceId}))`;
+  return `(sortValue ${comparison} ${sortValue} OR (sortValue = ${sortValue} AND traceId > ${traceId})${numeric ? ' OR isNull(sortValue)' : ''})`;
 }
 
 /**
@@ -697,7 +707,7 @@ export function compileClickHouseTraceQueryKeys(plan: TrustedTraceQueryTracesPla
   const order = traceOrder(plan);
   const ctes = compileClickHouseTraceCandidates(
     plan,
-    'r.traceId AS traceId, r.dedupeKey AS dedupeKey, r.startedAt AS startedAt, r.endedAt AS endedAt',
+    'r.traceId AS traceId, r.dedupeKey AS dedupeKey, r.startedAt AS startedAt, r.endedAt AS endedAt, r.timeToFirstChunkMs AS timeToFirstChunkMs',
     parameters,
     QUERY_TRACES_SCOPE,
   );
@@ -711,7 +721,7 @@ export function compileClickHouseTraceQueryKeys(plan: TrustedTraceQueryTracesPla
 SELECT traceId, dedupeKey, ${order.field} AS sortValue, startedAt AS rootStartedAt, endedAt AS rootEndedAt,
   count() OVER () AS __total
 FROM candidates${cursor ? `\nWHERE ${cursor}` : ''}
-ORDER BY sortValue ${order.direction}, traceId ASC
+ORDER BY sortValue ${order.direction} NULLS LAST, traceId ASC
 ${limit}`,
     query_params: parameters.params,
     sharedSnapshot: true,
@@ -721,7 +731,7 @@ ${limit}`,
 export type ClickHouseTraceRootKey = {
   traceId: string;
   dedupeKey: string;
-  sortValue: string;
+  sortValue: TraceQuerySortValue;
   rootStartedAt: string;
   rootEndedAt: string;
 };
@@ -754,7 +764,7 @@ export function compileClickHouseTraceRowsByKey(
     query: `SELECT ${TRACE_SELECT}
 FROM ${TABLE_TRACE_ROOTS} r
 WHERE (r.startedAt, r.traceId, r.dedupeKey, r.endedAt) IN (${tuples.join(', ')})${compileTenantScope(plan.scope, parameters)}${predicate}
-ORDER BY ${order.field} ${order.direction}, traceId ASC, ${ROOT_VERSION_ORDER}
+ORDER BY ${order.field} ${order.direction} NULLS LAST, traceId ASC, ${ROOT_VERSION_ORDER}
 LIMIT 1 BY traceId`,
     query_params: parameters.params,
   };
@@ -1249,6 +1259,8 @@ export async function queryTraces(
   // Keyset and page mode: the page's root keys (and the total), then those rows with
   // their payloads.
   const keys = await run(compileClickHouseTraceQueryKeys(plan));
+  const sortValue = (value: unknown): TraceQuerySortValue =>
+    plan.orderBy.field !== 'timeToFirstChunkMs' ? asIsoTimestamp(value) : value == null ? null : Number(value);
   let total = Number(keys[0]?.__total ?? 0);
   if (plan.paginationMode === 'page' && keys.length === 0 && plan.page > 0) {
     const [stats] = await run(compileClickHouseTraceQueryTotal(plan));
@@ -1264,7 +1276,7 @@ export async function queryTraces(
             visible.map(key => ({
               traceId: String(key.traceId),
               dedupeKey: String(key.dedupeKey),
-              sortValue: asIsoTimestamp(key.sortValue),
+              sortValue: sortValue(key.sortValue),
               rootStartedAt: asIsoTimestamp(key.rootStartedAt),
               rootEndedAt: asIsoTimestamp(key.rootEndedAt),
             })),
@@ -1287,7 +1299,7 @@ export async function queryTraces(
     });
   }
 
-  // The cursor comes from the keys statement, whose HAVING it is compared against: the rows are
+  // The cursor comes from the keys statement, whose cursor condition it is compared against: the rows are
   // read in a later statement, where a merge can leave the page short or empty.
   const lastKey = visible.at(-1);
   return coreStorage.traceQueryResponseSchema.parse({
@@ -1297,7 +1309,7 @@ export async function queryTraces(
         keys.length > plan.limit && lastKey
           ? coreStorage.encodeTraceQueryCursor(plan, {
               result: 'traces',
-              sortValue: asIsoTimestamp(lastKey.sortValue),
+              sortValue: sortValue(lastKey.sortValue),
               traceId: String(lastKey.traceId),
             })
           : null,

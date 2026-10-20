@@ -100,6 +100,7 @@ import {
   assertObservabilityTraceQueryContextIdsSupported,
   assertObservabilityTraceQueryRootDurationSupported,
   assertObservabilityTraceQueryTimeToFirstChunkSupported,
+  assertObservabilityTraceQueryTimeToFirstChunkSortSupported,
   isTraceQueryContextIdField,
   assertObservabilityTraceQueryRootSpanFieldsSupported,
   assertObservabilityTraceQueryRootSpanValuesSupported,
@@ -365,6 +366,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
       assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
+      assertObservabilityTraceQueryTimeToFirstChunkSortSupported(observabilityStore, plan.orderBy);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
       if (plan.paginationMode === 'delta' && !observabilityStore.getFeatures()?.includes('delta-polling')) {
         throw new HTTPException(501, { message: 'This storage provider does not support observability delta polling' });
@@ -610,6 +612,7 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
       assertObservabilitySpanQuerySupported(observabilityStore);
       assertObservabilitySpanQueryFieldsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryTimeToFirstChunkSortSupported(observabilityStore, plan.orderBy);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {

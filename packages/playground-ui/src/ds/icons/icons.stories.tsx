@@ -10,17 +10,20 @@ import {
   ApiIcon,
   BranchIcon,
   CheckIcon,
+  ClaudeIcon,
   ChevronIcon,
   CommitIcon,
   CrossIcon,
   DbIcon,
   DebugIcon,
+  DeepSeekIcon,
   DeploymentIcon,
   DividerIcon,
   DocsIcon,
   EnvIcon,
   FiltersIcon,
   FolderIcon,
+  GeminiIcon,
   GithubCoinIcon,
   GithubIcon,
   GoogleIcon,
@@ -31,9 +34,16 @@ import {
   LogsIcon,
   McpCoinIcon,
   McpServerIcon,
+  MetaIcon,
   MemoryIcon,
+  MinimaxIcon,
+  MistralIcon,
+  MoonshotIcon,
+  NvidiaIcon,
   OpenAIIcon,
+  OpenRouterIcon,
   PromptIcon,
+  QwenIcon,
   RepoIcon,
   SettingsIcon,
   SlashIcon,
@@ -44,6 +54,8 @@ import {
   VariablesIcon,
   WorkflowCoinIcon,
   WorkflowIcon,
+  XaiIcon,
+  ZaiIcon,
 } from './index';
 import { Button } from '@/ds/components/Button';
 import { Sizes } from '@/ds/tokens/sizes';
@@ -245,33 +257,36 @@ export const ToolIcons: Story = {
   ),
 };
 
+const brandIcons = [
+  { name: 'Github', component: GithubIcon },
+  { name: 'GithubCoin', component: GithubCoinIcon },
+  { name: 'Google', component: GoogleIcon },
+  { name: 'OpenAI', component: OpenAIIcon },
+  { name: 'Claude', component: ClaudeIcon },
+  { name: 'Gemini', component: GeminiIcon },
+  { name: 'DeepSeek', component: DeepSeekIcon },
+  { name: 'OpenRouter', component: OpenRouterIcon },
+  { name: 'Qwen', component: QwenIcon },
+  { name: 'Mistral', component: MistralIcon },
+  { name: 'Z.ai', component: ZaiIcon },
+  { name: 'NVIDIA', component: NvidiaIcon },
+  { name: 'MiniMax', component: MinimaxIcon },
+  { name: 'Meta', component: MetaIcon },
+  { name: 'Moonshot', component: MoonshotIcon },
+  { name: 'xAI', component: XaiIcon },
+];
+
 export const BrandIcons: Story = {
   render: () => (
-    <div className="flex gap-4">
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <GithubIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">Github</span>
-      </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <GithubCoinIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">GithubCoin</span>
-      </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <GoogleIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">Google</span>
-      </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <OpenAIIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">OpenAI</span>
-      </div>
+    <div className="grid w-200 grid-cols-6 gap-4">
+      {brandIcons.map(({ name, component: BrandIcon }) => (
+        <div key={name} className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+          <Icon size="lg" className="text-foreground">
+            <BrandIcon />
+          </Icon>
+          <span className="text-caption text-muted-foreground">{name}</span>
+        </div>
+      ))}
     </div>
   ),
 };

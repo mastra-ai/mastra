@@ -93,3 +93,13 @@ it('returns spans without time to first chunk when core predates the field', asy
   expect(result.spans).toHaveLength(1);
   expect(result.spans[0]).not.toHaveProperty('timeToFirstChunkMs');
 });
+
+it('advertises time to first chunk without its sort when core predates the sort', async () => {
+  vi.resetModules();
+  vi.doMock('@mastra/core/storage', async importOriginal => ({
+    ...(await importOriginal<typeof import('@mastra/core/storage')>()),
+    TRACE_QUERY_ORDER_FIELDS: undefined,
+  }));
+  const { timeToFirstChunkFeatures: features } = await import('./trace-query');
+  expect(features).toEqual(['trace-query-time-to-first-chunk']);
+});

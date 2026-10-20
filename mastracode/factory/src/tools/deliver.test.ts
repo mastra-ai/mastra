@@ -17,10 +17,11 @@ const ROW = {
 
 const MESSAGE = { kind: 'message', summary: 'Can you check the failing test?', priority: 'medium' as const };
 
-function fakeSession(currentThreadId: string) {
+function fakeSession(currentThreadId: string, running = false) {
   return {
     thread: { getId: vi.fn(() => currentThreadId), switch: vi.fn() },
     state: { get: () => ({}), set: vi.fn() },
+    stream: { isActive: () => running },
     sendNotificationSignal: vi.fn(),
   };
 }
@@ -30,8 +31,10 @@ function setup({
   offline = false,
   row = ROW as SourceControlSession | null,
   action = 'deliver',
+  liveThreadId = 'thread-other',
+  running = false,
 } = {}) {
-  const live = offline ? undefined : fakeSession('thread-other');
+  const live = offline ? undefined : fakeSession(liveThreadId, running);
   const calls: string[] = [];
   const created = fakeSession('thread-stored');
   const agent = {
@@ -83,6 +86,15 @@ describe('deliverFactorySessionNotification', () => {
     expect(live?.sendNotificationSignal).not.toHaveBeenCalled();
     expect(live?.thread.switch).not.toHaveBeenCalled();
     expect(controller.createSession).not.toHaveBeenCalled();
+  });
+
+  it('says mid-run only when the target thread itself is running (#27742)', async () => {
+    await expect(setup({ running: true, liveThreadId: 'thread-stored' }).deliver()).resolves.toMatchObject({
+      delivered: 'mid-run',
+    });
+    await expect(setup({ running: true, liveThreadId: 'thread-other' }).deliver()).resolves.toMatchObject({
+      delivered: 'woken',
+    });
   });
 
   it('refuses a thread that belongs to another resource, without looking up, creating or sending', async () => {

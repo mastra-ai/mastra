@@ -509,6 +509,13 @@ Identifies a specific agent thread.
     description: 'Agent identifier.',
     isOptional: true,
   },
+  {
+    name: 'ifIdle',
+    type: 'AgentSignalIfIdleOptions',
+    description:
+      'Options for signal delivery when the target thread is idle. Forwarded to `sendNotificationSignal`. See [thread signals](/reference/agents/agent#thread-signals).',
+    isOptional: true,
+  },
 ]}
 />
 

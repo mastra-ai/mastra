@@ -48,7 +48,7 @@ catalog:
   react-dom: ^19.2.5
   typescript: ^7.0.2
   vitest: 4.1.11
-  zod: ^4.6.4
+  zod: ^4.6.7
   tsx: ^4.23.1
   oxfmt: 0.59.0
 
@@ -238,6 +238,7 @@ minimumReleaseAgeExclude:
   - '@vitest/ui@4.1.11'
   - deepmerge-ts@8.0.2
   - zod@4.6.5
+  - zod@4.6.7
   # Renovate security update: brace-expansion@2.1.4 || 5.0.9
   - brace-expansion@2.1.4 || 5.0.9
   # Renovate security update: react-router@7.18.0
@@ -317,7 +318,7 @@ overrides:
   ssri: '>=6.0.2'
   jws: ^4.0.1
   client-js-e2e-tests-zod-v3>zod: ^3.24.0
-  client-js-e2e-tests-zod-v4>zod: ^4.6.5
+  client-js-e2e-tests-zod-v4>zod: ^4.6.7
   # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
   # (GHSA Dependabot alert #2266).
   # Vanta 2026-10-12: AIKIDO-2026-373183 critical (better-auth) fixed 1.7.7; pulls drizzle-adapter 1.7.7 (AIKIDO-2026-261025)
@@ -435,7 +436,8 @@ overrides:
   systeminformation@<5.32.0: 5.33.13
   tinypool@<2.1.2: 2.1.2
   ajv@>=8.0.0 <8.20.0: 8.20.0
-  zod@>=4.0.0 <4.6.5: 4.6.5
+  # Vanta 2026-10-14: AIKIDO-2026-143019 fixed in 4.6.7
+  zod@>=4.0.0 <4.6.7: 4.6.7
   # Vanta 2026-09-28: Aikido residuals (docusaurus search + inngest OTEL instrumentations)
   '@docsearch/react@>=4.0.0 <4.7.0': 4.7.0
   '@opentelemetry/auto-instrumentations-node@<0.80.0': 0.80.0

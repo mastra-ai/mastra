@@ -40,7 +40,7 @@ import {
   summarizeToolChoiceForSpan,
 } from './span-payload';
 import type { ProcessorStepOutput } from './step-schema';
-import { REPROCESS_PART_KEY, takeHeldParts } from './stream-reprocess';
+import { isFailedStreamChunk, REPROCESS_PART_KEY, takeHeldParts } from './stream-reprocess';
 import { needsTrailingAssistantGuard, TrailingAssistantGuard } from './trailing-assistant-guard';
 import type {
   CachedLLMStepChunk,
@@ -1180,6 +1180,7 @@ export class ProcessorRunner {
     retryCount: number = 0,
     writer?: ProcessorStreamWriter,
     abortSignal?: AbortSignal,
+    minIndex?: number,
   ): Promise<
     Array<{
       part: ChunkType<OUTPUT> | null | undefined;
@@ -1196,6 +1197,44 @@ export class ProcessorRunner {
       tripwireOptions?: TripWireOptions<unknown>;
       processorId?: string;
     }> = [];
+
+    // With `minIndex` (end-of-stream release), a part stashed by the processor at index j
+    // re-enters at j, never upstream: an upstream holder such as BatchPartsProcessor
+    // has already released everything and would hold the part with nothing left to free it.
+    if (minIndex !== undefined) {
+      const takeFrom = (): [ChunkType<OUTPUT>, number] | undefined => {
+        for (let j = minIndex; j < this.outputProcessors.length; j++) {
+          const processor = this.outputProcessors[j]!;
+          if (isProcessorWorkflow(processor)) continue;
+          const custom = processorStates.get(processor.id)?.customState as Record<string, unknown> | undefined;
+          const stashed = custom?.[REPROCESS_PART_KEY];
+          if (stashed) {
+            delete custom![REPROCESS_PART_KEY];
+            return [stashed as ChunkType<OUTPUT>, j];
+          }
+        }
+        return undefined;
+      };
+      let guard = 0;
+      let next = takeFrom();
+      while (next && guard++ < 1000) {
+        const result = await this.processPart(
+          next[0],
+          processorStates,
+          observabilityContext,
+          requestContext,
+          messageList,
+          retryCount,
+          writer,
+          abortSignal,
+          next[1],
+        );
+        results.push(result);
+        if (result.blocked) break;
+        next = takeFrom();
+      }
+      return results;
+    }
 
     // Pull the next stashed part (if any) from processor states, in processor order.
     const takeNext = (): ChunkType<OUTPUT> | undefined => {
@@ -1334,6 +1373,7 @@ export class ProcessorRunner {
           retryCount,
           writer,
           abortSignal,
+          index + 1,
         );
         results.push(...reprocessed);
         if (reprocessed.some(r => r.blocked)) return results;
@@ -1341,6 +1381,27 @@ export class ProcessorRunner {
     }
 
     return results;
+  }
+
+  /**
+   * Call instead of {@link flushHeldParts} when a stream errored or was aborted:
+   * clears what processors hold without emitting or checking it, so a retry
+   * doesn't repeat it and nothing is emitted after cancellation.
+   */
+  /**
+   * Drops what output processors hold after a failed or aborted model stream, without running
+   * any checks. Returns the held control parts (start, error, finish, ...), oldest first.
+   */
+  async discardHeldParts<OUTPUT>(processorStates: Map<string, ProcessorState<OUTPUT>>): Promise<ChunkType<OUTPUT>[]> {
+    // A later processor holds parts that passed the earlier ones first, so it goes first.
+    const kept: ChunkType<OUTPUT>[] = [];
+    for (const processorOrWorkflow of [...this.outputProcessors].reverse()) {
+      const parts = isProcessorWorkflow(processorOrWorkflow)
+        ? ((await processorOrWorkflow.__discardOutputStream?.(this.processorStates)) ?? [])
+        : await takeHeldParts(processorStates.get(processorOrWorkflow.id)?.customState, { discard: true });
+      kept.push(...(parts as ChunkType<OUTPUT>[]));
+    }
+    return kept;
   }
 
   async runOutputProcessorsForStream<OUTPUT = undefined>(
@@ -1358,11 +1419,17 @@ export class ProcessorRunner {
           custom: async (data: { type: string }) => controller.enqueue(data),
         };
 
+        let streamFailed = false;
         try {
           while (true) {
             const { done, value } = await reader.read();
 
             if (done) {
+              if (streamFailed) {
+                for (const part of await this.discardHeldParts(processorStates)) controller.enqueue(part);
+                controller.close();
+                break;
+              }
               for (const r of await this.flushHeldParts(
                 processorStates,
                 observabilityContext,
@@ -1391,6 +1458,8 @@ export class ProcessorRunner {
               break;
             }
 
+            if (isFailedStreamChunk(value)) streamFailed = true;
+
             // Process all stream parts through output processors
             const {
               part: processedPart,
@@ -1409,7 +1478,7 @@ export class ProcessorRunner {
             );
 
             const enqueueTripwire = (r?: string, opts?: TripWireOptions<unknown>, pid?: string) => {
-              void this.logger.debug('Stream part blocked by output processor', {
+              this.logger.debug('Stream part blocked by output processor', {
                 agent: this.agentName,
                 reason: r,
                 originalPart: value,
