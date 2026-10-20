@@ -103,6 +103,22 @@ describe('workspace_apply_patch', () => {
       expect(await read('a.ts')).toBe('function f() {\n  return 2;\n}\n');
     });
 
+    it('applies the nested-context form (@@ class, then @@ method)', async () => {
+      const source = 'class A {\n  foo() {\n    return 1;\n  }\n}\nclass B {\n  foo() {\n    return 1;\n  }\n}\n';
+      await fs.writeFile(path.join(tempDir, 'c.ts'), source);
+      const { apply } = await setup();
+      const result = await apply(`*** Begin Patch
+*** Update File: c.ts
+@@ class B {
+@@   foo() {
+-    return 1;
++    return 2;
+*** End Patch`);
+
+      expect(result).toContain('M c.ts');
+      expect(await read('c.ts')).toBe(source.replace(/return 1;(?![\s\S]*return 1;)/, 'return 2;'));
+    });
+
     it('moves a file while updating it', async () => {
       await fs.writeFile(path.join(tempDir, 'old.ts'), 'const name = "old";\n');
       const { apply } = await setup();

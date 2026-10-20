@@ -68,6 +68,7 @@ describe('parsePatch', () => {
     ],
     ['empty hunk', wrap('*** Update File: a.txt\n@@'), /empty hunk/],
     ['empty hunk after a real one', wrap('*** Update File: a.txt\n@@\n-a\n+b\n@@ ctx'), /empty hunk/],
+    ['bare @@ before a real hunk', wrap('*** Update File: a.txt\n@@\n@@ ctx\n-a\n+b'), /empty hunk/],
     ['move onto another touched path', wrap('*** Delete File: b\n*** Update File: a\n*** Move to: b'), /once/],
   ])('rejects %s', (_name, patch, message) => {
     expect(() => parsePatch(patch)).toThrow(ApplyPatchError);
@@ -93,6 +94,19 @@ describe('applyChunks', () => {
 -z
 +Z`);
     expect(applyChunks('a\nb\nc\ny\nz\n', chunks, 'f')).toBe('a\nB\nc\ny\nZ\n');
+  });
+
+  it('narrows the search with nested context-only hunks', () => {
+    const chunks = update(`*** Update File: f
+@@ class B {
+@@   foo()
+-    return 1
++    return 2`);
+    expect(chunks).toHaveLength(2);
+    const file = 'class A {\n  foo()\n    return 1\n}\nclass B {\n  foo()\n    return 1\n}\n';
+    expect(applyChunks(file, chunks, 'f')).toBe(
+      'class A {\n  foo()\n    return 1\n}\nclass B {\n  foo()\n    return 2\n}\n',
+    );
   });
 
   it('uses the @@ context line to pick the right occurrence', () => {

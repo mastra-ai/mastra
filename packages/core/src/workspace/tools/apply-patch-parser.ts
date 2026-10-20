@@ -180,7 +180,10 @@ export function parsePatch(patch: string): PatchOperation[] {
       if (chunks.length === 0 && !moveTo) {
         throw new ApplyPatchError(`Line ${lineNumber}: "${UPDATE_FILE.trim()}" for ${path} has no hunks`);
       }
-      if (chunks.some(chunk => chunk.oldLines.length === 0 && chunk.newLines.length === 0)) {
+      // A context-only hunk (`@@ class B {` with no lines) narrows the search for the
+      // next hunk, so it is allowed unless it is bare or the last one.
+      const isEmpty = (chunk: UpdateChunk) => chunk.oldLines.length === 0 && chunk.newLines.length === 0;
+      if (chunks.some((chunk, k) => isEmpty(chunk) && (chunk.context === undefined || k === chunks.length - 1))) {
         throw new ApplyPatchError(`Line ${lineNumber}: "${UPDATE_FILE.trim()}" for ${path} has an empty hunk`);
       }
       operations.push({ type: 'update', path, moveTo, chunks });
@@ -260,6 +263,10 @@ export function applyChunks(content: string, chunks: UpdateChunk[], path: string
         throw new ApplyPatchError(`Could not find context line "${chunk.context}" in ${path}`);
       }
       cursor = contextIndex + 1;
+    }
+
+    if (chunk.oldLines.length === 0 && chunk.newLines.length === 0) {
+      continue;
     }
 
     if (chunk.oldLines.length === 0) {
