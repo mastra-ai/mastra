@@ -3,7 +3,7 @@ import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 
 import { createSessionAsRowOwner } from '../integrations/subscription-session.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
-import { listFactorySessionThreads, sessionOwnsResource } from '../session/session-threads.js';
+import { listFactorySessionThreads, sessionMemoryResourceId } from '../session/session-threads.js';
 import type { FactorySessionOwnership } from '../session/session-threads.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
@@ -76,7 +76,7 @@ export async function deliverFactorySessionNotification({
   // this session's, whatever the caller paired it with.
   let targetRow: ReturnType<SourceControlSessionLookup['getBySessionId']> | undefined;
   const loadRow = () => (targetRow ??= sessions.getBySessionId(target.sessionId));
-  if (!(await isSessionThread(thread, target.sessionId, loadRow))) {
+  if (!(await isSessionThread(controller, thread, target.sessionId, loadRow))) {
     return { delivered: 'skipped', reason: 'thread-not-owned' };
   }
   const ownerResourceId = thread.resourceId || target.sessionId;
@@ -183,17 +183,16 @@ export async function resolveSessionThread({
 }
 
 async function isSessionThread(
+  controller: Pick<FactoryDeliveryController, 'queryThreadById'>,
   thread: { id: string; resourceId?: string | null; metadata?: Record<string, unknown> | null },
   sessionId: string,
   loadRow: () => Promise<FactorySessionOwnership | null>,
 ): Promise<boolean> {
-  if (thread.id === sessionId) return true;
-  const stamp = thread.metadata?.factorySessionId;
-  if (typeof stamp === 'string' && stamp) {
-    if (stamp !== sessionId) return false;
-    // The stamp is client-writable metadata: it only counts under a resource the session may use.
-    const row = await loadRow();
-    return !!row && sessionOwnsResource(row, thread.resourceId);
-  }
-  return !thread.resourceId || thread.resourceId === sessionId;
+  // Before resources were shared a session's threads ran under its own id.
+  if (thread.resourceId === sessionId) return true;
+  if (thread.id !== sessionId && thread.metadata?.factorySessionId !== sessionId) return false;
+  // Thread ids and stamps are client-writable: either only counts under the
+  // session's own memory resource.
+  const row = await loadRow();
+  return !!row && thread.resourceId === (await sessionMemoryResourceId(controller, row));
 }

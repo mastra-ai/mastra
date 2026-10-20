@@ -27,7 +27,7 @@ import type { ExecutableSandbox } from '../../sandbox/materialization.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
 import { waitForPendingFilesystemCapture } from '../../session/filesystem-capture.js';
-import { factorySessionResourceId, listFactorySessionThreads } from '../../session/session-threads.js';
+import { sessionMemoryResourceId, listFactorySessionThreads } from '../../session/session-threads.js';
 import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
@@ -1466,7 +1466,7 @@ function buildProjectGitRoutes({
         ) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        return c.json({ session: { ...session, resourceId: await factorySessionResourceId(controller, session) } });
+        return c.json({ session: { ...session, resourceId: await sessionMemoryResourceId(controller, session) } });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {

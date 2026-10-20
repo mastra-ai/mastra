@@ -165,11 +165,18 @@ describe('deliverFactorySessionNotification', () => {
     expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
   });
 
+  it("skips a thread created with the target's session id under another resource", async () => {
+    const { controller, agent, deliver } = setup({ thread: { id: 'session-b', resourceId: 'user-atk' } });
+    await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'thread-not-owned' });
+    expect(controller.createSession).not.toHaveBeenCalled();
+    expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
   it('skips an offline target with no Factory session row without creating or sending', async () => {
     const { controller, agent, deliver } = setup({
       offline: true,
       row: null,
-      thread: { id: 'session-b', resourceId: 'project-1' },
+      thread: { id: 'session-b', resourceId: 'session-b' },
     });
     await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'session-not-found' });
     expect(controller.createSession).not.toHaveBeenCalled();
@@ -179,7 +186,7 @@ describe('deliverFactorySessionNotification', () => {
   it('with onlyIfLive, skips an offline target without creating or sending', async () => {
     const { controller, sessions, agent, deliver } = setup({
       offline: true,
-      thread: { id: 'session-b', resourceId: 'project-1' },
+      thread: { id: 'session-b', resourceId: 'session-b' },
     });
     await expect(deliver({ onlyIfLive: true })).resolves.toEqual({ delivered: 'skipped', reason: 'offline' });
     expect(sessions.getBySessionId).not.toHaveBeenCalled();

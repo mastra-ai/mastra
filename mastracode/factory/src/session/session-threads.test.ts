@@ -28,18 +28,28 @@ async function controllerWith(threads: { id: string; resourceId: string; metadat
 }
 
 describe('listFactorySessionThreads', () => {
-  it("lists the session's own, stamped and pre-migration threads", async () => {
+  it("lists a run's own, stamped and pre-migration threads", async () => {
     const controller = await controllerWith([
       { id: 'session-1', resourceId: 'project-1' },
       { id: 'opened-later', resourceId: 'project-1', metadata: { factorySessionId: 'session-1' } },
-      { id: 'owner-thread', resourceId: 'user-1', metadata: { factorySessionId: 'session-1' } },
       { id: 'legacy', resourceId: 'session-1' },
       { id: 'neighbour', resourceId: 'project-1', metadata: { factorySessionId: 'session-2' } },
     ]);
 
     const threads = await listFactorySessionThreads(controller, SESSION);
 
-    expect(threads.map(thread => thread.id).sort()).toEqual(['legacy', 'opened-later', 'owner-thread', 'session-1']);
+    expect(threads.map(thread => thread.id).sort()).toEqual(['legacy', 'opened-later', 'session-1']);
+  });
+
+  it("lists a user session's threads under its owner", async () => {
+    const controller = await controllerWith([
+      { id: 'session-1', resourceId: 'user-1' },
+      { id: 'opened-later', resourceId: 'user-1', metadata: { factorySessionId: 'session-1' } },
+    ]);
+
+    const threads = await listFactorySessionThreads(controller, SESSION);
+
+    expect(threads.map(thread => thread.id).sort()).toEqual(['opened-later', 'session-1']);
   });
 
   it("leaves out a thread another resource stamped with the session's id", async () => {
@@ -51,5 +61,37 @@ describe('listFactorySessionThreads', () => {
     const threads = await listFactorySessionThreads(controller, SESSION);
 
     expect(threads.map(thread => thread.id)).toEqual(['session-1']);
+  });
+
+  it("leaves out a thread under the Factory stamped with a user session's id", async () => {
+    const controller = await controllerWith([
+      { id: 'session-1', resourceId: 'user-1' },
+      { id: 'forged', resourceId: 'project-1', metadata: { factorySessionId: 'session-1' } },
+    ]);
+
+    const threads = await listFactorySessionThreads(controller, SESSION);
+
+    expect(threads.map(thread => thread.id)).toEqual(['session-1']);
+  });
+
+  it("leaves out a thread created with the session's id under someone else's resource", async () => {
+    const controller = await controllerWith([{ id: 'session-1', resourceId: 'user-atk' }]);
+
+    expect(await listFactorySessionThreads(controller, SESSION)).toEqual([]);
+  });
+
+  it("keeps a Slack DM's threads under its sender, not its Factory", async () => {
+    const controller = await controllerWith([
+      { id: 'dm-thread', resourceId: 'user-1', metadata: { factorySessionId: 'session-1' } },
+      { id: 'forged', resourceId: 'project-1', metadata: { factorySessionId: 'session-1' } },
+    ]);
+
+    const threads = await listFactorySessionThreads(controller, {
+      ...SESSION,
+      branch: 'slack/1700-42',
+      visibility: 'private',
+    });
+
+    expect(threads.map(thread => thread.id)).toEqual(['dm-thread']);
   });
 });

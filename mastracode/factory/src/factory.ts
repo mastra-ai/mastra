@@ -120,7 +120,7 @@ import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './ses
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
-import { sessionOwnsResource } from './session/session-threads.js';
+import { sessionMemoryResourceId } from './session/session-threads.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
@@ -881,8 +881,15 @@ export class MastraFactory {
       for (const sessionId of candidates) {
         const row = await sourceControlSessions.getBySessionId(sessionId);
         // The stamp is client-writable metadata: a session only claims a
-        // thread that runs under a resource it may use.
-        if (row && sessionOwnsResource(row, resourceId)) return { sessionId, row };
+        // thread that runs under its own memory resource, or under its own id
+        // as the resource from before resources were shared.
+        if (
+          row &&
+          (resourceId === sessionId ||
+            resourceId === (await sessionMemoryResourceId(this.#prepared?.base.controller, row)))
+        ) {
+          return { sessionId, row };
+        }
       }
       // Unresolved: report on the woken thread, never on a session a stamp merely names.
       return { sessionId: threadId, row: null };
@@ -1250,7 +1257,13 @@ export class MastraFactory {
             if (auth) await failWake({ sessionId: threadId, threadId }, 'session storage is not ready');
             return;
           }
-          const { sessionId } = await resolveWakeSession({ resourceId, threadId });
+          const { sessionId, row } = await resolveWakeSession({ resourceId, threadId });
+          // Only a session that owns the thread's resource may lend its owner;
+          // the unresolved fallback id must never be looked up as a session.
+          if (!row) {
+            if (auth) await failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED['session-not-found']);
+            return;
+          }
           const prepared = await prepareSessionRunContext(requestContext, sessionId, {
             sessions: sourceControlSessions,
           });
