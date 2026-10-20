@@ -1175,6 +1175,8 @@ describe('MastraFactory.prepare', () => {
       'factory_start_session',
       'factory_answer_approval',
       'factory_switch_session_model',
+      'factory_subscribe_session',
+      'factory_unsubscribe_session',
     ];
     const ALLOWED_TOOLS = [
       ...READ_TOOLS,
@@ -1191,6 +1193,9 @@ describe('MastraFactory.prepare', () => {
       'factory_start_session',
       'factory_answer_approval',
       'factory_switch_session_model',
+      'factory_list_side_sessions',
+      'factory_subscribe_session',
+      'factory_unsubscribe_session',
     ];
 
     it('gives a user session every tool on every turn, and other sessions none', async () => {

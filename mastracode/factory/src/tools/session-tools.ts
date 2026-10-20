@@ -81,7 +81,8 @@ const LISTED_MODELS = 8;
 /**
  * How many of its side sessions may be running when a turn nobody signed in
  * started (a notification wake, a webhook) starts another. Those turns carry
- * other people's text, so a prompt injection can at most fill this many sandboxes.
+ * other people's text, so this caps how many sandboxes a prompt injection keeps
+ * busy at once. Side sessions that went idle don't count, so it is not a total.
  */
 export const UNATTENDED_SIDE_SESSION_LIMIT = 10;
 
