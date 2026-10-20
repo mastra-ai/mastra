@@ -17,7 +17,7 @@ import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { Agent } from '../../agent';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 import { ExecutionFence, executionLeaseKey } from '../execution-fence';
@@ -517,22 +517,92 @@ describe('__subscribeToRunStream() lifecycle', () => {
     }
   });
 
-  it('propagates an unavailable ownership store and unsubscribes instead of declaring a run unknown', async () => {
-    const { durable, transport, workflows } = await observedAgent();
-    const runId = 'unknown-with-store-outage';
-    vi.spyOn(workflows, 'getRunOwnership').mockRejectedValue(new Error('storage unavailable'));
-    const unsubscribe = vi.spyOn(durable.pubsub, 'unsubscribe');
-    const onComplete = vi.fn();
-    try {
-      await expect(durable.__subscribeToRunStream(runId, { onComplete }, vi.fn())).rejects.toThrow(
-        'storage unavailable',
-      );
-      expect(onComplete).not.toHaveBeenCalled();
-      expect(unsubscribe.mock.calls.filter(([topic]) => topic === AGENT_STREAM_TOPIC(runId))).toHaveLength(1);
-    } finally {
-      await transport.close();
-    }
-  });
+  describe.each([DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION])(
+    'retained %s snapshots',
+    workflowName => {
+      it.each([
+        'success',
+        'failed',
+        'tripwire',
+        'canceled',
+        'bailed',
+        'skipped',
+        'running',
+        'pending',
+        'waiting',
+        'suspended',
+        'paused',
+      ] as const)('classifies a retained %s snapshot without replay history', async status => {
+        const { durable, transport, workflows } = await observedAgent();
+        const runId = `retained-${workflowName}-${status}`;
+        const onComplete = vi.fn();
+        const terminal = ['success', 'failed', 'tripwire', 'canceled', 'bailed', 'skipped'].includes(status);
+        await workflows.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          snapshot: {
+            runId,
+            status,
+            value: {},
+            context: {},
+            serializedStepGraph: [],
+            activePaths: [],
+            activeStepsPath: {},
+            suspendedPaths: {},
+            resumeLabels: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          },
+        });
+        try {
+          const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, vi.fn());
+          expect(onComplete).toHaveBeenCalledTimes(terminal ? 1 : 0);
+          const observation = await durable.observe(runId);
+          const reader = readFullStream(observation.fullStream);
+          await delay(20);
+          expect(reader.isClosed()).toBe(terminal);
+          observation.detach();
+          await reader.done;
+          await unsubscribe();
+        } finally {
+          await transport.close();
+        }
+      });
+    },
+  );
+
+  it.each(['ownership', 'fencing', 'snapshot'] as const)(
+    'keeps observing through an unavailable %s read',
+    async boundary => {
+      const { durable, pubsub, transport, workflows } = await observedAgent();
+      const runId = `unknown-with-${boundary}-outage`;
+      const unavailable = new Error('storage unavailable');
+      if (boundary === 'ownership') vi.spyOn(workflows, 'getRunOwnership').mockRejectedValue(unavailable);
+      if (boundary === 'fencing') vi.spyOn(workflows, 'supportsRunFencing').mockRejectedValue(unavailable);
+      const snapshotRead =
+        boundary === 'snapshot' ? vi.spyOn(workflows, 'getWorkflowRunById').mockRejectedValue(unavailable) : undefined;
+      const onComplete = vi.fn();
+      const onEvent = vi.fn();
+      try {
+        const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, onEvent);
+        // Hydration succeeds; only the subsequent completion probe is unavailable.
+        snapshotRead?.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+        const observation = await durable.observe(runId);
+        const reader = readFullStream(observation.fullStream);
+        expect(onComplete).not.toHaveBeenCalled();
+        expect(reader.isClosed()).toBe(false);
+        await emitChunkEvent(pubsub, runId, textChunk('after outage'));
+        await emitFinishEvent(pubsub, runId, finishData);
+        await reader.done;
+        expect(texts(reader.chunks)).toEqual(['after outage']);
+        expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: AgentStreamEventTypes.FINISH }));
+        observation.detach();
+        await unsubscribe();
+      } finally {
+        await transport.close();
+      }
+    },
+  );
 });
 
 describe('__subscribeToRunStream()', () => {
