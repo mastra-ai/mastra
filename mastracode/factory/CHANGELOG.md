@@ -1,5 +1,17 @@
 # @mastra/factory
 
+## 0.24.0-alpha.9
+
+### Patch Changes
+
+- Attention items now link to the board a card is actually on. Failed runs, proposals, mentions and activity for a card on a custom board (or a GitLab merge request) used to open the Work board instead. ([#27783](https://github.com/mastra-ai/mastra/pull/27783))
+
+- Factory no longer retries a skill run that failed because its request had no authenticated user ("Tenant model credential policy could not be resolved: the request has no authenticated user."). That error came back on every retry, so the run used up all its attempts before a person saw it. It now fails on the first attempt with the non-retryable failure code `run_user_unauthenticated` and shows up in attention right away. A person needs to start it again. Provider 401/403 errors are still recorded as `run_credentials_unavailable` and are still retried. ([#27774](https://github.com/mastra-ai/mastra/pull/27774))
+
+- Updated dependencies [[`78b3ef7`](https://github.com/mastra-ai/mastra/commit/78b3ef7cb120f2b366a39d7095ece5f0ec7d3f71), [`3012dd4`](https://github.com/mastra-ai/mastra/commit/3012dd424b2329eda78381688f1f48244173e6a2), [`f9e22cc`](https://github.com/mastra-ai/mastra/commit/f9e22cc6fa264ded4a95ab34dab84b6ce12c2597), [`fed802d`](https://github.com/mastra-ai/mastra/commit/fed802d6e4e395d9ba42a1122c2468a072407b1c)]:
+  - @mastra/core@1.79.0-alpha.8
+  - @mastra/code-sdk@1.15.0-alpha.9
+
 ## 0.24.0-alpha.8
 
 ### Patch Changes

@@ -1,5 +1,40 @@
 # @mastra/client-js
 
+## 1.56.0-alpha.8
+
+### Patch Changes
+
+- Fixed client tools that run after `approveToolCall` / `declineToolCall` on an agent without memory. The follow-up model call now sees the whole conversation: the original user message, the approved (or declined) tool call and its result. Before, it saw only the client tool call and its result. ([#27772](https://github.com/mastra-ai/mastra/pull/27772))
+
+  `approveToolCallGenerate` and `declineToolCallGenerate` now run executable client tools the model calls after the decision, and then continue the conversation, the same way `generate` does. Before, they returned with `finishReason: 'tool-calls'` and never ran the client tool.
+
+  Pass `memory` to `approveToolCallGenerate` / `declineToolCallGenerate` to save that continuation to the thread:
+
+  ```ts
+  await agent.approveToolCallGenerate({
+    runId,
+    toolCallId,
+    clientTools,
+    memory: { thread: threadId, resource: resourceId },
+  });
+  ```
+
+- `queryTraces()` and `querySpans()` now accept `timeToFirstChunkMs` in `orderBy`, and `getObservabilityCapabilities()` returns the `traceQueryTimeToFirstChunkSort` flag. ([#27473](https://github.com/mastra-ai/mastra/pull/27473))
+
+  ```ts
+  const { capabilities } = await mastraClient.getObservabilityCapabilities();
+
+  if (capabilities.traceQueryTimeToFirstChunkSort) {
+    const { spans } = await mastraClient.querySpans({
+      timeRange,
+      orderBy: [{ field: 'timeToFirstChunkMs', direction: 'desc' }],
+    });
+  }
+  ```
+
+- Updated dependencies [[`78b3ef7`](https://github.com/mastra-ai/mastra/commit/78b3ef7cb120f2b366a39d7095ece5f0ec7d3f71), [`3012dd4`](https://github.com/mastra-ai/mastra/commit/3012dd424b2329eda78381688f1f48244173e6a2), [`f9e22cc`](https://github.com/mastra-ai/mastra/commit/f9e22cc6fa264ded4a95ab34dab84b6ce12c2597), [`fed802d`](https://github.com/mastra-ai/mastra/commit/fed802d6e4e395d9ba42a1122c2468a072407b1c)]:
+  - @mastra/core@1.79.0-alpha.8
+
 ## 1.56.0-alpha.7
 
 ### Patch Changes
