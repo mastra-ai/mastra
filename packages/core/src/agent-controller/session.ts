@@ -6403,6 +6403,7 @@ export class Session<TState = unknown> {
         sharedOptions.requireToolApproval = false;
       }
       sharedOptions.onStepFinish = this.#resumeUsageRecorder(agent, suspension.runId, requestContext);
+      const activeTools = this.machinery.resolveModeActiveTools();
       await agent.sendStreamResume({
         threadId,
         resourceId,
@@ -6415,6 +6416,8 @@ export class Session<TState = unknown> {
           abortSignal,
           requestContext,
           toolsets,
+          // Without it the continuation sees every agent tool, not the mode's subset.
+          ...(activeTools !== undefined && { activeTools }),
         },
       });
       restoreAbortedRun = undefined;

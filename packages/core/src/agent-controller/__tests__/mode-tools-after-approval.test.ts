@@ -1,7 +1,8 @@
 /**
  * A mode's `availableTools` keeps applying for the whole run: the model call
- * that continues a run after an approved or declined tool call must see the
- * same tool subset the first call saw, not every tool the agent owns.
+ * that continues a run after a tool approval, a decline, an `ask_user` answer
+ * or a rejected plan must see the same tool subset the first call saw, not
+ * every tool the agent owns.
  */
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -26,14 +27,16 @@ const ids = {
 
 const getMock = useLoopScenarioAimock();
 
-function model() {
+type FirstCall = { name: string; arguments: Record<string, unknown> };
+
+function model(firstCall: FirstCall) {
   const llm = getMock();
-  // The continuation carries the tool result (or the decline); the first call asks for the gated tool.
+  // The continuation carries the tool result (or the decline); the first call asks for the paused tool.
   llm.on(
     { endpoint: 'chat', predicate: req => req.messages.some(message => message.role === 'tool') },
     { content: 'done' },
   );
-  llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'call-1', name: 'lookup', arguments: { q: 'x' } }] });
+  llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'call-1', ...firstCall }] });
   return createOpenAI({ apiKey: 'aimock', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` })('gpt-4o-mini');
 }
 
@@ -43,7 +46,15 @@ function requestedToolNames() {
     .map(request => (request.body?.tools ?? []).map(tool => tool.function.name).sort());
 }
 
-async function parkedInReadOnlyMode() {
+async function pausedInRestrictedMode({
+  availableTools,
+  firstCall,
+  pausedEvent,
+}: {
+  availableTools: string[];
+  firstCall: FirstCall;
+  pausedEvent: 'tool_approval_required' | 'tool_suspended';
+}) {
   const executed: string[] = [];
   const lookup = createTool({
     id: 'lookup',
@@ -68,7 +79,7 @@ async function parkedInReadOnlyMode() {
     id: 'mode-tools-agent',
     name: 'mode-tools-agent',
     instructions: 'test',
-    model: model(),
+    model: model(firstCall),
     tools: { lookup, write_note: writeNote },
   });
   const controller = new AgentController({
@@ -83,7 +94,7 @@ async function parkedInReadOnlyMode() {
         default: true,
         agent,
         defaultModelId: 'mock-model',
-        availableTools: ['lookup'],
+        availableTools,
       },
     ],
   });
@@ -94,16 +105,24 @@ async function parkedInReadOnlyMode() {
   const events: AgentControllerEvent[] = [];
   session.subscribe(event => events.push(event));
 
+  if (pausedEvent === 'tool_suspended') {
+    // Interactive built-ins suspend for the user's answer; allow them past the approval gate as Mastra Code does.
+    await session.permissions.setForTool({ toolName: firstCall.name, policy: 'allow' });
+  }
   void session.sendMessage({ content: 'use the tool' }).catch(() => {});
   await vi.waitFor(
-    () =>
-      expect(events.some(event => event.type === 'tool_approval_required' && event.toolCallId === 'call-1')).toBe(true),
+    () => expect(events.some(event => event.type === pausedEvent && event.toolCallId === 'call-1')).toBe(true),
     { timeout: 10_000 },
   );
   // The first model call saw only the mode's subset.
-  expect(requestedToolNames()).toEqual([['lookup']]);
+  expect(requestedToolNames()).toEqual([[...availableTools].sort()]);
 
   return { session, executed };
+}
+
+async function continuationToolNames() {
+  await vi.waitFor(() => expect(requestedToolNames()).toHaveLength(2), { timeout: 10_000 });
+  return requestedToolNames()[1];
 }
 
 afterEach(() => {
@@ -111,30 +130,68 @@ afterEach(() => {
   agentThreadStreamRuntime.resetForTests();
 });
 
-describe('mode availableTools after a tool approval', () => {
+describe('mode availableTools after a paused tool call', () => {
+  const pausedOnLookup = () =>
+    pausedInRestrictedMode({
+      availableTools: ['lookup'],
+      firstCall: { name: 'lookup', arguments: { q: 'x' } },
+      pausedEvent: 'tool_approval_required',
+    });
+
   it('keeps the mode subset on the continuation after an approval', async () => {
-    const env = await parkedInReadOnlyMode();
+    const env = await pausedOnLookup();
 
     expect(env.session.respondToToolApproval({ toolCallId: 'call-1', decision: 'approve' })).toEqual({
       accepted: true,
     });
 
-    await vi.waitFor(() => expect(requestedToolNames()).toHaveLength(2), { timeout: 10_000 });
+    const tools = await continuationToolNames();
     expect(env.executed).toEqual(['lookup']);
-    expect(requestedToolNames()[1]).toEqual(['lookup']);
-    expect(requestedToolNames()[1]).not.toContain('write_note');
+    expect(tools).toEqual(['lookup']);
+    expect(tools).not.toContain('write_note');
   }, 30_000);
 
   it('keeps the mode subset on the continuation after a decline', async () => {
-    const env = await parkedInReadOnlyMode();
+    const env = await pausedOnLookup();
 
     expect(env.session.respondToToolApproval({ toolCallId: 'call-1', decision: 'decline' })).toEqual({
       accepted: true,
     });
 
-    await vi.waitFor(() => expect(requestedToolNames()).toHaveLength(2), { timeout: 10_000 });
+    const tools = await continuationToolNames();
     expect(env.executed).toEqual([]);
-    expect(requestedToolNames()[1]).toEqual(['lookup']);
-    expect(requestedToolNames()[1]).not.toContain('write_note');
+    expect(tools).toEqual(['lookup']);
+    expect(tools).not.toContain('write_note');
+  }, 30_000);
+
+  it('keeps the mode subset on the continuation after answering ask_user', async () => {
+    const env = await pausedInRestrictedMode({
+      availableTools: ['lookup', 'ask_user'],
+      firstCall: { name: 'ask_user', arguments: { question: 'Which file?' } },
+      pausedEvent: 'tool_suspended',
+    });
+
+    await env.session.respondToToolSuspension({ toolCallId: 'call-1', resumeData: 'notes.md' });
+
+    const tools = await continuationToolNames();
+    expect(tools).toEqual(['ask_user', 'lookup']);
+    expect(tools).not.toContain('write_note');
+  }, 30_000);
+
+  it('keeps the mode subset on the continuation after rejecting a plan', async () => {
+    const env = await pausedInRestrictedMode({
+      availableTools: ['lookup', 'submit_plan'],
+      firstCall: { name: 'submit_plan', arguments: { path: '.mastracode/plans/p.md' } },
+      pausedEvent: 'tool_suspended',
+    });
+
+    await env.session.respondToToolSuspension({
+      toolCallId: 'call-1',
+      resumeData: { action: 'rejected', feedback: 'not yet' },
+    });
+
+    const tools = await continuationToolNames();
+    expect(tools).toEqual(['lookup', 'submit_plan']);
+    expect(tools).not.toContain('write_note');
   }, 30_000);
 });
