@@ -629,6 +629,76 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
 
     expect(afterStall).toEqual([]);
   }, 30_000);
+  it('leaves no fence for an ended run when a renewal settles after it released its lease', async () => {
+    const runId = `late-renewal-run-${engine}`;
+    for (const prompt of ['late renewal first', 'late renewal second']) {
+      llm.on(
+        { userMessage: prompt, sequenceIndex: 0 },
+        { toolCalls: [{ id: `call_${prompt.replaceAll(' ', '_')}`, name: 'tick', arguments: {} }] },
+      );
+      llm.on({ userMessage: prompt, sequenceIndex: 1 }, { content: `${prompt} done` });
+    }
+    const shared = new SharedLeases();
+    const firstKey = [RESOURCE, 'late-renewal-thread'].join('\u0000');
+    let holdRenewal = false;
+    let settle!: () => void;
+    const settled = new Promise<void>(resolve => (settle = resolve));
+    let onHeld!: () => void;
+    const held = new Promise<void>(resolve => (onHeld = resolve));
+    let onLateSettled!: () => void;
+    const lateSettled = new Promise<void>(resolve => (onLateSettled = resolve));
+    /** Holds one renewal of the first run in flight until the run has ended and released its lease. */
+    class LateRenewalPubSub extends ReplicaPubSub {
+      override async renewLease(key: string, owner: string, ttlMs: number) {
+        if (!holdRenewal || key !== firstKey) return super.renewLease(key, owner, ttlMs);
+        holdRenewal = false;
+        onHeld();
+        await settled;
+        const renewed = await super.renewLease(key, owner, ttlMs);
+        setTimeout(onLateSettled, 20);
+        return renewed;
+      }
+    }
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        if (ticks === 1) {
+          holdRenewal = true;
+          await held;
+        } else {
+          // The first run's renewal finds its lease released and reports it lost while this run with the same id is live.
+          settle();
+          await lateSettled;
+        }
+        return 'ticked';
+      },
+    });
+    const agent = replica(shared, new MockMemory(), { tick }, new LateRenewalPubSub(shared));
+
+    const first = await startStream(agent, 'late renewal first', {
+      runId,
+      maxSteps: 3,
+      memory: { thread: 'late-renewal-thread', resource: RESOURCE },
+    });
+    await first.drain();
+    expect(await first.output.finishReason).not.toBe('aborted');
+    await vi.waitFor(() => expect(shared.owner(firstKey)).toBeUndefined());
+
+    const second = await startStream(agent, 'late renewal second', {
+      runId,
+      maxSteps: 3,
+      memory: { thread: 'late-renewal-next-thread', resource: RESOURCE },
+    });
+    await second.drain();
+    expect(ticks).toBe(2);
+    expect(await second.output.finishReason).not.toBe('aborted');
+    await vi.waitFor(() => expect(verifyRunLease(runId)).resolves.toBeUndefined());
+  }, 20_000);
+
   it('runs tools on a pubsub that cannot lease', async () => {
     for (let i = 0; i < 2; i++) {
       llm.on(

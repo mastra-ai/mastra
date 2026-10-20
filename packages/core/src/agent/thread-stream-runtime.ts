@@ -876,6 +876,9 @@ export class AgentThreadStreamRuntime {
         .renewLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)
         .then(renewed => {
           if (!renewed) {
+            // A renewal that settles after the run ended or re-registered speaks for no live run, and must not
+            // leave a rejecting fence behind for a later run with this id.
+            if (state.leaseRenewalTimers.get(runId) !== timer) return;
             // Another process may already own the thread, so stop this run instead of letting it keep
             // calling the model and tools beside its successor.
             this.#stopLeaseRenewal(pubsub, runId, timer);
