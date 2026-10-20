@@ -7,6 +7,7 @@ import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
 import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
 import { getModelReasoningOptions } from '@mastra/core/llm';
+import type { ModelReasoningOption } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
@@ -112,7 +113,7 @@ export interface OMSession {
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
 export interface ModelCatalog {
   listAvailableModels: () => Promise<
-    Array<{ id?: string; modelName?: string; provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }>
+    Array<{ id?: string; modelName: string; provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }>
   >;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
   getSessionByResource?: (resourceId: string, scope?: string) => Promise<OMSession | undefined>;
@@ -327,7 +328,7 @@ function grantingTenantRecord(records: CredentialRecord[], authProviderId: strin
   );
 }
 
-type ModelCredentialHolder = 'personal' | 'organization' | 'deployment';
+export type ModelCredentialHolder = 'personal' | 'organization' | 'deployment';
 
 function tenantModelCredential(
   records: CredentialRecord[] | undefined,
@@ -408,9 +409,9 @@ function canUseModelProvider(access: ProviderAccess, provider: string): boolean 
 export interface ModelCatalogEntry {
   id: string;
   provider: string;
-  modelName?: string;
+  modelName: string;
   hasApiKey: true;
-  reasoningOptions: ReturnType<typeof getModelReasoningOptions> | undefined;
+  reasoningOptions?: ModelReasoningOption[];
   credentialLabel?: string;
   credentialHolder?: ModelCredentialHolder;
 }
@@ -475,7 +476,6 @@ export async function buildModelCatalog({
             provider: record.providerId,
             modelName: model,
             hasApiKey: true,
-            reasoningOptions: undefined,
             ...customProviderCredential,
           });
         }
