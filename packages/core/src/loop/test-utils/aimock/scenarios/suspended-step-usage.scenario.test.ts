@@ -70,16 +70,11 @@ const lookupTool = createTool({
 
 type RunHandle = { output?: any; fullStream: AsyncIterable<ChunkType>; runId: string };
 
-// A durable stream stays open while suspended, so its result promises never
-// settle. Give up after a moment so those engines fail on the assertion.
 const settled = <T>(value: Promise<T> | T) =>
   Promise.race([Promise.resolve(value), new Promise<undefined>(r => setTimeout(() => r(undefined), 1000))]);
 
 describeForAllEngines('AIMock loop scenario: token usage when a tool call suspends', engine => {
   const getMock = useLoopScenarioAimock();
-  // Durable and evented streams stay open while a tool call is suspended, so their
-  // stream() usage promises do not settle until the run resumes. See #27440.
-  const itFailsOnDurable = engine === 'durable' || engine === 'evented' ? it.fails : it;
 
   async function setup(kind: Kind, { withPriorStep = false } = {}) {
     const llm = getMock();
@@ -115,9 +110,10 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
     kind === 'suspend' ? agent.resumeStream({ answer }, { runId }) : agent.approveToolCall({ runId, toolCallId });
 
   for (const kind of ['suspend', 'approval'] as const) {
-    itFailsOnDurable(`[${kind}] stream() reports the suspended step usage`, async () => {
+    it(`[${kind}] stream() reports the suspended step usage`, async () => {
       const { agent } = await setup(kind);
-      const output = await drain(await agent.stream('go'));
+      const run = await agent.stream('go');
+      const output = await drain(run);
 
       expect(tokens(await settled(output.usage))).toEqual(SUSPENDED);
       expect(tokens(await settled(output.totalUsage))).toEqual(SUSPENDED);
@@ -143,7 +139,7 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
       expect(tokens(await resumed.totalUsage)).toEqual(add(SUSPENDED, RESUMED));
     });
 
-    itFailsOnDurable(`[${kind}] steps before the suspension count in both suspended and resumed totals`, async () => {
+    it(`[${kind}] steps before the suspension count in both suspended and resumed totals`, async () => {
       const { agent, toolCallId } = await setup(kind, { withPriorStep: true });
       const first: RunHandle = await agent.stream('go');
       const firstOutput = await drain(first);
