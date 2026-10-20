@@ -248,9 +248,14 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
   return (
     <div
       className={cn(
-        'sidebar-layout group/sidebar relative min-h-0 shrink-0 self-stretch bg-sidebar text-foreground t-resize',
+        'sidebar-layout group/sidebar relative min-h-0 shrink-0 self-stretch bg-sidebar text-foreground',
         'w-(--sidebar-width)',
-        'in-data-[sidebar-gesture=active]:transition-none',
+        // Utilities rather than the global `t-resize` class: that one is unlayered CSS, so it would beat
+        // `transition-none` and keep animating the width behind the cursor while dragging
+        'transition-[width] duration-(--resize-dur) ease-(--resize-ease) motion-reduce:transition-none',
+        // Important: an app that runs its own Tailwind after this stylesheet (Platform) emits
+        // `transition-[width]` again later in the cascade, which would otherwise win mid-drag
+        'in-data-[sidebar-gesture=active]:transition-none!',
         className,
 
         isHidden && 'border-r-0 border-transparent',

@@ -46,7 +46,7 @@ const ResizeDemo = () => {
   return (
     <div className="flex flex-col gap-2">
       <div className="h-16 rounded-md bg-background p-2">
-        <div className={cn('h-full rounded-sm bg-fill-strong t-resize', expanded ? 'w-full' : 'w-1/4')} />
+        <div className={cn('t-resize h-full rounded-sm bg-fill-strong', expanded ? 'w-full' : 'w-1/4')} />
       </div>
       <DemoButton onClick={() => setExpanded(!expanded)}>{expanded ? 'Collapse' : 'Expand'}</DemoButton>
     </div>

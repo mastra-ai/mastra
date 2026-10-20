@@ -12,16 +12,16 @@
   --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* A utility, not a plain class: unlayered CSS beats every utility, so `transition-none`
-   (e.g. the sidebar switching it off mid-drag) could not override it. */
-@utility t-resize {
+.t-resize {
   transition:
     width var(--resize-dur) var(--resize-ease),
     height var(--resize-dur) var(--resize-ease);
   will-change: width, height;
+}
 
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
+@media (prefers-reduced-motion: reduce) {
+  .t-resize {
+    transition: none !important;
   }
 }
 
