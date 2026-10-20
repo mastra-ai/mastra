@@ -124,4 +124,27 @@ describe('createPlaintextFactorySecretEncryption', () => {
 
     await expect(encryption.decrypt(legacy)).resolves.toEqual({ value: legacy, needsReencryption: false });
   });
+
+  it('refuses encrypted envelopes instead of returning them as the secret', async () => {
+    const keyed = createFactorySecretEncryption({ primary: { id: 'v1', key: key(1) } });
+    const envelope = await keyed.encrypt({ type: 'oauth', access: 'at' });
+
+    await expect(createPlaintextFactorySecretEncryption().decrypt(envelope)).rejects.toThrow(
+      /no secret encryption key configured/,
+    );
+  });
+});
+
+describe('createFactorySecretEncryption nested envelopes', () => {
+  it('unwraps envelopes stored as JSON text or re-encrypted inside another envelope', async () => {
+    const encryption = createFactorySecretEncryption({ primary: { id: 'v1', key: key(1) } });
+    const value = { type: 'oauth', access: 'at' };
+    const envelope = await encryption.encrypt(value);
+
+    await expect(encryption.decrypt(JSON.stringify(envelope))).resolves.toEqual({ value, needsReencryption: true });
+    await expect(encryption.decrypt(await encryption.encrypt(envelope))).resolves.toEqual({
+      value,
+      needsReencryption: true,
+    });
+  });
 });

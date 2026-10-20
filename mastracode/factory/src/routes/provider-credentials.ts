@@ -68,11 +68,18 @@ export async function getTenantCredentialsStorage(
   if (!credentials) return undefined;
   try {
     await credentials.ensureReady();
-  } catch {
+  } catch (error) {
+    // Callers degrade to "no credentials", so this log is the only trace of why.
+    if (error !== lastReportedInitError) {
+      lastReportedInitError = error;
+      console.error('[factory] model credential storage is unavailable; providers will show as not set:', error);
+    }
     return undefined;
   }
   return credentials;
 }
+
+let lastReportedInitError: unknown;
 
 /**
  * Org key for tenant rows. Personal accounts get an org bootstrapped by the
