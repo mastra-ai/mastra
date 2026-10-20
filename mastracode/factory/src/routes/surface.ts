@@ -734,7 +734,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       sessionFs: {
         auth: deps.auth,
         sessions: sourceControlSessions,
-        filesystem: deps.domains.filesystem,
       },
     }),
     ...new ConfigRoutes({

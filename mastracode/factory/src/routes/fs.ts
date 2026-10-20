@@ -13,8 +13,6 @@ import type { ExecutableSandbox } from '../sandbox/materialization.js';
 import { peekSessionSandbox, sessionLayout } from '../sandbox/session-sandbox.js';
 import type { SessionLayout, SessionLayoutRepository } from '../sandbox/session-sandbox.js';
 import { peekSessionEnvironment } from '../session/environment-state-processor.js';
-import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
-import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import type { RouteAuth } from './route.js';
 
@@ -80,18 +78,22 @@ export interface WorkspaceFile {
   truncated?: boolean;
 }
 
-export interface WorkspaceFilesListing {
-  /** The Factory session resource id. */
+export interface WorkspaceTreeEntry {
+  name: string;
+  /** Path from the session's layout root, the form the file route takes. */
+  path: string;
+  type: 'file' | 'directory';
+  size?: number;
+}
+
+/** One directory of a session's checkouts, read live from its sandbox. */
+export interface WorkspaceTreeListing {
   workspacePath: string;
-  /** The agent thread whose terminal file list was captured. */
-  threadId: string;
-  files: Array<{ path: string }>;
-  /**
-   * The environment repositories the paths are prefixed by, in position
-   * order. Present only when the session's environment holds two or more
-   * repositories; a one-repository session lists unprefixed paths.
-   */
-  repositories?: Array<{ slug: string; prefix: string }>;
+  /** The listed directory; empty for the top level. */
+  path: string;
+  /** False when this process holds no sandbox for the session, so nothing was read. */
+  available: boolean;
+  entries: WorkspaceTreeEntry[];
 }
 
 export type WorkspaceChangeStatus =
@@ -451,7 +453,6 @@ export async function listArtifacts(root: string, workspacePath: string): Promis
 export interface SessionFsDeps {
   auth: RouteAuth;
   sessions: { getBySessionId(sessionId: string): Promise<SourceControlSession | null> };
-  filesystem: Pick<FilesystemStorage, 'listFiles'>;
 }
 
 /**
@@ -476,30 +477,6 @@ async function resolveAuthorizedSession(
     }
   }
   return session;
-}
-
-export async function listSessionFilesystemFiles(
-  filesystem: Pick<FilesystemStorage, 'listFiles'>,
-  session: SourceControlSession,
-  threadId: string,
-): Promise<WorkspaceFilesListing> {
-  const safeThreadId = threadId.trim();
-  if (!safeThreadId) throw new Error('Missing required query param: threadId');
-
-  // The turn-end capture no longer gates agent_end, so a reader refetching on
-  // run completion could otherwise race it and serve the previous turn's
-  // listing. Await the in-flight capture (bounded) before reading.
-  await waitForPendingFilesystemCapture(session.sessionId);
-
-  const layout = sessionLayout(peekSessionSandbox(session.id));
-  return {
-    workspacePath: session.sessionId,
-    threadId: safeThreadId,
-    files: await filesystem.listFiles({ resourceId: session.sessionId, threadId: safeThreadId }),
-    ...(layout && layout.repos.length > 1
-      ? { repositories: layout.repos.map(repo => ({ slug: repo.slug, prefix: repo.prefix })) }
-      : {}),
-  };
 }
 
 interface SessionSandboxHandle {
@@ -628,17 +605,118 @@ export async function listSessionRenderedPath(
   return { workspacePath: session.sessionId, root: safeRoot, rootPath, entries };
 }
 
-/** Read a file inside a session's sandbox. Paths outside rendered roots require a persisted-file allowlist check in the route. */
-export async function readSessionWorkspaceFile(
+/** Directory entries the file tree never shows or serves: a checkout's git internals. */
+const HIDDEN_TREE_ENTRIES = new Set(['.git']);
+
+/**
+ * Where a tree path lives: its checkout and the path inside it. Unlike
+ * `resolveLayoutPath`, a bare repository directory (`platform` in a
+ * multi-repository session) resolves to that checkout's root.
+ */
+function treeLocation(layout: SessionLayout, path: string): { repo: SessionLayoutRepository; relative: string } {
+  const location =
+    layout.repos.length === 1
+      ? { repo: layout.repos[0]!, relative: path ? assertRelativePath(path, 'path') : '' }
+      : (() => {
+          const safePath = assertRelativePath(path, 'path');
+          const root = layout.repos.find(repo => repo.prefix === `${safePath}/`);
+          return root ? { repo: root, relative: '' } : resolveLayoutPath(layout, safePath, 'path');
+        })();
+  if (location.relative.split('/').some(segment => HIDDEN_TREE_ENTRIES.has(segment))) {
+    throw new Error('Path is not available in this session');
+  }
+  return location;
+}
+
+/**
+ * The checkout-relative paths git ignores, in one `git check-ignore` call.
+ * Ignored files (`.env`, build output, `node_modules`) are neither listed nor
+ * served: viewers of a session shouldn't read its local secrets. Fails closed
+ * when git can't answer.
+ */
+async function ignoredPaths(sandbox: ExecutableSandbox, repoDir: string, paths: string[]): Promise<Set<string>> {
+  if (paths.length === 0) return new Set();
+  // Paths go in as positional arguments, never into the script text, and back
+  // NUL-separated so no filename needs quoting either way.
+  const result = await sandbox.executeCommand(
+    'sh',
+    ['-c', 'cd "$1" && shift && printf \'%s\\0\' "$@" | git check-ignore -z --stdin', 'sh', repoDir, ...paths],
+    { timeout: 30_000, maxRetainedBytes: Infinity },
+  );
+  // 0: some paths are ignored, 1: none are.
+  if (result.exitCode === 1) return new Set();
+  if (result.exitCode !== 0) throw new Error(`Unable to check ignored files: ${result.stderr.trim() || 'git failed'}`);
+  return new Set(result.stdout.split('\0').filter(Boolean));
+}
+
+/**
+ * List one directory of a session's checkouts from its sandbox, without git
+ * internals or ignored entries. A multi-repository session's top level lists
+ * its checkouts. Passive like every session read: a session with no sandbox in
+ * this process comes back `available: false` instead of starting one.
+ */
+export async function listSessionWorkspaceTree(
   session: SourceControlSession,
-  path: string,
-  options: { allowUnapprovedPath?: boolean } = {},
-): Promise<WorkspaceFile> {
+  path = '',
+): Promise<WorkspaceTreeListing> {
+  const requested = path.trim();
+  const handle = await sessionSandbox(session);
+  const listing = { workspacePath: session.sessionId, path: requested };
+  if (!handle) return { ...listing, available: false, entries: [] };
+
+  const { layout, sandbox, filesystem } = handle;
+  if (!requested && layout.repos.length > 1) {
+    return {
+      ...listing,
+      available: true,
+      entries: layout.repos.map(repo => {
+        const name = repo.prefix.slice(0, -1);
+        return { name, path: name, type: 'directory' as const };
+      }),
+    };
+  }
+
+  const { repo, relative } = treeLocation(layout, requested);
+  const children = (await filesystem.readdir(posixPath.join(repo.prefix, relative) || '.')).filter(
+    entry => !HIDDEN_TREE_ENTRIES.has(entry.name),
+  );
+  const inRepo = (name: string) => (relative ? `${relative}/${name}` : name);
+  const ignored = await ignoredPaths(sandbox, repo.dir, [
+    ...(relative ? [relative] : []),
+    ...children.map(entry => inRepo(entry.name)),
+  ]);
+  if (ignored.has(relative)) throw new Error('Path is not available in this session');
+
+  const entries = children
+    .filter(entry => !ignored.has(inRepo(entry.name)))
+    .map(
+      (entry): WorkspaceTreeEntry => ({
+        name: entry.name,
+        path: repo.prefix + inRepo(entry.name),
+        type: entry.type,
+        ...(entry.type === 'file' && entry.size !== undefined && { size: entry.size }),
+      }),
+    )
+    .toSorted((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'directory' ? -1 : 1));
+  return { ...listing, available: true, entries };
+}
+
+/**
+ * Read a file inside a session's sandbox: anything under an approved rendered
+ * root, or any checkout file the tree would list (not git internals, not
+ * ignored).
+ */
+export async function readSessionWorkspaceFile(session: SourceControlSession, path: string): Promise<WorkspaceFile> {
   const safePath = assertRelativePath(path, 'path');
-  if (!options.allowUnapprovedPath) assertApprovedRenderedRoot(safePath.split('/')[0] ?? '');
 
   const handle = await sessionSandbox(session);
   if (!handle) throw new Error('Session workspace is not available');
+  if (!APPROVED_RENDERED_ROOTS.has(safePath.split('/')[0] ?? '')) {
+    const { repo, relative } = treeLocation(handle.layout, safePath);
+    if (!relative || (await ignoredPaths(handle.sandbox, repo.dir, [relative])).has(relative)) {
+      throw new Error('Path is not available in this session');
+    }
+  }
   const { filesystem } = handle;
   const info = await filesystem.stat(safePath);
   if (info.type === 'directory') throw new Error('Path is a directory');
@@ -1060,25 +1138,6 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         }
       },
     }),
-    registerApiRoute('/web/workspace/files', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        const workspacePath = c.req.query('workspacePath');
-        const threadId = c.req.query('threadId')?.trim();
-        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
-        if (!threadId) return c.json({ error: 'Missing required query param: threadId' }, 400);
-        try {
-          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
-          if (!session || !sessionFs) return c.json({ error: 'Session workspace is not available' }, 403);
-          return c.json(await listSessionFilesystemFiles(sessionFs.filesystem, session, threadId));
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          const status = message.includes('not available') ? 403 : 500;
-          return c.json({ error: message }, status);
-        }
-      },
-    }),
     registerApiRoute('/web/workspace/changes', {
       method: 'GET',
       requiresAuth: false,
@@ -1118,33 +1177,39 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         }
       },
     }),
+    registerApiRoute('/web/workspace/tree', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        try {
+          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
+          if (!session || !sessionFs) return c.json({ error: 'Session workspace is not available' }, 403);
+          return c.json(await listSessionWorkspaceTree(session, c.req.query('path') ?? ''));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const status =
+            message.includes('relative') || message.includes('escapes') || message.includes('not available')
+              ? 403
+              : message.includes('not found')
+                ? 404
+                : 500;
+          return c.json({ error: message }, status);
+        }
+      },
+    }),
     registerApiRoute('/web/workspace/file', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
         const workspacePath = c.req.query('workspacePath');
         const path = c.req.query('path');
-        const requestedThreadId = c.req.query('threadId');
-        const threadId = requestedThreadId?.trim();
         if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
         if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
-        if (requestedThreadId !== undefined && !threadId) {
-          return c.json({ error: 'Missing required query param: threadId' }, 400);
-        }
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
-          if (session && sessionFs) {
-            if (threadId) {
-              const safePath = assertRelativePath(path, 'path');
-              const listing = await listSessionFilesystemFiles(sessionFs.filesystem, session, threadId);
-              if (!listing.files.some(file => file.path === safePath)) {
-                return c.json({ error: 'Path is not available for this thread' }, 404);
-              }
-              return c.json(await readSessionWorkspaceFile(session, safePath, { allowUnapprovedPath: true }));
-            }
-            return c.json(await readSessionWorkspaceFile(session, path));
-          }
-          if (threadId) return c.json({ error: 'Session workspace is not available' }, 403);
+          if (session && sessionFs) return c.json(await readSessionWorkspaceFile(session, path));
           return c.json(await readWorkspaceFile(root, workspacePath, path));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);

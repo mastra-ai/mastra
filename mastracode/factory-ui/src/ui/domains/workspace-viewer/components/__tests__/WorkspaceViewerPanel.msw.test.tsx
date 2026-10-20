@@ -15,31 +15,35 @@ import {
   unsupportedFile,
 } from './fixtures/workspace-file';
 
-const FILES_URL = `${TEST_BASE_URL}/web/workspace/files`;
+const TREE_URL = `${TEST_BASE_URL}/web/workspace/tree`;
 const FILE_URL = `${TEST_BASE_URL}/web/workspace/file`;
 const CHANGES_URL = `${TEST_BASE_URL}/web/workspace/changes`;
 const DIFF_URL = `${TEST_BASE_URL}/web/workspace/changes/diff`;
 const WORKSPACE = 'session-1';
-const THREAD = 'thread-1';
+
+const TREE: Record<string, Array<{ name: string; path: string; type: 'file' | 'directory'; size?: number }>> = {
+  '': [
+    { name: 'src', path: 'src', type: 'directory' },
+    { name: 'README.md', path: 'README.md', type: 'file', size: 9 },
+  ],
+  src: [{ name: 'agent.ts', path: 'src/agent.ts', type: 'file', size: 13 }],
+};
 
 Object.defineProperty(CSSStyleSheet.prototype, 'replaceSync', { value: () => {} });
 
 function installHandlers() {
-  const fileRequests: Array<{ path: string | null; threadId: string | null }> = [];
+  const fileRequests: Array<string | null> = [];
+  const treeRequests: string[] = [];
   server.use(
-    http.get(FILES_URL, ({ request }) => {
-      const url = new URL(request.url);
-      return HttpResponse.json({
-        workspacePath: url.searchParams.get('workspacePath'),
-        threadId: url.searchParams.get('threadId'),
-        files: [{ path: 'src/agent.ts' }, { path: 'README.md' }],
-      });
+    http.get(TREE_URL, ({ request }) => {
+      const path = new URL(request.url).searchParams.get('path') ?? '';
+      treeRequests.push(path);
+      return HttpResponse.json({ workspacePath: WORKSPACE, path, available: true, entries: TREE[path] ?? [] });
     }),
     http.get(FILE_URL, ({ request }) => {
       const url = new URL(request.url);
       const path = url.searchParams.get('path');
-      const threadId = url.searchParams.get('threadId');
-      fileRequests.push({ path, threadId });
+      fileRequests.push(path);
       return HttpResponse.json({
         workspacePath: WORKSPACE,
         path,
@@ -54,7 +58,24 @@ function installHandlers() {
       HttpResponse.json({ workspacePath: WORKSPACE, available: true, additions: 0, deletions: 0, changes: [] }),
     ),
   );
-  return fileRequests;
+  return Object.assign(fileRequests, { treeRequests });
+}
+
+/** A tree holding just one file, at any depth. */
+function treeHolding(filePath: string) {
+  return http.get(TREE_URL, ({ request }) => {
+    const path = new URL(request.url).searchParams.get('path') ?? '';
+    const rest = (path ? filePath.slice(path.length + 1) : filePath).split('/');
+    const name = rest[0];
+    const entryPath = path ? `${path}/${name}` : name;
+    const inside = path === '' || filePath.startsWith(`${path}/`);
+    return HttpResponse.json({
+      workspacePath: WORKSPACE,
+      path,
+      available: true,
+      entries: inside ? [{ name, path: entryPath, type: rest.length > 1 ? 'directory' : 'file' }] : [],
+    });
+  });
 }
 
 function pendingChangesHandler() {
@@ -74,13 +95,11 @@ describe('WorkspaceViewerPanel', () => {
     it.each([typescriptFile, htmlFile])('renders $path as safe text and then adds dual-theme colors', async file => {
       installHandlers();
       server.use(
-        http.get(FILES_URL, () =>
-          HttpResponse.json({ workspacePath: WORKSPACE, threadId: THREAD, files: [{ path: file.path }] }),
-        ),
+        treeHolding(file.path),
         http.get(FILE_URL, () => HttpResponse.json(file)),
       );
       const user = userEvent.setup();
-      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
       await user.click(await screen.findByRole('button', { name: /Files/ }));
       if (file.path.startsWith('src/')) await user.click(await screen.findByRole('button', { name: 'src' }));
       await user.click(await screen.findByText(file.name));
@@ -100,17 +119,11 @@ describe('WorkspaceViewerPanel', () => {
     it('shows unknown languages as literal plain text', async () => {
       installHandlers();
       server.use(
-        http.get(FILES_URL, () =>
-          HttpResponse.json({
-            workspacePath: WORKSPACE,
-            threadId: THREAD,
-            files: [{ path: unknownLanguageFile.path }],
-          }),
-        ),
+        treeHolding(unknownLanguageFile.path),
         http.get(FILE_URL, () => HttpResponse.json(unknownLanguageFile)),
       );
       const user = userEvent.setup();
-      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
       await user.click(await screen.findByRole('button', { name: /Files/ }));
       await user.click(await screen.findByText(unknownLanguageFile.name));
 
@@ -124,7 +137,7 @@ describe('WorkspaceViewerPanel', () => {
       installHandlers();
       server.use(http.get(FILE_URL, () => HttpResponse.json(markdownFile)));
       const user = userEvent.setup();
-      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
       await user.click(await screen.findByRole('button', { name: /Files/ }));
       await user.click(await screen.findByText('README.md'));
 
@@ -136,13 +149,11 @@ describe('WorkspaceViewerPanel', () => {
     it('keeps unsupported files out of the code renderer', async () => {
       installHandlers();
       server.use(
-        http.get(FILES_URL, () =>
-          HttpResponse.json({ workspacePath: WORKSPACE, threadId: THREAD, files: [{ path: unsupportedFile.path }] }),
-        ),
+        treeHolding(unsupportedFile.path),
         http.get(FILE_URL, () => HttpResponse.json(unsupportedFile)),
       );
       const user = userEvent.setup();
-      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
       await user.click(await screen.findByRole('button', { name: /Files/ }));
       await user.click(await screen.findByText(unsupportedFile.name));
 
@@ -152,31 +163,51 @@ describe('WorkspaceViewerPanel', () => {
     });
   });
 
-  describe('when a thread has persisted workspace files', () => {
-    it('renders the persisted paths instead of enumerating the sandbox', async () => {
-      installHandlers();
+  describe('when browsing the session files', () => {
+    it('reads nothing from the sandbox until the files view opens, then one folder at a time', async () => {
+      const { treeRequests } = installHandlers();
       const user = userEvent.setup();
 
-      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
-      await user.click(await screen.findByRole('button', { name: /Files/ }));
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await screen.findByRole('button', { name: /^Changes/ });
+      expect(treeRequests).toEqual([]);
 
+      await user.click(screen.getByRole('button', { name: /^Files/ }));
       expect(await screen.findByText('README.md')).toBeInTheDocument();
-      expect(screen.getByText('src')).toBeInTheDocument();
-      expect(screen.queryByText('Artifacts')).not.toBeInTheDocument();
+      expect(screen.queryByText('agent.ts')).not.toBeInTheDocument();
+      expect(treeRequests).toEqual(['']);
+
+      await user.click(screen.getByRole('button', { name: 'src' }));
+      expect(await screen.findByText('agent.ts')).toBeInTheDocument();
+      expect(treeRequests).toEqual(['', 'src']);
+    });
+
+    it('refetches every open folder on refresh', async () => {
+      const { treeRequests } = installHandlers();
+      const user = userEvent.setup();
+      const { client } = renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await user.click(await screen.findByRole('button', { name: /^Files/ }));
+      await user.click(await screen.findByRole('button', { name: 'src' }));
+      await screen.findByText('agent.ts');
+
+      await user.click(screen.getByRole('button', { name: 'Refresh workspace files' }));
+
+      await waitFor(() => expect(treeRequests.toSorted()).toEqual(['', '', 'src', 'src']));
+      await waitForMutationsIdle(client);
     });
 
     it('refreshes the selected file and preserves the expanded folder', async () => {
       const fileRequests = installHandlers();
       const user = userEvent.setup();
-      const { client } = renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
-      await user.click(await screen.findByRole('button', { name: /Files/ }));
+      const { client } = renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await user.click(await screen.findByRole('button', { name: /^Files/ }));
 
       await user.click(await screen.findByRole('button', { name: 'src' }));
       await user.click(await screen.findByText('agent.ts'));
 
       const viewer = await screen.findByLabelText('Workspace file viewer');
       expect(viewer).toHaveTextContent('export {}');
-      expect(fileRequests).toEqual([{ path: 'src/agent.ts', threadId: THREAD }]);
+      expect([...fileRequests]).toEqual(['src/agent.ts']);
 
       await user.click(screen.getByRole('button', { name: 'Refresh file' }));
       await waitFor(() => expect(fileRequests).toHaveLength(2));
@@ -185,6 +216,41 @@ describe('WorkspaceViewerPanel', () => {
 
       expect(screen.getByRole('button', { name: 'src' })).toHaveAttribute('aria-expanded', 'true');
       expect(screen.getByText('agent.ts')).toBeInTheDocument();
+    });
+
+    it('says the sandbox is not running instead of starting it', async () => {
+      installHandlers();
+      server.use(
+        http.get(TREE_URL, () =>
+          HttpResponse.json({ workspacePath: WORKSPACE, path: '', available: false, entries: [] }),
+        ),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await user.click(await screen.findByRole('button', { name: /^Files/ }));
+
+      expect(await screen.findByText(/The sandbox isn.t running/)).toBeInTheDocument();
+    });
+
+    it('shows a folder the server refuses as an error inside that folder', async () => {
+      installHandlers();
+      server.use(
+        http.get(TREE_URL, ({ request }) => {
+          const path = new URL(request.url).searchParams.get('path') ?? '';
+          return path === 'src'
+            ? HttpResponse.json({ error: 'Path is not available in this session' }, { status: 403 })
+            : HttpResponse.json({ workspacePath: WORKSPACE, path, available: true, entries: TREE[path] ?? [] });
+        }),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await user.click(await screen.findByRole('button', { name: /^Files/ }));
+      await user.click(await screen.findByRole('button', { name: 'src' }));
+
+      expect(await screen.findByText(/not available in this session/)).toBeInTheDocument();
+      expect(screen.getByText('README.md')).toBeInTheDocument();
     });
   });
 
@@ -206,7 +272,7 @@ describe('WorkspaceViewerPanel', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
 
       await screen.findByText('+4');
       const changesButton = screen.getByRole('button', { name: /Changes/ });
@@ -243,7 +309,7 @@ describe('WorkspaceViewerPanel', () => {
         }),
       );
       const user = userEvent.setup();
-      const { client } = renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
+      const { client } = renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
 
       await user.click(await screen.findByRole('button', { name: /Changes/ }));
       await user.click(await screen.findByText('agent.ts'));
@@ -268,7 +334,7 @@ describe('WorkspaceViewerPanel', () => {
       server.use(pendingChangesHandler());
       const user = userEvent.setup();
 
-      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
       const changesButton = await screen.findByRole('button', { name: /Changes/ });
       await screen.findByText('+4');
       await user.click(changesButton);
@@ -283,20 +349,6 @@ describe('WorkspaceViewerPanel', () => {
     });
   });
 
-  describe('when no terminal file capture exists', () => {
-    it('shows a muted empty status without opening the files view', async () => {
-      installHandlers();
-      server.use(
-        http.get(FILES_URL, () => HttpResponse.json({ workspacePath: WORKSPACE, threadId: THREAD, files: [] })),
-      );
-
-      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
-
-      const filesButton = screen.getByRole('button', { name: /^Files/ });
-      expect(await within(filesButton).findByText('No files')).toBeInTheDocument();
-    });
-  });
-
   describe('when the session sandbox is not running', () => {
     it('reports the sandbox state instead of pretending changes are pending', async () => {
       installHandlers();
@@ -308,7 +360,7 @@ describe('WorkspaceViewerPanel', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
 
       const changesButton = screen.getByRole('button', { name: /^Changes/ });
       await within(changesButton).findByText('No sandbox');

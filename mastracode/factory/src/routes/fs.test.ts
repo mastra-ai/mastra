@@ -1,7 +1,10 @@
+import { execFile } from 'node:child_process';
 import { mkdtemp, mkdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 
+import { LocalFilesystem } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -18,7 +21,7 @@ afterEach(() => {
 import {
   buildFsRoutes,
   listArtifacts,
-  listSessionFilesystemFiles,
+  listSessionWorkspaceTree,
   listSessionRenderedPath,
   listSessionWorkspaceChanges,
   listWorkspaceRenderedPath,
@@ -29,6 +32,8 @@ import {
   readSessionWorkspaceFile,
   readWorkspaceFile,
 } from './fs.js';
+
+const execFileAsync = promisify(execFile);
 
 describe('listArtifacts', () => {
   it('returns an empty list when .artifacts does not exist', async () => {
@@ -291,18 +296,10 @@ function seedSessionSandbox(
   return { executeCommand };
 }
 
-function makeSessionFs({
-  session = makeSession(),
-  files = [{ path: 'src/agent.ts' }],
-}: {
-  session?: SourceControlSession;
-  files?: Array<{ path: string }>;
-} = {}) {
+function makeSessionFs({ session = makeSession() }: { session?: SourceControlSession } = {}) {
   const ensureUser = vi.fn(async () => undefined);
-  const listFiles = vi.fn(async () => files);
   return {
     ensureUser,
-    listFiles,
     deps: {
       auth: {
         enabled: () => true,
@@ -311,7 +308,6 @@ function makeSessionFs({
         isOrganizationAdmin: async () => false,
       },
       sessions: { getBySessionId: vi.fn(async () => session) },
-      filesystem: { listFiles },
     },
   };
 }
@@ -325,65 +321,185 @@ async function requestSessionRoute(path: string, sessionFs: ReturnType<typeof ma
   return (query: string) => app.request(`http://localhost/${query}`);
 }
 
-describe('persisted session workspace files routes', () => {
-  it('authorizes before reading the persisted list and scopes it to the requested thread', async () => {
-    const { deps, ensureUser, listFiles } = makeSessionFs();
-    const request = await requestSessionRoute('/web/workspace/files', deps);
+/**
+ * A real git checkout on the host behind a sandbox whose commands run on the
+ * host and whose native filesystem is the host's, so the tree and file routes
+ * run real `git check-ignore`, real directory listings and real symlink checks.
+ */
+async function seedHostCheckouts(repos: string[] = ['acme/repo']) {
+  const parent = await realpath(await mkdtemp(join(tmpdir(), 'factory-tree-')));
+  for (const slug of repos) {
+    const dir = join(parent, slug.split('/')[1]!);
+    await mkdir(join(dir, 'src', 'nested'), { recursive: true });
+    await mkdir(join(dir, 'node_modules', 'pkg'), { recursive: true });
+    await mkdir(join(dir, 'dist'), { recursive: true });
+    await writeFile(join(dir, '.gitignore'), '.env\nnode_modules\ndist/\n');
+    await writeFile(join(dir, '.env'), 'TOKEN=secret');
+    await writeFile(join(dir, 'README.md'), `# ${slug}`);
+    await writeFile(join(dir, 'src', 'agent.ts'), 'export const agent = 1;\n');
+    await writeFile(join(dir, 'src', 'nested', 'deep.ts'), '');
+    await writeFile(join(dir, 'node_modules', 'pkg', 'index.js'), '');
+    await writeFile(join(dir, 'dist', 'out.js'), '');
+    await execFileAsync('git', ['init', '-q', dir]);
+  }
+  const executeCommand = vi.fn(async (command: string, args: string[] = [], options?: { cwd?: string }) => {
+    try {
+      const { stdout, stderr } = await execFileAsync(command, args, { cwd: options?.cwd ?? parent });
+      return { exitCode: 0, stdout, stderr };
+    } catch (error) {
+      const failed = error as { code?: number; stdout?: string; stderr?: string };
+      return {
+        exitCode: typeof failed.code === 'number' ? failed.code : 1,
+        stdout: failed.stdout ?? '',
+        stderr: failed.stderr ?? '',
+      };
+    }
+  });
+  const filesystem = new LocalFilesystem({ basePath: '/', contained: false });
+  getSessionSandbox(
+    'row-1',
+    repos[0]!,
+    () => ({ id: 'sbx-1', provider: 'local', workingDirectory: parent, executeCommand, filesystem }) as never,
+    repos.length > 1 ? repos : undefined,
+  );
+  return { parent, executeCommand };
+}
 
-    const response = await request(`?workspacePath=${makeSession().sessionId}&threadId=thread-1`);
+describe('live session file tree', () => {
+  const names = (listing: { entries: Array<{ name: string; type: string }> }) =>
+    listing.entries.map(entry => `${entry.type === 'directory' ? 'd' : 'f'} ${entry.name}`);
 
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      workspacePath: makeSession().sessionId,
-      threadId: 'thread-1',
-      files: [{ path: 'src/agent.ts' }],
+  it('lists one directory, folders first, without git internals or ignored entries', async () => {
+    await seedHostCheckouts();
+
+    const top = await listSessionWorkspaceTree(makeSession());
+    expect(top.available).toBe(true);
+    expect(names(top)).toEqual(['d src', 'f .gitignore', 'f README.md']);
+
+    const src = await listSessionWorkspaceTree(makeSession(), 'src');
+    expect(src.entries).toEqual([
+      { name: 'nested', path: 'src/nested', type: 'directory' },
+      { name: 'agent.ts', path: 'src/agent.ts', type: 'file', size: 24 },
+    ]);
+  });
+
+  it('refuses to list or read ignored paths and git internals', async () => {
+    await seedHostCheckouts();
+
+    for (const path of ['node_modules', 'node_modules/pkg', 'dist', '.git', '.git/objects']) {
+      await expect(listSessionWorkspaceTree(makeSession(), path)).rejects.toThrow('not available');
+    }
+    for (const path of ['.env', 'dist/out.js', '.git/config', 'node_modules/pkg/index.js']) {
+      await expect(readSessionWorkspaceFile(makeSession(), path)).rejects.toThrow('not available');
+    }
+  });
+
+  it('checks odd filenames exactly, with nothing read as shell', async () => {
+    const { parent } = await seedHostCheckouts();
+    await writeFile(join(parent, 'repo', '.gitignore'), `.env\n*.log\n`);
+    await writeFile(join(parent, 'repo', `it's "odd" $(touch pwned) é.log`), '');
+    await writeFile(join(parent, 'repo', `it's "kept" $(touch pwned) é.md`), '');
+
+    const names = (await listSessionWorkspaceTree(makeSession())).entries.map(entry => entry.name);
+
+    expect(names).toContain(`it's "kept" $(touch pwned) é.md`);
+    expect(names).not.toContain(`it's "odd" $(touch pwned) é.log`);
+    expect(names).not.toContain('pwned');
+  });
+
+  it('reads any listed checkout file', async () => {
+    await seedHostCheckouts();
+
+    await expect(readSessionWorkspaceFile(makeSession(), 'src/agent.ts')).resolves.toMatchObject({
+      path: 'src/agent.ts',
+      content: 'export const agent = 1;\n',
+      contentType: 'text',
     });
-    expect(ensureUser).toHaveBeenCalledTimes(1);
-    expect(listFiles).toHaveBeenCalledWith({ resourceId: makeSession().sessionId, threadId: 'thread-1' });
   });
 
-  it('rejects a missing thread id without querying the database', async () => {
-    const { deps, listFiles } = makeSessionFs();
-    const request = await requestSessionRoute('/web/workspace/files', deps);
+  it('refuses a file whose symlink leads outside the checkout', async () => {
+    const { parent } = await seedHostCheckouts();
+    const outside = await mkdtemp(join(tmpdir(), 'factory-tree-outside-'));
+    await writeFile(join(outside, 'secret.txt'), 'secret');
+    await symlink(join(outside, 'secret.txt'), join(parent, 'repo', 'src', 'link.txt'));
 
-    const response = await request(`?workspacePath=${makeSession().sessionId}`);
-
-    expect(response.status).toBe(400);
-    expect(listFiles).not.toHaveBeenCalled();
+    await expect(readSessionWorkspaceFile(makeSession(), 'src/link.txt')).rejects.toThrow('symlink');
   });
 
-  it.each([
-    ['/web/workspace/files', `?workspacePath=${makeSession().sessionId}&threadId=%20`],
-    ['/web/workspace/file', `?workspacePath=${makeSession().sessionId}&threadId=%20&path=src/agent.ts`],
-  ])('rejects a whitespace-only thread id on %s', async (route, query) => {
-    const { deps, ensureUser, listFiles } = makeSessionFs();
-    const request = await requestSessionRoute(route, deps);
+  it('lists the checkouts at the top of a multi-repository session, then each checkout', async () => {
+    await seedHostCheckouts(['acme/repo', 'acme/docs']);
 
-    const response = await request(query);
-
-    expect(response.status).toBe(400);
-    expect(ensureUser).not.toHaveBeenCalled();
-    expect(listFiles).not.toHaveBeenCalled();
+    const top = await listSessionWorkspaceTree(makeSession());
+    expect(top.entries).toEqual([
+      { name: 'repo', path: 'repo', type: 'directory' },
+      { name: 'docs', path: 'docs', type: 'directory' },
+    ]);
+    expect(names(await listSessionWorkspaceTree(makeSession(), 'docs'))).toEqual([
+      'd src',
+      'f .gitignore',
+      'f README.md',
+    ]);
+    expect((await listSessionWorkspaceTree(makeSession(), 'docs/src')).entries[1]).toEqual({
+      name: 'agent.ts',
+      path: 'docs/src/agent.ts',
+      type: 'file',
+      size: 24,
+    });
+    await expect(readSessionWorkspaceFile(makeSession(), 'docs/README.md')).resolves.toMatchObject({
+      content: '# acme/docs',
+    });
+    await expect(readSessionWorkspaceFile(makeSession(), 'docs/.env')).rejects.toThrow('not available');
+    await expect(listSessionWorkspaceTree(makeSession(), 'docs/../..')).rejects.toThrow('escapes');
   });
 
-  it('isolates rows for a different thread', async () => {
-    const { deps, listFiles } = makeSessionFs({ files: [] });
-    const request = await requestSessionRoute('/web/workspace/files', deps);
-
-    const response = await request(`?workspacePath=${makeSession().sessionId}&threadId=thread-2`);
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ workspacePath: makeSession().sessionId, threadId: 'thread-2', files: [] });
-    expect(listFiles).toHaveBeenCalledWith({ resourceId: makeSession().sessionId, threadId: 'thread-2' });
+  it('reports a session with no sandbox in this process as unavailable without starting one', async () => {
+    await expect(listSessionWorkspaceTree(makeSession(), 'src')).resolves.toEqual({
+      workspacePath: makeSession().sessionId,
+      path: 'src',
+      available: false,
+      entries: [],
+    });
   });
 
-  it('rejects an unlisted path before accessing the sandbox', async () => {
+  it('fails closed when git cannot say what is ignored', async () => {
+    const { executeCommand } = await seedHostCheckouts();
+    const host = executeCommand.getMockImplementation()!;
+    executeCommand.mockImplementation(async (command, args = [], options) =>
+      args[1]?.includes('check-ignore')
+        ? { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' }
+        : host(command, args, options),
+    );
+
+    await expect(listSessionWorkspaceTree(makeSession())).rejects.toThrow('Unable to check ignored files');
+    await expect(readSessionWorkspaceFile(makeSession(), 'README.md')).rejects.toThrow('Unable to check ignored files');
+  });
+
+  it('serves the tree and file routes after authorizing the caller', async () => {
+    await seedHostCheckouts();
+    const { deps, ensureUser } = makeSessionFs();
+    const tree = await requestSessionRoute('/web/workspace/tree', deps);
+    const file = await requestSessionRoute('/web/workspace/file', deps);
+    const id = makeSession().sessionId;
+
+    const listing = await tree(`?workspacePath=${id}&path=src`);
+    expect(listing.status).toBe(200);
+    expect(names(await listing.json())).toEqual(['d nested', 'f agent.ts']);
+    expect((await tree(`?workspacePath=${id}&path=node_modules`)).status).toBe(403);
+    expect((await tree(`?workspacePath=${id}&path=..`)).status).toBe(403);
+
+    expect((await file(`?workspacePath=${id}&path=src/agent.ts`)).status).toBe(200);
+    expect((await file(`?workspacePath=${id}&path=.env`)).status).toBe(403);
+    expect(ensureUser).toHaveBeenCalledTimes(5);
+  });
+
+  it("refuses another user's session before touching its sandbox", async () => {
+    const { executeCommand } = await seedHostCheckouts();
     const { deps } = makeSessionFs();
-    const request = await requestSessionRoute('/web/workspace/file', deps);
+    deps.auth.tenant = () => ({ orgId: 'org-1', userId: 'someone-else' });
+    const tree = await requestSessionRoute('/web/workspace/tree', deps);
 
-    const response = await request(`?workspacePath=${makeSession().sessionId}&threadId=thread-1&path=secret.env`);
-
-    expect(response.status).toBe(404);
+    expect((await tree(`?workspacePath=${makeSession().sessionId}`)).status).toBe(403);
+    expect(executeCommand).not.toHaveBeenCalled();
   });
 });
 
@@ -479,15 +595,6 @@ describe('readSessionWorkspaceFile', () => {
         truncated: false,
       }),
     );
-  });
-
-  it('rejects reads outside approved rendered roots', async () => {
-    const { executeCommand } = seedSessionSandbox(respondForFile('secret'));
-
-    await expect(readSessionWorkspaceFile(makeSession(), '.ssh/config')).rejects.toThrow(
-      'Root is not approved for rendered workspace access',
-    );
-    expect(executeCommand).not.toHaveBeenCalled();
   });
 
   it('rejects traversal outside the workspace', async () => {
@@ -1108,29 +1215,9 @@ describe('workspace changes across environment repositories', () => {
       path: '.artifacts/report.md',
       content: '# Report',
     });
-    await expect(
-      readSessionWorkspaceFile(session, 'docs/guide.md', { allowUnapprovedPath: true }),
-    ).resolves.toMatchObject({ path: 'docs/guide.md', content: '# Guide' });
-  });
-
-  it('lists the repositories beside the persisted files, and omits them for a one-repository session', async () => {
-    const { session } = seedEnvironment(() => ({ exitCode: 0, stdout: '' }));
-    const listFiles = vi.fn(async () => [{ path: 'docs/guide.md' }, { path: '.artifacts/report.md' }]);
-
-    await expect(listSessionFilesystemFiles({ listFiles }, session, 'thread-1')).resolves.toEqual({
-      workspacePath: session.sessionId,
-      threadId: 'thread-1',
-      files: [{ path: 'docs/guide.md' }, { path: '.artifacts/report.md' }],
-      repositories: [
-        { slug: 'acme/repo', prefix: 'repo/' },
-        { slug: 'acme/docs', prefix: 'docs/' },
-        { slug: 'acme/site', prefix: 'site/' },
-      ],
+    await expect(readSessionWorkspaceFile(session, 'docs/guide.md')).resolves.toMatchObject({
+      path: 'docs/guide.md',
+      content: '# Guide',
     });
-
-    __clearSessionSandboxesForTests();
-    seedSessionSandbox(() => ({ exitCode: 0, stdout: '' }));
-    const single = await listSessionFilesystemFiles({ listFiles }, makeSession(), 'thread-1');
-    expect('repositories' in single).toBe(false);
   });
 });
