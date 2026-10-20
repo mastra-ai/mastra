@@ -141,7 +141,7 @@ async function createHarness(id: string, durable: boolean) {
     });
     for await (const _ of output.fullStream) void _;
   };
-  return { session, prompts, errors, ends, runElsewhere };
+  return { session, prompts, errors, ends, runElsewhere, agent: registeredAgent };
 }
 
 describe.each([false, true])('a message after the session’s parked run is dropped from memory, durable=%s', durable => {
@@ -174,6 +174,36 @@ describe.each([false, true])('a message after the session’s parked run is drop
       prompts: 3,
       ends: ['suspended', 'complete'],
     });
+  });
+
+  // A subscriber that queued the parked run but starts reading only after the
+  // sweep must skip the dropped run, not wait on its open stream.
+  it('moves a subscriber that first reads after the sweep on to the next run', async () => {
+    const h = await createHarness(`swept-lazy-${durable}`, durable);
+    await h.session.sendMessage({ content: 'Read /x' });
+    expect(h.ends).toEqual(['suspended']);
+    const subscription = await h.agent.subscribeToThread({
+      resourceId: h.session.identity.getResourceId(),
+      threadId: h.session.thread.getId()!,
+    });
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, SUSPENDED_RUN_TTL_MS + 100));
+      await h.runElsewhere();
+      await new Promise(resolve => setTimeout(resolve, LEASE_TTL_MS + 500));
+      expect(await settlesWithin(h.session.sendMessage({ content: 'Are you there?' }), 5_000)).toBe(true);
+
+      // The parked run never finishes with `stop`; the next run does.
+      const reachesNextRun = (async () => {
+        for await (const part of subscription.stream as AsyncIterable<any>) {
+          if (part?.type === 'finish' && part.payload?.stepResult?.reason === 'stop') return true;
+        }
+        return false;
+      })();
+      expect(await settlesWithin(reachesNextRun, 3_000)).toBe(true);
+    } finally {
+      subscription.unsubscribe();
+    }
   });
 
   it('still takes the answer to the dropped prompt', async () => {
