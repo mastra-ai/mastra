@@ -320,10 +320,14 @@ const RESUME_SUSPEND_DURABILITY_MAX_POLL_INTERVAL_MS = 500;
 const inFlightUnclaimedResumes = new Set<string>();
 
 /**
- * How long a resume claim may stay `pending` (claimed but not started) before a later resume
- * treats it as abandoned by a process that died, and takes the suspension over.
+ * How long a resume claim may go without a sign of life before a later resume treats it as
+ * abandoned by a process that died, and takes the suspension over: a `pending` claim (claimed but
+ * not started) since it was claimed, a `running` claim since the running resume last renewed it.
  */
 export const AGENT_RESUME_CLAIM_STALE_MS = 60_000;
+
+/** How often a running resume renews its claim. Several renewals fit in one stale window. */
+const AGENT_RESUME_CLAIM_RENEW_MS = AGENT_RESUME_CLAIM_STALE_MS / 4;
 
 const createSubAgentInputSchema = ({ withResultRefs = false }: { withResultRefs?: boolean } = {}) =>
   z.object({
@@ -8037,12 +8041,16 @@ export class Agent<
    *
    * - `suspended -> pending` when claimed, stamped with `resumeClaimedAt`.
    * - `pending -> running` in `claim.start()`, right before the resumed run executes. Only one
-   *   caller can make this move, so only one resume executes the tool.
+   *   caller can make this move, so only one resume executes the tool. While the run executes,
+   *   its process renews the claim (`resumeLeaseRenewedAt`) every `AGENT_RESUME_CLAIM_RENEW_MS`.
    * - back to `suspended` in `claim.release()` when the resume fails before the run executes.
    *
-   * A claim left `pending` by a process that died before starting or releasing it is abandoned.
-   * Once it is older than `AGENT_RESUME_CLAIM_STALE_MS`, a later resume hands the suspension back
-   * and claims it again. A live claimant that loses the suspension this way fails in `start()`.
+   * A claim left by a process that died is abandoned: one left `pending` (before starting or
+   * releasing it) once it was claimed `AGENT_RESUME_CLAIM_STALE_MS` ago, one left `running` once
+   * it was last renewed that long ago. A later resume hands the suspension back and claims it
+   * again, resuming from the suspended snapshot, so the tool that was in flight runs again. A live
+   * claimant that loses a `pending` claim this way fails in `start()`. A live `running` claim keeps
+   * renewing, so it never looks abandoned.
    *
    * `claim.release()` is idempotent. The loop calls it when the resumed run ends; resume methods
    * also call it on any failure before or after handing the claim to the loop. It hands the
@@ -8091,24 +8099,42 @@ export class Agent<
     let claimed = await claim();
     if (!claimed) {
       const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
+      const claimStatus = current?.status;
+      const lastSignOfLife =
+        claimStatus === 'running'
+          ? (current!.resumeLeaseRenewedAt ?? current!.resumeClaimedAt)
+          : current?.resumeClaimedAt;
       const abandoned =
-        current?.status === 'pending' &&
-        current.timestamp === snapshot.timestamp &&
-        typeof current.resumeClaimedAt === 'number' &&
-        Date.now() - current.resumeClaimedAt >= AGENT_RESUME_CLAIM_STALE_MS;
+        (claimStatus === 'pending' || claimStatus === 'running') &&
+        current!.timestamp === snapshot.timestamp &&
+        typeof current!.resumeClaimedAt === 'number' &&
+        typeof lastSignOfLife === 'number' &&
+        Date.now() - lastSignOfLife >= AGENT_RESUME_CLAIM_STALE_MS;
       if (!abandoned) throwAlreadyClaimed();
 
-      // Hand the abandoned suspension back, then claim it like any other. If a concurrent caller
-      // re-claimed it in between, this hand-back can only make that caller's `start()` fail; the
-      // single `pending -> running` move still lets at most one resume execute.
+      // Hand the abandoned suspension back, then claim it like any other.
       this.logger.warn(
-        `[Agent:${this.name}] - Taking over resume claim for run ${runId} that was not started within ${AGENT_RESUME_CLAIM_STALE_MS}ms.`,
+        claimStatus === 'running'
+          ? `[Agent:${this.name}] - Taking over resume claim for run ${runId} that was not renewed within ${AGENT_RESUME_CLAIM_STALE_MS}ms; the suspended tool call runs again.`
+          : `[Agent:${this.name}] - Taking over resume claim for run ${runId} that was not started within ${AGENT_RESUME_CLAIM_STALE_MS}ms.`,
       );
-      await workflowsStore.updateWorkflowState({
+      const handedBack = await workflowsStore.updateWorkflowState({
         workflowName: AGENTIC_LOOP_WORKFLOW_ID,
         runId,
-        opts: { status: 'suspended', expectedStatus: 'pending' },
+        opts: { status: 'suspended', expectedStatus: claimStatus },
       });
+      // The guard is on status only. If a concurrent caller took the abandoned claim over and
+      // claimed it again in between, this hand-back hit that caller's claim. A `pending` one then
+      // fails in its `start()` and this caller claims it instead. A `running` one is already
+      // executing, so put it back and lose.
+      if (claimStatus === 'running' && handedBack && handedBack.resumeClaimedAt !== current!.resumeClaimedAt) {
+        await workflowsStore.updateWorkflowState({
+          workflowName: AGENTIC_LOOP_WORKFLOW_ID,
+          runId,
+          opts: { status: 'running', expectedStatus: 'suspended', resumeLeaseRenewedAt: Date.now() },
+        });
+        throwAlreadyClaimed();
+      }
       claimed = await claim();
       if (!claimed) throwAlreadyClaimed();
     }
@@ -8117,7 +8143,42 @@ export class Agent<
     let claimStatus: 'pending' | 'running' = 'pending';
     let started = false;
     let released = false;
+
+    // Renew the claim while the resumed run executes, so later resumes can tell this live
+    // claimant from one whose process died. Stops once the row is no longer this claim (the run
+    // finished, re-suspended with a new snapshot, or a later resume took it over). A row that is
+    // briefly not `running` but still carries this claim is a concurrent taker's mistaken
+    // hand-back that it is about to put back, so keep renewing.
+    let renewTimer: ReturnType<typeof setInterval> | undefined;
+    let renewing = false;
+    const stopRenewing = () => {
+      if (renewTimer) clearInterval(renewTimer);
+      renewTimer = undefined;
+    };
+    const renew = async () => {
+      if (renewing) return;
+      renewing = true;
+      try {
+        const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
+        if (!current || current.resumeClaimedAt !== claimedAt) {
+          stopRenewing();
+          return;
+        }
+        if (current.status !== 'running') return;
+        await workflowsStore.updateWorkflowState({
+          workflowName: AGENTIC_LOOP_WORKFLOW_ID,
+          runId,
+          opts: { status: 'running', expectedStatus: 'running', resumeLeaseRenewedAt: Date.now() },
+        });
+      } catch (error) {
+        this.logger.warn(`[Agent ${this.name}] Failed to renew resume claim for run ${runId}`, { error });
+      } finally {
+        renewing = false;
+      }
+    };
+
     const release = async () => {
+      stopRenewing();
       if (started || released) return;
       released = true;
       try {
@@ -8148,7 +8209,7 @@ export class Agent<
         const running = await workflowsStore.updateWorkflowState({
           workflowName: AGENTIC_LOOP_WORKFLOW_ID,
           runId,
-          opts: { status: 'running', expectedStatus: 'pending' },
+          opts: { status: 'running', expectedStatus: 'pending', resumeLeaseRenewedAt: Date.now() },
         });
         if (!running) {
           // A later resume took this claim over as abandoned; it owns the suspension now.
@@ -8156,6 +8217,10 @@ export class Agent<
           throwAlreadyClaimed();
         }
         claimStatus = 'running';
+        if (!released) {
+          renewTimer = setInterval(() => void renew(), AGENT_RESUME_CLAIM_RENEW_MS);
+          renewTimer.unref?.();
+        }
       },
       onExecutionStarted: () => {
         started = true;
