@@ -7,12 +7,15 @@
  */
 
 import { createOpenAI } from '@ai-sdk/openai-v5';
+import type { LanguageModelV2, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory';
 import { InMemoryStore } from '../../../../storage';
+import type { ChunkType } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
+import type { ToolPayloadTransformContext } from '../../../../tools/types';
 import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
 
@@ -119,18 +122,18 @@ describeForAllEngines('AIMock loop scenario: tool transform persistence', engine
     const realModel = provider(SCENARIO_MODEL_ID);
     // Real provider over AIMock; only the final `tool-call` part is dropped, which no
     // AIMock fixture can express because the OpenAI provider always pairs it with input-end.
-    const model = {
+    const model: LanguageModelV2 = {
       specificationVersion: realModel.specificationVersion,
       provider: realModel.provider,
       modelId: realModel.modelId,
       supportedUrls: realModel.supportedUrls,
-      doGenerate: (options: any) => realModel.doGenerate(options),
-      doStream: async (options: any) => {
+      doGenerate: options => realModel.doGenerate(options),
+      doStream: async options => {
         const result = await realModel.doStream(options);
         return {
           ...result,
           stream: result.stream.pipeThrough(
-            new TransformStream({
+            new TransformStream<LanguageModelV2StreamPart, LanguageModelV2StreamPart>({
               transform(part, controller) {
                 if (part.type !== 'tool-call') controller.enqueue(part);
               },
@@ -143,14 +146,14 @@ describeForAllEngines('AIMock loop scenario: tool transform persistence', engine
     const { chunks } = await runLoopScenario({
       engine,
       llm,
-      model: model as any,
+      model: () => model,
       prompt: 'run it',
       tools: { redactedTool },
       stopWhen: stepCountIs(3),
       collectChunks: true,
       transform: {
         targets: ['display', 'transcript'],
-        transformToolPayload: (ctx: any) => `[redacted ${ctx.phase} on ${ctx.target}]`,
+        transformToolPayload: (ctx: ToolPayloadTransformContext) => `[redacted ${ctx.phase} on ${ctx.target}]`,
       },
       fixtures: llm => {
         llm.on(
@@ -161,10 +164,12 @@ describeForAllEngines('AIMock loop scenario: tool transform persistence', engine
       },
     });
 
-    const toolCalls = (chunks ?? []).filter((c: any) => c.type === 'tool-call') as any[];
+    const toolCalls = (chunks ?? []).filter(
+      (c): c is Extract<ChunkType, { type: 'tool-call' }> => c.type === 'tool-call',
+    );
     expect(toolCalls).toHaveLength(1);
-    expect(toolCalls[0].payload.args).toEqual({ secret: 'hunter2' });
-    const transform = toolCalls[0].metadata?.mastra?.toolPayloadTransform;
+    expect(toolCalls[0]?.payload.args).toEqual({ secret: 'hunter2' });
+    const transform = toolCalls[0]?.metadata?.mastra?.toolPayloadTransform;
     expect(transform?.display?.['input-available']?.transformed).toBe('[redacted input-available on display]');
     expect(transform?.transcript?.['input-available']?.transformed).toBe('[redacted input-available on transcript]');
   });
