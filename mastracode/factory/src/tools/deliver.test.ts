@@ -15,6 +15,9 @@ const ROW = {
   projectRepositoryId: 'repo-link-1',
 } as SourceControlSession;
 
+// The target is a run: its run binding lets it run on the Factory's resource.
+const RUNS = { hasRunBindingForSession: vi.fn(async () => true) };
+
 const MESSAGE = { kind: 'message', summary: 'Can you check the failing test?', priority: 'medium' as const };
 
 function fakeSession(currentThreadId: string, running = false) {
@@ -70,6 +73,7 @@ function setup({
       deliverFactorySessionNotification({
         controller: controller as unknown as FactoryDeliveryController,
         sessions,
+        runs: RUNS,
         target: { sessionId: 'session-b', threadId: 'thread-stored' },
         notification: MESSAGE,
         ...options,
@@ -172,6 +176,15 @@ describe('deliverFactorySessionNotification', () => {
     expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
   });
 
+  it('skips a thread under the Factory for a session no run is bound to', async () => {
+    // A person's session runs under its owner, so a thread under the Factory isn't its own.
+    RUNS.hasRunBindingForSession.mockResolvedValueOnce(false);
+    const { controller, agent, deliver } = setup({ thread: { id: 'session-b', resourceId: 'project-1' } });
+    await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'thread-not-owned' });
+    expect(controller.createSession).not.toHaveBeenCalled();
+    expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
   it('skips an offline target with no Factory session row without creating or sending', async () => {
     const { controller, agent, deliver } = setup({
       offline: true,
@@ -239,6 +252,7 @@ describe('deliverFactorySessionNotification', () => {
     const result = await deliverFactorySessionNotification({
       controller: controller as unknown as FactoryDeliveryController,
       sessions: { getBySessionId: vi.fn(async () => ROW) },
+      runs: RUNS,
       target: { sessionId: 'session-b', threadId: 'thread-stored' },
       notification: { ...MESSAGE, priority: 'low', attributes: { 'from-session': 'session-a' } },
     });
@@ -272,7 +286,7 @@ describe('resolveSessionThread', () => {
         queryThreads: vi.fn(async () => threads),
       } as unknown as FactoryDeliveryController,
       sessions: { getBySessionId: vi.fn(async () => ROW) },
-      workItems: { findActiveRunBindingForSession: vi.fn(async () => binding) } as never,
+      workItems: { findActiveRunBindingForSession: vi.fn(async () => binding), ...RUNS } as never,
       sessionId: 'session-b',
     });
   }

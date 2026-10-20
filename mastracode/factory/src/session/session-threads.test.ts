@@ -4,7 +4,10 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 import { listFactorySessionThreads } from './session-threads.js';
 
-const SESSION = { sessionId: 'session-1', userId: 'user-1', factoryProjectId: 'project-1' };
+const SESSION = { sessionId: 'session-1', orgId: 'org-1', userId: 'user-1', factoryProjectId: 'project-1' };
+// Only the server's run bindings let a session claim the Factory's resource.
+const RUN = { hasRunBindingForSession: async () => true };
+const NO_RUN = { hasRunBindingForSession: async () => false };
 
 async function controllerWith(threads: { id: string; resourceId: string; metadata?: Record<string, unknown> }[]) {
   const storage = new InMemoryStore();
@@ -36,7 +39,7 @@ describe('listFactorySessionThreads', () => {
       { id: 'neighbour', resourceId: 'project-1', metadata: { factorySessionId: 'session-2' } },
     ]);
 
-    const threads = await listFactorySessionThreads(controller, SESSION);
+    const threads = await listFactorySessionThreads(controller, SESSION, RUN);
 
     expect(threads.map(thread => thread.id).sort()).toEqual(['legacy', 'opened-later', 'session-1']);
   });
@@ -47,7 +50,7 @@ describe('listFactorySessionThreads', () => {
       { id: 'opened-later', resourceId: 'user-1', metadata: { factorySessionId: 'session-1' } },
     ]);
 
-    const threads = await listFactorySessionThreads(controller, SESSION);
+    const threads = await listFactorySessionThreads(controller, SESSION, NO_RUN);
 
     expect(threads.map(thread => thread.id).sort()).toEqual(['opened-later', 'session-1']);
   });
@@ -58,7 +61,7 @@ describe('listFactorySessionThreads', () => {
       { id: 'forged', resourceId: 'user-atk', metadata: { factorySessionId: 'session-1' } },
     ]);
 
-    const threads = await listFactorySessionThreads(controller, SESSION);
+    const threads = await listFactorySessionThreads(controller, SESSION, RUN);
 
     expect(threads.map(thread => thread.id)).toEqual(['session-1']);
   });
@@ -69,7 +72,7 @@ describe('listFactorySessionThreads', () => {
       { id: 'forged', resourceId: 'project-1', metadata: { factorySessionId: 'session-1' } },
     ]);
 
-    const threads = await listFactorySessionThreads(controller, SESSION);
+    const threads = await listFactorySessionThreads(controller, SESSION, NO_RUN);
 
     expect(threads.map(thread => thread.id)).toEqual(['session-1']);
   });
@@ -77,7 +80,15 @@ describe('listFactorySessionThreads', () => {
   it("leaves out a thread created with the session's id under someone else's resource", async () => {
     const controller = await controllerWith([{ id: 'session-1', resourceId: 'user-atk' }]);
 
-    expect(await listFactorySessionThreads(controller, SESSION)).toEqual([]);
+    expect(await listFactorySessionThreads(controller, SESSION, NO_RUN)).toEqual([]);
+  });
+
+  it("doesn't let a session no run is bound to claim its own thread under the Factory", async () => {
+    // A client can create a session's thread under the Factory; only a run binding makes that its resource.
+    const controller = await controllerWith([{ id: 'session-1', resourceId: 'project-1' }]);
+
+    expect(await listFactorySessionThreads(controller, SESSION, NO_RUN)).toEqual([]);
+    expect((await listFactorySessionThreads(controller, SESSION, RUN)).map(thread => thread.id)).toEqual(['session-1']);
   });
 
   it("keeps a Slack DM's threads under its sender, not its Factory", async () => {
@@ -86,11 +97,15 @@ describe('listFactorySessionThreads', () => {
       { id: 'forged', resourceId: 'project-1', metadata: { factorySessionId: 'session-1' } },
     ]);
 
-    const threads = await listFactorySessionThreads(controller, {
-      ...SESSION,
-      branch: 'slack/1700-42',
-      visibility: 'private',
-    });
+    const threads = await listFactorySessionThreads(
+      controller,
+      {
+        ...SESSION,
+        branch: 'slack/1700-42',
+        visibility: 'private',
+      },
+      RUN,
+    );
 
     expect(threads.map(thread => thread.id)).toEqual(['dm-thread']);
   });

@@ -489,8 +489,8 @@ export function createChannelThreadIdResolver(startedSessions: SlackStartedSessi
  * The Factory session a repo-backed Slack thread belongs to. A thread created
  * before Slack threads moved onto the Factory resource runs under its session
  * id as its resource; a newer thread runs under the Factory and is named after
- * its session. With no session row for either, the thread keeps the older
- * reading and fails authorization like any session without a row.
+ * its session. With no session row for either, the thread is addressed by its
+ * own id and fails authorization like any session without a row.
  */
 async function slackThreadSessionId(
   sessions: ReturnType<typeof createSourceControlSessionLookup>,
@@ -499,7 +499,10 @@ async function slackThreadSessionId(
   if (thread.resourceId.startsWith('channel:')) return null;
   if (await sessions.getSourceControlBySessionId(thread.resourceId)) return thread.resourceId;
   if (await sessions.getSourceControlBySessionId(thread.id)) return thread.id;
-  return thread.resourceId;
+  // With no session row the thread is its own session: falling back to the
+  // resource would put every row-less thread under the Factory (or a sender)
+  // into one shared session.
+  return thread.id;
 }
 
 /** Create channel sessions with their Factory ownership present in initial controller state. */

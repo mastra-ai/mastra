@@ -848,6 +848,7 @@ export class MastraFactory {
           deliverFactorySessionNotification({
             controller: messaging.controller,
             sessions: sourceControlSessions,
+            runs: workItemsStorage,
             target,
             notification,
             ...options,
@@ -886,7 +887,7 @@ export class MastraFactory {
         if (
           row &&
           (resourceId === sessionId ||
-            resourceId === (await sessionMemoryResourceId(this.#prepared?.base.controller, row)))
+            resourceId === (await sessionMemoryResourceId(this.#prepared?.base.controller, row, workItemsStorage)))
         ) {
           return { sessionId, row };
         }

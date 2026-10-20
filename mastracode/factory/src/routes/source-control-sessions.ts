@@ -58,7 +58,7 @@ export interface SourceControlSessionRoutesOptions {
   filesystem?: Pick<FilesystemStorage, 'deleteResourceFiles'>;
   /** How long recreate waits for an aborted run to settle before destroying. */
   abortSettleTimeoutMs?: number;
-  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'>;
 }
 
 const ABORT_SETTLE_TIMEOUT_MS = 5_000;
@@ -481,7 +481,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           canRecreateSandbox(options) &&
           (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
         // The client opens the session by its id and creates it under this resource.
-        const resourceId = await sessionMemoryResourceId(options.controller, session);
+        const resourceId = await sessionMemoryResourceId(options.controller, session, options.workItems);
         return c.json({
           session: { ...withCapabilities(withOwnerProfile(session, owners), recreateSandbox), resourceId },
         });
@@ -608,7 +608,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: 'Session not found' }, 404);
         }
         if (!options.controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
-        const threads = await listFactorySessionThreads(options.controller, row);
+        const threads = await listFactorySessionThreads(options.controller, row, options.workItems);
         const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
         if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
         const stored = await options.memorySettings.get({ orgId: row.orgId, userId: row.userId });

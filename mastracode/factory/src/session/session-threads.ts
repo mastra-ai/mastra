@@ -1,30 +1,58 @@
 import type { AgentController, AgentControllerThread } from '@mastra/core/agent-controller';
 
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+
 /** The Factory session row fields that say which memory resource it uses. */
 export interface FactorySessionOwnership {
   sessionId: string;
   userId: string;
+  orgId?: string;
   factoryProjectId?: string | null;
   branch?: string;
   visibility?: string;
   originSessionId?: string | null;
 }
 
+/** Run bindings: the server-side record that a session runs work for its Factory. */
+export type SessionRunBindings = Pick<WorkItemsStorage, 'hasRunBindingForSession'>;
+
 type ThreadLookup = Pick<AgentController<any>, 'queryThreadById'>;
 
 /**
  * The one memory resource a Factory session runs under. A Slack session uses
  * its Factory's, or its sender's for a DM; a side session uses its Factory's;
- * any other session uses its owner's. A session created before resources were
- * shared, or a run kept on its own resource, uses its own id, which its own
- * thread records. A thread a client created under the session's id elsewhere
- * doesn't change that.
+ * any other session uses its owner's. A session's own thread can say otherwise
+ * only within what the server recorded for it: its own id (created before
+ * resources were shared, or a run kept on its own resource), and the Factory's
+ * only for a session with a run binding. A client can create a thread under the
+ * session's id, so the thread alone never makes a session the Factory's.
  */
-export async function sessionMemoryResourceId(controller: ThreadLookup | undefined, session: FactorySessionOwnership) {
-  return memoryResourceOf(session, await controller?.queryThreadById({ threadId: session.sessionId }));
+export async function sessionMemoryResourceId(
+  controller: ThreadLookup | undefined,
+  session: FactorySessionOwnership,
+  runs: SessionRunBindings | undefined,
+): Promise<string> {
+  const [own, runBound] = await Promise.all([
+    controller?.queryThreadById({ threadId: session.sessionId }),
+    isRunBound(session, runs),
+  ]);
+  return memoryResourceOf(session, own, runBound);
 }
 
-function memoryResourceOf(session: FactorySessionOwnership, own: { resourceId?: string | null } | null | undefined) {
+async function isRunBound(session: FactorySessionOwnership, runs: SessionRunBindings | undefined) {
+  if (!runs || !session.orgId || !session.factoryProjectId) return false;
+  return runs.hasRunBindingForSession({
+    orgId: session.orgId,
+    factoryProjectId: session.factoryProjectId,
+    sessionId: session.sessionId,
+  });
+}
+
+function memoryResourceOf(
+  session: FactorySessionOwnership,
+  own: { resourceId?: string | null } | null | undefined,
+  runBound: boolean,
+) {
   const factoryProjectId = session.factoryProjectId ?? undefined;
   const slack = session.branch?.startsWith('slack/') ?? false;
   const shared = slack
@@ -36,7 +64,7 @@ function memoryResourceOf(session: FactorySessionOwnership, own: { resourceId?: 
       : undefined;
   const allowed = shared
     ? [session.sessionId, shared]
-    : [session.sessionId, session.userId, ...(factoryProjectId ? [factoryProjectId] : [])];
+    : [session.sessionId, session.userId, ...(runBound && factoryProjectId ? [factoryProjectId] : [])];
   if (own?.resourceId && allowed.includes(own.resourceId)) return own.resourceId;
   return shared ?? session.userId;
 }
@@ -53,14 +81,16 @@ function memoryResourceOf(session: FactorySessionOwnership, own: { resourceId?: 
 export async function listFactorySessionThreads(
   controller: Pick<AgentController<any>, 'queryThreads' | 'queryThreadById'>,
   session: FactorySessionOwnership,
+  runs: SessionRunBindings | undefined,
 ): Promise<AgentControllerThread[]> {
   const { sessionId } = session;
-  const [own, stamped, legacy] = await Promise.all([
+  const [own, runBound, stamped, legacy] = await Promise.all([
     controller.queryThreadById({ threadId: sessionId }),
+    isRunBound(session, runs),
     controller.queryThreads({ metadata: { factorySessionId: sessionId } }),
     controller.queryThreads({ resourceId: sessionId }),
   ]);
-  const resourceId = memoryResourceOf(session, own);
+  const resourceId = memoryResourceOf(session, own, runBound);
   const threads = new Map<string, AgentControllerThread>();
   const owned = [...(own ? [own] : []), ...stamped].filter(thread => thread.resourceId === resourceId);
   for (const thread of [...owned, ...legacy]) threads.set(thread.id, thread);

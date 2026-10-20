@@ -64,6 +64,7 @@ export interface FactorySessionToolDependencies {
     | 'listRunBindings'
     | 'findActiveRunBindingForSession'
     | 'findRunBindingByThread'
+    | 'hasRunBindingForSession'
     | 'subscribeToWorkItem'
     | 'unsubscribeFromWorkItem'
     | 'listSessionSubscriptions'

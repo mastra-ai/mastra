@@ -1319,7 +1319,8 @@ describe('MastraFactory.prepare', () => {
         resourceId: string;
         threadId: string;
       }) => Promise<void>;
-      // The run's own thread is on the Factory's resource.
+      // A run is bound to the session, so its threads run on the Factory's resource.
+      vi.spyOn(storage.getDomain<WorkItemsStorage>('work-items'), 'hasRunBindingForSession').mockResolvedValue(true);
       threadsById({
         'session-1': { id: 'session-1', resourceId: project.id, metadata: {} },
         'thread-7': { id: 'thread-7', resourceId: project.id, metadata: { factorySessionId: 'session-1' } },

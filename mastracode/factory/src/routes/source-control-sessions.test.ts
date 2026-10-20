@@ -36,6 +36,7 @@ function buildApp(
   sourceControls: readonly SourceControlStorageHandle[],
   { memorySettings, projects, users }: Pick<RouteOptions, 'memorySettings' | 'projects' | 'users'>,
   controller?: RouteOptions['controller'],
+  workItems?: RouteOptions['workItems'],
 ) {
   const app = new Hono();
   app.use('*', async (context, next) => {
@@ -51,6 +52,7 @@ function buildApp(
       memorySettings,
       controller,
       users,
+      ...(workItems ? { workItems } : {}),
     }),
   );
   return app;
@@ -312,7 +314,12 @@ describe('source-control session routes', () => {
     const controller = {
       queryThreadById: async ({ threadId }: { threadId: string }) => threads[threadId] ?? null,
     } as unknown as RouteOptions['controller'];
-    const app = buildApp([sourceControl], seed, controller);
+    // Only a run binding lets a session run under its Factory.
+    const workItems = {
+      clearSessionReferences: async () => {},
+      hasRunBindingForSession: async ({ sessionId }: { sessionId: string }) => sessionId === 'session-run',
+    };
+    const app = buildApp([sourceControl], seed, controller, workItems);
 
     // A session with no thread yet is a new user session: it starts under its owner.
     const fresh = await app.request('/web/user-sessions/session-new');

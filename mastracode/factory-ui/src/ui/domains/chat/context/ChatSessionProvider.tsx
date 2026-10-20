@@ -86,7 +86,12 @@ export function ChatSessionConfigProvider({
     addressOverride ?? (inSession ? (storedSession?.resourceId ?? storedSession?.userId) : factory?.id);
   // A Factory session's threads are stamped with its id; the Factory chat
   // (no session) and channel sessions list every thread of their own resource.
-  const threadTags = !addressOverride && routedSessionId ? { factorySessionId: routedSessionId } : undefined;
+  // So does a session still on a resource of its own (a run on untrusted
+  // content, or one not migrated yet), whose older threads carry no stamp.
+  const threadTags =
+    !addressOverride && routedSessionId && resourceId !== routedSessionId
+      ? { factorySessionId: routedSessionId }
+      : undefined;
   // `sandboxReady` — session metadata resolved; safe to run mutations. The
   // server materializes sandboxes lazily on first use (and revives dead ones),
   // so nothing here waits on a sandbox existing.

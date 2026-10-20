@@ -4,7 +4,7 @@ import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 import { createSessionAsRowOwner } from '../integrations/subscription-session.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import { listFactorySessionThreads, sessionMemoryResourceId } from '../session/session-threads.js';
-import type { FactorySessionOwnership } from '../session/session-threads.js';
+import type { FactorySessionOwnership, SessionRunBindings } from '../session/session-threads.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 /** Notifications between Factory sessions all carry this source. */
@@ -60,9 +60,12 @@ export async function deliverFactorySessionNotification({
   target,
   notification,
   onlyIfLive = false,
+  runs,
 }: {
   controller: FactoryDeliveryController;
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
+  /** Run bindings, which decide whether a session may use its Factory's resource. */
+  runs: SessionRunBindings | undefined;
   target: FactoryDeliveryTarget;
   notification: Omit<SendNotificationSignalInput, 'source'>;
   /** Skip, without creating anything, when no live session owns the target (stage notices). */
@@ -76,7 +79,7 @@ export async function deliverFactorySessionNotification({
   // this session's, whatever the caller paired it with.
   let targetRow: ReturnType<SourceControlSessionLookup['getBySessionId']> | undefined;
   const loadRow = () => (targetRow ??= sessions.getBySessionId(target.sessionId));
-  if (!(await isSessionThread(controller, thread, target.sessionId, loadRow))) {
+  if (!(await isSessionThread(controller, runs, thread, target.sessionId, loadRow))) {
     return { delivered: 'skipped', reason: 'thread-not-owned' };
   }
   const ownerResourceId = thread.resourceId || target.sessionId;
@@ -161,7 +164,7 @@ export async function resolveSessionThread({
 }: {
   controller: Pick<FactoryDeliveryController, 'getSession' | 'queryThreads' | 'queryThreadById'>;
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
-  workItems: Pick<WorkItemsStorage, 'findActiveRunBindingForSession'>;
+  workItems: Pick<WorkItemsStorage, 'findActiveRunBindingForSession' | 'hasRunBindingForSession'>;
   sessionId: string;
 }): Promise<string | null> {
   const row = await sessions.getBySessionId(sessionId);
@@ -177,13 +180,14 @@ export async function resolveSessionThread({
   const current = live?.thread.getId();
   if (current) return current;
   // Without a row no resource is the session's to claim stamped threads on.
-  const threads = await listFactorySessionThreads(controller, row ?? { sessionId, userId: '' });
+  const threads = await listFactorySessionThreads(controller, row ?? { sessionId, userId: '' }, workItems);
   const newest = [...threads].sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())[0];
   return newest?.id ?? null;
 }
 
 async function isSessionThread(
   controller: Pick<FactoryDeliveryController, 'queryThreadById'>,
+  runs: SessionRunBindings | undefined,
   thread: { id: string; resourceId?: string | null; metadata?: Record<string, unknown> | null },
   sessionId: string,
   loadRow: () => Promise<FactorySessionOwnership | null>,
@@ -194,5 +198,5 @@ async function isSessionThread(
   // Thread ids and stamps are client-writable: either only counts under the
   // session's own memory resource.
   const row = await loadRow();
-  return !!row && thread.resourceId === (await sessionMemoryResourceId(controller, row));
+  return !!row && thread.resourceId === (await sessionMemoryResourceId(controller, row, runs));
 }

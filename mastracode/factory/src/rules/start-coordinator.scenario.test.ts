@@ -9,7 +9,14 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
-const runSession = (sessionId: string) => ({ sessionId, userId: 'user-1', factoryProjectId: PROJECT_ID });
+const runSession = (sessionId: string) => ({
+  sessionId,
+  orgId: 'org-1',
+  userId: 'user-1',
+  factoryProjectId: PROJECT_ID,
+});
+// Both sessions are runs, so their run bindings let them claim the Factory's resource.
+const RUNS = { hasRunBindingForSession: async () => true };
 
 function sourceControl() {
   const row = (sessionId: string) => ({
@@ -124,10 +131,10 @@ describe('scenario: concurrent runs in one Factory', () => {
     const extra = await runA!.thread.create();
     await vi.waitFor(async () =>
       expect(
-        (await listFactorySessionThreads(controller, runSession('run-a'))).map(thread => thread.id).sort(),
+        (await listFactorySessionThreads(controller, runSession('run-a'), RUNS)).map(thread => thread.id).sort(),
       ).toEqual([extra.id, 'run-a'].sort()),
     );
-    expect((await listFactorySessionThreads(controller, runSession('run-b'))).map(thread => thread.id)).toEqual([
+    expect((await listFactorySessionThreads(controller, runSession('run-b'), RUNS)).map(thread => thread.id)).toEqual([
       'run-b',
     ]);
   });

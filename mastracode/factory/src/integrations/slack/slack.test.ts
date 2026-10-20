@@ -477,7 +477,8 @@ describe('handler dispatch gating', () => {
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
 
     expect(defaultHandler).toHaveBeenCalled();
-    expect(sourceControl.sessions.getBySessionId).not.toHaveBeenCalledWith('fp-1', expect.anything());
+    // The run is authorized as the session the thread is named after, never as the shared Factory resource.
+    expect(sourceControl.sessions.getBySessionId).toHaveBeenLastCalledWith('session-1');
     expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
   });
 
@@ -545,7 +546,10 @@ describe('handler dispatch gating', () => {
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(mastra));
 
     expect(output).toHaveBeenCalledExactlyOnceWith(
-      expect.stringContaining(`Could not authorize the owner of Slack Factory session session-1: ${reason}.`),
+      // With no row naming the thread, its session is the thread itself.
+      expect.stringContaining(
+        `Could not authorize the owner of Slack Factory session ${session ? 'session-1' : 'thread-1'}: ${reason}.`,
+      ),
     );
     expect(defaultHandler).not.toHaveBeenCalled();
     expect(prime).not.toHaveBeenCalled();
@@ -1248,6 +1252,20 @@ describe('channel session creation context (resolveSession)', () => {
         threadId: 'session-1',
         tags: { factoryProjectId: 'fp-1' },
       }),
+    );
+  });
+
+  it('addresses a thread under the Factory with no session row by its own id, not the shared resource', async () => {
+    const sourceControl = { sessions: { getBySessionId: vi.fn(async () => null) } };
+    const controller = { id: 'code', createSession: vi.fn().mockResolvedValue({}) };
+
+    await createChannelSessionResolver({ sourceControl } as any)({
+      controller,
+      thread: { id: 'thread-9', resourceId: 'fp-1' },
+    } as any);
+
+    expect(controller.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'thread-9', resourceId: 'fp-1', threadId: 'thread-9' }),
     );
   });
 

@@ -161,6 +161,50 @@ describe('createSessionRunEndReporter', () => {
     expect(reporting).not.toHaveBeenCalled();
   });
 
+  it("reports a finished run kept on its own resource to its item's followers", async () => {
+    const since = new Date('2026-10-01T00:00:00.000Z');
+    // A run on untrusted content records its own session id as the binding's resource.
+    const findRunBindingBySession = vi.fn(async ({ resourceId }: { resourceId: string }) =>
+      resourceId === 'run'
+        ? {
+            orgId: 'org-1',
+            factoryProjectId: 'project-1',
+            workItemId: 'item-1',
+            role: 'reviewer',
+            threadId: 'run',
+            revokedAt: new Date('2026-10-01T00:05:00.000Z'),
+          }
+        : null,
+    );
+    const listWorkItemSubscribers = vi.fn(async () => []);
+    const reporter = createSessionRunEndReporter({
+      sessions: {
+        getBySessionId: async () =>
+          ({
+            sessionId: 'run',
+            orgId: 'org-1',
+            factoryProjectId: 'project-1',
+            userId: 'user-1',
+            originSessionId: null,
+            originThreadId: null,
+            title: null,
+          }) as never,
+      },
+      workItems: {
+        findActiveRunBindingForSession: async () => null,
+        findRunBindingBySession,
+        listWorkItemSubscribers,
+        getForProject: vi.fn(),
+      } as never,
+      reporting: async () => ({ deliver: vi.fn(), notifications: new InMemoryNotificationsStorage() }),
+    });
+
+    await reporter({ sessionId: 'run', threadId: 'run', outcome: { status: 'done' }, since });
+
+    expect(findRunBindingBySession).toHaveBeenCalledWith(expect.objectContaining({ resourceId: 'run' }));
+    expect(listWorkItemSubscribers).toHaveBeenCalledWith(expect.objectContaining({ workItemId: 'item-1' }));
+  });
+
   function sideReporter(originMutedAt: Date | null) {
     const deliver = vi.fn(async () => ({ delivered: 'woken' as const, notificationId: 'n-1' }));
     const reporter = createSessionRunEndReporter({
