@@ -82,7 +82,8 @@ export function CommentCount({ count }: { count: number }) {
   );
 }
 
-export function CardStatus({ status }: { status: BoardCardStatus }) {
+/** `compact` keeps an error to one truncated line (for list rows) and moves the full text into the tooltip. */
+export function CardStatus({ status, compact = false }: { status: BoardCardStatus; compact?: boolean }) {
   // A parked run is surfaced by the highlighted "Start suggested run" action, not a status badge.
   if (status.kind === 'idle' || status.kind === 'waiting') return null;
 
@@ -110,32 +111,37 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
     );
   }
 
+  const hasTooltip = compact || status.detail !== undefined;
   const message = (
     <Txt
       as="span"
       variant="meta"
       role="alert"
-      tabIndex={status.detail === undefined ? undefined : 0}
+      tabIndex={hasTooltip ? 0 : undefined}
       className={cn(
-        'text-destructive-foreground flex w-full min-w-0 items-start gap-1.5',
-        status.detail !== undefined && [
-          'relative cursor-help underline decoration-dotted underline-offset-2',
-          focusRing,
-        ],
+        'text-destructive-foreground flex w-full min-w-0 gap-1.5',
+        compact ? 'items-center' : 'items-start',
+        hasTooltip && ['relative cursor-help', focusRing],
+        status.detail !== undefined && 'underline decoration-dotted underline-offset-2',
       )}
     >
-      <TriangleAlert size={11} aria-hidden className="mt-0.5 shrink-0" />
-      <span className="min-w-0 wrap-anywhere">{status.label}</span>
+      <TriangleAlert size={11} aria-hidden className={cn('shrink-0', !compact && 'mt-0.5')} />
+      <span className={cn('min-w-0', compact ? 'truncate' : 'wrap-anywhere')}>{status.label}</span>
     </Txt>
   );
 
-  if (status.detail === undefined) return message;
+  if (!hasTooltip) return message;
   // Raw failure text stays one hover away instead of costing a row.
   return (
     <Tooltip>
       <TooltipTrigger render={message} />
       <TooltipContent side="top" className="max-w-80">
-        <span className="wrap-anywhere whitespace-pre-wrap">{status.detail}</span>
+        {compact && <span className="block wrap-anywhere">{status.label}</span>}
+        {status.detail !== undefined && (
+          <span className={cn('block wrap-anywhere whitespace-pre-wrap', compact && 'mt-1 opacity-80')}>
+            {status.detail}
+          </span>
+        )}
       </TooltipContent>
     </Tooltip>
   );

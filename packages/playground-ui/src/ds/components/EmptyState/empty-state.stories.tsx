@@ -117,6 +117,7 @@ const illustrations = [
   ['databases', 'Databases'],
   ['threads', 'Threads'],
   ['deploys', 'Deploys'],
+  ['no-charges', 'Charges'],
 ] as const;
 
 export const AllIllustrations: Story = {

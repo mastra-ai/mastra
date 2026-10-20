@@ -150,7 +150,7 @@ import type { StorageResult } from './utils/storage-factory.js';
 import { createStorageMaintenance, DEFAULT_RETENTION, resolveLocalDbFiles } from './utils/storage-maintenance.js';
 import type { StorageMaintenance } from './utils/storage-maintenance.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
-import { FOREIGN_THREAD, findWakeSession, threadScopeKey } from './utils/wake-session.js';
+import { FOREIGN_THREAD, findWakeSession, sessionLeaseScopes } from './utils/wake-session.js';
 import type { WakeSession } from './utils/wake-session.js';
 import { registerWorkflowBuilderPrimitives } from './workflows/register-primitives.js';
 
@@ -446,6 +446,16 @@ export interface MastraCodeConfig {
     resourceId: string;
     threadId: string;
   }) => void | Promise<void>;
+  /**
+   * Bring the session that owns `resourceId` online when a notification is
+   * delivered and no session in this process owns it (a deferred delivery
+   * after the session closed, a restart, another replica). Without it such a
+   * delivery wakes the thread with no request context: no owner identity, no
+   * model selection. Create the session as its owner, or throw when the owner
+   * can't be resolved. When set, a delivery that still finds no owning session
+   * fails with that error instead of running.
+   */
+  resumeWakeSession?: (args: { resourceId: string; threadId: string }) => Promise<void>;
 }
 
 export function createAuthStorage() {
@@ -916,14 +926,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     ownsNotificationDispatch && !ownSignalsPubSub && process.platform !== 'win32'
       ? createSignalsPubSub(project.resourceId)
       : undefined;
+  const notificationDispatchLeases = ownsNotificationDispatch
+    ? (ownSignalsPubSub ?? dispatchLeasePubSub)?.getLeaseProvider()
+    : undefined;
   const notificationDispatcher = createResourceNotificationDispatcher({
     getMastra: () => controller.getMastra(),
-    getSessionScopes: () =>
-      [...liveSessions].map(session => ({
-        resourceId: session.identity.getResourceId(),
-        scope: threadScopeKey(session.getThreadScope()),
-      })),
-    leases: ownsNotificationDispatch ? (ownSignalsPubSub ?? dispatchLeasePubSub)?.getLeaseProvider() : undefined,
+    getSessionScopes: async () =>
+      (
+        await Promise.all(
+          [...liveSessions].map(async session => {
+            const resourceId = session.identity.getResourceId();
+            return (await sessionLeaseScopes(session)).map(scope => ({ resourceId, scope }));
+          }),
+        )
+      ).flat(),
+    leases: notificationDispatchLeases,
     owner: `${ownerId}:${process.pid}:${randomUUID()}`,
     onError: error => console.warn('Notification dispatch failed:', error),
   });
@@ -1295,14 +1312,28 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           // don't fall through to the active session and wake it under an
           // empty resource binding.
           if (!input.record.resourceId) return decision;
+          const target = { resourceId: input.record.resourceId, threadId: input.record.threadId };
+          let owner = await findWakeSession(controller, liveSessions, target, notificationDispatchLeases);
+          // Nobody here owns the resource. A host that resumes sessions brings
+          // the owner's online, so the wake runs as that owner rather than as a
+          // bare wake with no identity; if it still can't, the delivery fails.
+          if (
+            !owner &&
+            config?.resumeWakeSession &&
+            (decision.action === 'deliver' || decision.action === 'summarize')
+          ) {
+            await config.resumeWakeSession(target);
+            owner = await findWakeSession(controller, liveSessions, target, notificationDispatchLeases);
+            if (!owner) {
+              throw new Error(
+                `No session owns resource ${target.resourceId} to run its wake on thread ${target.threadId}.`,
+              );
+            }
+          }
           // A session here serves the resource but not the thread's project:
           // another process sharing the resource runs it. Leave it pending for
           // that process, whose own dispatch pass for the thread's scope
           // delivers it, rather than running it with this one's workspace.
-          const owner = await findWakeSession(controller, liveSessions, {
-            resourceId: input.record.resourceId,
-            threadId: input.record.threadId,
-          });
           if (owner === FOREIGN_THREAD) return { ...decision, hold: true };
           const streamOptions = owner
             ? await getWakeStreamOptions({

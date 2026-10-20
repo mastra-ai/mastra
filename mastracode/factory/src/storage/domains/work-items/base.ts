@@ -368,9 +368,11 @@ export interface RevokeFactoryRunBindingInput {
 }
 
 export interface RevokeStaleFactoryRunBindingsInput {
-  /** Active bindings created before this instant are revoked regardless of item state. */
+  /** Active bindings created before this instant are revoked regardless of item state, unless `keep` exempts them. */
   olderThan: Date;
   now: Date;
+  /** Exempts an over-age binding from the age test only; the item-state checks still apply. */
+  keep?: (binding: FactoryRunBindingRecord) => Promise<boolean>;
 }
 
 export interface RevokeFactoryRunBindingsForWorkItemInput {
@@ -2926,17 +2928,17 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Revoke leaked/legacy active bindings: older than `olderThan`, or whose
-   * work item is gone, malformed, or already terminal. Terminal-stage cleanup
-   * handles bindings go-forward; this sweep drains anything that slipped past
-   * it. Returns the number of bindings revoked.
+   * Revoke leaked/legacy active bindings: older than `olderThan` (unless
+   * `keep` vouches for them), or whose work item is gone, malformed, or
+   * already terminal. Terminal-stage cleanup handles bindings go-forward; this
+   * sweep drains anything that slipped past it. Returns the number of bindings revoked.
    */
   async revokeStaleRunBindings(input: RevokeStaleFactoryRunBindingsInput): Promise<number> {
     const bindings = await this.listActiveRunBindings();
     const itemCache = new Map<string, WorkItemRow | null>();
     let revoked = 0;
     for (const binding of bindings) {
-      let stale = binding.createdAt.getTime() < input.olderThan.getTime();
+      let stale = binding.createdAt.getTime() < input.olderThan.getTime() && !(await input.keep?.(binding));
       if (!stale) {
         const key = `${binding.orgId}:${binding.workItemId}`;
         let item = itemCache.get(key);

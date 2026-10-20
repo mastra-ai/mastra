@@ -5,11 +5,11 @@ import { resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import {
-  SourceControlConnectionNotFoundError,
-  type SourceControlSession,
-  type SourceControlSessionVisibility,
-  type SourceControlStorageHandle,
+import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
+import type {
+  SourceControlSession,
+  SourceControlSessionVisibility,
+  SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
 import { resolveEnvironmentRepositories } from './environment-repositories.js';
 import { seedSessionOrg } from './org-seed.js';
@@ -55,6 +55,7 @@ export interface SourceControlSessionLookup {
   /** Side sessions started by `originSessionId`, across every provider. */
   listByOrigin(args: { orgId: string; originSessionId: string }): Promise<SourceControlSession[]>;
   rename(args: { sessionId: string; title: string }): Promise<void>;
+  setOriginMuted(args: { sessionId: string; muted: boolean }): Promise<void>;
   markFirstMessage(args: { sessionId: string }): Promise<void>;
   markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
 }
@@ -91,6 +92,7 @@ export function createSourceControlSessionLookup(
     listByOrigin: async args =>
       (await Promise.all(sourceControls.map(sourceControl => sourceControl.sessions.listByOrigin(args)))).flat(),
     rename: async args => (await resolve(args.sessionId))?.sourceControl.sessions.rename(args),
+    setOriginMuted: async args => (await resolve(args.sessionId))?.sourceControl.sessions.setOriginMuted(args),
     markFirstMessage: async args => (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMessage(args),
     markFirstMeaningfulExec: async args =>
       (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMeaningfulExec(args),

@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import { RemindContinuationProcessor } from '../subconscious/remind-continuation';
@@ -89,6 +90,21 @@ describe('Subconscious reminder continuation', () => {
       }),
     );
     expect(consumeStream).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the continuation on the sidekick thread its own run's request context names", async () => {
+    const { processor, sendMessage } = createHarness();
+    const question = message('question-1', { type: 'question', replyId: 'reply-1', askedAt: Date.now() });
+    // The processor runs inside the sidekick's own run, whose context names the sidekick thread.
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_THREAD_ID_KEY, reminderThreadId);
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+
+    await processor.processOutputResult({ ...resultArgs([question]), requestContext });
+
+    const sent = (sendMessage.mock.calls[0] as any[])[1].ifIdle.streamOptions.requestContext as RequestContext;
+    expect(sent.get(MASTRA_THREAD_ID_KEY)).toBe(reminderThreadId);
+    expect(sent.get(MASTRA_RESOURCE_ID_KEY)).toBe(resourceId);
   });
 
   it('increments continuation attempts from messages already in the MessageList', async () => {

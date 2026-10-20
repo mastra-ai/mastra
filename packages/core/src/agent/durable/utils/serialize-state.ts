@@ -4,6 +4,7 @@ import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { ToolCallConcurrency } from '../../../loop/types';
 import type { MemoryConfig } from '../../../memory/types';
 import type { CoreTool } from '../../../tools/types';
+import { boundedStringify } from '../../../utils/safe-stringify';
 import type { MessageList } from '../../message-list';
 import type { AgentModelManagerConfig } from '../../types';
 import type {
@@ -80,6 +81,7 @@ export function serializeModelConfig(model: MastraLanguageModel): SerializableMo
  */
 export function serializeModelListEntry(entry: AgentModelManagerConfig): SerializableModelListEntry {
   const model = entry.model;
+  const settings = serializeModelSettings(entry.modelSettings);
   return {
     id: entry.id,
     config: {
@@ -87,6 +89,7 @@ export function serializeModelListEntry(entry: AgentModelManagerConfig): Seriali
       modelId: model.modelId,
       specificationVersion: model.specificationVersion,
       originalConfig: `${model.provider}/${model.modelId}`,
+      ...(settings ? { settings } : {}),
       providerOptions: entry.providerOptions,
     },
     maxRetries: entry.maxRetries,
@@ -377,7 +380,19 @@ export function createWorkflowInput(params: {
   agentSpanData?: unknown;
   modelSpanData?: unknown;
   requestContextEntries?: Record<string, unknown>;
+  inputTripwire?: DurableAgenticWorkflowInput['inputTripwire'];
 }): DurableAgenticWorkflowInput {
+  // Unsupported metadata must not discard the terminal rejection itself.
+  const metadataJson = params.inputTripwire ? boundedStringify(params.inputTripwire.metadata) : undefined;
+  const inputTripwire = params.inputTripwire
+    ? {
+        reason: params.inputTripwire.reason,
+        retry: params.inputTripwire.retry,
+        processorId: params.inputTripwire.processorId,
+        ...(metadataJson === undefined ? {} : { metadata: JSON.parse(metadataJson) }),
+      }
+    : undefined;
+
   return {
     __workflowKind: 'durable-agent',
     runId: params.runId,
@@ -395,6 +410,7 @@ export function createWorkflowInput(params: {
     agentSpanData: params.agentSpanData,
     modelSpanData: params.modelSpanData,
     requestContextEntries: params.requestContextEntries,
+    inputTripwire,
   };
 }
 

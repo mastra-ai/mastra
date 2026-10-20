@@ -48,8 +48,8 @@ import {
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
   TraceQueryValidationError,
-  type TraceQueryPredicate,
 } from './trace-query';
+import type { TraceQueryPredicate } from './trace-query';
 
 const baseRequest = {
   timeRange: {
@@ -345,6 +345,37 @@ describe('planTraceQuery', () => {
         { type: 'comparison', field: 'durationMs', operator: 'gt', value: 5000 },
         { type: 'membership', field: 'durationMs', operator: 'in', values: [6000, 7000] },
         { type: 'presence', field: 'durationMs', operator: 'exists' },
+      ],
+    });
+  });
+
+  it('plans numeric time to first chunk predicates on the root and on spans', () => {
+    const plan = planTraceQuery(
+      parsed({
+        ...baseRequest,
+        where: {
+          op: 'and',
+          args: [
+            { op: 'lte', left: { path: 'timeToFirstChunkMs' }, right: { literal: 0 } },
+            { op: 'notExists', path: 'timeToFirstChunkMs' },
+            { spans: { some: { op: 'gt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 800 } } } },
+          ],
+        },
+      }),
+    );
+
+    expect(plan.where).toEqual({
+      type: 'boolean',
+      operator: 'and',
+      args: [
+        { type: 'comparison', field: 'timeToFirstChunkMs', operator: 'lte', value: 0 },
+        { type: 'presence', field: 'timeToFirstChunkMs', operator: 'notExists' },
+        {
+          type: 'relation',
+          collection: 'spans',
+          quantifier: 'some',
+          predicate: { type: 'comparison', field: 'timeToFirstChunkMs', operator: 'gt', value: 800 },
+        },
       ],
     });
   });

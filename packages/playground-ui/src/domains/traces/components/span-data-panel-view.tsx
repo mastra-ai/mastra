@@ -130,6 +130,7 @@ function SpanDataPanelContent({
   feedbackTabBadge?: ReactNode;
   isAnchor?: boolean;
 }) {
+  // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Built SDK declarations type attributes.usage as unknown.
   const usage = span.attributes?.usage as TokenUsage | undefined;
   const hasContext =
     (isAnchor ?? span.parentSpanId == null) &&
@@ -147,7 +148,7 @@ function SpanDataPanelContent({
         </div>
       )}
 
-      <SpanPayloadSection title="Error" raw={span.error} className="mb-3">
+      <SpanPayloadSection title="Error" raw={span.error} framed={false} className="mb-3">
         <SpanErrorRenderer span={span} />
       </SpanPayloadSection>
 

@@ -15,6 +15,9 @@ import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 export { FACTORY_INTERACTIVE_KEY };
 
+/** Linked Slack sender, separate from the session owner's model-credential identity. */
+export const FACTORY_SLACK_SENDER_KEY = 'mastra__factorySlackSender';
+
 /** Who is calling Factory tools, and from which session. Everything a tool needs to stay in scope. */
 export interface FactoryToolScope {
   orgId: string;
@@ -65,10 +68,12 @@ export async function resolveFactoryToolScope({
 
   let caller: { orgId: string; userId: string; actorProfile?: AuditActorProfileInput } | null = null;
   if (authEnabled) {
+    const slackSender = requestContext.get(FACTORY_SLACK_SENDER_KEY) as { userId: string; orgId: string } | undefined;
     const user = getFactoryAuthUserFromContext(requestContext);
-    const userId = getFactoryAuthUserId(user);
-    const orgId = factoryUserOrgId(user);
-    const actorProfile = auditActorProfile(user);
+    if (slackSender && factoryUserOrgId(user) !== slackSender.orgId) return null;
+    const userId = slackSender?.userId ?? getFactoryAuthUserId(user);
+    const orgId = slackSender?.orgId ?? factoryUserOrgId(user);
+    const actorProfile = slackSender ? undefined : auditActorProfile(user);
     if (userId && orgId) caller = { orgId, userId, ...(actorProfile ? { actorProfile } : {}) };
   } else {
     caller = { orgId: 'local', userId: 'local' };
@@ -119,4 +124,16 @@ export async function resolveFactoryToolScope({
     ...(identity.actorProfile ? { actorProfile: identity.actorProfile } : {}),
     ...(origin ? { origin } : {}),
   };
+}
+
+/**
+ * Refuses an action only a signed-in person may take. Turns nobody signed in
+ * started (notification wakes, webhooks, dispatcher notices) carry text other
+ * people wrote, so they can't approve, resolve proposals, or waive plan approval.
+ */
+export function requirePerson(scope: FactoryToolScope, action: string): void {
+  if (scope.interactive) return;
+  throw new Error(
+    `Only a person can ${action}. Nobody signed in started this turn (it came from a notification, webhook or rule); ask the person to do it from the board or by messaging this session.`,
+  );
 }

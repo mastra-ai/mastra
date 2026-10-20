@@ -15,16 +15,16 @@ export interface IterationStateUpdateInput {
 /**
  * Step record for tracking iteration history.
  *
- * Deliberate shape divergence from the main loop: main accumulates full
- * `DefaultStepResult` objects (with `content`, `response`, etc.); durable
- * serializes this reduced record across step boundaries instead. Processor
- * hooks receive these records via the `(inputData as any).accumulatedSteps`
- * casts in llm-execution.ts, so a processor reading `steps[i].content` gets
- * `undefined` on durable. Converging the shapes would require reworking
- * durable's serialized iteration state, so the divergence is kept for now.
+ * Main accumulates full `DefaultStepResult` objects; durable serializes this
+ * reduced record across step boundaries instead. `content` is the step's model
+ * content, the same value stopWhen and `stream.steps` see. It is absent on
+ * records written before it was added, where `buildDurableStepContent`
+ * rebuilds it from `text`/`toolCalls`/`toolResults`. Other fields of
+ * `DefaultStepResult` (`response`, etc.) are still not carried.
  */
 export interface StepRecord {
   text?: string;
+  content?: unknown[];
   toolCalls?: unknown[];
   toolResults?: unknown[];
   usage?: LanguageModelUsage;
@@ -71,6 +71,7 @@ export function calculateAccumulatedUsage(
 export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput): StepRecord {
   return {
     text: executionOutput.output.text,
+    content: executionOutput.output.content,
     toolCalls: executionOutput.output.toolCalls,
     toolResults: executionOutput.toolResults,
     usage: executionOutput.output.usage,
@@ -140,6 +141,7 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     // Carried, not recomputed: the request context is fixed for the run, and
     // the steps that rebuild from Mastra have no other source for it.
     requestContextEntries: currentState.requestContextEntries,
+    inputTripwire: signalPreempted ? currentState.inputTripwire : undefined,
     iterationCount: currentState.iterationCount + (signalPreempted ? 0 : 1),
     accumulatedSteps: signalPreempted
       ? currentState.accumulatedSteps

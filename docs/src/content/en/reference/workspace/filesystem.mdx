@@ -510,6 +510,20 @@ const entries = await filesystem.walk?.('.', { maxDepth: 3 })
     description: 'Include entries whose names start with ".". Defaults to false.',
     isOptional: true,
   },
+  {
+    name: 'options.includeGitignoreFiles',
+    type: 'boolean',
+    description:
+      "Return `.gitignore` files even when hidden entries are excluded. `list_files` sets this so it can apply each directory's `.gitignore`. Providers may ignore it.",
+    isOptional: true,
+  },
+  {
+    name: 'options.skipDirectoryNames',
+    type: 'string[]',
+    description:
+      'Directory names not to descend into or return, such as `node_modules`. `list_files` filters the results as well, so providers may ignore it.',
+    isOptional: true,
+  },
 ]}
 />
 

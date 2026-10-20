@@ -1,7 +1,8 @@
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { ReactNode } from 'react';
 
-import { CommittedInput, type SaveEnvironment } from './CommittedInput';
+import { CommittedInput } from './CommittedInput';
+import type { SaveEnvironment } from './CommittedInput';
 
 /**
  * Where the repositories are cloned, the one command that runs there after

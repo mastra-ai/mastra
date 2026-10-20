@@ -23,9 +23,9 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
   const {
     span,
     spanUI,
-    depth,
     isRootSpan,
     isLastChild,
+    guides,
     isExpanded,
     isSelected,
     isFaded,
@@ -65,25 +65,30 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
         },
       )}
     >
-      <div className="flex min-w-0 items-stretch" style={{ paddingLeft: `${depth}rem` }}>
-        {!isRootSpan && <TimelineStructureSign isLastChild={isLastChild} />}
+      <div className="flex min-w-0 items-stretch pl-1">
+        <TimelineStructureSign
+          guides={guides}
+          isRootSpan={isRootSpan}
+          isLastChild={isLastChild}
+          hasStem={expansion.hasChildren && isExpanded}
+          dot={
+            <span
+              aria-hidden
+              title={spanUI?.label}
+              style={{ backgroundColor: spanUI?.color }}
+              className="size-2 shrink-0 rounded-full"
+            />
+          }
+        />
 
         <button
           type="button"
           className={cn(
             'text-foreground',
-            'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left',
+            'flex min-w-0 flex-1 cursor-pointer items-center rounded-md pr-2 pl-1.5 text-left',
             focusRingInset,
           )}
         >
-          {spanUI?.color && (
-            <span
-              aria-hidden
-              title={spanUI.label}
-              style={{ backgroundColor: spanUI.color }}
-              className="inline-block size-2 shrink-0 rounded-full"
-            />
-          )}
           <Txt
             as="span"
             variant="caption"

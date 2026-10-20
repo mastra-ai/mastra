@@ -108,6 +108,7 @@ export {
   getRunRegistryEntry,
   setRunRegistryEntry,
   deleteRunRegistryEntry,
+  takeRunScorerInstances,
   type ExtendedRunRegistryEntry,
 } from './run-registry';
 

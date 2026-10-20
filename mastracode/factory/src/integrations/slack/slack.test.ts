@@ -2,7 +2,9 @@ import { ChannelSessionRejectedError, AgentChannels } from '@mastra/core/channel
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { FACTORY_INTERACTIVE_KEY } from '../../auth.js';
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
+import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
 
 // Captures the tenant each prime saw: the stamp can be overwritten later in
 // the gate, so asserting on the final request context alone isn't enough.
@@ -11,8 +13,8 @@ const prime = vi.fn(async (context: RequestContext) => {
   primedUsers.push(context.get('user'));
 });
 const primeTenant = vi.fn(async (_tenant: unknown) => undefined);
-const providerDefault = vi.fn(async (_tenant: unknown, _current: string | undefined): Promise<string | undefined> =>
-  undefined,
+const providerDefault = vi.fn(
+  async (_tenant: unknown, _current: string | undefined): Promise<string | undefined> => undefined,
 );
 vi.mock('../../routes/tenant-credentials.js', () => ({
   primeTenantCredentialsForRequestContext: (context: RequestContext) => prime(context),
@@ -360,6 +362,7 @@ describe('handler dispatch gating', () => {
     expect(thread.postEphemeral).not.toHaveBeenCalled();
     // The run must carry the linked tenant, or it resolves default credentials.
     expect(ctx.requestContext.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
+    expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).toBe(true);
     expect(prime).toHaveBeenCalledExactlyOnceWith(ctx.requestContext);
   });
 
@@ -379,38 +382,71 @@ describe('handler dispatch gating', () => {
     expect(defaultHandler).toHaveBeenCalledTimes(1);
     expect(prime).toHaveBeenCalledExactlyOnceWith(ctx.requestContext);
     expect(primedUsers).toEqual([{ id: 'user-1', organizationId: 'org-1' }]);
+    expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).toBe(true);
     expect(prime.mock.invocationCallOrder[0]).toBeLessThan(defaultHandler.mock.invocationCallOrder[0]!);
   });
 
-  it("uses the existing Factory session owner's credentials when another linked user replies", async () => {
+  it.each(['owner-1', 'responder-1'])(
+    'keeps linked Slack sender %s as the interactive tool actor in an existing session',
+    async senderId => {
+      const thread = makeSubscribedThread();
+      const accountLinks = fullStore({ orgId: 'org-1', userId: senderId, defaultFactoryProjectId: 'fp-1' });
+      const projects = makeProjects([{ id: 'fp-1' }]);
+      const sourceControl = {
+        sessions: {
+          getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'owner-1' }),
+        },
+      } as any;
+      const mastra = {
+        getStorage: () => ({
+          getStore: vi.fn().mockResolvedValue({
+            listThreads: vi.fn().mockResolvedValue({
+              threads: [{ id: 'thread-1', resourceId: 'session-1' }],
+            }),
+          }),
+        }),
+      };
+      const defaultHandler = vi.fn();
+      const handlers = createHandlers({ accountLinks, projects, sourceControl });
+      const message = makeMessage('T-1');
+
+      const ctx = handlerCtx(mastra);
+      await handlers.onSubscribedMessage!(thread, message, defaultHandler, ctx);
+
+      expect(defaultHandler).toHaveBeenCalledWith(thread, message);
+      expect(sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
+      expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+      expect(ctx.requestContext.get(FACTORY_SLACK_SENDER_KEY)).toEqual({ userId: senderId, orgId: 'org-1' });
+      expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).toBe(true);
+      expect(primedUsers.at(-1)).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+    },
+  );
+
+  it('does not dispatch a private Slack session for another linked participant', async () => {
     const thread = makeSubscribedThread();
     const accountLinks = fullStore({ orgId: 'org-1', userId: 'responder-1', defaultFactoryProjectId: 'fp-1' });
     const projects = makeProjects([{ id: 'fp-1' }]);
     const sourceControl = {
       sessions: {
-        getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'owner-1' }),
+        getBySessionId: vi.fn().mockResolvedValue({ orgId: 'org-1', userId: 'owner-1', visibility: 'private' }),
       },
     } as any;
     const mastra = {
       getStorage: () => ({
         getStore: vi.fn().mockResolvedValue({
-          listThreads: vi.fn().mockResolvedValue({
-            threads: [{ id: 'thread-1', resourceId: 'session-1' }],
-          }),
+          listThreads: vi.fn().mockResolvedValue({ threads: [{ id: 'thread-1', resourceId: 'session-1' }] }),
         }),
       }),
     };
     const defaultHandler = vi.fn();
     const handlers = createHandlers({ accountLinks, projects, sourceControl });
-    const message = makeMessage('T-1');
-
     const ctx = handlerCtx(mastra);
-    await handlers.onSubscribedMessage!(thread, message, defaultHandler, ctx);
 
-    expect(defaultHandler).toHaveBeenCalledWith(thread, message);
-    expect(sourceControl.sessions.getBySessionId).toHaveBeenCalledWith('session-1');
-    expect(ctx.requestContext.get('user')).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
-    expect(primedUsers.at(-1)).toEqual({ workosId: 'owner-1', organizationId: 'org-1' });
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
+
+    expect(defaultHandler).not.toHaveBeenCalled();
+    expect(thread.post).toHaveBeenCalledWith('This private Factory session belongs to another user.');
+    expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).not.toBe(true);
   });
 
   it('rejects an existing Factory session when the responder is linked to another organization', async () => {
@@ -548,6 +584,7 @@ describe('handler dispatch gating', () => {
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
     expect(ctx.requestContext.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
+    expect(ctx.requestContext.get(FACTORY_INTERACTIVE_KEY)).toBeUndefined();
   });
 
   it('does not stamp a tenant for an unlinked sender, and does not dispatch', async () => {

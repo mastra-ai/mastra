@@ -1,12 +1,6 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import {
-  type QueryClient,
-  queryOptions,
-  skipToken,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { queryOptions, skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
@@ -18,6 +12,7 @@ import {
   getUserSession,
   listUserSessions,
   USER_SESSION_BRANCH_PREFIX,
+  SLACK_SESSION_BRANCH_PREFIX,
 } from '../ui/domains/workspaces/services/user-sessions';
 import type { FactoryUserSession } from '../ui/domains/workspaces/services/user-sessions';
 
@@ -31,10 +26,16 @@ export interface WorkspacesData {
   userSessions: FactoryUserSession[];
 }
 
+function isUserSession(session: FactoryUserSession): boolean {
+  return (
+    session.branch.startsWith(USER_SESSION_BRANCH_PREFIX) || session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)
+  );
+}
+
 function splitSessions(sessions: FactoryUserSession[]): WorkspacesData {
   return {
-    workspaces: sessions.filter(session => !session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)),
-    userSessions: sessions.filter(session => session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)),
+    workspaces: sessions.filter(session => !isUserSession(session)),
+    userSessions: sessions.filter(isUserSession),
   };
 }
 
