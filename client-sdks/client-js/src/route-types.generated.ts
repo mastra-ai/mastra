@@ -163,14 +163,14 @@ type InputShared_Auxiliary_230 =
       arg: InputShared_Auxiliary_230;
     };
 
-type InputShared_Auxiliary_264 =
+type InputShared_Auxiliary_265 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_264[];
+      args: InputShared_Auxiliary_265[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_264;
+      arg: InputShared_Auxiliary_265;
     }
   | {
       traces:
@@ -182,7 +182,7 @@ type InputShared_Auxiliary_264 =
           };
     };
 
-type InputShared_Auxiliary_692 =
+type InputShared_Auxiliary_693 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,19 +227,19 @@ type InputShared_Auxiliary_692 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_692[];
+      args: InputShared_Auxiliary_693[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_692;
+      arg: InputShared_Auxiliary_693;
     };
 
-type InputShared_Auxiliary_766 = {
+type InputShared_Auxiliary_767 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_766[] | undefined;
+  children?: InputShared_Auxiliary_767[] | undefined;
 };
 
 type Shared_Auxiliary_758 = {
@@ -1808,7 +1808,7 @@ type InputShared_Type_88 = {
       }
     | undefined;
   steps: InputShared_Type_83[];
-  predicates: InputShared_Auxiliary_692[];
+  predicates: InputShared_Auxiliary_693[];
 };
 
 type InputShared_Type_89 = {
@@ -1822,7 +1822,7 @@ type InputShared_Type_89 = {
     | undefined;
   step: InputShared_Type_83;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_692;
+  predicate: InputShared_Auxiliary_693;
 };
 
 type InputShared_Type_90 =
@@ -3724,6 +3724,8 @@ type Shared_Type_68 = {
   traceQueryTimeToFirstChunk: boolean;
   /** Root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct` */
   traceQueryRootSpanFields: boolean;
+  /** Sorting trace and span queries by `timeToFirstChunkMs` */
+  traceQueryTimeToFirstChunkSort: boolean;
   /** Trace query field discovery (POST /observability/traces/query/fields and /values) */
   traceQueryDiscovery: boolean;
   /** Trusted tenant scoping of trace and thread queries */
@@ -3732,8 +3734,12 @@ type Shared_Type_68 = {
   traceAggregate: boolean;
   /** Advanced thread queries (POST /observability/threads/query) */
   threadQuery: boolean;
+  /** Full-history thread rows with activity windows, filters and sorting. Treat a missing value as unavailable. */
+  threadQueryRows: boolean;
   /** Span queries (POST /observability/spans/query) */
   spanQuery: boolean;
+  /** Additional identity, context and parent/root entity predicates in span queries. Treat a missing value as unavailable. */
+  spanQueryContextFields: boolean;
   /** Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit. */
   traceRetentionDays?: number | undefined;
   /** Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501. */
@@ -5582,6 +5588,11 @@ export type PostAgentsAgentIdApproveToolCall_Body = {
       }
     | undefined;
   modelSettings?: unknown | undefined;
+  clientTools?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
 };
 
 export type PostAgentsAgentIdApproveToolCall_Response = {
@@ -5731,6 +5742,11 @@ export type PostAgentsAgentIdDeclineToolCall_Body = {
       }
     | undefined;
   modelSettings?: unknown | undefined;
+  clientTools?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   reason?: string | undefined;
 };
 
@@ -10680,20 +10696,25 @@ export interface PostObservabilityTracesAggregate_RouteContract {
 // ============================================================================
 // Route: POST /observability/threads/query
 // ============================================================================
-export type PostObservabilityThreadsQuery_Body = {
-  traces: {
-    timeRange: {
-      from: string;
-      to: string;
+export type PostObservabilityThreadsQuery_Body =
+  | {
+      timeRange: unknown;
+      [x: string]: unknown;
+    }
+  | {
+      traces: {
+        timeRange: {
+          from: string;
+          to: string;
+        };
+        where?: InputShared_Auxiliary_207 | undefined;
+      };
+      where?: InputShared_Auxiliary_265 | undefined;
+      page?: {
+        limit?: number;
+        after?: (string | null) | undefined;
+      };
     };
-    where?: InputShared_Auxiliary_207 | undefined;
-  };
-  where?: InputShared_Auxiliary_264 | undefined;
-  page?: {
-    limit?: number;
-    after?: (string | null) | undefined;
-  };
-};
 
 export type PostObservabilityThreadsQuery_Response = {
   threads: {
@@ -18657,7 +18678,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_766[] | undefined;
+  files?: InputShared_Auxiliary_767[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18715,7 +18736,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_766[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_767[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (

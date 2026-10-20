@@ -22,6 +22,9 @@ overrides:
   'yaml@>=2.0.0 <2.9.1': 2.9.1
   # Vanta 2026-10-06: nested-lock security floors
   'source-map-js@>=1.0.0 <1.2.2': 1.2.2
+  # Vanta 2026-10-15: AIKIDO-2026-526145 (@ai-sdk/provider-utils) fixed 4.0.52 / 5.0.37; mirror root floors
+  '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
+  '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.52
 enableGlobalVirtualStore: true
 # Mirrors the monorepo root policy: postinstall build scripts for these deps
 # are unnecessary (esbuild works without its install script under pnpm's

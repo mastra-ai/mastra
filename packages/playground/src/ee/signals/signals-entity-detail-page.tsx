@@ -6,7 +6,8 @@ import { Link } from '../../lib/link';
 import { SignalsEntityCrumb } from './signals-entity-crumb';
 import { useSignalsDateUrlState } from './use-signals-date-url-state';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { navCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
+import { navCrumb } from '@/domains/navigation/crumbs';
+import type { CrumbDef } from '@/domains/navigation/crumbs';
 
 const crumbs: CrumbDef[] = [navCrumb('/intelligence'), { id: 'signals-entity', Component: SignalsEntityCrumb }];
 

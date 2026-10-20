@@ -23,7 +23,8 @@ import {
 import { DatasetItemSidePanel } from '@/domains/datasets/components/items/dataset-item-side-panel';
 import { DatasetItemPanelProvider } from '@/domains/datasets/context/dataset-item-panel-context';
 import { useDatasetItemsUrlState } from '@/domains/datasets/hooks/use-dataset-items-url-state';
-import { datasetCrumb, datasetVersionCrumb, navCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
+import { datasetCrumb, datasetVersionCrumb, navCrumb } from '@/domains/navigation/crumbs';
+import type { CrumbDef } from '@/domains/navigation/crumbs';
 
 function DatasetPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (

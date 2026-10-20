@@ -100,6 +100,7 @@ import {
   assertObservabilityTraceQueryContextIdsSupported,
   assertObservabilityTraceQueryRootDurationSupported,
   assertObservabilityTraceQueryTimeToFirstChunkSupported,
+  assertObservabilityTraceQueryTimeToFirstChunkSortSupported,
   isTraceQueryContextIdField,
   assertObservabilityTraceQueryRootSpanFieldsSupported,
   assertObservabilityTraceQueryRootSpanValuesSupported,
@@ -365,6 +366,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
       assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
+      assertObservabilityTraceQueryTimeToFirstChunkSortSupported(observabilityStore, plan.orderBy);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
       if (plan.paginationMode === 'delta' && !observabilityStore.getFeatures()?.includes('delta-polling')) {
         throw new HTTPException(501, { message: 'This storage provider does not support observability delta polling' });
@@ -610,6 +612,7 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
       assertObservabilitySpanQuerySupported(observabilityStore);
       assertObservabilitySpanQueryFieldsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
+      assertObservabilityTraceQueryTimeToFirstChunkSortSupported(observabilityStore, plan.orderBy);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -827,8 +830,15 @@ for (const route of [GET_TRACE_QUERY_FIELDS, GET_TRACE_QUERY_VALUES]) {
 }
 
 export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
-  bodySchema: coreStorage.queryThreadsInputSchema,
-  responseSchema: coreStorage.queryThreadsResultSchema,
+  // Preserve legacy schemas/exports for old clients and independently upgraded packages.
+  // On old core, recognize new requests only to return a structured capability error.
+  bodySchema: z.union([
+    coreStorage.threadQueryRequestSchema ?? z.object({ timeRange: z.unknown() }).passthrough(),
+    coreStorage.queryThreadsInputSchema,
+  ]),
+  responseSchema: coreStorage.threadQueryResponseSchema
+    ? z.union([coreStorage.threadQueryResponseSchema, coreStorage.queryThreadsResultSchema])
+    : coreStorage.queryThreadsResultSchema,
   onValidationError: traceQueryValidationError,
   maxBodySize: 256 * 1024,
   preserveHttpExceptions: true,
@@ -837,10 +847,24 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
       code: 'TRACE_QUERY_UNSUPPORTED',
       message: 'Thread queries require a newer @mastra/core with observability thread-query support. Please upgrade.',
     }),
-  handler: async ({ mastra, requestContext, traces, where, page }) => {
+  handler: async params => {
+    const { mastra, requestContext } = params;
+    const rowsRequest = 'timeRange' in params;
+    if (rowsRequest && typeof coreStorage.planThreadRowsQuery !== 'function') {
+      throwTraceQueryError(501, {
+        code: 'TRACE_QUERY_UNSUPPORTED',
+        message: 'Thread rows require a newer @mastra/core. Please upgrade.',
+      });
+    }
     let plan;
     try {
-      plan = coreStorage.planThreadQuery({ traces, where, page }, { scope: resolveTraceQueryScope(requestContext) });
+      const options = { scope: resolveTraceQueryScope(requestContext) };
+      plan = rowsRequest
+        ? coreStorage.planThreadRowsQuery(
+            { timeRange: params.timeRange, where: params.where, page: params.page, orderBy: params.orderBy },
+            options,
+          )
+        : coreStorage.planThreadQuery({ traces: params.traces, where: params.where, page: params.page }, options);
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
         throwTraceQueryError(422, { code: error.code, message: error.message, issues: error.issues });
@@ -858,14 +882,23 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilityThreadQuerySupported(observabilityStore);
-      assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.traces.where);
-      assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.traces.where);
-      assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.traces.where);
-      assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
-      assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
-      assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
-      assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan.traces);
-      assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
+      if (plan.result === 'threadRows') {
+        if (!observabilityStore.getFeatures()?.includes('thread-query-rows')) {
+          throwTraceQueryError(501, {
+            code: 'TRACE_QUERY_UNSUPPORTED',
+            message: 'Thread rows require an updated observability storage adapter. Please upgrade.',
+          });
+        }
+      } else {
+        assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.traces.where);
+        assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.traces.where);
+        assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.traces.where);
+        assertObservabilityTraceQueryRootDurationSupported(observabilityStore, plan.where);
+        assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
+        assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
+        assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan.traces);
+        assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
+      }
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -880,6 +913,12 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
     try {
       return await observabilityStore.queryThreads(plan);
     } catch (error) {
+      if (
+        typeof coreStorage.TraceQueryResourceLimitError === 'function' &&
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      ) {
+        throwTraceQueryError(503, { code: error.code, message: error.message });
+      }
       if (error instanceof coreStorage.TraceQueryExecutionError) {
         throwTraceQueryError(504, { code: error.code, message: error.message });
       }
@@ -912,6 +951,10 @@ if (QUERY_THREADS.openapi) {
   QUERY_THREADS.openapi.responses[501] = {
     description: 'The configured observability store does not support thread queries',
     content: { 'application/json': { schema: traceQueryUnsupportedErrorSchema } },
+  };
+  QUERY_THREADS.openapi.responses[503] = {
+    description: 'Thread query exceeded the database resource limit',
+    content: { 'application/json': { schema: traceQueryResourceLimitErrorSchema } },
   };
   QUERY_THREADS.openapi.responses[504] = {
     description: 'Thread query exceeded the configured database execution timeout',

@@ -153,6 +153,8 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       // The user session that started this one as a side session, if any.
       origin_session_id: { type: 'text', nullable: true },
       origin_thread_id: { type: 'text', nullable: true },
+      // When the origin muted this side session's reports; null while it gets them.
+      origin_muted_at: { type: 'timestamp', nullable: true },
       sandbox_id: { type: 'text', nullable: true },
       sandbox_workdir: { type: 'text', nullable: true },
       materialized_at: { type: 'timestamp', nullable: true },
@@ -353,6 +355,8 @@ export interface SourceControlSession {
   originSessionId: string | null;
   /** The thread of `originSessionId` that started it. */
   originThreadId: string | null;
+  /** When the origin muted this side session's reports; null while they are delivered. */
+  originMutedAt: Date | null;
   baseBranch: string;
   sandboxId: string | null;
   sandboxWorkdir: string | null;
@@ -502,6 +506,8 @@ export interface SourceControlStorageHandle {
     listByOrigin(args: { orgId: string; originSessionId: string }): Promise<SourceControlSession[]>;
     /** Overwrite the session's display title. Keyed by the controller-facing `sessionId`. */
     rename(args: { sessionId: string; title: string }): Promise<void>;
+    /** Mute or unmute the side session's reports to its origin. Keyed by the controller-facing `sessionId`. */
+    setOriginMuted(args: { sessionId: string; muted: boolean }): Promise<void>;
     /** Keyed by the link (today's callers) or by the factory. */
     getForBranch(args: SessionBranchKey): Promise<SourceControlSession | null>;
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
@@ -608,6 +614,7 @@ interface SessionDbRow extends Record<string, unknown> {
   visibility: string | null;
   origin_session_id?: string | null;
   origin_thread_id?: string | null;
+  origin_muted_at?: Date | null;
   base_branch: string;
   sandbox_id: string | null;
   sandbox_workdir: string | null;
@@ -725,6 +732,7 @@ function toSession(row: SessionDbRow): SourceControlSession {
     visibility: row.visibility === 'private' ? 'private' : 'org',
     originSessionId: row.origin_session_id ?? null,
     originThreadId: row.origin_thread_id ?? null,
+    originMutedAt: row.origin_muted_at ?? null,
     baseBranch: row.base_branch,
     sandboxId: row.sandbox_id,
     sandboxWorkdir: row.sandbox_workdir,
@@ -1433,6 +1441,12 @@ export class SourceControlStorage extends FactoryStorageDomain {
             updated_at: new Date(),
           }));
         },
+        setOriginMuted: async ({ sessionId, muted }) => {
+          await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
+            origin_muted_at: muted ? new Date() : null,
+            updated_at: new Date(),
+          }));
+        },
         getForBranch: async args => {
           if ('factoryProjectId' in args) {
             const row = await db().findOne<SessionDbRow>(SESSIONS, {
@@ -1487,6 +1501,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               visibility: input.visibility ?? 'org',
               origin_session_id: input.origin?.sessionId ?? null,
               origin_thread_id: input.origin?.threadId ?? null,
+              origin_muted_at: null,
               base_branch: input.baseBranch,
               sandbox_id: null,
               sandbox_workdir: null,

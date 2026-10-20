@@ -1,6 +1,7 @@
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import { expandDurableSteps } from '@internal/core/durable';
 import { z } from 'zod';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../../error';
 import { serializeError } from '../../../../events/codec/error';
@@ -73,7 +74,7 @@ import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCall
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
-import { durableOptionsSchema } from '../shared/schemas';
+import { baseIterationStateSchema, durableOptionsSchema } from '../shared/schemas';
 
 /**
  * Detect a run-level budget expiry (`modelSettings.timeout.totalMs`, #21724
@@ -134,6 +135,7 @@ const durableLLMInputSchema = z.object({
           modelId: z.string(),
           specificationVersion: z.string().optional(),
           originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
+          settings: z.record(z.string(), z.any()).optional(),
           providerOptions: z.record(z.string(), z.any()).optional(),
         }),
         maxRetries: z.number(),
@@ -148,6 +150,7 @@ const durableLLMInputSchema = z.object({
   // rebuild-from-Mastra path resolves the model and tools with the caller's
   // context rather than an empty one.
   requestContextEntries: z.record(z.string(), z.any()).optional(),
+  inputTripwire: baseIterationStateSchema.shape.inputTripwire,
   // Agent span data for model span parenting
   agentSpanData: z.any().optional(),
   // Model span data (ONE span for entire agent run, created before workflow)
@@ -195,6 +198,7 @@ const durableLLMOutputSchema = z.object({
     signalPreempted: z.boolean().optional(),
     totalUsage: z.any().optional(),
     tripwire: z.any().optional(),
+    messageId: z.string().optional(),
   }),
   metadata: z.any(),
   processorRetryCount: z.number().optional(),
@@ -396,9 +400,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
       // 1c. Check for tripwire from processInput (initial input processing).
       // If an input processor called abort() during preparation, the tripwire
-      // data is stored on the registry entry. Emit a tripwire chunk and bail
-      // immediately — the model must never be called.
-      const registryTripwire = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tripwire;
+      // data is stored on the registry entry, with a serialized fallback for
+      // separate workers. Emit a tripwire chunk and bail before calling the model.
+      const registryTripwire =
+        getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tripwire ?? typedInput.inputTripwire;
       if (registryTripwire) {
         // Clear it so it doesn't fire again on a subsequent iteration (shouldn't
         // happen since the loop will stop, but belt-and-suspenders).
@@ -689,7 +694,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             let currentTools = tools as unknown as ToolSet;
             let currentToolChoice = execOptions.toolChoice as ToolChoice<ToolSet> | undefined;
             let currentActiveTools = execOptions.activeTools;
-            let currentModelSettings: Record<string, unknown> = { ...(execOptions.modelSettings ?? {}) };
+            // Per-entry settings shallow-merge over call-time settings, timeout
+            // fields included — same precedence as the in-process loop.
+            const entrySettings = modelEntry.config.settings;
+            let currentModelSettings: Record<string, unknown> = {
+              ...execOptions.modelSettings,
+              ...entrySettings,
+              ...(execOptions.modelSettings?.timeout || entrySettings?.timeout
+                ? { timeout: { ...execOptions.modelSettings?.timeout, ...entrySettings?.timeout } }
+                : {}),
+            };
             let currentProviderOptions: SharedProviderOptions | undefined = mergeProviderOptions(
               execOptions.providerOptions,
               modelEntry.config.providerOptions,
@@ -819,7 +833,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   llmRequestProcessorIds: ProcessorRunner.getLLMRequestProcessorIds(llmRequestInputProcessors),
                   messageList,
                   stepNumber: stepIndex,
-                  steps: inputData.accumulatedSteps ?? [],
+                  steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   requestContext,
                   memory: registryEntry?.memory,
@@ -1080,7 +1094,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   messageList,
                   workspace: registryEntry?.workspace,
                   stepNumber: inputData.stepIndex ?? 0,
-                  steps: inputData.accumulatedSteps ?? [],
+                  steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                   retryCount: processorRetryCount,
                   requestContext,
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
@@ -1712,7 +1726,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   if (effectiveOutputProcessors.length > 0) {
                     try {
                       await getToolResultRunner().runProcessToolResult({
-                        steps: (inputData as any).accumulatedSteps ?? [],
+                        steps: expandDurableSteps((inputData as any).accumulatedSteps ?? []),
                         messages: messageList.get.all.db(),
                         messageList,
                         stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,
@@ -2262,6 +2276,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               cleanupToolObservabilitySpans(!(toolCalls.length > 0 && finishReason !== 'stop'));
             } catch (error) {
               ownership?.throwIfLost();
+              // This attempt is over: whatever processors still hold from it must not be
+              // released alongside a retry's parts or after an abort.
+              if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
+                const kept = await getToolResultRunner().discardHeldParts(registryEntry.processorStates);
+                if (pubsub) {
+                  for (const part of kept) await emitChunkEvent(pubsub, runId, part, true);
+                }
+              }
               throwIfInterrupted();
               cleanupToolObservabilitySpans(true);
               logger?.error?.('Error processing LLM stream', { error, runId });
@@ -2335,7 +2357,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     messageId: currentMessageId,
                     rotateResponseMessageId,
                     stepNumber: inputData.stepIndex ?? 0,
-                    steps: inputData.accumulatedSteps ?? [],
+                    steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                     retryCount: processorRetryCount,
                     requestContext,
                   });
@@ -2456,7 +2478,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   chunks: collectedChunks,
                   model: currentModel,
                   stepNumber: inputData.stepIndex ?? 0,
-                  steps: inputData.accumulatedSteps ?? [],
+                  steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                   warnings,
                   request,
                   rawResponse,
@@ -2577,7 +2599,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
               try {
                 await outputStepRunner.runProcessOutputStep({
-                  steps: inputData.accumulatedSteps ?? [],
+                  steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                   messages: messageList.get.all.db(),
                   messageList,
                   stepNumber: inputData.stepIndex ?? 0,
@@ -2661,6 +2683,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 headers: rawResponse?.headers,
                 request,
                 tripwire: stepTripwire,
+                // The id may have rotated in this step (retry feedback, signals, processors);
+                // the next iteration must continue and roll back that message, not the old one.
+                messageId: currentMessageId,
               },
               metadata: {
                 id: responseMetadata.id,
@@ -2799,7 +2824,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   messageId: currentMessageId,
                   rotateResponseMessageId,
                   stepNumber: inputData.stepIndex ?? 0,
-                  steps: inputData.accumulatedSteps ?? [],
+                  steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                   retryCount: processorRetryCount,
                   requestContext,
                   tracingContext,

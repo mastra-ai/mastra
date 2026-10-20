@@ -93,7 +93,7 @@ const result = await mastraClient.querySpans({
 console.log(result.spans)
 ```
 
-Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt` or `endedAt`, ascending or descending, and defaults to descending start time.
+Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt`, `endedAt`, or `timeToFirstChunkMs`, ascending or descending, and defaults to descending start time. Spans without a `timeToFirstChunkMs` value sort last in both directions.
 
 | Fields | Operators |
 | - | - |
@@ -101,16 +101,131 @@ Pages default to 100 rows and allow at most 1,000. The response is `{ spans, pag
 | `organizationId`, `resourceId`, `runId`, `sessionId`, `userId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | Same string operators |
 | Entity, parent entity and root entity `Type`, `Id`, `Name`, `VersionId` fields, such as `parentEntityId` | Same string operators |
 | `name`, `spanType`, `status` | Same string operators; `name` also accepts `matches` / `notMatches` for normalized whole words and phrases |
-| `startedAt`, `endedAt`, `durationMs` | Comparisons, membership and presence |
+| `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs` | Comparisons, membership and presence |
 | `error` | `exists`, `notExists` |
 
 Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', value: { path: 'spanType' }, set: ['agent_run', 'tool_call'] }`. A span's status is `error` when it has an error and `success` otherwise.
 
 Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews. Model/provider are available in returned rows but aren't filterable.
 
-The additional identity, context and parent/root entity filters require an updated storage adapter. With an older adapter, requests using these filters return a structured `422` error.
+Check `capabilities.spanQueryContextFields` from `getObservabilityCapabilities()` before using the additional identity, context and parent/root entity filters. A missing or false value means these filters aren't available. With an older adapter, requests using these filters return a structured `422` error.
 
 DuckDB returns `null` for parent/root entity type, ID and name, and for `executionSource`. Equality filters on these fields match no spans. Parent/root entity version IDs remain available.
+
+## Querying threads
+
+`queryTraceThreads()` returns thread summaries from completed traces through `POST /observability/threads/query`. Each row includes activity timestamps, trace counts, context and previews. Traces without a thread ID aren't included.
+
+```typescript
+const result = await mastraClient.queryTraceThreads({
+  timeRange: {
+    traces: {
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-02T00:00:00.000Z',
+    },
+  },
+  where: { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } },
+  orderBy: [{ field: 'endedAt', direction: 'desc' }],
+  page: { limit: 100 },
+})
+
+for (const thread of result.threads) {
+  console.log(thread.firstTraceId, thread.lastTraceId, thread.traceCount, thread.outputPreview)
+}
+```
+
+### Thread time ranges
+
+Choose exactly one time selector. Each range requires ISO timestamps with `from` earlier than `to`. The range includes `from` and excludes `to`.
+
+| Selector | Matches threads with |
+| - | - |
+| `timeRange.traces: { from, to }` | At least one trace that started in the window |
+| `timeRange.threads: { field: 'startedAt', from, to }` | Their first activity in the window |
+| `timeRange.threads: { field: 'endedAt', from, to }` | Their last activity in the window |
+
+For example, find threads whose most recent activity falls on October 1:
+
+```typescript
+const result = await mastraClient.queryTraceThreads({
+  timeRange: {
+    threads: {
+      field: 'endedAt',
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-02T00:00:00.000Z',
+    },
+  },
+})
+```
+
+Rows include the full retained history within the authorized scope, including traces before and after the window. Filters apply to these complete rows. An `environment` filter checks the first trace's environment.
+
+### Thread filters
+
+Use `where` to filter thread rows. Combine predicates with `and`, `or` and `not`.
+
+| Fields | Operators |
+| - | - |
+| `threadId`, `organizationId`, `firstTraceId`, `lastTraceId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| `resourceId`, `userId`, `runId`, `sessionId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | Same string operators |
+| `entityType`, `entityId`, `entityName`, `entityVersionId` | Same string operators |
+| `status` | `eq`, `ne`, `in`, `notIn`, with values `success` or `error` |
+| `startedAt`, `endedAt`, `timeToFirstChunkMs` | `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `in`, `notIn`, `exists`, `notExists` |
+| `traceCount` | `eq`, `ne`, `lt`, `lte`, `gt`, `gte` |
+
+For example, filter for threads from selected agents with at least three traces:
+
+```typescript
+const result = await mastraClient.queryTraceThreads({
+  timeRange: {
+    traces: {
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-02T00:00:00.000Z',
+    },
+  },
+  where: {
+    op: 'and',
+    args: [
+      { op: 'in', value: { path: 'entityId' }, set: ['support-agent', 'sales-agent'] },
+      { op: 'gte', left: { path: 'traceCount' }, right: { literal: 3 } },
+    ],
+  },
+})
+```
+
+Presence filters use `{ op: 'exists', path: 'userId' }` to check for a non-null value. Model/provider and previews are available in returned rows but aren't filterable.
+
+### Thread response
+
+The response is `{ threads, page: { next } }`, without a total count. Each entry in `threads` contains these fields:
+
+| Returned fields | Meaning |
+| - | - |
+| `threadId`, `organizationId` | Thread identity. Equal thread IDs in different organizations remain separate. |
+| `firstTraceId`, `lastTraceId` | Earliest and latest trace by start time. Equal start times use trace ID as a deterministic tie-breaker. |
+| `resourceId`, `userId`, `runId`, `sessionId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | First-trace context, or `null` when missing. |
+| `entityType`, `entityId`, `entityName`, `entityVersionId` | First-trace entity. |
+| `startedAt`, `endedAt` | Earliest start and maximum end time across the thread. |
+| `status` | `error` when the last-started trace's root span has an error, otherwise `success`. |
+| `traceCount` | Number of logical traces in the thread. |
+| `inputPreview` | First trace's input preview. |
+| `outputPreview`, `errorPreview` | Last-started trace's previews. |
+| `timeToFirstChunkMs` | First trace's root agent time to first chunk, in milliseconds. `null` when unavailable or the root isn't an agent. |
+| `model`, `provider` | Model/provider from the first completed model generation directly under the first trace's root agent. `null` when unavailable. |
+
+An earlier-started trace can finish last. In that case, it supplies `endedAt`, while the last-started trace still supplies status and output/error previews. Missing first-trace values aren't replaced with values from a later trace.
+
+### Thread ordering and pagination
+
+Ordering accepts exactly one of `startedAt` or `endedAt`, with direction `asc` or `desc`. The default is `endedAt` descending. Pages default to 100 rows and allow at most 1,000. Pass `result.page.next` as `page.after` with the same time selector, filters, scope and ordering. A `null` cursor means no more pages are available. Pagination reflects live data, so new traces can move a thread between pages.
+
+To load the traces within a thread, use [`queryTraces()`](#querying-traces) with a `threadId` filter and a time range covering the thread's activity.
+
+### Thread query support
+
+Check `capabilities.threadQueryRows` from `getObservabilityCapabilities()` before using this contract. A missing or false value means full thread rows aren't available. Older core or storage packages return a structured `501` for these requests. Legacy identity requests remain supported for mixed package versions.
+
+ClickHouse rejects broad thread queries when the authorized history exceeds 250,000 stored trace-root rows, including duplicate copies. A narrower time range can still succeed by selecting fewer candidate threads. Rejected queries return `503 TRACE_QUERY_RESOURCE_LIMIT` without partial results.
 
 ## Querying traces
 
@@ -136,7 +251,7 @@ const result = await mastraClient.queryTraces({
 })
 ```
 
-See [Trace queries](/reference/observability/tracing/trace-query) for request fields, predicates, limits, response shapes, and errors.
+See [Query traces](/reference/observability/tracing/advanced-queries#query-traces) for request fields, predicates, limits, response shapes, and errors.
 
 ### Load a page and poll for traces
 
@@ -163,7 +278,7 @@ const changes = await mastraClient.queryTraces({
 
 Merge `changes.traces` by `traceId`, retain `changes.deltaCursor`, and continue while `changes.delta.hasMore` is `true`. Keep the same time range and predicate across polls. Only completed traces are returned; polling doesn't guarantee notifications for related-record updates, deletions, or traces that stop matching.
 
-See [Delta polling](/reference/observability/tracing/trace-query#poll-after-loading-a-numbered-page) for bootstrap behavior, cursor lifetime, retention, and a complete polling loop.
+See [Delta polling](/reference/observability/tracing/advanced-queries#poll-after-loading-a-numbered-page) for bootstrap behavior, cursor lifetime, retention, and a complete polling loop.
 
 ### Aggregate traces
 
@@ -188,11 +303,9 @@ if (capabilities.traceAggregate) {
 }
 ```
 
-`groupBy` accepts the root span's `name` and `spanType` as well as entity and context fields. Every `groupBy` field can also be used in `where` to drill into a group, except `serviceName`, `executionSource`, and `experimentId`, which are groupable only.
+Each row has `dimensions` keyed by `groupBy` field, `measures` keyed by measure name, a `bucket` timestamp when `interval` is set, and `cost` coverage when a cost measure is requested. `truncated` is `true` when more groups matched than `limit`. Check `capabilities.traceAggregate` before calling. The client retries server errors like `queryTraces()` but doesn't retry `422` validation errors.
 
-Each row has `dimensions` keyed by `groupBy` field, `measures` keyed by measure name, a `bucket` timestamp when `interval` is set, and `cost` coverage when a cost measure is requested. `truncated` is `true` when more groups matched than `limit`.
-
-Check `capabilities.traceAggregate` before calling. Unlike `traceQuery`, a missing value means the server doesn't support aggregation. The client retries server errors like `queryTraces()` but doesn't retry `422` validation errors.
+See [Aggregate traces](/reference/observability/tracing/advanced-queries#aggregate-traces) for dimensions, measures, token and cost semantics, time buckets, limits, and errors.
 
 ### Discover trace-query fields and values
 
@@ -212,7 +325,7 @@ const fields = await mastraClient.getTraceQueryFields({
 })
 ```
 
-For the `trace` scope on a server that supports aggregation, the response also includes `aggregate`: the `dimensions` you can pass to `groupBy` and the `measures` you can request. Every observed metadata field is also a dimension, and `countDistinct.<field>` accepts any dimension or `traceId`.
+For the `trace` scope on a server that supports aggregation, the response also includes `aggregate`: the `dimensions` you can pass to `groupBy` and the `measures` you can request. See [Discover fields and values](/reference/observability/tracing/advanced-queries#discover-fields-and-values).
 
 Use the exact local path from the response with the same scope. For example, `model` belongs inside a `spans.some` or `spans.none` predicate. A field picker can fetch the `trace` and `spans` scopes in parallel.
 
@@ -390,7 +503,7 @@ const ratingPercentiles = await mastraClient.getFeedbackPercentiles({
 
 ## Related
 
-- [Trace queries](/reference/observability/tracing/trace-query): Query completed traces with recursive predicates
+- [Advanced trace queries](/reference/observability/tracing/advanced-queries): Query and aggregate completed traces with recursive predicates
 - [Feedback guide](/docs/observability/feedback): Learn how to create, list, and query feedback
 - [Feedback reference](/reference/observability/feedback): Review feedback schemas and HTTP routes
 - [Agents API](./agents): Learn about agent interactions that generate traces

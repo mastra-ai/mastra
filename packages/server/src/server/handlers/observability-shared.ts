@@ -52,6 +52,7 @@ const OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_STORAGE_FEATURE = 'trace-que
 const TRACE_QUERY_TIME_TO_FIRST_CHUNK_FIELDS = new Set(['timeToFirstChunkMs']);
 const OBSERVABILITY_TRACE_QUERY_ROOT_SPAN_FIELDS_STORAGE_FEATURE = 'trace-query-root-span-fields';
 const TRACE_QUERY_ROOT_SPAN_FIELDS = new Set(['name', 'spanType']);
+const OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_SORT_STORAGE_FEATURE = 'trace-query-time-to-first-chunk-sort';
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
 const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE = 'trace-query-tenant-scope';
@@ -338,6 +339,30 @@ export function assertObservabilityTraceQueryRootSpanValuesSupported(
   throw new coreStorage.TraceQueryValidationError([rootSpanFieldIssue(['path'], plan.path)]);
 }
 
+export function supportsObservabilityTraceQueryTimeToFirstChunkSort(observabilityStore: ObservabilityStorage) {
+  return (
+    getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_SORT_STORAGE_FEATURE) ===
+    true
+  );
+}
+
+/** Covers the sort of trace and span queries. */
+export function assertObservabilityTraceQueryTimeToFirstChunkSortSupported(
+  observabilityStore: ObservabilityStorage,
+  orderBy: { field: string },
+) {
+  if (
+    !TRACE_QUERY_TIME_TO_FIRST_CHUNK_FIELDS.has(orderBy.field) ||
+    supportsObservabilityTraceQueryTimeToFirstChunkSort(observabilityStore)
+  ) {
+    return;
+  }
+
+  throw new HTTPException(501, {
+    message: 'Sorting by time to first chunk is not supported by the configured observability store',
+  });
+}
+
 export function assertObservabilityTraceQueryDiscoverySupported(observabilityStore: ObservabilityStorage) {
   if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE)) return;
 
@@ -416,11 +441,14 @@ export type ObservabilityStorageCapabilities = {
   traceQueryContextIds: boolean;
   traceQueryTimeToFirstChunk: boolean;
   traceQueryRootSpanFields: boolean;
+  traceQueryTimeToFirstChunkSort: boolean;
   traceQueryDiscovery: boolean;
   traceQueryTenantScope: boolean;
   traceAggregate: boolean;
   threadQuery: boolean;
+  threadQueryRows: boolean;
   spanQuery: boolean;
+  spanQueryContextFields: boolean;
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
   traceRetentionDays?: number;
   feedback: boolean;
@@ -443,11 +471,14 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   traceQueryContextIds: false,
   traceQueryTimeToFirstChunk: false,
   traceQueryRootSpanFields: false,
+  traceQueryTimeToFirstChunkSort: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   traceAggregate: false,
   threadQuery: false,
+  threadQueryRows: false,
   spanQuery: false,
+  spanQueryContextFields: false,
   feedback: false,
 };
 
@@ -523,6 +554,8 @@ export function getObservabilityStorageCapabilities(
       declares(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_STORAGE_FEATURE),
     traceQueryRootSpanFields:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_SPAN_FIELDS_STORAGE_FEATURE),
+    traceQueryTimeToFirstChunkSort:
+      (traceQuery || spanQuery) && declares(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_SORT_STORAGE_FEATURE),
     traceQueryDiscovery:
       newApiCore && supportsTraceQueryDiscoveryCore() && declares(OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE),
     traceQueryTenantScope:
@@ -532,7 +565,10 @@ export function getObservabilityStorageCapabilities(
     traceAggregate:
       newApiCore && supportsTraceAggregateCore() && declares(OBSERVABILITY_TRACE_AGGREGATE_STORAGE_FEATURE),
     threadQuery,
+    threadQueryRows:
+      threadQuery && typeof coreStorage.planThreadRowsQuery === 'function' && declares('thread-query-rows'),
     spanQuery,
+    spanQueryContextFields: spanQuery && declares('span-query-context-fields'),
     feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
   };
 }
@@ -614,7 +650,8 @@ export const NEW_ROUTE_DEFS = {
     method: 'POST',
     path: '/observability/threads/query',
     summary: 'Query threads',
-    description: 'Returns thread identities matching eligible trace and cross-trace predicates',
+    description:
+      'Returns full-history thread rows with activity timestamps, first/last traces, previews and context fields',
     requiresPermission: 'observability:read',
   },
 

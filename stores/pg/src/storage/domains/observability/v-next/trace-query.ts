@@ -45,9 +45,33 @@ export const TRACE_STATUS_SQL = `CASE WHEN r."error" IS NOT NULL THEN 'error' EL
 /** Core versions without the field reject it in strict query results, so it is only returned when core knows it. */
 export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;
 
-export const timeToFirstChunkFeatures = timeToFirstChunkSupported
-  ? (['trace-query-time-to-first-chunk'] as const)
-  : ([] as const);
+/** Core before the sort rejects `orderBy` on the field, so the sort is only declared when core plans it. */
+const timeToFirstChunkSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstChunkMs') === true;
+
+export const timeToFirstChunkFeatures = [
+  ...(timeToFirstChunkSupported ? (['trace-query-time-to-first-chunk'] as const) : []),
+  ...(timeToFirstChunkSortSupported ? (['trace-query-time-to-first-chunk-sort'] as const) : []),
+];
+
+/**
+ * Keyset bounds for a cursor's sort value: terms for rows strictly past it in `direction`, and the
+ * condition for rows level with it. Empty values sort last in both directions, so they are past
+ * every value and level only with each other.
+ */
+export function keysetSortBounds(
+  field: string,
+  direction: 'asc' | 'desc',
+  sortValue: string | number | null,
+  values: unknown[],
+): { past: string[]; level: string } {
+  if (sortValue === null) return { past: [], level: `${field} IS NULL` };
+  values.push(sortValue);
+  const parameter = `$${values.length}::${typeof sortValue === 'number' ? 'float8' : 'timestamptz'}`;
+  return {
+    past: [`${field} ${direction === 'asc' ? '>' : '<'} ${parameter}`, `${field} IS NULL`],
+    level: `${field} = ${parameter}`,
+  };
+}
 
 export function durationMsSql(startedAt: string, endedAt: string): string {
   return `EXTRACT(EPOCH FROM (${endedAt} - ${startedAt}))::numeric * 1000`;
@@ -300,11 +324,13 @@ function compileScalarPredicate<TField extends string>(
 
   const parameter = `$${parameterOffset}`;
   const operators = { lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
+  // `value` is never null, so plain `=`/`<>` keep `IS [NOT] DISTINCT FROM` semantics while staying
+  // indexable. The null guards keep `NOT (...)` two-valued on null columns.
   if (predicate.operator === 'eq') {
-    return { sql: `${field} IS NOT DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
+    return { sql: `${field} IS NOT NULL AND ${field} = ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   if (predicate.operator === 'ne') {
-    return { sql: `${field} IS DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
+    return { sql: `${field} IS NULL OR ${field} <> ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   const operator = operators[predicate.operator];
   if (operator === undefined) throw new Error(`Unsupported trusted trace-query operator: ${predicate.operator}`);
@@ -755,8 +781,8 @@ LIMIT $${values.length}`,
     };
   }
 
-  const orderField = plan.orderBy.field === 'startedAt' ? '"startedAt"' : '"endedAt"';
-  const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
+  const orderField = `"${plan.orderBy.field}"`;
+  const direction = `${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST`;
   if (plan.paginationMode === 'page') {
     values.push(plan.perPage, plan.page * plan.perPage);
     return {
@@ -771,11 +797,9 @@ LIMIT $${values.length - 1} OFFSET $${values.length}`,
 
   let pageCondition = '';
   if (plan.cursor) {
-    const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
-    const sortParameter = `$${values.length + 1}`;
-    const idParameter = `$${values.length + 2}`;
-    pageCondition = `WHERE (${orderField} ${comparison} ${sortParameter} OR (${orderField} = ${sortParameter} AND "traceId" > ${idParameter}))`;
-    values.push(plan.cursor.sortValue, plan.cursor.traceId);
+    const { past, level } = keysetSortBounds(orderField, plan.orderBy.direction, plan.cursor.sortValue, values);
+    values.push(plan.cursor.traceId);
+    pageCondition = `WHERE (${[...past, `(${level} AND "traceId" > $${values.length})`].join(' OR ')})`;
   }
   values.push(plan.limit + 1);
 
@@ -1202,7 +1226,7 @@ export async function queryTraces(
         rows.length > plan.limit && last
           ? coreStorage.encodeTraceQueryCursor(plan, {
               result: 'traces',
-              sortValue: last[plan.orderBy.field],
+              sortValue: last[plan.orderBy.field] ?? null,
               traceId: last.traceId,
             })
           : null,
@@ -1236,4 +1260,11 @@ export async function queryThreads(
 /** Compile a direct span-query filter using its dedicated field mapping. */
 export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate, offset: number): SqlFragment {
   return compileScalarPredicate(predicate, SPAN_QUERY_FIELDS, offset);
+}
+
+export function compileThreadQueryPredicate(predicate: TrustedTraceQueryScalarPredicate, offset: number): SqlFragment {
+  const fields = Object.fromEntries(
+    Object.keys(coreStorage.THREAD_QUERY_FIELD_REGISTRY).map(field => [field, `s."${field}"`]),
+  );
+  return compileScalarPredicate(predicate, fields, offset);
 }

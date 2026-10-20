@@ -43,7 +43,8 @@ function ConfigTabLabel({ title, icon, badge }: { title: string; icon: React.Rea
 
 function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchemaProperty; depth: number }) {
   const typeLabel = Array.isArray(prop.type) ? prop.type.filter((t: string) => t !== 'null').join(' | ') : prop.type;
-  const hasChildren = prop.type === 'object' && prop.properties && Object.keys(prop.properties).length > 0;
+  const properties = prop.properties;
+  const hasChildren = prop.type === 'object' && properties && Object.keys(properties).length > 0;
 
   return (
     <div style={depth > 0 ? { paddingLeft: depth * 12 } : undefined}>
@@ -60,7 +61,7 @@ function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchem
       </div>
       {hasChildren && (
         <div className="ml-1 border-l border-border">
-          {Object.entries(prop.properties).map(([childName, childProp]) => (
+          {Object.entries(properties).map(([childName, childProp]) => (
             <VariableProperty key={childName} name={childName} prop={childProp} depth={depth + 1} />
           ))}
         </div>

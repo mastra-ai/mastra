@@ -2,6 +2,7 @@ import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
 import { embedMany as embedManyV6 } from '@internal/ai-v6';
+import { embedMany as embedManyV7 } from '@internal/ai-v7';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -239,6 +240,9 @@ export function extractWorkingMemoryContent(text: string): string | null {
 type MastraMessagePart = MastraDBMessage['content']['parts'][number];
 const UPDATE_WORKING_MEMORY_TOOL_NAME = 'updateWorkingMemory';
 
+// Google's documented dummy signature for Gemini function calls without a real one.
+const SKIP_THOUGHT_SIGNATURE_VALIDATOR = 'skip_thought_signature_validator';
+
 /**
  * Removes `updateWorkingMemory` tool invocations from stored message parts, one step
  * at a time. A step starts at a `step-start` part, or where a tool part is followed by
@@ -266,6 +270,28 @@ function removeWorkingMemoryToolInvocationParts(parts: MastraMessagePart[]): Mas
   return steps.flatMap(step => {
     if (!step.some(isWorkingMemoryCall)) return step;
     const remaining = step.filter(part => !isWorkingMemoryCall(part));
+    // Gemini signs only the first call of a parallel step and rejects a replayed step
+    // whose first call is unsigned. When the signed call was the working-memory call,
+    // mark the first surviving call with Google's documented skip-validator signature
+    // (#27231). The real signature is bound to the removed call, so it is not moved.
+    // A signature already on the surviving call wins.
+    const targetIndex = remaining.findIndex(part => part?.type === 'tool-invocation');
+    const target = remaining[targetIndex];
+    if (target?.type === 'tool-invocation') {
+      let providerMetadata = target.providerMetadata;
+      for (const removed of step) {
+        if (!isWorkingMemoryCall(removed)) continue;
+        for (const [provider, metadata] of Object.entries(removed.providerMetadata ?? {})) {
+          if (metadata?.thoughtSignature === undefined) continue;
+          if (providerMetadata?.[provider]?.thoughtSignature !== undefined) continue;
+          providerMetadata = {
+            ...providerMetadata,
+            [provider]: { ...providerMetadata?.[provider], thoughtSignature: SKIP_THOUGHT_SIGNATURE_VALIDATOR },
+          };
+        }
+      }
+      if (providerMetadata !== target.providerMetadata) remaining[targetIndex] = { ...target, providerMetadata };
+    }
     const onlyReasoningLeft = remaining.every(
       part =>
         part?.type === 'step-start' ||
@@ -491,11 +517,11 @@ export class Memory extends MastraMemory {
    * await store.close();
    * ```
    */
-  override async settled(): Promise<void> {
+  override async settled(scope?: { threadId?: string | null; resourceId?: string | null }): Promise<void> {
     await this.pendingVectorCleanup;
     // Only join an engine that already exists — never instantiate one just to drain it.
     const engine = this._omEngine ? await this._omEngine : this._omEngineInstance;
-    await engine?.settled();
+    await engine?.settled(scope);
     // Observational-memory cycles can start further vector cleanup; drain once more.
     await this.pendingVectorCleanup;
   }
@@ -1641,28 +1667,40 @@ ${workingMemory}`;
       await this.firstEmbed;
     }
 
-    let embedFn: typeof embedMany | typeof embedManyV5 | typeof embedManyV6;
-    const specVersion = this.embedder.specificationVersion;
-
-    switch (specVersion) {
+    const options = { values: chunks, maxRetries: 3 };
+    // Options share a public union; select the SDK-specific options alongside the model version.
+    const model = this.embedder;
+    let promise;
+    switch (model.specificationVersion) {
+      case 'v4':
+        promise = embedManyV7({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV7>[0], 'model' | 'values'>),
+          model,
+        });
+        break;
       case 'v3':
-        embedFn = embedManyV6;
+        promise = embedManyV6({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV6>[0], 'model' | 'values'>),
+          model,
+        });
         break;
       case 'v2':
-        embedFn = embedManyV5;
+        promise = embedManyV5({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV5>[0], 'model' | 'values'>),
+          model,
+        });
         break;
       default:
-        embedFn = embedMany;
+        promise = embedMany({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedMany>[0], 'model' | 'values'>),
+          model,
+        });
         break;
     }
-
-    const promise = embedFn({
-      values: chunks,
-      maxRetries: 3,
-      // @ts-expect-error - embedder type mismatch
-      model: this.embedder,
-      ...(this.embedderOptions || {}),
-    });
 
     if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
     const { embeddings, usage } = await promise;

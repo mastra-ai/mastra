@@ -88,8 +88,8 @@ export function WorkItemListRow({
           </span>
         ),
         status: (status.kind !== 'idle' || verdict) && (
-          <span className="flex items-center gap-2">
-            <CardStatus status={status} />
+          <span className="flex min-w-0 items-center gap-2">
+            <CardStatus status={status} compact />
             {verdict && <ReviewVerdictBadge verdict={verdict} />}
           </span>
         ),

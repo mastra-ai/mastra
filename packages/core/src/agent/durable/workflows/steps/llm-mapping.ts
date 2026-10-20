@@ -1,3 +1,4 @@
+import { compactDurableStepContent } from '@internal/core/durable';
 import { z } from 'zod';
 import { MastraFGAPermissions } from '../../../../auth/ee';
 import {
@@ -393,7 +394,7 @@ export function createDurableLLMMappingStep() {
           steps: [], // Steps are accumulated at the loop level
           // Recorded on the step record; stopWhen reads it, and the deferred
           // step-finish chunk returns it as stream.steps content.
-          content: messageList.get.response.aiV5.modelContent(-1),
+          content: compactDurableStepContent(messageList.get.response.aiV5.modelContent(-1), toolResults),
         },
         state: {
           ...state,
