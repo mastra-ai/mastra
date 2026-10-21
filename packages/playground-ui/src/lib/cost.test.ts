@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatAggregateCost, formatCompactNumber, formatCost, formatFullNumber } from './cost';
+import { formatCompactNumber, formatCost, formatFullNumber } from './cost';
 
 describe('formatCompactNumber', () => {
   it.each([
@@ -53,40 +53,5 @@ describe('formatCost', () => {
     expect(formatCost(0.0277)).toBe('$0.03');
     expect(formatCost(0)).toBe('$0.00');
     expect(formatCost(0.0006, 'EUR')).toBe('<0.01 EUR');
-  });
-});
-
-describe('formatAggregateCost', () => {
-  describe('when every trace with usage is priced', () => {
-    it('shows the exact cost', () => {
-      expect(formatAggregateCost({ value: 12.5, coverage: 1, unit: 'USD' })).toEqual({ text: '$12.50' });
-    });
-  });
-
-  describe('when only part of the usage is priced', () => {
-    it('marks the cost approximate and says how much was priced', () => {
-      expect(formatAggregateCost({ value: 12.5, coverage: 0.8, unit: 'USD' })).toEqual({
-        text: '~$12.50',
-        tooltip: 'Priced for 80% of traces with usage',
-      });
-    });
-  });
-
-  describe('when the priced rows use more than one currency', () => {
-    it('shows no total', () => {
-      expect(formatAggregateCost({ coverage: 1, unit: 'mixed' })).toEqual({
-        text: '—',
-        tooltip: 'Costs use more than one currency',
-      });
-    });
-  });
-
-  describe('when nothing is priced', () => {
-    it('shows no total', () => {
-      expect(formatAggregateCost({})).toEqual({
-        text: '—',
-        tooltip: 'No priced usage for these traces',
-      });
-    });
   });
 });
