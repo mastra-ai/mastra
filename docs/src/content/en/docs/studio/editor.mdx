@@ -321,7 +321,7 @@ await editor.agent.update({
 })
 ```
 
-The direct `editor.agent.update()` method saves the changed snapshot fields as a new version, but that version starts as an inactive draft. The method only changes record fields such as `status` or `activeVersionId` when you pass them, so the published agent keeps serving its previous version until you publish. To publish, fetch the draft's version ID (for example with `listVersions()` from the Client SDK) and assign it explicitly:
+The direct `editor.agent.update()` method saves the changed snapshot fields as a new version, but that version starts as an inactive draft. The method only changes record fields such as `status` or `activeVersionId` when you pass them. The published agent keeps serving its previous version until you publish. To publish, fetch the draft's version ID (for example with `listVersions()` from the Client SDK) and assign it explicitly:
 
 ```typescript title="src/scripts/publish-agent.ts"
 await editor.agent.update({
