@@ -79,6 +79,10 @@ function toActivity(event: AuditEventRow, workItem: { id: string; name?: string 
  *
  * Poll-only by design: the MCP server is built per request, so there is nothing
  * to push from, and every poll reads storage from the client's cursor.
+ *
+ * Cursors are `(occurred_at, id)` keysets, so a row that commits after a poll
+ * with an earlier `occurred_at` than the cursor (clock skew between instances)
+ * is not delivered.
  */
 export function factoryActivityEvent(deps: FactoryActivityEventDeps) {
   const project = { orgId: deps.orgId, factoryProjectId: deps.factoryProjectId };

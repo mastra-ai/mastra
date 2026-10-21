@@ -162,7 +162,7 @@ export function decodeAuditCursor(cursor: string): { occurredAt: Date; id: strin
 /** An `after` cursor that sorts before every audit row, so paging from it misses nothing. */
 export const AUDIT_TRAIL_START = `${new Date(0).toISOString()}_00000000-0000-0000-0000-000000000000`;
 
-const AUDIT_EVENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const AUDIT_EVENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /**
  * Decode an `after` cursor, or `undefined` when it can't be paged from. Its id

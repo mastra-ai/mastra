@@ -739,7 +739,7 @@ Copy it from **Settings → Connections → MCP clients** in the Factory UI. The
 
 It exposes the Factory tools a signed-in web session has (list, inspect, create, update and transition work items, start and signal sessions, decisions, approvals), plus `search` and `fetch` over work items for ChatGPT. Each tool carries MCP annotations (read-only, destructive, idempotent) so clients can ask before changes.
 
-Callers must sign in. Requests without a valid bearer token get `401` with a `WWW-Authenticate` header pointing to the RFC 9728 metadata at `/.well-known/oauth-protected-resource/web/factory/projects/<projectId>/mcp`. Tokens go through the same auth provider and org checks as the web UI. Each user gets one private connector session per Factory that the session tools act from.
+Callers must sign in. Requests without a valid bearer token get `401` with a `WWW-Authenticate` header pointing to the RFC 9728 metadata at `/.well-known/oauth-protected-resource/web/factory/projects/<projectId>/mcp`. Tokens go through the same auth provider and org checks as the web UI. When the Factory has a linked repository, each user gets one private connector session per Factory that the session tools act from.
 
 To connect a client:
 
@@ -771,7 +771,7 @@ The endpoint serves one MCP event type (SEP-3415, experimental in `@mastra/mcp`)
 ```
 
 - `arguments` are optional: `workItemId` narrows to one work item, `actions` to specific audit actions (for example `factory.work_item.updated`).
-- A `null` cursor starts from now and returns no events. Pass back the returned `cursor` on each poll. An unreadable cursor restarts from now and marks the result `truncated`.
+- A `null` cursor starts from now and returns no events. Pass back the returned `cursor` on each poll. An unreadable cursor restarts from now and marks the result `truncated`. Cursors follow each event's recorded time, so an event recorded with an earlier timestamp after you already polled past it (clock skew between server instances) is not delivered.
 - Each event's `eventId` is its audit row id, and the payload has `action`, `occurredAt`, `actor`, `workItemId`, `sessionId` (when a session was involved) and a one-line `summary`.
 - Only activity on work items is served. Activity that only touches a session (signals, pushes from private sessions) is left out.
 

@@ -493,7 +493,15 @@ describe('Factory activity over MCP events', () => {
   });
 
   it('a client with a cursor the Factory can’t read starts over from now and is told it may have missed events', async () => {
-    const { url, item } = await setup();
+    const { url, project, item, audit } = await setup();
+    // Already on the trail: starting over from the start would replay it.
+    await audit.record({
+      orgId: 'org-1',
+      actorId: 'alice',
+      action: 'factory.work_item.created',
+      targets: [{ type: 'work_item', id: item.id, name: item.title }],
+      factoryProjectId: project.id,
+    });
 
     // Well-formed, but its id isn't an audit row id (Postgres would reject it in the query).
     const restart = await poll(url, 'token-alice', '2026-10-21T00:00:00.000Z_row-7');

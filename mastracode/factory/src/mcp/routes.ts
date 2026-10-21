@@ -55,7 +55,7 @@ const FACTORY_MCP_INSTRUCTIONS = [
   'A Mastra Factory tracks software work as work items on a board; agent sessions plan and build them.',
   'Start with `factory_list_attention` for what needs a person, or `search` and `fetch` to find a work item.',
   'Work item tools file, update, move and follow items; session tools start, message and follow the agent sessions working on them.',
-  'Every call runs as the signed-in user, from a private connector session of theirs in this Factory.',
+  'Every call runs as the signed-in user. When the Factory has a repository, session tools act from a private connector session of theirs.',
 ].join(' ');
 
 /** Mastra Platform's WorkOS AuthKit, which issues tokens Platform's `/auth/verify` accepts. */
