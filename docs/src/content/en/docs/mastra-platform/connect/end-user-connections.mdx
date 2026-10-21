@@ -1,6 +1,6 @@
 ---
 title: 'End-user connections | Connect'
-description: 'Let each user of your app connect their own provider accounts, and scope agent tools to the calling user.'
+description: 'Give every user an agent that works with their own apps without building provider auth, credential storage, or per-user tool routing.'
 packages:
   - '@mastra/connect'
   - '@mastra/playground-ui'
@@ -8,9 +8,31 @@ packages:
 
 # End-user connections
 
-By default, a connection is global to a project: every agent request can use the same Linear workspace or Slack account. End-user connections belong to one user of your application. Each connection carries a resource ID, an opaque key you choose, and the platform only serves it to requests asserting the same key.
+Give every user an agent that works with their own Linear workspace, GitHub organization, Slack account, Notion workspace, or other connected app. Mastra Connect runs the provider authorization flow, stores and refreshes credentials on Mastra Platform, scopes each connection to its owner, and supplies the correct tools when that user's agent request runs.
 
-An agent resolving tools for one user receives the project's global connections plus that user's own connections. It never receives another user's connections.
+Your application authenticates the user and maps them to a stable resource ID. Mastra handles the rest of the connection lifecycle through hosted pages, headless UI helpers, Studio, or an in-chat connect card.
+
+## What Mastra handles
+
+| Concern | Mastra Connect behavior |
+| - | - |
+| Provider authorization | Starts OAuth, app-install, API-key, Basic, two-step, and supported custom flows from one provider catalog. |
+| Credential custody | Stores credentials on Mastra Platform, refreshes supported OAuth tokens, and keeps them out of prompts and tool arguments. |
+| User isolation | Binds each connection to a project-scoped resource ID and verifies that identity on every sensitive operation. |
+| Runtime tool access | Resolves the project's shared connections plus the current user's connections through the same `tools()` API. |
+| Connection UI | Provides a hosted page, React hooks for custom interfaces, Studio's **Connections** page, and chat connect cards. |
+| Missing connections | Adds a `request_connection` tool so an agent can ask for access at the point of need when a required provider isn't connected. |
+| Operations | Supports provider policies, listing, status polling, retries, disconnect, and user offboarding. |
+
+## How it works
+
+1. Your server authenticates a request and derives a stable resource ID for the user.
+1. The user connects a provider through your chosen interface.
+1. Mastra Platform stores the provider credential under that project and resource ID.
+1. `tools()` resolves global connections plus the active user's connections.
+1. Tool calls go through the platform proxy, which verifies scope and injects the credential before calling the provider.
+
+The same agent definition serves every user. The resource ID selects the account and tools for the current request.
 
 | Connection scope | Who can use it | Who can disconnect it from the end-user surface |
 | - | - | - |

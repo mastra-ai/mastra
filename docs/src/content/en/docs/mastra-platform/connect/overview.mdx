@@ -16,6 +16,7 @@ Mastra Connect is free to use on Mastra platform while in beta.
 Connect manages connections to services such as GitHub, Slack, and Linear in your [Mastra platform](/docs/mastra-platform/overview) project. The `@mastra/connect` package makes those connections available to your application as tools, channels, or credentials.
 
 - **Tools** let agents call a provider's API. Connect supplies ready-made tools and sends their requests through a platform proxy that adds credentials and refreshes OAuth tokens. See [Tools](/docs/mastra-platform/connect/tools).
+- **End-user connections** let every user authorize their own provider accounts. The same agent resolves the right tools and credentials from the authenticated user's resource ID. See [End-user connections](/docs/mastra-platform/connect/end-user-connections).
 - **Channels** let people talk to agents through Slack, Telegram, Discord, or Microsoft Teams. Connect supplies credentials to Mastra's channel providers. See [Channels](/docs/mastra-platform/connect/channels).
 - **Raw credentials** let your code call a provider's SDK directly when the tools don't cover what you need. See [`credential()`](/reference/connect/credential).
 
@@ -27,7 +28,7 @@ Combine Connect tools and channels with your own [custom tools](/docs/agents/too
 
 ## How connections work
 
-A **provider** defines the service and capabilities you can use. A **connection** authorizes an account on that provider. Connections belong to your organization and can be linked to multiple projects without authorizing again.
+A **provider** defines the service and capabilities you can use. A **connection** authorizes an account on that provider. Global connections belong to your organization and can be linked to multiple projects without authorizing again. End-user connections belong to one project and one resource ID, so the same agent can use a different account for each user.
 
 A project can have multiple connections for the same provider, such as accounts in different Slack workspaces. Give each connection a distinct display name to help agents choose the right account.
 
