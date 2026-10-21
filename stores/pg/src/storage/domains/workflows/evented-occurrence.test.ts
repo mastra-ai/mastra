@@ -101,6 +101,109 @@ describe('Postgres evented occurrence replay', () => {
     20_000,
   );
 
+  it('continues with committed loop state when a slower duplicate loses completion', async () => {
+    const driver = new RedeliveryDriver();
+    const schema = z.object({ n: z.number() });
+    let release!: () => void;
+    const blocked = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    let executions = 0;
+    const states: unknown[] = [];
+    const body = createStep({
+      id: 'body',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData, state, setState }) => {
+        executions++;
+        if (executions === 1) {
+          await blocked;
+          await setState({ n: 999 });
+          return { n: 999 };
+        }
+        states.push(state);
+        await setState({ n: inputData.n + 1 });
+        return { n: inputData.n + 1 };
+      },
+    });
+    const workflow = createWorkflow({
+      id: `loop-race-${randomUUID()}`,
+      inputSchema: schema,
+      outputSchema: schema,
+      stateSchema: schema,
+    })
+      .dountil(body, async ({ inputData }) => inputData.n >= 2)
+      .commit();
+    const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
+    const publish = driver.pubsub.publish.bind(driver.pubsub);
+    let swallowed = false;
+    const interrupted = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+      if (
+        !swallowed &&
+        topic === 'workflows' &&
+        event.type === 'workflow.step.run' &&
+        event.data.prevResult?.output?.n === 1
+      ) {
+        swallowed = true;
+        return;
+      }
+      return publish(topic, event, options);
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const result = run.start({ inputData: { n: 0 }, initialState: { n: 0 } });
+      await expect.poll(() => executions).toBe(1);
+      const original = driver.stepRuns({ spec: '0', runId: run.runId })[0]!;
+      const key = `workflow-step-run:${run.runId}:${original.id}`;
+      await driver.pubsub.releaseLease(key, (await driver.pubsub.getLeaseOwner(key))!);
+      await driver.redeliverEvent(original);
+      expect(swallowed).toBe(true);
+      release();
+      await expect.poll(() => executions, { timeout: 1_500 }).toBe(3);
+      expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
+      expect(states).toEqual([{ n: 0 }, { n: 1 }]);
+    } finally {
+      release();
+      interrupted.mockRestore();
+      await mastra.stopWorkers();
+      driver.dispose();
+    }
+  }, 8_000);
+
+  it('continues a suspended loop after approval without stranding the next iteration', async () => {
+    const driver = new RedeliveryDriver();
+    const schema = z.object({ n: z.number() });
+    const calls: number[] = [];
+    const body = createStep({
+      id: 'approval',
+      inputSchema: schema,
+      outputSchema: schema,
+      resumeSchema: z.object({ approved: z.boolean() }),
+      suspendSchema: z.object({ approval: z.boolean() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        if (inputData.n === 0 && !resumeData?.approved) return suspend({ approval: true });
+        calls.push(inputData.n);
+        return { n: inputData.n + 1 };
+      },
+    });
+    const workflow = createWorkflow({ id: `loop-resume-${randomUUID()}`, inputSchema: schema, outputSchema: schema })
+      .dountil(body, async ({ inputData }) => inputData.n === 2)
+      .commit();
+    const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
+      const result = run.resume({ resumeData: { approved: true } });
+      await expect.poll(() => calls, { timeout: 1_500 }).toEqual([0, 1]);
+      expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
+    } finally {
+      await mastra.stopWorkers();
+      driver.dispose();
+    }
+  }, 8_000);
+
   it.each(['run', 'end'] as const)(
     'continues a saved linear result after losing its continuation and reclaiming step.%s',
     async delivery => {

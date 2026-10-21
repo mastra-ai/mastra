@@ -1662,7 +1662,12 @@ export class WorkflowEventProcessor extends EventProcessor {
       } catch (error) {
         if (!isWorkflowStepConflictError(error) || error.reason !== 'completed' || !error.storedResult) throw error;
         stepResult = error.storedResult;
-        args = { ...args, requestContext: error.storedRequestContext ?? args.requestContext };
+        args = {
+          ...args,
+          stepResults: error.storedSnapshot?.context ?? args.stepResults,
+          state: error.storedSnapshot?.context.__state ?? args.state,
+          requestContext: error.storedRequestContext ?? args.requestContext,
+        };
       }
     }
     return processWorkflowLoop(
@@ -2626,7 +2631,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
         step,
         stepResult,
-        guardStart ? args.eventId : undefined,
+        guardStart
+          ? args.eventId
+          : !restart && !timeTravel && resumeSteps?.length
+            ? stepResults[leafId]?.metadata?.startedBy
+            : undefined,
       );
     } else {
       // Extract updated state from step result
