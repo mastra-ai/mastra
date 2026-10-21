@@ -1,6 +1,8 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   mergeWorkflowStepResult,
+  assertWorkflowStepGuard,
+  isWorkflowStepConflictError,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_WORKFLOW_RUN_OWNERS,
@@ -19,6 +21,8 @@ import type {
   RenewRunOwnershipResult,
   RunFence,
   RunOwnershipRecord,
+  WorkflowStepStartGuard,
+  WorkflowStepCompletionGuard,
   UpdateWorkflowStateOptions,
   StorageListWorkflowRunsInput,
   WorkflowRun,
@@ -488,6 +492,10 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
+  supportsWorkflowStepGuards(): boolean {
+    return true;
+  }
+
   async updateWorkflowResults({
     workflowName,
     runId,
@@ -496,6 +504,8 @@ export class WorkflowsPG extends WorkflowsStorage {
     requestContext,
     state,
     fence: explicitFence,
+    startGuard,
+    completionGuard,
   }: {
     workflowName: string;
     runId: string;
@@ -504,6 +514,8 @@ export class WorkflowsPG extends WorkflowsStorage {
     requestContext: Record<string, any>;
     state?: Record<string, any>;
     fence?: RunFence;
+    startGuard?: WorkflowStepStartGuard;
+    completionGuard?: WorkflowStepCompletionGuard;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const fence = resolveRunFence(this, explicitFence, runId);
     try {
@@ -520,12 +532,14 @@ export class WorkflowsPG extends WorkflowsStorage {
         );
 
         if (!existingSnapshotResult) {
+          assertWorkflowStepGuard({ snapshot: null, stepId, startGuard, completionGuard });
           return {};
         }
 
         const existingSnapshot = existingSnapshotResult.snapshot;
         const snapshot: WorkflowRunState =
           typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+        assertWorkflowStepGuard({ snapshot, stepId, startGuard, completionGuard });
 
         // Merge the new step result using element-wise array merging
         // (critical for concurrent foreach iteration results)
@@ -546,7 +560,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         return snapshot.context;
       });
     } catch (error) {
-      if (isRunFenceConflictError(error)) throw error;
+      if (isRunFenceConflictError(error) || isWorkflowStepConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),

@@ -10,6 +10,7 @@ import type { TracingContext } from '../../../observability';
 import { resolveExportedSpanId } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
 import { coverNestedRun } from '../../../storage/run-fencing';
+import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
 import type {
@@ -35,12 +36,13 @@ import {
 } from '../../utils';
 import { resolveCurrentState, withoutAuthToken } from '../helpers';
 import { StepExecutor } from '../step-executor';
-import { isQueuedForeachIteration, processWorkflowForEach, processWorkflowLoop } from './loop';
+import { evaluateLoopCondition, isQueuedForeachIteration, processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
 import { processWorkflowSleep, processWorkflowSleepUntil, processWorkflowWaitForEvent } from './sleep';
 import { getNestedWorkflow, getStepId, isExecutableStep, toStepExecutionParentWorkflow } from './utils';
 
 export type ProcessorArgs = {
+  eventId?: string;
   activeStepsPath: Record<string, number[]>;
   workflow: Workflow;
   workflowId: string;
@@ -760,7 +762,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowStatus: 'running',
       }) ?? true;
 
-    if (shouldPersist) {
+    // Guarded execution requires a durable run row even when optional snapshots are disabled.
+    const requiresGuardedSnapshot =
+      workflowsStore?.supportsWorkflowStepGuards() && !restart && !timeTravel && !resumeSteps?.length;
+    if (shouldPersist || requiresGuardedSnapshot) {
       const runningSnapshot: WorkflowRunState = {
         activePaths: restart ? (executionPath ?? restart.activePaths) : [],
         suspendedPaths: {},
@@ -984,7 +989,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         // `__state` predates this iteration and would win over `state`.
         const loopStepResults: Record<string, any> = { ...parentWorkflow.stepResults, __state: finalState };
         // pick workflow information from parentWorkflow as the workflow end being processed here is actually a step in the parentWorkflow
-        await processWorkflowLoop(
+        await this.#processLoop(
           {
             workflow: parentWorkflow as unknown as Workflow,
             workflowId: parentWorkflow.workflowId,
@@ -1001,12 +1006,11 @@ export class WorkflowEventProcessor extends EventProcessor {
             actor,
             retryCount: 0,
           },
-          {
-            pubsub: this.mastra.pubsub,
-            stepExecutor: this.stepExecutor,
-            step,
-            stepResult: prevResult,
-          },
+          step,
+          prevResult,
+          !parentWorkflow.restart && !parentWorkflow.timeTravel && !parentWorkflow.resumeSteps?.length
+            ? loopStepResults[getEntryId(step.step)]?.metadata?.startedBy
+            : undefined,
         );
       } else {
         await this.mastra.pubsub.publish('workflows', {
@@ -1539,6 +1543,52 @@ export class WorkflowEventProcessor extends EventProcessor {
    * executor's dispatch; here entries are only inspected via the `step-entry`
    * accessors.
    */
+  async #processLoop(
+    args: ProcessorArgs,
+    step: Extract<StepFlowEntry, { type: 'loop' }>,
+    result: StepResult<any, any, any, any>,
+    startedBy?: string,
+  ) {
+    const leafId = getEntryId(step.step);
+    const store = await this.mastra.getStorage()?.getStore('workflows');
+    let stepResult = result;
+    const guarded = startedBy && store?.supportsWorkflowStepGuards();
+    if (startedBy && store?.supportsWorkflowStepGuards()) {
+      try {
+        // Read-only preflight reuses a committed decision without evaluating it again.
+        // The transactional completion guard below still arbitrates concurrent writers.
+        const snapshot = await store.loadWorkflowSnapshot({ workflowName: args.workflowId, runId: args.runId });
+        assertWorkflowStepGuard({ snapshot, stepId: leafId, completionGuard: { eventId: startedBy } });
+        const loopCondition =
+          result.metadata?.loopCondition ?? (await evaluateLoopCondition(args, step, this.stepExecutor, result));
+        stepResult = { ...result, metadata: { ...result.metadata, startedBy, loopCondition } };
+        await store.updateWorkflowResults({
+          workflowName: args.workflowId,
+          runId: args.runId,
+          stepId: leafId,
+          result: stepResult,
+          requestContext: withoutAuthToken(args.requestContext),
+          state: resolveCurrentState({ stepResult, stepResults: args.stepResults, state: args.state }),
+          completionGuard: { eventId: startedBy },
+        });
+      } catch (error) {
+        if (!isWorkflowStepConflictError(error) || error.reason !== 'completed' || !error.storedResult) throw error;
+        stepResult = error.storedResult;
+        args = { ...args, requestContext: error.storedRequestContext ?? args.requestContext };
+      }
+    }
+    return processWorkflowLoop(
+      { ...args, prevResult: stepResult },
+      {
+        pubsub: this.mastra.pubsub,
+        stepExecutor: this.stepExecutor,
+        step,
+        stepResult,
+        savedCondition: guarded ? stepResult.metadata?.loopCondition : undefined,
+      },
+    );
+  }
+
   protected async runLeafStep(
     args: ProcessorArgs & {
       step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
@@ -1619,7 +1669,15 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepResults: stepResults ?? {},
         workflowStatus: 'running',
       }) ?? true;
-    if (shouldPersistRunning && workflowsStore) {
+    const guardStart =
+      workflowsStore?.supportsWorkflowStepGuards() &&
+      args.eventId &&
+      !restart &&
+      !timeTravel &&
+      !resumeSteps?.length &&
+      step.type !== 'foreach';
+    let completedResult: StepResult<any, any, any, any> | undefined;
+    if ((shouldPersistRunning || guardStart) && workflowsStore) {
       // A resumed step skips this generic write (it is claimed separately
       // below, keeping its record fields intact): its suspendPayload is
       // the richer resume artifact (stream state, nested-run ids) and a
@@ -1651,21 +1709,48 @@ export class WorkflowEventProcessor extends EventProcessor {
         if (snapshot?.status === 'suspended' && (snapshot.context as any)?.[leafId]?.status === 'suspended') {
           return;
         }
-        await workflowsStore.updateWorkflowResults({
-          workflowName: workflowId,
-          runId,
-          stepId: leafId,
-          result: {
-            // Loop re-entries overwrite the previous iteration's completion
-            // fields (like the default engine's stepInfo) while preserving
-            // e.g. metadata.nestedRunId for nested-run recovery.
-            ...omitPriorCompletionFields((stepResults?.[leafId] ?? {}) as Record<string, unknown>),
-            payload: prevResult.status === 'success' ? prevResult.output : undefined,
-            startedAt: Date.now(),
-            status: 'running',
-          } as any,
-          requestContext: withoutAuthToken(requestContext),
-        });
+        const runningResult = {
+          ...omitPriorCompletionFields((stepResults?.[leafId] ?? {}) as Record<string, unknown>),
+          payload: prevResult.status === 'success' ? prevResult.output : undefined,
+          startedAt: Date.now(),
+          status: 'running' as const,
+          ...(guardStart
+            ? { metadata: { ...stepResults[leafId]?.metadata, startedBy: args.eventId, loopCondition: undefined } }
+            : {}),
+        };
+        try {
+          await workflowsStore.updateWorkflowResults({
+            workflowName: workflowId,
+            runId,
+            stepId: leafId,
+            result: runningResult,
+            requestContext: withoutAuthToken(requestContext),
+            ...(guardStart
+              ? {
+                  startGuard: {
+                    eventId: args.eventId!,
+                    expectedStartedBy: stepResults[leafId]?.metadata?.startedBy,
+                  },
+                }
+              : {}),
+          });
+        } catch (error) {
+          // A loop persists its body before publishing the next iteration. Replay
+          // that continuation from the saved result, never by re-running the body.
+          if (
+            isWorkflowStepConflictError(error) &&
+            error.reason === 'completed' &&
+            ((step.type === 'loop' && error.storedResult?.status === 'success') ||
+              error.storedResult?.status === 'failed')
+          ) {
+            completedResult = error.storedResult;
+          } else {
+            throw error;
+          }
+        }
+        if (guardStart) {
+          stepResults[leafId] = { ...stepResults[leafId], ...runningResult };
+        }
       } else if ((resumeSteps?.length ?? 0) > 0 && resumeSteps?.[0] === leafId && step.type !== 'foreach') {
         // Foreach is excluded on purpose: its resume fans out one step.run per
         // iteration against the shared aggregate record, each with its own
@@ -1706,6 +1791,9 @@ export class WorkflowEventProcessor extends EventProcessor {
             requestContext: withoutAuthToken(requestContext),
           });
         }
+      }
+      if (completedResult?.status === 'success' && step.type === 'loop') {
+        return this.#processLoop(args, step, completedResult, args.eventId);
       }
       // `expectedStatus` makes this a compare-and-set: the row is 'running' on
       // the normal path (written by processWorkflowStart for both start and
@@ -2215,7 +2303,9 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     let stepResult: StepResult<any, any, any, any>;
 
-    if (this.stepExecutionStrategy) {
+    if (completedResult) {
+      stepResult = completedResult;
+    } else if (this.stepExecutionStrategy) {
       stepResult = await this.stepExecutionStrategy.executeStep({
         workflowId,
         runId,
@@ -2260,6 +2350,9 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
     requestContext = Object.fromEntries(rc.entries());
+    if (guardStart) {
+      stepResult.metadata = { ...stepResult.metadata, startedBy: args.eventId };
+    }
 
     if (abortController?.signal?.aborted) {
       // Extract updated state from step result
@@ -2344,6 +2437,17 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
         return;
       } else {
+        if (guardStart && !completedResult) {
+          await workflowsStore!.updateWorkflowResults({
+            workflowName: workflowId,
+            runId,
+            stepId: leafId,
+            result: stepResult,
+            requestContext: withoutAuthToken(requestContext),
+            completionGuard: { eventId: args.eventId! },
+          });
+        }
+        if (guardStart) stepResults[leafId] = stepResult;
         return this.mastra.pubsub.publish('workflows', {
           type: 'workflow.step.run',
           runId,
@@ -2404,7 +2508,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (step.type === 'loop') {
       //timeTravel is not passed to the processWorkflowLoop function becuase the step already ran the first time
       // with whatever information it needs from timeTravel, subsequent loop runs use the previous loop run result as it's input.
-      await processWorkflowLoop(
+      await this.#processLoop(
         {
           workflow,
           workflowId,
@@ -2420,12 +2524,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           actor,
           retryCount: retryCount + 1,
         },
-        {
-          pubsub: this.mastra.pubsub,
-          stepExecutor: this.stepExecutor,
-          step,
-          stepResult,
-        },
+        step,
+        stepResult,
+        guardStart ? args.eventId : undefined,
       );
     } else {
       // Extract updated state from step result
@@ -3209,14 +3310,27 @@ export class WorkflowEventProcessor extends EventProcessor {
       // restart after this point resumes with the state this step produced. Branches of a
       // parallel/conditional entry skip it: their full state would clobber sibling updates;
       // aggregateBranchResults records the merged state instead.
-      const newStepResults = await workflowsStore?.updateWorkflowResults({
-        workflowName: workflow.id,
-        runId,
-        stepId,
-        result: persistedResult,
-        requestContext: withoutAuthToken(requestContext),
-        ...(isParallelBranch ? {} : { state: currentState }),
-      });
+      const startedBy = stepResults[stepId]?.metadata?.startedBy ?? prevResult?.metadata?.startedBy;
+      const guardCompletion =
+        startedBy && workflowsStore?.supportsWorkflowStepGuards() && !restart && !timeTravel && !resumeSteps?.length;
+      let newStepResults;
+      try {
+        newStepResults = await workflowsStore?.updateWorkflowResults({
+          workflowName: workflow.id,
+          runId,
+          stepId,
+          result: guardCompletion
+            ? { ...persistedResult, metadata: { ...persistedResult.metadata, startedBy } }
+            : persistedResult,
+          requestContext: withoutAuthToken(requestContext),
+          ...(isParallelBranch ? {} : { state: currentState }),
+          ...(guardCompletion ? { completionGuard: { eventId: startedBy } } : {}),
+        });
+      } catch (error) {
+        if (!isWorkflowStepConflictError(error) || error.reason !== 'completed') throw error;
+        // Replay the continuation with its original view, not a newer occurrence's results.
+        newStepResults = undefined;
+      }
 
       // When the Mastra has no storage configured, workflowsStore is undefined
       // and updateWorkflowResults returns undefined. When it has storage but no
@@ -3653,6 +3767,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       this.deliveryAttempts.delete(eventKey);
       return { ok: true };
     } catch (err) {
+      if (isWorkflowStepConflictError(err) && (err.reason === 'stale' || err.reason === 'completed')) {
+        this.deliveryAttempts.delete(eventKey);
+        return { ok: true };
+      }
       const attempts = (this.deliveryAttempts.get(eventKey) ?? 0) + 1;
       this.#setDeliveryAttempts(eventKey, attempts);
       const exhausted = attempts >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS;
@@ -3743,7 +3861,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   async #dispatch(event: Event) {
     const { type, data } = event;
 
-    const workflowData = data as Omit<ProcessorArgs, 'workflow'>;
+    const workflowData = { ...(data as Omit<ProcessorArgs, 'workflow'>), eventId: event.id };
 
     const currentState = await this.loadData({
       workflowId: workflowData.workflowId,

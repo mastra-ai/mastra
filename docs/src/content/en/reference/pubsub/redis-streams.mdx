@@ -250,6 +250,14 @@ When a subscriber calls `nack`, the event is republished with an incremented `de
 
 A subscription never reclaims an event its own handler is still processing, so a slow handler isn't invoked twice for the same event. If a handler hangs, a different consumer in the group reclaims the event once it has been idle for `reclaimIdleMs`. In a single-consumer group there's no sibling to do that, so set `inFlightTimeoutMs` to have the subscription nack the event itself after that long.
 
+### Evented agent worker takeover
+
+With Postgres storage, distributed evented agents publish worker orchestration events through Redis. If a worker exits before acknowledging an event, another worker can reclaim it and finish the run while the original API process stays alive. Configure the API process with `MASTRA_WORKERS=false` and worker processes with `MASTRA_WORKERS=orchestration`. All processes must share the same Postgres database, Redis connection settings, and `keyPrefix`.
+
+Upgrade `@mastra/core` and `@mastra/pg` together. Drain runs started on older versions before upgrading. Their saved steps don't contain the occurrence identifiers needed to reject stale deliveries safely. Other storage adapters keep distributed internal orchestration on the worker process.
+
+An interrupted step can execute again, so make external side effects idempotent. Completed step occurrences are protected against stale redeliveries, and a completed loop iteration reuses its saved result and loop decision. Guarded execution persists the records needed for recovery even when `shouldPersistSnapshot` returns `false`. Resume, time travel, restart races, and individual `foreach` items aren't covered by these occurrence guards.
+
 ## Distributed leasing
 
 `RedisStreamsPubSub` implements the [`LeaseProvider`](/reference/pubsub/lease-provider) contract on top of the same Redis connection. The [signals runtime](/docs/harness/signals) uses it to elect a single owner (usually per thread key) so that across instances only one process wakes and runs the agent, and others route follow-up work to the holder. This is what makes signals work on serverless and multi-instance deployments; without a shared lease, each instance would start its own competing run.
