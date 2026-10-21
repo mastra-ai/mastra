@@ -7,6 +7,7 @@ import { resolveCustomProviders } from '@mastra/code-sdk/agents/custom-provider-
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
+import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
@@ -354,6 +355,13 @@ describe('MastraFactory constructor', () => {
 });
 
 describe('MastraFactory.prepare', () => {
+  it('passes the configured MastraBrowser to the agent controller', async () => {
+    const browser = { getTools: vi.fn() } as unknown as MastraBrowser;
+    const config = await prepareFactory({ storage: fakeStorage(), auth: null, browser });
+
+    expect(config.browser).toBe(browser);
+  });
+
   it('given a Factory deployment, when the controller mounts, then sessions run without modes', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
 
