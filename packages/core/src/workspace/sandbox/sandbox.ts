@@ -548,6 +548,8 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    *
    * const procs = await sandbox.processes.list();
    * const proc = await sandbox.processes.get(handle.pid);
+   * // Read without releasing an exited process, so other readers still find it
+   * const peek = await sandbox.processes.get(handle.pid, { release: false });
    * await proc?.sendStdin('hello\n');
    * await proc?.kill();
    * ```
