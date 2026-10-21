@@ -18,4 +18,4 @@ const processes = await sandbox.processes.list()
 await handle.kill()
 ```
 
-Processes have no time limit unless you set `timeout`. A long-running process's output stream reconnects periodically, and the process keeps running through it. Output written during a reconnect is lost, and a process that exits during one reports exit code `1` from `wait()` instead of its real exit code. Railway sandboxes keep the previous behavior.
+Processes have no time limit unless you set `timeout`. A long-running process's output stream reconnects periodically, and the process keeps running through it. Output written during a reconnect is lost, and a process that exits during one reports exit code `1` from `wait()` instead of its real exit code.

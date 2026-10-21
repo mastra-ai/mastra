@@ -333,8 +333,6 @@ A process has no time limit unless you pass `timeout` to `spawn()` or the constr
 
 A long-running process's output stream reconnects periodically, and the process keeps running through it. Output written during a reconnect is lost, and a process that exits during one reports exit code `1` from `wait()` instead of its real exit code.
 
-On Railway sandboxes (`sandboxProvider: 'railway'`), a process's output arrives when it exits, and `kill()` isn't supported.
-
 ## Constructor parameters
 
 <PropertiesTable
@@ -480,7 +478,7 @@ On Railway sandboxes (`sandboxProvider: 'railway'`), a process's output arrives 
     name: 'processes',
     type: 'SandboxProcessManager',
     description:
-      "Background process manager. `spawn()` streams output while the process runs, `kill()` stops it, `list()` shows what is running in the sandbox, and `get(pid)` attaches to a process this manager didn't start. On Railway sandboxes, output arrives when the command exits and `kill()` isn't supported. See [Background processes](#background-processes) and the [SandboxProcessManager reference](/reference/workspace/process-manager).",
+      "Background process manager. `spawn()` streams output while the process runs, `kill()` stops it, `list()` shows what is running in the sandbox, and `get(pid)` attaches to a process this manager didn't start. See [Background processes](#background-processes) and the [SandboxProcessManager reference](/reference/workspace/process-manager).",
   },
   {
     name: 'filesystem',
