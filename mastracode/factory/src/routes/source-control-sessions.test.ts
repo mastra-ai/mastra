@@ -206,6 +206,7 @@ describe('source-control session routes', () => {
       audit: seed.audit,
       actorType: 'human',
       observedEnd: () => undefined,
+      startedAt: new Date(),
       run: {
         kickoffId: 'review-kickoff',
         bindingId: prepared.binding.id,

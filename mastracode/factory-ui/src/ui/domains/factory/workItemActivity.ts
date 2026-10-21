@@ -20,7 +20,7 @@ function actorProfile(actorId: string, actors: Record<string, AuditActorProfile>
   return actors[actorId];
 }
 
-function metadataString(source: Record<string, unknown>, key: string): string | undefined {
+export function metadataString(source: Record<string, unknown>, key: string): string | undefined {
   const value = source[key];
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }

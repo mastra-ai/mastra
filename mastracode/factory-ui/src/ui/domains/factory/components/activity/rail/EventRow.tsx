@@ -7,6 +7,7 @@ import { useState } from 'react';
 import type { ActivityEntry } from '../../../activity';
 import type { FactoryMentionMember } from '../../../services/members';
 import { RailRow } from '../../Timeline';
+import { useEntriesSpotlight } from '../spotlight';
 import { EntryNode } from './sentence/EntryNode';
 import { EntrySentence } from './sentence/EntrySentence';
 
@@ -27,9 +28,15 @@ export function EventRow({
   const [open, setOpen] = useState(false);
   const detail = entry.kind === 'deed' ? entry.detail : '';
   const hasMetadata = Object.keys(entry.metadata).length > 0;
+  const spotlight = useEntriesSpotlight([entry]);
 
   return (
-    <RailRow mark={<EntryNode entry={entry} />} connected={false}>
+    <RailRow
+      mark={<EntryNode entry={entry} />}
+      connected={false}
+      spotlit={spotlight.state === 'spotlit'}
+      {...spotlight.handlers}
+    >
       <EntrySentence
         entries={[entry]}
         roster={roster}

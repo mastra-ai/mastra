@@ -18,6 +18,7 @@ import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 
 import type { AuditActorType } from './actors.js';
+import { MAX_AUDIT_PAGE_SIZE } from './wire.js';
 
 /** What an audit event acted on (WorkOS Audit Logs target shape). */
 export interface AuditTarget {
@@ -120,7 +121,6 @@ export interface AuditEventPage {
 const MAX_METADATA_JSON_LENGTH = 4096;
 
 const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 200;
 
 /** Truncate oversized metadata rather than dropping the whole event. */
 export function boundAuditMetadata(metadata: Record<string, unknown> | undefined): Record<string, unknown> {
@@ -133,10 +133,9 @@ export function boundAuditMetadata(metadata: Record<string, unknown> | undefined
   return { truncated: true };
 }
 
-/** Normalize a requested page size to a finite integer in `[1, MAX_PAGE_SIZE]`. */
 export function clampAuditLimit(limit: number | undefined): number {
   const normalized = typeof limit === 'number' && Number.isFinite(limit) ? Math.trunc(limit) : DEFAULT_PAGE_SIZE;
-  return Math.min(Math.max(normalized, 1), MAX_PAGE_SIZE);
+  return Math.min(Math.max(normalized, 1), MAX_AUDIT_PAGE_SIZE);
 }
 
 /** Encode the `(occurredAt, id)` keyset cursor of a row. */

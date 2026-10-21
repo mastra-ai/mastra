@@ -14,6 +14,7 @@ import {
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
 import type { FactoryActivityAttentionItem, FactoryAutomationFailedAttentionItem } from '../../../services/attention';
 import type { WorkItemStageEntry } from '../../../services/workItems';
+import { SpotlightProvider } from '../spotlight';
 import { ActivityTimeline } from '../timeline/ActivityTimeline';
 
 const FACTORY_ID = 'factory-1';
@@ -92,7 +93,9 @@ function failedRun(workItemId: string): FactoryAutomationFailedAttentionItem {
 function renderActivity() {
   return renderWithProviders(
     <MemoryRouter>
-      <ActivityTimeline factoryId={FACTORY_ID} />
+      <SpotlightProvider>
+        <ActivityTimeline factoryId={FACTORY_ID} />
+      </SpotlightProvider>
     </MemoryRouter>,
   );
 }

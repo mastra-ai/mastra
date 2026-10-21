@@ -59,7 +59,13 @@ async function setup() {
   const capture = makeSession();
   observeSessionRunEnd(capture.session, { audit });
   const start = (run = OPEN_RUN, reason?: 'complete' | 'error') =>
-    recordSessionRunStart(capture.session, { audit, run, actorType: 'human', observedEnd: () => reason });
+    recordSessionRunStart(capture.session, {
+      audit,
+      run,
+      actorType: 'human',
+      observedEnd: () => reason,
+      startedAt: new Date(),
+    });
   const events = async () => (await audit.list({ orgId: 'org-1' })).events;
   return { ...capture, audit, start, events };
 }
@@ -210,6 +216,7 @@ describe('Factory run lifecycle audit', () => {
           run: { ...OPEN_RUN, kickoffId: `kickoff-${role}`, role, threadId: `thread-${role}` },
           actorType: 'human',
           observedEnd: () => undefined,
+          startedAt: new Date(),
         });
       }
       work.step(1000, 200);

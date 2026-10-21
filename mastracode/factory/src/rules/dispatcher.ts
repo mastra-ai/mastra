@@ -320,7 +320,7 @@ interface FactoryNotificationResult {
 interface DispatcherSession extends SkillSession {
   thread: {
     switch(input: { threadId: string }): Promise<unknown>;
-    listActiveMessages(): Promise<Array<{ id: string }>>;
+    listActiveMessages(): Promise<Array<{ id: string; createdAt: Date }>>;
   };
   stream: { isActive(): boolean };
   abort(): void;
@@ -1014,8 +1014,9 @@ export class FactoryDecisionDispatcher {
           await this.#switchThread(session, binding);
           const deliveryId =
             record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
-          const kickoffLanded = async () =>
-            (await session.thread.listActiveMessages()).some(message => message.id === deliveryId);
+          const kickoffLandedAt = async () =>
+            (await session.thread.listActiveMessages()).find(message => message.id === deliveryId)?.createdAt;
+          const kickoffLanded = async () => (await kickoffLandedAt()) !== undefined;
           const kickoffStale = async () =>
             (await this.#roleSuperseded(record, decision.role)) ||
             (await this.#findBinding(record, decision.role))?.id !== binding.id ||
@@ -1138,6 +1139,7 @@ export class FactoryDecisionDispatcher {
           };
 
           try {
+            let startedAt = new Date();
             let settled = await sendKickoff();
             while (settled.action === 'deliver') {
               // `deliver` means the signal was queued onto a run that was already
@@ -1147,7 +1149,11 @@ export class FactoryDecisionDispatcher {
               // nobody working. Signals persist under their generation-scoped id
               // (the same identity the replay guard above reads), so confirm the
               // message actually landed in the thread rather than trusting the ack.
-              if (await kickoffLanded()) break;
+              const landedOnBusyRun = await kickoffLandedAt();
+              if (landedOnBusyRun) {
+                startedAt = landedOnBusyRun;
+                break;
+              }
 
               // Another run can start while the previous run is finishing, so one
               // redelivery is not enough to prove the session is idle. Follow each
@@ -1163,15 +1169,21 @@ export class FactoryDecisionDispatcher {
               // onto ends. Resend only when it is still missing, and never once
               // the card has moved on or the seat was handed over or revoked —
               // a stale kickoff would restart a phase that already finished.
-              if (await kickoffLanded()) break;
+              const landedAfterRunEnd = await kickoffLandedAt();
+              if (landedAfterRunEnd) {
+                startedAt = landedAfterRunEnd;
+                break;
+              }
               if (await kickoffStale()) throw new FactoryDecisionSuperseded();
               run.arm();
+              startedAt = new Date();
               settled = await sendKickoff();
             }
             await this.#recordRunStart(
               session,
               binding,
               deliveryId,
+              startedAt,
               record.approvedBy ?? undefined,
               run.endReason,
               item?.title,
@@ -1702,6 +1714,7 @@ export class FactoryDecisionDispatcher {
     session: BoundDispatcherSession,
     binding: FactoryRunBindingRecord,
     kickoffId: string,
+    startedAt: Date,
     approvedBy: string | undefined,
     observedEnd: ReturnType<typeof watchRun>['endReason'],
     workItemName: string | undefined,
@@ -1709,6 +1722,7 @@ export class FactoryDecisionDispatcher {
     if (!this.#audit) return;
     const humanApproved = isHumanActorId(approvedBy);
     await recordSessionRunStart(session, {
+      startedAt,
       audit: this.#audit,
       actorType: humanApproved ? 'human' : 'system',
       observedEnd,
@@ -1790,6 +1804,7 @@ export class FactoryDecisionDispatcher {
               true,
             );
           try {
+            let startedAt = new Date();
             let settled = await sendKickoff(`factory-kickoff:${record.kickoffKey}`);
             let deliveryGeneration = 0;
             while (settled?.action === 'deliver') {
@@ -1805,6 +1820,7 @@ export class FactoryDecisionDispatcher {
               }
               run.arm();
               deliveryGeneration += 1;
+              startedAt = new Date();
               settled = await sendKickoff(
                 `factory-kickoff:${record.kickoffKey}:retry:${record.attempts}:${deliveryGeneration}`,
               );
@@ -1813,6 +1829,7 @@ export class FactoryDecisionDispatcher {
               session,
               binding,
               `factory-kickoff:${record.kickoffKey}:${record.attempts}`,
+              startedAt,
               startedBy,
               run.endReason,
               item?.title,

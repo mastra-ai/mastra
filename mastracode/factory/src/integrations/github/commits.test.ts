@@ -14,8 +14,9 @@ function github() {
 const INPUT = {
   orgId: 'org1',
   project: { repository: { id: 'repo1', slug: 'acme/repo' } },
-  branch: 'main',
+  startRef: 'main',
   limit: 2,
+  page: 1,
 };
 
 function respondWith(body: unknown, ok = true, status = 200) {
@@ -33,7 +34,7 @@ describe('listRepositoryCommits', () => {
     await listRepositoryCommits(github(), INPUT);
 
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('https://api.github.com/repos/acme/repo/commits?sha=main&per_page=2');
+    expect(url).toBe('https://api.github.com/repos/acme/repo/commits?sha=main&per_page=2&page=1');
     expect((init.headers as Record<string, string>).authorization).toBe('Bearer t0k');
   });
 

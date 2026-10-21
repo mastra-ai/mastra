@@ -62,7 +62,12 @@ const PHASE_KIND_TONES: Record<BoardPhaseKind, BoardTone> = {
   terminal: 'success',
 };
 
-const TONE_CLASSES: Record<BoardTone, { icon: string; tint: string }> = {
+export interface StageToneClasses {
+  icon: string;
+  tint: string;
+}
+
+const TONE_CLASSES: Record<BoardTone, StageToneClasses> = {
   neutral: { icon: 'text-muted-foreground', tint: 'bg-fill-subtle' },
   orange: { icon: 'text-(--orange-500) dark:text-(--orange-400)', tint: 'bg-badge-orange-subtle' },
   cyan: { icon: 'text-(--cyan-500) dark:text-(--cyan-400)', tint: 'bg-badge-cyan-subtle' },
@@ -137,8 +142,12 @@ function StageArt({ stage, kind, className }: { stage: string; kind?: BoardPhase
   }
 }
 
+export function stageToneClasses(stage: string, kind?: BoardPhaseKind): StageToneClasses {
+  return TONE_CLASSES[stageToneFor(stage, kind)];
+}
+
 export function stageTintClass(stage: string, kind?: BoardPhaseKind): string {
-  return TONE_CLASSES[stageToneFor(stage, kind)].tint;
+  return stageToneClasses(stage, kind).tint;
 }
 
 export function BoardStageIcon({

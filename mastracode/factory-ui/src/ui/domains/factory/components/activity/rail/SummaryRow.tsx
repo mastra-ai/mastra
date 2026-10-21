@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { ActivityEntry } from '../../../activity';
 import type { FactoryMentionMember } from '../../../services/members';
 import { RailRow } from '../../Timeline';
+import { useEntriesSpotlight } from '../spotlight';
 import { GroupedEntries } from './GroupedEntries';
 import { EntryNode } from './sentence/EntryNode';
 import { EntrySentence } from './sentence/EntrySentence';
@@ -27,9 +28,15 @@ export function SummaryRow({
   const [cardsShown, setCardsShown] = useState(false);
   const listsCards = namesSeveralCards(entries);
   const foldsCards = compact && listsCards;
+  const spotlight = useEntriesSpotlight(entries);
 
   return (
-    <RailRow mark={<EntryNode entry={entries[0]} />} connected={connected}>
+    <RailRow
+      mark={<EntryNode entry={entries[0]} />}
+      connected={connected}
+      spotlit={spotlight.state === 'spotlit'}
+      {...spotlight.handlers}
+    >
       <EntrySentence
         entries={entries}
         roster={roster}

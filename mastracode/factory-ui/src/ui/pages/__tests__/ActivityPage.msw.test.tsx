@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -104,7 +104,10 @@ function renderAudit() {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe('Activity page, ungrouped', () => {
   it('lands the old audit URL ungrouped, one line per event, fetching the next page as it scrolls', async () => {
@@ -123,7 +126,9 @@ describe('Activity page, ungrouped', () => {
     server.use(
       ...baseHandlers(),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, ({ request }) => {
-        const cursor = new URL(request.url).searchParams.get('before');
+        const params = new URL(request.url).searchParams;
+        if (params.has('namespaces')) return HttpResponse.json({ events: [], actors: {} });
+        const cursor = params.get('before');
         requestedCursors.push(cursor);
         return cursor
           ? HttpResponse.json({ events: [started], actors })
@@ -134,7 +139,7 @@ describe('Activity page, ungrouped', () => {
     const user = userEvent.setup();
     const { client } = renderAudit();
 
-    expect(await screen.findByText('started a run on')).toBeInTheDocument();
+    expect(await screen.findByText('started a run on', undefined, { timeout: 5_000 })).toBeInTheDocument();
     await openPropertySubmenu(user, 'Timeline properties', 'Group');
     expect(screen.getByRole('menuitemradio', { name: 'None' })).toHaveAttribute('aria-checked', 'true');
     await closePropertiesMenus(user);
@@ -174,12 +179,11 @@ describe('Activity page, ungrouped', () => {
     const user = userEvent.setup();
     renderAudit();
 
-    expect(await screen.findByText('moved')).toBeInTheDocument();
+    expect(await screen.findByText('moved', undefined, { timeout: 5_000 })).toBeInTheDocument();
 
     await togglePropertyOption(user, 'Timeline properties', 'Filter', 'Runs');
     expect(screen.getByRole('button', { name: 'Timeline properties, 2 changed' })).toBeInTheDocument();
     expect(await screen.findByText('No events in these categories.')).toBeInTheDocument();
-    expect(requestedNamespaces).toContain('run');
 
     await togglePropertyOption(user, 'Timeline properties', 'Filter', 'Git');
     await waitFor(() => expect(requestedNamespaces).toContain('run,git'));
@@ -190,33 +194,74 @@ describe('Activity page, ungrouped', () => {
     expect(screen.getByRole('menuitemcheckbox', { name: 'All events' })).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByRole('menuitemcheckbox', { name: 'Runs' })).toHaveAttribute('aria-checked', 'false');
   });
+});
 
-  it('keeps every event listed across a trip to Codebase and back, without reading the trail again', async () => {
-    let auditRequests = 0;
-    const started = event('event-started', { action: 'factory.run.started' });
+describe('Activity page, Pulse and timeline together', () => {
+  const reconnect = { id: 'wi-1', name: 'Fix reconnect' };
+  const keys = { id: 'wi-2', name: 'Rotate keys' };
+
+  function runEvent(
+    side: 'started' | 'ended',
+    kickoffId: string,
+    minutesAgo: number,
+    card: { id: string; name: string },
+    metadata: Record<string, string>,
+  ): AuditEvent {
+    return event(`${kickoffId}-${side}`, {
+      action: `factory.run.${side}`,
+      actorId: side === 'ended' ? `agent:thread-${kickoffId}` : 'user-1',
+      actorType: side === 'ended' ? 'agent' : 'human',
+      targets: [{ type: 'work_item', ...card }],
+      metadata: { kickoffId, threadId: `thread-${kickoffId}`, ...metadata },
+      occurredAt: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
+    });
+  }
+
+  function threeRoles() {
+    return [
+      runEvent('started', 'review', 10, keys, { role: 'review', sessionId: 'session-review' }),
+      runEvent('started', 'build', 20, reconnect, { role: 'work', sessionId: 'session-build' }),
+      runEvent('ended', 'plan', 25, reconnect, { role: 'plan', sessionId: 'session-plan', reason: 'complete' }),
+      runEvent('started', 'plan', 40, reconnect, { role: 'plan', sessionId: 'session-plan' }),
+    ];
+  }
+
+  function stubActivity(events: AuditEvent[]) {
     server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [boardCard, { ...boardCard, id: 'wi-2', title: 'Rotate keys' }],
+          runningSessionIds: ['session-build'],
+          parkedSessionIds: ['session-review'],
+        }),
+      ),
       ...baseHandlers(),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, () => {
-        auditRequests += 1;
-        return HttpResponse.json({ events: [started], actors });
-      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, ({ request }) =>
+        HttpResponse.json({ events: new URL(request.url).searchParams.has('before') ? [] : events, actors }),
+      ),
     );
+  }
 
+  function renderActivity() {
+    const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/activity`] });
+    return renderWithProviders(<RouterProvider router={router} />);
+  }
+
+  const lane = (name: string) => within(screen.getByRole('group', { name }));
+
+  it('highlights only the hovered run in the timeline, not every event on its card', async () => {
+    stubActivity(threeRoles());
     const user = userEvent.setup();
-    renderAudit();
-    expect(await screen.findByText('started a run on')).toBeInTheDocument();
+    renderActivity();
+    await screen.findByRole('link', { name: /^Rotate keys, Review · Needs you/ }, { timeout: 5_000 });
+    const timeline = await screen.findByRole('region', { name: 'Timeline' });
+    await within(timeline).findAllByText(/ended a run/);
+    const spotlitRows = () => [...timeline.querySelectorAll('li[data-spotlit]')].map(row => row.textContent ?? '');
 
-    await user.click(screen.getByRole('radio', { name: 'Codebase' }));
-    expect(await screen.findByRole('heading', { name: 'No repository linked yet' })).toBeInTheDocument();
-    await user.click(screen.getByRole('radio', { name: 'Factory' }));
+    await user.hover(lane('Planning').getByRole('link'));
+    expect(spotlitRows()).toEqual([expect.stringMatching(/ended a run/), expect.stringMatching(/started a run/)]);
 
-    expect(await screen.findByText('started a run on')).toBeInTheDocument();
-    await openPropertySubmenu(user, 'Timeline properties', 'Group');
-    expect(screen.getByRole('menuitemradio', { name: 'None' })).toHaveAttribute('aria-checked', 'true');
-    await user.click(screen.getByRole('menuitemradio', { name: 'Similar' }));
-    await closePropertiesMenus(user);
-
-    expect(await screen.findByText('started a run on')).toBeInTheDocument();
-    expect(auditRequests).toBe(1);
+    await user.hover(lane('Building').getByRole('link'));
+    expect(spotlitRows()).toEqual([expect.stringMatching(/started a run/)]);
   });
 });

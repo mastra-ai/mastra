@@ -242,11 +242,14 @@ export function recordSessionRunStart(
     run,
     actorType,
     observedEnd,
+    startedAt,
   }: {
     audit: AuditRecorder;
     run: FactoryOpenRun;
     actorType: AuditActorType;
     observedEnd: () => RunEndReason;
+    /** When the run's kickoff landed or was sent; recording can lag it by the whole run. */
+    startedAt: Date;
   },
 ): Promise<void> {
   return serializeRunAudit(session, async () => {
@@ -259,6 +262,7 @@ export function recordSessionRunStart(
       actorId: run.startedBy,
       actorType,
       action: 'factory.run.started',
+      occurredAt: startedAt,
     });
     await recordRunEnds(session, audit, observedEnd(), run.kickoffId);
   });

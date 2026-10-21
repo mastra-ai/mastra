@@ -86,13 +86,21 @@ async function throwRequestError(res: Response): Promise<never> {
 export async function fetchAuditEvents(
   baseUrl: string,
   factoryProjectId: string,
-  options: { namespaces?: string[]; actorIds?: string[]; before?: string; limit?: number; signal?: AbortSignal } = {},
+  options: {
+    namespaces?: string[];
+    actorIds?: string[];
+    before?: string;
+    limit?: number;
+    skipActorProfiles?: boolean;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<AuditEventPage> {
   const query = new URLSearchParams();
   if (options.namespaces && options.namespaces.length > 0) query.set('namespaces', options.namespaces.join(','));
   if (options.actorIds && options.actorIds.length > 0) query.set('actorIds', options.actorIds.join(','));
   if (options.before) query.set('before', options.before);
   if (options.limit) query.set('limit', String(options.limit));
+  if (options.skipActorProfiles) query.set('actors', 'none');
   const qs = query.size > 0 ? `?${query}` : '';
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/audit${qs}`, {
     headers: { Accept: 'application/json' },

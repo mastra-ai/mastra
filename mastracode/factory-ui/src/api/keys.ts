@@ -51,8 +51,10 @@ export const queryKeys = {
     ['github', 'pr', githubProjectId ?? null, number ?? null] as const,
   repositorySettings: (projectRepositoryId: string | undefined) =>
     ['source-control', 'repository-settings', projectRepositoryId ?? null] as const,
-  githubCommits: (projectRepositoryId: string | undefined, limit: number) =>
-    ['github', 'commits', projectRepositoryId ?? null, limit] as const,
+  githubCommits: (projectRepositoryId: string | undefined) =>
+    ['github', 'commits', projectRepositoryId ?? null] as const,
+  githubCommitHistory: (projectRepositoryId: string | undefined, fromSha: string | undefined) =>
+    [...queryKeys.githubCommits(projectRepositoryId), 'history', fromSha ?? null] as const,
   gitlabStatus: (baseUrl: string) => ['gitlab', 'status', baseUrl] as const,
   gitlabProjects: (baseUrl: string) => ['gitlab', 'projects', baseUrl] as const,
   gitlabIssuesAll: (baseUrl: string) => ['gitlab', 'issues', baseUrl] as const,

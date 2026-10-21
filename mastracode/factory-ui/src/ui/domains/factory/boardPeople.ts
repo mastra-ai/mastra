@@ -4,7 +4,7 @@ import type { BoardCandidate } from './boardCandidates';
 import type { BoardFilterFieldId, BoardFilterState } from './boardFilters';
 import type { AuditActorProfile, AuditEventPage } from './services/audit';
 import type { WorkItem } from './services/workItems';
-import { workItemHumanActorIds } from './workItemActivity';
+import { metadataString, workItemHumanActorIds } from './workItemActivity';
 
 const BOARD_PERSON_ROLES = ['worked', 'authored', 'assigned', 'review-requested'] as const;
 type BoardPersonRole = (typeof BOARD_PERSON_ROLES)[number];
@@ -71,11 +71,6 @@ export function withPeopleUnfolded(filters: BoardFilterState, personId: PersonId
 interface RelatedCard {
   source: WorkItem['source'];
   metadata: Record<string, unknown>;
-}
-
-function metadataString(metadata: Record<string, unknown>, key: string): string | undefined {
-  const value = metadata[key];
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 function metadataStrings(metadata: Record<string, unknown>, key: string): string[] {

@@ -1,6 +1,6 @@
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 
 /** A connector is drawn down to the next row, so this gap and `RAIL_LINE`'s inset must agree. */
 export const RAIL_LIST = 'm-0 flex list-none flex-col gap-6 p-0';
@@ -43,9 +43,25 @@ export function DayHeading({ children }: { children: ReactNode }) {
   );
 }
 
-export function RailRow({ mark, connected, children }: { mark: ReactNode; connected: boolean; children: ReactNode }) {
+export function RailRow({
+  mark,
+  connected,
+  spotlit = false,
+  children,
+  ...spotlightHandlers
+}: {
+  mark: ReactNode;
+  connected: boolean;
+  spotlit?: boolean;
+  children: ReactNode;
+} & Pick<HTMLAttributes<HTMLLIElement>, 'onPointerEnter' | 'onPointerLeave' | 'onFocus' | 'onBlur'>) {
   return (
-    <li className="relative grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-3">
+    <li
+      className="relative isolate grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-3"
+      data-spotlit={spotlit || undefined}
+      {...spotlightHandlers}
+    >
+      {spotlit ? <span aria-hidden className="bg-fill absolute -inset-x-2 inset-y-0 -z-10 rounded-lg" /> : null}
       {connected ? <span aria-hidden className={RAIL_LINE} /> : null}
       <span className="grid size-7 place-items-center">{mark}</span>
       <div className="min-w-0">{children}</div>

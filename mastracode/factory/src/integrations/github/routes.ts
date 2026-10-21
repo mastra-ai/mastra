@@ -40,7 +40,7 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
-import { listRepositoryCommits } from './commits.js';
+import { isCommitSha, listRepositoryCommits } from './commits.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
 import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
@@ -1630,14 +1630,23 @@ function buildProjectGitRoutes({
 
         const branch = c.req.query('branch') ?? project.defaultBranch;
         if (!isValidGitRefSandbox(branch)) return c.json({ error: 'Invalid branch' }, 400);
-        // GitHub takes `per_page` as an integer, so a fractional limit would go out verbatim.
+        const from = c.req.query('from');
+        if (from !== undefined && !isCommitSha(from)) return c.json({ error: 'Invalid commit' }, 400);
+        // GitHub takes `per_page` and `page` as integers, so a fractional value would go out verbatim.
         const limit = Math.min(
           Math.max(Math.floor(Number(c.req.query('limit') ?? DEFAULT_COMMIT_PAGE)) || DEFAULT_COMMIT_PAGE, 1),
           MAX_COMMIT_PAGE,
         );
+        const page = Math.max(Math.floor(Number(c.req.query('page') ?? 1)) || 1, 1);
 
         try {
-          const commits = await listRepositoryCommits(github, { orgId, project, branch, limit });
+          const commits = await listRepositoryCommits(github, {
+            orgId,
+            project,
+            startRef: from ?? branch,
+            limit,
+            page,
+          });
           return c.json({ commits, branch });
         } catch (err) {
           return gitErrorResponse(loose(c), err);

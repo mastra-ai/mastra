@@ -1,6 +1,8 @@
 import type { AuditActorType } from './actors.js';
 import type { AuditEventRow, AuditTarget } from './base.js';
 
+export const MAX_AUDIT_PAGE_SIZE = 200;
+
 export interface WireAuditActor {
   id: string;
   name: string;

@@ -476,6 +476,7 @@ export function createFactorySessionTools(
     const heartbeat = heartbeatOpenRunUntilEnd(session, kickoffId);
     const kickoffContext = new RequestContext();
     kickoffContext.set('user', { workosId: scope.userId, organizationId: scope.orgId });
+    const kickoffSentAt = new Date();
     try {
       await session.sendSignal(
         { id: kickoffId, type: 'user', tagName: 'user', contents: prompt },
@@ -487,6 +488,7 @@ export function createFactorySessionTools(
     }
 
     await recordSessionRunStart(session, {
+      startedAt: kickoffSentAt,
       audit: deps.auditRecorder,
       actorType: 'human',
       observedEnd: heartbeat.endReason,

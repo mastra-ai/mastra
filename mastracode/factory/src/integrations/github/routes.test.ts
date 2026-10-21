@@ -1852,6 +1852,29 @@ describe('commits route', () => {
     expect(await res.json()).toMatchObject({ branch: 'release/v2' });
     expect(new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams.get('sha')).toBe('release/v2');
   });
+
+  it('pages older history from a fixed commit, so pushes in between cannot shift the page', async () => {
+    seedMaterializedProject();
+    const fetchMock = stubCommitFetch();
+    const from = 'a'.repeat(40);
+
+    const res = await buildApp({ workosId: 'u1' }).request(`/web/github/projects/p1/commits?from=${from}&page=3`);
+
+    const asked = new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams;
+    expect(await res.json()).toMatchObject({ branch: 'main' });
+    expect(asked.get('sha')).toBe(from);
+    expect(asked.get('page')).toBe('3');
+  });
+
+  it('rejects a starting point that is not a full commit sha', async () => {
+    seedMaterializedProject();
+    const fetchMock = stubCommitFetch();
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/commits?from=main');
+
+    expect(res.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('project settings routes', () => {
@@ -2478,8 +2501,11 @@ describe('Factory session routes', () => {
 
   it('explains that a session with no conversation cannot be named', async () => {
     seedMaterializedProject();
-    const controller = { queryThreadById: vi.fn(async () => null),
-      queryThreads: vi.fn(async () => []), generateThreadTitle: vi.fn() } as any;
+    const controller = {
+      queryThreadById: vi.fn(async () => null),
+      queryThreads: vi.fn(async () => []),
+      generateThreadTitle: vi.fn(),
+    } as any;
     const app = buildApp({ workosId: 'u1' }, { controller });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
@@ -2493,8 +2519,11 @@ describe('Factory session routes', () => {
 
   it('does not name a session belonging to another user', async () => {
     seedMaterializedProject();
-    const controller = { queryThreadById: vi.fn(async () => null),
-      queryThreads: vi.fn(), generateThreadTitle: vi.fn() } as any;
+    const controller = {
+      queryThreadById: vi.fn(async () => null),
+      queryThreads: vi.fn(),
+      generateThreadTitle: vi.fn(),
+    } as any;
     const ownerApp = buildApp({ workosId: 'u1' }, { controller });
     const created = await postJson(ownerApp, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;

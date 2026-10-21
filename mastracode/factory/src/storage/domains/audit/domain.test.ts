@@ -267,6 +267,38 @@ describe('AuditDomain', () => {
     expect(getUser).not.toHaveBeenCalledWith('factory-rule-dispatcher');
   });
 
+  it('skips actor profiles when the caller asks for none, so a poll never reaches the user provider', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Acme project' },
+    });
+    const getUser = vi.fn(async (userId: string) => ({ id: userId, name: 'Ada Lovelace' }));
+    const domain = auditDomain(seed, { users: { getUser } });
+    await domain.record({
+      orgId: 'org-1',
+      actorId: 'user-1',
+      action: 'factory.run.started',
+      targets: [{ type: 'work_item', id: 'item-1', name: 'Fix login' }],
+      factoryProjectId: project.id,
+    });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, domain.routes());
+
+    const response = await app.request(`/web/factory/projects/${project.id}/audit?actors=none`);
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.events).toMatchObject([{ action: 'factory.run.started' }]);
+    expect(body.actors).toEqual({});
+    expect(getUser).not.toHaveBeenCalled();
+  });
+
   it('captures the acting user profile in emitted metadata for later resolution', async () => {
     const seed = await createFactoryStorageForTests();
     const domain = auditDomain(seed);

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
@@ -52,6 +52,8 @@ function createSession(
     droppedSignalCount?: number;
     /** The queued copy only surfaces once the run it was queued onto ends, then runs to completion. */
     surfaceQueuedSignalOnRunEnd?: boolean;
+    landQueuedSignalAt?: Date;
+    queuedSignalAlreadyLandedAt?: Date;
     /** Runs just before the busy run ends, e.g. to move the card on mid-run. */
     beforeRunEnd?: () => Promise<void>;
     initialDeliveredSignalIds?: string[];
@@ -123,7 +125,7 @@ function createSession(
   const notificationAccepted = accepted ?? Promise.resolve({ action: 'wake', output: { consumeStream } });
   let signalSends = 0;
   const deliveredKeys = new Set<string>();
-  const deliveredSignals = new Set(options?.initialDeliveredSignalIds ?? []);
+  const deliveredSignals = new Map((options?.initialDeliveredSignalIds ?? []).map(id => [id, new Date()]));
   const delivered: string[] = [];
   let notificationSends = 0;
   const sendNotificationSignal = vi.fn(
@@ -166,7 +168,7 @@ function createSession(
       rename: vi.fn(async () => {}),
       requireId: vi.fn(() => threadId),
       getId: vi.fn(() => threadId),
-      listActiveMessages: vi.fn(async () => [...deliveredSignals].map(id => ({ id }))),
+      listActiveMessages: vi.fn(async () => [...deliveredSignals].map(([id, createdAt]) => ({ id, createdAt }))),
     },
     stream: { isActive: vi.fn(() => options?.streamActive ?? false) },
     abort,
@@ -195,7 +197,8 @@ function createSession(
       const droppedSignalCount = options?.droppedSignalCount ?? (options?.dropDeliveredSignal ? 1 : 0);
       const dropped = signalSends <= droppedSignalCount;
       const redelivered = !dropped && signalSends > 1 && options?.acceptRedeliveredSignal === true;
-      if (!dropped) deliveredSignals.add(input.id);
+      if (!dropped) deliveredSignals.set(input.id, new Date());
+      if (options?.queuedSignalAlreadyLandedAt) deliveredSignals.set(input.id, options.queuedSignalAlreadyLandedAt);
       if (options?.suspendsOnPlan || options?.suspendsOnTool) {
         queueMicrotask(() => void emitScriptedSuspension());
       } else if (options?.emitAgentEndDuringSignal || redelivered) {
@@ -204,9 +207,12 @@ function createSession(
         // The busy run finishes without ever answering the queued prompt, which
         // is the moment the session becomes free to take it again.
         queueMicrotask(async () => {
-          if (options?.surfaceQueuedSignalOnRunEnd) await new Promise(resolve => setTimeout(resolve, 0));
+          if (options?.surfaceQueuedSignalOnRunEnd || options?.landQueuedSignalAt) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
+          if (options?.landQueuedSignalAt) deliveredSignals.set(input.id, options.landQueuedSignalAt);
           await options?.beforeRunEnd?.();
-          if (options?.surfaceQueuedSignalOnRunEnd) deliveredSignals.add(input.id);
+          if (options?.surfaceQueuedSignalOnRunEnd) deliveredSignals.set(input.id, new Date());
           emitAgentEnd('complete');
           if (options?.surfaceQueuedSignalOnRunEnd) setTimeout(() => emitAgentEnd('complete'), 0);
         });
@@ -237,9 +243,8 @@ function createSession(
   const controller = {
     createSession: vi.fn(async () => session),
     // Bindings run under the Factory resource; the session is found by its own id only.
-    getSession: vi.fn(
-      async (sessionId: string): Promise<typeof session | undefined> =>
-        sessionId === 'session-1' ? session : undefined,
+    getSession: vi.fn(async (sessionId: string): Promise<typeof session | undefined> =>
+      sessionId === 'session-1' ? session : undefined,
     ),
     // Empty registry by default: the level-triggered timeout check sees no run.
     listActiveThreadRuns: vi.fn((): Array<{ runId: string; resourceId?: string; threadId: string }> => []),
@@ -2750,8 +2755,8 @@ describe('FactoryDecisionDispatcher', () => {
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
-  async function prepareDeliverScenario(idempotencyKey: string) {
-    const storage = (await createFactoryStorageForTests()).workItems;
+  async function prepareDeliverScenario(idempotencyKey: string, existingStorage?: WorkItemsStorage) {
+    const storage = existingStorage ?? (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
       role: 'work',
@@ -2804,6 +2809,56 @@ describe('FactoryDecisionDispatcher', () => {
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(decision?.status).toBe('succeeded');
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
+  });
+
+  const kickoffAt = new Date('2030-01-01T00:00:00Z');
+  const midRunAt = new Date('2030-01-01T00:10:00Z');
+  const busyRunEndAt = new Date('2030-01-01T00:24:00Z');
+  it.each([
+    {
+      timing: 'lands partway through the busy run, which does the work',
+      fakeTiming: { landQueuedSignalAt: midRunAt },
+      expectedStart: midRunAt,
+    },
+    {
+      timing: 'is already in the thread when the queue is acknowledged',
+      fakeTiming: { queuedSignalAlreadyLandedAt: midRunAt },
+      expectedStart: midRunAt,
+    },
+    {
+      timing: 'only surfaces once the busy run ends',
+      fakeTiming: { surfaceQueuedSignalOnRunEnd: true },
+      expectedStart: busyRunEndAt,
+    },
+  ])('starts a run from when its queued kickoff $timing', async ({ fakeTiming, expectedStart }) => {
+    vi.useFakeTimers({ toFake: ['Date'], now: kickoffAt });
+    onTestFinished(() => vi.useRealTimers());
+    const seed = await createFactoryStorageForTests();
+    const { transitionService } = await prepareDeliverScenario('skill-queued-run-dated', seed.workItems);
+    const { controller, session } = createSession(undefined, {
+      ...fakeTiming,
+      signalAccepted: Promise.resolve({ accepted: true, action: 'deliver' }),
+      dropDeliveredSignal: true,
+      endRunAfterDroppedSignal: true,
+      acceptRedeliveredSignal: true,
+      beforeRunEnd: async () => vi.setSystemTime(busyRunEndAt),
+    });
+    observeSessionRunEnd(session, { audit: seed.audit });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage: seed.workItems,
+      audit: seed.audit,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(kickoffAt);
+
+    const started = async () =>
+      (await seed.audit.list({ orgId: 'org-1' })).events.find(event => event.action === 'factory.run.started');
+    await vi.waitFor(async () => expect(await started()).toBeDefined());
+    expect((await started())?.occurredAt).toEqual(expectedStart);
   });
 
   it('drops a dropped kickoff instead of resending it once the card has moved to another stage', async () => {
@@ -5716,6 +5771,41 @@ describe('FactoryDecisionDispatcher', () => {
     expect(getAgentEndListenerCount()).toBe(0);
   });
 
+  it('starts a redelivered kickoff run from when it was resent', async () => {
+    const sentAt = new Date('2030-01-01T00:00:00Z');
+    const resentAt = new Date('2030-01-01T00:18:00Z');
+    vi.useFakeTimers({ toFake: ['Date'], now: sentAt });
+    onTestFinished(() => vi.useRealTimers());
+    const seed = await createFactoryStorageForTests();
+    const { controller, session, sendNotificationSignal } = createSession(undefined, {
+      notificationResponses: [{ action: 'deliver', endRun: true }, { action: 'wake' }],
+    });
+    const scriptedSend = sendNotificationSignal.getMockImplementation();
+    sendNotificationSignal.mockImplementation(async (...args) => {
+      if (!scriptedSend) throw new Error('createSession scripts sendNotificationSignal');
+      const response = await scriptedSend(...args);
+      if (sendNotificationSignal.mock.calls.length === 1) vi.setSystemTime(resentAt);
+      return response;
+    });
+    observeSessionRunEnd(session, { audit: seed.audit });
+    const { transitionService } = await preparePromptKickoff(seed.workItems);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage: seed.workItems,
+      audit: seed.audit,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(sentAt);
+
+    const started = async () =>
+      (await seed.audit.list({ orgId: 'org-1' })).events.find(event => event.action === 'factory.run.started');
+    await vi.waitFor(async () => expect(await started()).toBeDefined());
+    expect((await started())?.occurredAt).toEqual(resentAt);
+  });
+
   it('fails a kickoff for retry when the delivered run never ends', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller } = createSession(undefined, {
@@ -5873,14 +5963,12 @@ describe('custom-board deferred targets', () => {
 
   it('materializes its declared initial phase and dispatches its lifecycle-produced custom transition once', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const queued = vi.fn(
-      (): FactoryCommitDecision => ({
-        type: 'transition',
-        idempotencyKey: 'begin-release',
-        board: 'release',
-        stage: 'shipping',
-      }),
-    );
+    const queued = vi.fn((): FactoryCommitDecision => ({
+      type: 'transition',
+      idempotencyKey: 'begin-release',
+      board: 'release',
+      stage: 'shipping',
+    }));
     const shipping = vi.fn();
     const board = defineBoard({
       id: 'release',
@@ -6236,13 +6324,11 @@ describe('custom-board deferred targets', () => {
   it('does not mistake a committed linked initial entry for a completed destination after uninstall', async () => {
     const seed = await createFactoryStorageForTests();
     const storage = seed.workItems;
-    const entered = vi.fn(
-      (): FactoryCommitDecision => ({
-        type: 'notify',
-        idempotencyKey: 'initial-effect',
-        title: 'Initial entry committed',
-      }),
-    );
+    const entered = vi.fn((): FactoryCommitDecision => ({
+      type: 'notify',
+      idempotencyKey: 'initial-effect',
+      title: 'Initial entry committed',
+    }));
     const destination = vi.fn();
     const boards = createBoardRegistry({
       includeDefaultBoards: false,

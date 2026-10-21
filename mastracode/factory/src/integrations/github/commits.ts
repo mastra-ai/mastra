@@ -8,6 +8,7 @@
 import type { VersionControl } from '../../capabilities/version-control.js';
 
 const GITHUB_API = 'https://api.github.com';
+const SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 export interface RepositoryCommit {
   sha: string;
@@ -25,13 +26,18 @@ interface GithubCommitResponse {
   author: { login: string; avatar_url: string } | null;
 }
 
+export function isCommitSha(value: unknown): value is string {
+  return typeof value === 'string' && SHA_PATTERN.test(value);
+}
+
 export async function listRepositoryCommits(
   github: { versionControl: Pick<VersionControl, 'getRepositoryAccess'> },
   input: {
     orgId: string;
     project: { repository: { id: string; slug: string } };
-    branch: string;
+    startRef: string;
     limit: number;
+    page: number;
   },
 ): Promise<RepositoryCommit[]> {
   const access = await github.versionControl.getRepositoryAccess({
@@ -39,7 +45,7 @@ export async function listRepositoryCommits(
     repositoryId: input.project.repository.id,
   });
 
-  const query = new URLSearchParams({ sha: input.branch, per_page: String(input.limit) });
+  const query = new URLSearchParams({ sha: input.startRef, per_page: String(input.limit), page: String(input.page) });
   const response = await fetch(`${GITHUB_API}/repos/${input.project.repository.slug}/commits?${query}`, {
     headers: {
       accept: 'application/vnd.github+json',
@@ -61,8 +67,6 @@ export async function listRepositoryCommits(
     url: entry.html_url,
   }));
 }
-
-const SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 /** The commit a branch points at right now, as a full sha. Throws when GitHub rejects the lookup. */
 export async function getBranchHead(
@@ -86,7 +90,9 @@ export async function getBranchHead(
   );
 
   if (!response.ok) {
-    throw new Error(`GitHub rejected the head lookup for ${input.repository.slug}@${input.branch} (${response.status}).`);
+    throw new Error(
+      `GitHub rejected the head lookup for ${input.repository.slug}@${input.branch} (${response.status}).`,
+    );
   }
 
   const sha = (await response.text()).trim();

@@ -230,8 +230,7 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
   }): Promise<void> {
     try {
       const context = requestContext.get('controller') as
-        | AgentControllerRequestContext<FactorySessionState>
-        | undefined;
+        AgentControllerRequestContext<FactorySessionState> | undefined;
       const tenant = this.#agentTenant?.(requestContext);
       const orgId = tenant?.orgId;
       const userId = tenant?.userId;
@@ -346,7 +345,10 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
             before: c.req.query('before') || undefined,
             limit: parseLimitParam(c.req.query('limit')),
           });
-          const actors = await this.#resolveActorProfiles(page.events, parseActorIdsParam(c.req.query('actorIds')));
+          const actors =
+            c.req.query('actors') === 'none'
+              ? {}
+              : await this.#resolveActorProfiles(page.events, parseActorIdsParam(c.req.query('actorIds')));
           const body: WireAuditPage = {
             events: page.events.map(toWireAuditEvent),
             actors,

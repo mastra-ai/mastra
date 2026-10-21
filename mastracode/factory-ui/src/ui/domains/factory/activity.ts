@@ -8,9 +8,14 @@ import type { BoardKind } from './boardStages';
 import { itemBoard } from './boardStages';
 import type { AuditEvent } from './services/audit';
 import type { WorkItem } from './services/workItems';
+import { metadataString } from './workItemActivity';
 
 export function boardItemPath(factoryProjectId: string | undefined, item: { board: string; id: string }): string {
   return `/factories/${factoryProjectId ?? ''}/${item.board}?item=${encodeURIComponent(item.id)}`;
+}
+
+export function workItemPath(factoryProjectId: string, item: WorkItem): string {
+  return boardItemPath(factoryProjectId, { id: item.id, board: itemBoard(item) });
 }
 
 /** `?events=all` lists every recorded event; the old audit log URL lands there. */
@@ -111,6 +116,10 @@ export interface ActivityDeed {
 
 export type ActivityEntry = ActivityMove | ActivityDeed;
 
+export function entryRunId(entry: ActivityEntry): string | undefined {
+  return metadataString(entry.metadata, 'kickoffId');
+}
+
 /** `factoryActivity` owns moves from `stageHistory`; the audit copy would show each one twice. */
 const STAGE_MOVE_ACTION = 'factory.work_item.stage_moved' satisfies AuditAction;
 
@@ -160,7 +169,7 @@ function auditMove(event: AuditEvent, at: number, cards: Map<string, ActivityCar
   };
 }
 
-function eventTime(event: AuditEvent): number | undefined {
+export function eventTime(event: AuditEvent): number | undefined {
   const at = Date.parse(event.occurredAt);
   return Number.isNaN(at) ? undefined : at;
 }
