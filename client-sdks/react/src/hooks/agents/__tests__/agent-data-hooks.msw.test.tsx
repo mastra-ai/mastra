@@ -17,8 +17,8 @@ import { isModelNotAllowedError } from '../is-model-not-allowed';
 import { useAgentSkills } from '../use-agent-skills';
 import { useAgentVersions } from '../use-agent-versions';
 import { useAgentWorkingMemory } from '../use-agent-working-memory';
-import { useReorderModelList, useUpdateModelInModelList } from '../use-agents';
 import { useAgentWorkspace } from '../use-agent-workspace';
+import { useReorderModelList, useUpdateModelInModelList } from '../use-agents';
 import { useAgentsModelProviders } from '../use-agents-model-providers';
 import { useChannelPlatforms, useDisconnectChannel } from '../use-channels';
 import { useCloseBrowser } from '../use-close-browser';
@@ -183,49 +183,51 @@ describe('useAgentVersions', () => {
     });
   });
 
-  it('refreshes Editor version state after model list mutations', async () => {
-    let versionsRequests = 0;
-    let storedAgentRequests = 0;
+  describe('when the model list is mutated', () => {
+    it('refreshes Editor version state', async () => {
+      let versionsRequests = 0;
+      let storedAgentRequests = 0;
 
-    server.use(
-      http.get(`${API}/stored/agents/agent-1/versions`, () => {
-        versionsRequests += 1;
-        return HttpResponse.json(versions);
-      }),
-      http.get(`${API}/stored/agents/agent-1`, () => {
-        storedAgentRequests += 1;
-        return HttpResponse.json(storedAgent);
-      }),
-      http.post(`${API}/agents/agent-1/models/reorder`, () => HttpResponse.json({ success: true })),
-      http.post(`${API}/agents/agent-1/models/fallback`, () => HttpResponse.json({ success: true })),
-    );
+      server.use(
+        http.get(`${API}/stored/agents/agent-1/versions`, () => {
+          versionsRequests += 1;
+          return HttpResponse.json(versions);
+        }),
+        http.get(`${API}/stored/agents/agent-1`, () => {
+          storedAgentRequests += 1;
+          return HttpResponse.json(storedAgent);
+        }),
+        http.post(`${API}/agents/agent-1/models/reorder`, () => HttpResponse.json({ success: true })),
+        http.post(`${API}/agents/agent-1/models/fallback`, () => HttpResponse.json({ success: true })),
+      );
 
-    const reorderOnSuccess = vi.fn();
-    const updateOnSuccess = vi.fn();
-    const { result } = renderHookWithProviders(() => ({
-      versions: useAgentVersions({ agentId: 'agent-1' }),
-      storedAgent: useStoredAgent({ agentId: 'agent-1' }),
-      reorder: useReorderModelList({ agentId: 'agent-1', queryOptions: { onSuccess: reorderOnSuccess } }),
-      update: useUpdateModelInModelList({ agentId: 'agent-1', queryOptions: { onSuccess: updateOnSuccess } }),
-    }));
+      const reorderOnSuccess = vi.fn();
+      const updateOnSuccess = vi.fn();
+      const { result } = renderHookWithProviders(() => ({
+        versions: useAgentVersions({ agentId: 'agent-1' }),
+        storedAgent: useStoredAgent({ agentId: 'agent-1' }),
+        reorder: useReorderModelList({ agentId: 'agent-1', queryOptions: { onSuccess: reorderOnSuccess } }),
+        update: useUpdateModelInModelList({ agentId: 'agent-1', queryOptions: { onSuccess: updateOnSuccess } }),
+      }));
 
-    await waitFor(() => {
-      expect(result.current.versions.data).toEqual(versions);
-      expect(result.current.storedAgent.data).toEqual(storedAgent);
-    });
+      await waitFor(() => {
+        expect(result.current.versions.data).toEqual(versions);
+        expect(result.current.storedAgent.data).toEqual(storedAgent);
+      });
 
-    await act(() => result.current.reorder.mutateAsync({ reorderedModelIds: ['fallback', 'primary'] }));
-    await waitFor(() => {
-      expect(versionsRequests).toBe(2);
-      expect(storedAgentRequests).toBe(2);
-      expect(reorderOnSuccess).toHaveBeenCalledOnce();
-    });
+      await act(() => result.current.reorder.mutateAsync({ reorderedModelIds: ['fallback', 'primary'] }));
+      await waitFor(() => {
+        expect(versionsRequests).toBe(2);
+        expect(storedAgentRequests).toBe(2);
+        expect(reorderOnSuccess).toHaveBeenCalledOnce();
+      });
 
-    await act(() => result.current.update.mutateAsync({ modelConfigId: 'fallback', enabled: false }));
-    await waitFor(() => {
-      expect(versionsRequests).toBe(3);
-      expect(storedAgentRequests).toBe(3);
-      expect(updateOnSuccess).toHaveBeenCalledOnce();
+      await act(() => result.current.update.mutateAsync({ modelConfigId: 'fallback', enabled: false }));
+      await waitFor(() => {
+        expect(versionsRequests).toBe(3);
+        expect(storedAgentRequests).toBe(3);
+        expect(updateOnSuccess).toHaveBeenCalledOnce();
+      });
     });
   });
 });
