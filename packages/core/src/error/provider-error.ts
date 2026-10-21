@@ -22,6 +22,7 @@ export interface ProviderErrorFacts {
 
 const MAX_OBJECT_DEPTH = 4;
 const ENVELOPE_TYPES = new Set(['error', 'response.failed']);
+const SYMBOLIC_STATUS = /^[A-Z][A-Z0-9_]+$/;
 
 const BILLING_EXHAUSTED =
   /insufficient[_ ]quota|insufficient (?:balance|credits?)|credits? exhausted|credit balance|payment required/i;
@@ -90,8 +91,8 @@ function collect(value: unknown, facts: CollectedFacts, depth: number): void {
 
   const status = readField(value, 'statusCode') ?? readField(value, 'status');
   if (typeof status === 'number' && facts.statusCode === undefined) facts.statusCode = status;
-  // Google puts the HTTP status in `error.code` and a symbolic status in `error.status`.
-  if (typeof status === 'string' && status.trim()) facts.codes.push(status);
+  // Google puts the HTTP status in `error.code` and a symbolic status in `error.status`; a lifecycle `status: 'failed'` names nothing.
+  if (typeof status === 'string' && SYMBOLIC_STATUS.test(status.trim())) facts.codes.push(status.trim());
   const code = readField(value, 'code');
   if (typeof code === 'number' && facts.statusCode === undefined && code >= 400 && code < 600) facts.statusCode = code;
   for (const candidate of [code, readField(value, 'type')]) {
@@ -119,15 +120,17 @@ export function classifyProviderError(error: unknown): ProviderFailureKind {
   if (USAGE_CAPPED.test(evidence)) return RENEWS_WITHIN_THE_HOUR.test(evidence) ? 'rate_limited' : 'quota';
   // Token-per-minute limits are 429s whose message asks to shorten the request; waiting is the fix.
   if (status === 429) return 'rate_limited';
+  if (status === 408 || status === 504) return 'timeout';
+  if (status !== undefined && status >= 500) return 'unavailable';
   if (ACCESS_DENIED.test(evidence)) return 'auth';
   if (CONTEXT_OVERFLOW.some(pattern => pattern.test(evidence))) return 'context_overflow';
   if (MODEL_REJECTED.test(evidence)) return 'model_rejected';
   if (TOOL_HISTORY_REJECTED.test(evidence)) return 'tool_history_rejected';
   // A request the provider named invalid is final, whatever its wording mentions.
   if (INVALID_REQUEST_CODE.test(evidence)) return 'invalid_request';
-  if (status === 408 || status === 504 || TIMED_OUT.test(evidence)) return 'timeout';
+  if (TIMED_OUT.test(evidence)) return 'timeout';
   if (RATE_LIMITED.test(evidence)) return 'rate_limited';
-  if ((status !== undefined && status >= 500) || UNAVAILABLE.test(evidence)) return 'unavailable';
+  if (UNAVAILABLE.test(evidence)) return 'unavailable';
   if (status === 400 || status === 404 || status === 422) return 'invalid_request';
   if (facts.texts.some(text => HTTP_REASON_PHRASE.test(text.trim()))) return 'invalid_request';
   return 'unknown';

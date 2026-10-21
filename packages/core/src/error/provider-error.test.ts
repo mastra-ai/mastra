@@ -252,6 +252,8 @@ describe('classifyProviderError', () => {
       'rate_limited',
     ],
     ['500', apiError(500, 'The server had an error while processing your request'), 'unavailable'],
+    ['503 that mentions authentication', apiError(503, 'Upstream authentication service unavailable'), 'unavailable'],
+    ['504 that mentions authentication', apiError(504, 'authentication backend timed out'), 'timeout'],
     ['529 overloaded', apiError(529, 'Overloaded', undefined, { error: { type: 'overloaded_error' } }), 'unavailable'],
     ['Responses server_error frame', responsesServerErrorFrame, 'unavailable'],
     [
@@ -303,6 +305,12 @@ describe('providerErrorFacts', () => {
       statusCode: 429,
       code: 'RESOURCE_EXHAUSTED',
     });
+    expect(
+      providerErrorFacts({
+        type: 'response.failed',
+        response: { status: 'failed', error: { code: 'server_error', message: 'An internal error occurred.' } },
+      }),
+    ).toEqual({ code: 'server_error', reason: 'An internal error occurred.' });
   });
 
   it('keeps the body sentence as the reason when the message is only an HTTP phrase', () => {

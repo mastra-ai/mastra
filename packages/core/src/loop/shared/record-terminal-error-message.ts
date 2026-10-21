@@ -14,11 +14,11 @@
  * Because that message is a real assistant record, the failed turn forms a
  * persistable pair with its user message through the ordinary memory path.
  *
- * Only `{ name, message }` plus the provider's `statusCode` and `code` is
- * persisted. Stack traces, causes, other custom enumerable fields and custom
- * `toJSON` output stay on the runtime error surfaces (stream chunk, `onError`,
- * `result.error`); thread history has to be deterministic, JSON-safe and safe
- * to hand to clients.
+ * Only `{ name, message }` plus the provider's `statusCode`, `code` and body
+ * `reason` is persisted. Stack traces, causes, other custom enumerable fields
+ * and custom `toJSON` output stay on the runtime error surfaces (stream chunk,
+ * `onError`, `result.error`); thread history has to be deterministic,
+ * JSON-safe and safe to hand to clients.
  */
 
 import type { MastraDBMessage, MastraErrorPart, MessageList } from '../../agent/message-list';
