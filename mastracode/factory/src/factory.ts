@@ -1684,6 +1684,11 @@ export class MastraFactory {
               });
               await sessionMemory.settled();
             },
+            saveThreadMessages: async messages => {
+              const sessionMemory = getDynamicMemory(storage.getMastraStorage(), vector);
+              await sessionMemory({ requestContext: new RequestContext() }).saveMessages({ messages });
+              await sessionMemory.settled();
+            },
             factoryStorage: storage,
             integrationStorage,
             sourceControlStorage,

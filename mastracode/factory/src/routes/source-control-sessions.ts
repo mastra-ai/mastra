@@ -1,8 +1,10 @@
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import { createSignal } from '@mastra/core/signals';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { Context } from 'hono';
 
@@ -20,6 +22,7 @@ import {
   userSessionResourceFor,
 } from '../session/session-threads.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
+import { SESSION_OWNER_SIGNAL_TAG } from '../session-owner-signal.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -73,6 +76,8 @@ export interface SourceControlSessionRoutesOptions {
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'>;
   /** Moves a thread, with everything keyed by its resource, when a session's visibility changes. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
+  /** Saves messages into a session's threads, such as the line marking an owner change. */
+  saveThreadMessages?: (messages: MastraDBMessage[]) => Promise<unknown>;
 }
 
 const ABORT_SETTLE_TIMEOUT_MS = 5_000;
@@ -132,6 +137,27 @@ async function ownershipRefusal(
   return null;
 }
 
+/** Marks the takeover in every thread of the session: the transcript draws it as a divider and the model reads it as context. */
+async function markOwnerChange(
+  options: SourceControlSessionRoutesOptions,
+  session: SourceControlSession,
+  newOwner: { id: string; name?: string },
+) {
+  const { controller, saveThreadMessages } = options;
+  if (!controller || !saveThreadMessages) return;
+  const threads = await listFactorySessionThreads(controller, session, options.workItems);
+  if (threads.length === 0) return;
+  const contents = `${newOwner.name ?? 'A teammate'} took ownership`;
+  await saveThreadMessages(
+    threads.map(thread =>
+      createSignal({ type: 'reactive', tagName: SESSION_OWNER_SIGNAL_TAG, contents, author: newOwner }).toDBMessage({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+      }),
+    ),
+  );
+}
+
 /** Abort the session's active run and wait (bounded) for it to stop. Returns whether a run was aborted. */
 async function abortActiveRun(
   controller: MountedMastraCode['controller'] | undefined,
@@ -148,11 +174,11 @@ async function abortActiveRun(
       await new Promise(resolve => setTimeout(resolve, ABORT_SETTLE_POLL_MS));
     }
     if (live.stream.isActive()) {
-      console.warn('[Factory Sessions] Aborted run did not settle before sandbox recreate', { sessionId });
+      console.warn('[Factory Sessions] Aborted run did not settle in time', { sessionId });
     }
     return true;
   } catch (error) {
-    console.warn('[Factory Sessions] Failed to abort the active run before sandbox recreate', { sessionId, error });
+    console.warn('[Factory Sessions] Failed to abort the active run', { sessionId, error });
     return false;
   }
 }
@@ -674,15 +700,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if (session.userId === userId) return c.json({ session });
         const refusal = await ownershipRefusal(session, options);
         if (refusal) return c.json({ error: refusal.error }, refusal.status);
-        const controller = options.controller;
-        // A turn reads its payer from the row on every model call, and a parked one dies with its live host.
-        if (controller) {
-          const threads = await listFactorySessionThreads(controller, session, options.workItems);
-          const threadIds = threads.map(thread => thread.id);
-          if (controller.listActiveThreadRuns().some(run => threadIds.includes(run.threadId))) {
-            return c.json({ error: 'Wait for the session to finish its run before taking ownership' }, 409);
-          }
-        }
         const transferred = await sourceControl.sessions.transferOwner({
           sessionId,
           expectedUserId: expectedOwnerId,
@@ -703,12 +720,22 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             409,
           );
         }
+        const controller = options.controller;
+        // A running turn reads its payer from the row on every model call, so it stops with the old owner.
+        await abortActiveRun(controller, sessionId, options.abortSettleTimeoutMs ?? ABORT_SETTLE_TIMEOUT_MS);
         // The live host acts as the old owner; the next message starts one as the new.
         if (controller && (await controller.getSession(sessionId))) {
           await controller.deleteSession({ sessionId }).catch(error => {
             console.error('[Factory Sessions] Failed to recycle transferred live session', { sessionId, error });
           });
         }
+        const newOwner = (await resolveOwnerProfiles([userId])).get(userId) ?? { id: userId };
+        await markOwnerChange(options, transferred.session, newOwner).catch(error => {
+          console.error('[Factory Sessions] Failed to mark the ownership change in the transcript', {
+            sessionId,
+            error,
+          });
+        });
         await options.audit
           ?.record({
             orgId,

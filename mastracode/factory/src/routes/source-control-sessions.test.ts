@@ -40,7 +40,7 @@ function buildApp(
   controller?: RouteOptions['controller'],
   workItems?: RouteOptions['workItems'],
   viewer: Viewer | ((headers: Headers) => Viewer) = user,
-  moveThread?: RouteOptions['moveThread'],
+  threadWrites: Pick<RouteOptions, 'moveThread' | 'saveThreadMessages'> = {},
 ) {
   const app = new Hono();
   app.use('*', async (context, next) => {
@@ -59,7 +59,7 @@ function buildApp(
       users,
       audit,
       ...(workItems ? { workItems } : {}),
-      ...(moveThread ? { moveThread } : {}),
+      ...threadWrites,
     }),
   );
   return app;
@@ -310,7 +310,7 @@ describe('source-control session routes', () => {
     await expect(sourceControl.sessions.getBySessionId(threadId)).resolves.toBeNull();
   });
 
-  it('refuses to change owner while the session is running', async () => {
+  it('stops a running turn, hands the session over, and marks the takeover in its thread', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     const sessionId = 'factory-running-transfer';
     await sourceControl.sessions.create({
@@ -322,24 +322,48 @@ describe('source-control session routes', () => {
       baseBranch: 'main',
       visibility: 'org',
     });
-    const controller = await startOwnershipController('factory-running-transfer');
+    const storage = new InMemoryStore({ id: 'factory-running-transfer' });
+    const controller = await startOwnershipController('factory-running-transfer', storage);
     const liveSession = await controller.createSession({ id: sessionId, resourceId: sessionId, ownerId: 'user-1' });
     const threadId = liveSession.thread.getId()!;
-    vi.spyOn(controller, 'listActiveThreadRuns').mockReturnValue([{ runId: 'run-1', resourceId: sessionId, threadId }]);
-    const audit = { record: vi.fn().mockResolvedValue(null) };
-    const app = buildApp([sourceControl], { ...seed, audit }, controller, noRuns, {
-      workosId: 'user-2',
-      organizationId: 'org-1',
+    let running = true;
+    vi.spyOn(liveSession.stream, 'isActive').mockImplementation(() => running);
+    const abort = vi.spyOn(liveSession, 'abort').mockImplementation(() => {
+      setTimeout(() => {
+        running = false;
+      }, 50);
     });
+    const memory = (await storage.getStore('memory'))!;
+    const users = { getUser: async (id: string) => (id === 'user-2' ? { id, name: 'Shane Thomas' } : null) };
+    const app = buildApp(
+      [sourceControl],
+      { ...seed, users },
+      controller,
+      noRuns,
+      { workosId: 'user-2', organizationId: 'org-1' },
+      { saveThreadMessages: messages => memory.saveMessages({ messages }) },
+    );
 
     const response = await takeOwnership(app, sessionId, 'user-1');
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toMatchObject({
-      error: 'Wait for the session to finish its run before taking ownership',
-    });
-    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ userId: 'user-1' });
-    expect(await controller.getSession(sessionId)).toBe(liveSession);
-    expect(audit.record).not.toHaveBeenCalled();
+
+    expect(response.status).toBe(200);
+    expect(abort).toHaveBeenCalled();
+    expect(running).toBe(false);
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ userId: 'user-2' });
+    expect(await controller.getSession(sessionId)).toBeUndefined();
+    const { messages } = await controller.queryThreadMessages({ threadId });
+    expect(messages).toEqual([
+      expect.objectContaining({
+        role: 'signal',
+        threadId,
+        content: expect.objectContaining({
+          metadata: expect.objectContaining({
+            signal: expect.objectContaining({ type: 'reactive', tagName: 'session-owner' }),
+          }),
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(messages[0]!.content)).toContain('Shane Thomas took ownership');
   });
 
   it('hides a session its owner made private while the transfer was in flight', async () => {
@@ -458,7 +482,7 @@ describe('source-control session routes', () => {
       controller,
       noRuns,
       headers => ({ workosId: headers.get('x-viewer')!, organizationId: 'org-1' }),
-      moveThread,
+      { moveThread },
     );
 
     const madePrivate = app.request(`/web/user-sessions/${sessionId}/visibility`, {
@@ -1135,9 +1159,9 @@ describe('source-control session routes', () => {
       });
       await controller.init();
       const memory = (await storage.getStore('memory'))!;
-      const owner = buildApp([sourceControl], seed, controller, noRuns, user, input =>
-        memory.updateThreadResourceId(input),
-      );
+      const owner = buildApp([sourceControl], seed, controller, noRuns, user, {
+        moveThread: input => memory.updateThreadResourceId(input),
+      });
       const sessionId = '33333333-3333-4333-8333-333333333333';
       const created = await owner.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
         method: 'POST',
@@ -1182,9 +1206,11 @@ describe('source-control session routes', () => {
       // is still on the Factory, and a retry finishes the move.
       expect((await putVisibility(owner, sessionId, { visibility: 'org' })).status).toBe(200);
       let moves = 0;
-      const failing = buildApp([sourceControl], seed, controller, noRuns, user, async input => {
-        if (++moves === 2) throw new Error('storage unavailable');
-        return memory.updateThreadResourceId(input);
+      const failing = buildApp([sourceControl], seed, controller, noRuns, user, {
+        moveThread: async input => {
+          if (++moves === 2) throw new Error('storage unavailable');
+          return memory.updateThreadResourceId(input);
+        },
       });
       expect((await putVisibility(failing, sessionId, { visibility: 'private' })).status).toBe(500);
       await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ visibility: 'org' });
@@ -1204,7 +1230,7 @@ describe('source-control session routes', () => {
         listActiveThreadRuns: () => [{ runId: 'run-1', resourceId: 'user-1', threadId: session.sessionId }],
       } as unknown as RouteOptions['controller'];
       const moveThread = vi.fn(async () => undefined);
-      const owner = buildApp([sourceControl], seed, controller, noRuns, user, moveThread);
+      const owner = buildApp([sourceControl], seed, controller, noRuns, user, { moveThread });
 
       const res = await putVisibility(owner, session.sessionId, { visibility: 'org' });
       expect(res.status).toBe(409);
@@ -1506,7 +1532,7 @@ describe('session sandbox recreate', () => {
     await expect(response.json()).resolves.toEqual({ recreated: true, aborted: true });
     expect(live.abort).toHaveBeenCalledTimes(1);
     expect(sessionRetirement.recreateSessionSandbox).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith('[Factory Sessions] Aborted run did not settle before sandbox recreate', {
+    expect(warn).toHaveBeenCalledWith('[Factory Sessions] Aborted run did not settle in time', {
       sessionId: session.sessionId,
     });
   });
@@ -1528,10 +1554,7 @@ describe('session sandbox recreate', () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ recreated: true, aborted: false });
     expect(sessionRetirement.recreateSessionSandbox).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith(
-      '[Factory Sessions] Failed to abort the active run before sandbox recreate',
-      expect.anything(),
-    );
+    expect(warn).toHaveBeenCalledWith('[Factory Sessions] Failed to abort the active run', expect.anything());
   });
 
   it('drains a pending filesystem capture before recreating', async () => {

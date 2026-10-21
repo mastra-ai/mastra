@@ -1,3 +1,6 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { createSignal } from '@mastra/core/signals';
+import { SESSION_OWNER_SIGNAL_TAG } from '@mastra/factory/session-owner-signal';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -36,12 +39,31 @@ const wardSessionWithoutProfile = { ...wardSession, owner: undefined };
 const USER_THREAD_PATH = `/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`;
 const BOARD_THREAD_PATH = `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/thread-review-1`;
 
+function takeoverSignal(name: string): MastraDBMessage {
+  return createSignal({
+    type: 'reactive',
+    tagName: SESSION_OWNER_SIGNAL_TAG,
+    contents: `${name} took ownership`,
+  }).toDBMessage({ threadId: SESSION_ID, resourceId: SESSION_ID });
+}
+
+async function confirmTakeover(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Take ownership' }));
+  expect(await screen.findByText(/Its next turn runs as you, and a running agent stops\./)).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Take ownership' }));
+}
+
 function openWardSessionAs(
   viewerUserId: string,
   {
     session = wardSession,
     path = USER_THREAD_PATH,
-  }: { session?: typeof wardSession | typeof wardSessionWithoutProfile; path?: string } = {},
+    threadMessages = [],
+  }: {
+    session?: typeof wardSession | typeof wardSessionWithoutProfile;
+    path?: string;
+    threadMessages?: MastraDBMessage[];
+  } = {},
 ) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -99,7 +121,9 @@ function openWardSessionAs(
     ),
     http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
-    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
+    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () =>
+      HttpResponse.json({ messages: threadMessages }),
+    ),
   );
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [path],
@@ -144,23 +168,44 @@ describe("a teammate's Factory session", () => {
   });
 
   describe('when a teammate takes ownership', () => {
-    it('moves the session to the viewer and drops the steering line', async () => {
+    it('asks first, then moves the session to the viewer and marks the takeover in the thread', async () => {
       const session = { ...wardSession };
+      const threadMessages: MastraDBMessage[] = [];
       const transfers: unknown[] = [];
       server.use(
         http.post(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}/owner`, async ({ request }) => {
           transfers.push(await request.json());
           Object.assign(session, { userId: 'user-damien', owner: { id: 'user-damien', name: 'Damien' } });
+          threadMessages.push(takeoverSignal('Damien'));
           return HttpResponse.json({ session });
         }),
       );
-      const client = openWardSessionAs('user-damien', { session });
+      const client = openWardSessionAs('user-damien', { session, threadMessages });
 
-      await userEvent.setup().click(await screen.findByRole('button', { name: 'Take ownership' }));
+      await confirmTakeover(userEvent.setup());
       await waitForMutationsIdle(client);
 
       expect(transfers).toEqual([{ expectedOwnerId: 'user-ward' }]);
       await waitFor(() => expect(screen.queryByText(/You’re steering/)).not.toBeInTheDocument());
+      expect(await screen.findByRole('separator', { name: 'Damien took ownership' })).toBeInTheDocument();
+    });
+
+    it('sends nothing when the viewer cancels', async () => {
+      const transfers: unknown[] = [];
+      server.use(
+        http.post(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}/owner`, async ({ request }) => {
+          transfers.push(await request.json());
+          return HttpResponse.json({ session: wardSession });
+        }),
+      );
+      openWardSessionAs('user-damien');
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByRole('button', { name: 'Take ownership' }));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(await screen.findByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
+      expect(transfers).toEqual([]);
     });
 
     it('names the new owner when someone else took it first', async () => {
@@ -176,7 +221,7 @@ describe("a teammate's Factory session", () => {
       );
       const client = openWardSessionAs('user-damien', { session });
 
-      await userEvent.setup().click(await screen.findByRole('button', { name: 'Take ownership' }));
+      await confirmTakeover(userEvent.setup());
       await waitForMutationsIdle(client);
 
       expect(await screen.findByText('You’re steering Caleb’s session')).toBeInTheDocument();
