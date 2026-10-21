@@ -30,19 +30,12 @@
   ],
   "structuredOutput": ["gemma4-31b", "glm5.2", "qwen3.8-27b"],
   "reasoning": {
-    "glm5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "qwen3.8-27b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gemma4-31b": [
       {
         "type": "toggle"
       }
@@ -53,9 +46,16 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gemma4-31b": [
+    "gpt-oss-20b": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "glm5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ]
   }

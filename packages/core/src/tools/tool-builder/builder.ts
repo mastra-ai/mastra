@@ -14,6 +14,7 @@ import {
 import type { SchemaCompatLayer } from '@mastra/schema-compat';
 import type { JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod/v4';
+import { verifyRunLease } from '../../agent/run-lease-fence';
 import { MastraFGAPermissions } from '../../auth/ee';
 import type { ActorSignal } from '../../auth/ee';
 import {
@@ -686,6 +687,8 @@ export class CoreToolBuilder extends MastraBase {
       try {
         let result;
         let suspendData = null;
+
+        await verifyRunLease(options.runId);
 
         if (isVercelTool(tool)) {
           // Handle Vercel tools (AI SDK tools)

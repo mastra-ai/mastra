@@ -61,23 +61,36 @@ describe('AgentController Resource', () => {
   });
 
   it('creates (or resumes) a session via the canonical agent-controller route', async () => {
-    mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 't-123' });
+    mockJson({ controllerId: 'code', sessionId: 'user-1', resourceId: 'user-1', threadId: 't-123' });
     const res = await client.getAgentController('code').session('user-1').create();
-    expect(res).toEqual({ controllerId: 'code', resourceId: 'user-1', threadId: 't-123' });
+    expect(res).toEqual({ controllerId: 'code', sessionId: 'user-1', resourceId: 'user-1', threadId: 't-123' });
     const [url, init] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions');
     expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body as string)).toEqual({ resourceId: 'user-1' });
+    // Without a resourceId the server resumes the session on the resource it already has.
+    expect(JSON.parse(init.body as string)).toEqual({ sessionId: 'user-1' });
   });
 
-  it('requests an exact thread binding when creating a session', async () => {
-    mockJson({ controllerId: 'code', resourceId: 'factory-session-1', threadId: 'factory-session-1' });
-    await client.getAgentController('code').session('factory-session-1').create({ threadId: 'factory-session-1' });
+  it('creates a session on a shared resource and binds an exact thread', async () => {
+    mockJson({ controllerId: 'code', sessionId: 'run-1', resourceId: 'factory-1', threadId: 'run-1' });
+    await client.getAgentController('code').session('run-1').create({ resourceId: 'factory-1', threadId: 'run-1' });
     const [, init] = lastCall();
     expect(JSON.parse(init.body as string)).toEqual({
-      resourceId: 'factory-session-1',
-      threadId: 'factory-session-1',
+      resourceId: 'factory-1',
+      sessionId: 'run-1',
+      threadId: 'run-1',
     });
+  });
+
+  it('addresses every session request by sessionId, with no query params', async () => {
+    const session = client.getAgentController('code').session('run-1');
+    mockJson({ ok: true });
+    await session.abort();
+    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/sessions/run-1/abort');
+    mockJson({ controllerId: 'code', sessionId: 'run-1', resourceId: 'factory-1', modeId: 'build', modelId: 'm' });
+    await session.state();
+    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/sessions/run-1');
+    for (const [url] of (global.fetch as any).mock.calls) expect(new URL(url).search).toBe('');
   });
 
   it('sends a message to the resource-scoped session', async () => {
@@ -237,12 +250,10 @@ describe('AgentController Resource', () => {
   it('requests session state for a specific thread', async () => {
     mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 't/1', modeId: 'build', modelId: 'm' });
 
-    await client.getAgentController('code').session('user-1', '/repo').state({ threadId: 't/1' });
+    await client.getAgentController('code').session('user-1').state({ threadId: 't/1' });
 
     const [url] = lastCall();
-    expect(url).toBe(
-      'http://localhost:4111/api/agent-controller/code/sessions/user-1?threadId=t%2F1&sessionScope=%2Frepo',
-    );
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1?threadId=t%2F1');
   });
 
   it('switches mode and model', async () => {
