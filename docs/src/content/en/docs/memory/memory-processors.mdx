@@ -41,7 +41,7 @@ memory: new Memory({
 
 **Mastra internally:**
 
-1. Creates a `MessageHistory` processor with `limit: 10`
+1. Creates a `MessageHistory` processor with `lastMessages: 10`
 1. Adds it to the agent's input processors (runs before the LLM)
 1. Adds it to the agent's output processors (runs after the LLM)
 
@@ -92,7 +92,7 @@ memory: new Memory({
 1. Creates a `SemanticRecall` processor
 1. Adds it to the agent's input processors (runs before the LLM)
 1. Adds it to the agent's output processors (runs after the LLM)
-1. Requires both a vector store and embedder to be configured
+1. Requires a vector store, plus an embedder unless the vector store generates embeddings itself
 
 **What it does:**
 
