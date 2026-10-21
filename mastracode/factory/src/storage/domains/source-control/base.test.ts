@@ -565,6 +565,11 @@ describe('SourceControlStorage', () => {
     await expect(
       github.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'stale', toUserId: 'user-2' }),
     ).resolves.toMatchObject({ status: 'conflict', reason: 'stale_owner' });
+    await github.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'private' });
+    await expect(
+      github.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-2' }),
+    ).resolves.toMatchObject({ status: 'conflict', reason: 'stale_owner', session: { userId: 'user-1' } });
+    await github.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'org' });
     await github.sessions.create({
       sessionId: '00000000-0000-4000-8000-000000000033',
       projectRepositoryId: link.id,
@@ -1679,6 +1684,11 @@ describe('SourceControlStorageInMemory sessions', () => {
     await expect(
       store.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-4' }),
     ).resolves.toMatchObject({ status: 'conflict', reason: 'branch_owned' });
+    await store.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'private' });
+    await expect(
+      store.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-2' }),
+    ).resolves.toMatchObject({ status: 'conflict', reason: 'stale_owner', session: { userId: 'user-1' } });
+    await store.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'org' });
     await expect(
       store.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-2' }),
     ).resolves.toMatchObject({

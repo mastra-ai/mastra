@@ -338,6 +338,42 @@ describe('source-control session routes', () => {
     expect(audit.record).not.toHaveBeenCalled();
   });
 
+  it('hides a session its owner made private while the transfer was in flight', async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const sessionId = 'factory-privatized-transfer';
+    await sourceControl.sessions.create({
+      sessionId,
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/privatized-transfer',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const controller = await startOwnershipController('factory-privatized-transfer');
+    const liveSession = await controller.createSession({ id: sessionId, resourceId: sessionId, ownerId: 'user-1' });
+    const transferOwner = sourceControl.sessions.transferOwner.bind(sourceControl.sessions);
+    vi.spyOn(sourceControl.sessions, 'transferOwner').mockImplementationOnce(async input => {
+      await sourceControl.sessions.setVisibility({ sessionId, visibility: 'private' });
+      return transferOwner(input);
+    });
+    const audit = { record: vi.fn().mockResolvedValue(null) };
+    const app = buildApp([sourceControl], { ...seed, audit }, controller, undefined, {
+      workosId: 'user-2',
+      organizationId: 'org-1',
+    });
+
+    const response = await takeOwnership(app, sessionId, 'user-1');
+    expect(response.status).toBe(404);
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
+      userId: 'user-1',
+      visibility: 'private',
+    });
+    await expect(liveSession.thread.getOwner()).resolves.toBe('user-1');
+    expect(await controller.getSession(sessionId)).toBe(liveSession);
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
   it('takes org-visible ownership with DB CAS, mirrors the thread, audits, and recycles the live host', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     const sessionId = 'factory-session-transfer';

@@ -670,11 +670,16 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             toUserId: userId,
           });
           if (transferred.status === 'conflict') {
+            const current = transferred.session;
+            // Made private under the transfer: it now looks missing, like any private session of someone else.
+            if (current?.visibility === 'private' && current.userId !== userId) {
+              return c.json({ error: 'Session not found' }, 404);
+            }
             return c.json(
               {
                 error: OWNER_CONFLICT_MESSAGES[transferred.reason],
                 reason: transferred.reason,
-                currentOwnerId: transferred.session?.userId,
+                currentOwnerId: current?.userId,
               },
               409,
             );

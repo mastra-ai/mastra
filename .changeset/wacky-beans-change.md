@@ -2,4 +2,11 @@
 '@mastra/factory': minor
 ---
 
-Take ownership of a teammate's session. `POST /web/user-sessions/:sessionId/owner` moves an org-visible session to the caller when the expected owner still holds it, refuses while the session has a run in flight, mirrors the new owner onto its thread, and recycles the live host so the next message starts under the new owner. The steering line under the composer gets a Take ownership button.
+Added a way to take over a teammate's shared session. Anyone steering someone else's shared session sees a **Take ownership** button on the line under the composer; after the transfer the session is theirs and their next message runs with their credentials.
+
+```http
+POST /web/user-sessions/:sessionId/owner
+{ "expectedOwnerId": "user-ward" }
+```
+
+`expectedOwnerId` is the owner the caller last saw. The response is `{ session }` with the new owner. The request returns `409` when someone else took the session first, when the caller already has a session on that branch, or while the session is still running, and `404` for a private session of someone else. Each transfer is recorded in the Factory audit log as `factory.session.owner_transferred`.

@@ -528,6 +528,7 @@ export interface SourceControlStorageHandle {
     /** Keyed by the link (today's callers) or by the factory. */
     getForBranch(args: SessionBranchKey): Promise<SourceControlSession | null>;
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
+    /** Move a shared session to `toUserId` while `expectedUserId` still owns it; a private one is a `stale_owner` conflict. */
     transferOwner(args: {
       sessionId: string;
       expectedUserId: string;
@@ -1591,7 +1592,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           try {
             const updated = await db().updateAtomic<SessionDbRow>(
               SESSIONS,
-              { session_id: sessionId, user_id: expectedUserId },
+              { session_id: sessionId, user_id: expectedUserId, visibility: 'org' },
               current =>
                 current.user_id === toUserId
                   ? null

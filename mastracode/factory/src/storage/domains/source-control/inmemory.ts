@@ -531,7 +531,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     }) => {
       const index = this.sessionsRows.findIndex(row => row.sessionId === sessionId);
       const session = this.sessionsRows[index] ?? null;
-      if (!session || session.userId !== expectedUserId) {
+      if (!session || session.userId !== expectedUserId || session.visibility !== 'org') {
         return { status: 'conflict' as const, reason: 'stale_owner' as const, session };
       }
       if (session.userId === toUserId) return { status: 'updated' as const, session };
