@@ -175,6 +175,33 @@ describe('MemoryMessageRefs', () => {
     expect(isMemoryMessageRef(mappedRefs.dehydrate(mappedCounted).messages[0])).toBe(false);
   });
 
+  it.each(['content', 'message'] as const)('keeps mapped client estimates distinct at %s metadata', level => {
+    const rows = storedRows();
+    const client = { v: 0, key: 'client', tokens: 7, source: 'client' };
+    const metadataOf = (message: any) =>
+      level === 'content' ? (message.content.metadata ??= {}) : (message.metadata ??= {});
+    metadataOf(rows[0]).mastra = { tokenEstimate: { client: { ...client } } };
+    const list = new MessageList({ threadId: 't', resourceId: 'r' });
+    list.add(rows, 'memory');
+    const state = list.serialize();
+    const refs = new MemoryMessageRefs();
+    refs.recordSaved(rows, state.memoryInfo);
+
+    const counted = structuredClone(state);
+    const estimate = metadataOf(counted.messages[0]).mastra.tokenEstimate;
+    estimate.framework = { v: 8, key: 'framework', tokens: 9, source: 'v8:tokenx' };
+    expect(isMemoryMessageRef(refs.dehydrate(counted).messages[0])).toBe(true);
+
+    const renamed = structuredClone(counted);
+    const renamedEstimate = metadataOf(renamed.messages[0]).mastra.tokenEstimate;
+    renamedEstimate.other = renamedEstimate.client;
+    delete renamedEstimate.client;
+    expect(isMemoryMessageRef(refs.dehydrate(renamed).messages[0])).toBe(false);
+
+    estimate.client.tokens = 8;
+    expect(isMemoryMessageRef(refs.dehydrate(counted).messages[0])).toBe(false);
+  });
+
   it('restores refs from storage in a process that never verified them', async () => {
     const { load } = storage();
     const writer = new MemoryMessageRefs();
