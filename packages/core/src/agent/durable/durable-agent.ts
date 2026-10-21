@@ -2148,6 +2148,7 @@ export class DurableAgent<
    * @internal
    */
   override __fork(): Agent<TAgentId, TTools, TOutput> {
+    const sharedChannels = this.#wrappedAgent.getChannels();
     const innerFork = this.#wrappedAgent.__fork();
 
     const Ctor = this.constructor as new (
@@ -2165,6 +2166,11 @@ export class DurableAgent<
       shouldCache: this.#shouldCache,
       shouldPersistSnapshot: this.userShouldPersistSnapshot,
     });
+
+    // A transient version fork must not take over the singleton's channel ingress.
+    if (sharedChannels && sharedChannels === innerFork.getChannels()) {
+      sharedChannels.__setAgent(this);
+    }
 
     // Preserve runtime state set after construction (mastra registration and the
     // wired inner pubsub, e.g. mastra.pubsub) without re-triggering registration

@@ -238,6 +238,13 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
     { attachment: 'replacement', decision: undefined },
     { attachment: 'late', decision: 'approve' },
     { attachment: 'late', decision: 'deny' },
+    ...(engine === 'plain'
+      ? []
+      : ([
+          { attachment: 'fork', decision: undefined },
+          { attachment: 'fork', decision: 'approve' },
+          { attachment: 'fork', decision: 'deny' },
+        ] as const)),
   ] as const)(
     'keeps the execution owner with $attachment channels ($decision)',
     async ({ attachment, decision }) => {
@@ -306,7 +313,11 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
               }),
             }
           : undefined,
-        ...(attachment === 'config' ? { channels: config } : attachment === 'instance' ? { channels } : {}),
+        ...(attachment === 'config'
+          ? { channels: config }
+          : attachment === 'instance' || attachment === 'fork'
+            ? { channels }
+            : {}),
       });
       const agent =
         engine === 'plain'
@@ -344,6 +355,9 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
         }
         expect(agent.getChannels()).toBe(channels);
         expect(inner.getChannels()).toBe(channels);
+        if (attachment === 'fork' && !decision) {
+          agent.__fork().__updateInstructions('Transient fork instructions must not handle channel messages.');
+        }
         const message: Message = {
           id: 'inbound-1',
           threadId: 'C1:thread',
@@ -397,6 +411,9 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
             { timeout: 5000 },
           );
           expect(execute).not.toHaveBeenCalled();
+          if (attachment === 'fork') {
+            agent.__fork().__updateInstructions('Transient fork instructions must not handle channel messages.');
+          }
           const actions = channels.sdk as unknown as {
             processAction(event: unknown): Promise<void>;
           };
@@ -419,6 +436,9 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
         expect(execute).toHaveBeenCalledTimes(decision === 'approve' ? 1 : 0);
         expect(adapter.postMessage).toHaveBeenCalledTimes(decision ? 2 : 1);
         expect(llm.getRequests()).toHaveLength(decision ? 2 : 1);
+        expect(JSON.stringify(llm.getRequests().map(request => request.body))).not.toContain(
+          'Transient fork instructions',
+        );
         expect(runIds.size).toBe(1);
         if (engine === 'evented') {
           expect(workflowEvents).toContain('workflow.start');
