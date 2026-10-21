@@ -1883,6 +1883,53 @@ describe('GithubRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
+  it('does not re-review pushes to draft PRs or PRs stacked on a branch other than the repository default', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['done'],
+        sessions: {},
+        metadata: { authorTrusted: true },
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+    const base = pullRequest('synchronize', 'delivery-push-draft');
+    const draft = {
+      ...base,
+      payload: { ...base.payload, pull_request: { ...base.payload.pull_request, draft: true } },
+    };
+    // The PR targets `main`, but the payload says this repository's default is
+    // `trunk`, so it is stacked as far as review is concerned.
+    const stacked = {
+      ...base,
+      deliveryId: 'delivery-push-stacked',
+      payload: { ...base.payload, repository: { ...base.payload.repository, default_branch: 'trunk' } },
+    };
+
+    for (const delivery of [draft, stacked]) {
+      await expect(service.ingest(delivery)).resolves.toEqual({ status: 'committed' });
+    }
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+
   describe('recording the pushed head against a review verdict', () => {
     const reviewedHeadSha = 'be10bfa000000000000000000000000000000000';
     const pushedHeadSha = '8fa258d000000000000000000000000000000000';

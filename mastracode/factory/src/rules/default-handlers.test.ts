@@ -1211,6 +1211,21 @@ describe('built-in board and integration handlers', () => {
       }
     });
 
+    it('ignores pushes to draft PRs and PRs that do not target the default branch', async () => {
+      const rule = defaultGithubRules.pullRequestUpdated;
+      const draft = pushContext();
+      draft.pullRequest = { ...draft.pullRequest!, draft: true };
+      const stacked = pushContext();
+      stacked.pullRequest = { ...stacked.pullRequest!, baseBranch: 'factory/pr-27919' };
+      const trunk = pushContext({ repository: { id: 10, fullName: 'acme/repo', defaultBranch: 'trunk' } });
+      expect(await rule?.(draft)).toBeUndefined();
+      expect(await rule?.(stacked)).toBeUndefined();
+      // `main` is only the fallback; the repository's real default branch wins.
+      expect(await rule?.(trunk)).toBeUndefined();
+      trunk.pullRequest = { ...trunk.pullRequest!, baseBranch: 'trunk' };
+      expect(await rule?.(trunk)).toMatchObject({ type: 'transition', stage: 'review' });
+    });
+
     it('ignores push events on closed or merged pull requests', async () => {
       const rule = defaultGithubRules.pullRequestUpdated;
       const closed = pushContext();

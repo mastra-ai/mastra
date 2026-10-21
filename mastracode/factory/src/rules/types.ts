@@ -306,8 +306,11 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   event: FactoryGithubEventName;
   deliveryId: string;
   factory: { createdAt: string };
-  /** `installationId` is the GitHub App installation the delivery arrived through. */
-  repository: { id: number; fullName: string; installationId?: number };
+  /**
+   * `installationId` is the GitHub App installation the delivery arrived through.
+   * `defaultBranch` is the repository default branch from the webhook payload.
+   */
+  repository: { id: number; fullName: string; installationId?: number; defaultBranch?: string };
   issue?: {
     number: number;
     title: string;

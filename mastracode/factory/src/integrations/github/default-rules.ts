@@ -388,6 +388,11 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
 function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
   if (!context.item || context.board !== 'review') return;
   if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
+  // Drafts and stacked PRs take many pushes before anyone wants a verdict, and
+  // a pass per push burns model budget. Only pushes to ready PRs targeting the
+  // default branch re-review on their own; a maintainer can still request one.
+  if (context.pullRequest.draft) return;
+  if (context.pullRequest.baseBranch !== (context.repository.defaultBranch ?? 'main')) return;
   // Intake has not started a review pass yet, so a push there is just more of
   // the code the first pass will read. A push to a card sitting in Reviewing is
   // different: it invalidates whatever that pass is reading, so re-enter the

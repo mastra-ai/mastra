@@ -594,6 +594,7 @@ export class GithubRules {
     // that case so provenance and `context.pullRequest` behave as they do for
     // every other PR event, and so the number is never treated as an issue's.
     const commentOnPullRequest = object(parsed.payload.issue)?.pull_request !== undefined;
+    const defaultBranch = string(object(parsed.payload.repository)?.default_branch);
     const pullRequest = object(parsed.payload.pull_request) ?? (commentOnPullRequest ? issue : undefined);
     const issueNumber = commentOnPullRequest ? undefined : number(issue?.number);
     const pullRequestNumber = number(pullRequest?.number);
@@ -712,7 +713,12 @@ export class GithubRules {
         event,
         deliveryId: parsed.deliveryId,
         factory: { createdAt: factoryProject.createdAt.toISOString() },
-        repository: { id: repositoryId, fullName: repositoryName, installationId },
+        repository: {
+          id: repositoryId,
+          fullName: repositoryName,
+          installationId,
+          ...(defaultBranch ? { defaultBranch } : {}),
+        },
         ...(issueNumber && string(issue?.title) && string(issue?.html_url)
           ? {
               issue: {
