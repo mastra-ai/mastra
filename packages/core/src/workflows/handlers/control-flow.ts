@@ -203,8 +203,7 @@ export async function executeParallel(
       makeStepRunning = timeTravel.steps[0] === stepId;
     }
     if (!makeStepRunning) {
-      // Arms that already finished before a restart are skipped, not the arms after them.
-      continue;
+      break;
     }
     const startTime = resume?.steps[0] === stepId ? undefined : Date.now();
     const resumeTime = resume?.steps[0] === stepId ? Date.now() : undefined;

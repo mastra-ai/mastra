@@ -388,6 +388,54 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
       ]);
     });
 
+    it('resumes suspended items with their suspend payload after a process restart', async () => {
+      const storage = new MockStore();
+      const seen: Record<number, unknown> = {};
+      const build = () => {
+        const item = createStep({
+          id: 'item',
+          inputSchema: anySchema,
+          outputSchema: anySchema,
+          resumeSchema: anySchema,
+          suspendSchema: anySchema,
+          execute: async ({ inputData, resumeData, suspendData, suspend }) => {
+            if (inputData % 2 === 1 && !resumeData) return suspend({ waiting: inputData });
+            if (resumeData) seen[inputData] = suspendData;
+            return { value: inputData, approved: resumeData?.ok ?? null };
+          },
+        });
+        const workflow = createWorkflow({
+          id: 'foreach-restart-suspend',
+          inputSchema: anySchema,
+          outputSchema: anySchema,
+        })
+          .foreach(item, { concurrency: 3 })
+          .commit();
+        new Mastra({ logger: false, storage, workflows: { wf: workflow } });
+        return workflow;
+      };
+
+      const firstProcess = await build().createRun();
+      expect((await firstProcess.start({ inputData: [0, 1, 2, 3, 4] })).status).toBe('suspended');
+
+      // A fresh workflow and Mastra instance only see what was persisted.
+      const run = await build().createRun({ runId: firstProcess.runId });
+      let result: any;
+      for (const forEachIndex of [3, 1]) {
+        result = await run.resume({ step: 'item', forEachIndex, resumeData: { ok: true } });
+      }
+
+      expect(seen).toEqual({ 1: { waiting: 1 }, 3: { waiting: 3 } });
+      expect(result.status).toBe('success');
+      expect(result.result).toEqual([
+        { value: 0, approved: null },
+        { value: 1, approved: true },
+        { value: 2, approved: null },
+        { value: 3, approved: true },
+        { value: 4, approved: null },
+      ]);
+    });
+
     it('runs a foreach whose items are nested workflows with their own foreach', async () => {
       const storage = new MockStore();
       const inner = step('inner', async ({ inputData }) => {
