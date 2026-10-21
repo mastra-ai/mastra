@@ -494,6 +494,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         originSessionId: origin?.sessionId ?? null,
         originThreadId: origin?.threadId ?? null,
         originMutedAt: null,
+        createdByUserId: input.userId,
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,
@@ -504,6 +505,32 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       };
       this.sessionsRows.push(session);
       return session;
+    },
+    transferOwner: async ({
+      sessionId,
+      expectedUserId,
+      toUserId,
+    }: {
+      sessionId: string;
+      expectedUserId: string;
+      toUserId: string;
+    }) => {
+      const session = this.sessionsRows.find(row => row.sessionId === sessionId) ?? null;
+      if (!session || session.userId !== expectedUserId) {
+        return { status: 'conflict' as const, reason: 'stale_owner' as const, session };
+      }
+      if (session.userId === toUserId) return { status: 'updated' as const, session };
+      const branchOwned = this.sessionsRows.some(
+        row =>
+          row.id !== session.id &&
+          row.projectRepositoryId === session.projectRepositoryId &&
+          row.userId === toUserId &&
+          row.branch === session.branch,
+      );
+      if (branchOwned) return { status: 'conflict' as const, reason: 'branch_owned' as const, session };
+      session.userId = toUserId;
+      session.updatedAt = new Date();
+      return { status: 'updated' as const, session };
     },
     setSandbox: async ({
       id,
