@@ -1,3 +1,4 @@
+import { createServer } from 'node:http';
 import { stateSchema } from '@mastra/code-sdk/schema';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import { Agent } from '@mastra/core/agent';
@@ -167,6 +168,98 @@ describe('Slack session owner names', () => {
       session: { owner: profile },
     });
   });
+
+  it.each(['individual', 'bulk', 'absent'] as const)(
+    'does not substitute Slack names for unchecked owners in large lists when directory access is %s',
+    async directory => {
+      const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+      const profiles = new Map<string, { id: string; name: string }>();
+      for (let index = 0; index < 105; index++) {
+        const userId = `owner-${index}`;
+        profiles.set(userId, { id: userId, name: `Directory ${userId}` });
+        await sourceControl.sessions.create({
+          sessionId: `session-${userId}`,
+          projectRepositoryId: projectRepository.id,
+          factoryProjectId: project.id,
+          orgId: 'org-1',
+          userId,
+          branch: `slack/${index}`,
+          baseBranch: 'main',
+          visibility: 'org',
+        });
+        await seed.channelIdentity.saveAccountLink({
+          platform: 'slack',
+          externalTeamId: 'T-work',
+          externalUserId: `U-${index}`,
+          orgId: 'org-1',
+          userId,
+          externalUserName: `Slack ${userId}`,
+        });
+      }
+
+      let origin = '';
+      const users =
+        directory === 'absent'
+          ? undefined
+          : {
+              getUser: async (id: string) => (await fetch(`${origin}/test-directory/${id}`)).json(),
+              ...(directory === 'bulk'
+                ? {
+                    getUsers: async (ids: string[]) =>
+                      (await fetch(`${origin}/test-directory?ids=${ids.join(',')}`)).json(),
+                  }
+                : {}),
+            };
+      const app = buildApp([sourceControl], { ...seed, users });
+      // Only the external user directory is simulated; routes and SQLite storage run for real.
+      app.get('/test-directory/:id', c => c.json(profiles.get(c.req.param('id')) ?? null));
+      app.get('/test-directory', c =>
+        c.json(
+          c.req
+            .query('ids')!
+            .split(',')
+            .map(id => profiles.get(id) ?? null),
+        ),
+      );
+      const server = createServer(async (request, response) => {
+        const result = await app.fetch(new Request(`${origin}${request.url}`));
+        response.writeHead(result.status, Object.fromEntries(result.headers));
+        response.end(Buffer.from(await result.arrayBuffer()));
+      });
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', resolve);
+      });
+      onTestFinished(
+        () => new Promise<void>((resolve, reject) => server.close(error => (error ? reject(error) : resolve()))),
+      );
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Expected a TCP listener');
+      origin = `http://127.0.0.1:${address.port}`;
+
+      for (const path of [
+        `/web/factory/projects/${project.id}/sessions`,
+        `/web/source-control/projects/${projectRepository.id}/sessions`,
+        `/web/github/projects/${projectRepository.id}/sessions`,
+      ]) {
+        const response = await fetch(`${origin}${path}`);
+        expect(response.status).toBe(200);
+        const { sessions } = await response.json();
+        expect(sessions).toHaveLength(105);
+        const named = sessions.filter((session: { owner?: unknown }) => session.owner);
+        for (const session of named) {
+          expect(session.owner).toEqual({
+            id: session.userId,
+            name: `${directory === 'absent' ? 'Slack' : 'Directory'} ${session.userId}`,
+          });
+        }
+        expect(named).toHaveLength(directory === 'absent' ? 105 : 100);
+        const detail = await fetch(`${origin}/web/user-sessions/${named.at(-1).sessionId}`);
+        expect(detail.status).toBe(200);
+        expect((await detail.json()).session.owner).toEqual(named.at(-1).owner);
+      }
+    },
+  );
 
   it('reads current links after disconnect, relink, and a move to another organization', async () => {
     const { seed, sourceControl, session, key } = await seedOwner();

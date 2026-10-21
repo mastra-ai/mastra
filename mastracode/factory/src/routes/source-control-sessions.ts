@@ -327,8 +327,11 @@ function createSessionOwnerProfileResolver(
   };
 
   return async (orgId: string, userIds: string[]): Promise<Map<string, SessionOwnerProfile>> => {
-    const profiles = await resolveDirectoryProfiles(userIds);
-    const missing = [...new Set(userIds)].filter(userId => !profiles.has(userId));
+    const ownerIds = [...new Set(userIds)];
+    // Owners beyond the directory limit are unchecked, not missing a profile.
+    const eligibleOwnerIds = users ? ownerIds.slice(0, MAX_SESSION_OWNER_PROFILES) : ownerIds;
+    const profiles = await resolveDirectoryProfiles(eligibleOwnerIds);
+    const missing = eligibleOwnerIds.filter(userId => !profiles.has(userId));
     if (!channelIdentity || missing.length === 0) return profiles;
     try {
       // Keep Slack names out of the directory cache: links are organization-scoped
