@@ -1911,6 +1911,26 @@ describe('InngestAgent parity surface', () => {
       }
     });
 
+    it('routes a snapshot read failure through resume dispatch cleanup', async () => {
+      const durableAgent = makeIsolatedAgent('resume-snapshot-read-failure');
+      const loadSnapshot = vi.fn().mockRejectedValue(new Error('snapshot unavailable'));
+      (durableAgent as any).__setMastra({
+        getStorage: () => ({ getStore: async () => ({ loadWorkflowSnapshot: loadSnapshot }) }),
+      });
+      const sendSpy = stubInngestSend();
+      const publishSpy = vi.spyOn(durableAgent.pubsub, 'publish');
+      const runId = 'resume-snapshot-read-failure-run';
+      try {
+        await expect(durableAgent.resume(runId, { answer: 'yes' })).rejects.toThrow('snapshot unavailable');
+        expect(sendSpy).not.toHaveBeenCalled();
+        expect(publishSpy.mock.calls.some(([, event]: any[]) => event?.type === 'error')).toBe(true);
+        expect(globalRunRegistry.get(runId)).toBeUndefined();
+      } finally {
+        publishSpy.mockRestore();
+        sendSpy.mockRestore();
+      }
+    });
+
     it('rejects resume() when dispatching the resume event fails', async () => {
       // Dispatch used to be fire-and-forget: resume() resolved while the run
       // stayed parked, and the failure only ever showed up as a stream error.

@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed `DurableAgent` and evented agents dropping the text a model streamed before a tool approval. After `approveToolCall()`, the resumed stream's `text` and `steps` now include that earlier text, the same as a plain `Agent`. The suspended stream's `text`, `steps` and `finishReason` (`'suspended'`) now resolve instead of hanging.
+Restore text streamed before tool approval in resumed durable and evented agent output. Streams configured to close on suspension settle their partial results; streams kept open continue through approval. Earlier completed iterations are not added to the resumed stream's `steps`.

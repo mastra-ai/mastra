@@ -52,7 +52,7 @@ describe('durable stream adapter suspension ordering', () => {
   it('keeps an open stream pending across approval until the resumed segment finishes', async () => {
     const pubsub = new EventEmitterPubSub();
     const runId = 'open-approval-run';
-    const { output, ready } = createDurableAgentStream({
+    const { output, ready, waitForEventDelivery } = createDurableAgentStream({
       pubsub,
       runId,
       messageId: `msg-${runId}`,
@@ -61,6 +61,11 @@ describe('durable stream adapter suspension ordering', () => {
     });
     const fullOutput = output.getFullOutput();
     const text = output.text;
+    const suspendedChunkSeen = (async () => {
+      for await (const chunk of output.fullStream) {
+        if (chunk.type === 'tool-call-suspended') return;
+      }
+    })();
     let settled = false;
     void text.then(() => {
       settled = true;
@@ -80,7 +85,8 @@ describe('durable stream adapter suspension ordering', () => {
       payload: suspendedData,
     } as any);
     await emitSuspendedEvent(pubsub, runId, suspendedData);
-    await Promise.resolve();
+    await waitForEventDelivery();
+    await suspendedChunkSeen;
     expect(settled).toBe(false);
 
     await emitChunkEvent(pubsub, runId, {
@@ -132,13 +138,18 @@ describe('durable stream adapter suspension ordering', () => {
   it('waits for sibling tool results before settling a close-on-suspend reader', async () => {
     const pubsub = new EventEmitterPubSub();
     const runId = 'sibling-result-run';
-    const { output, ready } = createDurableAgentStream({
+    const { output, ready, waitForEventDelivery } = createDurableAgentStream({
       pubsub,
       runId,
       messageId: `msg-${runId}`,
       model: { modelId: 'test', provider: 'test', version: 'v3' },
       closeOnSuspend: true,
     });
+    const suspendedChunkSeen = (async () => {
+      for await (const chunk of output.fullStream) {
+        if (chunk.type === 'tool-call-suspended') return;
+      }
+    })();
     let settled = false;
     const toolResultCount = output.toolResults.then(results => {
       settled = true;
@@ -151,7 +162,8 @@ describe('durable stream adapter suspension ordering', () => {
       from: 'AGENT',
       payload: suspendedData,
     } as any);
-    await Promise.resolve();
+    await waitForEventDelivery();
+    await suspendedChunkSeen;
     expect(settled).toBe(false);
     await emitChunkEvent(pubsub, runId, {
       type: 'tool-result',

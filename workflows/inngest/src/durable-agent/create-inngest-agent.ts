@@ -1270,7 +1270,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       validateModelTimeoutSettings(callbackOptions.modelSettings?.timeout);
       // The resumed segment only receives new pubsub chunks. Restore text from the
       // suspended iteration so output.text includes what streamed before approval.
-      const outerSnapshot = (await resumableSnapshot).snapshot;
+      const outerSnapshot = (await resumableSnapshot.catch(() => undefined))?.snapshot;
       let resumedText: { priorText: string; stepText: string } | undefined;
       try {
         const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
@@ -1294,8 +1294,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             stepText: llmStep.output.text ?? '',
           };
         }
-      } catch {
+      } catch (error) {
         // Snapshot text is best-effort; a failed metadata read must not block tool approval.
+        mastra?.getLogger?.()?.warn?.('Failed to restore Inngest approval text from snapshot', {
+          agentId,
+          runId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
       const resumeOffset = await getPubsubOffset(runId);
 
