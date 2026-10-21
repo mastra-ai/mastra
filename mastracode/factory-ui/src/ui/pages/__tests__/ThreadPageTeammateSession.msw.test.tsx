@@ -149,21 +149,23 @@ describe("a teammate's Factory session", () => {
       await waitFor(() => expect(screen.queryByText(/You’re steering/)).not.toBeInTheDocument());
     });
 
-    it('keeps the steering line when someone else took it first', async () => {
+    it('names the new owner when someone else took it first', async () => {
+      const session = { ...wardSession };
       server.use(
-        http.post(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}/owner`, () =>
-          HttpResponse.json(
-            { error: 'Session ownership conflict', reason: 'stale_owner', currentOwnerId: 'user-caleb' },
+        http.post(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}/owner`, () => {
+          Object.assign(session, { userId: 'user-caleb', owner: { id: 'user-caleb', name: 'Caleb' } });
+          return HttpResponse.json(
+            { error: 'Someone else owns this session now', reason: 'stale_owner', currentOwnerId: 'user-caleb' },
             { status: 409 },
-          ),
-        ),
+          );
+        }),
       );
-      const client = openWardSessionAs('user-damien');
+      const client = openWardSessionAs('user-damien', { session });
 
       await userEvent.setup().click(await screen.findByRole('button', { name: 'Take ownership' }));
       await waitForMutationsIdle(client);
 
-      expect(screen.getByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
+      expect(await screen.findByText('You’re steering Caleb’s session')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Take ownership' })).toBeEnabled();
     });
   });

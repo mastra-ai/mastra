@@ -164,7 +164,7 @@ export async function setUserSessionVisibility(
   return normalizeUserSession(body.session);
 }
 
-/** Move a teammate's org-visible session to the viewer. `expectedOwnerId` is the owner the viewer saw; the server refuses a stale one with 409. */
+/** Move a teammate's org-visible session to the viewer. `expectedOwnerId` is the owner the viewer saw; the server refuses a stale one with 409 and says why. */
 export async function takeUserSessionOwnership(
   baseUrl: string,
   sessionId: string,
@@ -177,7 +177,6 @@ export async function takeUserSessionOwnership(
     body: JSON.stringify({ expectedOwnerId }),
   });
   const body: { session?: FactoryUserSessionPayload; error?: string } = await res.json().catch(() => ({}));
-  if (res.status === 409) throw new Error('Someone else owns this session now');
   if (!res.ok || !body.session) throw new Error(body.error ?? `Failed to take ownership (${res.status})`);
   return normalizeUserSession(body.session);
 }

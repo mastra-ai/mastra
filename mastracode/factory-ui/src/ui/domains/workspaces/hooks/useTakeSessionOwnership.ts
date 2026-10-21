@@ -11,11 +11,13 @@ export function useTakeSessionOwnership(factoryId: string | undefined) {
   return useMutation({
     mutationFn: ({ sessionId, expectedOwnerId }: { sessionId: string; expectedOwnerId: string }) =>
       takeUserSessionOwnership(baseUrl, sessionId, expectedOwnerId),
-    onSuccess: (_session, { sessionId }) => {
+    onSuccess: () => toast('You own this session now'),
+    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to take ownership'),
+    // A refusal means the owner moved under the viewer, and the model catalog follows the owner's credentials.
+    onSettled: (_session, _error, { sessionId }) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(sessionId) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
-      toast('You own this session now');
+      void queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() });
     },
-    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to take ownership'),
   });
 }
