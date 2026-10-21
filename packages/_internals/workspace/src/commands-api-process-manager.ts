@@ -38,7 +38,7 @@ export interface CommandsApi {
  * Attaching sets no deadline of its own: without one the SDK cuts the stream
  * after 60s, and the process's own timeout was set when it was spawned.
  */
-const ATTACH_TIMEOUT_MS = 0;
+export const ATTACH_TIMEOUT_MS = 0;
 
 /** envd runs every command as `/bin/bash -l -c <command>`; show the command itself. */
 function commandOf(proc: { cmd: string; args: string[] }): string {
@@ -53,19 +53,16 @@ export type CommandsApiOperation = 'spawn' | 'list' | 'connect' | 'kill' | 'send
 
 /**
  * A process started or attached through a {@link CommandsApi}. `kill` and
- * `sendStdin` go back through the manager, so a provider whose commands handle
- * changes over a process's lifetime (a rotated lease) always uses the current one.
+ * `sendStdin` go back through the manager, so they use whatever commands
+ * handle the provider currently supplies.
  */
 export class CommandsApiProcessHandle extends ProcessHandle {
   readonly pid: string;
   /** The exit code `wait()` saw, for a handle that doesn't update its own. */
   private waitedExitCode?: number;
-  /** One settle loop shared by every `wait()` caller, so a dropped stream is reattached once. */
-  private settled?: Promise<{ exitCode: number } | { error: unknown }>;
-
   constructor(
-    private inner: CommandsApiHandle,
-    private readonly manager: CommandsApiProcessManager<any>,
+    protected inner: CommandsApiHandle,
+    protected readonly manager: CommandsApiProcessManager<any>,
     private readonly startTime: number,
     private readonly stdinMode: SpawnProcessOptions['stdinMode'],
     options?: SpawnProcessOptions,
@@ -79,40 +76,14 @@ export class CommandsApiProcessHandle extends ProcessHandle {
     return this.inner.exitCode ?? this.waitedExitCode;
   }
 
-  /**
-   * Wait on the current stream. When the provider says the stream dropped while
-   * the process kept running (a Platform lease expiring), reattach with
-   * `connect` and keep waiting. Output written between the drop and the
-   * reattach is not seen.
-   */
-  private async settle(): Promise<{ exitCode: number } | { error: unknown }> {
-    for (;;) {
-      try {
-        return await this.inner.wait();
-      } catch (error) {
-        if (!this.manager.isStreamDrop(error)) return { error };
-        const pid = this.inner.pid;
-        const reattached = await this.manager
-          .runCommands('connect', async commands => {
-            if (!(await commands.list()).some(proc => proc.pid === pid)) return undefined;
-            return commands.connect(pid, {
-              onStdout: data => this.emitStdout(data),
-              onStderr: data => this.emitStderr(data),
-              timeoutMs: ATTACH_TIMEOUT_MS,
-            });
-          })
-          .catch(() => undefined);
-        if (!reattached) return { error };
-        this.inner = reattached;
-      }
-    }
+  /** Wait for the process to exit. Providers whose output stream can drop while the process runs override this. */
+  protected waitForExit(): Promise<{ exitCode: number }> {
+    return this.inner.wait();
   }
 
   async wait(): Promise<CommandResult> {
     try {
-      const outcome = await (this.settled ??= this.settle());
-      if ('error' in outcome) throw outcome.error;
-      const result = outcome;
+      const result = await this.waitForExit();
       this.waitedExitCode = result.exitCode;
       return {
         success: result.exitCode === 0,
@@ -132,8 +103,7 @@ export class CommandsApiProcessHandle extends ProcessHandle {
         result?: { exitCode: number; error?: string; stdout: string; stderr: string };
       };
       const reportedExitCode = errorObj.result?.exitCode ?? errorObj.exitCode;
-      // Only an error carrying an exit code proves the process ended; a dropped
-      // stream does not.
+      // Only an error carrying an exit code proves the process ended.
       if (reportedExitCode !== undefined) this.waitedExitCode = reportedExitCode;
       const exitCode = reportedExitCode ?? this.exitCode ?? 1;
 
@@ -205,13 +175,13 @@ export abstract class CommandsApiProcessManager<
   /** Run `fn` against the provider's current commands handle. */
   abstract runCommands<T>(operation: CommandsApiOperation, fn: (commands: CommandsApi) => Promise<T>): Promise<T>;
 
-  /**
-   * Whether `error` from a handle's `wait()` means only the output stream ended
-   * and the process may still be running. Such a handle reattaches with
-   * `connect`. Off by default.
-   */
-  isStreamDrop(_error: unknown): boolean {
-    return false;
+  /** Wrap a started or attached command. Providers override this to supply their own handle. */
+  protected createHandle(
+    inner: CommandsApiHandle,
+    stdinMode: SpawnProcessOptions['stdinMode'],
+    options?: SpawnProcessOptions,
+  ): CommandsApiProcessHandle {
+    return new CommandsApiProcessHandle(inner, this, Date.now(), stdinMode, options);
   }
 
   /** Where a command runs when the caller gives no `cwd`. */
@@ -241,7 +211,7 @@ export abstract class CommandsApiProcessManager<
         onStdout: data => handle.emitStdout(data),
         onStderr: data => handle.emitStderr(data),
       });
-      handle = new CommandsApiProcessHandle(inner, this, Date.now(), options.stdinMode, options);
+      handle = this.createHandle(inner, options.stdinMode, options);
       this._tracked.set(handle.pid, handle);
       return handle;
     });
@@ -287,7 +257,7 @@ export abstract class CommandsApiProcessManager<
           timeoutMs: ATTACH_TIMEOUT_MS,
         }),
       );
-      handle = new CommandsApiProcessHandle(inner, this, Date.now(), undefined);
+      handle = this.createHandle(inner, undefined);
       this._tracked.set(handle.pid, handle);
       return handle;
     } catch {

@@ -29,6 +29,7 @@ export {
   type FilesCommandResult,
 } from './files-api-filesystem';
 export {
+  ATTACH_TIMEOUT_MS,
   CommandsApiProcessManager,
   CommandsApiProcessHandle,
   type CommandsApi,

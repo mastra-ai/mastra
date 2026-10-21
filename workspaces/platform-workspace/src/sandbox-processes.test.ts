@@ -98,10 +98,13 @@ class HostVm {
 
   private handle(pid: number, done: Promise<number>, jwt: string, listener: Listener): CommandsApiHandle {
     let exitCode: number | undefined;
-    void done.then(code => (exitCode = code));
+    let streaming = true;
+    // A handle learns the exit code from its stream, so not after the stream ended.
+    void done.then(code => streaming && (exitCode = code));
     const ended = new Promise<never>((_, reject) => {
       const ends = this.streams.get(jwt) ?? [];
       ends.push(() => {
+        streaming = false;
         const listeners = this.children.get(pid)?.listeners;
         if (listeners) listeners.splice(listeners.indexOf(listener), 1);
         reject(new TimeoutError('[unavailable] the connection to sandbox ended before the stream completed'));
@@ -281,6 +284,42 @@ describe('PlatformSandbox.processes', () => {
 
     expect(await waiting).toMatchObject({ success: true, stdout: 'before\nafter\n' });
     expect(vm.calls).toEqual(['first run', 'second list', 'second connect', 'second sendStdin']);
+  });
+
+  it('reports a failed wait when the process ended before it could be reattached', async () => {
+    let releaseLease!: () => void;
+    const secondLease = new Promise<Response>(resolve => (releaseLease = () => resolve(e2bLease('second'))));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(created())
+      .mockResolvedValueOnce(e2bLease('first'))
+      .mockReturnValueOnce(secondLease);
+    const { sandbox } = makeSandbox(fetchMock);
+
+    const handle = await sandbox.processes!.spawn('echo before; exec sleep 30');
+    const waiting = handle.wait();
+    await until(() => handle.stdout === 'before\n');
+
+    rotateLease(sandbox);
+    vm.expire('first');
+    // It ends while nobody is attached, before the new lease arrives.
+    const child = vm.children.get(Number(handle.pid))!;
+    child.child.kill('SIGKILL');
+    await child.done;
+    releaseLease();
+
+    const result = await waiting;
+    expect(result).toMatchObject({ success: false, exitCode: 1 });
+    expect(result.stderr).toContain('[unavailable]');
+    expect(vm.calls).toEqual(['first run', 'second list']);
+
+    // It reads as exited, so it stays listed until read and is then released.
+    expect(handle.exitCode).toBe(1);
+    expect(await sandbox.processes!.list()).toEqual([
+      { pid: handle.pid, command: 'echo before; exec sleep 30', running: false, exitCode: 1 },
+    ]);
+    expect(await sandbox.processes!.get(handle.pid)).toBe(handle);
+    expect(await sandbox.processes!.list()).toEqual([]);
   });
 
   it('turns a 410 lease into SandboxDestroyedError and clears state', async () => {

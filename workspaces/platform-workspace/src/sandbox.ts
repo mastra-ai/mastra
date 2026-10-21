@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
-import { CommandsApiProcessManager } from '@internal/workspace';
-import type { CommandsApi, CommandsApiOperation } from '@internal/workspace';
+import { ATTACH_TIMEOUT_MS, CommandsApiProcessHandle, CommandsApiProcessManager } from '@internal/workspace';
+import type { CommandsApi, CommandsApiHandle, CommandsApiOperation } from '@internal/workspace';
 import type { RequestContext } from '@mastra/core/di';
 import type {
   CommandResult,
@@ -431,9 +431,71 @@ class PlatformCommandsProcessManager extends CommandsApiProcessManager<PlatformS
     return this.sandbox[withCommands](operation, fn);
   }
 
-  /** envd ends the output stream when the lease it was opened with expires; the process keeps running. */
-  isStreamDrop(error: unknown): boolean {
-    return error instanceof TimeoutError && error.message.startsWith('[unavailable]');
+  protected createHandle(
+    inner: CommandsApiHandle,
+    stdinMode: SpawnProcessOptions['stdinMode'],
+    options?: SpawnProcessOptions,
+  ): CommandsApiProcessHandle {
+    return new PlatformProcessHandleOverLease(inner, this, Date.now(), stdinMode, options);
+  }
+}
+
+/** envd ends the output stream when the lease it was opened with expires; the process keeps running. */
+function isLeaseStreamDrop(error: unknown): boolean {
+  return error instanceof TimeoutError && error.message.startsWith('[unavailable]');
+}
+
+/**
+ * The process left the VM while no stream was attached, so envd can't say how
+ * it ended. Carries an exit code so the handle reads as exited: it shows in
+ * `list()` and is released like any other finished process.
+ */
+class ProcessEndedUnseenError extends Error {
+  readonly exitCode = 1;
+
+  constructor(cause: unknown) {
+    super(
+      `${cause instanceof Error ? cause.message : String(cause)} (the process ended before it could be reattached)`,
+    );
+  }
+}
+
+/**
+ * A process outlives the lease it was started with. When that lease expires
+ * envd ends the output stream, so reattach on the current lease and keep
+ * waiting. Output written between the drop and the reattach is not seen.
+ */
+class PlatformProcessHandleOverLease extends CommandsApiProcessHandle {
+  /** One reattach loop shared by every `wait()` caller. */
+  private exited?: Promise<{ exitCode: number }>;
+
+  protected waitForExit(): Promise<{ exitCode: number }> {
+    return (this.exited ??= this.waitAcrossLeases());
+  }
+
+  private async waitAcrossLeases(): Promise<{ exitCode: number }> {
+    for (;;) {
+      try {
+        return await this.inner.wait();
+      } catch (error) {
+        if (!isLeaseStreamDrop(error)) throw error;
+        const pid = this.inner.pid;
+        const reattached = await this.manager
+          .runCommands('connect', async commands => {
+            if (!(await commands.list()).some(proc => proc.pid === pid)) return 'ended' as const;
+            return commands.connect(pid, {
+              onStdout: data => this.emitStdout(data),
+              onStderr: data => this.emitStderr(data),
+              timeoutMs: ATTACH_TIMEOUT_MS,
+            });
+          })
+          .catch(() => undefined);
+        if (reattached === 'ended') throw new ProcessEndedUnseenError(error);
+        // Couldn't reach the VM: it may still be running, so leave it unexited and killable.
+        if (!reattached) throw error;
+        this.inner = reattached;
+      }
+    }
   }
 }
 
