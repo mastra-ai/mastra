@@ -160,7 +160,8 @@ function traceQueryFixtureForWriteModel(
         : rootVersions === 'current-first'
           ? [...current, ...superseded]
           : current,
-    relatedSpans: [...spans.values()],
+    // Completion-only writers never see a span before it ends.
+    relatedSpans: [...spans.values()].filter(span => !span.isPending),
     scores: data.scores,
     feedback: data.feedback,
   };
