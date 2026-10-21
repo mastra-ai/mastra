@@ -1,5 +1,14 @@
 # @mastra/playground-ui
 
+## 65.0.0-alpha.14
+
+### Patch Changes
+
+- Improved auto-refresh in the traces explorer. When the observability store supports delta polling, the list now adds new and updated traces in place instead of reloading every page, so the scroll position and loaded pages are kept. Other stores keep the previous refresh behavior. ([#27967](https://github.com/mastra-ai/mastra/pull/27967))
+
+- Updated dependencies [[`7c86dc1`](https://github.com/mastra-ai/mastra/commit/7c86dc176dbbb29c437fc66dc9fc9988236d561c)]:
+  - @mastra/react@1.12.0-alpha.13
+
 ## 65.0.0-alpha.13
 
 ### Patch Changes

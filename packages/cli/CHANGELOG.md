@@ -1,5 +1,11 @@
 # mastra
 
+## 1.35.0-alpha.14
+
+### Patch Changes
+
+- The version row in the Studio sidebar now reads "Version 1.79.0" instead of "v1.79.0". ([#27977](https://github.com/mastra-ai/mastra/pull/27977))
+
 ## 1.35.0-alpha.13
 
 ### Patch Changes
