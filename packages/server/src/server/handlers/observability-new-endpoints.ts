@@ -521,6 +521,9 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
     try {
       return await observabilityStore.aggregateTraces(plan);
     } catch (error) {
+      if (error instanceof coreStorage.TraceQueryResourceLimitError) {
+        throwTraceQueryError(503, { code: error.code, message: error.message });
+      }
       if (error instanceof coreStorage.TraceQueryExecutionError) {
         throwTraceQueryError(504, { code: error.code, message: error.message });
       }
@@ -545,6 +548,10 @@ if (AGGREGATE_TRACES.openapi) {
   AGGREGATE_TRACES.openapi.responses[501] = {
     description: 'The configured observability store does not support trace aggregation',
     content: { 'application/json': { schema: traceAggregateUnsupportedErrorSchema } },
+  };
+  AGGREGATE_TRACES.openapi.responses[503] = {
+    description: 'Trace aggregate query exceeded a bounded execution resource limit',
+    content: { 'application/json': { schema: traceQueryResourceLimitErrorSchema } },
   };
   AGGREGATE_TRACES.openapi.responses[504] = {
     description: 'Trace aggregate query exceeded the configured database execution timeout',
