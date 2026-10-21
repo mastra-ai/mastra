@@ -1,7 +1,7 @@
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it } from 'vitest';
 
-import { AuditStorage, clampAuditLimit } from './base.js';
+import { AuditStorage, clampAuditLimit, encodeAuditCursor } from './base.js';
 
 describe('clampAuditLimit', () => {
   it('defaults non-finite values and truncates fractions', () => {
@@ -75,6 +75,48 @@ describe('AuditStorage', () => {
     const last = await storage.list({ orgId: 'org1', limit: 2, before: second.nextCursor });
     expect(last.events.map(e => e.action)).toEqual(['action.0']);
     expect(last.nextCursor).toBeUndefined();
+  });
+
+  it('pages forward oldest-first without gaps or repeats, even when events share a timestamp', async () => {
+    const storage = await makeStorage();
+    const base = new Date('2026-10-21T12:00:00.000Z').getTime();
+    // Three events land in the same millisecond, so only the id orders them.
+    const times = [0, 1000, 1000, 1000, 2000, 3000];
+    const recorded = [];
+    for (const [i, offset] of times.entries()) {
+      recorded.push(
+        await storage.record({
+          orgId: 'org1',
+          actorId: 'user:alice',
+          action: `action.${i}`,
+          targets: [],
+          occurredAt: new Date(base + offset),
+        }),
+      );
+    }
+    const inOrder = [...recorded].sort(
+      (a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || (a.id < b.id ? -1 : 1),
+    );
+
+    const seen: string[] = [];
+    let after = encodeAuditCursor(inOrder[0]!);
+    for (;;) {
+      const page = await storage.list({ orgId: 'org1', limit: 2, after });
+      seen.push(...page.events.map(e => e.id));
+      if (!page.nextCursor) break;
+      after = page.nextCursor;
+    }
+
+    expect(seen).toEqual(inOrder.slice(1).map(e => e.id));
+  });
+
+  it('refuses to page both ways at once, or forward from an unreadable cursor', async () => {
+    const storage = await makeStorage();
+    const row = await storage.record({ orgId: 'org1', actorId: 'user:alice', action: 'a.one', targets: [] });
+    const cursor = encodeAuditCursor(row);
+
+    await expect(storage.list({ orgId: 'org1', before: cursor, after: cursor })).rejects.toThrow(/not both/);
+    await expect(storage.list({ orgId: 'org1', after: 'not-a-cursor' })).rejects.toThrow(/Invalid audit cursor/);
   });
 
   it('filters by project, actions, and actor', async () => {

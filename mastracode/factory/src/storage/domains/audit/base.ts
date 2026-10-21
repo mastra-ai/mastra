@@ -107,12 +107,17 @@ export interface ListAuditEventsInput {
   actorId?: string;
   /** Opaque cursor from a previous page (`nextCursor`). */
   before?: string;
+  /**
+   * Page oldest-first, strictly after this cursor: `nextCursor` of a previous
+   * `after` page, or `encodeAuditCursor` of a row. Can't be combined with `before`.
+   */
+  after?: string;
   limit?: number;
 }
 
 export interface AuditEventPage {
   events: AuditEventRow[];
-  /** Pass back as `before` to fetch the next (older) page; absent at the end. */
+  /** Pass back as `before` (or `after`, when paging forward) to fetch the next page; absent at the end. */
   nextCursor?: string;
 }
 
@@ -274,8 +279,9 @@ export class AuditStorage extends FactoryStorageDomain {
     return toRow(inserted);
   }
 
-  /** List an org's audit events newest-first with keyset pagination. */
+  /** List an org's audit events newest-first (or oldest-first with `after`) with keyset pagination. */
   async list(input: ListAuditEventsInput): Promise<AuditEventPage> {
+    if (input.before && input.after) throw new Error('Audit list takes `before` or `after`, not both');
     const limit = clampAuditLimit(input.limit);
 
     const where: CollectionWhere = { org_id: input.orgId };
@@ -283,12 +289,17 @@ export class AuditStorage extends FactoryStorageDomain {
     if (input.actions && input.actions.length > 0) where.action = { in: input.actions };
     if (input.actorId) where.actor_id = input.actorId;
 
-    const cursor = input.before ? decodeAuditCursor(input.before) : undefined;
+    const forward = input.after !== undefined;
+    const raw = input.after ?? input.before;
+    const cursor = raw ? decodeAuditCursor(raw) : undefined;
+    // Paging forward from an unreadable cursor would replay the whole trail.
+    if (forward && !cursor) throw new Error(`Invalid audit cursor '${input.after}'`);
+    const direction = forward ? 'asc' : 'desc';
 
     const rows = await this.#db.findMany<AuditEventDbRow>('audit_events', where, {
       orderBy: [
-        ['occurred_at', 'desc'],
-        ['id', 'desc'],
+        ['occurred_at', direction],
+        ['id', direction],
       ],
       limit: limit + 1,
       ...(cursor ? { cursor: { values: [cursor.occurredAt, cursor.id] } } : {}),

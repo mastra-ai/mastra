@@ -20,6 +20,7 @@ import { FACTORY_TOOL_ANNOTATIONS } from '../tools/annotations.js';
 import { createFactoryTools } from '../tools/index.js';
 import type { FactoryToolDependencies, FactoryToolScope } from '../tools/index.js';
 import { propagateClientDisconnect } from './disconnect.js';
+import { factoryActivityEvent } from './events.js';
 
 export const FACTORY_MCP_PATH = '/web/factory/projects/:projectId/mcp';
 const PROTECTED_RESOURCE_PREFIX = '/.well-known/oauth-protected-resource';
@@ -250,6 +251,14 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
     description: 'Manage work items, sessions and decisions in a Mastra Factory.',
     instructions: FACTORY_MCP_INSTRUCTIONS,
     tools: createFactoryMcpTools(scope, deps, { persistedSession: persisted }),
+    events: {
+      'factory.activity': factoryActivityEvent({
+        orgId: tenant.orgId,
+        factoryProjectId,
+        audit: deps.tools.audit,
+        workItems: deps.tools.workItems,
+      }),
+    },
   });
 
   const { req, res } = toReqRes(c.req.raw);

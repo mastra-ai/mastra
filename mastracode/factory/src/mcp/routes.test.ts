@@ -431,3 +431,103 @@ describe('Factory MCP server', () => {
     expect(response.body).toEqual({ error: 'organization_required' });
   });
 });
+
+describe('Factory activity over MCP events', () => {
+  const poll = (url: string, token: string, cursor: string | null, args: Record<string, unknown> = {}) =>
+    claudeRequest(url, 'events/poll', { name: 'factory.activity', arguments: args, cursor }, token);
+
+  const renameItem = (url: string, workItem: string, title: string) =>
+    claudeRequest(
+      url,
+      'tools/call',
+      { name: 'factory_update_work_item', arguments: { workItem, title } },
+      'token-alice',
+    );
+
+  it('an MCP client finds the activity event type', async () => {
+    const { url } = await setup();
+
+    const list = await claudeRequest(url, 'events/list', {}, 'token-alice');
+
+    expect(list.status).toBe(200);
+    expect(list.body?.result.events).toEqual([
+      expect.objectContaining({ name: 'factory.activity', delivery: ['poll'] }),
+    ]);
+  });
+
+  it('an MCP client polling Factory activity sees new work item changes once', async () => {
+    const { url, project, item, audit } = await setup();
+    // Activity from before the client started polling is not replayed.
+    await audit.record({
+      orgId: 'org-1',
+      actorId: 'alice',
+      action: 'factory.work_item.created',
+      targets: [{ type: 'work_item', id: item.id, name: item.title }],
+      factoryProjectId: project.id,
+    });
+
+    const start = await poll(url, 'token-alice', null);
+    expect(start.body?.result).toMatchObject({ events: [], cursor: expect.any(String) });
+
+    const rename = await renameItem(url, item.id, 'Fix the sign-in page');
+    expect(rename.body?.result.isError).not.toBe(true);
+
+    const next = await poll(url, 'token-alice', start.body!.result.cursor);
+    expect(next.body?.result.events).toEqual([
+      expect.objectContaining({
+        name: 'factory.activity',
+        eventId: expect.any(String),
+        data: {
+          action: 'factory.work_item.updated',
+          occurredAt: expect.any(String),
+          actor: { type: 'human', id: 'alice' },
+          workItemId: item.id,
+          summary: expect.stringMatching(/^updated: /),
+        },
+      }),
+    ]);
+
+    const again = await poll(url, 'token-alice', next.body!.result.cursor);
+    expect(again.body?.result.events).toEqual([]);
+    expect(again.body?.result.cursor).toBe(next.body!.result.cursor);
+  });
+
+  it('activity from another org’s Factory never shows up', async () => {
+    const { url, base, item, projects } = await setup();
+    const globex = await projects.create({ orgId: 'org-2', userId: 'mallory', input: { name: 'Globex' } });
+    const globexUrl = mcpUrl(base, globex.id);
+
+    const start = await poll(globexUrl, 'token-mallory', null);
+    await renameItem(url, item.id, 'Fix the sign-in page');
+    const next = await poll(globexUrl, 'token-mallory', start.body!.result.cursor);
+    expect(next.body?.result.events).toEqual([]);
+
+    // Naming the other org's work item doesn't get her its activity either.
+    const targeted = await poll(globexUrl, 'token-mallory', null, { workItemId: item.id });
+    expect(targeted.body?.result).toBeUndefined();
+    expect(targeted.body?.error).toMatchObject({ code: -32024 });
+  });
+
+  it('a private session’s activity isn’t visible to other users', async () => {
+    const { url, project, item, audit } = await setup();
+    const start = await poll(url, 'token-alice', null);
+
+    // Another member's agent signals a private session: activity on the session, not on a work item.
+    await audit.record({
+      orgId: 'org-1',
+      actorId: 'agent:thread-bob',
+      actorType: 'agent',
+      action: 'factory.agent.signaled',
+      targets: [{ type: 'session', id: 'bob-private-session' }],
+      metadata: { targetSessionId: 'bob-private-session' },
+      factoryProjectId: project.id,
+    });
+    await renameItem(url, item.id, 'Fix the sign-in page');
+
+    const next = await poll(url, 'token-alice', start.body!.result.cursor);
+    expect(next.body?.result.events.map((event: { data: { action: string } }) => event.data.action)).toEqual([
+      'factory.work_item.updated',
+    ]);
+    expect(JSON.stringify(next.body?.result)).not.toContain('bob-private-session');
+  });
+});
