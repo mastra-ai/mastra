@@ -2,7 +2,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { handleError } from '@mastra/server/handlers/error';
 import { createRoute, HTTPException, SERVER_ROUTES } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { z as z3 } from 'zod/v3';
 
@@ -460,6 +460,8 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // hangs. These routes' behavior is exercised in unit tests.
       '/background-tasks/stream',
       '/agents/:agentId/observe',
+      // Covered by packages/server/src/server/handlers/mcp-events.test.ts.
+      '/mcp/:serverId/events/:eventName/stream',
       // Recover requires both a durable agent and a persisted workflow run.
       // Its stateful behavior is covered by packages/server/src/server/handlers/agents.test.ts.
       '/agents/:agentId/recover',
@@ -509,6 +511,10 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       excludedPrefixes.some(prefix => r.path.startsWith(prefix));
     const activeRoutes = SERVER_ROUTES.filter(r => !isExcluded(r));
 
+    // Routes that are only served under `mastra dev` and return 404 otherwise.
+    // MASTRA_DEV is scoped to these routes because it also relaxes auth elsewhere.
+    const devOnlyRoutes = ['/mcp/:serverId/events/:eventName/emit'];
+
     // Group routes by first path segment (e.g., /agents/:id/tools -> 'agents')
     const routesByCategory = activeRoutes.reduce(
       (acc, route) => {
@@ -525,6 +531,15 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         routes.forEach(route => {
           const testName = `${route.method} ${route.path}`;
           describe(testName, () => {
+            if (devOnlyRoutes.includes(route.path)) {
+              beforeEach(() => {
+                vi.stubEnv('MASTRA_DEV', 'true');
+              });
+              afterEach(() => {
+                vi.unstubAllEnvs();
+              });
+            }
+
             it('should execute with valid request', async () => {
               // Build HTTP request with auto-generated test data
               const request = buildRouteRequest(route);
