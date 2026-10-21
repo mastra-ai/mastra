@@ -32,6 +32,7 @@ const DIMENSION_SQL: Record<string, string> = {
   entityName: 'r.entityName',
   name: 'r.name',
   spanType: 'r.spanType',
+  entityId: 'r.entityId',
   environment: 'r.environment',
   status: TRACE_STATUS_SQL,
   serviceName: 'r.serviceName',
@@ -122,18 +123,11 @@ const COMPARISON_SQL = { eq: '=', ne: '!=', lt: '<', lte: '<=', gt: '>', gte: '>
  */
 export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
+  // Candidates hold each trace's current root once (ROOT_VERSION_ORDER), already filtered.
   const ctes = compileClickHouseTraceCandidates(plan, '*', parameters, { oneRootPerTrace: true });
-  // Candidates may hold unmerged copies of a trace's root; count each trace once, keeping the copy
-  // with the lowest dedupeKey.
-  ctes.push(`trace_roots AS (
-    SELECT *
-    FROM candidates
-    ORDER BY traceId, dedupeKey
-    LIMIT 1 BY traceId
-  )`);
   return compileClickHouseAggregate(plan, parameters, {
     ctes,
-    from: 'trace_roots',
+    from: 'candidates',
     dimensionSql: field => {
       if (field.startsWith('metadata.')) {
         return traceMetadataValueSql(parameters.add(field.slice('metadata.'.length), 'String'));

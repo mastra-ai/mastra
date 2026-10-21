@@ -6,14 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import { WorkspaceChangesPanel } from '../WorkspaceChangesPanel';
-import { WorkspaceFileBrowser } from '../WorkspaceFileBrowser';
-import {
-  WORKSPACE,
-  multiRepositoryChanges,
-  multiRepositoryFiles,
-  singleRepositoryChanges,
-  singleRepositoryFiles,
-} from './fixtures/workspace-repositories';
+import { WORKSPACE, multiRepositoryChanges, singleRepositoryChanges } from './fixtures/workspace-repositories';
 
 const DIFF_URL = `${TEST_BASE_URL}/web/workspace/changes/diff`;
 
@@ -40,23 +33,6 @@ function renderChanges(changes: typeof multiRepositoryChanges) {
       isLoading={false}
       isRefreshing={false}
       onRefresh={noop}
-      onBack={noop}
-    />,
-  );
-}
-
-function renderFiles(listing: typeof multiRepositoryFiles, onFileSelect = vi.fn()) {
-  const noop = () => {};
-  return renderWithProviders(
-    <WorkspaceFileBrowser
-      files={listing.files}
-      repositories={listing.repositories}
-      isLoading={false}
-      isRefreshing={false}
-      onRefresh={noop}
-      onFileSelect={onFileSelect}
-      openFolders={{}}
-      onFolderOpenChange={noop}
       onBack={noop}
     />,
   );
@@ -123,35 +99,7 @@ describe('workspace repository groups', () => {
     );
   });
 
-  it('renders one files group per repository and the root artifacts ungrouped', async () => {
-    const onFileSelect = vi.fn();
-    const user = userEvent.setup();
-    renderFiles(multiRepositoryFiles, onFileSelect);
-
-    const panel = screen.getByLabelText('Workspace files');
-    const groups = repositoryGroups(panel);
-    // Files groups are named after the checkout directories, without an icon.
-    expect(groups.map(group => group.textContent)).toEqual([
-      expect.stringMatching(/^mastra\d/),
-      expect.stringMatching(/^platform\d/),
-      expect.stringMatching(/^mastra-website\d/),
-    ]);
-    expect(within(panel).queryByText('mastra-ai/mastra')).not.toBeInTheDocument();
-    expect(within(panel).queryByTestId('repository-provider-github')).not.toBeInTheDocument();
-    expect(groups[0]).toHaveTextContent('1 file');
-    expect(within(panel).getByText('4 files')).toBeInTheDocument();
-    // Repository folders never render as tree folders; the artifacts folder does, after the groups.
-    expect(treeItemIds(panel)).toEqual(['platform/proof.txt', 'mastra-website/proof.txt']);
-    expect(within(panel).queryByRole('treeitem', { name: /^platform$/ })).not.toBeInTheDocument();
-    const artifacts = within(panel).getByRole('button', { name: '.artifacts' });
-    expect(artifacts.compareDocumentPosition(groups[2]) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-
-    await user.click(within(panel).getAllByText('proof.txt')[0]);
-    expect(onFileSelect).toHaveBeenCalledWith('platform/proof.txt');
-  });
-
   it('renders a one-repository session without any group header, as before', () => {
-    const noop = () => {};
     renderChanges(singleRepositoryChanges);
     const changesPanel = screen.getByTestId('workspace-changes-panel');
     expect(repositoryGroups(changesPanel)).toHaveLength(0);
@@ -159,23 +107,5 @@ describe('workspace repository groups', () => {
     expect(within(changesPanel).getByRole('button', { name: 'src' })).toHaveAttribute('aria-expanded', 'true');
     expect(within(changesPanel).getByText('agent.ts')).toBeInTheDocument();
     expect(within(changesPanel).getByText('README.md')).toBeInTheDocument();
-
-    renderWithProviders(
-      <WorkspaceFileBrowser
-        files={singleRepositoryFiles.files}
-        repositories={singleRepositoryFiles.repositories}
-        isLoading={false}
-        isRefreshing={false}
-        onRefresh={noop}
-        onFileSelect={noop}
-        openFolders={{}}
-        onFolderOpenChange={noop}
-        onBack={noop}
-      />,
-    );
-    const filesPanel = screen.getByLabelText('Workspace files');
-    expect(repositoryGroups(filesPanel)).toHaveLength(0);
-    expect(treeItemIds(filesPanel)).toEqual(['README.md']);
-    expect(within(filesPanel).getByRole('button', { name: 'src' })).toBeInTheDocument();
   });
 });

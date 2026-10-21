@@ -177,6 +177,12 @@ const agent = new Agent({
     description:
       'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
   },
+  {
+    name: 'filesystem',
+    type: 'E2BSandboxFilesystem',
+    description:
+      "The sandbox's disk through E2B's files API. Each operation starts the sandbox if needed and retries once when the sandbox died server-side. Paths are absolute and not confined to a root. Copies, appends, and no-overwrite writes run as one command in the VM. See [Native filesystem](/reference/workspace/sandbox#native-filesystem).",
+  },
 ]}
 />
 

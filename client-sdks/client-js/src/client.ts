@@ -130,6 +130,7 @@ import type { Body, PathParams, QueryParams, RouteResponse } from './route-types
 import type {
   ListFeedbackResponse,
   ClientOptions,
+  McpServerEventStreamFrame,
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
   GetAgentResponse,
@@ -342,7 +343,7 @@ export class MastraClient extends BaseResource {
 
   /**
    * Scopes to an agent controller hosted on the connected Mastra instance. Use
-   * `getAgentController(id).session(resourceId)` to create/resume a session,
+   * `getAgentController(id).session(sessionId)` to create/resume a session,
    * stream its events, and send messages.
    * @param controllerId - The id the agent controller is registered under on Mastra
    */
@@ -885,6 +886,96 @@ export class MastraClient extends BaseResource {
     return this.request(`/mcp/${encodeURIComponent(serverId)}/resources/read`, {
       method: 'POST',
       body: { uri },
+    });
+  }
+
+  /**
+   * Lists the event types an MCP server declares (experimental).
+   * `testEmit` is true when the server serves {@link emitMcpServerEvent} (under `mastra dev`).
+   * @param serverId - The ID of the MCP server.
+   */
+  public getMcpServerEvents(
+    serverId: PathParams<'GET /mcp/:serverId/events'>['serverId'],
+  ): Promise<RouteResponse<'GET /mcp/:serverId/events'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/events`);
+  }
+
+  /**
+   * Reads occurrences of an MCP server event type, like the `events/poll` MCP request (experimental).
+   * Pass the returned `cursor` to the next call to resume.
+   * @param serverId - The ID of the MCP server.
+   * @param eventName - The event type name.
+   * @param body - Event arguments, resume cursor and page size.
+   */
+  public pollMcpServerEvent(
+    serverId: PathParams<'POST /mcp/:serverId/events/:eventName/poll'>['serverId'],
+    eventName: PathParams<'POST /mcp/:serverId/events/:eventName/poll'>['eventName'],
+    body: Body<'POST /mcp/:serverId/events/:eventName/poll'> = {},
+  ): Promise<RouteResponse<'POST /mcp/:serverId/events/:eventName/poll'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/events/${encodeURIComponent(eventName)}/poll`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Streams occurrences of a push-capable MCP server event type (experimental).
+   * Yields an `active` frame first, then `event`, `heartbeat` and `error` frames, and ends
+   * when the server ends the stream. Abort `options.signal` or break out of the loop to stop.
+   *
+   * @example
+   * ```typescript
+   * const controller = new AbortController();
+   * for await (const frame of client.streamMcpServerEvent('tickets', 'ticket.created', {}, { signal: controller.signal })) {
+   *   if (frame.type === 'event') console.log(frame.occurrence.data);
+   * }
+   * ```
+   */
+  public async *streamMcpServerEvent(
+    serverId: PathParams<'POST /mcp/:serverId/events/:eventName/stream'>['serverId'],
+    eventName: PathParams<'POST /mcp/:serverId/events/:eventName/stream'>['eventName'],
+    body: Body<'POST /mcp/:serverId/events/:eventName/stream'> = {},
+    options: { signal?: AbortSignal } = {},
+  ): AsyncGenerator<McpServerEventStreamFrame, void, undefined> {
+    const response: Response = await this.request(
+      `/mcp/${encodeURIComponent(serverId)}/events/${encodeURIComponent(eventName)}/stream`,
+      { method: 'POST', body, stream: true, signal: options.signal, retries: 0 },
+    );
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    const reader = response.body.pipeThrough(createSseJsonTransform<McpServerEventStreamFrame>()).getReader();
+    const cancel = () => void reader.cancel().catch(() => {});
+    options.signal?.addEventListener('abort', cancel, { once: true });
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) return;
+        yield value;
+      }
+    } finally {
+      options.signal?.removeEventListener('abort', cancel);
+      await reader.cancel().catch(() => {});
+    }
+  }
+
+  /**
+   * Emits a test occurrence of an emit-fed MCP server event type (experimental).
+   * Only served under `mastra dev`; other servers respond 404. The occurrence's
+   * `eventId` starts with `mastra-test-`.
+   * @param serverId - The ID of the MCP server.
+   * @param eventName - The event type name.
+   * @param data - The event payload; validated against the event's payload schema.
+   */
+  public emitMcpServerEvent(
+    serverId: PathParams<'POST /mcp/:serverId/events/:eventName/emit'>['serverId'],
+    eventName: PathParams<'POST /mcp/:serverId/events/:eventName/emit'>['eventName'],
+    data: Body<'POST /mcp/:serverId/events/:eventName/emit'>['data'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/events/:eventName/emit'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/events/${encodeURIComponent(eventName)}/emit`, {
+      method: 'POST',
+      body: { data },
     });
   }
 

@@ -57,22 +57,22 @@
     "@cf/zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "@cf/nvidia/nemotron-3-120b-a12b": [
+    "@cf/qwen/qwen3.8-27b": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["low", "medium", "xhigh"]
       }
     ],
-    "@cf/deepseek-ai/deepseek-v4-flash-0731": [
+    "@cf/deepseek-ai/deepseek-v4-pro-0813": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "@cf/deepseek-ai/deepseek-v4-pro-0813": [
+    "@cf/deepseek-ai/deepseek-v4-flash-0731": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -84,25 +84,9 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "@cf/qwen/qwen3.8-27b": [
+    "@cf/zai-org/glm-4.7-flash": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "@cf/moonshotai/kimi-k2.6": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "@cf/zai-org/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "@cf/zai-org/glm-5.3": [
@@ -111,9 +95,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "@cf/zai-org/glm-4.7-flash": [
+    "@cf/zai-org/glm-5.3-flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "@cf/zai-org/glm-5.2": [
@@ -127,13 +112,28 @@
         "type": "toggle"
       }
     ],
-    "@cf/openai/gpt-oss-20b": [
+    "@cf/moonshotai/kimi-k2.6": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "@cf/nvidia/nemotron-3-120b-a12b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
+    "@cf/openai/gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "@cf/openai/gpt-oss-120b": [
+    "@cf/openai/gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

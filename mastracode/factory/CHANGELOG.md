@@ -1,5 +1,68 @@
 # @mastra/factory
 
+## 0.24.0-alpha.12
+
+### Patch Changes
+
+- Queue a Factory session message that would pass the delivery cap, and deliver it oldest first once the window allows, instead of dropping it. ([#27884](https://github.com/mastra-ai/mastra/pull/27884))
+
+- `factory_start_session` now takes an optional `model`. A side session started without one inherits the model of the session that started it, instead of the server default, and falls back to that default when the parent has no model set. A model the session's credentials cannot run is rejected before the session is created. A run that dies on a provider usage or quota limit reports that reason instead of a bare "Bad Request". ([#27883](https://github.com/mastra-ai/mastra/pull/27883))
+
+- The session Files panel reads files faster on E2B-backed sandboxes, and still refuses a symlink that points outside the checkout. ([#27859](https://github.com/mastra-ai/mastra/pull/27859))
+
+- Updated dependencies [[`f1b596e`](https://github.com/mastra-ai/mastra/commit/f1b596e3219bd8721079611c62b92b8f0f6c12d9), [`4e6701a`](https://github.com/mastra-ai/mastra/commit/4e6701a8534e29fad29c7fe4c6787dc1ed56b419), [`f905746`](https://github.com/mastra-ai/mastra/commit/f905746159def2d386dca516657123f43ef90e24), [`f1b596e`](https://github.com/mastra-ai/mastra/commit/f1b596e3219bd8721079611c62b92b8f0f6c12d9), [`72cb1e2`](https://github.com/mastra-ai/mastra/commit/72cb1e2b9453f7bb1bd08e4f9aa54da56fa20600), [`0e5d045`](https://github.com/mastra-ai/mastra/commit/0e5d045be4ab67d1fba5eeb8125bc2ec43aa9519), [`0e4fa4f`](https://github.com/mastra-ai/mastra/commit/0e4fa4f0604bb2e6e63e5d1d203b2dcadd646a81), [`d7c012f`](https://github.com/mastra-ai/mastra/commit/d7c012fcc98a18552e0aef55f9c0d19fccad57da), [`598470c`](https://github.com/mastra-ai/mastra/commit/598470c9385c18b837d8f448a593bc0047f5ec59), [`a7bfa1f`](https://github.com/mastra-ai/mastra/commit/a7bfa1ff7c592f368cf34be472c7d89e03b0098b)]:
+  - @mastra/core@1.79.0-alpha.11
+  - @mastra/code-sdk@1.15.0-alpha.12
+  - @mastra/mcp@2.5.0-alpha.2
+
+## 0.24.0-alpha.11
+
+### Patch Changes
+
+- Disabled subagents in Factory sessions, matching the Mastra Code TUI default. ([#27855](https://github.com/mastra-ai/mastra/pull/27855))
+
+- GitHub issue `assigned` and `unassigned` webhooks now update the linked card's assignees. Only issues that already have a card are updated; the card's board and stage stay the same, and no run is started. ([#27853](https://github.com/mastra-ai/mastra/pull/27853))
+
+- Updated dependencies [[`59c02f5`](https://github.com/mastra-ai/mastra/commit/59c02f53955dde397f343f2107060ed70bbe63c5), [`9c66073`](https://github.com/mastra-ai/mastra/commit/9c66073db33749ab622d54db7e8885f183451ca4), [`e5b6877`](https://github.com/mastra-ai/mastra/commit/e5b6877fbdb471485b99019eb50046b44e778aae), [`e5b6877`](https://github.com/mastra-ai/mastra/commit/e5b6877fbdb471485b99019eb50046b44e778aae), [`5035d61`](https://github.com/mastra-ai/mastra/commit/5035d619e9b3369ba9bda264ac0460528012168b), [`bd16097`](https://github.com/mastra-ai/mastra/commit/bd16097e6eda067c670e1e62d73dc91ddac3a872), [`8c05e78`](https://github.com/mastra-ai/mastra/commit/8c05e78b099b26daf4bfa9b229190201c8bf581d)]:
+  - @mastra/core@1.79.0-alpha.10
+  - @mastra/code-sdk@1.15.0-alpha.11
+
+## 0.24.0-alpha.10
+
+### Minor Changes
+
+- Factory sessions now share memory. A Factory's work-item runs, side sessions, and Slack channel threads store their threads under the Factory id. The sessions a person opens, and their Slack DMs, store theirs under that person's user id, so a DM is never shared with the Factory's runs. Factory sessions always use thread-scoped observational memory, and session state, `MASTRA_OM_SCOPE`, and `.mastracode/database.json` can't change that, so each session keeps its own observations while recall search reaches every thread under the shared resource. Before, every session was its own memory resource, so recall never reached past one run or chat. Each session is still addressed by its own id, and each session's thread list still shows only its own threads. ([#27338](https://github.com/mastra-ai/mastra/pull/27338))
+
+  Existing sessions move over when the server starts, and each session is marked once moved, so later starts only read sessions not yet moved. Their threads, messages, run bindings, and pull request subscriptions move to the Factory or the owner, and each thread is tagged with its session id. The move is safe to repeat and deletes nothing. A session counts as the Factory's when it has a run binding, was started as a side session, or is a Slack channel thread; every other session, including pull request sessions opened before the upgrade, moves to its owner. Factory sessions with no Factory recorded are skipped and logged. Each thread keeps its observations, which are stored by thread id, and they stay findable in recall search under the new resource. Resource-scoped records left under an old session key are logged.
+
+  Pull request and merge request subscription lookups now take a session id:
+
+  ```bash
+  # Before
+  curl "$FACTORY_URL/web/github/subscriptions?resourceId=$SESSION_ID&threadId=$SESSION_ID"
+
+  # After
+  curl "$FACTORY_URL/web/github/subscriptions?sessionId=$SESSION_ID&threadId=$SESSION_ID"
+  ```
+
+  The `resourceId` form still works.
+
+  Runs on a pull request, or on a GitHub or GitLab card whose author has no write access, keep their own resource before and after the upgrade, so untrusted content never reaches the shared Factory memory. A run whose work item no longer exists keeps its own resource too.
+
+### Patch Changes
+
+- Runs on untrusted content keep their own memory. A run on a pull request checkout, or on a GitHub or GitLab card whose author has no write access, no longer shares the Factory's memory resource, so it can't plant observations that trusted runs later read, or read what trusted runs observed. A session that was isolated stays isolated, and a session that already shares the Factory's memory refuses untrusted work. ([#27337](https://github.com/mastra-ai/mastra/pull/27337))
+
+- Fixed Factory servers without a credential encryption key silently damaging saved provider credentials. Previously such a server treated encrypted credentials as plain values, so providers showed as "Not set" with nothing in the logs. It could also rewrite the stored credentials so that servers with the key could no longer read them. ([#27771](https://github.com/mastra-ai/mastra/pull/27771))
+
+  The server now refuses to read encrypted credentials without the key and logs a clear error, and saved credentials stay intact. Configure `secretEncryption` with the same key on every Factory instance to read them. Credentials damaged by the old behavior are repaired the next time a server with the key reads them.
+
+- Fixed the `ModelCatalogEntry` type to match what `GET /web/config/models` returns: `modelName` is always present and `reasoningOptions` may be absent. `ModelCredentialHolder` is now exported, so clients can type the `credentialHolder` field without copying it. ([#27806](https://github.com/mastra-ai/mastra/pull/27806))
+
+- Updated dependencies [[`6362d32`](https://github.com/mastra-ai/mastra/commit/6362d32a905d32820dcab3b9a039ebc1cec4f444), [`6362d32`](https://github.com/mastra-ai/mastra/commit/6362d32a905d32820dcab3b9a039ebc1cec4f444), [`e3678a5`](https://github.com/mastra-ai/mastra/commit/e3678a564cf3bb5922112b4dca65973c5fdc0a92), [`9c4d65f`](https://github.com/mastra-ai/mastra/commit/9c4d65f41ee21e407f0015b0e745881288f69d05), [`6d97ec3`](https://github.com/mastra-ai/mastra/commit/6d97ec37452ca7ca7d5891ec833be2af5b0290fd), [`7425858`](https://github.com/mastra-ai/mastra/commit/74258589417e9e91114c64571a67702d2e352b3f), [`a97ba85`](https://github.com/mastra-ai/mastra/commit/a97ba8578a2dc91a16d945276ca8c7a4ad32e38a), [`750a4ed`](https://github.com/mastra-ai/mastra/commit/750a4edf7826da9ba7321682912504c60f29712d), [`c236d64`](https://github.com/mastra-ai/mastra/commit/c236d64974c68e6c0f9bf6e3d6442e0184c5f49e), [`22df9d7`](https://github.com/mastra-ai/mastra/commit/22df9d76651b3b4d513388a7eae8e51dbfb36a1b), [`0971298`](https://github.com/mastra-ai/mastra/commit/0971298317be971ae1c3f0c1d949a31df7d71c7f), [`98c7e10`](https://github.com/mastra-ai/mastra/commit/98c7e109fca4995d19d7eb132fdb8411c860b151), [`e3678a5`](https://github.com/mastra-ai/mastra/commit/e3678a564cf3bb5922112b4dca65973c5fdc0a92), [`5d5ea03`](https://github.com/mastra-ai/mastra/commit/5d5ea032a4c64cefe5bc217f4cc761a9364ccbf4)]:
+  - @mastra/core@1.79.0-alpha.9
+  - @mastra/code-sdk@1.15.0-alpha.10
+
 ## 0.24.0-alpha.9
 
 ### Patch Changes

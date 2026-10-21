@@ -38,13 +38,13 @@ describe('AgentController.deleteSession', () => {
     const abort = vi.spyOn(session, 'abort');
     const cleanupSubscription = vi.spyOn(session.thread, 'cleanupSubscription');
 
-    await expect(controller.deleteSession({ resourceId: 'resource-1' })).resolves.toBe(true);
+    await expect(controller.deleteSession({ sessionId: 'resource-1' })).resolves.toBe(true);
 
     expect(abort).toHaveBeenCalledOnce();
     expect(cleanupSubscription).toHaveBeenCalledOnce();
     expect(release).toHaveBeenCalledWith(threadId);
     expect(deleted).toHaveBeenCalledWith(session);
-    await expect(controller.getSessionByResource('resource-1')).resolves.toBeUndefined();
+    await expect(controller.getSession('resource-1')).resolves.toBeUndefined();
     expect(await storage.stores.memory?.getThreadById({ threadId, resourceId: 'resource-1' })).not.toBeNull();
   });
 
@@ -54,25 +54,25 @@ describe('AgentController.deleteSession', () => {
     const first = await controller.createSession({ resourceId: 'resource-1' });
     const threadId = first.thread.requireId();
 
-    await controller.deleteSession({ resourceId: 'resource-1' });
+    await controller.deleteSession({ sessionId: 'resource-1' });
     const rematerialized = await controller.createSession({ resourceId: 'resource-1' });
 
     expect(rematerialized).not.toBe(first);
     expect(rematerialized.thread.requireId()).toBe(threadId);
   });
 
-  it('is a no-op for absent sessions and isolates scopes', async () => {
+  it('is a no-op for absent sessions and only deletes the addressed session on a shared resource', async () => {
     const controller = createController(new InMemoryStore());
     await controller.init();
-    const scoped = await controller.createSession({ resourceId: 'resource-1', scope: 'work' });
-    const unscoped = await controller.createSession({ resourceId: 'resource-1' });
+    const work = await controller.createSession({ id: 'session-work', resourceId: 'resource-1' });
+    const other = await controller.createSession({ resourceId: 'resource-1' });
 
-    await expect(controller.deleteSession({ resourceId: 'missing' })).resolves.toBe(false);
-    await expect(controller.deleteSession({ resourceId: 'resource-1', scope: 'work' })).resolves.toBe(true);
+    await expect(controller.deleteSession({ sessionId: 'missing' })).resolves.toBe(false);
+    await expect(controller.deleteSession({ sessionId: 'session-work' })).resolves.toBe(true);
 
-    await expect(controller.getSessionByResource('resource-1', 'work')).resolves.toBeUndefined();
-    await expect(controller.getSessionByResource('resource-1')).resolves.toBe(unscoped);
-    expect(scoped.thread.getId()).toBeNull();
+    await expect(controller.getSession('session-work')).resolves.toBeUndefined();
+    await expect(controller.getSession('resource-1')).resolves.toBe(other);
+    expect(work.thread.getId()).toBeNull();
   });
 
   it('notifies exactly once when deletion is requested concurrently', async () => {
@@ -83,8 +83,8 @@ describe('AgentController.deleteSession', () => {
     controller.onSessionDeleted(deleted);
 
     const results = await Promise.all([
-      controller.deleteSession({ resourceId: 'resource-1' }),
-      controller.deleteSession({ resourceId: 'resource-1' }),
+      controller.deleteSession({ sessionId: 'resource-1' }),
+      controller.deleteSession({ sessionId: 'resource-1' }),
     ]);
 
     expect(results.filter(Boolean)).toHaveLength(1);
@@ -106,11 +106,11 @@ describe('AgentController.deleteSession', () => {
     const unsubscribe = controller.onSessionDeleted(received);
 
     await controller.createSession({ resourceId: 'resource-1' });
-    await controller.deleteSession({ resourceId: 'resource-1' });
+    await controller.deleteSession({ sessionId: 'resource-1' });
     await Promise.resolve();
     unsubscribe();
     await controller.createSession({ resourceId: 'resource-2' });
-    await controller.deleteSession({ resourceId: 'resource-2' });
+    await controller.deleteSession({ sessionId: 'resource-2' });
 
     expect(received).toHaveBeenCalledTimes(1);
     expect(error).toHaveBeenCalledTimes(4);
@@ -128,7 +128,7 @@ describe('AgentController.deleteSession', () => {
     // deleteSession and could return the session being torn down.
     const [reused, deleted] = await Promise.all([
       controller.createSession({ resourceId: 'resource-1' }),
-      controller.deleteSession({ resourceId: 'resource-1' }),
+      controller.deleteSession({ sessionId: 'resource-1' }),
     ]);
 
     // deleteSession must report that it removed the original session.
@@ -148,13 +148,13 @@ describe('AgentController.deleteSession', () => {
     // setResourceId would re-register the aborted session under the new key,
     // and the deletion would only drop the old key.
     await Promise.all([
-      controller.deleteSession({ resourceId: 'resource-1' }),
+      controller.deleteSession({ sessionId: 'resource-1' }),
       controller.setResourceId(session, { resourceId: 'resource-2' }),
     ]);
 
     // The aborted session must not be registered under either key.
-    await expect(controller.getSessionByResource('resource-1')).resolves.toBeUndefined();
-    await expect(controller.getSessionByResource('resource-2')).resolves.toBeUndefined();
+    await expect(controller.getSession('resource-1')).resolves.toBeUndefined();
+    await expect(controller.getSession('resource-2')).resolves.toBeUndefined();
 
     // A fresh session can be created for the new resource — it must not be
     // the original (aborted) session.
@@ -170,11 +170,11 @@ describe('AgentController.deleteSession', () => {
     // Delete fully resolves first — #deletionsInProgress is cleared but
     // #sessionsBeingDeleted still has the session. Without the early return,
     // setResourceId would register the dead session under resource-2.
-    await controller.deleteSession({ resourceId: 'resource-1' });
+    await controller.deleteSession({ sessionId: 'resource-1' });
     await controller.setResourceId(session, { resourceId: 'resource-2' });
 
-    await expect(controller.getSessionByResource('resource-1')).resolves.toBeUndefined();
-    await expect(controller.getSessionByResource('resource-2')).resolves.toBeUndefined();
+    await expect(controller.getSession('resource-1')).resolves.toBeUndefined();
+    await expect(controller.getSession('resource-2')).resolves.toBeUndefined();
 
     // createSession for the new resource must return a fresh session, not
     // loop forever on the dead session.
@@ -200,7 +200,7 @@ describe('AgentController.deleteSession', () => {
     const session = await controller.createSession({ resourceId: 'resource-1' });
 
     // Start deletion — it will block at clearAndReleaseLock.
-    const deletionPromise = controller.deleteSession({ resourceId: 'resource-1' });
+    const deletionPromise = controller.deleteSession({ sessionId: 'resource-1' });
     // Wait for the lock resolver to be installed without invoking it, so the
     // deletion stays in progress when setResourceId runs.
     await vi.waitFor(() => expect(resolveLock).toBeTypeOf('function'));
@@ -214,8 +214,8 @@ describe('AgentController.deleteSession', () => {
     await deletionPromise;
 
     // The dead session must not be registered under either key.
-    await expect(controller.getSessionByResource('resource-1')).resolves.toBeUndefined();
-    await expect(controller.getSessionByResource('resource-2')).resolves.toBeUndefined();
+    await expect(controller.getSession('resource-1')).resolves.toBeUndefined();
+    await expect(controller.getSession('resource-2')).resolves.toBeUndefined();
 
     // createSession for the new resource must return a fresh session.
     const fresh = await controller.createSession({ resourceId: 'resource-2' });
@@ -232,13 +232,13 @@ describe('AgentController.deleteSession', () => {
     const deleted = vi.fn();
     controller.onSessionDeleted(deleted);
 
-    await expect(controller.deleteSession({ resourceId: 'resource-1' })).rejects.toThrow('lock release failed');
+    await expect(controller.deleteSession({ sessionId: 'resource-1' })).rejects.toThrow('lock release failed');
 
     // The failed teardown still deregistered the session, so listeners
     // mirroring the registry must hear about it — otherwise they hold the
     // dead session forever.
     expect(deleted).toHaveBeenCalledWith(session);
-    await expect(controller.getSessionByResource('resource-1')).resolves.toBeUndefined();
+    await expect(controller.getSession('resource-1')).resolves.toBeUndefined();
     const fresh = await controller.createSession({ resourceId: 'resource-1' });
     expect(fresh).not.toBe(session);
   });

@@ -34,6 +34,7 @@ const DIMENSION_SQL: Record<string, string> = {
   entityName: 'r."entityName"',
   name: 'r."name"',
   spanType: 'r."spanType"',
+  entityId: 'r."entityId"',
   environment: 'r."environment"',
   status: TRACE_STATUS_SQL,
   serviceName: 'r."serviceName"',

@@ -105,8 +105,7 @@ import {
   isTraceQueryContextIdField,
   assertObservabilityTraceQueryRootSpanFieldsSupported,
   assertObservabilityTraceQueryRootSpanValuesSupported,
-  isTraceQueryRootSpanField,
-  supportsObservabilityTraceQueryRootSpanFields,
+  supportsObservabilityTraceQueryRootSpanField,
   assertObservabilityTraceQuerySupported,
   createObservabilityListQuerySchema,
   getObservabilityStorageCapabilities,
@@ -842,9 +841,7 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
         )
         .filter(
           field =>
-            predicateScope !== 'trace' ||
-            !isTraceQueryRootSpanField(field.path) ||
-            supportsObservabilityTraceQueryRootSpanFields(observabilityStore),
+            predicateScope !== 'trace' || supportsObservabilityTraceQueryRootSpanField(observabilityStore, field.path),
         );
       // Older Core's strict response schema has no `aggregate` key, so only send it when Core can describe it.
       const describesAggregate =
@@ -859,11 +856,7 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
           aggregate: {
             dimensions: coreStorage
               .getTraceAggregateDimensionDescriptors()
-              .filter(
-                dimension =>
-                  !isTraceQueryRootSpanField(dimension.path) ||
-                  supportsObservabilityTraceQueryRootSpanFields(observabilityStore),
-              ),
+              .filter(dimension => supportsObservabilityTraceQueryRootSpanField(observabilityStore, dimension.path)),
             measures: coreStorage.getTraceAggregateMeasureDescriptors(),
           },
         }),

@@ -303,10 +303,12 @@ export interface GithubRulesOptions {
 /** Identity under which label-driven relocations are recorded. */
 const LABEL_ROUTE_USER_ID = 'factory-rule-dispatcher';
 
-function issueLabelChange(parsed: ParsedGithubWebhook): boolean {
-  const action = string(parsed.payload.action);
-  return parsed.event === 'issues' && (action === 'labeled' || action === 'unlabeled');
-}
+type IssueActionHandler = (
+  parsed: ParsedGithubWebhook,
+  repositoryId: number,
+  repositoryName: string,
+  project: ExternalRepositoryProjectTarget,
+) => Promise<{ status: 'ignored' | 'committed' }>;
 
 /**
  * Whether a login is Factory itself. Prefers the resolved identity, which is
@@ -432,9 +434,83 @@ export class GithubRules {
     return { status: changed || outcome === 'moved' ? 'committed' : 'ignored' };
   }
 
+  /**
+   * `assigned` / `unassigned` are not rule events either: an existing issue card only mirrors the
+   * issue's full assignee list. No card is created, moved, or handed to a run.
+   */
+  async #syncIssueAssignees(
+    parsed: ParsedGithubWebhook,
+    repositoryId: number,
+    repositoryName: string,
+    project: ExternalRepositoryProjectTarget,
+  ): Promise<{ status: 'ignored' | 'committed' }> {
+    const issue = object(parsed.payload.issue);
+    const issueNumber = issue?.pull_request === undefined ? number(issue?.number) : undefined;
+    if (!issueNumber) return { status: 'ignored' };
+    const item = await this.#relatedItem(
+      project.orgId,
+      project.factoryProjectId,
+      repositoryId,
+      repositoryName,
+      issueNumber,
+      undefined,
+      undefined,
+      null,
+    );
+    if (!item || item.externalSource?.type !== 'issue') return { status: 'ignored' };
+    const assignees = actorLogins(issue?.assignees);
+    // GitHub can deliver webhooks out of order; drop payloads older than the last applied one.
+    // Timestamps have one-second resolution, so equal timestamps still apply.
+    const updatedAt = string(issue?.updated_at);
+    const payloadTime = timestamp(updatedAt);
+    const storedTime = timestamp(item.metadata?.githubAssigneesUpdatedAt);
+    if (payloadTime !== undefined && storedTime !== undefined && payloadTime < storedTime) {
+      return { status: 'ignored' };
+    }
+    // A newer payload with unchanged assignees still advances the stored time, so a delayed older
+    // payload cannot slip in behind it.
+    const advancesTime = payloadTime !== undefined && (storedTime === undefined || payloadTime > storedTime);
+    if (sameStrings(item.metadata?.assignees, assignees) && !advancesTime) return { status: 'ignored' };
+    try {
+      const updated = await this.options.storage.update({
+        orgId: item.orgId,
+        id: item.id,
+        userId: LABEL_ROUTE_USER_ID,
+        patch: {
+          metadata: {
+            ...(item.metadata ?? {}),
+            assignees,
+            ...(payloadTime !== undefined ? { githubAssigneesUpdatedAt: updatedAt } : {}),
+          },
+        },
+        expectedRevision: item.revision,
+      });
+      return { status: updated ? 'committed' : 'ignored' };
+    } catch (error) {
+      // A concurrent write won; nothing reconciles issue-card assignees, so they stay as the
+      // winner left them until the next assigned/unassigned delivery for this issue.
+      if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+      return { status: 'ignored' };
+    }
+  }
+
+  /** `issues` actions that are not rule events but still update an existing card. */
+  #issueActionHandler(parsed: ParsedGithubWebhook): IssueActionHandler | undefined {
+    if (parsed.event !== 'issues') return undefined;
+    switch (string(parsed.payload.action)) {
+      case 'labeled':
+      case 'unlabeled':
+        return (...args) => this.#relocateLabeledIssue(...args);
+      case 'assigned':
+      case 'unassigned':
+        return (...args) => this.#syncIssueAssignees(...args);
+      default:
+        return undefined;
+    }
+  }
+
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
-    const labelChange = issueLabelChange(parsed);
     const repository = object(parsed.payload.repository);
     const installationId = number(object(parsed.payload.installation)?.id);
     const repositoryId = number(repository?.id);
@@ -444,9 +520,15 @@ export class GithubRules {
       await this.#handOffPush(parsed, installationId, repositoryId);
       return { status: 'ignored' };
     }
-    if ((!event && !labelChange) || !installationId || !repositoryId || !repositoryName || !login) {
-      return { status: 'ignored' };
-    }
+    if (!installationId || !repositoryId || !repositoryName || !login) return { status: 'ignored' };
+    const issueAction = this.#issueActionHandler(parsed);
+    const handle = event
+      ? (project: ExternalRepositoryProjectTarget) =>
+          this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project)
+      : issueAction
+        ? (project: ExternalRepositoryProjectTarget) => issueAction(parsed, repositoryId, repositoryName, project)
+        : undefined;
+    if (!handle) return { status: 'ignored' };
 
     const projects = await this.options.sourceControl.projectRepositories.listByExternalRepository({
       installationExternalId: String(installationId),
@@ -455,11 +537,7 @@ export class GithubRules {
     if (projects.length === 0) return { status: 'ignored' };
     const results = [];
     for (const project of projects) {
-      results.push(
-        event
-          ? await this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project)
-          : await this.#relocateLabeledIssue(parsed, repositoryId, repositoryName, project),
-      );
+      results.push(await handle(project));
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };

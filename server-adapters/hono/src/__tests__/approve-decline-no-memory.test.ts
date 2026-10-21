@@ -10,6 +10,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { LLMock } from '@copilotkit/aimock';
 import { MastraClient, createTool as createClientTool } from '@mastra/client-js';
 import { Agent } from '@mastra/core/agent';
+import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -26,187 +27,226 @@ const EARLIER_EXCHANGE = [
   { role: 'assistant' as const, content: 'Hi.' },
 ];
 
-describe('client-js approve/decline client-tool continuation without memory (#27754)', () => {
-  let llm: LLMock;
+type AgentKind = 'agent' | 'durable' | 'evented';
 
-  beforeAll(async () => {
-    llm = new LLMock({ port: 0 });
-    await llm.start();
-  });
+/** Wraps the plain agent in the requested execution engine. */
+function asKind(kind: AgentKind, agent: Agent) {
+  if (kind === 'durable') return createDurableAgent({ agent });
+  if (kind === 'evented') return createEventedAgent({ agent });
+  return agent;
+}
 
-  afterEach(() => {
-    llm.clearFixtures();
-    llm.clearRequests();
-    llm.resetMatchCounts();
-  });
+describe.each(['agent', 'durable', 'evented'] as const)(
+  'client-js approve/decline client-tool continuation without memory, %s (#27754, #27777)',
+  kind => {
+    let llm: LLMock;
 
-  afterAll(async () => {
-    await llm.stop();
-  });
-
-  async function setup() {
-    const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
-
-    const agent = new Agent({
-      id: 'approval-agent',
-      name: 'approval-agent',
-      instructions: 'Use the tools.',
-      model: openai('gpt-4o-mini'),
-      tools: {
-        serverTool: createTool({
-          id: 'serverTool',
-          description: 'Server tool that needs approval.',
-          inputSchema: z.object({ value: z.string() }),
-          requireApproval: true,
-          execute: async ({ value }) => ({ ok: value }),
-        }),
-      },
+    beforeAll(async () => {
+      llm = new LLMock({ port: 0 });
+      await llm.start();
     });
 
-    const mastra = new Mastra({ logger: false, storage: new InMemoryStore(), agents: { agent } });
-    const app = new Hono();
-    const adapter = new MastraServer({ app, mastra, prefix: '/api' });
-    await adapter.init();
-
-    const fetchViaApp: typeof fetch = async (input, init) => app.fetch(new Request(input, init));
-    return new MastraClient({ baseUrl: 'http://localhost', retries: 0, fetch: fetchViaApp });
-  }
-
-  function registerFixtures() {
-    // Turn 1: model asks for the server tool, which requires approval.
-    llm.on(
-      { endpoint: 'chat', hasToolResult: false },
-      { toolCalls: [{ id: 'call_server', name: 'serverTool', arguments: { value: 'a' } }] },
-    );
-    // Turn 2 (after approve or decline): model calls the client tool.
-    llm.on(
-      { endpoint: 'chat', toolCallId: 'call_server', hasToolResult: true },
-      { toolCalls: [{ id: 'call_client', name: 'clientTool', arguments: { value: 'b' } }] },
-    );
-    // Turn 3 (after the client tool result): final answer.
-    llm.on({ endpoint: 'chat', toolCallId: 'call_client', hasToolResult: true }, { content: 'All done.' });
-  }
-
-  async function collect(response: {
-    processDataStream: (opts: { onChunk: (c: Chunk) => Promise<void> }) => Promise<void>;
-  }) {
-    const chunks: Chunk[] = [];
-    await response.processDataStream({
-      onChunk: async chunk => {
-        chunks.push(chunk);
-      },
+    afterEach(() => {
+      llm.clearFixtures();
+      llm.clearRequests();
+      llm.resetMatchCounts();
     });
-    return chunks;
-  }
 
-  function executableClientTool(runs: string[]) {
-    return createClientTool({
-      id: 'clientTool',
-      description: 'Client tool executed by the caller.',
-      inputSchema: z.object({ value: z.string() }),
-      execute: async ({ value }) => {
-        runs.push(value);
-        return { echoed: value };
-      },
+    afterAll(async () => {
+      await llm.stop();
     });
-  }
 
-  async function suspendOnApproval(
-    client: MastraClient,
-    clientTools: Record<string, ReturnType<typeof createClientTool>>,
-    { withEarlierExchange = false }: { withEarlierExchange?: boolean } = {},
-  ) {
-    const agent = client.getAgent('agent');
-    const prompt = { role: 'user' as const, content: 'Do the thing.' };
-    const input = withEarlierExchange ? [...EARLIER_EXCHANGE, prompt] : [prompt];
-    const chunks = await collect(await agent.stream(input, { clientTools }));
-    const approval = chunks.find(c => c.type === 'tool-call-approval');
-    expect(approval?.payload?.toolCallId).toBe('call_server');
-    const runId = approval?.runId;
-    if (!runId) throw new Error('stream did not suspend for approval');
-    return { agent, runId };
-  }
+    async function setup() {
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
 
-  function finalRequestMessages() {
-    const messages: { role: string; content?: unknown; tool_calls?: { id: string }[]; tool_call_id?: string }[] =
-      llm.getRequests().at(-1)?.body?.messages ?? [];
-    return messages;
-  }
+      const agent = new Agent({
+        id: 'approval-agent',
+        name: 'approval-agent',
+        instructions: 'Use the tools.',
+        model: openai('gpt-4o-mini'),
+        tools: {
+          serverTool: createTool({
+            id: 'serverTool',
+            description: 'Server tool that needs approval.',
+            inputSchema: z.object({ value: z.string() }),
+            requireApproval: true,
+            execute: async ({ value }) => ({ ok: value }),
+          }),
+        },
+      });
 
-  function expectFullHistoryOnFinalRequest() {
-    const last = finalRequestMessages();
-    // The final model call answers the client tool result...
-    expect(last.at(-1)).toMatchObject({ role: 'tool', tool_call_id: 'call_client' });
-    // ...and still sees the original prompt and the approval-gated server tool turn.
-    expect(last).toContainEqual(expect.objectContaining({ role: 'user', content: 'Do the thing.' }));
-    expect(last.some(m => m.role === 'assistant' && m.tool_calls?.some(c => c.id === 'call_server'))).toBe(true);
-    expect(last).toContainEqual(expect.objectContaining({ role: 'tool', tool_call_id: 'call_server' }));
-    // Each turn is sent once.
-    expect(last.filter(m => m.role === 'user')).toHaveLength(1);
-    expect(last.filter(m => m.role === 'assistant' && m.tool_calls?.some(c => c.id === 'call_client'))).toHaveLength(1);
-  }
+      const mastra = new Mastra({
+        logger: false,
+        storage: new InMemoryStore(),
+        agents: { agent: asKind(kind, agent) },
+      });
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra, prefix: '/api' });
+      await adapter.init();
 
-  it.each(['approveToolCall', 'declineToolCall'] as const)('%s continuation keeps the conversation', async method => {
-    registerFixtures();
-    const client = await setup();
-    const runs: string[] = [];
-    const clientTools = { clientTool: executableClientTool(runs) };
-    const { agent, runId } = await suspendOnApproval(client, clientTools);
+      const fetchViaApp: typeof fetch = async (input, init) => app.fetch(new Request(input, init));
+      return new MastraClient({ baseUrl: 'http://localhost', retries: 0, fetch: fetchViaApp });
+    }
 
-    const chunks = await collect(await agent[method]({ runId, toolCallId: 'call_server', clientTools }));
+    function registerFixtures() {
+      // Turn 1: model asks for the server tool, which requires approval.
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        { toolCalls: [{ id: 'call_server', name: 'serverTool', arguments: { value: 'a' } }] },
+      );
+      // Turn 2 (after approve or decline): model calls the client tool.
+      llm.on(
+        { endpoint: 'chat', toolCallId: 'call_server', hasToolResult: true },
+        { toolCalls: [{ id: 'call_client', name: 'clientTool', arguments: { value: 'b' } }] },
+      );
+      // Turn 3 (after the client tool result): final answer.
+      llm.on({ endpoint: 'chat', toolCallId: 'call_client', hasToolResult: true }, { content: 'All done.' });
+    }
 
-    expect(runs).toEqual(['b']);
-    expect(chunks.filter(c => c.type === 'tool-error')).toEqual([]);
-    expectFullHistoryOnFinalRequest();
-  });
+    async function collect(response: {
+      processDataStream: (opts: { onChunk: (c: Chunk) => Promise<void> }) => Promise<void>;
+    }) {
+      const chunks: Chunk[] = [];
+      await response.processDataStream({
+        onChunk: async chunk => {
+          chunks.push(chunk);
+        },
+      });
+      return chunks;
+    }
 
-  it.each(['approveToolCallGenerate', 'declineToolCallGenerate'] as const)(
-    '%s continuation keeps the conversation',
-    async method => {
+    function executableClientTool(runs: string[]) {
+      return createClientTool({
+        id: 'clientTool',
+        description: 'Client tool executed by the caller.',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async ({ value }) => {
+          runs.push(value);
+          return { echoed: value };
+        },
+      });
+    }
+
+    async function suspendOnApproval(
+      client: MastraClient,
+      clientTools: Record<string, ReturnType<typeof createClientTool>>,
+      { withEarlierExchange = false }: { withEarlierExchange?: boolean } = {},
+    ) {
+      const agent = client.getAgent('agent');
+      const prompt = { role: 'user' as const, content: 'Do the thing.' };
+      const input = withEarlierExchange ? [...EARLIER_EXCHANGE, prompt] : [prompt];
+      const response = await agent.stream(input, { clientTools });
+      // Read the first stream the way an app does: act on the approval request as soon as it
+      // arrives, while the stream keeps being processed in the background.
+      let onApproval: (chunk: Chunk) => void = () => {};
+      const approvalSeen = new Promise<Chunk>(resolve => {
+        onApproval = resolve;
+      });
+      const initialStreamDone = response
+        .processDataStream({
+          onChunk: async chunk => {
+            if (chunk.type === 'tool-call-approval') onApproval(chunk);
+          },
+        })
+        .finally(() => onApproval({ type: 'closed-without-approval' }));
+      const approval = await approvalSeen;
+      expect(approval.payload?.toolCallId).toBe('call_server');
+      const runId = approval.runId;
+      if (!runId) throw new Error('stream did not suspend for approval');
+      return { agent, runId, initialStreamDone };
+    }
+
+    function finalRequestMessages() {
+      const messages: { role: string; content?: unknown; tool_calls?: { id: string }[]; tool_call_id?: string }[] =
+        llm.getRequests().at(-1)?.body?.messages ?? [];
+      return messages;
+    }
+
+    function expectFullHistoryOnFinalRequest() {
+      const last = finalRequestMessages();
+      // The final model call answers the client tool result...
+      expect(last.at(-1)).toMatchObject({ role: 'tool', tool_call_id: 'call_client' });
+      // ...and still sees the original prompt and the approval-gated server tool turn.
+      expect(last).toContainEqual(expect.objectContaining({ role: 'user', content: 'Do the thing.' }));
+      expect(last.some(m => m.role === 'assistant' && m.tool_calls?.some(c => c.id === 'call_server'))).toBe(true);
+      expect(last).toContainEqual(expect.objectContaining({ role: 'tool', tool_call_id: 'call_server' }));
+      // Each turn is sent once.
+      expect(last.filter(m => m.role === 'user')).toHaveLength(1);
+      expect(last.filter(m => m.role === 'assistant' && m.tool_calls?.some(c => c.id === 'call_client'))).toHaveLength(
+        1,
+      );
+    }
+
+    it.each(['approveToolCall', 'declineToolCall'] as const)('%s continuation keeps the conversation', async method => {
       registerFixtures();
       const client = await setup();
       const runs: string[] = [];
       const clientTools = { clientTool: executableClientTool(runs) };
-      const { agent, runId } = await suspendOnApproval(client, clientTools);
+      const { agent, runId, initialStreamDone } = await suspendOnApproval(client, clientTools);
 
-      const result = await agent[method]({ runId, toolCallId: 'call_server', clientTools });
+      const chunks = await collect(await agent[method]({ runId, toolCallId: 'call_server', clientTools }));
 
+      // The first stream is still being processed; once it ends the client tool must have run once.
+      await initialStreamDone;
       expect(runs).toEqual(['b']);
-      expect(result.text).toBe('All done.');
+      expect(chunks.filter(c => c.type === 'tool-error')).toEqual([]);
       expectFullHistoryOnFinalRequest();
-    },
-  );
+    });
 
-  it.each(['approveToolCall', 'declineToolCall', 'approveToolCallGenerate', 'declineToolCallGenerate'] as const)(
-    '%s continuation keeps earlier turns the caller sent, in order',
-    async method => {
-      registerFixtures();
-      const client = await setup();
-      const runs: string[] = [];
-      const clientTools = { clientTool: executableClientTool(runs) };
-      const { agent, runId } = await suspendOnApproval(client, clientTools, { withEarlierExchange: true });
+    it.each(['approveToolCallGenerate', 'declineToolCallGenerate'] as const)(
+      '%s continuation keeps the conversation',
+      async method => {
+        registerFixtures();
+        const client = await setup();
+        const runs: string[] = [];
+        const clientTools = { clientTool: executableClientTool(runs) };
+        const { agent, runId, initialStreamDone } = await suspendOnApproval(client, clientTools);
 
-      const params = { runId, toolCallId: 'call_server', clientTools };
-      if (method === 'approveToolCall' || method === 'declineToolCall') {
-        await collect(await agent[method](params));
-      } else {
-        expect((await agent[method](params)).text).toBe('All done.');
-      }
+        const result = await agent[method]({ runId, toolCallId: 'call_server', clientTools });
 
-      expect(runs).toEqual(['b']);
-      const final = finalRequestMessages();
-      expect(final.map(m => m.role)).toEqual([
-        'system',
-        'user',
-        'assistant',
-        'user',
-        'assistant',
-        'tool',
-        'assistant',
-        'tool',
-      ]);
-      expect(final.slice(1, 4).map(m => m.content)).toEqual(['Earlier.', 'Hi.', 'Do the thing.']);
-      expect(final.filter(m => m.role === 'tool').map(m => m.tool_call_id)).toEqual(['call_server', 'call_client']);
-    },
-  );
-});
+        // The first stream is still being processed; once it ends the client tool must have run once.
+        await initialStreamDone;
+        expect(runs).toEqual(['b']);
+        expect(result.text).toBe('All done.');
+        expectFullHistoryOnFinalRequest();
+      },
+    );
+
+    it.each(['approveToolCall', 'declineToolCall', 'approveToolCallGenerate', 'declineToolCallGenerate'] as const)(
+      '%s continuation keeps earlier turns the caller sent, in order',
+      async method => {
+        registerFixtures();
+        const client = await setup();
+        const runs: string[] = [];
+        const clientTools = { clientTool: executableClientTool(runs) };
+        const { agent, runId, initialStreamDone } = await suspendOnApproval(client, clientTools, {
+          withEarlierExchange: true,
+        });
+
+        const params = { runId, toolCallId: 'call_server', clientTools };
+        if (method === 'approveToolCall' || method === 'declineToolCall') {
+          await collect(await agent[method](params));
+        } else {
+          expect((await agent[method](params)).text).toBe('All done.');
+        }
+
+        // The first stream is still being processed; once it ends the client tool must have run once.
+        await initialStreamDone;
+        expect(runs).toEqual(['b']);
+        const final = finalRequestMessages();
+        expect(final.map(m => m.role)).toEqual([
+          'system',
+          'user',
+          'assistant',
+          'user',
+          'assistant',
+          'tool',
+          'assistant',
+          'tool',
+        ]);
+        expect(final.slice(1, 4).map(m => m.content)).toEqual(['Earlier.', 'Hi.', 'Do the thing.']);
+        expect(final.filter(m => m.role === 'tool').map(m => m.tool_call_id)).toEqual(['call_server', 'call_client']);
+      },
+    );
+  },
+);
