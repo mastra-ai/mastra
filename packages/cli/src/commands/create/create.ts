@@ -8,6 +8,7 @@ import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { findTemplateByName, loadTemplates, selectTemplate } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
 import { getToken, LoginCancelledError } from '../auth/credentials.js';
+import type { LoginSource } from '../auth/credentials.js';
 import { OrgSelectionCancelledError, resolveCurrentOrg } from '../auth/orgs.js';
 import { provisionObservabilityProject } from '../init/observability-provision';
 import { installMastraSkills } from '../init/skills-install';
@@ -90,6 +91,7 @@ export interface CreateOptions {
   analytics?: PosthogAnalytics;
   resolveVersionTag?: () => Promise<string | undefined>;
   install?: boolean;
+  loginSource?: LoginSource;
 }
 
 type PlatformSetupResult =
@@ -102,7 +104,7 @@ function cancelCreate(): never {
   throw new CreateCancelledError();
 }
 
-async function runCreatePrompt<T>(prompt: (signal: AbortSignal) => Promise<T | symbol>): Promise<T> {
+async function runCreatePrompt<T>(prompt: (signal: AbortSignal) => Promise<T | typeof p.CANCEL_SYMBOL>): Promise<T> {
   const controller = new AbortController();
   let rejectCancellation: (error: CreateCancelledError) => void = () => {};
   let cancellationAnnounced = false;
@@ -226,7 +228,7 @@ function normalizeDirectCreateOptions(args: CreateOptions): NormalizedCreateOpti
 export async function runCreateCommand(
   projectName: string | undefined,
   options: CreateCommandOptions,
-  dependencies: Pick<CreateOptions, 'analytics' | 'resolveVersionTag'> = {},
+  dependencies: Pick<CreateOptions, 'analytics' | 'resolveVersionTag' | 'loginSource'> = {},
 ): Promise<void> {
   const normalized = normalizeCreateCommandOptions(projectName, options);
   await create({ ...normalized, ...dependencies });
@@ -279,7 +281,10 @@ export const create = async (args: CreateOptions): Promise<void> => {
         platformSetupController = new AbortController();
         platformSetupPromise = (async (): Promise<PlatformSetupResult> => {
           try {
-            const token = await getToken(platformSetupController!.signal, { skipOnInput: true });
+            const token = await getToken(platformSetupController!.signal, {
+              skipOnInput: true,
+              source: args.loginSource,
+            });
             const org = await resolveCurrentOrg(token, {
               forcePrompt: true,
               exitOnCancel: false,

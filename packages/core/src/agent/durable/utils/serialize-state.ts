@@ -4,9 +4,11 @@ import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { ToolCallConcurrency } from '../../../loop/types';
 import type { MemoryConfig } from '../../../memory/types';
 import type { CoreTool } from '../../../tools/types';
+import { boundedStringify } from '../../../utils/safe-stringify';
 import type { MessageList } from '../../message-list';
 import type { AgentModelManagerConfig } from '../../types';
 import type {
+  SerializableClientTool,
   SerializableToolMetadata,
   SerializableModelConfig,
   SerializableModelListEntry,
@@ -79,6 +81,7 @@ export function serializeModelConfig(model: MastraLanguageModel): SerializableMo
  */
 export function serializeModelListEntry(entry: AgentModelManagerConfig): SerializableModelListEntry {
   const model = entry.model;
+  const settings = serializeModelSettings(entry.modelSettings);
   return {
     id: entry.id,
     config: {
@@ -86,6 +89,7 @@ export function serializeModelListEntry(entry: AgentModelManagerConfig): Seriali
       modelId: model.modelId,
       specificationVersion: model.specificationVersion,
       originalConfig: `${model.provider}/${model.modelId}`,
+      ...(settings ? { settings } : {}),
       providerOptions: entry.providerOptions,
     },
     maxRetries: entry.maxRetries,
@@ -157,6 +161,7 @@ export function serializeDurableState(params: {
   threadExists?: boolean;
   savePerStep?: boolean;
   observationalMemory?: boolean;
+  fixedMemory?: boolean;
 }): SerializableDurableState {
   return {
     memoryConfig: params.memoryConfig,
@@ -165,6 +170,7 @@ export function serializeDurableState(params: {
     threadExists: params.threadExists,
     savePerStep: params.savePerStep,
     observationalMemory: params.observationalMemory,
+    fixedMemory: params.fixedMemory,
   };
 }
 
@@ -232,9 +238,57 @@ export function serializeModelSettings(
 }
 
 /**
+ * Snapshot call-time client tools from their converted CoreTools so a worker in
+ * another process can rebuild them. Provider tools (no JSON input schema to
+ * carry) are skipped.
+ */
+export function serializeClientTools(
+  clientTools: Record<string, unknown> | undefined,
+  tools: Record<string, CoreTool>,
+): Record<string, SerializableClientTool> | undefined {
+  if (!clientTools) return undefined;
+  const out: Record<string, SerializableClientTool> = {};
+  for (const name of Object.keys(clientTools)) {
+    const tool = tools[name];
+    if (
+      !tool ||
+      (tool as { type?: string }).type === 'provider-defined' ||
+      (tool as { type?: string }).type === 'provider'
+    ) {
+      continue;
+    }
+    const meta = serializeToolMetadata(name, tool);
+    out[name] = {
+      id: meta.id,
+      description: meta.description,
+      inputSchema: meta.inputSchema,
+      requireApproval: meta.requireApproval,
+    };
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Collect the tool names from call-time toolsets so a cross-process worker can
+ * detect that they are unavailable.
+ */
+export function serializeToolsetToolNames(
+  toolsets: Record<string, Record<string, unknown> | undefined> | undefined,
+): string[] | undefined {
+  if (!toolsets) return undefined;
+  const names = new Set<string>();
+  for (const toolset of Object.values(toolsets)) {
+    for (const name of Object.keys(toolset ?? {})) names.add(name);
+  }
+  return names.size > 0 ? [...names] : undefined;
+}
+
+/**
  * Extract serializable options from agent execution options
  */
 export function serializeDurableOptions(options: {
+  clientTools?: SerializableDurableOptions['clientTools'];
+  toolsetToolNames?: string[];
   maxSteps?: number;
   toolChoice?: any;
   activeTools?: string[];
@@ -277,6 +331,8 @@ export function serializeDurableOptions(options: {
   }
 
   return {
+    clientTools: options.clientTools,
+    toolsetToolNames: options.toolsetToolNames,
     maxSteps: options.maxSteps,
     toolChoice: serializedToolChoice,
     activeTools: options.activeTools,
@@ -324,7 +380,19 @@ export function createWorkflowInput(params: {
   agentSpanData?: unknown;
   modelSpanData?: unknown;
   requestContextEntries?: Record<string, unknown>;
+  inputTripwire?: DurableAgenticWorkflowInput['inputTripwire'];
 }): DurableAgenticWorkflowInput {
+  // Unsupported metadata must not discard the terminal rejection itself.
+  const metadataJson = params.inputTripwire ? boundedStringify(params.inputTripwire.metadata) : undefined;
+  const inputTripwire = params.inputTripwire
+    ? {
+        reason: params.inputTripwire.reason,
+        retry: params.inputTripwire.retry,
+        processorId: params.inputTripwire.processorId,
+        ...(metadataJson === undefined ? {} : { metadata: JSON.parse(metadataJson) }),
+      }
+    : undefined;
+
   return {
     __workflowKind: 'durable-agent',
     runId: params.runId,
@@ -342,6 +410,7 @@ export function createWorkflowInput(params: {
     agentSpanData: params.agentSpanData,
     modelSpanData: params.modelSpanData,
     requestContextEntries: params.requestContextEntries,
+    inputTripwire,
   };
 }
 

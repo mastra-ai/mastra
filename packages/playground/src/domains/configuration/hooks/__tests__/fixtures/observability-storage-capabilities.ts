@@ -1,32 +1,27 @@
-import type { GetSystemPackagesResponse } from '@mastra/client-js';
+import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 
-const baseSystemPackages: GetSystemPackagesResponse = {
-  packages: [],
-  isDev: false,
-  cmsEnabled: false,
-  observabilityEnabled: true,
-};
-
-export const renamedPostgresWithMetrics: GetSystemPackagesResponse = {
-  ...baseSystemPackages,
+export const renamedPostgresWithMetrics: GetObservabilityCapabilitiesResponse = {
   observabilityStorageType: '_ObservabilityStoragePostgresVNext',
-  observabilityStorageCapabilities: {
+  capabilities: {
     metrics: true,
     logs: true,
     traceQueryDiscovery: false,
   },
 };
 
-export const legacyPostgresWithoutCapabilities: GetSystemPackagesResponse = {
-  ...baseSystemPackages,
+export const storageWithoutMetrics: GetObservabilityCapabilitiesResponse = {
   observabilityStorageType: 'ObservabilityStoragePostgresVNext',
+  capabilities: {
+    metrics: false,
+    logs: true,
+    traceQueryDiscovery: false,
+  },
 };
 
-export const storageWithoutMetrics: GetSystemPackagesResponse = {
-  ...baseSystemPackages,
-  observabilityStorageType: 'ObservabilityStoragePostgresVNext',
-  observabilityStorageCapabilities: {
-    metrics: false,
+export const inMemoryStorage: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityInMemory',
+  capabilities: {
+    metrics: true,
     logs: true,
     traceQueryDiscovery: false,
   },

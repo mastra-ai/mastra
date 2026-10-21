@@ -7,7 +7,7 @@ description: React performance optimization guidelines from Mastra Engineering. 
 
 ## Overview
 
-Routing and priority guide for React performance and quality, containing 26 rules across 9 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
+Routing and priority guide for React performance and quality, containing 27 rules across 9 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
 
 ## When to Apply
 
@@ -73,6 +73,7 @@ Rules are prioritized by impact:
 - Extract complex derived logic into named locals plus predicates or pure helpers with early returns: oversized conditions, nested ternaries, ternaries that compute instead of picking (multi-line branches, or an `as` cast re-asserting what the condition tested), fallback chains, and `let`-based render prep are code smells, in render prep and in hook options, request builders, config maps, and reducers alike (`structure-complex-derived-logic`)
 - Pick the view with early `if` guards but keep the layout wrapper in one place — branch a body component, don't ternary or duplicate the shell (`structure-early-return-render-branches`)
 - For a fixed set of items, write one component per item with explicit props that owns its data and loading — don't map a config-object array onto a component shape (`structure-composition-over-config`)
+- When a domain component fetches data, render through a pure layout component that positions slots, and branch the slot contents between skeletons and resolved sub-domain components (`structure-data-fetching-layout`)
 
 **Testing:**
 
@@ -121,5 +122,5 @@ grep -l "Tanstack" references/rules/
 - `rendering-*` - DOM rendering performance (2 rules)
 - `js-*` - JavaScript micro-optimizations (3 rules)
 - `types-*` - Type-safety / no-`as`-cast and no-`null` rules (2 rules)
-- `structure-*` - Component/hook/function/utility structure (7 rules)
+- `structure-*` - Component/hook/function/utility structure (8 rules)
 - `testing-*` - BDD tests + mock-only-the-network policy + no className implementation-mirror assertions (2 rules)

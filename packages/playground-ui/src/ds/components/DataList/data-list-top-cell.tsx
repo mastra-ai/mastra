@@ -1,9 +1,11 @@
-import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
-import { forwardRef } from 'react';
+import type { ComponentPropsWithoutRef, DragEvent, ElementType, KeyboardEvent, ReactNode } from 'react';
+import { forwardRef, useState } from 'react';
+import { useDataListReorder } from './data-list-reorder-context';
 import { dataListStickyStartStyles } from './shared';
 import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
+import { focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type DataListTopCellProps = {
@@ -22,6 +24,49 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
   ({ children, className, as, sticky, ...rest }, ref) => {
     const Component = as || 'span';
     const isText = typeof children === 'string' || typeof children === 'number';
+    const { reorderable, order, move } = useDataListReorder();
+    const [isDropTarget, setIsDropTarget] = useState(false);
+    const canReorder = reorderable && !sticky;
+
+    const reorderProps = canReorder
+      ? {
+          draggable: true,
+          tabIndex: 0,
+          'aria-roledescription': 'draggable column',
+          'data-drop-target': isDropTarget || undefined,
+          onDragStart: (event: DragEvent<HTMLElement>) => {
+            const from = getVisualPosition(event.currentTarget, order);
+            if (from === null) return event.preventDefault();
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData(DRAG_TYPE, String(from));
+          },
+          onDragOver: (event: DragEvent<HTMLElement>) => {
+            if (!event.dataTransfer.types.includes(DRAG_TYPE)) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            setIsDropTarget(true);
+          },
+          onDragLeave: () => setIsDropTarget(false),
+          onDrop: (event: DragEvent<HTMLElement>) => {
+            setIsDropTarget(false);
+            const from = Number(event.dataTransfer.getData(DRAG_TYPE));
+            const to = getVisualPosition(event.currentTarget, order);
+            if (to === null || Number.isNaN(from)) return;
+            event.preventDefault();
+            move(from, to);
+          },
+          onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+            if (!event.altKey || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return;
+            const from = getVisualPosition(event.currentTarget, order);
+            if (from === null) return;
+            const to = from + (event.key === 'ArrowLeft' ? -1 : 1);
+            if (isStickyAt(event.currentTarget, order, to)) return;
+            event.preventDefault();
+            move(from, to);
+          },
+        }
+      : undefined;
+
     return (
       <Component
         ref={ref}
@@ -30,8 +75,12 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
           sticky === 'start' && dataListStickyStartStyles,
           sticky === 'start' && '-mx-3 w-auto max-w-none px-3',
           sticky === 'start' && 'z-20',
+          canReorder &&
+            'cursor-grab active:cursor-grabbing data-drop-target:shadow-[inset_2px_0_0_var(--border-focus)]',
+          canReorder && focusRingInset,
           className,
         )}
+        {...reorderProps}
         {...rest}
       >
         {/* Plain string/number titles truncate with an ellipsis; element children
@@ -41,6 +90,23 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
     );
   },
 );
+
+const DRAG_TYPE = 'application/x-mastra-data-list-column';
+
+/** Visual position of a header cell, or `null` when it is not in a full-width cells container. */
+function getVisualPosition(cell: HTMLElement, order: number[]): number | null {
+  const parent = cell.parentElement;
+  if (!parent?.classList.contains('data-list-cells')) return null;
+  const visual = order.indexOf(Array.from(parent.children).indexOf(cell));
+  return visual === -1 ? null : visual;
+}
+
+/** Whether the header cell at `visual` is pinned (so nothing may move into its slot). */
+function isStickyAt(cell: HTMLElement, order: number[], visual: number): boolean {
+  const original = order[visual];
+  if (original === undefined) return true;
+  return cell.parentElement?.children[original]?.classList.contains('data-list-sticky-start') ?? true;
+}
 
 export type DataListTopCellWithTooltipProps = {
   children: ReactNode;

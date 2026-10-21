@@ -8,7 +8,10 @@ import type { InternalCoreTool, MCPToolType } from '../tools';
 import { slugify } from '../utils/slugify';
 import type {
   MCPServerConfig,
+  MCPServerEventInfo,
+  MCPServerEventsInspector,
   MCPServerHonoSSEOptions,
+  MCPServerIcon,
   MCPServerHTTPOptions,
   MCPServerSSEOptions,
   PackageInfo,
@@ -42,6 +45,12 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
   private _id: TId;
   /** A description of what the MCP server does. */
   public readonly description?: string;
+  /** A human-readable display title for the MCP server. */
+  public readonly title?: string;
+  /** The URL of the server's website. */
+  public readonly websiteUrl?: string;
+  /** Icons clients can display for the server. */
+  public readonly icons?: MCPServerIcon[];
   /** Optional instructions describing how to use the server and its features. */
   public readonly instructions?: string;
   /** Repository information for the server's source code. */
@@ -189,6 +198,9 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
     }
 
     this.description = config.description;
+    this.title = config.title;
+    this.websiteUrl = config.websiteUrl;
+    this.icons = config.icons;
     this.instructions = config.instructions;
     this.repository = config.repository;
     this.releaseDate = config.releaseDate || new Date().toISOString();
@@ -345,9 +357,9 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
    * @param uri The resource URI to read (e.g. `ui://weather/dashboard`).
    * @returns A promise resolving to the resource content.
    */
-  public abstract readResource(
-    uri: string,
-  ): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }>;
+  public abstract readResource(uri: string): Promise<{
+    contents: Array<{ uri: string; text?: string; blob?: string; mimeType?: string; _meta?: Record<string, unknown> }>;
+  }>;
 
   /**
    * Lists all resources available on this MCP server.
@@ -362,4 +374,18 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
       _meta?: Record<string, unknown>;
     }>;
   }>;
+
+  /**
+   * The event types this server declares, or `undefined` when it has none.
+   * Optional: implementations without events omit it.
+   * @experimental
+   */
+  public getEventsInfo?(): { events: MCPServerEventInfo[] } | undefined;
+
+  /**
+   * Polls, streams, and test-emits this server's events in-process (used by Studio),
+   * or `undefined` when it has none.
+   * @experimental
+   */
+  public getEventsInspector?(): MCPServerEventsInspector | undefined;
 }

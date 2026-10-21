@@ -77,6 +77,12 @@ describe('resolveProjectId', () => {
     expect(mockLoadProjectConfig).not.toHaveBeenCalled();
   });
 
+  it('prefers the explicit --project flag over MASTRA_PROJECT_ID', async () => {
+    process.env.MASTRA_PROJECT_ID = 'from-env';
+    const { resolveProjectId } = await import('./env.js');
+    await expect(resolveProjectId({ project: 'from-flag' })).resolves.toBe('from-flag');
+  });
+
   it('resolves slug via fetchServerProjects when auth provided', async () => {
     mockFetchServerProjects.mockResolvedValue([{ id: 'uuid-1', name: 'App', slug: 'my-app', organizationId: 'org-1' }]);
     const { resolveProjectId } = await import('./env.js');

@@ -1,6 +1,7 @@
 import { builtinModules } from 'node:module';
 import { join } from 'node:path';
 import process from 'node:process';
+import type { BundlerConfig } from '@mastra/core/bundler';
 import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import type { BundlerOptions } from '@mastra/deployer/bundler';
@@ -75,16 +76,23 @@ export class NetlifyDeployer extends Deployer {
       this.target === 'edge' ? join('.netlify', 'v1', 'edge-functions') : join('.netlify', 'v1', 'functions', 'api');
   }
 
-  protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
+  protected async installDependencies(
+    outputDirectory: string,
+    rootDir = process.cwd(),
+    pnpmOverrides?: Record<string, string>,
+    pnpmWorkspaceSettings?: BundlerConfig['pnpmWorkspaceSettings'],
+  ) {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
     if (this.target === 'edge') {
       // Edge functions run on Deno — no platform-specific architecture constraints
-      await deps.install({ dir: join(outputDirectory, this.outputDir) });
+      await deps.install({ dir: join(outputDirectory, this.outputDir), pnpmOverrides, pnpmWorkspaceSettings });
     } else {
       await deps.install({
         dir: join(outputDirectory, this.outputDir),
+        pnpmOverrides,
+        pnpmWorkspaceSettings,
         architecture: {
           os: ['linux'],
           cpu: ['x64'],

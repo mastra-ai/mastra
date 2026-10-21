@@ -10,11 +10,12 @@ import { MemoryPage } from '../memory-page';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
-function Harness({ scope }: { scope: 'thread' | 'resource' }) {
+function Harness({ scope, memoryRef }: { scope: 'thread' | 'resource'; memoryRef?: AgentFormValues['memoryRef'] }) {
   const form = useForm<AgentFormValues>({
     defaultValues: {
       name: 'Memory Agent',
       memory: { enabled: true, observationalMemory: { enabled: true, scope } },
+      memoryRef,
     },
   });
 
@@ -58,6 +59,17 @@ describe('MemoryPage', () => {
       renderWithProviders(<Harness scope="thread" />);
 
       expect(await screen.findByText(/Resource scope is deprecated/)).not.toBeNull();
+    });
+  });
+
+  describe('when the agent references a registered memory instance', () => {
+    it('shows the registered memory id instead of the inline memory settings', async () => {
+      useMemoryPageHandlers();
+
+      renderWithProviders(<Harness scope="thread" memoryRef={{ type: 'id', memoryId: 'support-memory' }} />);
+
+      expect(await screen.findByText('support-memory')).not.toBeNull();
+      expect(screen.queryByText('Message History')).toBeNull();
     });
   });
 });

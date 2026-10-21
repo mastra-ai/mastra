@@ -222,7 +222,7 @@ Converts speech to text using the configured listening model.
 
 ```typescript oxfmt:false
 abstract listen(
-  audioStream: NodeJS.ReadableStream,
+  audioStream: NodeJS.ReadableStream | unknown,
   options?: {
     [key: string]: unknown;
   }
@@ -231,30 +231,31 @@ abstract listen(
 
 Purpose:
 
-- Takes an audio stream and converts it to text using the provider's speech-to-text service
+- Takes an audio stream (or another provider-specific audio input) and converts it to text using the provider's speech-to-text service
 - Supports provider-specific options for transcription configuration
 - Can return either a complete text transcription or a stream of transcribed text
 - Not all providers support this functionality (e.g., PlayAI, Speechify)
 - May return void if the transcription is handled by emitting 'writing' event
+
+## Optional methods
+
+These methods have default implementations but can be overridden by voice providers that support speech-to-speech capabilities.
 
 ### `getSpeakers()`
 
 Returns a list of available voices supported by the provider.
 
 ```typescript oxfmt:false
-abstract getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: unknown }>>
+getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: unknown }>>
 ```
 
 Purpose:
 
 - Retrieves the list of available voices/speakers from the provider
+- The default implementation returns an empty array; providers override it to list their voices
 - Each voice must have at least a voiceId property
 - Providers can include additional metadata about each voice
 - Used to discover available voices for text-to-speech conversion
-
-## Optional methods
-
-These methods have default implementations but can be overridden by voice providers that support speech-to-speech capabilities.
 
 ### `connect()`
 
@@ -291,12 +292,13 @@ Purpose:
 Triggers the voice provider to generate a response.
 
 ```typescript oxfmt:false
-answer(): Promise<void>
+answer(options?: Record<string, unknown>): Promise<void>
 ```
 
 Purpose:
 
 - Sends a signal to the voice provider to generate a response
+- Accepts optional provider-specific options
 - Used in real-time conversations to prompt the AI to respond
 - Response will be emitted through the event system (e.g., 'speaking' event)
 
@@ -369,13 +371,18 @@ The MastraVoice class includes an event system for real-time communication. Stan
 <PropertiesTable
   content={[
   {
+    name: 'speaker',
+    type: 'NodeJS.ReadableStream',
+    description: 'Emitted with an audio stream for each new response the voice provider speaks',
+  },
+  {
     name: 'speaking',
-    type: '{ text: string; audioStream?: NodeJS.ReadableStream; audio?: Int16Array }',
+    type: '{ audio?: string }',
     description: 'Emitted when the voice provider is speaking, contains audio data',
   },
   {
     name: 'writing',
-    type: '{ text: string, role: string }',
+    type: "{ text: string; role: 'assistant' | 'user' }",
     description: 'Emitted when text is transcribed from speech',
   },
   {
@@ -424,7 +431,7 @@ MastraVoice includes built-in telemetry support through the `traced` method, whi
 ## Notes
 
 - MastraVoice is an abstract class and can't be instantiated directly
-- Implementations must provide concrete implementations for all abstract methods
+- Implementations must provide concrete implementations of the abstract `speak()` and `listen()` methods
 - The class provides a consistent interface across different voice service providers
 - Speech-to-speech capabilities are optional and provider-specific
 - The event system enables asynchronous communication for real-time interactions

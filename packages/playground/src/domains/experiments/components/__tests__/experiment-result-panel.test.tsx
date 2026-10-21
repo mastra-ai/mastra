@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
-import type { DatasetExperimentResult, GetSystemPackagesResponse } from '@mastra/client-js';
+import type { DatasetExperimentResult, GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ExperimentResultPanel } from '../experiment-result-panel';
+import { agentFailedResult, agentMarkdownResult, workflowResult } from './fixtures/experiment-results';
 import {
-  metricsCapableSystemPackages,
-  metricsUnavailableSystemPackages,
+  metricsCapableCapabilities,
+  metricsUnavailableCapabilities,
   traceSpans,
   traceUsageBreakdown,
 } from '@/pages/traces/__tests__/fixtures/traces';
@@ -22,6 +23,7 @@ const makeResult = (overrides: Partial<DatasetExperimentResult> = {}): DatasetEx
   experimentId: 'exp-1',
   itemId: 'item-1',
   input: 'hello',
+  targetType: 'workflow',
   output: 'world',
   groundTruth: null,
   scores: {},
@@ -42,6 +44,7 @@ beforeEach(() => {
       HttpResponse.json({ feedback: [], pagination: { total: 0, page: 0, perPage: 50, hasMore: false } }),
     ),
     http.get('*/api/observability/traces/:traceId', () => HttpResponse.json(traceSpans)),
+    http.get('*/api/observability/capabilities', () => HttpResponse.json(metricsUnavailableCapabilities)),
   );
 });
 
@@ -64,22 +67,48 @@ function renderPanel(
 ) {
   const onTagsChange = vi.fn();
   const { wrapper: Wrapper } = makeWrapper();
-  render(
+  const tree = (current: DatasetExperimentResult) => (
     <Wrapper>
       <TestLinkProvider>
         <ExperimentResultPanel
           open
-          result={result}
+          result={current}
           onClose={() => {}}
           onTagsChange={onTagsChange}
           tagVocabulary={['alpha', 'beta']}
           {...props}
         />
       </TestLinkProvider>
-    </Wrapper>,
+    </Wrapper>
   );
-  return { onTagsChange };
+  const { rerender } = render(tree(result));
+  return { onTagsChange, showResult: (next: DatasetExperimentResult) => rerender(tree(next)) };
 }
+
+describe('ExperimentResultPanel output', () => {
+  describe('when the result is an agent result with text', () => {
+    it('renders the output text as markdown', () => {
+      renderPanel(agentMarkdownResult);
+
+      expect(screen.getByRole('heading', { name: 'Title' })).toBeDefined();
+      expect(screen.getByText('bold').tagName).toBe('STRONG');
+    });
+
+    it('does not render the raw markdown source', () => {
+      renderPanel(agentMarkdownResult);
+
+      expect(document.body.textContent).not.toContain('**bold**');
+    });
+  });
+
+  describe('when the result is a workflow result', () => {
+    it('renders the output as JSON', () => {
+      renderPanel(workflowResult);
+
+      expect(document.body.textContent).toContain('"answer": 42');
+    });
+  });
+});
 
 describe('ExperimentResultPanel metadata', () => {
   describe('given a result with a status and tags', () => {
@@ -193,6 +222,36 @@ describe('ExperimentResultPanel review controls', () => {
 
     expect(screen.queryByRole('button', { name: 'Mark as reviewed' })).toBeNull();
   });
+
+  it('drops the "Experiment result" title from the header', () => {
+    renderPanel(makeResult());
+
+    expect(screen.queryByRole('heading', { name: 'Experiment result' })).toBeNull();
+  });
+
+  it('renders the complete action with a visible label, before the other header actions', () => {
+    renderPanel(makeResult({ status: 'needs-review' }), {
+      onComplete: vi.fn(),
+      experimentLink: '/experiments/exp-1',
+    });
+
+    const button = screen.getByRole('button', { name: 'Mark as reviewed' });
+    expect(button.textContent).toBe('Mark as reviewed');
+    const experimentLink = screen.getByRole('link', { name: /See experiment/ });
+    expect(button.compareDocumentPosition(experimentLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Sits on the left of the header, outside the right-aligned actions group.
+    expect(experimentLink.parentElement?.contains(button)).toBe(false);
+  });
+
+  it('renders the request review action with a visible label', () => {
+    const onFlagForReview = vi.fn();
+    renderPanel(makeResult({ status: null }), { onFlagForReview });
+
+    const button = screen.getByRole('button', { name: 'Request review' });
+    expect(button.textContent).toBe('Request review');
+    fireEvent.click(button);
+    expect(onFlagForReview).toHaveBeenCalled();
+  });
 });
 
 describe('ExperimentResultPanel trace usage', () => {
@@ -200,14 +259,14 @@ describe('ExperimentResultPanel trace usage', () => {
   const onBreakdownRequest = vi.fn();
 
   const setUsageHandlers = ({
-    systemPackages,
+    capabilities,
     rootEntityType,
   }: {
-    systemPackages: GetSystemPackagesResponse;
+    capabilities: GetObservabilityCapabilitiesResponse;
     rootEntityType: EntityType;
   }) => {
     server.use(
-      http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackages)),
+      http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(capabilities)),
       http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => {
         onTraceRequest();
         const [root] = traceSpans.spans;
@@ -233,45 +292,241 @@ describe('ExperimentResultPanel trace usage', () => {
   });
 
   it('renders no usage rows and fetches nothing when the result has no trace', async () => {
-    setUsageHandlers({ systemPackages: metricsCapableSystemPackages, rootEntityType: EntityType.AGENT });
+    setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.AGENT });
     renderPanel(makeResult({ traceId: null }));
 
     await screen.findByText('Item Id');
     expect(onTraceRequest).not.toHaveBeenCalled();
     expect(onBreakdownRequest).not.toHaveBeenCalled();
-    expect(screen.queryByText('Input tokens')).toBeNull();
+    expect(screen.queryByText('Tokens')).toBeNull();
   });
 
-  it('shows tokens and cost for an agent trace when metrics are supported', async () => {
-    setUsageHandlers({ systemPackages: metricsCapableSystemPackages, rootEntityType: EntityType.AGENT });
+  it('shows total tokens and cost for an agent trace when metrics are supported', async () => {
+    setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.AGENT });
     renderPanel(makeResult({ traceId: 'trace-a' }));
 
-    expect(await screen.findByText('Input tokens')).toBeDefined();
+    expect(await screen.findByText('Tokens')).toBeDefined();
     expect(onBreakdownRequest).toHaveBeenCalled();
     expect(screen.getByText('100')).toBeDefined();
-    expect(screen.getByText('Output tokens')).toBeDefined();
-    expect(screen.getByText('—')).toBeDefined();
     expect(screen.getByText('Cost')).toBeDefined();
-    expect(screen.getByText('<$0.01')).toBeDefined();
+    expect(screen.getByText('$0.001')).toBeDefined();
+  });
+
+  describe('when the usage of an agent result is still loading', () => {
+    it('reserves the cost and tokens rows', async () => {
+      setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.AGENT });
+      server.use(http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => delay('infinite')));
+      renderPanel(makeResult({ targetType: 'agent', traceId: 'trace-a' }));
+
+      expect(termLabels().slice(0, 2)).toEqual(['Cost', 'Tokens']);
+      await waitFor(() => expect(onTraceRequest).toHaveBeenCalled());
+      expect(termLabels().slice(0, 2)).toEqual(['Cost', 'Tokens']);
+      expect(screen.queryByText('$0.001')).toBeNull();
+    });
+  });
+
+  describe('when switching to another agent result whose usage is still loading', () => {
+    it('keeps the cost and tokens rows reserved', async () => {
+      setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.AGENT });
+      const { showResult } = renderPanel(makeResult({ targetType: 'agent', traceId: 'trace-a' }));
+      await screen.findByText('$0.001');
+
+      server.use(http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => delay('infinite')));
+      showResult(makeResult({ id: 'res-2', itemId: 'item-2', targetType: 'agent', traceId: 'trace-b' }));
+      await waitFor(() => expect(screen.queryByText('$0.001')).toBeNull());
+      // Let the trace load and the next usage request start, the window where the rows used to vanish.
+      await waitFor(() => expect(onTraceRequest).toHaveBeenCalledTimes(2));
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(termLabels().slice(0, 2)).toEqual(['Cost', 'Tokens']);
+    });
+  });
+
+  describe('when the result is a workflow run', () => {
+    it('does not reserve usage rows while the trace loads', () => {
+      setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.WORKFLOW });
+      renderPanel(makeResult({ targetType: 'workflow', traceId: 'trace-a' }));
+
+      expect(termLabels()).not.toContain('Cost');
+    });
   });
 
   it('skips usage for a workflow trace', async () => {
-    setUsageHandlers({ systemPackages: metricsCapableSystemPackages, rootEntityType: EntityType.WORKFLOW });
+    setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.WORKFLOW });
     renderPanel(makeResult({ traceId: 'trace-a' }));
 
     await waitFor(() => expect(onTraceRequest).toHaveBeenCalled());
     await screen.findByText('Item Id');
     expect(onBreakdownRequest).not.toHaveBeenCalled();
-    expect(screen.queryByText('Input tokens')).toBeNull();
+    expect(screen.queryByText('Tokens')).toBeNull();
   });
 
   it('skips usage when the observability storage does not support metrics', async () => {
-    setUsageHandlers({ systemPackages: metricsUnavailableSystemPackages, rootEntityType: EntityType.AGENT });
+    setUsageHandlers({ capabilities: metricsUnavailableCapabilities, rootEntityType: EntityType.AGENT });
     renderPanel(makeResult({ traceId: 'trace-a' }));
 
     await waitFor(() => expect(onTraceRequest).toHaveBeenCalled());
     await screen.findByText('Item Id');
     expect(onBreakdownRequest).not.toHaveBeenCalled();
-    expect(screen.queryByText('Input tokens')).toBeNull();
+    expect(screen.queryByText('Tokens')).toBeNull();
+  });
+});
+
+const termLabels = () => screen.getAllByRole('term').map(term => term.textContent);
+const regionNames = () => screen.getAllByRole('region').map(region => region.getAttribute('aria-label'));
+
+describe('ExperimentResultPanel summary', () => {
+  describe('when the result has run timestamps', () => {
+    it('shows the run duration', () => {
+      renderPanel(
+        makeResult({
+          startedAt: new Date('2026-01-01T00:00:00Z'),
+          completedAt: new Date('2026-01-01T00:00:01Z'),
+        }),
+      );
+
+      expect(termLabels()).toContain('Duration');
+    });
+  });
+
+  describe('when the result has usage, details and scores', () => {
+    it('lists usage first, then item details, then scorers', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () =>
+          HttpResponse.json(metricsCapableCapabilities),
+        ),
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () =>
+          HttpResponse.json({
+            ...traceSpans,
+            spans: traceSpans.spans.map(span => ({ ...span, entityType: EntityType.AGENT })),
+          }),
+        ),
+        http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => HttpResponse.json(traceUsageBreakdown)),
+      );
+      renderPanel(
+        makeResult({
+          traceId: 'trace-a',
+          status: 'needs-review',
+          startedAt: new Date('2026-01-01T00:00:00Z'),
+          completedAt: new Date('2026-01-01T00:00:01Z'),
+        }),
+        { scores: [{ id: 'score-1', scorerId: 'accuracy', score: 0.5 }] },
+      );
+
+      await screen.findByText('Tokens');
+      expect(termLabels()).toEqual(['Cost', 'Duration', 'Tokens', 'Item Id', 'Created', 'Status', 'Tags', 'accuracy']);
+    });
+  });
+
+  describe('when scores can be opened', () => {
+    const scores = [
+      { id: 'score-1', scorerId: 'accuracy', score: 0.5 },
+      { id: 'score-2', scorerId: 'tone', score: 1 },
+    ];
+
+    it('opens the clicked score', () => {
+      const onScoreClick = vi.fn();
+      renderPanel(makeResult(), { scores, onScoreClick });
+
+      fireEvent.click(screen.getByRole('button', { name: 'tone' }));
+
+      expect(onScoreClick).toHaveBeenCalledWith('score-2');
+    });
+
+    it('marks the featured score as pressed', () => {
+      renderPanel(makeResult(), { scores, onScoreClick: vi.fn(), featuredScoreId: 'score-1' });
+
+      expect(screen.getByRole('button', { name: 'accuracy' }).getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByRole('button', { name: 'tone' }).getAttribute('aria-pressed')).toBe('false');
+    });
+  });
+
+  describe('when scores cannot be opened', () => {
+    it('links each scorer to its page', () => {
+      renderPanel(makeResult(), { scores: [{ id: 'score-1', scorerId: 'accuracy', score: 0.5 }] });
+
+      expect(screen.getByRole('link', { name: 'Open accuracy' }).getAttribute('href')).toBe('/scorers/accuracy');
+    });
+  });
+});
+
+describe('ExperimentResultPanel score reason', () => {
+  describe('when a score has a reason', () => {
+    const scores = [{ id: 'score-1', scorerId: 'accuracy', score: 0.5, reason: 'Because **bold**' }];
+
+    it('shows an info button next to the score', () => {
+      renderPanel(makeResult(), { scores });
+
+      expect(screen.getByRole('button', { name: 'Show accuracy reason' })).toBeDefined();
+    });
+
+    it('renders the reason as markdown when the info button is focused', async () => {
+      renderPanel(makeResult(), { scores });
+
+      fireEvent.focus(screen.getByRole('button', { name: 'Show accuracy reason' }));
+
+      expect((await screen.findByText('bold')).tagName).toBe('STRONG');
+    });
+  });
+
+  describe('when a score has no reason', () => {
+    it('does not show an info button', () => {
+      renderPanel(makeResult(), { scores: [{ id: 'score-1', scorerId: 'accuracy', score: 0.5, reason: null }] });
+
+      expect(screen.queryByRole('button', { name: 'Show accuracy reason' })).toBeNull();
+    });
+  });
+});
+
+describe('ExperimentResultPanel payloads', () => {
+  describe('when the result has a ground truth', () => {
+    it('shows Input, Ground Truth, then Output', () => {
+      renderPanel(makeResult({ groundTruth: 'expected' }));
+
+      expect(regionNames()).toEqual(['Input', 'Ground Truth', 'Output']);
+    });
+  });
+
+  describe('when the result has no ground truth', () => {
+    it('hides the Ground Truth section', () => {
+      renderPanel(makeResult({ groundTruth: null }));
+
+      expect(regionNames()).toEqual(['Input', 'Output']);
+    });
+  });
+
+  describe('when the result failed', () => {
+    it('shows the error in place of the output', () => {
+      renderPanel(agentFailedResult);
+
+      expect(regionNames()).toEqual(['Input', 'Error']);
+      expect(screen.getByRole('region', { name: 'Error' }).textContent).toContain('model exploded');
+    });
+  });
+});
+
+describe('ExperimentResultPanel inline variant', () => {
+  describe('when variant is inline and a result is given', () => {
+    it('renders the result as an inline section in the document flow', () => {
+      renderPanel(agentMarkdownResult, { variant: 'inline' });
+
+      const panel = document.querySelector('[data-slot="data-panel"]');
+      expect(panel?.tagName).toBe('SECTION');
+      expect(panel?.getAttribute('data-variant')).toBe('inline');
+    });
+
+    it('does not render a modal dialog', () => {
+      renderPanel(agentMarkdownResult, { variant: 'inline' });
+
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+  });
+
+  describe('when variant is inline and neither a result nor an item id is given', () => {
+    it('renders nothing', () => {
+      renderPanel(agentMarkdownResult, { variant: 'inline', result: undefined });
+
+      expect(document.querySelector('[data-slot="data-panel"]')).toBeNull();
+    });
   });
 });

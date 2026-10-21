@@ -5,13 +5,8 @@ import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  ACTIVE_ATTR,
-  useFluidHover,
-  useRegisterFluidHoverItem,
-  type UseFluidHoverOptions,
-  type UseFluidHoverReturn,
-} from './use-fluid-hover';
+import { ACTIVE_ATTR, useFluidHover, useRegisterFluidHoverItem } from './use-fluid-hover';
+import type { UseFluidHoverOptions, UseFluidHoverReturn } from './use-fluid-hover';
 import { FluidHoverHighlight } from '@/components/fluid-hover-highlight';
 
 const ROW_HEIGHT = 40;
@@ -25,16 +20,19 @@ function layoutRow(element: HTMLElement, index: number) {
     offsetWidth: { value: 200, configurable: true },
     offsetHeight: { value: ROW_HEIGHT, configurable: true },
   });
+  element.getBoundingClientRect = () => new DOMRect(0, index * ROW_HEIGHT, 200, ROW_HEIGHT);
 }
 
 function Row({
   index,
   registerItem,
   onClick,
+  hidden = false,
 }: {
   index: number;
   registerItem: (index: number, element: HTMLElement | null) => void;
   onClick?: () => void;
+  hidden?: boolean;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   useRegisterFluidHoverItem(registerItem, index, ref);
@@ -42,7 +40,7 @@ function Row({
     <button
       ref={el => {
         ref.current = el;
-        if (el) layoutRow(el, index);
+        if (el && !hidden) layoutRow(el, index);
       }}
       data-testid={`row-${index}`}
       data-index={index}
@@ -56,12 +54,14 @@ function Row({
 function List({
   options,
   rows = 3,
+  hiddenRows = [],
   onRowClick,
   onHover,
   children,
 }: {
   options?: UseFluidHoverOptions;
   rows?: number;
+  hiddenRows?: number[];
   onRowClick?: (index: number) => void;
   onHover?: (hover: UseFluidHoverReturn) => void;
   children?: ReactNode;
@@ -87,7 +87,13 @@ function List({
     >
       <FluidHoverHighlight hover={hover} />
       {Array.from({ length: rows }, (_, index) => (
-        <Row key={index} index={index} registerItem={hover.registerItem} onClick={() => onRowClick?.(index)} />
+        <Row
+          key={index}
+          index={index}
+          registerItem={hover.registerItem}
+          onClick={() => onRowClick?.(index)}
+          hidden={hiddenRows.includes(index)}
+        />
       ))}
       {children}
     </div>
@@ -138,6 +144,18 @@ describe('useFluidHover', () => {
     });
   });
 
+  describe('when some rows have no layout box', () => {
+    it('still tracks the rows that are laid out', async () => {
+      render(<List hiddenRows={[1]} />);
+      await flushFrames();
+
+      await moveTo(2);
+
+      expect(screen.getByTestId('row-2').hasAttribute(ACTIVE_ATTR)).toBe(true);
+      expect(screen.getByTestId('list').querySelector('[data-slot="fluid-hover-highlight"]')).not.toBeNull();
+    });
+  });
+
   describe('when a row is disabled', () => {
     const options: UseFluidHoverOptions = {
       isItemDisabled: el => el.dataset.index === '1',
@@ -151,6 +169,17 @@ describe('useFluidHover', () => {
 
       expect(screen.getByTestId('row-1').hasAttribute(ACTIVE_ATTR)).toBe(false);
       expect(screen.getByTestId('list').hasAttribute('data-fluid-hover-active-index')).toBe(true);
+    });
+
+    it('ignores a click on that row instead of routing it to the lit neighbour', async () => {
+      const onRowClick = vi.fn();
+      render(<List options={options} onRowClick={onRowClick} />);
+      await flushFrames();
+      await moveTo(1);
+
+      fireEvent.click(screen.getByTestId('list'), { clientX: 10, clientY: ROW_HEIGHT + ROW_HEIGHT / 2 });
+
+      expect(onRowClick).not.toHaveBeenCalled();
     });
   });
 

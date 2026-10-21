@@ -611,7 +611,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
               state: {},
               result: {
                 text: '',
-                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                usage: result.usage,
                 finishReason: 'unknown',
                 steps: [],
               },
@@ -784,9 +784,9 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
                     .map(p => (p as any).payload?.text ?? '')
                     .join(''),
                   usage: finishChunk?.payload?.output?.usage ?? {
-                    inputTokens: 0,
-                    outputTokens: 0,
-                    totalTokens: 0,
+                    inputTokens: undefined,
+                    outputTokens: undefined,
+                    totalTokens: undefined,
                   },
                   finishReason: finishChunk?.payload?.stepResult?.reason ?? 'unknown',
                   steps: [],
@@ -1022,13 +1022,11 @@ function convertMastraChunkToAISDKStreamPart(chunk: ChunkType): LanguageModelV2S
       return {
         type: 'finish',
         finishReason: toAISDKFinishReason(chunk.payload.stepResult?.reason || 'stop'),
-        usage: usage
-          ? {
-              inputTokens: usage.inputTokens || 0,
-              outputTokens: usage.outputTokens || 0,
-              totalTokens: usage.totalTokens || 0,
-            }
-          : { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        usage: {
+          inputTokens: usage?.inputTokens,
+          outputTokens: usage?.outputTokens,
+          totalTokens: usage?.totalTokens,
+        },
         providerMetadata: chunk.payload.metadata?.providerMetadata,
       };
     }

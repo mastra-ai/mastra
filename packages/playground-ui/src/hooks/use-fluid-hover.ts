@@ -1,12 +1,14 @@
 'use client';
 
-import { useRef, useState, useCallback, useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
+import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 export interface ItemRect {
   top: number;
   height: number;
   left: number;
   width: number;
+  radius: string;
 }
 
 export interface UseFluidHoverOptions {
@@ -102,6 +104,46 @@ export interface PickNearestInput {
   layoutSize: { width: number; height: number };
   /** Skips an item without unregistering it. */
   isDisabled?: (index: number) => boolean;
+  /** Resolves nothing once the pointer leaves the span from the first item to the last. */
+  onlyBetweenItems?: boolean;
+}
+
+interface ViewportBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+function boxContains(box: ViewportBox, point: { x: number; y: number }, axis: PickNearestInput['axis']) {
+  const insideX = point.x >= box.left && point.x <= box.right;
+  const insideY = point.y >= box.top && point.y <= box.bottom;
+  if (axis === 'x') return insideX;
+  if (axis === 'y') return insideY;
+  return insideX && insideY;
+}
+
+function distanceToCenter(box: ViewportBox, point: { x: number; y: number }, axis: PickNearestInput['axis']) {
+  const dx = point.x - (box.left + box.right) / 2;
+  const dy = point.y - (box.top + box.bottom) / 2;
+  if (axis === 'x') return Math.abs(dx);
+  if (axis === 'y') return Math.abs(dy);
+  return Math.hypot(dx, dy);
+}
+
+function isOverDisabledItem(
+  items: Iterable<HTMLElement>,
+  point: { clientX: number; clientY: number },
+  isItemDisabled: ((element: HTMLElement) => boolean) | undefined,
+) {
+  for (const element of items) {
+    if (!isItemDisabled?.(element)) continue;
+    const r = element.getBoundingClientRect();
+    if (point.clientX >= r.left && point.clientX <= r.right && point.clientY >= r.top && point.clientY <= r.bottom) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -121,51 +163,37 @@ export function pickNearest({
   border,
   layoutSize,
   isDisabled,
+  onlyBetweenItems = false,
 }: PickNearestInput): number | null {
   const scaleX = layoutSize.width > 0 ? containerRect.width / layoutSize.width : 1;
   const scaleY = layoutSize.height > 0 ? containerRect.height / layoutSize.height : 1;
   let closestIndex: number | null = null;
   let closestDistance = Infinity;
   let containingIndex: number | null = null;
+  const itemSpan: ViewportBox = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
 
   for (let index = 0; index < rects.length; index++) {
     const r = rects[index];
     if (!r) continue;
     if (isDisabled?.(index)) continue;
 
-    if (axis === 'xy') {
-      const left = containerRect.left + (border.x + r.left - scroll.x) * scaleX;
-      const top = containerRect.top + (border.y + r.top - scroll.y) * scaleY;
-      const width = r.width * scaleX;
-      const height = r.height * scaleY;
-      if (point.x >= left && point.x <= left + width && point.y >= top && point.y <= top + height) {
-        containingIndex = index;
-      }
-      const distance = Math.hypot(point.x - (left + width / 2), point.y - (top + height / 2));
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closestIndex = index;
-      }
-      continue;
-    }
+    const left = containerRect.left + (border.x + r.left - scroll.x) * scaleX;
+    const top = containerRect.top + (border.y + r.top - scroll.y) * scaleY;
+    const box: ViewportBox = { left, top, right: left + r.width * scaleX, bottom: top + r.height * scaleY };
+    itemSpan.left = Math.min(itemSpan.left, box.left);
+    itemSpan.top = Math.min(itemSpan.top, box.top);
+    itemSpan.right = Math.max(itemSpan.right, box.right);
+    itemSpan.bottom = Math.max(itemSpan.bottom, box.bottom);
 
-    const horizontal = axis === 'x';
-    const mousePos = horizontal ? point.x : point.y;
-    const scale = horizontal ? scaleX : scaleY;
-    const itemStart =
-      (horizontal ? containerRect.left : containerRect.top) +
-      ((horizontal ? border.x : border.y) + (horizontal ? r.left : r.top) - (horizontal ? scroll.x : scroll.y)) * scale;
-    const itemSize = (horizontal ? r.width : r.height) * scale;
-    if (mousePos >= itemStart && mousePos <= itemStart + itemSize) {
-      containingIndex = index;
-    }
-    const distance = Math.abs(mousePos - (itemStart + itemSize / 2));
+    if (boxContains(box, point, axis)) containingIndex = index;
+    const distance = distanceToCenter(box, point, axis);
     if (distance < closestDistance) {
       closestDistance = distance;
       closestIndex = index;
     }
   }
 
+  if (onlyBetweenItems && !boxContains(itemSpan, point, axis)) return null;
   return containingIndex ?? closestIndex;
 }
 
@@ -173,6 +201,9 @@ export function pickNearest({
 export const ACTIVE_ATTR = 'data-fluid-hover-active';
 /** Set on the container: the highlighted index, or absent. */
 export const ACTIVE_INDEX_ATTR = 'data-fluid-hover-active-index';
+/** Marks an element whose items form their own hover group: the highlight stays between that group's items. */
+export const GROUP_ATTR = 'data-fluid-hover-group';
+const GROUP_SELECTOR = `[${GROUP_ATTR}]`;
 
 /** False for an event bubbled through React from a portal outside the container, and for a detached target. */
 function isFromInside(e: React.SyntheticEvent) {
@@ -213,6 +244,7 @@ export function useFluidHover<T extends HTMLElement>(
   const { axis = 'y', isItemDisabled, gapClick = true } = options;
   const gapClickMaxDistance = typeof gapClick === 'object' ? (gapClick.maxDistance ?? Infinity) : Infinity;
   const itemsRef = useRef(new Map<number, HTMLElement>());
+  const itemGroupsRef = useRef(new Map<number, Element | null>());
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   // Mirrored for handlers that read it outside a render (the gap click).
   const activeIndexRef = useRef<number | null>(null);
@@ -244,27 +276,26 @@ export function useFluidHover<T extends HTMLElement>(
   const remeasureRafIdRef = useRef<number | null>(null);
 
   /**
-   * Publishes a rect for every registered item. Returns false when the
-   * measurement could not be completed (no container, or an item without a
-   * layout box) — nothing is published in that case, so the last complete
-   * measurement stands instead of being overwritten with zeroes.
+   * Publishes a rect for every registered item that has a layout box. Returns
+   * false when the measurement could not be completed (no container, or no
+   * item with a layout box) — nothing is published in that case, so the last
+   * complete measurement stands instead of being overwritten with zeroes.
    */
   const runMeasurement = useCallback(() => {
     const container = containerRef.current;
     if (!container) return false;
     const rects: ItemRect[] = [];
-    let everyItemHasLayout = true;
+    let laidOutItemCount = 0;
     itemsRef.current.forEach((element, index) => {
       // An element inside a display:none / not-yet-laid-out popup has no
-      // offsetParent and reports every offset as 0. Publishing that would pin
-      // overlays to the top of the list, so treat the whole pass as
-      // incomplete. A boxless element is the only case: `position: fixed`
+      // offsetParent and reports every offset as 0. When every item is like
+      // that, publishing would pin overlays to the top of the list, so the
+      // whole pass counts as incomplete. A boxless item among laid-out ones
+      // (a row in a collapsed section) is just left out. `position: fixed`
       // items also have no offsetParent but do have a size.
       const hasLayoutBox = element.offsetParent !== null || element.offsetWidth > 0 || element.offsetHeight > 0;
-      if (!hasLayoutBox) {
-        everyItemHasLayout = false;
-        return;
-      }
+      if (!hasLayoutBox) return;
+      laidOutItemCount++;
       // Use offset* instead of getBoundingClientRect so measurements are
       // unaffected by CSS transforms (e.g. scaleY animation on the parent
       // motion.div). offsetTop/offsetLeft are layout values relative to the
@@ -287,18 +318,26 @@ export function useFluidHover<T extends HTMLElement>(
         height: element.offsetHeight,
         left,
         width: element.offsetWidth,
+        radius: getComputedStyle(element).borderRadius,
       };
     });
-    if (!everyItemHasLayout) return false;
-    // Skip the state update when nothing moved (a cheap top/left/width/height
-    // compare) so redundant remeasures don't churn re-renders.
+    if (itemsRef.current.size > 0 && laidOutItemCount === 0) return false;
+    // Skip the state update when nothing moved (a cheap per-field compare) so
+    // redundant remeasures don't churn re-renders.
     const prev = itemRectsRef.current;
     let changed = prev.length !== rects.length;
     for (let i = 0; !changed && i < rects.length; i++) {
       const p = prev[i];
       const r = rects[i];
       if (p === r) continue; // both undefined (sparse slot)
-      changed = !p || !r || p.top !== r.top || p.left !== r.left || p.width !== r.width || p.height !== r.height;
+      changed =
+        !p ||
+        !r ||
+        p.top !== r.top ||
+        p.left !== r.left ||
+        p.width !== r.width ||
+        p.height !== r.height ||
+        p.radius !== r.radius;
     }
     if (changed) {
       itemRectsRef.current = rects;
@@ -359,6 +398,7 @@ export function useFluidHover<T extends HTMLElement>(
     (index: number, element: HTMLElement | null) => {
       if (element) {
         itemsRef.current.set(index, element);
+        itemGroupsRef.current.set(index, element.closest(GROUP_SELECTOR));
         getItemRo()?.observe(element);
         if (index === activeIndexRef.current) element.setAttribute(ACTIVE_ATTR, '');
       } else {
@@ -368,6 +408,7 @@ export function useFluidHover<T extends HTMLElement>(
         // index (a filtering list re-ordering) must not carry it there.
         previous?.removeAttribute(ACTIVE_ATTR);
         itemsRef.current.delete(index);
+        itemGroupsRef.current.delete(index);
         // The highlighted row is gone: nothing should stay lit or receive a
         // routed click until the pointer picks again. Decided when the
         // update applies, after this commit's registrations, so a row that
@@ -391,7 +432,8 @@ export function useFluidHover<T extends HTMLElement>(
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (!isFromInside(e)) return;
+      if (!isFromInside(e) || !(e.target instanceof Element)) return;
+      const pointerTarget = e.target;
       const mouseX = e.clientX;
       const mouseY = e.clientY;
 
@@ -403,6 +445,9 @@ export function useFluidHover<T extends HTMLElement>(
         rafIdRef.current = null;
         const container = containerRef.current;
         if (!container) return;
+        const enclosingGroup = container.closest(GROUP_SELECTOR);
+        const groupInside = (group: Element | null | undefined) => (group === enclosingGroup ? null : group);
+        const pointerGroup = groupInside(pointerTarget.closest(GROUP_SELECTOR));
         setActiveIndex(
           pickNearest({
             axis,
@@ -412,12 +457,12 @@ export function useFluidHover<T extends HTMLElement>(
             scroll: { x: container.scrollLeft, y: container.scrollTop },
             border: { x: container.clientLeft, y: container.clientTop },
             layoutSize: { width: container.offsetWidth, height: container.offsetHeight },
-            isDisabled: isItemDisabled
-              ? index => {
-                  const el = itemsRef.current.get(index);
-                  return !!el && isItemDisabled(el);
-                }
-              : undefined,
+            isDisabled: index => {
+              if (groupInside(itemGroupsRef.current.get(index)) !== pointerGroup) return true;
+              const element = itemsRef.current.get(index);
+              return !!element && !!isItemDisabled?.(element);
+            },
+            onlyBetweenItems: pointerGroup !== null,
           }),
         );
       });
@@ -449,6 +494,7 @@ export function useFluidHover<T extends HTMLElement>(
       // a menu, a footer button, a theme toggle) keeps its own click too.
       if (target.closest(CONTROL_BETWEEN_ROWS)) return;
       if (gapClick === false) return;
+      if (isOverDisabledItem(itemsRef.current.values(), e, isItemDisabled)) return;
       const index = activeIndexRef.current;
       if (index === null) return;
       const element = itemsRef.current.get(index);

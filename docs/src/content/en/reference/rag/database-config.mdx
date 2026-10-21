@@ -20,6 +20,7 @@ export type DatabaseConfig = {
   pinecone?: PineconeConfig
   pgvector?: PgVectorConfig
   chroma?: ChromaConfig
+  mongodb?: MongoDBConfig
   turbopuffer?: TurbopufferConfig
   [key: string]: any // Extensible for future databases
 }
@@ -125,15 +126,16 @@ Configuration options specific to Chroma vector store.
   content={[
   {
     name: 'where',
-    type: 'Record<string, any>',
+    type: 'Where',
     description:
-      'Metadata filtering conditions using MongoDB-style query syntax. Filters results based on metadata fields.',
+      'Metadata filtering conditions. Each field maps to a literal value or an operator expression (`$gt`, `$gte`, `$lt`, `$lte`, `$ne`, `$eq`, `$in`, `$nin`). Combine conditions with `$and` and `$or`.',
     isOptional: true,
   },
   {
     name: 'whereDocument',
-    type: 'Record<string, any>',
-    description: 'Document content filtering conditions. Allows filtering based on the actual document text content.',
+    type: 'WhereDocument',
+    description:
+      'Document content filtering conditions using `$contains` and `$not_contains`. Combine conditions with `$and` and `$or`.',
     isOptional: true,
   },
 ]}
@@ -163,6 +165,27 @@ whereDocument: { "$contains": "API documentation" }
 - Advanced metadata filtering
 - Content-based document filtering
 - Complex query combinations
+
+### `MongoDBConfig`
+
+Configuration options specific to MongoDB Atlas Vector Search.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'numCandidates',
+    type: 'number',
+    description:
+      'Number of candidates the HNSW graph considers before selecting the top-K results. Higher values improve recall at the cost of query latency. Must be greater than or equal to `topK`. Defaults to 20 × `topK`, capped at 10,000.',
+    isOptional: true,
+  },
+]}
+/>
+
+**Use Cases:**
+
+- Improving recall for large collections
+- Lowering latency when approximate results are acceptable
 
 ### `TurbopufferConfig`
 

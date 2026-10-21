@@ -287,6 +287,8 @@ export function splitIntoChunks(text: string, options: ChunkOptions = {}): TextC
       }
     }
 
+    if (end >= lines.length) break;
+
     const nextStart = end - overlapLines;
     start = nextStart <= start ? end : nextStart;
   }

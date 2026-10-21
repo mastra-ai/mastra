@@ -47,6 +47,21 @@ export const Default: Story = {
   ),
 };
 
+/** A long menu scrolls inside the popup; the scrollbar stays clear of the rounded corners. */
+export const WithManyItems: Story = {
+  render: () => (
+    <ContextMenu>
+      <ContextMenu.Trigger className={triggerClass}>Right click here</ContextMenu.Trigger>
+      <ContextMenu.Content className="w-56">
+        <ContextMenu.Label>Many items</ContextMenu.Label>
+        {Array.from({ length: 30 }, (_, i) => (
+          <ContextMenu.Item key={i}>Item {i + 1}</ContextMenu.Item>
+        ))}
+      </ContextMenu.Content>
+    </ContextMenu>
+  ),
+};
+
 export const WithIconsAndShortcuts: Story = {
   render: () => (
     <ContextMenu>

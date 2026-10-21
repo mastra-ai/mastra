@@ -37,6 +37,7 @@ import type {
 import type { RequestContext } from '../request-context';
 import type {
   ChunkType,
+  LanguageModelUsage,
   MastraOnFinishCallback,
   MastraOnStepFinishCallback,
   MastraStreamTransformOptions,
@@ -46,7 +47,7 @@ import type {
 } from '../stream/types';
 import type { MCPToolExecutionContext, RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
 import type { MastraIdGenerator } from '../types';
-import type { OutputWriter } from '../workflows/types';
+import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
 
 type StopCondition = StopConditionV5<any> | StopConditionV6<any>;
@@ -120,6 +121,8 @@ export type StreamInternal = {
   resourceId?: string;
   /** @deprecated Use `runScope.get(MEMORY_KEY)` from `loop/run-scope-keys`. */
   memory?: MastraMemory; // MastraMemory from memory/memory
+  /** @deprecated Use `runScope.get(FIXED_MEMORY_KEY)` from `loop/run-scope-keys`. */
+  fixedMemory?: boolean;
   /** @deprecated Use `runScope.get(THREAD_EXISTS_KEY)` from `loop/run-scope-keys`. */
   threadExists?: boolean;
   // Tools modified by prepareStep/processInputStep - stored here to avoid workflow serialization
@@ -133,6 +136,8 @@ export type StreamInternal = {
   stepWorkspace?: Workspace;
   /** @deprecated Use `runScope.get(TOOL_APPROVAL_VERDICTS_KEY)` from `loop/run-scope-keys`. */
   toolApprovalVerdicts?: Map<string, boolean>;
+  /** @deprecated Use `runScope.get(STEP_USAGE_KEY)` from `loop/run-scope-keys`. */
+  stepUsage?: LanguageModelUsage;
   /** @deprecated Use `runScope.get(STEP_MODEL_MESSAGES_KEY)` from `loop/run-scope-keys`. */
   stepModelMessages?: ModelMessage[];
   /** @deprecated Use `runScope.get(EAGER_TOOL_EXECUTION_KEY)` from `loop/run-scope-keys`. */
@@ -162,6 +167,8 @@ export type StreamInternal = {
   skipBgTaskWait?: boolean;
   /** @deprecated Use `runScope.get(DRAIN_PENDING_SIGNALS_KEY)` from `loop/run-scope-keys`. */
   drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  /** @deprecated Use `runScope.get(SUBSCRIBE_PENDING_SIGNALS_KEY)` from `loop/run-scope-keys`. */
+  subscribePendingSignals?: (runId: string, listener: () => void) => () => void;
   // Signal inputs already stored in the initial message list that still need
   // stream data-part echoes before the first model step.
   /** @deprecated Use `runScope.get(INITIAL_SIGNAL_ECHOES_KEY)` from `loop/run-scope-keys`. */
@@ -203,11 +210,32 @@ export type LoopConfig<OUTPUT = undefined> = {
   prepareStep?: PrepareStepFunction;
 };
 
+/**
+ * A suspended `agentic-loop` run that the agent already claimed in storage
+ * (`suspended -> running`) before resuming it, so concurrent resumes of the
+ * same run cannot both execute the suspended tool.
+ * @internal
+ */
+export type AgentLoopResumeClaim = {
+  /** The suspended snapshot the claim was taken on. Absent when the store cannot claim atomically. */
+  snapshot?: WorkflowRunState;
+  /**
+   * Marks the claim started right before the resumed run executes. Throws when the claim was
+   * taken over in the meantime, in which case the run must not execute.
+   */
+  start?: () => Promise<void>;
+  /** Called right before the resumed run starts executing steps. */
+  onExecutionStarted?: () => void;
+  /** Ends the claim. Idempotent; hands the suspension back only if the run never started. */
+  release: () => Promise<void>;
+};
+
 export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   mastra?: Mastra;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
+    claim?: AgentLoopResumeClaim;
   };
   toolCallId?: string;
   models: ModelManagerModelConfig[];
@@ -255,6 +283,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * version instead of whatever a status selector points at later.
    */
   agentVersionId?: string;
+  resolvedScopes?: string[];
   toolCallConcurrency?: ToolCallConcurrency;
   eagerToolExecution?: boolean;
   /**
@@ -319,7 +348,8 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopO
   _internal: StreamInternal;
   rotateResponseMessageId: (sealMessageId?: string) => string;
   streamState: {
-    serialize: () => any;
+    /** Pass a suspension chunk the step just emitted so the state reflects it. */
+    serialize: (pendingSuspension?: { usage?: LanguageModelUsage }) => any;
     deserialize: (state: any) => void;
   };
   methodType: ModelMethodType;

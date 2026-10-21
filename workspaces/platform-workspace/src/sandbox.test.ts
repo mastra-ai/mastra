@@ -1,6 +1,9 @@
+import { createHash } from 'node:crypto';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DirectExecWebSocket, DirectExecWebSocketFactory } from './direct-exec.js';
-import { PlatformSandbox, type SandboxAddressRegistry } from './sandbox.js';
+import { PlatformSandbox } from './sandbox.js';
+import type { SandboxAddressRegistry } from './sandbox.js';
 import { serializeSandboxTemplate, Template } from './template.js';
 
 function json(body: unknown, init?: ResponseInit) {
@@ -816,6 +819,77 @@ describe('PlatformSandbox', () => {
     );
   });
 
+  it('resumes through the recovery id when getInfo() runs before start() with a stale hint', async () => {
+    // The sequence a resumed Factory session runs: the workspace tools emit
+    // metadata (getInfo) before their first exec. The stored hint is unknown
+    // to the proxy, so start() must own the 404 and fall through to POST
+    // /sandbox keyed by the logical id; getInfo() must not fail the tool first.
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ error: { message: 'Sandbox not found', type: 'not_found' } }, { status: 404 }))
+      .mockResolvedValueOnce(json({ id: 'sbx_same_vm', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      id: 'session-1',
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      sandboxId: 'stale-hint',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    const before = await sandbox.getInfo();
+    expect(before.status).toBe('pending');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const result = await sandbox.executeCommand('pwd');
+    expect(result.exitCode).toBe(0);
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'https://proxy.test/v1/railway/projects/proj_123/sandbox/stale-hint',
+    );
+    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).toMatchObject({ id: 'session-1' });
+    // The confirmed id replaces the hint for the next persist.
+    expect(sandbox.sandboxId).toBe('sbx_same_vm');
+  });
+
+  it('creates a fresh sandbox when the proxy answers 410 for the reattach id', async () => {
+    // The proxy returns 410 sandbox_destroyed for a record it has marked
+    // destroyed (idle GC, manual delete). Like a 404, that id is not
+    // reattachable; start() must fall through to a fresh provision instead
+    // of failing the resumed session.
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        json(
+          { error: { message: 'Sandbox has been destroyed', type: 'sandbox_destroyed', providerStatus: 'destroyed' } },
+          { status: 410 },
+        ),
+      )
+      .mockResolvedValueOnce(json({ id: 'sbx_recreated', createdAt: '2026-06-28T00:00:00.000Z' }));
+    const sandbox = new PlatformSandbox({
+      id: 'session-1',
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      sandboxId: 'sbx_destroyed',
+      fetch: fetchMock,
+    });
+
+    await expect(sandbox._start()).resolves.toEqual({ outcome: 'created' });
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_destroyed',
+    );
+    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox');
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).toMatchObject({ id: 'session-1' });
+    expect(sandbox.sandboxId).toBe('sbx_recreated');
+  });
+
   it('creates a fresh sandbox when the reattached sandbox record is destroyed', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'env_from_process');
@@ -845,6 +919,102 @@ describe('PlatformSandbox', () => {
     );
   });
 
+  describe("reattach: 'required'", () => {
+    const strictSandbox = (fetchMock: ReturnType<typeof vi.fn>) =>
+      new PlatformSandbox({
+        id: 'session-1',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        sandboxId: 'sbx_gone',
+        reattach: 'required',
+        fetch: fetchMock,
+      });
+
+    it.each([
+      [404, { error: { message: 'Sandbox not found', type: 'not_found' } }],
+      [410, { error: { message: 'Sandbox has been destroyed', type: 'sandbox_destroyed' } }],
+    ])('throws SANDBOX_REATTACH_FAILED without POST /sandbox on %i', async (status, body) => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockImplementation(async () => json(body, { status }));
+      const sandbox = strictSandbox(fetchMock);
+
+      await expect(sandbox._start()).rejects.toMatchObject({
+        name: 'SandboxError',
+        code: 'SANDBOX_REATTACH_FAILED',
+        details: { provider: 'platform', sandboxId: 'sbx_gone', reason: String(status) },
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(String(fetchMock.mock.calls[0]![0])).toBe(
+        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_gone',
+      );
+
+      // A retry stays strict: it re-checks the same id and never provisions.
+      await expect(sandbox._start()).rejects.toMatchObject({ code: 'SANDBOX_REATTACH_FAILED' });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls.every(call => String(call[0]).endsWith('/sandbox/sbx_gone'))).toBe(true);
+    });
+
+    it('throws SANDBOX_REATTACH_FAILED when the reattached record is destroyed', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          json({ id: 'sbx_gone', createdAt: '2026-06-26T00:00:00.000Z', destroyedAt: '2026-06-27T00:00:00.000Z' }),
+        );
+      const sandbox = strictSandbox(fetchMock);
+
+      await expect(sandbox._start()).rejects.toMatchObject({
+        code: 'SANDBOX_REATTACH_FAILED',
+        details: { reason: 'destroyed' },
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('rethrows other reattach errors unchanged', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ error: { message: 'Forbidden', type: 'forbidden' } }, { status: 403 }));
+      const sandbox = strictSandbox(fetchMock);
+
+      const error = await sandbox._start().catch(e => e);
+      expect(error.code).not.toBe('SANDBOX_REATTACH_FAILED');
+      expect(error.status).toBe(403);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('reattaches normally when the sandbox is live', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_gone', createdAt: '2026-06-26T00:00:00.000Z', destroyedAt: null }));
+
+      await expect(strictSandbox(fetchMock)._start()).resolves.toEqual({ outcome: 'connected' });
+    });
+
+    it('is inherited by clone()', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockImplementation(async () =>
+          json({ error: { message: 'Sandbox not found', type: 'not_found' } }, { status: 404 }),
+        );
+      const template = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        reattach: 'required',
+        fetch: fetchMock,
+      });
+
+      const child = template.clone({ id: 'session-2', sandboxId: 'sbx_gone' });
+
+      await expect(child._start()).rejects.toMatchObject({ code: 'SANDBOX_REATTACH_FAILED' });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('exposes the platform-assigned sandbox id via getInfo metadata for reattach persistence', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi
@@ -867,6 +1037,32 @@ describe('PlatformSandbox', () => {
     // Callers persisting a reattach id (the Factory fleet reads metadata.sandboxId)
     // must get the id the proxy recognizes, not the local construction id.
     expect(info.metadata?.sandboxId).toBe('sbx_platform_uuid');
+    expect(sandbox.sandboxId).toBe('sbx_platform_uuid');
+  });
+
+  it('getInfo() before start answers locally instead of asking the proxy about the reattach hint', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn();
+
+    // A resumed session hands back whatever id was persisted. Until start()
+    // confirms it with the proxy it is only a hint: the workspace tools call
+    // getInfo() before their first exec, and a proxy 404 here would fail the
+    // tool where start() would have fallen through to a fresh provision.
+    const sandbox = new PlatformSandbox({
+      id: 'session-1',
+      sandboxId: 'stale-or-logical-id',
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+
+    const info = await sandbox.getInfo();
+    expect(info.id).toBe('session-1');
+    expect(info.status).toBe('pending');
+    expect(fetchMock).not.toHaveBeenCalled();
+    // The hint is not reported as the physical id either.
+    expect(sandbox.sandboxId).toBeUndefined();
   });
 
   it('clears sandbox state on destroy so stale IDs cannot leak to later calls', async () => {
@@ -2928,6 +3124,112 @@ describe('PlatformSandbox', () => {
           requestMs: expect.any(Number),
         }),
       );
+      const [, fields] = loggerInfoSpy.mock.calls.find(([message]) => message === 'platform-workspace start complete')!;
+      expect(fields).not.toHaveProperty('templateHash');
+    });
+
+    it('logs the template hash when a template was resolved for the provision', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const template = Template().setWorkdir('/workspace/repo').runCmd('pnpm build');
+      const expected = createHash('sha256')
+        .update(JSON.stringify(serializeSandboxTemplate(template)))
+        .digest('hex')
+        .slice(0, 16);
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_hash', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(json({ id: 'sbx_hash_2', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        template: async () => template,
+        fetch: fetchMock,
+      });
+      const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
+
+      await sandbox._start();
+
+      expect(loggerInfoSpy).toHaveBeenCalledWith(
+        'platform-workspace start complete',
+        expect.objectContaining({
+          sandboxId: 'sbx_hash',
+          mode: 'provision',
+          templateHash: expected,
+          templateBoot: 'exact',
+        }),
+      );
+      expect(expected).toMatch(/^[0-9a-f]{16}$/);
+      const [, exactFields] = loggerInfoSpy.mock.calls.find(
+        ([message]) => message === 'platform-workspace start complete',
+      )!;
+      expect(exactFields).not.toHaveProperty('pendingTemplateId');
+
+      // The same definition hashes the same on a second provision.
+      const again = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        template,
+        fetch: fetchMock,
+      });
+      const againSpy = vi.spyOn((again as any).logger, 'info');
+      await again._start();
+      expect(againSpy).toHaveBeenCalledWith(
+        'platform-workspace start complete',
+        expect.objectContaining({ templateHash: expected }),
+      );
+    });
+
+    it('logs the same template hash for definitions differing only by family', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const hashes: unknown[] = [];
+      for (const family of ['repo-a', 'repo-b']) {
+        const sandbox = new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          template: Template().setWorkdir('/workspace/repo').runCmd('pnpm build').withFamily(family),
+          fetch: vi.fn().mockResolvedValueOnce(json({ id: `sbx_${family}`, createdAt: '2026-06-26T00:00:00.000Z' })),
+        });
+        const spy = vi.spyOn((sandbox as any).logger, 'info');
+        await sandbox._start();
+        const [, fields] = spy.mock.calls.find(([message]) => message === 'platform-workspace start complete')!;
+        hashes.push((fields as { templateHash?: unknown }).templateHash);
+      }
+      expect(hashes[0]).toMatch(/^[0-9a-f]{16}$/);
+      expect(hashes[1]).toBe(hashes[0]);
+    });
+
+    it('logs a pending template boot with the id the platform is still building', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(
+        json({
+          id: 'sbx_pending',
+          createdAt: '2026-06-26T00:00:00.000Z',
+          templatePending: { templateId: 'tpl_pending', retryAfterMs: 5_000 },
+        }),
+      );
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        template: Template().runCmd('pnpm build'),
+        fetch: fetchMock,
+      });
+      const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
+
+      await sandbox._start();
+
+      expect(loggerInfoSpy).toHaveBeenCalledWith(
+        'platform-workspace start complete',
+        expect.objectContaining({
+          sandboxId: 'sbx_pending',
+          mode: 'provision',
+          templateBoot: 'pending',
+          pendingTemplateId: 'tpl_pending',
+        }),
+      );
     });
 
     it('logs one start-complete summary on reattach', async () => {
@@ -2955,22 +3257,49 @@ describe('PlatformSandbox', () => {
           requestMs: expect.any(Number),
         }),
       );
+      const [, fields] = loggerInfoSpy.mock.calls.find(([message]) => message === 'platform-workspace start complete')!;
+      expect(fields).not.toHaveProperty('templateHash');
+    });
+
+    it('omits templateHash when the same instance reattaches after provisioning', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_again', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(json({ id: 'sbx_again', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        template: Template().runCmd('echo hi'),
+        fetch: fetchMock,
+      });
+      const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
+
+      await sandbox._start();
+      await sandbox._stop();
+      await sandbox._start();
+
+      const starts = loggerInfoSpy.mock.calls.filter(([message]) => message === 'platform-workspace start complete');
+      expect(starts.map(([, fields]) => (fields as { mode: string }).mode)).toEqual(['provision', 'reattach']);
+      expect(starts[0]![1]).toHaveProperty('templateHash');
+      expect(starts[1]![1]).not.toHaveProperty('templateHash');
     });
   });
 
   describe('stop / destroy (checkpoint lifecycle)', () => {
-    // These tests pin down the semantic split between stop() and destroy()
-    // that mirrors @mastra/railway RailwaySandbox after mastra#20739:
-    //   stop()    -> preserve checkpoint (VM DELETE only)
-    //   destroy() -> release checkpoint (checkpoint DELETE + VM DELETE)
-    // The old behavior — stop() aliasing destroy() with no checkpoint delete
-    // in either — is the invariant break the split fixes.
-    it('stop() releases the VM without touching the checkpoint (DELETE /sandbox/:id only)', async () => {
+    // These tests pin down the semantic split between stop() and destroy():
+    //   stop()    -> nothing sent; the VM and its checkpoint stay, the id is kept for reattach
+    //   destroy() -> release checkpoint (checkpoint DELETE) + release VM (sandbox DELETE)
+    // Mastra.shutdown() stops every registered workspace on SIGINT, and the
+    // proxy's sandbox DELETE kills the VM on E2B, so a stop() that sent it
+    // destroyed every live session on a host restart.
+    it('stop() sends nothing to the proxy and keeps the sandbox id for reattach', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
-        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
 
       const sandbox = new PlatformSandbox({
         // Explicit id so _hasRecoveryKey is true — the destroy() path guards
@@ -2983,13 +3312,18 @@ describe('PlatformSandbox', () => {
       });
       await sandbox._start();
 
-      await sandbox.stop();
+      await sandbox._stop();
+      expect(sandbox.status).toBe('stopped');
 
-      // Exactly two upstream calls: the create and the sandbox DELETE.
-      // Anything else (in particular a DELETE /checkpoint) is a regression
-      // — stop() must not release the recovery checkpoint.
+      // Only the create went upstream. A DELETE of the sandbox or its
+      // checkpoint here is a regression.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      // The id survives, so the next start() reattaches (GET /sandbox/sbx_1)
+      // instead of provisioning (POST /sandbox).
+      await sandbox._start();
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(fetchMock.mock.calls[1]![1].method).toBe('DELETE');
+      expect(fetchMock.mock.calls[1]![1].method ?? 'GET').toBe('GET');
       expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
     });
 
@@ -3163,8 +3497,7 @@ describe('PlatformSandbox', () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
-        .mockReturnValueOnce(capturePending)
-        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+        .mockReturnValueOnce(capturePending);
 
       const sandbox = new PlatformSandbox({
         id: 'mc-session-42',
@@ -3177,31 +3510,32 @@ describe('PlatformSandbox', () => {
 
       // Kick off a capture, then a stop while it's still in flight.
       const capturePromise = sandbox.captureCheckpoint();
-      const stopPromise = sandbox.stop();
+      let stopped = false;
+      const stopPromise = sandbox.stop().then(() => {
+        stopped = true;
+      });
+      await Promise.resolve();
 
-      // stop() must not have progressed to the VM DELETE yet — only the
-      // create + the in-flight POST /checkpoint should be observable.
+      // stop() waits for the capture: only the create + the in-flight
+      // POST /checkpoint are observable and stop() has not resolved.
       expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(stopped).toBe(false);
 
       releaseCapture(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'captured' }));
-
       await Promise.all([capturePromise, stopPromise]);
 
-      // Now the VM DELETE has fired, but no checkpoint DELETE (this is
-      // stop(), not destroy()).
-      expect(fetchMock).toHaveBeenCalledTimes(3);
-      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
-      expect(fetchMock.mock.calls[2]![1].method).toBe('DELETE');
+      // Nothing else went upstream: no sandbox DELETE, no checkpoint DELETE.
+      expect(stopped).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    it('stop() proceeds to teardown even if the in-flight capture fails (best-effort flush)', async () => {
+    it('stop() resolves even if the in-flight capture fails (best-effort flush)', async () => {
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
         // Capture blows up with a transport error.
-        .mockResolvedValueOnce(new Response('quota exceeded', { status: 429 }))
-        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+        .mockResolvedValueOnce(new Response('quota exceeded', { status: 429 }));
 
       const sandbox = new PlatformSandbox({
         id: 'mc-session-42',
@@ -3217,13 +3551,10 @@ describe('PlatformSandbox', () => {
       const capturePromise = sandbox.captureCheckpoint();
       await expect(capturePromise).rejects.toMatchObject({ status: 429 });
 
-      // A failed capture must not leave the caller unable to release the
-      // sandbox. The proxy's safety-net timer is the fallback for the
-      // checkpoint state.
-      await sandbox.stop();
-
-      expect(fetchMock).toHaveBeenCalledTimes(3);
-      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
+      // A failed capture must not make stop() throw. The proxy's safety-net
+      // timer is the fallback for the checkpoint state.
+      await expect(sandbox.stop()).resolves.toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
   });
 

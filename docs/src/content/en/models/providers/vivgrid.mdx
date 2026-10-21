@@ -7,7 +7,7 @@ description: "Browse Vivgrid model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/vivgrid.svg" alt="Vivgrid logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Vivgrid
 
-Access 36 Vivgrid models through Mastra's model router. Authentication is handled automatically using the `VIVGRID_API_KEY` environment variable.
+Access 37 Vivgrid models through Mastra's model router. Authentication is handled automatically using the `VIVGRID_API_KEY` environment variable.
 
 Learn more in the [Vivgrid documentation](https://docs.vivgrid.com/models).
 
@@ -68,6 +68,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 10,
     "outputCost": 50
+  },
+  {
+    "model": "vivgrid/claude-haiku-5-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.5
   },
   {
     "model": "vivgrid/claude-opus-5",
@@ -138,8 +150,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.15,
-    "outputCost": 0.3
+    "inputCost": 0.44,
+    "outputCost": 1.32
   },
   {
     "model": "vivgrid/deepseek-v4-pro",
@@ -150,8 +162,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.435,
-    "outputCost": 0.87
+    "inputCost": 1.74,
+    "outputCost": 3.48
   },
   {
     "model": "vivgrid/deepseek-v4-pro-0813",
@@ -198,7 +210,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
-    "inputCost": 2,
+    "inputCost": 3,
     "outputCost": 12
   },
   {

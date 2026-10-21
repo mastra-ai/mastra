@@ -29,7 +29,7 @@ const {
 
 | Parameter | Type | Required | Description |
 | - | - | - | - |
-| `options` | `CreateMastraCodeOptions` | No | Configuration options |
+| `options` | `MastraCodeConfig` | No | Configuration options |
 
 ### Returns
 
@@ -55,47 +55,69 @@ const {
 | `effectiveDefaults` | `object` | Effective default settings after merging |
 | `setActiveSession` | `(session: Session<MastraCodeState>) => void` | Publishes a session back into config closures |
 
-### `CreateMastraCodeOptions`
+### `MastraCodeConfig`
 
 | Option | Type | Default | Description |
 | - | - | - | - |
 | `cwd` | `string` | `process.cwd()` | Working directory for project detection |
 | `homeDir` | `string` | `os.homedir()` | Home directory for global config discovery |
-| `modes` | `AgentControllerMode[]` | Build, Plan, Fast | Override modes (model IDs, colors, which modes exist) |
+| `modes` | `AgentControllerMode[] \| false` | Build, Plan, Explore | Override modes (model IDs, colors, which modes exist). `false` runs every session as a single Build agent |
 | `subagents` | `AgentControllerSubagent[]` | Explore, Plan, Execute | Override or extend subagent definitions |
-| `extraTools` | `Record<string, Tool> \| ((ctx) => Record<string, Tool>)` | `{}` | Extra tools merged into the dynamic tool set |
+| `extraTools` | `Record<string, Tool> \| ((ctx) => Record<string, Tool> \| Promise<Record<string, Tool>>)` | — | Extra tools merged into the dynamic tool set |
 | `postToolObserver` | `(context: ToolAfterHookContext) => void \| Promise<void>` | — | Observes completed tool calls without replacing tools. Errors are logged without failing successful tool calls |
+| `inputProcessors` | `InputProcessor[] \| ((ctx) => InputProcessor[] \| Promise<InputProcessor[]>)` | — | Processors prepended before Mastra Code's built-in input processors |
+| `outputProcessors` | `OutputProcessor[] \| ((ctx) => OutputProcessor[] \| Promise<OutputProcessor[]>)` | — | Processors appended after Mastra Code's built-in output processors |
 | `disabledTools` | `string[]` | `[]` | Tools removed from the dynamic tool set before exposure to the model |
-| `storage` | `StorageConfig` | Local LibSQL | Custom storage config instead of auto-detected default |
+| `disableBuiltinTools` | `BuiltinToolId[]` | `[]` | Agent controller built-in tools (for example, `submit_plan`) removed from every session. Tool guidance skips disabled tools, and plan mode writes the plan file instead of calling `submit_plan` when it's disabled |
+| `storage` | `StorageConfig \| MastraCompositeStore` | Local LibSQL | Custom storage config instead of auto-detected default, or a pre-built store |
+| `storageBackend` | `'libsql' \| 'pg'` | Inferred for LibSQL and Postgres | Backend for an injected store. Inferred for `LibSQLStore` and `PostgresStore`; required for any other `MastraCompositeStore` |
+| `vector` | `MastraVector` | Default recall store | Pre-built vector store for recall search |
+| `knowledge` | `{ key: string; instance: Knowledge }` | — | Host-owned Knowledge instance registered on the mounted Mastra runtime |
 | `omScope` | `'thread' \| 'resource'` | Auto-detected | Observational Memory scope. `'resource'` is [deprecated](https://mastra.ai/docs/memory/observational-memory#resource-scope-deprecated) |
 | `settingsPath` | `string` | Global settings | Path to a custom `settings.json` file |
 | `initialState` | `Partial<MastraCodeState>` | Default state | Initial state overrides (yolo, thinkingLevel, etc.) |
+| `resolveDefaultThinkingLevel` | `(ctx) => ThinkingLevelSetting \| Promise<ThinkingLevelSetting>` | Settings defaults | Host-owned thinking default applied when a request has no level |
+| `createInitialThread` | `boolean` | `true` | Create a thread during local boot when no existing thread matches |
+| `hostInstructions` | `string \| ((ctx) => string \| undefined \| Promise<string \| undefined>)` | — | Trusted host instructions resolved outside mutable session state |
+| `coAuthor` | `{ name?: string; email?: string }` | Core defaults | Commit co-author identity used in coding-agent commit guidance |
 | `idGenerator` | `() => string` | Default | Override id generation for threads/messages (useful for deterministic tests) |
 | `intervalHandlers` | `IntervalHandler[]` | gateway-sync | Override interval (background task) handlers |
-| `resolveModel` | `(modelId: string, options?) => ResolvedModel` | Default resolver | Custom model resolution function |
 | `workspace` | `Workspace` | Local FS + sandbox | Override the workspace |
 | `configDir` | `string` | `.mastracode` | Override the config directory name |
 | `mcpServers` | `Record<string, McpServerConfig>` | `{}` | Programmatic MCP server configs, merged with file-based configs |
 | `disableMcp` | `boolean` | `false` | Disable MCP server discovery |
 | `disableHooks` | `boolean` | `false` | Disable hooks |
+| `disableEnvFile` | `boolean` | `false` | Skip loading `cwd/.env` into the process environment |
+| `disablePlugins` | `boolean` | `false` | Disable plugin discovery and loading |
+| `disableGithubSignals` | `boolean` | `false` | Disable the polling GitHub signal provider even when enabled in global settings |
+| `disableSettingsOmSeed` | `boolean` | `false` | Skip seeding observational memory settings from `settings.json` |
+| `pluginManager` | `PluginManager` | Built-in manager | Override the plugin manager |
 | `memory` | `Memory \| MemoryFactory \| false` | Built-in gateway | Override the memory instance or factory |
 | `browser` | `BrowserProvider` | — | Browser provider; when set the agent gains browser tools |
 | `pubsub` | `PubSub` | — | PubSub for signal routing |
 | `unixSocketPubSub` | `boolean` | `false` | Use the built-in Unix socket PubSub for local cross-process signal routing |
 | `crossProcessPubSub` | `boolean` | `false` | Mark the configured PubSub as cross-process-safe (skips file thread locks) |
+| `agentConnections` | `AgentConnectionsSignalProviderOptions` | — | Agent connection state and discovery options |
+| `crossAgentSignals` | `boolean` | Global setting (off) | Enable experimental cross-agent communication |
+| `scheduleTools` | `boolean` | Global setting (off) | Enable the experimental schedule tools |
+| `prepareWakeRequestContext` | `(args) => void \| Promise<void>` | — | Prepare request context before a wake runs on an idle thread |
+| `resumeWakeSession` | `(args) => Promise<void>` | — | Bring the session that owns a resource online for a deferred notification |
 
 #### `AgentControllerMode`
 
-Each mode defines an agent configuration and display properties.
+Each mode defines a display configuration and optional tool and instruction overrides. All modes share the backing agent.
 
 | Property | Type | Required | Description |
 | - | - | - | - |
 | `id` | `string` | Yes | Unique identifier (e.g., `"build"`, `"plan"`) |
 | `name` | `string` | No | Display name shown in the TUI |
-| `default` | `boolean` | No | Whether this mode is active on startup |
-| `defaultModelId` | `string` | No | Default model ID for this mode |
-| `color` | `string` | No | Hex color for mode indicator (e.g., `"#7c3aed"`) |
-| `agent` | `Agent \| ((state) => Agent)` | Yes | Agent instance or factory function |
+| `defaultModelId` | `string` | No | Model for sessions that start in this mode and fallback for subagents. Mode switches do not apply it |
+| `description` | `string` | No | Description shown in mode pickers and Studio |
+| `instructions` | `string` | No | Instructions layered above the backing agent's instructions |
+| `availableTools` | `string[]` | No | Tool allowlist for this mode. `undefined` allows all tools; `[]` hides all tools |
+| `transitionsTo` | `string` | No | Mode to switch to when a submitted plan is approved |
+| `metadata` | `Record<string, unknown>` | No | User-defined metadata. `metadata.color` sets the TUI indicator color and `metadata.default: true` marks the startup mode |
+| `agent` | `Agent` | No | Deprecated. Use the shared backing agent |
 
 #### `AgentControllerSubagent`
 
@@ -124,17 +146,19 @@ Database connection configuration.
 
 #### `MastraCodeState`
 
-AgentController state fields available through `initialState`.
+AgentController state fields available through `initialState`. `OMModel` accepts `"auto"` or a concrete model ID.
 
 | Field | Type | Default | Description |
 | - | - | - | - |
-| `yolo` | `boolean` | `false` | Auto-approve all tool calls |
-| `thinkingLevel` | `"off" \| "low" \| "medium" \| "high" \| "xhigh"` | `"off"` | Extended thinking depth for Anthropic models |
+| `yolo` | `boolean` | `true` | Auto-approve all tool calls. A saved preference overrides this default |
+| `thinkingLevel` | `"off" \| "low" \| "medium" \| "high" \| "xhigh" \| "max"` | `"off"` | Extended thinking depth |
 | `smartEditing` | `boolean` | `true` | Use AST-based analysis for code edits |
 | `notifications` | `"bell" \| "system" \| "both" \| "off"` | `"off"` | Alert style when TUI needs attention |
 | `permissionRules` | `PermissionRules` | Default policies | Per-category and per-tool approval policies |
-| `observerModelId` | `string` | `"google/gemini-2.5-flash"` | Model for observational memory observer |
-| `reflectorModelId` | `string` | `"google/gemini-2.5-flash"` | Model for observational memory reflector |
+| `observerModelId` | `string` | — | Legacy concrete model for the observational memory observer |
+| `reflectorModelId` | `string` | — | Legacy concrete model for the observational memory reflector |
+| `observerModelSelection` | `OMModel` | `"auto"` | Automatic or explicit observer model selection |
+| `reflectorModelSelection` | `OMModel` | `"auto"` | Automatic or explicit reflector model selection |
 | `observationThreshold` | `number` | `30000` | Token count triggering observation pass |
 | `reflectionThreshold` | `number` | `40000` | Token count triggering reflection pass |
 
@@ -173,10 +197,11 @@ The `MastraTUI` class provides the terminal interface. Import it separately to b
 import { createMastraCode } from 'mastracode'
 import { MastraTUI } from 'mastracode/tui'
 
-const { controller, mcpManager, hookManager, authStorage } = await createMastraCode()
+const { controller, session, mcpManager, hookManager, authStorage } = await createMastraCode()
 
 const tui = new MastraTUI({
   controller,
+  session,
   hookManager,
   authStorage,
   mcpManager,
@@ -192,9 +217,10 @@ tui.run()
 | Option | Type | Required | Description |
 | - | - | - | - |
 | `controller` | `AgentController` | Yes | The controller instance |
-| `hookManager` | `HookManager` | Yes | Hook manager from `createMastraCode()` |
-| `authStorage` | `AuthStorage` | Yes | Auth storage from `createMastraCode()` |
-| `mcpManager` | `MCPManager` | Yes | MCP manager from `createMastraCode()` |
+| `session` | `Session` | Yes | The session created from the controller |
+| `hookManager` | `HookManager` | No | Hook manager from `createMastraCode()` |
+| `authStorage` | `AuthStorage` | No | Auth storage from `createMastraCode()` |
+| `mcpManager` | `MCPManager` | No | MCP manager from `createMastraCode()` |
 | `appName` | `string` | No | Application name shown in header |
 | `version` | `string` | No | Version shown in header |
 

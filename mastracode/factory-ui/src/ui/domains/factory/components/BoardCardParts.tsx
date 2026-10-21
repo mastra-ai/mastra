@@ -6,14 +6,22 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Hand, Maximize2, Sparkles, TriangleAlert } from 'lucide-react';
+import { Hand, Maximize2, MessageSquare, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
-import type { BoardCardStatus } from '../boardCardStatus';
-import { HIDDEN_CARD_LABELS, SOURCE_LABELS } from '../boardItems';
+import type { BoardCardStatus } from '../boardCardState';
+import {
+  HIDDEN_CARD_LABELS,
+  SOURCE_LABELS,
+  metadataLabelColors,
+  metadataLabels,
+  pullRequestStatusForItem,
+} from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
-import type { WorkItemSource } from '../services/workItems';
+import type { WorkItem, WorkItemSource } from '../services/workItems';
+import { SourceIcon } from './BoardIcons';
+import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 
 export function SourceTitle({ source, title, id }: { source: WorkItemSource; title: string; id?: string }) {
   return (
@@ -22,6 +30,11 @@ export function SourceTitle({ source, title, id }: { source: WorkItemSource; tit
       <span id={id}>{title}</span>
     </>
   );
+}
+
+export function WorkItemSourceIcon({ item }: { item: WorkItem }) {
+  if (item.source === 'github-pr') return <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />;
+  return <SourceIcon source={item.source} />;
 }
 
 // The app-wide provider fires at 0ms, which makes card-sized targets open as the pointer merely crosses them.
@@ -37,30 +50,42 @@ export function BoardTooltipDelay({ children }: { children: ReactNode }) {
 export const REVEAL_ON_CARD_HOVER =
   'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 pointer-fine:aria-expanded:opacity-100';
 
-// Beside the card's menu, in the slot where the open copy puts Collapse; the click falls through to the card.
-export function CardDetailsHint() {
+// A mouse twin of the card's own details button, which keeps the keyboard and screen-reader path.
+export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
   return (
-    <span
+    <button
+      type="button"
       aria-hidden
-      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'pointer-events-none', REVEAL_ON_CARD_HOVER)}
+      tabIndex={-1}
+      draggable={false}
+      onClick={onOpen}
+      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), REVEAL_ON_CARD_HOVER)}
     >
       <Maximize2 size={13} aria-hidden />
-    </span>
+    </button>
   );
 }
 
-export function CardStatus({ status }: { status: BoardCardStatus }) {
-  if (status.kind === 'idle') return null;
+export function CommentCount({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <Txt
+      as="span"
+      variant="meta"
+      tone="faint"
+      className="flex shrink-0 items-center gap-1"
+      aria-label={`${count} ${count === 1 ? 'comment' : 'comments'}`}
+    >
+      <MessageSquare size={11} aria-hidden />
+      {count}
+    </Txt>
+  );
+}
 
-  // A parked run is the one idle state the card cannot whisper: it needs the
-  // user, so it stays lit without a hover. Releasing it is the actions row's job.
-  if (status.kind === 'waiting') {
-    return (
-      <Badge size="xs" variant="orange" icon={<Sparkles aria-hidden />} role="status" aria-live="polite">
-        Suggested: {status.label}
-      </Badge>
-    );
-  }
+/** `compact` keeps an error to one truncated line (for list rows) and moves the full text into the tooltip. */
+export function CardStatus({ status, compact = false }: { status: BoardCardStatus; compact?: boolean }) {
+  // A parked run is surfaced by the highlighted "Start suggested run" action, not a status badge.
+  if (status.kind === 'idle' || status.kind === 'waiting') return null;
 
   if (status.kind === 'held') {
     return (
@@ -86,32 +111,37 @@ export function CardStatus({ status }: { status: BoardCardStatus }) {
     );
   }
 
+  const hasTooltip = compact || status.detail !== undefined;
   const message = (
     <Txt
       as="span"
       variant="meta"
       role="alert"
-      tabIndex={status.detail === undefined ? undefined : 0}
+      tabIndex={hasTooltip ? 0 : undefined}
       className={cn(
-        'text-destructive-foreground flex w-full min-w-0 items-start gap-1.5',
-        status.detail !== undefined && [
-          'relative cursor-help underline decoration-dotted underline-offset-2',
-          focusRing,
-        ],
+        'text-destructive-foreground flex w-full min-w-0 gap-1.5',
+        compact ? 'items-center' : 'items-start',
+        hasTooltip && ['relative cursor-help', focusRing],
+        status.detail !== undefined && 'underline decoration-dotted underline-offset-2',
       )}
     >
-      <TriangleAlert size={11} aria-hidden className="mt-0.5 shrink-0" />
-      <span className="min-w-0 wrap-anywhere">{status.label}</span>
+      <TriangleAlert size={11} aria-hidden className={cn('shrink-0', !compact && 'mt-0.5')} />
+      <span className={cn('min-w-0', compact ? 'truncate' : 'wrap-anywhere')}>{status.label}</span>
     </Txt>
   );
 
-  if (status.detail === undefined) return message;
+  if (!hasTooltip) return message;
   // Raw failure text stays one hover away instead of costing a row.
   return (
     <Tooltip>
       <TooltipTrigger render={message} />
       <TooltipContent side="top" className="max-w-80">
-        <span className="wrap-anywhere whitespace-pre-wrap">{status.detail}</span>
+        {compact && <span className="block wrap-anywhere">{status.label}</span>}
+        {status.detail !== undefined && (
+          <span className={cn('block wrap-anywhere whitespace-pre-wrap', compact && 'mt-1 opacity-80')}>
+            {status.detail}
+          </span>
+        )}
       </TooltipContent>
     </Tooltip>
   );
@@ -127,15 +157,10 @@ function labelDotClass(label: string): string {
   return 'bg-muted-foreground';
 }
 
-export function CardLabels({
-  labels,
-  colors = {},
-}: {
-  labels: readonly string[];
-  colors?: Readonly<Record<string, string>>;
-}) {
-  const displayLabels = labels.filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
+export function MetadataLabels({ metadata }: { metadata: Record<string, unknown> }) {
+  const displayLabels = metadataLabels(metadata).filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
   if (displayLabels.length === 0) return null;
+  const colors = metadataLabelColors(metadata);
   return (
     <ScrollArea orientation="horizontal" revealScrollbarOnHover={false} aria-label="Labels">
       <div className="flex items-center gap-1.5">
@@ -187,8 +212,9 @@ export function CardActions({
   );
 }
 
+// A routine move stays quiet so the one urgent pill on the board is the only raised control.
 function pillVariant(action: CardAction, main: boolean) {
-  return main && action.urgent && !action.disabled ? 'primary' : 'default';
+  return main && action.urgent && !action.disabled ? 'primary' : 'ghost';
 }
 
 function CardActionButton({

@@ -1,10 +1,11 @@
 import type { TextPart } from '@mastra/react/ui';
 
+import { MessageAttachment } from '../../attachments/message-attachment';
+import { isMessageAttachment } from '../../attachments/split-message-attachments';
 import type { MessageMetadata } from '../message-metadata';
 import { parseSkillActivation } from '../skill-activation';
 import { SkillMessage } from '../skill-message';
 import { SystemReminderBadge } from '../system-reminder-badge';
-import { InMessageAttachment } from './in-message-attachment';
 import { MessageText } from './message-text';
 
 export interface UserTextPartRendererProps {
@@ -27,8 +28,8 @@ export const UserTextPartRenderer = ({ part, metadata }: UserTextPartRendererPro
   if (text.trimStart().startsWith('<system-reminder')) {
     return <SystemReminderBadge text={text} />;
   }
-  if (text.includes('<attachment name=')) {
-    return <InMessageAttachment type="document" contentType="text/plain" data={text} />;
+  if (isMessageAttachment(part)) {
+    return <MessageAttachment type="document" contentType="text/plain" data={text} />;
   }
 
   return <MessageText text={text} metadata={metadata} />;

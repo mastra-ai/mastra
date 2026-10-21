@@ -1,4 +1,3 @@
-import matter from 'gray-matter';
 import type { BlobStore } from '../../storage/domains/blobs/base';
 import type {
   SkillVersionTree,
@@ -7,6 +6,7 @@ import type {
   StorageSkillFileNode,
   StorageSkillSnapshotType,
 } from '../../storage/types';
+import { extractSkillFrontmatter } from './schemas';
 import type { SkillSource, SkillSourceEntry } from './skill-source';
 
 /**
@@ -227,9 +227,7 @@ export function parseSkillSnapshotFromFiles(files: SkillSnapshotFile[]): Omit<St
 
   const skillMdContent =
     typeof skillMdFile.content === 'string' ? skillMdFile.content : skillMdFile.content.toString('utf-8');
-  const parsed = matter(skillMdContent);
-  const frontmatter = parsed.data;
-  const instructions = parsed.content.trim();
+  const { metadata: frontmatter, instructions } = extractSkillFrontmatter(skillMdContent);
 
   const allPaths = files.map(f => f.path);
   const references = collectSubdirPaths(allPaths, 'references');

@@ -316,7 +316,7 @@ function ThreadRailPreview({
     ref: previewSizerRef,
     heightStyle: previewHeightStyle,
     measure: measurePreviewHeight,
-  } = useMeasuredAutoHeight<HTMLDivElement>();
+  } = useMeasuredAutoHeight();
   const containerVisible = phase === 'visible' || (phase === 'entering' && Boolean(previousTurn));
   // Entering and exiting share the same off-screen resting style.
   const hiddenLayerClassName = 'scale-95 opacity-0 blur-xs';
@@ -382,7 +382,7 @@ function ThreadRailPreviewContent({
         </Txt>
       )}
       {(turn.files.length > 0 || turn.hiddenFileCount > 0) && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-2.5">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-2.5">
           {turn.files.map(file => (
             <Txt
               as="span"

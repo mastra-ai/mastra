@@ -20,7 +20,7 @@ import {
   createObservabilityContext,
   resolveObservabilityContext,
 } from '../observability';
-import type { ObservabilityContext, ProcessorSpanType, Span } from '../observability';
+import type { AnySpan, ObservabilityContext, ProcessorSpanType, Span } from '../observability';
 import type { TracingContext } from '../observability/types';
 import { executeWithContext } from '../observability/utils';
 import { RequestContext } from '../request-context';
@@ -28,6 +28,7 @@ import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import type { OutputWriter } from '../workflows/types';
+import type { AnyWorkspace } from '../workspace/workspace';
 import { isProcessorWorkflow } from './is-processor-workflow';
 import { createProcessorSendSignal } from './send-signal';
 import { resolveProcessorSpanAttributes, resolveProcessorSpanName } from './span-declaration';
@@ -39,7 +40,7 @@ import {
   summarizeToolChoiceForSpan,
 } from './span-payload';
 import type { ProcessorStepOutput } from './step-schema';
-import { REPROCESS_PART_KEY } from './stream-reprocess';
+import { isFailedStreamChunk, REPROCESS_PART_KEY, takeHeldParts } from './stream-reprocess';
 import { needsTrailingAssistantGuard, TrailingAssistantGuard } from './trailing-assistant-guard';
 import type {
   CachedLLMStepChunk,
@@ -209,6 +210,70 @@ export class ProcessorState<OUTPUT = undefined> {
  * hook time on the shared processor state, next to `__outputStreamSpan_<id>`.
  */
 export const OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX = '__outputStreamHookDurationMs_';
+
+/**
+ * The MODEL_STEP an output stream processor span belongs under: `span` itself
+ * (a step's stream passes its step span) or its nearest step ancestor. Stops at
+ * the first agent run, so a nested agent's stream never attaches to its
+ * caller's step.
+ */
+export function findOwnModelStepSpan(span: AnySpan | undefined): AnySpan | undefined {
+  for (let current = span; current && current.type !== SpanType.AGENT_RUN; current = current.parent) {
+    if (current.type === SpanType.MODEL_STEP) {
+      return current;
+    }
+  }
+  return undefined;
+}
+
+/** Chunk types that end the model step an output stream processor span sits under. */
+const STEP_END_CHUNK_TYPES = new Set(['step-finish', 'error', 'abort']);
+
+function endStoredOutputStreamSpan(state: Record<string, unknown>, processorId: string, totalChunks: number): void {
+  const spanKey = `__outputStreamSpan_${processorId}`;
+  const hookDurationKey = `${OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX}${processorId}`;
+  (state[spanKey] as Span<SpanType.PROCESSOR_RUN> | undefined)?.end({
+    output: { totalChunks },
+    attributes: { hookDurationMs: (state[hookDurationKey] as number | undefined) ?? 0 },
+  });
+  delete state[spanKey];
+  delete state[hookDurationKey];
+}
+
+/**
+ * When a step's stream starts, ends the stored output stream processor span if
+ * it was opened outside that step (e.g. by a tool result replayed on resume,
+ * before any step started), so it does not carry into the step.
+ */
+export function endOutputStreamSpanOutsideStep(
+  state: Record<string, unknown>,
+  processorId: string,
+  part: ChunkType,
+  stepSpan: AnySpan | undefined,
+  totalChunks: number,
+): void {
+  const span = state[`__outputStreamSpan_${processorId}`] as AnySpan | undefined;
+  if (span && part.type === 'step-start' && stepSpan?.type === SpanType.MODEL_STEP && span.parent?.id !== stepSpan.id) {
+    endStoredOutputStreamSpan(state, processorId, totalChunks);
+  }
+}
+
+/**
+ * Ends the stored output stream processor span when the model step it sits
+ * under ends. The span outlives the step's model stream so the step's tool
+ * results land in it too.
+ */
+export function endOutputStreamSpanAtStepEnd(
+  state: Record<string, unknown>,
+  processorId: string,
+  part: ChunkType,
+  totalChunks: number,
+): void {
+  const span = state[`__outputStreamSpan_${processorId}`] as AnySpan | undefined;
+  if (span?.parent?.type === SpanType.MODEL_STEP && STEP_END_CHUNK_TYPES.has(part.type)) {
+    endStoredOutputStreamSpan(state, processorId, totalChunks);
+  }
+}
 
 /**
  * Union type for processor or workflow that can be used as a processor
@@ -885,6 +950,9 @@ export class ProcessorRunner {
     messageList?: MessageList,
     retryCount: number = 0,
     writer?: ProcessorStreamWriter,
+    abortSignal?: AbortSignal,
+    /** Skip output processors before this index (the part was released by the one before it). */
+    startIndex: number = 0,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -901,6 +969,7 @@ export class ProcessorRunner {
       const isFinishChunk = part.type === 'finish';
 
       for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
+        if (index < startIndex) continue;
         // Handle workflows for stream processing
         if (isProcessorWorkflow(processorOrWorkflow)) {
           if (!processedPart) continue;
@@ -935,6 +1004,7 @@ export class ProcessorRunner {
               observabilityContext,
               requestContext,
               writer,
+              abortSignal,
             );
 
             // Extract the processed part from the result if it exists
@@ -953,7 +1023,7 @@ export class ProcessorRunner {
                 processorId: error.processorId || workflowId,
               };
             }
-            this.logger.error('Output processor workflow failed', { agent: this.agentName, workflowId, error });
+            throw error;
           }
           continue;
         }
@@ -987,13 +1057,14 @@ export class ProcessorRunner {
                 state: state.customState,
                 agent: this.agent,
                 abort: <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-                  throw new TripWire(reason || `Stream part blocked by ${processor.id}`, options, processor.id);
+                  throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
                 },
                 ...createObservabilityContext({ currentSpan: state.span }),
                 requestContext,
                 messageList,
                 retryCount,
                 writer,
+                abortSignal,
               });
             } finally {
               state.hookDurationMs += performance.now() - hookStart;
@@ -1028,11 +1099,7 @@ export class ProcessorRunner {
               processorId: processor.id,
             };
           }
-          // End span with error
-          const state = processorStates.get(processor.id);
-          state?.span?.error({ error: error as Error, endSpan: true, attributes: state.getFinalAttributes() });
-          // Log error but continue with original part
-          this.logger.error('Output processor failed', { agent: this.agentName, processorId: processor.id, error });
+          throw error;
         }
       }
 
@@ -1053,21 +1120,34 @@ export class ProcessorRunner {
       for (const state of processorStates.values()) {
         state.span?.error({ error: error as Error, endSpan: true, attributes: state.getFinalAttributes() });
       }
-      return { part, blocked: false };
+      throw error;
     }
   }
 
-  endStreamProcessorSpans<OUTPUT>(processorStates: Map<string, ProcessorState<OUTPUT>>): void {
+  endStreamProcessorSpans<OUTPUT>(
+    processorStates: Map<string, ProcessorState<OUTPUT>>,
+    options?: {
+      /**
+       * Leave workflow-path spans parented to a model step open. Set when only
+       * the step's model stream closed: the step's tool results still flow
+       * through the processors, and the span ends with the step's
+       * `step-finish` chunk.
+       */
+      keepStepScopedSpans?: boolean;
+    },
+  ): void {
     for (const state of processorStates.values()) {
       state.span?.end({ output: state.getFinalOutput(), attributes: state.getFinalAttributes() });
 
       for (const [key, value] of Object.entries(state.customState)) {
         if (key.startsWith('__outputStreamSpan_')) {
+          const span = value as Span<SpanType.PROCESSOR_RUN> | undefined;
+          if (options?.keepStepScopedSpans && span?.parent?.type === SpanType.MODEL_STEP) {
+            continue;
+          }
           const durationKey = OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX + key.slice('__outputStreamSpan_'.length);
           const hookDurationMs = state.customState[durationKey];
-          (value as Span<SpanType.PROCESSOR_RUN> | undefined)?.end(
-            typeof hookDurationMs === 'number' ? { attributes: { hookDurationMs } } : undefined,
-          );
+          span?.end(typeof hookDurationMs === 'number' ? { attributes: { hookDurationMs } } : undefined);
           // Processor state outlives a single LLM step, so a kept reference would
           // leave later steps writing to an already-ended span parented to the
           // previous step - dropping their output and any tripwire abort.
@@ -1099,6 +1179,8 @@ export class ProcessorRunner {
     messageList?: MessageList,
     retryCount: number = 0,
     writer?: ProcessorStreamWriter,
+    abortSignal?: AbortSignal,
+    minIndex?: number,
   ): Promise<
     Array<{
       part: ChunkType<OUTPUT> | null | undefined;
@@ -1115,6 +1197,44 @@ export class ProcessorRunner {
       tripwireOptions?: TripWireOptions<unknown>;
       processorId?: string;
     }> = [];
+
+    // With `minIndex` (end-of-stream release), a part stashed by the processor at index j
+    // re-enters at j, never upstream: an upstream holder such as BatchPartsProcessor
+    // has already released everything and would hold the part with nothing left to free it.
+    if (minIndex !== undefined) {
+      const takeFrom = (): [ChunkType<OUTPUT>, number] | undefined => {
+        for (let j = minIndex; j < this.outputProcessors.length; j++) {
+          const processor = this.outputProcessors[j]!;
+          if (isProcessorWorkflow(processor)) continue;
+          const custom = processorStates.get(processor.id)?.customState as Record<string, unknown> | undefined;
+          const stashed = custom?.[REPROCESS_PART_KEY];
+          if (stashed) {
+            delete custom![REPROCESS_PART_KEY];
+            return [stashed as ChunkType<OUTPUT>, j];
+          }
+        }
+        return undefined;
+      };
+      let guard = 0;
+      let next = takeFrom();
+      while (next && guard++ < 1000) {
+        const result = await this.processPart(
+          next[0],
+          processorStates,
+          observabilityContext,
+          requestContext,
+          messageList,
+          retryCount,
+          writer,
+          abortSignal,
+          next[1],
+        );
+        results.push(result);
+        if (result.blocked) break;
+        next = takeFrom();
+      }
+      return results;
+    }
 
     // Pull the next stashed part (if any) from processor states, in processor order.
     const takeNext = (): ChunkType<OUTPUT> | undefined => {
@@ -1142,6 +1262,7 @@ export class ProcessorRunner {
         messageList,
         retryCount,
         writer,
+        abortSignal,
       );
       results.push(result);
       if (result.blocked) {
@@ -1151,6 +1272,136 @@ export class ProcessorRunner {
     }
 
     return results;
+  }
+
+  /**
+   * Call when a stream ends. Processors that hold parts until a later part
+   * arrives (`BatchPartsProcessor`, LLM-buffered checks) would otherwise drop
+   * what they hold when nothing follows it. Each held part is released and
+   * pushed through the processors after its holder, then any stashed parts are
+   * drained. Returns the results in emission order, stopping at the first block.
+   */
+  async flushHeldParts<OUTPUT>(
+    processorStates: Map<string, ProcessorState<OUTPUT>>,
+    observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
+    messageList?: MessageList,
+    retryCount: number = 0,
+    writer?: ProcessorStreamWriter,
+    abortSignal?: AbortSignal,
+  ): Promise<
+    Array<{
+      part: ChunkType<OUTPUT> | null | undefined;
+      blocked: boolean;
+      reason?: string;
+      tripwireOptions?: TripWireOptions<unknown>;
+      processorId?: string;
+    }>
+  > {
+    const results: Array<{
+      part: ChunkType<OUTPUT> | null | undefined;
+      blocked: boolean;
+      reason?: string;
+      tripwireOptions?: TripWireOptions<unknown>;
+      processorId?: string;
+    }> = [];
+
+    for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
+      let held: ChunkType[];
+      try {
+        if (isProcessorWorkflow(processorOrWorkflow)) {
+          const flush = processorOrWorkflow.__flushOutputStream;
+          if (!flush) continue;
+          const outputWriter: OutputWriter | undefined = writer
+            ? (chunk, options) => writer.custom(chunk, options)
+            : undefined;
+          held = await executeWithContext({
+            span: observabilityContext?.tracingContext?.currentSpan,
+            fn: () =>
+              flush({
+                inputData: {
+                  phase: 'outputStream',
+                  streamParts: [],
+                  state: {},
+                  messageList,
+                  retryCount,
+                  processorStates: this.processorStates,
+                  abortSignal,
+                  agent: this.agent,
+                } as ProcessorStepOutput,
+                ...observabilityContext,
+                requestContext: requestContext ?? new RequestContext(),
+                outputWriter,
+              }),
+          });
+        } else {
+          held = await takeHeldParts(processorStates.get(processorOrWorkflow.id)?.customState);
+        }
+      } catch (error) {
+        if (error instanceof TripWire) {
+          results.push({
+            part: null,
+            blocked: true,
+            reason: error.message,
+            tripwireOptions: error.options,
+            processorId: error.processorId || processorOrWorkflow.id,
+          });
+          return results;
+        }
+        throw error;
+      }
+
+      for (const part of held) {
+        const result = await this.processPart(
+          part as ChunkType<OUTPUT>,
+          processorStates,
+          observabilityContext,
+          requestContext,
+          messageList,
+          retryCount,
+          writer,
+          abortSignal,
+          index + 1,
+        );
+        results.push(result);
+        if (result.blocked) return results;
+        const reprocessed = await this.drainReprocessParts(
+          processorStates,
+          observabilityContext,
+          requestContext,
+          messageList,
+          retryCount,
+          writer,
+          abortSignal,
+          index + 1,
+        );
+        results.push(...reprocessed);
+        if (reprocessed.some(r => r.blocked)) return results;
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Call instead of {@link flushHeldParts} when a stream errored or was aborted:
+   * clears what processors hold without emitting or checking it, so a retry
+   * doesn't repeat it and nothing is emitted after cancellation.
+   */
+  /**
+   * Drops what output processors hold after a failed or aborted model stream, without running
+   * any checks. Returns the held control parts (start, error, finish, ...), oldest first.
+   */
+  async discardHeldParts<OUTPUT>(processorStates: Map<string, ProcessorState<OUTPUT>>): Promise<ChunkType<OUTPUT>[]> {
+    // A later processor holds parts that passed the earlier ones first, so it goes first.
+    const kept: ChunkType<OUTPUT>[] = [];
+    for (const processorOrWorkflow of [...this.outputProcessors].reverse()) {
+      const parts = isProcessorWorkflow(processorOrWorkflow)
+        ? ((await processorOrWorkflow.__discardOutputStream?.(this.processorStates)) ?? [])
+        : await takeHeldParts(processorStates.get(processorOrWorkflow.id)?.customState, { discard: true });
+      kept.push(...(parts as ChunkType<OUTPUT>[]));
+    }
+    return kept;
   }
 
   async runOutputProcessorsForStream<OUTPUT = undefined>(
@@ -1168,14 +1419,46 @@ export class ProcessorRunner {
           custom: async (data: { type: string }) => controller.enqueue(data),
         };
 
+        let streamFailed = false;
         try {
           while (true) {
             const { done, value } = await reader.read();
 
             if (done) {
+              if (streamFailed) {
+                for (const part of await this.discardHeldParts(processorStates)) controller.enqueue(part);
+                controller.close();
+                break;
+              }
+              for (const r of await this.flushHeldParts(
+                processorStates,
+                observabilityContext,
+                undefined,
+                undefined,
+                0,
+                streamWriter,
+              )) {
+                if (r.blocked) {
+                  controller.enqueue({
+                    type: 'tripwire',
+                    payload: {
+                      reason: r.reason || 'Output processor blocked content',
+                      retry: r.tripwireOptions?.retry,
+                      metadata: r.tripwireOptions?.metadata,
+                      processorId: r.processorId,
+                    },
+                  });
+                  break;
+                }
+                if (r.part != null) {
+                  controller.enqueue(r.part);
+                }
+              }
               controller.close();
               break;
             }
+
+            if (isFailedStreamChunk(value)) streamFailed = true;
 
             // Process all stream parts through output processors
             const {
@@ -1195,7 +1478,7 @@ export class ProcessorRunner {
             );
 
             const enqueueTripwire = (r?: string, opts?: TripWireOptions<unknown>, pid?: string) => {
-              void this.logger.debug('Stream part blocked by output processor', {
+              this.logger.debug('Stream part blocked by output processor', {
                 agent: this.agentName,
                 reason: r,
                 originalPart: value,
@@ -1251,6 +1534,7 @@ export class ProcessorRunner {
           }
         } catch (error) {
           controller.error(error);
+          await reader.cancel(error).catch(() => {});
         }
       },
     });
@@ -1825,6 +2109,7 @@ export class ProcessorRunner {
     prompt: LanguageModelV2Prompt;
     model: unknown;
     messageList?: MessageList;
+    workspace?: AnyWorkspace;
     stepNumber: number;
     steps: Array<StepResult<any>>;
     requestContext?: RequestContext;
@@ -1880,6 +2165,7 @@ export class ProcessorRunner {
           // (e.g. unresolved string ids or function-typed dynamic models).
           model: args.model as never,
           messageList: args.messageList,
+          workspace: args.workspace,
           stepNumber: args.stepNumber,
           steps: args.steps,
           state: processorState.customState,

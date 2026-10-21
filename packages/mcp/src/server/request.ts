@@ -3,7 +3,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { MCPToolExecutionContext } from '@mastra/core/tools';
 import { ProtocolError, ProtocolErrorCode, inputResponse } from '@modelcontextprotocol/server';
 import type { ServerContext } from '@modelcontextprotocol/server';
-import { traceContextFromMeta } from '../shared/trace-context';
+import { callerTraceContext, traceContextFromMeta } from '../shared/trace-context';
+import type { CallerTraceContext } from '../shared/trace-context';
 import type { MCPAuthInfoToUserMapper } from './types';
 
 const unavailable = (feature: string, replacement: string) => (): Promise<never> =>
@@ -40,6 +41,20 @@ export function toToolExecutionContext(ctx: ServerContext, loggerName: string): 
       await ctx.mcpReq.notify({ method: 'notifications/progress', params: { progressToken, ...params } });
     },
   };
+}
+
+/**
+ * The caller's trace context a request names: `traceparent` and `tracestate` in
+ * `_meta`, else the HTTP headers, which is where OpenTelemetry-instrumented hosts
+ * put them.
+ */
+export function callerTrace(ctx: ServerContext): CallerTraceContext | undefined {
+  const meta = ctx.mcpReq._meta;
+  const headers = ctx.http?.req?.headers;
+  return (
+    callerTraceContext(meta?.traceparent, meta?.tracestate) ??
+    callerTraceContext(headers?.get('traceparent'), headers?.get('tracestate'))
+  );
 }
 
 /**

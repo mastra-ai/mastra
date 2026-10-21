@@ -1,6 +1,10 @@
 import type { Mastra } from '@mastra/core';
 import { coreFeatures } from '@mastra/core/features';
-import { TraceQueryExecutionError, traceAggregateRequestSchema } from '@mastra/core/storage';
+import {
+  TraceQueryExecutionError,
+  TraceQueryResourceLimitError,
+  traceAggregateRequestSchema,
+} from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod/v4';
 
@@ -41,7 +45,7 @@ async function captureHttpException(call: Promise<unknown>) {
   }
 }
 
-function getDeclaredErrorSchema(status: 400 | 413 | 422 | 501 | 504): z.ZodTypeAny {
+function getDeclaredErrorSchema(status: 400 | 413 | 422 | 501 | 503 | 504): z.ZodTypeAny {
   const schema = AGGREGATE_TRACES.openapi?.responses[status]?.content?.['application/json']?.schema;
   if (!schema) throw new Error(`Missing OpenAPI error schema for ${status}`);
   return schema as z.ZodTypeAny;
@@ -253,6 +257,31 @@ describe('AGGREGATE_TRACES', () => {
     );
   });
 
+  it('gates time to first chunk predicates on the store advertising support', async () => {
+    const request = {
+      timeRange: TIME_RANGE,
+      where: { op: 'gt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 500 } },
+      measures: ['count'],
+    };
+    const older = createHarness(['trace-aggregate']);
+    const error = await captureHttpException(AGGREGATE_TRACES.handler(params(older.mastra, request)));
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'TRACE_AGGREGATE_UNSUPPORTED',
+      message: 'Time to first chunk predicates are not supported by the configured observability store',
+    });
+    expect(older.observabilityStore.aggregateTraces).not.toHaveBeenCalled();
+
+    const supported = createHarness(['trace-aggregate', 'trace-query-time-to-first-chunk']);
+    await AGGREGATE_TRACES.handler(params(supported.mastra, request));
+    expect(supported.observabilityStore.aggregateTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { type: 'comparison', field: 'timeToFirstChunkMs', operator: 'gt', value: 500 },
+      }),
+    );
+  });
+
   it('returns 501 before calling an older store for context identifier predicates', async () => {
     const wheres = [
       { op: 'eq', left: { path: 'userId' }, right: { literal: 'user-1' } },
@@ -295,6 +324,113 @@ describe('AGGREGATE_TRACES', () => {
         },
       }),
     );
+  });
+
+  it('rejects root span name and type with 422 when the store does not support them', async () => {
+    const cases = [
+      {
+        request: {
+          timeRange: TIME_RANGE,
+          where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'workflow_run' } },
+          measures: ['count'],
+        },
+        path: ['where'],
+      },
+      {
+        request: { timeRange: TIME_RANGE, groupBy: ['entityName', 'name'], measures: ['count'] },
+        path: ['groupBy', 1],
+      },
+      { request: { timeRange: TIME_RANGE, measures: ['count', 'countDistinct.spanType'] }, path: ['measures', 1] },
+    ];
+    for (const { request, path } of cases) {
+      const { mastra, observabilityStore } = createHarness(['trace-aggregate']);
+      const error = await captureHttpException(AGGREGATE_TRACES.handler(params(mastra, request)));
+
+      expect(error.status).toBe(422);
+      const body = getDeclaredErrorSchema(422).parse(await error.getResponse().json());
+      expect(body).toMatchObject({ code: 'TRACE_QUERY_INVALID', issues: [{ code: 'field_not_allowed', path }] });
+      expect(observabilityStore.aggregateTraces).not.toHaveBeenCalled();
+    }
+  });
+
+  it('passes root span name and type to stores that advertise support, and span-scope ones to any store', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-aggregate', 'trace-query-root-span-fields']);
+    await AGGREGATE_TRACES.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: { op: 'eq', left: { path: 'name' }, right: { literal: 'nightly-sync' } },
+        groupBy: ['spanType'],
+        measures: ['count', 'countDistinct.name'],
+      }),
+    );
+    expect(observabilityStore.aggregateTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { type: 'comparison', field: 'name', operator: 'eq', value: 'nightly-sync' },
+        dimensions: ['spanType'],
+      }),
+    );
+
+    const legacy = createHarness(['trace-aggregate']);
+    await AGGREGATE_TRACES.handler(
+      params(legacy.mastra, {
+        timeRange: TIME_RANGE,
+        where: { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } } },
+        measures: ['count'],
+      }),
+    );
+    expect(legacy.observabilityStore.aggregateTraces).toHaveBeenCalledOnce();
+  });
+
+  it('rejects root span entityId with 422 on stores that only support root span name and type', async () => {
+    const cases = [
+      {
+        request: {
+          timeRange: TIME_RANGE,
+          where: { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } },
+          measures: ['count'],
+        },
+        path: ['where'],
+      },
+      { request: { timeRange: TIME_RANGE, groupBy: ['name', 'entityId'], measures: ['count'] }, path: ['groupBy', 1] },
+      { request: { timeRange: TIME_RANGE, measures: ['count', 'countDistinct.entityId'] }, path: ['measures', 1] },
+    ];
+    for (const { request, path } of cases) {
+      const { mastra, observabilityStore } = createHarness(['trace-aggregate', 'trace-query-root-span-fields']);
+      const error = await captureHttpException(AGGREGATE_TRACES.handler(params(mastra, request)));
+
+      expect(error.status).toBe(422);
+      const body = getDeclaredErrorSchema(422).parse(await error.getResponse().json());
+      expect(body).toMatchObject({ code: 'TRACE_QUERY_INVALID', issues: [{ code: 'field_not_allowed', path }] });
+      expect(observabilityStore.aggregateTraces).not.toHaveBeenCalled();
+    }
+  });
+
+  it('passes root span entityId to stores that advertise support, and span-scope entityId to any store', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-aggregate', 'trace-query-root-entity-id']);
+    await AGGREGATE_TRACES.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } },
+        groupBy: ['entityId'],
+        measures: ['count', 'countDistinct.entityId'],
+      }),
+    );
+    expect(observabilityStore.aggregateTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { type: 'comparison', field: 'entityId', operator: 'eq', value: 'nightly-scorer' },
+        dimensions: ['entityId'],
+      }),
+    );
+
+    const legacy = createHarness(['trace-aggregate']);
+    await AGGREGATE_TRACES.handler(
+      params(legacy.mastra, {
+        timeRange: TIME_RANGE,
+        where: { spans: { some: { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } } } },
+        measures: ['count'],
+      }),
+    );
+    expect(legacy.observabilityStore.aggregateTraces).toHaveBeenCalledOnce();
   });
 
   it('scopes the plan to the trusted tenant and never runs a scoped request unscoped', async () => {
@@ -343,6 +479,21 @@ describe('AGGREGATE_TRACES', () => {
     }
   });
 
+  it('returns a structured 503 when the query hits a resource limit', async () => {
+    const { mastra, observabilityStore } = createHarness();
+    observabilityStore.aggregateTraces.mockRejectedValue(new TraceQueryResourceLimitError());
+
+    const error = await captureHttpException(
+      AGGREGATE_TRACES.handler(params(mastra, { timeRange: TIME_RANGE, measures: ['count'] })),
+    );
+
+    expect(error.status).toBe(503);
+    expect(getDeclaredErrorSchema(503).parse(await error.getResponse().json())).toEqual({
+      code: 'TRACE_QUERY_RESOURCE_LIMIT',
+      message: 'The query exceeded its resource limit',
+    });
+  });
+
   it('returns a structured 504 without exposing database errors', async () => {
     const { mastra, observabilityStore } = createHarness();
     observabilityStore.aggregateTraces.mockRejectedValue(new TraceQueryExecutionError());
@@ -354,7 +505,7 @@ describe('AGGREGATE_TRACES', () => {
     expect(error.status).toBe(504);
     expect(getDeclaredErrorSchema(504).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
-      message: 'The trace query exceeded its execution timeout',
+      message: 'The query exceeded its execution timeout',
     });
   });
 
@@ -365,7 +516,15 @@ describe('AGGREGATE_TRACES', () => {
     expect(AGGREGATE_TRACES.method).toBe('POST');
     expect(AGGREGATE_TRACES.path).toBe('/observability/traces/aggregate');
     expect(AGGREGATE_TRACES.maxBodySize).toBe(256 * 1024);
-    expect(Object.keys(AGGREGATE_TRACES.openapi?.responses ?? {})).toEqual(['200', '400', '413', '422', '501', '504']);
+    expect(Object.keys(AGGREGATE_TRACES.openapi?.responses ?? {})).toEqual([
+      '200',
+      '400',
+      '413',
+      '422',
+      '501',
+      '503',
+      '504',
+    ]);
 
     const document = generateOpenAPIDocument([AGGREGATE_TRACES], { title: 'Test', version: '1.0.0' });
     const operation = document.paths['/observability/traces/aggregate'].post;

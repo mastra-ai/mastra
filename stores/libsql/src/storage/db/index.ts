@@ -8,9 +8,17 @@ import {
   TABLE_SPANS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
+import type {
+  KNOWLEDGE_TABLE_NAME,
+  TABLE_NAMES,
+  TABLE_MEMORY_RUN_FENCES,
+  TABLE_WORKFLOW_RUN_OWNERS,
+  StorageColumn,
+} from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { SqliteClient as Client, SqliteInValue as InValue } from './client';
+import { withRunFence } from './run-fencing';
+import type { RunFenceCheck } from './run-fencing';
 import {
   buildSelectColumns,
   createExecuteWriteOperationWithRetry,
@@ -20,10 +28,21 @@ import {
 } from './utils';
 import { withClientWriteLock } from './write-lock';
 
+/** Tables retention can prune: the core tables plus the run fencing tables, which aren't in TABLE_NAMES. */
+export type PrunableTable = TABLE_NAMES | typeof TABLE_WORKFLOW_RUN_OWNERS | typeof TABLE_MEMORY_RUN_FENCES;
+
 /**
  * Base configuration options shared across LibSQL domain configurations
  */
 export type LibSQLDomainBaseConfig = {
+  /** @internal Identifies the physical backend and namespace for keyed Knowledge isolation. */
+  storageIsolationKey?: unknown;
+  /**
+   * The client is a Turso embedded replica (`syncUrl`): reads are served from the local
+   * replica, so a write that conflicts with another instance's change syncs before retrying.
+   * @internal Set by `LibSQLStore`.
+   */
+  embeddedReplica?: boolean;
   /**
    * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
    * @default 5
@@ -208,15 +227,17 @@ export class LibSQLDB extends MastraBase {
   private async doInsert({
     tableName,
     record,
+    check,
   }: {
     tableName: TABLE_NAMES;
     record: Record<string, any>;
+    check?: RunFenceCheck;
   }): Promise<void> {
     // Filter out columns that don't exist in the actual database table
     const filteredRecord = await this.filterRecordToKnownColumns(tableName, record);
     if (Object.keys(filteredRecord).length === 0) return; // No known columns after filtering - skip insert
-    await withClientWriteLock(this.client, () =>
-      this.client.execute(
+    await withRunFence(this.client, check, writer =>
+      writer.execute(
         prepareStatement({
           tableName,
           record: filteredRecord,
@@ -231,8 +252,9 @@ export class LibSQLDB extends MastraBase {
    * @param args - The insert arguments
    * @param args.tableName - The name of the table to insert into
    * @param args.record - The record to insert (key-value pairs)
+   * @param args.check - The run fence the insert must carry, if any
    */
-  public insert(args: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+  public insert(args: { tableName: TABLE_NAMES; record: Record<string, any>; check?: RunFenceCheck }): Promise<void> {
     return this.executeWriteOperationWithRetry(() => this.doInsert(args), `insert into table ${args.tableName}`);
   }
 
@@ -667,10 +689,12 @@ export class LibSQLDB extends MastraBase {
     tableName,
     schema,
     compositePrimaryKey,
+    executor = this.client,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
     schema: Record<string, StorageColumn>;
     compositePrimaryKey?: string[];
+    executor?: Pick<Client, 'execute'>;
   }): Promise<void> {
     try {
       const parsedTableName = parseSqlIdentifier(tableName, 'table name');
@@ -714,7 +738,7 @@ export class LibSQLDB extends MastraBase {
 
       const sql = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (\n  ${allDefinitions}\n)`;
 
-      await this.client.execute(sql);
+      await executor.execute(sql);
       this.logger.debug(`LibSQLDB: Created table ${tableName}`);
 
       // Run migrations for Spans table to add any new columns
@@ -1071,7 +1095,7 @@ export class LibSQLDB extends MastraBase {
     schema,
     ifNotExists,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
@@ -1167,7 +1191,7 @@ export class LibSQLDB extends MastraBase {
     cutoff,
     limit,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: PrunableTable;
     column: string;
     /**
      * Exclusive upper bound for the anchor column. Must match the column's
@@ -1259,7 +1283,7 @@ export class LibSQLDB extends MastraBase {
     column,
   }: {
     indexName: string;
-    tableName: TABLE_NAMES;
+    tableName: PrunableTable;
     column: string;
   }): Promise<void> {
     const parsedTable = parseSqlIdentifier(tableName, 'table name');

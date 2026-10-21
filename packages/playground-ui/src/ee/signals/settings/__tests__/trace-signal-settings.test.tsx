@@ -9,7 +9,7 @@ import type {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { TraceSignalManagement } from '../../trace-intelligence-context';
 import { TraceIntelligenceProvider } from '../../trace-intelligence-provider';
@@ -35,11 +35,6 @@ const archivedDefinition: TraceSignalDefinition = {
   status: 'archived',
 };
 
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
-  }
-});
 afterEach(() => cleanup());
 
 function management(overrides: Partial<TraceSignalManagement> = {}): TraceSignalManagement {

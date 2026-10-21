@@ -156,6 +156,17 @@ const result = await run.timeTravel({
       {
         parameters: [
           {
+            name: 'nestUnderParent',
+            type: 'boolean',
+            isOptional: true,
+            description:
+              "Set to `true` together with `parentSpanId` to attach this run as a child of that span inside the existing trace, for example an LLM judge under the run it scores. Exporters then keep the trace's own name, input, output, and tags. Leave unset when `parentSpanId` comes from your own tracing system. Ignored without a valid `traceId` and `parentSpanId`.",
+          },
+        ],
+      },
+      {
+        parameters: [
+          {
             name: 'tags',
             type: 'string[]',
             isOptional: true,
@@ -302,6 +313,36 @@ const result = await run.timeTravel({
   },
 })
 ```
+
+## Concurrent time travel calls
+
+Only one `timeTravel()` call can run for a workflow run at a time. Before it runs anything, `timeTravel()` atomically claims the run by moving its stored status from the status it loaded (for example `suspended` or `success`) to `running`. If another caller already claimed it, this call throws `WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED` and executes no steps. A call that loads the run while it's already `running` throws `WORKFLOW_TIME_TRAVEL_RUN_RUNNING`.
+
+This matters whenever time travel can be triggered more than once for the same run, such as a "retry from step" button pressed twice or a retried API request.
+
+```typescript
+try {
+  await run.timeTravel({ step: 'step2' })
+} catch (error) {
+  if (
+    error.id === 'WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED' ||
+    error.id === 'WORKFLOW_TIME_TRAVEL_RUN_RUNNING'
+  ) {
+    // Another caller is already re-running this workflow. Re-read the run
+    // state instead of time travelling again.
+  }
+}
+```
+
+Over HTTP, `POST /api/workflows/:workflowId/time-travel-async` returns `409 Conflict` for a losing call. The `time-travel` and `time-travel-stream` endpoints respond before the time travel finishes, so a losing call doesn't change their status code.
+
+Calling `timeTravel()` again after the previous call finished is still allowed and re-runs the target step.
+
+:::note
+
+The claim is enforced atomically by storage adapters that report `supportsConcurrentUpdates()`. Adapters without atomic read-modify-write support (such as ClickHouse, Cloudflare D1, Cloudflare KV, Cloudflare Durable Objects, LanceDB, and Redis) can't enforce it, and the claim is also skipped when `shouldPersistSnapshot` excludes the `running` status. The Inngest workflow runner doesn't claim the run yet.
+
+:::
 
 ## Notes
 

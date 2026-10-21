@@ -1,9 +1,8 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
-import { useDatasetMutations, useDataset } from '@mastra/playground-ui/domains/datasets';
-import { useDatasetItems } from '@mastra/playground-ui/domains/datasets/hooks/use-dataset-items';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations, useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useDebounce } from 'use-debounce';
@@ -19,9 +18,7 @@ export interface DatasetItemsViewProps {
   datasetId: string;
   onAddItemClick?: () => void;
   onNavigateToDataset?: (datasetId: string) => void;
-  leftSlot?: React.ReactNode;
-  rightSlot?: React.ReactNode;
-  belowToolbarSlot?: React.ReactNode;
+  toolbarActionsSlot?: React.ReactNode;
 }
 
 const DATASET_ITEMS_SORT_KEYS = ['createdAt'] as const;
@@ -30,9 +27,7 @@ export function DatasetItemsView({
   datasetId,
   onAddItemClick,
   onNavigateToDataset,
-  leftSlot,
-  rightSlot,
-  belowToolbarSlot,
+  toolbarActionsSlot,
 }: DatasetItemsViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeVersion: activeDatasetVersion } = useDatasetItemsUrlState(searchParams, setSearchParams);
@@ -56,14 +51,20 @@ export function DatasetItemsView({
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch] = useDebounce(searchQuery, 300);
 
-  const { data: dataset } = useDataset(datasetId);
+  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
   const {
     data: items = [],
     isLoading: isItemsLoading,
     setEndOfListElement,
     isFetchingNextPage,
     hasNextPage,
-  } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion, orderBy);
+  } = useDatasetItems({
+    datasetId: datasetId,
+    search: debouncedSearch || undefined,
+    version: activeDatasetVersion,
+    orderBy: orderBy,
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
   const { deleteItems } = useDatasetMutations();
 
   // Clicking the already-open item closes the URL-driven panel.
@@ -127,9 +128,7 @@ export function DatasetItemsView({
       <div className="grid h-full overflow-auto">
         <DatasetItems
           items={items}
-          leftSlot={leftSlot}
-          rightSlot={rightSlot}
-          belowToolbarSlot={belowToolbarSlot}
+          toolbarActionsSlot={toolbarActionsSlot}
           isLoading={isItemsLoading}
           onItemClick={handleItemClick}
           featuredItemId={currentItemId}

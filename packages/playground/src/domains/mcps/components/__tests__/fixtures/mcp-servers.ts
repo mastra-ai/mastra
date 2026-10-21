@@ -1,5 +1,5 @@
 import type { McpServerInfo, McpServerToolListResponse, McpToolInfo } from '@mastra/client-js';
-import type { AuthCapabilities } from '@/domains/auth/types';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 
 const versionDetail: McpServerInfo['version_detail'] = {
   version: '1.0.0',
@@ -61,3 +61,12 @@ export const toolList: McpServerToolListResponse = {
 
 /** Auth disabled: every permission check passes. */
 export const authDisabled: AuthCapabilities = { enabled: false, login: { type: 'credentials' } };
+
+/** An authenticated user under RBAC holding exactly `permissions`. */
+export const rbacUser = (permissions: string[]): AuthCapabilities => ({
+  enabled: true,
+  login: { type: 'credentials' },
+  user: { id: 'user-1', email: 'user@example.com' },
+  capabilities: { user: true, session: true, sso: false, rbac: true, acl: false },
+  access: { roles: ['member'], permissions },
+});

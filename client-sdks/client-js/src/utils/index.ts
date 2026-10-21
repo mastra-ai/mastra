@@ -219,3 +219,33 @@ export function mergeAbortSignals(...signals: Array<AbortSignal | undefined>): A
   }
   return controller.signal;
 }
+
+/**
+ * Whether an error carries an HTTP status that retrying cannot fix: any 4xx
+ * client error (e.g. 401/403 auth failures) or 501 Not Implemented.
+ */
+export function isTerminalHttpError(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null | undefined)?.status;
+  return typeof status === 'number' && ((status >= 400 && status < 500) || status === 501);
+}
+
+/**
+ * Whether an error is the server's trace query execution timeout (504 with code
+ * `TRACE_QUERY_EXECUTION_TIMEOUT`). Re-sending the same query hits the same
+ * timeout budget, so retrying only repeats an expensive database query.
+ * Plain 504s from proxies or gateways do not carry this code and stay retryable.
+ */
+export function isTraceQueryTimeoutError(error: unknown): boolean {
+  const { status, body } = (error ?? {}) as { status?: unknown; body?: unknown };
+  return status === 504 && (body as { code?: unknown } | null | undefined)?.code === 'TRACE_QUERY_EXECUTION_TIMEOUT';
+}
+
+/**
+ * Whether a failed resubscribe should end a long-lived subscription instead of
+ * retrying. Like {@link isTerminalHttpError}, but 408 Request Timeout and
+ * 429 Too Many Requests stay retryable because they mean "try again later".
+ */
+export function isTerminalReconnectError(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null | undefined)?.status;
+  return isTerminalHttpError(error) && status !== 408 && status !== 429;
+}

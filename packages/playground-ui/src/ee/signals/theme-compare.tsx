@@ -103,7 +103,7 @@ export function ThemeCompare({
         <Txt
           variant="caption"
           tone="muted"
-          font="mono"
+
           className="rounded-md border border-border px-2 py-1 tabular-nums"
         >
           {snapshotSummaryLabel(fromSnapshot, flows[fromIndex])}
@@ -114,7 +114,7 @@ export function ThemeCompare({
         <Txt
           variant="caption"
           tone="muted"
-          font="mono"
+
           className="rounded-md border border-border px-2 py-1 tabular-nums"
         >
           {snapshotSummaryLabel(toSnapshot, flows[toIndex])}

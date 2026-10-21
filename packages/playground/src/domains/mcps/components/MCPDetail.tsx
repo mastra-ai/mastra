@@ -4,6 +4,7 @@ import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useState } from 'react';
+import { McpServerEventsList } from './mcp-server-events-list';
 import { McpServerToolsList } from './mcp-server-tools-list';
 
 export interface MCPDetailProps {
@@ -88,7 +89,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
     <div className="flex flex-col gap-6 pt-4">
       <Card>
         <Tabs defaultTab="http">
-          <CardHeader className="border-border1 flex-row items-center justify-between gap-3 space-y-0 border-b">
+          <CardHeader className="flex-row items-center justify-between gap-3 space-y-0 border-b border-border">
             <CardTitle className="shrink-0">Connect</CardTitle>
             <div className="min-w-0">
               <TabList variant="pill-ghost" size="sm">
@@ -118,6 +119,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
       </Card>
 
       <McpServerToolsList server={server} />
+      {server.events_capability && <McpServerEventsList server={server} />}
     </div>
   );
 };

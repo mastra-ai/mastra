@@ -58,7 +58,7 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             </>
           )}
 
-          <SpanPayloadSection title="Error" raw={span.error} layout="details" className="mb-3">
+          <SpanPayloadSection title="Error" raw={span.error} layout="details" framed={false} className="mb-3">
             <SpanErrorRenderer span={span} />
           </SpanPayloadSection>
 

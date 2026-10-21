@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "hyper/deepseek-v4-flash"
+  model: "hyper/deepseek-v4-flash-0731"
 });
 
 // Generate a response
@@ -46,18 +46,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "hyper/deepseek-v4-flash",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
-    "inputCost": 0.2,
-    "outputCost": 0.4
-  },
-  {
     "model": "hyper/deepseek-v4-flash-0731",
     "imageInput": false,
     "audioInput": false,
@@ -68,18 +56,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 0.44,
     "outputCost": 1.32
-  },
-  {
-    "model": "hyper/deepseek-v4-pro",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
-    "inputCost": 2.4,
-    "outputCost": 4.8
   },
   {
     "model": "hyper/deepseek-v4-pro-0813",
@@ -100,10 +76,22 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 32768,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": 0.33,
+    "outputCost": 1.31
+  },
+  {
+    "model": "hyper/deepseek-v4.1-flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 262144,
+    "inputCost": 0.33,
+    "outputCost": 1.31
   },
   {
     "model": "hyper/gemma-4-26b-a4b-it",
@@ -238,6 +226,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.30656
   },
   {
+    "model": "hyper/prism",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 16000,
+    "inputCost": 3.2664,
+    "outputCost": 16.332
+  },
+  {
     "model": "hyper/qwen3.7-flash",
     "imageInput": true,
     "audioInput": false,
@@ -336,7 +336,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://hyper.charm.land/v1",
-    id: "hyper/deepseek-v4-flash",
+    id: "hyper/deepseek-v4-flash-0731",
     apiKey: process.env.HYPER_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -355,7 +355,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "hyper/qwen3.8-max"
-      : "hyper/deepseek-v4-flash";
+      : "hyper/deepseek-v4-flash-0731";
   }
 });
 ```

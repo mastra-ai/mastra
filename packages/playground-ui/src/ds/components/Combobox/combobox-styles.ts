@@ -52,7 +52,7 @@ export function comboboxTriggerClass({
     // Fill the field and push the value left / chevron right (Button's base
     // centers its content with `justify-center`). Icon sizes are a fixed square
     // showing only the chevron, so they keep Button's centering.
-    !isIconButtonSize(size) && cn(fieldTriggerWidthStyle, 'justify-between text-body-sm'),
+    !isIconButtonSize(size) && cn(fieldTriggerWidthStyle, 'justify-between'),
     // Read as "active" while the popup is open, per variant (see map above).
     controlTriggerOpenState[visualVariant],
     'data-[placeholder]:text-muted-foreground',
@@ -140,5 +140,5 @@ export const comboboxStyles = {
   optionEnd: 'ml-auto flex items-center shrink-0',
 
   /** @deprecated A `FieldError` colors the error. */
-  error: 'text-caption text-destructive-foreground',
+  error: 'text-body-sm text-destructive-foreground',
 } as const;

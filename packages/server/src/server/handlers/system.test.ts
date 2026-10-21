@@ -20,9 +20,18 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   traceQuery: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
+  traceQueryTimeToFirstChunk: false,
+  traceQueryRootSpanFields: false,
+  traceQueryRootEntityId: false,
+  traceQueryTimeToFirstChunkSort: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
+  traceAggregate: false,
   threadQuery: false,
+  threadQueryRows: false,
+  spanQuery: false,
+  spanQueryContextFields: false,
+  spanAggregate: false,
   feedback: false,
 };
 
@@ -206,21 +215,23 @@ describe('System Handlers', () => {
       });
     });
 
-    it('should return cmsEnabled false when editor is not configured', async () => {
-      delete process.env.MASTRA_PACKAGES_FILE;
+    it('advertises recording review for the exact default LiveKit GET route', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, undefined, false, {
+          apiRoutes: [{ method: 'GET', path: '/voice/livekit/recordings/:traceId' }],
+        }),
+      } as any);
+      expect(result).toMatchObject({ liveKitRecordingRouteEnabled: true });
+    });
 
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
-
-      expect(result).toEqual({
-        packages: [],
-        isDev: false,
-        cmsEnabled: false,
-        liveKitConnectionRouteEnabled: false,
-        observabilityEnabled: false,
-        storageType: undefined,
-        observabilityStorageType: undefined,
-        observabilityRuntimeStrategy: undefined,
-      });
+    it.each([
+      { method: 'POST' as const, path: '/voice/livekit/recordings/:traceId' },
+      { method: 'GET' as const, path: '/custom/recordings/:traceId' },
+    ])('does not advertise recording review for $method $path', async route => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, undefined, false, { apiRoutes: [route] }),
+      } as any);
+      expect(result).not.toHaveProperty('liveKitRecordingRouteEnabled');
     });
 
     it('should return liveKitConnectionRouteEnabled true for the exact default LiveKit POST route', async () => {
@@ -626,6 +637,7 @@ describe('System Handlers', () => {
               'metric-discovery',
               'delta-polling',
               'thread-query',
+              'span-query',
               'trace-query-root-duration',
               'trace-query-tenant-scope',
             ] as const;
@@ -638,6 +650,66 @@ describe('System Handlers', () => {
           deltaPolling: true,
           traceQueryRootDuration: true,
           traceQueryTenantScope: true,
+          threadQuery: true,
+          spanQuery: true,
+        });
+      });
+
+      it.each([
+        { features: ['span-query', 'span-query-context-fields'], supported: true },
+        { features: ['span-query'], supported: false },
+        { features: ['span-query-context-fields'], supported: false },
+      ] as const)('reports expanded span filters for $features as $supported', async ({ features, supported }) => {
+        class SpanQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return features;
+          }
+        }
+
+        expect(await capabilitiesFor(new SpanQueryStore())).toMatchObject({
+          spanQueryContextFields: supported,
+        });
+      });
+
+      it('reports time to first chunk only when the store also serves a trace, thread or span query', async () => {
+        class SpanQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-query', 'trace-query-time-to-first-chunk'] as const;
+          }
+        }
+        class NoQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['trace-query-time-to-first-chunk'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new SpanQueryStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          spanQuery: true,
+          traceQueryTimeToFirstChunk: true,
+        });
+        expect(await capabilitiesFor(new NoQueryStore())).toEqual(NO_OBSERVABILITY_CAPABILITIES);
+      });
+
+      it('reports the time to first chunk sort only when the store also serves a trace or span query', async () => {
+        class SpanQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-query', 'trace-query-time-to-first-chunk-sort'] as const;
+          }
+        }
+        class NoQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['thread-query', 'trace-query-time-to-first-chunk-sort'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new SpanQueryStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          spanQuery: true,
+          traceQueryTimeToFirstChunkSort: true,
+        });
+        expect(await capabilitiesFor(new NoQueryStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
           threadQuery: true,
         });
       });
@@ -727,6 +799,50 @@ describe('System Handlers', () => {
           ...NO_OBSERVABILITY_CAPABILITIES,
           feedback: true,
         });
+      });
+
+      it('reports trace aggregation only for stores that declare it', async () => {
+        class AggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['trace-aggregate'] as const;
+          }
+        }
+        class UndeclaredAggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['trace-query'] as const;
+          }
+          override async aggregateTraces() {
+            return { rows: [], truncated: false };
+          }
+        }
+
+        expect(await capabilitiesFor(new AggregateStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          traceAggregate: true,
+        });
+        expect(await capabilitiesFor(new UndeclaredAggregateStore())).toMatchObject({ traceAggregate: false });
+      });
+
+      it('reports span aggregation only for stores that declare it', async () => {
+        class AggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-aggregate'] as const;
+          }
+        }
+        class UndeclaredAggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-query'] as const;
+          }
+          async aggregateSpans() {
+            return { rows: [], truncated: false };
+          }
+        }
+
+        expect(await capabilitiesFor(new AggregateStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          spanAggregate: true,
+        });
+        expect(await capabilitiesFor(new UndeclaredAggregateStore())).toMatchObject({ spanAggregate: false });
       });
 
       it('does not report query refinements for stores without trace or thread queries', async () => {

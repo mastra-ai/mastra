@@ -1,80 +1,109 @@
 import { retryWithExponentialBackoff } from '@ai-sdk/provider-utils-v7';
 import {
   APICallError,
-  Experimental_EvaluationUnsupportedQuestionTypeError as EvaluationUnsupportedQuestionTypeError,
-  type Experimental_EvaluationModelV4 as EvaluationModelV4,
-  type Experimental_EvaluationModelV4Answer as EvaluationModelV4Answer,
-  type Experimental_EvaluationModelV4Input as EvaluationModelV4Input,
-  type Experimental_EvaluationModelV4Question as EvaluationModelV4Question,
-  type SharedV4ProviderMetadata,
-  type SharedV4ProviderOptions,
-  type SharedV4Warning,
+  Experimental_DecisionUnsupportedQuestionTypeError as DecisionUnsupportedQuestionTypeError,
+} from '@ai-sdk/provider-v7';
+import type {
+  Experimental_DecisionModelV4 as DecisionModelV4,
+  Experimental_DecisionModelV4Answer as DecisionModelV4Answer,
+  Experimental_DecisionModelV4CallOptions as DecisionModelV4CallOptions,
+  Experimental_DecisionModelV4Input as DecisionModelV4Input,
+  Experimental_DecisionModelV4Question as DecisionModelV4Question,
+  Experimental_DecisionModelV4Result as DecisionModelV4Result,
+  Experimental_DecisionModelV4State as DecisionModelV4State,
+  Experimental_EvaluationModelV4 as EvaluationModelV4,
+  SharedV4ProviderMetadata,
+  SharedV4ProviderOptions,
+  SharedV4Warning,
 } from '@ai-sdk/provider-v7';
 
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
-import { SpanType } from '../observability/types';
+import { EntityType, SpanType } from '../observability/types';
 import { getOrCreateSpan, resolveCurrentSpan } from '../observability/utils';
 
-export type ClassifierState = EvaluationModelV4Input;
-export type EvaluationModelResult = Awaited<ReturnType<EvaluationModelV4['doEvaluate']>>;
+export type ClassifierState = DecisionModelV4Input;
+export type DecisionModelResult = DecisionModelV4Result;
+/** @deprecated Use `DecisionModelResult` instead. */
+export type EvaluationModelResult = DecisionModelResult;
 
-export interface MastraEvaluationModelInterface {
+/**
+ * A model accepted by `Classifier`: an AI SDK decision model (`doDecide`), or a
+ * legacy evaluation model (`doEvaluate`) kept for backwards compatibility.
+ */
+export type ClassifierModel = DecisionModelV4 | EvaluationModelV4;
+
+export interface MastraDecisionModelInterface {
   readonly specificationVersion: 'v4';
   readonly provider: string;
   readonly modelId: string;
-  readonly supportedQuestionTypes: EvaluationModelV4['supportedQuestionTypes'];
-  doEvaluate(options: Parameters<EvaluationModelV4['doEvaluate']>[0]): Promise<EvaluationModelResult>;
+  readonly supportedQuestionTypes: DecisionModelV4['supportedQuestionTypes'];
+  doDecide(options: DecisionModelV4CallOptions): Promise<DecisionModelResult>;
+  /** @deprecated Use `doDecide` instead. */
+  doEvaluate(options: DecisionModelV4CallOptions): Promise<DecisionModelResult>;
 }
 
-export class MastraEvaluationModel extends MastraBase implements MastraEvaluationModelInterface {
+/** @deprecated Use `MastraDecisionModelInterface` instead. */
+export interface MastraEvaluationModelInterface extends Omit<MastraDecisionModelInterface, 'doDecide'> {}
+
+export class MastraDecisionModel extends MastraBase implements MastraDecisionModelInterface {
   readonly specificationVersion = 'v4' as const;
   readonly provider: string;
   readonly modelId: string;
-  readonly supportedQuestionTypes: EvaluationModelV4['supportedQuestionTypes'];
-  readonly #model: EvaluationModelV4;
+  readonly supportedQuestionTypes: DecisionModelV4['supportedQuestionTypes'];
+  readonly #model: ClassifierModel;
 
-  constructor(model: EvaluationModelV4) {
-    super({ name: 'evaluation-model' });
+  constructor(model: ClassifierModel) {
+    super({ name: 'decision-model' });
     this.#model = model;
     this.provider = model.provider;
     this.modelId = model.modelId;
     this.supportedQuestionTypes = model.supportedQuestionTypes;
   }
 
-  async doEvaluate(options: Parameters<EvaluationModelV4['doEvaluate']>[0]): Promise<EvaluationModelResult> {
-    return this.transformResult(await this.#model.doEvaluate(options));
+  async doDecide(options: DecisionModelV4CallOptions): Promise<DecisionModelResult> {
+    const model = this.#model;
+    const result = 'doDecide' in model ? await model.doDecide(options) : await model.doEvaluate(options);
+    return this.transformResult(result);
   }
 
-  protected transformResult(result: EvaluationModelResult): EvaluationModelResult {
+  /** @deprecated Use `doDecide` instead. */
+  doEvaluate(options: DecisionModelV4CallOptions): Promise<DecisionModelResult> {
+    return this.doDecide(options);
+  }
+
+  protected transformResult(result: DecisionModelResult): DecisionModelResult {
     return result;
   }
 }
 
+/** @deprecated Use `MastraDecisionModel` instead. `MastraEvaluationModel` will be removed in a future release. */
+export class MastraEvaluationModel extends MastraDecisionModel {}
+
 export type ChoiceQuestion<
-  CRITERIA extends Readonly<Record<string, EvaluationModelV4Input | null>> = Readonly<
-    Record<string, EvaluationModelV4Input | null>
+  CRITERIA extends Readonly<Record<string, DecisionModelV4Input | null>> = Readonly<
+    Record<string, DecisionModelV4Input | null>
   >,
 > = {
   readonly type: 'choice';
-  readonly instructions?: EvaluationModelV4Input;
+  readonly instructions?: DecisionModelV4Input;
   readonly criteria: CRITERIA;
 };
 
 export type ScoreQuestion<
-  CRITERIA extends readonly (EvaluationModelV4Input | null)[] = readonly (EvaluationModelV4Input | null)[],
+  CRITERIA extends readonly (DecisionModelV4Input | null)[] = readonly (DecisionModelV4Input | null)[],
 > = {
   readonly type: 'score';
-  readonly instructions?: EvaluationModelV4Input;
+  readonly instructions?: DecisionModelV4Input;
   readonly criteria: CRITERIA;
 };
 
 export type BooleanQuestion = {
   readonly type: 'boolean';
-  readonly instructions?: EvaluationModelV4Input;
+  readonly instructions?: DecisionModelV4Input;
   readonly criteria?: {
-    readonly true?: EvaluationModelV4Input | null;
-    readonly false?: EvaluationModelV4Input | null;
+    readonly true?: DecisionModelV4Input | null;
+    readonly false?: DecisionModelV4Input | null;
   };
 };
 
@@ -98,15 +127,29 @@ export type BooleanAnswer = {
   probability: number;
 };
 
+/**
+ * The decision model declined to answer the question. Valid for any question type.
+ *
+ * The answer fields are typed as absent so equality checks such as
+ * `answers.route.choice === 'billing'` keep compiling and evaluate to `false` on a refusal.
+ */
+export type RefusalAnswer = {
+  type: 'refusal';
+  choice?: never;
+  score?: never;
+  probability?: never;
+  probabilities?: never;
+};
+
 export type ClassifierAnswer<QUESTION extends ClassifierQuestion> = QUESTION extends {
   type: 'choice';
-  criteria: infer CRITERIA extends Readonly<Record<string, EvaluationModelV4Input | null>>;
+  criteria: infer CRITERIA extends Readonly<Record<string, DecisionModelV4Input | null>>;
 }
-  ? ChoiceAnswer<Extract<keyof CRITERIA, string>>
+  ? ChoiceAnswer<Extract<keyof CRITERIA, string>> | RefusalAnswer
   : QUESTION extends { type: 'score' }
-    ? ScoreAnswer
+    ? ScoreAnswer | RefusalAnswer
     : QUESTION extends { type: 'boolean' }
-      ? BooleanAnswer
+      ? BooleanAnswer | RefusalAnswer
       : never;
 
 export type ClassifierAnswers<QUESTIONS extends ClassifierQuestions> = {
@@ -137,42 +180,56 @@ export type ClassifierResult<QUESTIONS extends ClassifierQuestions> = {
   };
 };
 
-type CommonEvaluateOptions = {
+type CommonDecideOptions = {
   state: ClassifierState;
   abortSignal?: AbortSignal;
   providerOptions?: SharedV4ProviderOptions;
   maxRetries?: number;
 };
 
-export type ConfiguredClassifierEvaluateOptions = CommonEvaluateOptions & {
+export type ConfiguredClassifierDecideOptions = CommonDecideOptions & {
   questions?: never;
 };
 
-export type PerCallClassifierEvaluateOptions<QUESTIONS extends ClassifierQuestions> = CommonEvaluateOptions & {
+export type PerCallClassifierDecideOptions<QUESTIONS extends ClassifierQuestions> = CommonDecideOptions & {
   questions: QUESTIONS;
 };
 
+/** @deprecated Use `ConfiguredClassifierDecideOptions` instead. */
+export type ConfiguredClassifierEvaluateOptions = ConfiguredClassifierDecideOptions;
+/** @deprecated Use `PerCallClassifierDecideOptions` instead. */
+export type PerCallClassifierEvaluateOptions<QUESTIONS extends ClassifierQuestions> =
+  PerCallClassifierDecideOptions<QUESTIONS>;
+
 export type ConfiguredClassifierOptions<QUESTIONS extends ClassifierQuestions> = {
   id: string;
-  model: EvaluationModelV4 | MastraEvaluationModel;
+  model: ClassifierModel | MastraDecisionModel;
   questions: QUESTIONS;
 };
 
 export type PerCallClassifierOptions = {
   id: string;
-  model: EvaluationModelV4 | MastraEvaluationModel;
+  model: ClassifierModel | MastraDecisionModel;
   questions?: never;
 };
 
 export interface ClassifierInterface<CONFIGURED_QUESTIONS extends ClassifierQuestions | undefined = undefined> {
   readonly id: string;
-  readonly model: MastraEvaluationModelInterface;
+  readonly model: MastraDecisionModelInterface;
   readonly questions: CONFIGURED_QUESTIONS;
-  evaluate(
-    options: CONFIGURED_QUESTIONS extends ClassifierQuestions ? ConfiguredClassifierEvaluateOptions : never,
+  decide(
+    options: CONFIGURED_QUESTIONS extends ClassifierQuestions ? ConfiguredClassifierDecideOptions : never,
   ): Promise<CONFIGURED_QUESTIONS extends ClassifierQuestions ? ClassifierResult<CONFIGURED_QUESTIONS> : never>;
+  decide<const QUESTIONS extends ClassifierQuestions>(
+    options: CONFIGURED_QUESTIONS extends undefined ? PerCallClassifierDecideOptions<QUESTIONS> : never,
+  ): Promise<ClassifierResult<QUESTIONS>>;
+  /** @deprecated Use `decide` instead. */
+  evaluate(
+    options: CONFIGURED_QUESTIONS extends ClassifierQuestions ? ConfiguredClassifierDecideOptions : never,
+  ): Promise<CONFIGURED_QUESTIONS extends ClassifierQuestions ? ClassifierResult<CONFIGURED_QUESTIONS> : never>;
+  /** @deprecated Use `decide` instead. */
   evaluate<const QUESTIONS extends ClassifierQuestions>(
-    options: CONFIGURED_QUESTIONS extends undefined ? PerCallClassifierEvaluateOptions<QUESTIONS> : never,
+    options: CONFIGURED_QUESTIONS extends undefined ? PerCallClassifierDecideOptions<QUESTIONS> : never,
   ): Promise<ClassifierResult<QUESTIONS>>;
 }
 
@@ -181,7 +238,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
   implements ClassifierInterface<CONFIGURED_QUESTIONS>
 {
   readonly id: string;
-  readonly model: MastraEvaluationModel;
+  readonly model: MastraDecisionModel;
   readonly questions: CONFIGURED_QUESTIONS;
   #mastra?: Mastra;
 
@@ -197,8 +254,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
     }
 
     this.id = options.id;
-    this.model =
-      options.model instanceof MastraEvaluationModel ? options.model : new MastraEvaluationModel(options.model);
+    this.model = options.model instanceof MastraDecisionModel ? options.model : new MastraDecisionModel(options.model);
     this.questions = options.questions as CONFIGURED_QUESTIONS;
 
     if (this.questions !== undefined) {
@@ -214,14 +270,28 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
     this.#mastra = mastra;
   }
 
+  /** @deprecated Use `decide` instead. `evaluate` will be removed in a future release. */
   async evaluate(
-    options: CONFIGURED_QUESTIONS extends ClassifierQuestions ? ConfiguredClassifierEvaluateOptions : never,
+    options: CONFIGURED_QUESTIONS extends ClassifierQuestions ? ConfiguredClassifierDecideOptions : never,
   ): Promise<CONFIGURED_QUESTIONS extends ClassifierQuestions ? ClassifierResult<CONFIGURED_QUESTIONS> : never>;
+  /** @deprecated Use `decide` instead. `evaluate` will be removed in a future release. */
   async evaluate<const QUESTIONS extends ClassifierQuestions>(
-    options: CONFIGURED_QUESTIONS extends undefined ? PerCallClassifierEvaluateOptions<QUESTIONS> : never,
+    options: CONFIGURED_QUESTIONS extends undefined ? PerCallClassifierDecideOptions<QUESTIONS> : never,
   ): Promise<ClassifierResult<QUESTIONS>>;
   async evaluate(
-    options: ConfiguredClassifierEvaluateOptions | PerCallClassifierEvaluateOptions<ClassifierQuestions>,
+    options: ConfiguredClassifierDecideOptions | PerCallClassifierDecideOptions<ClassifierQuestions>,
+  ): Promise<ClassifierResult<ClassifierQuestions>> {
+    return this.decide(options as never);
+  }
+
+  async decide(
+    options: CONFIGURED_QUESTIONS extends ClassifierQuestions ? ConfiguredClassifierDecideOptions : never,
+  ): Promise<CONFIGURED_QUESTIONS extends ClassifierQuestions ? ClassifierResult<CONFIGURED_QUESTIONS> : never>;
+  async decide<const QUESTIONS extends ClassifierQuestions>(
+    options: CONFIGURED_QUESTIONS extends undefined ? PerCallClassifierDecideOptions<QUESTIONS> : never,
+  ): Promise<ClassifierResult<QUESTIONS>>;
+  async decide(
+    options: ConfiguredClassifierDecideOptions | PerCallClassifierDecideOptions<ClassifierQuestions>,
   ): Promise<ClassifierResult<ClassifierQuestions>> {
     const questions = this.questions ?? ('questions' in options ? options.questions : undefined);
     if (questions === undefined) {
@@ -238,8 +308,12 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
     const span = getOrCreateSpan({
       type: SpanType.CLASSIFIER_EVALUATION,
       name: `classifier evaluate: '${this.id}'`,
+      entityType: EntityType.CLASSIFIER,
+      entityId: this.id,
+      entityName: this.name ?? this.id,
       tracingContext: { currentSpan: resolveCurrentSpan() },
       mastra: this.#mastra,
+      input: { state: options.state, questions },
       attributes: {
         classifierId: this.id,
         modelId: this.model.modelId,
@@ -261,18 +335,22 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
       });
       // The last provider error is kept so it can be restored below.
       let lastProviderError: unknown;
-      let providerResult: Awaited<ReturnType<EvaluationModelV4['doEvaluate']>>;
+      let providerResult: DecisionModelResult;
       try {
         providerResult = await retry(async () => {
           options.abortSignal?.throwIfAborted();
           attemptCount += 1;
           try {
-            return await this.model.doEvaluate({
-              state: options.state,
+            const callOptions = {
+              state: toProviderState(options.state),
               questions: providerQuestions,
               abortSignal: options.abortSignal,
               providerOptions: options.providerOptions,
-            });
+            };
+            // Subclasses written before doDecide existed may override doEvaluate; keep honoring them.
+            return this.model.doEvaluate !== MastraDecisionModel.prototype.doEvaluate
+              ? await this.model.doEvaluate(callOptions)
+              : await this.model.doDecide(callOptions);
           } catch (error) {
             lastProviderError = error;
             throw error;
@@ -324,7 +402,7 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
           },
         },
       });
-      span?.end();
+      span?.end({ output: { answers: result.answers } });
       return result;
     } catch (error) {
       span?.update({
@@ -344,7 +422,18 @@ export class Classifier<CONFIGURED_QUESTIONS extends ClassifierQuestions | undef
   }
 }
 
-function toProviderQuestions(questions: ClassifierQuestions): Readonly<Record<string, EvaluationModelV4Question>> {
+// Mirrors the AI SDK's decide(): providers receive state as an array of parts.
+function toProviderState(state: ClassifierState): DecisionModelV4State {
+  if (typeof state === 'string') return [{ type: 'text', text: state }];
+  if (Array.isArray(state) && state.every(isStatePart)) return state;
+  return [{ type: 'json', value: state }];
+}
+
+function isStatePart(value: unknown): value is DecisionModelV4State[number] {
+  return isPlainObject(value) && (value.type === 'text' || value.type === 'file' || value.type === 'json');
+}
+
+function toProviderQuestions(questions: ClassifierQuestions): Readonly<Record<string, DecisionModelV4Question>> {
   return Object.fromEntries(
     Object.entries(questions).map(([questionId, question]) => [
       questionId,
@@ -366,7 +455,7 @@ function validateState(state: unknown): asserts state is ClassifierState {
   validateJsonValue(state, 'state');
 }
 
-function validateQuestions(questions: ClassifierQuestions, model: EvaluationModelV4): void {
+function validateQuestions(questions: ClassifierQuestions, model: MastraDecisionModelInterface): void {
   if (!isPlainObject(questions) || Object.keys(questions).length === 0) {
     throw new TypeError('Questions must be a non-empty object.');
   }
@@ -379,7 +468,7 @@ function validateQuestions(questions: ClassifierQuestions, model: EvaluationMode
       throw new TypeError(`Question '${questionId}' has an invalid type.`);
     }
     if (!model.supportedQuestionTypes.includes(question.type)) {
-      throw new EvaluationUnsupportedQuestionTypeError({
+      throw new DecisionUnsupportedQuestionTypeError({
         questionId,
         questionType: question.type,
         provider: model.provider,
@@ -462,9 +551,9 @@ function validateProviderEnvelope(result: {
 
 function validateProviderResult(
   questions: ClassifierQuestions,
-  answers: Record<string, EvaluationModelV4Answer>,
+  answers: Record<string, DecisionModelV4Answer>,
   rounding?: { probabilityDecimals?: number; scoreDecimals?: number },
-): void {
+): asserts answers is ClassifierAnswers<ClassifierQuestions> {
   if (!isPlainObject(answers)) throw new TypeError('The evaluation model returned invalid answers.');
   const questionIds = Object.keys(questions);
   const answerIds = Object.keys(answers);
@@ -480,7 +569,16 @@ function validateProviderResult(
   for (const questionId of questionIds) {
     const question = questions[questionId]!;
     const answer = answers[questionId]!;
-    if (!isPlainObject(answer) || answer.type !== question.type) {
+    if (!isPlainObject(answer)) {
+      throw new TypeError(`Answer '${questionId}' does not match its question type.`);
+    }
+    if (answer.type === 'refusal') {
+      if (['choice', 'score', 'probability', 'probabilities'].some(field => field in answer)) {
+        throw new TypeError(`Refusal answer '${questionId}' must not include answer fields.`);
+      }
+      continue;
+    }
+    if (answer.type !== question.type) {
       throw new TypeError(`Answer '${questionId}' does not match its question type.`);
     }
 

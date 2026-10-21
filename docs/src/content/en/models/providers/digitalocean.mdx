@@ -7,7 +7,7 @@ description: "Browse DigitalOcean model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/digitalocean.svg" alt="DigitalOcean logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />DigitalOcean
 
-Access 101 DigitalOcean models through Mastra's model router. Authentication is handled automatically using the `DIGITALOCEAN_ACCESS_TOKEN` environment variable.
+Access 104 DigitalOcean models through Mastra's model router. Authentication is handled automatically using the `DIGITALOCEAN_ACCESS_TOKEN` environment variable.
 
 Learn more in the [DigitalOcean documentation](https://docs.digitalocean.com/products/gradient-ai-platform/details/models/).
 
@@ -46,18 +46,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "digitalocean/alibaba-qwen3-32b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 32768,
-    "maxOutput": 32768,
-    "inputCost": 0.25,
-    "outputCost": 0.55
-  },
-  {
     "model": "digitalocean/all-mini-lm-l6-v2",
     "imageInput": false,
     "audioInput": false,
@@ -68,18 +56,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384,
     "inputCost": 0.009,
     "outputCost": null
-  },
-  {
-    "model": "digitalocean/anthropic-claude-4.1-opus",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 8192,
-    "inputCost": 15,
-    "outputCost": 75
   },
   {
     "model": "digitalocean/anthropic-claude-4.5-sonnet",
@@ -118,6 +94,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 10
   },
   {
+    "model": "digitalocean/anthropic-claude-5.5-haiku",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.5
+  },
+  {
     "model": "digitalocean/anthropic-claude-fable-5",
     "imageInput": true,
     "audioInput": false,
@@ -152,18 +140,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 1,
     "outputCost": 5
-  },
-  {
-    "model": "digitalocean/anthropic-claude-opus-4",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 32000,
-    "inputCost": 15,
-    "outputCost": 75
   },
   {
     "model": "digitalocean/anthropic-claude-opus-4.5",
@@ -238,18 +214,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 20
   },
   {
-    "model": "digitalocean/anthropic-claude-sonnet-4",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 64000,
-    "inputCost": 3,
-    "outputCost": 15
-  },
-  {
     "model": "digitalocean/anthropic-claude-sonnet-5.5",
     "imageInput": true,
     "audioInput": false,
@@ -320,18 +284,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 0.14,
     "outputCost": 0.28
-  },
-  {
-    "model": "digitalocean/deepseek-r1-distill-llama-70b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 32678,
-    "maxOutput": 8192,
-    "inputCost": 0.99,
-    "outputCost": 0.99
   },
   {
     "model": "digitalocean/deepseek-v3",
@@ -466,30 +418,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.5
   },
   {
-    "model": "digitalocean/glm-5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 64000,
-    "maxOutput": 64000,
-    "inputCost": 1,
-    "outputCost": 3.2
-  },
-  {
-    "model": "digitalocean/glm-5.1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 163840,
-    "maxOutput": 163840,
-    "inputCost": 1.3,
-    "outputCost": 4.3
-  },
-  {
     "model": "digitalocean/glm-5.2",
     "imageInput": false,
     "audioInput": false,
@@ -497,7 +425,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 262144,
+    "maxOutput": 131072,
     "inputCost": 1.4,
     "outputCost": 4.4
   },
@@ -515,13 +443,13 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "digitalocean/glm-5.3-flash",
-    "imageInput": true,
+    "imageInput": false,
     "audioInput": false,
-    "videoInput": true,
+    "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 1048576,
+    "maxOutput": 131072,
     "inputCost": 0.15,
     "outputCost": 0.5
   },
@@ -536,18 +464,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1024,
     "inputCost": 0.09,
     "outputCost": null
-  },
-  {
-    "model": "digitalocean/kimi-k2.5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.5,
-    "outputCost": 2.7
   },
   {
     "model": "digitalocean/kimi-k2.6",
@@ -598,18 +514,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.198
   },
   {
-    "model": "digitalocean/llama3.3-70b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": 0.65,
-    "outputCost": 0.65
-  },
-  {
     "model": "digitalocean/mimo-v2.5-pro",
     "imageInput": false,
     "audioInput": false,
@@ -623,7 +527,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "digitalocean/minimax-m2.5",
-    "imageInput": true,
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
@@ -718,6 +622,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.7
   },
   {
+    "model": "digitalocean/nemotron-3.5-super-vl",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.3,
+    "outputCost": 0.65
+  },
+  {
     "model": "digitalocean/nemotron-nano-12b-v2-vl",
     "imageInput": true,
     "audioInput": false,
@@ -728,18 +644,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 16384,
     "inputCost": 0.2,
     "outputCost": 0.6
-  },
-  {
-    "model": "digitalocean/nvidia-nemotron-3-super-120b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 32768,
-    "inputCost": 0.3,
-    "outputCost": 0.65
   },
   {
     "model": "digitalocean/openai-gpt-4.1",
@@ -812,18 +716,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 0.05,
     "outputCost": 0.4
-  },
-  {
-    "model": "digitalocean/openai-gpt-5.1-codex-max",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 400000,
-    "maxOutput": 128000,
-    "inputCost": 1.25,
-    "outputCost": 10
   },
   {
     "model": "digitalocean/openai-gpt-5.2",
@@ -1114,18 +1006,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "digitalocean/qwen3-coder-flash",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.45,
-    "outputCost": 1.7
-  },
-  {
     "model": "digitalocean/qwen3-embedding-0.6b",
     "imageInput": false,
     "audioInput": false,
@@ -1174,6 +1054,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 6
   },
   {
+    "model": "digitalocean/reflection-beam",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.4,
+    "outputCost": 1.2
+  },
+  {
     "model": "digitalocean/stable-diffusion-3.5-large",
     "imageInput": false,
     "audioInput": false,
@@ -1182,7 +1074,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 256,
     "maxOutput": 1,
-    "inputCost": 0.08,
+    "inputCost": null,
     "outputCost": null
   },
   {
@@ -1194,7 +1086,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 100,
     "maxOutput": 1,
-    "inputCost": 0.6,
+    "inputCost": null,
     "outputCost": null
   }
 ]}

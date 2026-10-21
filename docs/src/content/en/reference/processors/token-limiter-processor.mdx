@@ -47,10 +47,10 @@ const processor = new TokenLimiterProcessor({
           },
           {
             name: 'encoding',
-            type: 'TiktokenBPE',
-            description: 'Optional encoding to use. Defaults to o200k_base which is used by gpt-5.1',
+            type: 'unknown',
+            description:
+              'Deprecated. Accepted for backwards compatibility but ignored. Token counts are estimated with `tokenx`, so no encoder is needed.',
             isOptional: true,
-            default: 'o200k_base',
           },
           {
             name: 'strategy',
@@ -96,8 +96,8 @@ const processor = new TokenLimiterProcessor({
   {
     name: 'name',
     type: 'string',
-    description: 'Optional processor display name',
-    isOptional: true,
+    description: "Processor display name set to 'Token Limiter'",
+    isOptional: false,
   },
   {
     name: 'processInput',

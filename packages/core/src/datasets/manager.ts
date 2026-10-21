@@ -186,7 +186,8 @@ export class DatasetsManager {
    */
   async list(args?: {
     page?: number;
-    perPage?: number;
+    /** Datasets per page, or `false` to return every match on one page. */
+    perPage?: number | false;
     filters?: {
       organizationId?: string;
       projectId?: string;
@@ -198,6 +199,11 @@ export class DatasetsManager {
        * Filter to datasets whose `targetIds` intersect this list (any overlap matches).
        */
       targetIds?: string[];
+      /**
+       * Only return datasets with these IDs. An empty array matches no datasets.
+       * Pass `perPage: false` to get every match; otherwise the page size still applies.
+       */
+      datasetIds?: string[];
       /** Substring match on dataset `name`, case-insensitive. */
       name?: string;
     };
@@ -283,65 +289,94 @@ export class DatasetsManager {
   /**
    * Compare two or more experiments.
    *
-   * Uses the internal `compareExperiments` function for pairwise comparison,
-   * then enriches results with per-item input/groundTruth/output data.
+   * Each contender is compared pairwise against the baseline with the internal
+   * `compareExperiments` function; the pairs are then merged so every item has
+   * a result entry for every experiment (or `null` when it did not run the item).
    */
   async compareExperiments(args: { experimentIds: string[]; baselineId?: string }) {
-    const { experimentIds, baselineId } = args;
+    const experimentIds = [...new Set(args.experimentIds)];
 
     if (experimentIds.length < 2) {
       throw new MastraError({
         id: 'COMPARE_INVALID_INPUT',
-        text: 'compareExperiments requires at least 2 experiment IDs.',
+        text: 'compareExperiments requires at least 2 distinct experiment IDs.',
         domain: 'STORAGE',
         category: 'USER',
       });
     }
 
-    const resolvedBaseline = baselineId ?? experimentIds[0]!;
-    const otherExperimentId = experimentIds.find(id => id !== resolvedBaseline) ?? experimentIds[1]!;
+    const baselineId = args.baselineId ?? experimentIds[0]!;
+    if (!experimentIds.includes(baselineId)) {
+      throw new MastraError({
+        id: 'COMPARE_INVALID_INPUT',
+        text: `baselineId "${baselineId}" must be one of experimentIds.`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
 
-    const internal = await compareExperimentsInternal(this.#mastra, {
-      experimentIdA: resolvedBaseline,
-      experimentIdB: otherExperimentId,
-    });
-
-    // Load results for both runs to get input/groundTruth/output
+    const contenderIds = experimentIds.filter(id => id !== baselineId);
     const experimentsStore = await this.#getExperimentsStore();
-    const [resultsA, resultsB] = await Promise.all([
-      experimentsStore.listExperimentResults({
-        experimentId: resolvedBaseline,
-        pagination: { page: 0, perPage: false },
-      }),
-      experimentsStore.listExperimentResults({
-        experimentId: otherExperimentId,
-        pagination: { page: 0, perPage: false },
-      }),
+
+    const [pairs, resultLists] = await Promise.all([
+      Promise.all(
+        contenderIds.map(contenderId =>
+          compareExperimentsInternal(this.#mastra, { experimentIdA: baselineId, experimentIdB: contenderId }),
+        ),
+      ),
+      Promise.all(
+        experimentIds.map(experimentId =>
+          experimentsStore.listExperimentResults({ experimentId, pagination: { page: 0, perPage: false } }),
+        ),
+      ),
     ]);
 
-    // Build results maps by itemId
-    const resultsMapA = new Map(resultsA.results.map(r => [r.itemId, r]));
-    const resultsMapB = new Map(resultsB.results.map(r => [r.itemId, r]));
+    const resultsByExperiment = new Map(
+      experimentIds.map((experimentId, index) => [
+        experimentId,
+        new Map(resultLists[index]!.results.map(result => [result.itemId, result])),
+      ]),
+    );
 
-    // Transform internal items to MVP shape
-    const items = internal.items.map(item => {
-      const resultA = resultsMapA.get(item.itemId);
-      const resultB = resultsMapB.get(item.itemId);
+    // scores[experimentId][itemId] — baseline scores are merged across pairs so
+    // scorers that only some contenders share still show up on the baseline.
+    const scores = new Map<string, Map<string, Record<string, number | null>>>(
+      experimentIds.map(experimentId => [experimentId, new Map()]),
+    );
+    const itemIds = new Set<string>();
+    pairs.forEach((pair, index) => {
+      const contenderId = contenderIds[index]!;
+      for (const item of pair.items) {
+        itemIds.add(item.itemId);
+        const baselineScores = scores.get(baselineId)!;
+        baselineScores.set(item.itemId, { ...baselineScores.get(item.itemId), ...item.scoresA });
+        scores.get(contenderId)!.set(item.itemId, item.scoresB);
+      }
+    });
+
+    const items = [...itemIds].map(itemId => {
+      let source: { input: unknown; groundTruth: unknown } | undefined;
+      // Object.fromEntries keeps caller-chosen experiment IDs like "__proto__" as own keys.
+      const results: Record<string, { output: unknown; scores: Record<string, number | null> } | null> =
+        Object.fromEntries(
+          experimentIds.map(experimentId => {
+            const result = resultsByExperiment.get(experimentId)!.get(itemId);
+            source ??= result;
+            return [
+              experimentId,
+              result ? { output: result.output, scores: scores.get(experimentId)!.get(itemId) ?? {} } : null,
+            ];
+          }),
+        );
 
       return {
-        itemId: item.itemId,
-        input: resultA?.input ?? resultB?.input ?? null,
-        groundTruth: resultA?.groundTruth ?? resultB?.groundTruth ?? null,
-        results: {
-          [resolvedBaseline]: resultA ? { output: resultA.output, scores: item.scoresA } : null,
-          [otherExperimentId]: resultB ? { output: resultB.output, scores: item.scoresB } : null,
-        },
+        itemId,
+        input: source?.input ?? null,
+        groundTruth: source?.groundTruth ?? null,
+        results,
       };
     });
 
-    return {
-      baselineId: resolvedBaseline,
-      items,
-    };
+    return { baselineId, items };
   }
 }

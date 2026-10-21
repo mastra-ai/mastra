@@ -29,7 +29,7 @@ describe('custom provider source', () => {
     expect(resolveCustomProviders(requestContext)).toEqual([
       { name: 'Acme', url: 'https://llm.acme.dev/v1', models: ['fast-1'] },
     ]);
-    expect(source).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(source).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1', credentialScope: 'user' });
   });
 
   it('passes an undefined tenant for calls without an authenticated request', () => {

@@ -64,7 +64,13 @@ export const LongFilename: Story = {
 
 export const RemotePdf: Story = {
   args: { part: { type: 'file', mimeType: 'application/pdf', data: 'https://example.com/review.pdf' } },
-  parameters: { docs: { description: { story: 'External-link state. The example URL is not a hosted PDF fixture.' } } },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Remote PDF preview with an open-in-new-tab fallback. The example URL is not a hosted PDF fixture.',
+      },
+    },
+  },
 };
 
 export const CloudStorageFile: Story = {

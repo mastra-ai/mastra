@@ -215,6 +215,18 @@ export class IntegrationStorage extends FactoryStorageDomain {
     ]);
   }
 
+  /**
+   * Move every subscription still recorded under `fromResourceId` onto
+   * `toResourceId`, across integrations. A rerun finds nothing to move.
+   */
+  async moveSubscriptionsToResource(input: { fromResourceId: string; toResourceId: string }): Promise<number> {
+    return this.ops.updateMany(
+      'integration_subscriptions',
+      { resource_id: input.fromResourceId },
+      { resource_id: input.toResourceId },
+    );
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     await this.ops.deleteMany('integration_subscriptions', {});
     await this.ops.deleteMany('integration_settings', {});

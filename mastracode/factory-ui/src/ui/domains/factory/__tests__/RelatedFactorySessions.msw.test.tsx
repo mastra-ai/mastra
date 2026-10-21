@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -78,7 +78,7 @@ function stubHeader(item: ReturnType<typeof workItem> | ReturnType<typeof linear
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () =>
       HttpResponse.json({ session: workspaceSession }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPOSITORY_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [workspaceSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
@@ -90,7 +90,7 @@ function stubHeader(item: ReturnType<typeof workItem> | ReturnType<typeof linear
 function renderHeader() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`]}>
-      <MainSidebarProvider storageKey="related-factory-sessions-test">
+      <SidebarProvider storageKey="related-factory-sessions-test">
         <Routes>
           <Route
             path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
@@ -101,7 +101,7 @@ function renderHeader() {
             }
           />
         </Routes>
-      </MainSidebarProvider>
+      </SidebarProvider>
     </MemoryRouter>,
   );
 }

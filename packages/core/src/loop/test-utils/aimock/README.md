@@ -163,6 +163,58 @@ scenarios run on `'fs'` too. Scenarios whose inputs the file-routing model canno
 dynamic-function `instructions`, `sharedAgent`, `workflows`-as-tool, or durable resume/suspension — opt out
 with `{ skip: ['fs'] }` (alongside any engines they already skip).
 
+### Running on the Inngest engine
+
+From the repository root, build the integration and its test dependencies, then install the local Inngest dev server:
+
+```bash
+pnpm turbo build --filter '@mastra/inngest...'
+pnpm --dir workflows/inngest setup:inngest-cli
+```
+
+Run selected shared agent-loop scenarios through the real Inngest dev server:
+
+```bash
+AIMOCK_INNGEST_WORKERS=1 \
+AIMOCK_SCENARIOS='{queued-tool-approval,resumed-tool-output}' \
+pnpm --dir workflows/inngest test:aimock
+```
+
+`test:aimock` selects the `e2e:workflows/inngest:aimock` Vitest project. It starts its own local app and dev servers; no cloud credentials are needed. `AIMOCK_SCENARIOS` accepts scenario filename stems or a brace glob. Without it, the project runs all shared scenarios. `AIMOCK_INNGEST_WORKERS` defaults to four; use one for serial regression runs.
+
+The approval and resume scenarios include expected-failure pins for duplicate approval output (#27925) and missing resumed tool-call history (#27926). Vitest fails if a pinned test unexpectedly passes, so an upstream fix requires updating the pin.
+
+### Parity mode (`describeParity` / `expectParity`)
+
+`parity.ts` is the opt-in mode for asserting that durable and evented agents behave exactly like a plain
+`Agent`. It runs the same scripted scenario on plain (the reference) and on one target engine, then
+compares text, finish reason, usage, tool calls/results, step count, chunk types, normalised chunk
+payloads, `getFullOutput()` and every request the model received. Run ids, message ids, timestamps,
+response ids and trace/span ids are stripped before comparing.
+
+```ts
+describeParity('tool choice', target => {
+  it('forwards a named toolChoice', () =>
+    expectParity(target, {
+      model: { tapes: [toolCallTape('lookup', {}), textOnlyTape('Done.')] },
+      buildAgent: ({ model }) => new Agent({ id: 'a', name: 'A', instructions: '...', model, tools }),
+      input: 'Look it up',
+      options: { toolChoice: { type: 'tool', toolName: 'lookup' } },
+    }));
+});
+```
+
+- `describeParity` registers through `describeForAllEngines` with the `durable` and `evented` variants
+  only (plain is the in-test baseline; `normal`, `fs` and `inngest` are skipped).
+- The model is an in-process recording model (`createRecordingModel`, `textOnlyTape`, `toolCallTape`),
+  not the AIMock HTTP server, because parity cases script provider usage objects, thrown errors,
+  mid-stream `error` parts and aborts that an HTTP fixture cannot express.
+- Multi-turn runs, `generate()` turns and suspend/approve/decline continuations go through the `run`
+  handle; see the header of `parity.ts`.
+- Known engine differences are declared with a ticket (`KNOWN_CHUNK_DIFFERENCES`, per-scenario
+  `differences`) and fail the suite once they stop reproducing.
+- Parity scenario files are named `parity-<topic>.scenario.test.ts`.
+
 ### Error-state scenarios
 
 The loop surfaces failures through specific chunks; script and assert them directly:

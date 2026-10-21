@@ -13,6 +13,7 @@ import {
   fieldErrorRimWithin,
   inputSurfaceAndFocusWithinStyle,
 } from '@/ds/primitives/form-element';
+import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
 import { TextareaControl } from '@/ds/primitives/textarea-control';
 import { cn } from '@/lib/utils';
 
@@ -58,7 +59,8 @@ const inputGroupRoundedTextareaClassName = cn(
 // one and only ever produced two boundary languages for the same control, which is why
 // four of its call sites had wrapped it in a hand-made `bg-card rounded-full` div to get
 // the material back.
-const inputGroupClassName = cn(
+// eslint-disable-next-line react-refresh/only-export-components -- shared with InputNumber
+export const inputGroupClassName = cn(
   inputGroupBaseClassName,
   'rounded-full',
   inputSurfaceAndFocusWithinStyle,
@@ -102,6 +104,10 @@ const inputGroupAddonVariants = cva(
   ),
   {
     variants: {
+      variant: {
+        default: '',
+        flush: '',
+      },
       align: {
         'inline-start': 'order-first pr-1 pl-3 has-[>button]:pl-1',
         'inline-end': 'order-last pr-3 pl-1 has-[>button]:pr-1',
@@ -109,21 +115,38 @@ const inputGroupAddonVariants = cva(
         'block-end': 'order-last w-full justify-start border-t border-border px-3 pt-1 pb-2',
       },
     },
+    compoundVariants: [
+      { variant: 'flush', align: ['inline-start', 'inline-end'], className: 'gap-0 [&>button]:mx-0' },
+      { variant: 'flush', align: 'inline-start', className: 'pl-0 has-[>button]:pl-0' },
+      { variant: 'flush', align: 'inline-end', className: 'pr-0 has-[>button]:pr-0' },
+    ],
     defaultVariants: {
+      variant: 'default',
       align: 'inline-start',
     },
   },
 );
 
-export type InputGroupAddonProps = React.ComponentProps<'div'> & VariantProps<typeof inputGroupAddonVariants>;
+export type InputGroupAddonProps = React.ComponentProps<'div'> &
+  Omit<VariantProps<typeof inputGroupAddonVariants>, 'variant'> & {
+    /** `flush` joins inline buttons without a gap or an inset from the field's outside edge. */
+    variant?: VariantProps<typeof inputGroupAddonVariants>['variant'];
+  };
 
-function InputGroupAddon({ className, align = 'inline-start', onClick, ...props }: InputGroupAddonProps) {
+function InputGroupAddon({
+  className,
+  align = 'inline-start',
+  variant = 'default',
+  onClick,
+  ...props
+}: InputGroupAddonProps) {
   return (
     <div
       role="group"
       data-slot="input-group-addon"
       data-align={align}
-      className={cn(inputGroupAddonVariants({ align }), className)}
+      data-variant={variant}
+      className={cn(inputGroupAddonVariants({ align, variant }), className)}
       onClick={event => {
         // Click on non-interactive addon area focuses the control inside the group.
         // Skip when a button/input handled the click itself.
@@ -153,24 +176,29 @@ const inputGroupControlHeightBySize = cn(
   'group-data-[size=lg]/input-group:h-[calc(var(--spacing-control-lg)-2px)]',
 );
 
+// eslint-disable-next-line react-refresh/only-export-components -- shared with InputNumber
+export const inputGroupControlClassName = cn(
+  'min-w-0 flex-1 bg-transparent px-3 text-label text-foreground outline-hidden',
+  inputGroupControlHeightBySize,
+  'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
+  'focus:placeholder:opacity-70',
+  'disabled:cursor-not-allowed',
+);
+
 export type InputGroupInputProps = Omit<React.ComponentProps<'input'>, 'size'> & {
   testId?: string;
   /** @deprecated Wrap the group in `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`. */
   error?: boolean;
 };
 
-function InputGroupInput({ className, testId, error, type = 'text', ...props }: InputGroupInputProps) {
+function InputGroupInput({ className, testId, error, type = 'text', autoComplete, ...props }: InputGroupInputProps) {
   return (
     <InputPrimitive
       type={type}
       data-slot="input-group-control"
       data-testid={testId}
       className={cn(
-        'min-w-0 flex-1 bg-transparent px-3 text-label text-foreground outline-hidden',
-        inputGroupControlHeightBySize,
-        'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
-        'focus:placeholder:opacity-70',
-        'disabled:cursor-not-allowed',
+        inputGroupControlClassName,
         // WebKit and Firefox use different selectors for native number spinners.
         '[&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none',
         '[&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none',
@@ -182,6 +210,7 @@ function InputGroupInput({ className, testId, error, type = 'text', ...props }: 
       )}
       {...deprecatedErrorAria(error)}
       {...props}
+      {...textFieldAutofillProps(autoComplete)}
       {...keepOwnAccessibleName(props)}
     />
   );

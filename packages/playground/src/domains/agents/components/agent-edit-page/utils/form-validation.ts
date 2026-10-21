@@ -30,6 +30,7 @@ export type RefInstructionBlock = {
   id: string;
   type: 'prompt_block_ref';
   promptBlockId: string;
+  rules?: RuleGroup;
 };
 
 export type InstructionBlock = InlineInstructionBlock | RefInstructionBlock;
@@ -79,6 +80,7 @@ const refInstructionBlockSchema = z.object({
   id: z.string(),
   type: z.literal('prompt_block_ref'),
   promptBlockId: z.string().min(1),
+  rules: ruleGroupSchema.optional(),
 });
 
 const instructionBlockSchema = z.discriminatedUnion('type', [inlineInstructionBlockSchema, refInstructionBlockSchema]);
@@ -90,10 +92,11 @@ export const createInstructionBlock = (content = '', rules?: RuleGroup): InlineI
   rules,
 });
 
-export const createRefInstructionBlock = (promptBlockId: string): RefInstructionBlock => ({
+export const createRefInstructionBlock = (promptBlockId: string, rules?: RuleGroup): RefInstructionBlock => ({
   id: uuid(),
   type: 'prompt_block_ref',
   promptBlockId,
+  rules,
 });
 
 const scoringSamplingConfigSchema = z.object({
@@ -207,6 +210,7 @@ export const agentFormSchema = z.object({
   agents: z.record(z.string(), entityConfigSchema).optional(),
   scorers: z.record(z.string(), scorerConfigSchema).optional(),
   memory: memoryConfigSchema.optional(),
+  memoryRef: z.object({ type: z.literal('id'), memoryId: z.string() }).optional(),
   variables: z.custom<JsonSchema>().optional(),
   instructionBlocks: z.array(instructionBlockSchema).optional(),
   mcpClients: z

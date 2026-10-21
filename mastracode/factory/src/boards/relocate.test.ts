@@ -178,6 +178,26 @@ describe('moveCardToBoard', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['an explicit board', { board: 'work', stages: ['canceled'] }],
+    ['a legacy null board', { board: null, stages: ['done'] }],
+  ])('leaves a card on an uninstalled board alone (%s)', async (_label, overrides) => {
+    const row = item(overrides as Partial<WorkItemRow>);
+    const update = vi.fn();
+    const boards = createBoardRegistry({ includeDefaultBoards: false, boards: [createTestBoard()] });
+
+    await expect(
+      moveCardToBoard({
+        workItems: { update, supersedeDecisionsForWorkItem: vi.fn() },
+        boardRegistry: boards,
+        userId: 'dispatcher',
+        item: row,
+        targetBoard: 'release',
+      }),
+    ).resolves.toBe('skipped');
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('reports a card that changed under it as skipped, without superseding', async () => {
     const row = item({ board: 'work', stages: ['intake'] });
     const { boards, supersedeDecisionsForWorkItem } = harness(row);

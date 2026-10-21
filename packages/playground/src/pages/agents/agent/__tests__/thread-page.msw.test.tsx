@@ -1002,7 +1002,7 @@ describe('Standalone thread page', () => {
   });
 
   describe('when the thread list is still loading', () => {
-    it('shows a compact skeleton in the sidebar, replaced by the threads once loaded', async () => {
+    it('keeps the sidebar header in place without a skeleton, then fills in the threads', async () => {
       installHandlers();
       let releaseThreads!: () => void;
       const gate = new Promise<void>(resolve => (releaseThreads = resolve));
@@ -1015,11 +1015,56 @@ describe('Standalone thread page', () => {
 
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
-      expect(await screen.findByTestId('agent-route-sidebar-skeleton')).not.toBeNull();
+      expect(await screen.findByRole('link', { name: /New Thread/ })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
+      expect(screen.queryByTestId('agent-route-sidebar-skeleton')).toBeNull();
+      expect(screen.queryByText(/Your conversations will appear here/)).toBeNull();
 
       releaseThreads();
       expect(await screen.findByText('Sushi ideas')).not.toBeNull();
-      expect(screen.queryByTestId('agent-route-sidebar-skeleton')).toBeNull();
+    });
+  });
+
+  describe('when the agent is still loading', () => {
+    it('keeps the threads panel in place next to the chat skeleton', async () => {
+      installHandlers();
+      let releaseAgent!: () => void;
+      const gate = new Promise<void>(resolve => (releaseAgent = resolve));
+      server.use(
+        http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, async () => {
+          await gate;
+          return HttpResponse.json(agentResponse);
+        }),
+      );
+
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+      expect(await screen.findByTestId('agent-thread-skeleton')).not.toBeNull();
+      expect(screen.getByRole('link', { name: /New Thread/ })).not.toBeNull();
+
+      releaseAgent();
+      expect(await screen.findByText('Sushi ideas')).not.toBeNull();
+    });
+  });
+
+  describe('when the user reloads an agent without threads after opening its threads panel', () => {
+    it('keeps the threads panel open', async () => {
+      installHandlers();
+      server.use(
+        http.get(`${BASE_URL}/api/memory/threads`, () =>
+          HttpResponse.json({ ...threadsResponse, threads: [], total: 0 }),
+        ),
+      );
+      window.localStorage.setItem(
+        `react-resizable-panels:agent-layout-v6-${AGENT_ID}`,
+        JSON.stringify({ 'left-slot': 300 }),
+      );
+
+      renderAt(`/agents/${AGENT_ID}/threads/new`);
+
+      expect(await screen.findByText(/Your conversations will appear here/)).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
     });
   });
 
@@ -1359,7 +1404,7 @@ describe('Standalone thread page', () => {
           modelSettings: expect.objectContaining({ temperature: 0.2 }),
         }),
       );
-    });
+    }, 15_000);
   });
 
   describe('when the current agent no longer exists', () => {

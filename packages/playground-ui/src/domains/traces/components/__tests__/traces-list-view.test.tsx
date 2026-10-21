@@ -1,10 +1,20 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
+import { afterEach, assert, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TracesListView } from '../traces-list-view';
 import type { TracesListViewTrace } from '../traces-list-view';
+import {
+  FAILED_SPAN_ID,
+  FAILED_TRACE_ID,
+  errorPreview,
+  failedSpanDetail,
+  fullErrorMessage,
+} from './fixtures/trace-error-cell';
+import { server } from '@/test/msw-server';
+import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
 
 // jsdom implements neither ResizeObserver nor element layout; without both the
 // virtualizer sees a zero-height scroll container and renders no rows. The stub
@@ -26,13 +36,13 @@ beforeAll(() => {
             devicePixelContentBoxSize: [{ inlineSize: 800, blockSize: 600 }],
           },
         ],
-        this as unknown as ResizeObserver,
+        this,
       );
     }
     unobserve() {}
     disconnect() {}
   }
-  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+  globalThis.ResizeObserver = ResizeObserverStub;
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600));
   // Base UI waits for the menu's exit animations; jsdom has no Web Animations API.
   Element.prototype.getAnimations ??= () => [];
@@ -51,7 +61,10 @@ function makeTrace(
   };
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
 
 function headerTexts(container: HTMLElement): (string | null)[] {
   const top = container.querySelector('.data-list-top');
@@ -74,13 +87,14 @@ describe('TracesListView columns', () => {
         'Primitive type',
         'Primitive name',
         'Input',
+        'Output',
         'Status',
         'Duration',
         'Est. cost',
       ]);
       expect(screen.queryByText('Created')).toBeNull();
       expect(screen.queryByText('Entity')).toBeNull();
-      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
+      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) minmax(8rem,1fr) 6rem 7rem 8rem');
     });
   });
 
@@ -184,6 +198,61 @@ describe('TracesListView — type column', () => {
       expect(screen.getByText('weatherAgent')).not.toBeNull();
       expect(screen.getByText('fetchWeather')).not.toBeNull();
     });
+  });
+});
+
+describe('TracesListView — failed row error', () => {
+  const failedRow = makeTrace({
+    traceId: FAILED_TRACE_ID,
+    spanId: FAILED_SPAN_ID,
+    status: 'error',
+    errorPreview,
+  });
+
+  beforeEach(() => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () =>
+        HttpResponse.json(failedSpanDetail),
+      ),
+    );
+  });
+
+  it('shows the full error from the span when hovering the cut-off preview', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TracesListView traces={[failedRow]} onTraceClick={vi.fn()} />);
+
+    await user.hover(screen.getByText(errorPreview));
+
+    expect(await screen.findByText(fullErrorMessage)).not.toBeNull();
+    expect(screen.getByText('AI_APICallError')).not.toBeNull();
+  });
+
+  it('keeps the preview and says so when the full error fails to load', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () =>
+        HttpResponse.json({ error: 'Internal Server Error' }, { status: 500 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<TracesListView traces={[failedRow]} onTraceClick={vi.fn()} />);
+
+    await user.hover(screen.getByText(errorPreview));
+
+    expect(await screen.findByText("Couldn't load the full error.")).not.toBeNull();
+    expect(screen.getAllByText(errorPreview)).toHaveLength(2);
+  });
+
+  it('copies the error from the card without opening the trace', async () => {
+    const user = userEvent.setup();
+    const onTraceClick = vi.fn();
+    renderWithProviders(<TracesListView traces={[failedRow]} onTraceClick={onTraceClick} />);
+
+    await user.hover(screen.getByText(errorPreview));
+    await screen.findByText(fullErrorMessage);
+    await user.click(screen.getByRole('button', { name: 'Copy error' }));
+
+    expect(await navigator.clipboard.readText()).toBe(fullErrorMessage);
+    expect(onTraceClick).not.toHaveBeenCalled();
   });
 });
 
@@ -557,44 +626,16 @@ describe('TracesListView — custom columns', () => {
   });
 });
 
-describe('TracesListView — scrolling back to the top', () => {
-  it('re-reads the scroll position once a fresh query resolves', () => {
-    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
-    const { rerender } = render(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
-    dispatchEvent.mockClear();
+describe('TracesListView — scroll container', () => {
+  const gridOf = (container: HTMLElement) => container.querySelector('[style*="grid-template-columns"]');
+
+  it('keeps the same scroll container once a query resolves', () => {
+    const { container, rerender } = render(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
+    const gridBefore = gridOf(container);
 
     rerender(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
 
-    // The list swapped its scroll container, so the virtualizer has to be told
-    // to read the new element's scrollTop rather than keep the old offset.
-    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(true);
-    dispatchEvent.mockRestore();
-  });
-
-  it('leaves the scroll position alone while paginating', () => {
-    const { rerender } = render(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
-    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
-
-    rerender(
-      <TracesListView
-        traces={[makeTrace({ traceId: 'trace-1' }), makeTrace({ traceId: 'trace-2' })]}
-        isFetchingNextPage
-        onTraceClick={vi.fn()}
-      />,
-    );
-
-    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(false);
-    dispatchEvent.mockRestore();
-  });
-
-  it('leaves the scroll position alone when a query starts', () => {
-    const { rerender } = render(<TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />);
-    const dispatchEvent = vi.spyOn(HTMLElement.prototype, 'dispatchEvent');
-
-    rerender(<TracesListView traces={[]} isLoading onTraceClick={vi.fn()} />);
-
-    expect(dispatchEvent.mock.calls.some(([event]) => event.type === 'scroll')).toBe(false);
-    dispatchEvent.mockRestore();
+    expect(gridOf(container)).toBe(gridBefore);
   });
 });
 
@@ -684,5 +725,79 @@ describe('TracesListView — featuring by trace alone', () => {
     const rows = screen.getAllByRole('button');
     expect(rows[0]?.hasAttribute('data-featured')).toBe(true);
     expect(rows[1]?.hasAttribute('data-featured')).toBe(false);
+  });
+});
+
+describe('TracesListView column reordering', () => {
+  function dragHeader(container: HTMLElement, from: string, to: string) {
+    const top = container.querySelector('.data-list-top');
+    assert(top);
+    const cells = Array.from(top.children) as HTMLElement[];
+    const source = cells.find(cell => cell.textContent === from);
+    const target = cells.find(cell => cell.textContent === to);
+    assert(source && target);
+    const data = new Map<string, string>();
+    const dataTransfer = {
+      setData: (type: string, value: string) => data.set(type, value),
+      getData: (type: string) => data.get(type) ?? '',
+      types: ['application/x-mastra-data-list-column'],
+      effectAllowed: 'move',
+      dropEffect: 'move',
+    };
+    fireEvent.dragStart(source, { dataTransfer });
+    fireEvent.dragOver(target, { dataTransfer });
+    fireEvent.drop(target, { dataTransfer });
+  }
+
+  function visualHeaders(container: HTMLElement): string[] {
+    const top = container.querySelector('.data-list-top');
+    assert(top);
+    const cells = Array.from(top.children) as HTMLElement[];
+    const css = container.querySelector('style')?.textContent ?? '';
+    const orderOf = (index: number) =>
+      Number(new RegExp(`nth-child\\(${index + 1}\\) \\{ order: (\\d+)`).exec(css)?.[1]);
+    return cells
+      .map((cell, index) => ({ text: cell.textContent ?? '', order: orderOf(index) }))
+      .sort((a, b) => a.order - b.order)
+      .map(cell => cell.text);
+  }
+
+  describe('when every column is rendered', () => {
+    it('makes every header draggable, including the Start column', () => {
+      const { container } = render(
+        <TracesListView traces={[makeTrace({ traceId: 'trace-1' })]} onTraceClick={vi.fn()} />,
+      );
+      const top = container.querySelector('.data-list-top');
+      assert(top);
+      expect(Array.from(top.children).every(cell => cell.getAttribute('draggable') === 'true')).toBe(true);
+    });
+  });
+
+  describe('when a column is moved and then optional columns change', () => {
+    it('keeps the moved order by column key', () => {
+      const traces = [makeTrace({ traceId: 'trace-1' })];
+      const base = { visibleColumns: ['type', 'input', 'duration'] as const, customColumns: [], metadataKeys: [] };
+      const { container, rerender } = render(
+        <TracesListView traces={traces} columnPreferences={base} onTraceClick={vi.fn()} />,
+      );
+      dragHeader(container, 'Status', 'Start');
+      expect(visualHeaders(container)).toEqual([
+        'Status',
+        'Start',
+        'Primitive type',
+        'Primitive name',
+        'Input',
+        'Duration',
+      ]);
+
+      rerender(
+        <TracesListView
+          traces={traces}
+          columnPreferences={{ ...base, visibleColumns: ['input', 'duration'], metadataKeys: ['tenant'] }}
+          onTraceClick={vi.fn()}
+        />,
+      );
+      expect(visualHeaders(container)).toEqual(['Status', 'Start', 'Primitive name', 'Input', 'Duration', 'tenant']);
+    });
   });
 });

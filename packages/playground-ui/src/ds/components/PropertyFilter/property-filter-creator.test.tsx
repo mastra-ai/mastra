@@ -1,18 +1,10 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PropertyFilterCreator } from './property-filter-creator';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
-
-beforeAll(() => {
-  // jsdom ships no PointerEvent, and Base UI constructs one when a choice is clicked.
-  if (typeof window.PointerEvent === 'undefined') {
-    class PointerEventStub extends MouseEvent {}
-    window.PointerEvent = PointerEventStub as unknown as typeof PointerEvent;
-  }
-});
 
 afterEach(() => {
   cleanup();
@@ -249,10 +241,11 @@ describe('PropertyFilterCreator — choosing a multi-select value', () => {
 
     openMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
-    expect(screen.getByRole('combobox').textContent).toContain('Choose Tags');
+    // The multi-select is a chips field: the invitation is its placeholder, and it searches in itself.
+    expect(screen.getByRole('combobox').getAttribute('placeholder')).toBe('Choose Tags');
 
-    fireEvent.click(screen.getByRole('combobox'));
-    fireEvent.change(await screen.findByPlaceholderText('Search tags...'), { target: { value: 'no such tag' } });
+    fireEvent.mouseDown(screen.getByRole('combobox'));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'no such tag' } });
 
     expect(await screen.findByText('No option found.')).toBeTruthy();
   });
@@ -272,10 +265,10 @@ describe('PropertyFilterCreator — choosing a multi-select value', () => {
 
     openMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
-    expect(screen.getByRole('combobox').textContent).toContain('Pick some tags');
+    expect(screen.getByRole('combobox').getAttribute('placeholder')).toBe('Pick some tags');
 
-    fireEvent.click(screen.getByRole('combobox'));
-    fireEvent.change(await screen.findByPlaceholderText('Search tags...'), { target: { value: 'zzz' } });
+    fireEvent.mouseDown(screen.getByRole('combobox'));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'zzz' } });
 
     expect(await screen.findByText('No tags yet')).toBeTruthy();
   });
@@ -310,9 +303,12 @@ describe('PropertyFilterCreator — choosing a multi-select value', () => {
 
     openMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
-    fireEvent.click(screen.getByRole('combobox'));
+    // A field opens on mousedown (a real press), which fireEvent.click doesn't send.
+    fireEvent.mouseDown(screen.getByRole('combobox'));
     fireEvent.click(await screen.findByRole('option', { name: 'Prod' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add filter' }));
+    // A multi-select keeps its list open after a pick, hiding the rest from assistive tech meanwhile;
+    // a pointer click on the button still lands.
+    fireEvent.click(screen.getByRole('button', { name: 'Add filter', hidden: true }));
 
     expect(onTokensChange).toHaveBeenCalledWith([{ fieldId: 'tags', value: ['prod'] }]);
     await waitFor(() => expect(screen.queryByText('Tags · is')).toBeNull());
@@ -326,7 +322,8 @@ describe('PropertyFilterCreator — choosing a multi-select value', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add filter' }));
     expect(screen.getByText('Choose at least one tags value.')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('combobox'));
+    // A field opens on mousedown (a real press), which fireEvent.click doesn't send.
+    fireEvent.mouseDown(screen.getByRole('combobox'));
     fireEvent.click(await screen.findByRole('option', { name: 'Prod' }));
 
     expect(screen.queryByText('Choose at least one tags value.')).toBeNull();

@@ -1,4 +1,4 @@
-import { useStreamWorkflow } from '@mastra/react';
+import { useStreamWorkflow } from '@mastra/react/hooks/workflows';
 import { useCallback, useState } from 'react';
 import { toast } from '@/utils/toast';
 

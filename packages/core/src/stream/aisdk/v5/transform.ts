@@ -742,7 +742,7 @@ function normalizeUsage(
     return {
       inputTokens,
       outputTokens,
-      totalTokens: (inputTokens ?? 0) + (outputTokens ?? 0),
+      totalTokens: inputTokens !== undefined && outputTokens !== undefined ? inputTokens + outputTokens : undefined,
       reasoningTokens: output.reasoning,
       cachedInputTokens: input.cacheRead,
       cacheCreationInputTokens: input.cacheWrite,
@@ -756,7 +756,11 @@ function normalizeUsage(
   return {
     inputTokens: v2Usage.inputTokens,
     outputTokens: v2Usage.outputTokens,
-    totalTokens: v2Usage.totalTokens ?? (v2Usage.inputTokens ?? 0) + (v2Usage.outputTokens ?? 0),
+    totalTokens:
+      v2Usage.totalTokens ??
+      (v2Usage.inputTokens !== undefined && v2Usage.outputTokens !== undefined
+        ? v2Usage.inputTokens + v2Usage.outputTokens
+        : undefined),
     reasoningTokens: (v2Usage as { reasoningTokens?: number }).reasoningTokens,
     cachedInputTokens: (v2Usage as { cachedInputTokens?: number }).cachedInputTokens,
     cacheCreationInputTokens: (v2Usage as { cacheCreationInputTokens?: number }).cacheCreationInputTokens,

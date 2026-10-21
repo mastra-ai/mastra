@@ -100,7 +100,7 @@ const controlTintHover =
 const controlTintActive = '[&:active:not(:disabled)]:[--surface-tint:var(--fill)]';
 
 export const raisedControlSurfaceStyle =
-  'bg-card shadow-raised text-foreground ' + controlTintHover + ' ' + controlTintActive + ' ' + surfaceRimFocus;
+  'bg-field shadow-input text-foreground ' + controlTintHover + ' ' + controlTintActive + ' ' + surfaceRimFocus;
 
 // `filled` was an alias for `default` (both render the filled surface) and has been
 // removed from the variant set. An unknown value makes cva emit nothing for the
@@ -111,7 +111,7 @@ export type DeprecatedFilledVariant = 'filled';
 export function resolveFieldVariant<TVariant extends string>(
   variant: TVariant | DeprecatedFilledVariant | null | undefined,
 ): TVariant | 'default' | null | undefined {
-  return variant === 'filled' ? 'default' : (variant as TVariant | null | undefined);
+  return variant === 'filled' ? 'default' : variant;
 }
 
 // Unstyled variant baseline — strips all chrome but still suppresses the

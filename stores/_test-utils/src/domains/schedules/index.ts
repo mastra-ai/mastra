@@ -144,6 +144,27 @@ export function createSchedulesTests({ storage }: SchedulesTestOptions) {
     });
 
     describe('updateScheduleNextFire (CAS)', () => {
+      it('sets status atomically when newStatus is provided', async () => {
+        if (!scheduleStore) return;
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 's1', nextFireAt: 100 }));
+
+        expect(await scheduleStore.updateScheduleNextFire('s1', 100, 100, 150, 'run_1', 'completed')).toBe(true);
+        const fetched = await scheduleStore.getSchedule('s1');
+        expect(fetched!.status).toBe('completed');
+        expect(fetched!.lastRunId).toBe('run_1');
+
+        // Completed rows are no longer claimable or due.
+        expect(await scheduleStore.updateScheduleNextFire('s1', 100, 200, 150, 'run_2')).toBe(false);
+        expect(await scheduleStore.listDueSchedules(10_000)).toHaveLength(0);
+      });
+
+      it('keeps status unchanged when newStatus is omitted', async () => {
+        if (!scheduleStore) return;
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 's1', nextFireAt: 100 }));
+        await scheduleStore.updateScheduleNextFire('s1', 100, 200, 150, 'run_1');
+        expect((await scheduleStore.getSchedule('s1'))!.status).toBe('active');
+      });
+
       it('advances nextFireAt when expected matches', async () => {
         if (!scheduleStore) return;
         await scheduleStore.createSchedule(createSampleSchedule({ id: 's1', nextFireAt: 100 }));

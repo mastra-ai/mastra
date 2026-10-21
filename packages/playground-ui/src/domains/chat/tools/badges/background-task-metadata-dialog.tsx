@@ -1,6 +1,6 @@
+import { useGetBackgroundTaskById, useBackgroundTaskStream } from '@mastra/react/hooks/agents';
 import { Loader2Icon, Share2 } from 'lucide-react';
 import { useState } from 'react';
-import { useGetBackgroundTaskById, useBackgroundTaskStream } from '@/domains/agents/hooks/use-background-tasks';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import {
@@ -32,10 +32,10 @@ const BackgroundTaskMetadata = ({
   open,
   onOpenChange,
 }: BackgroundTaskMetadataProps) => {
-  const { data: task } = useGetBackgroundTaskById(
-    backgroundTaskTaskId,
-    !!backgroundTaskCompletedAt || !!backgroundTaskSuspendedAt,
-  );
+  const { data: task } = useGetBackgroundTaskById({
+    backgroundTaskId: backgroundTaskTaskId,
+    queryOptions: { enabled: !!backgroundTaskCompletedAt || !!backgroundTaskSuspendedAt },
+  });
   const { tasks } = useBackgroundTaskStream({
     taskId: backgroundTaskTaskId,
     enabled: !backgroundTaskCompletedAt && !backgroundTaskSuspendedAt,
@@ -66,6 +66,7 @@ const BackgroundTaskMetadata = ({
     } = typeof args === 'object' ? args : JSON.parse(args ?? '');
     argSlot = <CodeEditor data={formattedArgs} />;
   } catch {
+    // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- The built task type is an object; TypeScript requires unknown as the intermediate type in this string assertion.
     argSlot = <pre className="overflow-x-auto rounded-md bg-muted p-4 whitespace-pre">{args as unknown as string}</pre>;
   }
 
@@ -94,7 +95,7 @@ const BackgroundTaskMetadata = ({
         <DialogBody>
           <div className="space-y-2">
             <Txt tone="muted">Background Task Duration</Txt>
-            <Txt tone="ink" className="text-body">
+            <Txt variant="body" tone="ink">
               {toSigFigs(timeDiff, 3)}ms
             </Txt>
           </div>

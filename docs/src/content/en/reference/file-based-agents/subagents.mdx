@@ -7,12 +7,6 @@ packages:
 
 # Subagents
 
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
-
 A file-based agent can declare **subagents**, specialist child agents it delegates to. The parent model sees each subagent as a delegation tool named after the subagent directory and calls that tool to hand off a task. The subagent's result returns to the parent conversation.
 
 Use this page for the file-based convention. For broader delegation patterns, hooks, memory isolation, tool approval propagation, and scoring, see [Supervisor agents](/docs/subagents).
@@ -51,7 +45,7 @@ export default agentConfig({
 
 A subagent's `description` is routing text for the parent model. Write it like a [tool description](/reference/file-based-agents/tools#tool-options): explain what the subagent does and when to delegate to it.
 
-The build fails when a discovered subagent doesn't provide a non-empty description.
+The build fails when a discovered subagent doesn't provide a non-empty description. The exception is a parent whose `config.ts` exports a `new Agent()`: its `subagents/` directory is ignored with a warning, so no description check runs. Set `agents` on the `Agent` instead.
 
 ## Isolation
 

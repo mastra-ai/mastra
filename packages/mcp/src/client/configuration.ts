@@ -12,11 +12,25 @@ import { InternalMastraMCPClient } from './client';
 import type { MastraMCPServerDefinition, MCPServerAuthState } from './client';
 import { getMCPDiscoveryErrorDetails, isReconnectableMCPError } from './error-utils';
 import type { MCPDiscoveryErrorDetails } from './error-utils';
+import type {
+  MCPClientWebhookOptions,
+  MCPEventDescriptor,
+  MCPEventSubscribeOptions,
+  MCPEventSubscription,
+} from './events';
+import type { EventsWebhookSetup } from './events/types';
+import { WebhookReceiver } from './events/webhook-receiver';
+import { loadInputSchemaMetaValidator } from './input-schema-meta-schema';
 import { createOAuthCallbackServer } from './oauth-callback-server';
 import type { OAuthCallbackServer } from './oauth-callback-server';
 import { MCPOAuthClientProvider } from './oauth-provider';
 import { MCPClientServerProxy } from './server-proxy';
-import type { SerializableMCPToolCatalog, SerializableMCPToolDefinition } from './types';
+import type {
+  MCPClientInfo,
+  MCPServerImplementation,
+  SerializableMCPToolCatalog,
+  SerializableMCPToolDefinition,
+} from './types';
 
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
@@ -59,6 +73,18 @@ export interface MCPClientOptions {
   servers: Record<string, MastraMCPServerDefinition>;
   /** Optional global timeout in milliseconds for all servers (default: 60000ms) */
   timeout?: number;
+  /**
+   * Default `clientInfo` every server receives on connect and with each request.
+   * Per-server `clientInfo` overrides it field-wise. Defaults to the server key and `'1.0.0'`.
+   */
+  clientInfo?: MCPClientInfo;
+  /**
+   * Webhook delivery for MCP Events. Servers that offer webhook delivery POST occurrences to
+   * `webhook.url`, which must route to {@link MCPClient.events}`.handleWebhook()`.
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  webhook?: MCPClientWebhookOptions;
 }
 
 /**
@@ -91,6 +117,8 @@ export class MCPClient extends MastraBase {
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
   private defaultTimeout: number;
+  private defaultClientInfo?: MCPClientInfo;
+  private webhook?: EventsWebhookSetup;
   private mcpClientsById = new Map<string, InternalMastraMCPClient>();
   private disconnectPromise: Promise<void> | null = null;
   private authFlowsByServer = new Map<string, Promise<void>>();
@@ -134,14 +162,16 @@ export class MCPClient extends MastraBase {
   constructor(args: MCPClientOptions) {
     super({ name: 'MCPClient' });
     this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
+    this.defaultClientInfo = args.clientInfo && { ...args.clientInfo };
     this.serverConfigs = args.servers;
+    this.webhook = args.webhook && { options: { ...args.webhook }, receiver: new WebhookReceiver() };
     this.id = args.id ?? this.makeId();
 
     if (args.id) {
       this.id = args.id;
       const cached = mcpClientInstances.get(this.id);
 
-      if (cached && !equal(cached.serverConfigs, args.servers)) {
+      if (cached && (!equal(cached.serverConfigs, args.servers) || !equal(cached.defaultClientInfo, args.clientInfo))) {
         const existingInstance = mcpClientInstances.get(this.id);
         if (existingInstance) {
           void existingInstance.disconnect();
@@ -218,6 +248,73 @@ To fix this you have three different options:
   }
 
   /**
+   * Provides access to MCP Events (SEP-3415) on configured servers: list event types and
+   * subscribe to their occurrences over webhook (when `webhook` is configured), push or poll
+   * delivery.
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   *
+   * @example
+   * ```typescript
+   * const events = await mcp.events.list('github');
+   * const sub = await mcp.events.subscribe('github', 'push', { repo: 'mastra-ai/mastra' });
+   * for await (const event of sub) {
+   *   console.log(event.eventId, event.data);
+   *   await saveCursor(sub.cursor);
+   * }
+   * ```
+   */
+  public get events() {
+    this.addToInstanceCache();
+    const wrap = async <T>(
+      id: Uppercase<string>,
+      details: Record<string, string>,
+      run: () => Promise<T>,
+    ): Promise<T> => {
+      try {
+        return await run();
+      } catch (error) {
+        throw new MastraError({ id, domain: ErrorDomain.MCP, category: ErrorCategory.THIRD_PARTY, details }, error);
+      }
+    };
+    return {
+      /**
+       * Lists the event types a server offers. Changes are not announced yet; call it again to refresh.
+       *
+       * @throws {MastraError} `MCP_CLIENT_LIST_EVENTS_FAILED`; the cause is `MCP_EVENTS_NOT_SUPPORTED`
+       * when the server does not advertise the events extension.
+       */
+      list: (serverName: string): Promise<MCPEventDescriptor[]> =>
+        wrap('MCP_CLIENT_LIST_EVENTS_FAILED', { serverName }, async () =>
+          (await this.getConnectedClientForServer(serverName)).events.list(),
+        ),
+      /**
+       * Subscribes to an event type on a server. Resolves once the server accepted the subscription.
+       *
+       * @throws {MastraError} `MCP_CLIENT_SUBSCRIBE_EVENT_FAILED`; the cause carries the events error id.
+       */
+      subscribe: (
+        serverName: string,
+        eventName: string,
+        args?: Record<string, unknown>,
+        options?: MCPEventSubscribeOptions,
+      ): Promise<MCPEventSubscription> =>
+        wrap('MCP_CLIENT_SUBSCRIBE_EVENT_FAILED', { serverName, eventName }, async () =>
+          (await this.getConnectedClientForServer(serverName)).events.subscribe(eventName, args, options),
+        ),
+      /**
+       * Handles a webhook delivery POSTed to `webhook.url`: verifies the signature, answers the
+       * server's verification handshake, and routes occurrences to their subscription. Mount it
+       * on the route that `webhook.url` points at. Returns 404 when `webhook` is not configured.
+       *
+       * @experimental SEP-3415 is a draft; this API may change.
+       */
+      handleWebhook: async (request: Request): Promise<Response> =>
+        this.webhook ? this.webhook.receiver.handle(request) : new Response(null, { status: 404 }),
+    };
+  }
+
+  /**
    * Provides access to resource-related operations across all configured servers.
    *
    * Resources represent data exposed by MCP servers (files, database records, API responses, etc.).
@@ -256,7 +353,7 @@ To fix this you have three different options:
        * const resources = await mcp.resources.list();
        * console.log(resources.weatherServer); // Array of resources
        * ```
-      */
+       */
       list: async (): Promise<Record<string, Resource[]>> => (await this.listResourcesWithErrors()).resources,
       /**
        * Lists resources while preserving per-server discovery failures.
@@ -623,7 +720,11 @@ To fix this you have three different options:
   }
 
   private makeId() {
-    const text = JSON.stringify(this.serverConfigs).normalize('NFKC');
+    const text = JSON.stringify(
+      this.defaultClientInfo === undefined
+        ? this.serverConfigs
+        : { servers: this.serverConfigs, clientInfo: this.defaultClientInfo },
+    ).normalize('NFKC');
     return createHash('sha256').update('MCPClient').update(text).digest('hex');
   }
 
@@ -651,7 +752,9 @@ To fix this you have three different options:
 
     this.disconnectPromise = (async () => {
       try {
-        mcpClientInstances.delete(this.id);
+        if (mcpClientInstances.get(this.id) === this) {
+          mcpClientInstances.delete(this.id);
+        }
 
         // Tear down any in-flight authorization: each callback server owns a live
         // loopback HTTP port, and closing it rejects the flow's waitForCode. Await
@@ -903,6 +1006,24 @@ To fix this you have three different options:
     }
 
     return instructions;
+  }
+
+  /**
+   * Returns the identity each connected MCP server announced when the
+   * connection was established (`serverInfo`: name, version, and optionally
+   * title, description, websiteUrl, and icons), keyed by server name.
+   *
+   * A server's entry is `undefined` if it has not connected yet, or if it
+   * connected over the 2026-07-28 revision without announcing an identity, so
+   * don't use this to check connection state. Icon and website URLs come from
+   * the remote server and are not validated.
+   */
+  public getServerInfo(): Record<string, MCPServerImplementation | undefined> {
+    const info: Record<string, MCPServerImplementation | undefined> = {};
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      info[serverName] = this.mcpClientsById.get(serverName)?.serverInfo;
+    }
+    return info;
   }
 
   /**
@@ -1178,6 +1299,7 @@ To fix this you have three different options:
     // getOrCreateClient constructs the client without connecting; connection is deferred to
     // the tool's first execution.
     const client = await this.getOrCreateClient(serverName, this.getServerConfig(serverName));
+    await loadInputSchemaMetaValidator();
     return client.toolFromDefinition({ definition });
   }
 
@@ -1214,7 +1336,12 @@ To fix this you have three different options:
       }
 
       for (const [toolName, definition] of Object.entries(definitions)) {
-        tools[`${serverName}_${toolName}`] = await this.toolFromDefinition({ serverName, definition });
+        try {
+          tools[`${serverName}_${toolName}`] = await this.toolFromDefinition({ serverName, definition });
+        } catch (error) {
+          // The client already logged which tool was skipped and why.
+          if (!(error instanceof MastraError && error.id === 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA')) throw error;
+        }
       }
     }
 
@@ -1457,6 +1584,11 @@ To fix this you have three different options:
       name,
       server: config,
       timeout: config.timeout ?? this.defaultTimeout,
+      clientInfo: {
+        name: config.clientInfo?.name ?? this.defaultClientInfo?.name,
+        version: config.clientInfo?.version ?? this.defaultClientInfo?.version,
+      },
+      webhook: this.webhook,
     });
 
     mcpClient.__setLogger(this.logger);

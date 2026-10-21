@@ -177,6 +177,7 @@ describe('loginXAI', () => {
       expect(onAuth).toHaveBeenCalledWith({
         url: 'https://auth.x.ai/activate',
         instructions: 'Enter code: ABCD-1234',
+        userCode: 'ABCD-1234',
       });
     } finally {
       vi.useRealTimers();

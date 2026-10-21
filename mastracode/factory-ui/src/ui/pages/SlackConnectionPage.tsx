@@ -2,7 +2,6 @@ import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
-import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
@@ -16,14 +15,14 @@ import {
   useDisconnectChannelAccountMutation,
   useSetDefaultFactoryMutation,
 } from '../../hooks/useChannelAccounts';
-import { useSetFactorySlackWorkItemsMutation } from '../../hooks/useFactorySlackWorkItems';
 import { useFactoriesQuery } from '../../hooks/useFactories';
 import { IdentityWithTooltip } from '../domains/settings/components/IdentityWithTooltip';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import { SlackNotConfigured } from '../domains/settings/components/ConnectedAccountsSection';
 import { SettingsSubsection } from '../domains/settings/components/SettingsSubsection';
-import { connectSlackUrl, type ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
+import { connectSlackUrl } from '../domains/settings/services/channelAccounts';
+import type { ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
 import { SettingsPageLayout } from './SettingsPage';
 
 const linkedDateFormatter = new Intl.DateTimeFormat(undefined, {
@@ -67,12 +66,10 @@ export function SlackConnectionSettings() {
   const factoriesQuery = useFactoriesQuery();
   const disconnectMutation = useDisconnectChannelAccountMutation();
   const setDefaultFactoryMutation = useSetDefaultFactoryMutation();
-  const slackWorkItemsMutation = useSetFactorySlackWorkItemsMutation(factoryId);
 
   const accounts = accountsQuery.data?.accounts.filter(candidate => candidate.platform === 'slack') ?? [];
   const canConnect = accountsQuery.data?.canConnect ?? false;
   const factories = factoriesQuery.data ?? [];
-  const factory = factories.find(candidate => candidate.id === factoryId);
 
   const connectSlack = () => {
     window.location.assign(connectSlackUrl(baseUrl, factoryId));
@@ -116,7 +113,7 @@ export function SlackConnectionSettings() {
   return (
     <div className="mt-6 flex flex-col gap-8 pb-5">
       {accountsQuery.isPending ? (
-        <Txt as="p" variant="caption" role="status" className="text-muted-foreground">
+        <Txt tone="muted" as="p" variant="caption" role="status">
           Loading Slack connection…
         </Txt>
       ) : accountsQuery.error ? (
@@ -176,7 +173,7 @@ export function SlackConnectionSettings() {
                       </span>
                     }
                     description={
-                      <Txt as="span" variant="meta" className="text-placeholder">
+                      <Txt tone="faint" as="span" variant="meta">
                         Connected {linkedDateFormatter.format(new Date(account.linkedAt))}
                       </Txt>
                     }
@@ -226,28 +223,6 @@ export function SlackConnectionSettings() {
             </SettingsContainer>
           </SettingsSubsection>
 
-          <SettingsSubsection scope="factory" title="Work items">
-            <SettingsContainer>
-              <SettingsRow
-                label="Create work items for new Slack threads"
-                description="Add new Slack thread sessions to this Factory's Work board in Building."
-              >
-                <Switch
-                  aria-label="Create work items for new Slack threads"
-                  checked={factory?.slackWorkItemsEnabled ?? false}
-                  disabled={!factoryId || factoriesQuery.isPending || slackWorkItemsMutation.isPending}
-                  onCheckedChange={enabled =>
-                    slackWorkItemsMutation.mutate(enabled, {
-                      onSuccess: () => toast.success('Slack session behavior updated'),
-                      onError: error =>
-                        toast.error(error instanceof Error ? error.message : 'Failed to update Slack session behavior'),
-                    })
-                  }
-                />
-              </SettingsRow>
-            </SettingsContainer>
-          </SettingsSubsection>
-
           <SettingsSubsection scope="personal" title="Danger zone">
             <SettingsContainer>
               {accounts.map(account => (
@@ -257,13 +232,13 @@ export function SlackConnectionSettings() {
                   description={
                     <span>
                       Slack messages from{' '}
-                      <strong className="font-medium">
+                      <Txt as="strong" variant="label">
                         <IdentityWithTooltip
                           label={account.externalUserName ?? account.externalUserId}
                           idLabel="Slack user ID"
                           id={account.externalUserId}
                         />
-                      </strong>{' '}
+                      </Txt>{' '}
                       will no longer start or continue Factory sessions.
                     </span>
                   }

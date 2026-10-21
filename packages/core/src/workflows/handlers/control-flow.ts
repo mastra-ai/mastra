@@ -8,7 +8,7 @@ import { SpanType, createObservabilityContext, resolveObservabilityContext } fro
 import type { ObservabilityContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import { selectFields } from '../../utils';
-import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type { ConditionFunction, InnerOutput, LoopConditionFunction } from '../step';
 import { getStepResult } from '../step';
@@ -30,6 +30,7 @@ import type {
 } from '../types';
 import {
   createDeprecationProxy,
+  defineLazyWriter,
   runCountDeprecationMessage,
   getResumeLabelsByStepId,
   getSingleStepEntryId,
@@ -412,37 +413,41 @@ export async function executeConditional(
         });
 
         const operationId = `workflow.${workflowId}.conditional.${index}`;
+        const conditionCallId = globalThis.crypto.randomUUID();
         const context = createDeprecationProxy(
-          {
-            runId,
-            workflowId,
-            mastra: engine.mastra!,
-            requestContext,
-            actor,
-            inputData: prevOutput,
-            state: executionContext.state,
-            retryCount: -1,
-            ...createObservabilityContext({ currentSpan: evalSpan }),
-            getInitData: () => stepResults?.input as any,
-            getStepResult: getStepResult.bind(null, stepResults),
-            bail: (() => {}) as () => InnerOutput,
-            abort: () => {
-              abortController?.abort();
-            },
-            [PUBSUB_SYMBOL]: pubsub,
-            [STREAM_FORMAT_SYMBOL]: executionContext.format,
-            engine: engine.getEngineContext(),
-            abortSignal: abortController?.signal,
-            writer: new ToolStream(
-              {
-                prefix: 'workflow-step',
-                callId: globalThis.crypto.randomUUID(),
-                name: 'conditional',
-                runId,
+          defineLazyWriter(
+            {
+              runId,
+              workflowId,
+              mastra: engine.mastra!,
+              requestContext,
+              actor,
+              inputData: prevOutput,
+              state: executionContext.state,
+              retryCount: -1,
+              ...createObservabilityContext({ currentSpan: evalSpan }),
+              getInitData: () => stepResults?.input as any,
+              getStepResult: getStepResult.bind(null, stepResults),
+              bail: (() => {}) as () => InnerOutput,
+              abort: () => {
+                abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
               },
-              outputWriter,
-            ),
-          },
+              [PUBSUB_SYMBOL]: pubsub,
+              [STREAM_FORMAT_SYMBOL]: executionContext.format,
+              engine: engine.getEngineContext(),
+              abortSignal: abortController?.signal,
+            },
+            () =>
+              new ToolStream(
+                {
+                  prefix: 'workflow-step',
+                  callId: conditionCallId,
+                  name: 'conditional',
+                  runId,
+                },
+                outputWriter,
+              ),
+          ),
           {
             paramName: 'runCount',
             deprecationMessage: runCountDeprecationMessage,
@@ -833,39 +838,43 @@ export async function executeLoop(
       executionContext,
     });
 
+    const loopCallId = globalThis.crypto.randomUUID();
     isTrue = await condition(
       createDeprecationProxy(
-        {
-          workflowId,
-          runId,
-          mastra: engine.mastra!,
-          requestContext,
-          actor,
-          inputData: result.output,
-          state: executionContext.state,
-          retryCount: -1,
-          ...createObservabilityContext({ currentSpan: evalSpan }),
-          iterationCount: iteration + 1,
-          getInitData: () => stepResults?.input as any,
-          getStepResult: getStepResult.bind(null, stepResults),
-          bail: (() => {}) as () => InnerOutput,
-          abort: () => {
-            abortController?.abort();
-          },
-          [PUBSUB_SYMBOL]: pubsub,
-          [STREAM_FORMAT_SYMBOL]: executionContext.format,
-          engine: engine.getEngineContext(),
-          abortSignal: abortController?.signal,
-          writer: new ToolStream(
-            {
-              prefix: 'workflow-step',
-              callId: globalThis.crypto.randomUUID(),
-              name: 'loop',
-              runId,
+        defineLazyWriter(
+          {
+            workflowId,
+            runId,
+            mastra: engine.mastra!,
+            requestContext,
+            actor,
+            inputData: result.output,
+            state: executionContext.state,
+            retryCount: -1,
+            ...createObservabilityContext({ currentSpan: evalSpan }),
+            iterationCount: iteration + 1,
+            getInitData: () => stepResults?.input as any,
+            getStepResult: getStepResult.bind(null, stepResults),
+            bail: (() => {}) as () => InnerOutput,
+            abort: () => {
+              abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
             },
-            outputWriter,
-          ),
-        },
+            [PUBSUB_SYMBOL]: pubsub,
+            [STREAM_FORMAT_SYMBOL]: executionContext.format,
+            engine: engine.getEngineContext(),
+            abortSignal: abortController?.signal,
+          },
+          () =>
+            new ToolStream(
+              {
+                prefix: 'workflow-step',
+                callId: loopCallId,
+                name: 'loop',
+                runId,
+              },
+              outputWriter,
+            ),
+        ),
         {
           paramName: 'runCount',
           deprecationMessage: runCountDeprecationMessage,

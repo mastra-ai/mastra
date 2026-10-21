@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { describe, expect, it } from 'vitest';
 import type { WorkflowStepTiming } from '../workflow-step-timing';
 import { isAwaitingInput, resolveRunTiming, resolveStepSpan } from '../workflow-step-timing';

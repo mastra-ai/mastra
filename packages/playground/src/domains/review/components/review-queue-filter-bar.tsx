@@ -1,64 +1,33 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { hueAccentColor } from '@mastra/playground-ui/utils/colors';
-import type { CategoricalHue } from '@mastra/playground-ui/utils/colors';
-import { BoxIcon, CheckCircleIcon, FingerprintIcon, FlaskConicalIcon, TagIcon } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { CheckCircleIcon, FlaskConicalIcon, TagIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ReviewListStatus } from './dataset-review';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
-import {
-  DATASET_TARGET_TYPES,
-  isDatasetTargetType,
-  type DatasetTargetType,
-} from '@/domains/datasets/components/target-type-options';
 import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
-import { useProcessors } from '@/domains/processors/hooks/use-processors';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import {
+  filterBarItem,
+  getFilterBarItemValue,
+  targetFromItems,
+  targetToItems,
+  useTargetFilterFields,
+} from '@/domains/shared/hooks/use-target-filter-fields';
+import type { TargetFilterValue } from '@/domains/shared/hooks/use-target-filter-fields';
 
-export const TARGET_TYPE_FIELD_ID = 'targetType';
-export const TARGET_ID_FIELD_ID = 'targetId';
 export const EXPERIMENT_FIELD_ID = 'experiment';
 export const STATUS_FIELD_ID = 'status';
 export const TAG_FIELD_ID = 'tag';
-
-const TARGET_TYPE_LABELS: Record<DatasetTargetType, string> = {
-  agent: 'Agent',
-  workflow: 'Workflow',
-  scorer: 'Scorer',
-  processor: 'Processor',
-};
 
 const STATUS_OPTIONS: Array<{ value: ReviewListStatus; label: string }> = [
   { value: 'review', label: 'Review queue' },
   { value: 'completed', label: 'Completed' },
 ];
 
-// Same hues as the matching trace filter fields so a "Tag" or "Experiment" chip reads alike across pages.
-const FIELD_META: Record<string, { icon: LucideIcon; hue: CategoricalHue }> = {
-  [TARGET_TYPE_FIELD_ID]: { icon: BoxIcon, hue: 'purple' },
-  [TARGET_ID_FIELD_ID]: { icon: FingerprintIcon, hue: 'pink' },
-  [EXPERIMENT_FIELD_ID]: { icon: FlaskConicalIcon, hue: 'pink' },
-  [STATUS_FIELD_ID]: { icon: CheckCircleIcon, hue: 'orange' },
-  [TAG_FIELD_ID]: { icon: TagIcon, hue: 'pink' },
-};
-
-const fieldBase = (id: string, label: string) => ({
-  id,
-  label,
-  icon: FIELD_META[id].icon,
-  color: hueAccentColor(FIELD_META[id].hue),
-  strict: true,
-});
-
 // Every field takes exactly one operator, so chips render as `Field · Value`.
 const OPERATORS: FilterBarOperator[] = [{ id: 'is', label: 'is' }];
 
-export interface ReviewQueueFilters {
-  targetType: DatasetTargetType | '';
-  targetId: string;
+export interface ReviewQueueFilters extends TargetFilterValue {
   experimentId: string;
   status: ReviewListStatus;
   /** `null` → every tag. */
@@ -71,35 +40,21 @@ export interface ReviewQueueFilterBarProps extends ReviewQueueFilters {
   onChange: (next: ReviewQueueFilters) => void;
 }
 
-const item = (fieldId: string, value: string): FilterBarItem => ({ id: fieldId, fieldId, operatorId: 'is', value });
-
 const toItems = ({ targetType, targetId, experimentId, status, tag }: ReviewQueueFilters): FilterBarItem[] => {
-  const items: FilterBarItem[] = [];
-  if (targetType) items.push(item(TARGET_TYPE_FIELD_ID, targetType));
-  if (targetId) items.push(item(TARGET_ID_FIELD_ID, targetId));
-  if (experimentId) items.push(item(EXPERIMENT_FIELD_ID, experimentId));
+  const items = targetToItems({ targetType, targetId });
+  if (experimentId) items.push(filterBarItem(EXPERIMENT_FIELD_ID, experimentId));
   // "Review queue" is the default view; only the other status shows as a chip.
-  if (status !== 'review') items.push(item(STATUS_FIELD_ID, status));
-  if (tag) items.push(item(TAG_FIELD_ID, tag));
+  if (status !== 'review') items.push(filterBarItem(STATUS_FIELD_ID, status));
+  if (tag) items.push(filterBarItem(TAG_FIELD_ID, tag));
   return items;
 };
 
-const fromItems = (items: FilterBarItem[]): ReviewQueueFilters => {
-  const value = (fieldId: string) => {
-    const found = items.find(candidate => candidate.fieldId === fieldId);
-    return typeof found?.value === 'string' ? found.value : '';
-  };
-  const rawType = value(TARGET_TYPE_FIELD_ID);
-  const targetType = isDatasetTargetType(rawType) ? rawType : '';
-  return {
-    targetType,
-    // A target id only makes sense within a type.
-    targetId: targetType ? value(TARGET_ID_FIELD_ID) : '',
-    experimentId: value(EXPERIMENT_FIELD_ID),
-    status: value(STATUS_FIELD_ID) === 'completed' ? 'completed' : 'review',
-    tag: value(TAG_FIELD_ID) || null,
-  };
-};
+const fromItems = (items: FilterBarItem[]): ReviewQueueFilters => ({
+  ...targetFromItems(items),
+  experimentId: getFilterBarItemValue(items, EXPERIMENT_FIELD_ID),
+  status: getFilterBarItemValue(items, STATUS_FIELD_ID) === 'completed' ? 'completed' : 'review',
+  tag: getFilterBarItemValue(items, TAG_FIELD_ID) || null,
+});
 
 /**
  * Typeahead filter bar scoping the review queue by target type, target, experiment, status and tag.
@@ -115,58 +70,44 @@ export function ReviewQueueFilterBar({
   tagOptions,
   onChange,
 }: ReviewQueueFilterBarProps) {
-  const { data: agents } = useAgents({ enabled: targetType === 'agent' });
-  const { data: workflows } = useWorkflows({
-    enabled: targetType === 'workflow',
-  });
-  const { data: scorers } = useScorers({ enabled: targetType === 'scorer' });
-  const { data: processors } = useProcessors({ enabled: targetType === 'processor' });
+  const targetFields = useTargetFilterFields(targetType);
 
-  const fields = useMemo<FilterBarField[]>(() => {
-    const targetOptions =
-      targetType === 'agent'
-        ? Object.entries(agents ?? {}).map(([id, agent]) => ({ value: id, label: agent.name ?? id }))
-        : targetType === 'workflow'
-          ? Object.entries(workflows ?? {}).map(([id, workflow]) => ({ value: id, label: workflow.name ?? id }))
-          : targetType === 'scorer'
-            ? Object.entries(scorers ?? {}).map(([id, scorer]) => ({
-                value: id,
-                label: scorer.scorer?.config?.name ?? id,
-              }))
-            : targetType === 'processor'
-              ? Object.entries(processors ?? {}).map(([id, processor]) => ({ value: id, label: processor.name ?? id }))
-              : [];
-
-    return [
+  // Same hues as the matching trace filter fields so a "Tag" or "Experiment" chip reads alike across pages.
+  const fields = useMemo<FilterBarField[]>(
+    () => [
+      ...targetFields,
       {
-        ...fieldBase(TARGET_TYPE_FIELD_ID, 'Target type'),
-        suggestions: DATASET_TARGET_TYPES.map(type => ({ value: type, label: TARGET_TYPE_LABELS[type] })),
-      },
-      {
-        ...fieldBase(TARGET_ID_FIELD_ID, targetType ? TARGET_TYPE_LABELS[targetType] : 'Target'),
-        // Only offered once a type narrows which entities can be picked.
-        hidden: !targetType,
-        suggestions: targetOptions,
-      },
-      {
-        ...fieldBase(EXPERIMENT_FIELD_ID, 'Experiment'),
+        id: EXPERIMENT_FIELD_ID,
+        label: 'Experiment',
+        icon: FlaskConicalIcon,
+        color: hueAccentColor('pink'),
+        strict: true,
         suggestions: experiments.map(experiment => ({
           value: experiment.id,
           label: getExperimentDisplayName(experiment),
         })),
       },
       {
-        ...fieldBase(STATUS_FIELD_ID, 'Status'),
+        id: STATUS_FIELD_ID,
+        label: 'Status',
+        icon: CheckCircleIcon,
+        color: hueAccentColor('orange'),
+        strict: true,
         suggestions: STATUS_OPTIONS,
       },
       {
-        ...fieldBase(TAG_FIELD_ID, 'Tag'),
+        id: TAG_FIELD_ID,
+        label: 'Tag',
+        icon: TagIcon,
+        color: hueAccentColor('pink'),
+        strict: true,
         // Nothing to pick from until the items carry tags.
         hidden: tagOptions.length === 0,
         suggestions: tagOptions,
       },
-    ];
-  }, [targetType, agents, workflows, scorers, processors, experiments, tagOptions]);
+    ],
+    [targetFields, experiments, tagOptions],
+  );
 
   const value = useMemo(
     () => toItems({ targetType, targetId, experimentId, status, tag }),

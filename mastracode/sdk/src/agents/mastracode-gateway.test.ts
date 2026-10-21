@@ -103,6 +103,21 @@ describe('MastraCodeGateway', () => {
       expect(createGateway().handlesModel('anthropic/claude-opus-4-8')).toBe(false);
     });
 
+    it('stops claiming a model after another store removes its api key and the catalog refreshes', async () => {
+      writeAuthJson({
+        'apikey:302ai': { type: 'api_key', key: 'sk-302ai' },
+      });
+      const gateway = createGateway();
+      expect(gateway.handlesModel('302ai/MiniMax-M1')).toBe(true);
+
+      // `/api-keys` deletes through the TUI's own AuthStorage instance, which only
+      // updates auth.json on disk — not this gateway's store.
+      writeFileSync(join(appDataDir, 'auth.json'), JSON.stringify({}), 'utf8');
+      await gateway.fetchProviders();
+
+      expect(gateway.handlesModel('302ai/MiniMax-M1')).toBe(false);
+    });
+
     it('does not claim an id without a provider and model', () => {
       writeAuthJson({
         anthropic: { type: 'oauth', access: 'a', refresh: 'r', expires: Date.now() + 1_000_000 },
@@ -147,6 +162,23 @@ describe('MastraCodeGateway', () => {
       });
 
       expect(auth).toEqual({ bearerToken: 'oauth', source: 'gateway' });
+    });
+
+    it('finds a Kimi API key stored under the catalog provider id', () => {
+      // `/api-keys` saves under the row's provider id, and Factory tenants saved
+      // `kimi-code-plan-cn` keys before it was mapped to `kimi-for-coding`.
+      writeAuthJson({
+        'apikey:kimi-code-plan-cn': { type: 'api_key', key: 'sk-kimi-stored' },
+      });
+
+      const auth = MastraCodeGateway.resolveProviderAuth({
+        gatewayId: 'mastracode',
+        providerId: 'kimi-code-plan-cn',
+        modelId: 'k3',
+        routerId: 'kimi-code-plan-cn/k3',
+      });
+
+      expect(auth).toEqual({ apiKey: 'sk-kimi-stored', source: 'gateway' });
     });
 
     it('returns undefined when the provider has no credentials', () => {

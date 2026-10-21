@@ -798,7 +798,7 @@ describe('ComposioToolProvider — authorize', () => {
     const result = await integration.authorize({ toolkit: 'gmail', connectionId: 'author_1' });
 
     expect(raw.authConfigs.list).toHaveBeenCalledWith({ toolkit: 'gmail' });
-    expect(raw.connectedAccounts.link).toHaveBeenCalledWith('author_1', 'ac_1');
+    expect(raw.connectedAccounts.link).toHaveBeenCalledWith('author_1', 'ac_1', { allowMultiple: true });
     expect(raw.connectedAccounts.initiate).not.toHaveBeenCalled();
     expect(result).toEqual({ url: 'https://oauth', authId: 'ca_new' });
   });
@@ -864,8 +864,78 @@ describe('ComposioToolProvider — authorize', () => {
 
     await integration.authorize({ toolkit: 'gmail', connectionId: 'a', config: {} });
 
-    expect(raw.connectedAccounts.link).toHaveBeenCalledWith('a', 'ac_1');
+    expect(raw.connectedAccounts.link).toHaveBeenCalledWith('a', 'ac_1', { allowMultiple: true });
     expect(raw.connectedAccounts.initiate).not.toHaveBeenCalled();
+  });
+
+  describe('shared connections', () => {
+    async function setup(config: ConstructorParameters<typeof ComposioToolProvider>[0]) {
+      const integration = new ComposioToolProvider(config);
+      await integration.authorize({ toolkit: 'gmail', connectionId: 'a' }).catch(() => undefined);
+      const raw = getRawInstance();
+      raw.connectedAccounts.link.mockClear();
+      raw.authConfigs.list.mockResolvedValue({ items: [{ id: 'ac_1', status: 'ENABLED', authScheme: 'OAUTH2' }] });
+      raw.connectedAccounts.link.mockResolvedValue({ id: 'ca_new', redirectUrl: 'https://oauth' });
+      raw.connectedAccounts.initiate.mockResolvedValue({ id: 'ca_new', redirectUrl: 'https://oauth' });
+      return { integration, raw };
+    }
+
+    it('creates a Composio SHARED account with the configured ACL for scope=shared', async () => {
+      const acl = { allowAllUsers: true, notAllowedUserIds: ['user_bob'] };
+      const { integration, raw } = await setup({ apiKey: 'k', sharedConnections: { acl } });
+
+      await integration.authorize({ toolkit: 'gmail', connectionId: 'shared', scope: 'shared' });
+
+      expect(raw.connectedAccounts.link).toHaveBeenCalledWith('shared', 'ac_1', {
+        allowMultiple: true,
+        experimental: { accountType: 'SHARED', aclConfigForShared: acl },
+      });
+    });
+
+    it('omits the ACL when none is configured (Composio deny-by-default)', async () => {
+      const { integration, raw } = await setup({ apiKey: 'k', sharedConnections: {} });
+
+      await integration.authorize({ toolkit: 'gmail', connectionId: 'shared', scope: 'shared' });
+
+      expect(raw.connectedAccounts.link).toHaveBeenCalledWith('shared', 'ac_1', {
+        allowMultiple: true,
+        experimental: { accountType: 'SHARED' },
+      });
+    });
+
+    it('keeps scope=shared PRIVATE when sharedConnections is not configured', async () => {
+      const { integration, raw } = await setup({ apiKey: 'k' });
+
+      await integration.authorize({ toolkit: 'gmail', connectionId: 'shared', scope: 'shared' });
+
+      expect(raw.connectedAccounts.link).toHaveBeenCalledWith('shared', 'ac_1', { allowMultiple: true });
+    });
+
+    it.each(['per-author', 'caller-supplied', undefined] as const)(
+      'does not create a SHARED account for scope=%s',
+      async scope => {
+        const { integration, raw } = await setup({ apiKey: 'k', sharedConnections: { acl: { allowAllUsers: true } } });
+
+        await integration.authorize({ toolkit: 'gmail', connectionId: 'user_1', scope });
+
+        expect(raw.connectedAccounts.link).toHaveBeenCalledWith('user_1', 'ac_1', { allowMultiple: true });
+      },
+    );
+
+    it('rejects a shared connection that needs custom config fields instead of creating a PRIVATE one', async () => {
+      const { integration, raw } = await setup({ apiKey: 'k', sharedConnections: {} });
+
+      await expect(
+        integration.authorize({
+          toolkit: 'confluence',
+          connectionId: 'shared',
+          scope: 'shared',
+          config: { subdomain: 'acme' },
+        }),
+      ).rejects.toThrow(/do not support custom connection fields/);
+      expect(raw.connectedAccounts.initiate).not.toHaveBeenCalled();
+      expect(raw.connectedAccounts.link).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -971,13 +1041,29 @@ describe('ComposioToolProvider — getConnectionStatus', () => {
     });
 
     expect(raw.connectedAccounts.list).toHaveBeenCalledTimes(1);
-    expect(raw.connectedAccounts.list).toHaveBeenCalledWith({ toolkitSlugs: ['gmail', 'slack'] });
+    expect(raw.connectedAccounts.list).toHaveBeenCalledWith({ toolkitSlugs: ['gmail', 'slack'], accountType: 'ALL' });
     expect(result).toEqual({
       ca_active: { connected: true },
       ca_inactive: { connected: false },
       ca_disabled: { connected: false },
       ca_missing: { connected: false },
     });
+  });
+
+  it('reports a pinned SHARED account as connected', async () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k' });
+    await integration.getConnectionStatus({ items: [{ connectionId: 'x', toolkit: 'gmail' }] }).catch(() => undefined);
+    const raw = getRawInstance();
+    raw.connectedAccounts.list.mockImplementation(async (query: { accountType?: string }) => ({
+      items:
+        query.accountType === 'ALL'
+          ? [{ id: 'ca_shared', status: 'ACTIVE', isDisabled: false, experimental: { accountType: 'SHARED' } }]
+          : [],
+    }));
+
+    const result = await integration.getConnectionStatus({ items: [{ connectionId: 'ca_shared', toolkit: 'gmail' }] });
+
+    expect(result).toEqual({ ca_shared: { connected: true } });
   });
 
   it('returns {} for empty items without calling the SDK', async () => {
@@ -1006,6 +1092,7 @@ describe('ComposioToolProvider — listConnections', () => {
     expect(raw.connectedAccounts.list).toHaveBeenCalledWith({
       toolkitSlugs: ['gmail'],
       userIds: ['user_42'],
+      accountType: 'ALL',
       limit: 50,
     });
     expect(result.items).toEqual([
@@ -1026,6 +1113,7 @@ describe('ComposioToolProvider — listConnections', () => {
     expect(raw.connectedAccounts.list).toHaveBeenCalledWith({
       toolkitSlugs: ['gmail'],
       userIds: ['default'],
+      accountType: 'ALL',
       limit: 50,
     });
   });
@@ -1041,6 +1129,7 @@ describe('ComposioToolProvider — listConnections', () => {
     expect(raw.connectedAccounts.list).toHaveBeenCalledWith({
       toolkitSlugs: ['gmail'],
       userIds: ['user_a', 'user_b'],
+      accountType: 'ALL',
       limit: 50,
     });
   });
@@ -1089,6 +1178,7 @@ describe('ComposioToolProvider — listConnections', () => {
     expect(raw.connectedAccounts.list).toHaveBeenCalledWith({
       toolkitSlugs: ['gmail'],
       userIds: ['user_42'],
+      accountType: 'ALL',
       limit: 200,
     });
     expect(result).toEqual({
@@ -1101,6 +1191,77 @@ describe('ComposioToolProvider — listConnections', () => {
         },
       ],
       pagination: { page: 1, perPage: 200, hasMore: true },
+    });
+  });
+
+  describe('SHARED accounts owned by other users', () => {
+    const sharedAccount = (id: string, acl?: Record<string, unknown>) => ({
+      id,
+      status: 'ACTIVE',
+      isDisabled: false,
+      user_id: 'admin',
+      experimental: { accountType: 'SHARED', ...(acl ? { aclConfigForShared: acl } : {}) },
+    });
+
+    async function setup(owned: unknown[], shared: unknown[], cursors: { owned?: string; shared?: string } = {}) {
+      const integration = new ComposioToolProvider({ apiKey: 'k' });
+      await integration.listConnections({ toolkit: 'gmail' }).catch(() => undefined);
+      const raw = getRawInstance();
+      raw.connectedAccounts.list.mockClear();
+      raw.connectedAccounts.list.mockImplementation(async (query: { accountType?: string }) =>
+        query.accountType === 'SHARED'
+          ? { items: shared, nextCursor: cursors.shared ?? null }
+          : { items: owned, nextCursor: cursors.owned ?? null },
+      );
+      return { integration, raw };
+    }
+
+    it('lists SHARED accounts separately without the userIds filter', async () => {
+      const { integration, raw } = await setup([], []);
+
+      await integration.listConnections({ toolkit: 'gmail', userIds: ['user_a'] });
+
+      expect(raw.connectedAccounts.list).toHaveBeenCalledTimes(2);
+      expect(raw.connectedAccounts.list).toHaveBeenCalledWith({
+        toolkitSlugs: ['gmail'],
+        accountType: 'SHARED',
+        limit: 50,
+      });
+    });
+
+    it('includes only SHARED accounts whose ACL grants a requested user', async () => {
+      const { integration } = await setup(
+        [],
+        [
+          sharedAccount('ca_all', { allowAllUsers: true }),
+          sharedAccount('ca_allowed', { allowedUserIds: ['user_b'] }),
+          sharedAccount('ca_denied', { allowAllUsers: true, notAllowedUserIds: ['user_a', 'user_b'] }),
+          sharedAccount('ca_other', { allowedUserIds: ['user_z'] }),
+          sharedAccount('ca_no_acl'),
+        ],
+      );
+
+      const result = await integration.listConnections({ toolkit: 'gmail', userIds: ['user_a', 'user_b'] });
+
+      expect(result.items.map(i => i.connectionId)).toEqual(['ca_all', 'ca_allowed']);
+      expect(result.items[0]).toMatchObject({ status: 'active', authorId: 'admin' });
+    });
+
+    it('dedupes SHARED accounts already returned for an owning bucket', async () => {
+      const own = sharedAccount('ca_own', { allowAllUsers: true });
+      const { integration } = await setup([own], [own]);
+
+      const result = await integration.listConnections({ toolkit: 'gmail', userIds: ['admin'] });
+
+      expect(result.items.map(i => i.connectionId)).toEqual(['ca_own']);
+    });
+
+    it('reports hasMore when either list has another page', async () => {
+      const { integration } = await setup([], [], { shared: 'next' });
+
+      const result = await integration.listConnections({ toolkit: 'gmail', userIds: ['user_a'] });
+
+      expect(result.pagination.hasMore).toBe(true);
     });
   });
 });

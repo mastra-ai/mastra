@@ -6,9 +6,6 @@ on:
       head_sha:
         required: true
         type: string
-      base_ref:
-        required: true
-        type: string
       has_code:
         required: true
         type: string
@@ -36,7 +33,7 @@ jobs:
   unit-test:
     name: UNIT Test (Shard ${{ matrix.shard }})
     if: inputs.has_code == 'true' && inputs.run_full != 'false'
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -86,7 +83,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: vitest-blob-unit-${{ matrix.shard }}
           path: .vitest-reports/
@@ -96,7 +93,7 @@ jobs:
   affected-unit-test:
     name: Affected UNIT Test
     if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.unit_test_files != ''
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -104,6 +101,7 @@ jobs:
       TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
       NODE_OPTIONS: --max-old-space-size=8192
     permissions:
+      actions: read
       contents: read
     steps:
       - name: Checkout repo
@@ -128,19 +126,22 @@ jobs:
       - name: Build packages
         run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
 
+      - name: Download affected tests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: affected-tests-outputs
+          path: /tmp/affected-outputs
+
       - name: Run affected tests
-        env:
-          TEST_FILES: ${{ inputs.unit_test_files }}
         run: |
-          printf '%s\n' "$TEST_FILES" > /tmp/affected.txt
-          pnpm vitest run \
-            $(cat /tmp/affected.txt | tr '\n' ' ') \
-            --project 'unit:*' --project 'typecheck:*' \
-            --reporter=blob \
-            --reporter=verbose \
-            --reporter=github-actions \
-            --outputFile.blob=.vitest-reports/blob-unit-affected.json \
-            --passWithNoTests
+          tr '\n' '\0' < /tmp/affected-outputs/unit_test_files.txt \
+            | xargs -0 pnpm vitest run \
+                --project 'unit:*' --project 'typecheck:*' \
+                --reporter=blob \
+                --reporter=verbose \
+                --reporter=github-actions \
+                --outputFile.blob=.vitest-reports/blob-unit-affected.json \
+                --passWithNoTests
 
       - name: Upload test results
         if: always()
@@ -154,7 +155,7 @@ jobs:
   e2e-test:
     name: E2E Test (${{ matrix.project }})
     if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.e2e_test_files != '')
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -219,7 +220,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: vitest-blob-e2e-${{ steps.normalize.outputs.project_id }}
           path: .vitest-reports/
@@ -228,7 +229,7 @@ jobs:
 
   merge-reports:
     name: Merge Test Reports
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     needs: [unit-test, affected-unit-test, e2e-test]
     if: always()
     permissions:
@@ -254,7 +255,7 @@ jobs:
 
       - name: Download test results
         if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: vitest-blob-*
           path: .vitest-reports

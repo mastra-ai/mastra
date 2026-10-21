@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { MessageList } from '../../agent/message-list';
 import { RequestContext, MASTRA_THREAD_ID_KEY } from '../../request-context';
@@ -1418,6 +1418,34 @@ describe('ToolSearchProcessor', () => {
       // the window). weather de-loads on the very next step.
       const withoutWeather = await processor.processInputStep(argsWithLoadedMessages('thread-ctx', []));
       expect(withoutWeather.tools?.weather).toBeUndefined();
+    });
+
+    it("'context' mode: resume rebuild derives loaded tools from persisted thread messages", async () => {
+      const tools = {
+        weather: createMockTool('weather', 'Get weather'),
+        calendar: createMockTool('calendar', 'Manage calendar'),
+      };
+      // A fresh processor models a restart or another instance: no same-process state.
+      const processor = new ToolSearchProcessor({ tools, storage: 'context' });
+      const { requestContext, messages } = argsWithLoadedMessages('thread-resume', [['weather']]);
+
+      const withoutMessages = await processor.getLoadedToolsForRequestContext({ requestContext });
+      expect(Object.keys(withoutMessages)).toEqual([]);
+
+      const getMessages = vi.fn(async () => messages);
+      const rebuilt = await processor.getLoadedToolsForRequestContext({ requestContext, getMessages });
+      expect(Object.keys(rebuilt)).toEqual(['weather']);
+      expect(getMessages).toHaveBeenCalledTimes(1);
+    });
+
+    it("'in-memory' mode: resume rebuild does not load thread messages", async () => {
+      const processor = new ToolSearchProcessor({ tools: { weather: createMockTool('weather', 'Get weather') } });
+      const getMessages = vi.fn(async () => []);
+      await processor.getLoadedToolsForRequestContext({
+        requestContext: createMockArgs('thread-mem').requestContext,
+        getMessages,
+      });
+      expect(getMessages).not.toHaveBeenCalled();
     });
 
     it("'context' mode: an unload shrinks the active tool set (the change that moves the cache prefix)", async () => {

@@ -28,6 +28,13 @@ All chunks include these base properties:
     description: 'Unique identifier for this execution run',
   },
   {
+    name: 'traceId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Trace ID of the run that produced this chunk, when tracing is enabled. Not set on custom data-* chunks.',
+  },
+  {
     name: 'from',
     type: 'ChunkFrom',
     description: 'Source of the chunk',
@@ -949,6 +956,18 @@ Signals the start of a processing step.
             type: 'string',
             isOptional: true,
             description: 'Optional message identifier',
+          },
+          {
+            name: 'modelId',
+            type: 'string',
+            isOptional: true,
+            description: 'ID of the model this step calls. After a fallback, the fallback model.',
+          },
+          {
+            name: 'provider',
+            type: 'string',
+            isOptional: true,
+            description: 'Provider of the model this step calls',
           },
           {
             name: 'request',

@@ -4,6 +4,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main, 0.x]
+  # Lets other workflows (e.g. the alpha cron, which publishes without a PR) gate on the
+  # full suite without duplicating these jobs. A call always runs the full suite on the
+  # caller's commit.
+  workflow_call:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -14,58 +18,38 @@ permissions: {}
 jobs:
   changes:
     name: Detect code changes
-    runs-on: starsling-ubuntu-24.04-2
+    runs-on: starsling-ubuntu-26.04-2
     permissions:
       contents: read
     outputs:
       has_code: ${{ steps.filter.outputs.has_code }}
+      head_sha: ${{ steps.filter.outputs.head_sha }}
+      full_suite: ${{ steps.filter.outputs.full_suite }}
     steps:
       - name: Check for code changes
         id: filter
         env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          # Only a workflow_call (e.g. the alpha cron) and the Changesets release PR run the
+          # build and tests. Regular PRs rely on the Changed Test Gate and lint checks. A fork
+          # can pick any branch name, so the release PR head must also live in this repository.
+          FULL_SUITE: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/')) }}
         run: |
-          compare_json=$(mktemp)
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "full_suite=$FULL_SUITE" >> "$GITHUB_OUTPUT"
 
-          if ! gh api \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "repos/$REPOSITORY/compare/$BASE_SHA...$HEAD_SHA" \
-            > "$compare_json"; then
-            echo "Compare API failed; running Prebuild fail-closed."
-            echo "has_code=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if ! file_count=$(jq -er \
-            'if (.files | type) == "array" then (.files | length) else error("missing files array") end' \
-            "$compare_json"); then
-            echo "Compare API result was invalid; running Prebuild fail-closed."
-            echo "has_code=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [ "$file_count" -ge 300 ]; then
-            echo "Compare API result reached its 300-file response limit; running Prebuild fail-closed."
-            echo "has_code=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          CHANGED=$(jq -r '.files[].filename' "$compare_json" \
-            | grep -vE '^(docs/|examples/|\.changeset/|explorations/)' || true)
-          if [ -n "$CHANGED" ]; then
+          if [ "$FULL_SUITE" = "true" ]; then
+            echo "Full suite requested; running Prebuild."
             echo "has_code=true" >> "$GITHUB_OUTPUT"
           else
+            echo "Regular PR; skipping Prebuild build and tests."
             echo "has_code=false" >> "$GITHUB_OUTPUT"
           fi
 
   prebuild:
     name: Build
     needs: changes
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     env:
@@ -81,7 +65,7 @@ jobs:
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ needs.changes.outputs.head_sha }}
           fetch-depth: 2
 
       - name: Setup pnpm and Node.js
@@ -103,7 +87,7 @@ jobs:
     name: Detect affected tests
     needs: changes
     if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 10
     outputs:
       run_full: ${{ steps.compute.outputs.run_full }}
@@ -144,11 +128,17 @@ jobs:
         id: compute
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_SHA: ${{ needs.changes.outputs.head_sha }}
+          FULL_SUITE: ${{ needs.changes.outputs.full_suite }}
         run: |
-          git diff --name-only \
-            "$BASE_SHA...$HEAD_SHA" \
-            > /tmp/changed-files.txt
+          # The full suite ignores the diff, and a workflow_call has no PR base to diff against.
+          if [ "$FULL_SUITE" = "true" ]; then
+            : > /tmp/changed-files.txt
+          else
+            git diff --name-only \
+              "$BASE_SHA...$HEAD_SHA" \
+              > /tmp/changed-files.txt
+          fi
 
           CHANGED=$(grep -E '/src/.*\.(ts|tsx)$' /tmp/changed-files.txt \
             | grep -vE '__fixtures__|/fixtures/' \
@@ -176,7 +166,8 @@ jobs:
           const total = data.testFiles || 1;
           const ratio = count / total;
           const hasChangedSource = changedFiles.some(file => /\/src\/.*\.(ts|tsx)$/.test(file) && !/__fixtures__|\/fixtures\//.test(file));
-          const runFull = hasChangedSource && ratio > 0.5;
+          const fullSuite = process.env.FULL_SUITE === 'true';
+          const runFull = fullSuite || (hasChangedSource && ratio > 0.5);
 
           const output = (line) => fs.appendFileSync(process.env.GITHUB_OUTPUT, line);
           const outputList = (name, files) => {
@@ -197,6 +188,12 @@ jobs:
           const unitTestFiles = affectedTests.filter(file => !isPackageE2eTest(file) && !isExternalE2eTest(file));
           const e2eTestFiles = affectedTests.filter(isPackageE2eTest);
 
+          fs.mkdirSync('/tmp/affected-outputs', { recursive: true });
+          fs.writeFileSync(
+            '/tmp/affected-outputs/unit_test_files.txt',
+            `${unitTestFiles.join('\n')}${unitTestFiles.length > 0 ? '\n' : ''}`,
+          );
+
           const affectedStoreTests = affected(file => file.startsWith('stores/'));
           const affectedWorkspaceTests = affected(file => file.startsWith('workspaces/'));
           const affectedMemoryTests = affected(file => file.startsWith('packages/memory/integration-tests/'));
@@ -211,17 +208,17 @@ jobs:
             workspacePackages: discoverWorkspacePackages(),
           });
 
-          const storesChanged = affectedStoreTests || changed(file =>
+          const storesChanged = fullSuite || affectedStoreTests || changed(file =>
             file.startsWith('stores/') ||
             file === '.github/workflows/test-combined-stores.yml' ||
             file === '.github/workflows/prebuild.yml'
           );
           const workspacesChanged = workspaceSelection.packages.length > 0;
-          const memoryChanged = affectedMemoryTests || changed(file =>
+          const memoryChanged = fullSuite || affectedMemoryTests || changed(file =>
             file.startsWith('packages/memory/') || file === '.github/workflows/prebuild.yml'
           );
           const { studioE2eChanged } = require('./.github/scripts/studio-e2e-routing.cjs');
-          const e2eChanged = studioE2eChanged(nonMarkdownChangedFiles) || affected(isExternalE2eTest) || (runFull && hasChangedSource) || changed(file =>
+          const e2eChanged = fullSuite || studioE2eChanged(nonMarkdownChangedFiles) || affected(isExternalE2eTest) || (runFull && hasChangedSource) || changed(file =>
             (file.startsWith('e2e-tests/') &&
               !file.startsWith('e2e-tests/experiment-worker/') &&
               !file.startsWith('e2e-tests/_local-registry-setup/')) ||
@@ -236,7 +233,7 @@ jobs:
             file === '.github/workflows/e2e-tests.yml' ||
             file === 'pnpm-lock.yaml'
           );
-          const mastracodeE2eChanged = changed(file =>
+          const mastracodeE2eChanged = fullSuite || changed(file =>
             file.startsWith('mastracode/') ||
             file.startsWith('packages/core/') ||
             file === 'pnpm-lock.yaml' ||
@@ -263,7 +260,7 @@ jobs:
                 { encoding: 'utf8' },
               )
             : '';
-          const experimentWorkerChanged = experimentWorkerE2eChanged(nonMarkdownChangedFiles, experimentEntryDiff);
+          const experimentWorkerChanged = fullSuite || experimentWorkerE2eChanged(nonMarkdownChangedFiles, experimentEntryDiff);
 
           output(`memory_changed=${memoryChanged}\n`);
           output(`e2e_changed=${e2eChanged}\n`);
@@ -280,7 +277,7 @@ jobs:
           );
 
           if (runFull) {
-            console.error('Above 50% threshold — running full suite.');
+            console.error(fullSuite ? 'Full suite requested — running full suite.' : 'Above 50% threshold — running full suite.');
             output('run_full=true\n');
             output('test_files=\n');
             output('unit_test_files=\n');
@@ -308,7 +305,7 @@ jobs:
           WORKSPACE_PACKAGES: ${{ steps.compute.outputs.workspace_packages }}
           AFFECTED_MEMORY_TESTS: ${{ steps.compute.outputs.affected_memory_tests }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_SHA: ${{ needs.changes.outputs.head_sha }}
         run: |
           mkdir -p /tmp/affected-outputs
           echo "$E2E_CHANGED" > /tmp/affected-outputs/e2e_changed.txt
@@ -341,8 +338,7 @@ jobs:
       actions: read
       contents: read
     with:
-      head_sha: ${{ github.event.pull_request.head.sha }}
-      base_ref: ${{ github.event.pull_request.base.ref }}
+      head_sha: ${{ needs.changes.outputs.head_sha }}
       has_code: ${{ needs.changes.outputs.has_code }}
       unit_test_files: ${{ needs.affected-tests.outputs.unit_test_files }}
       e2e_test_files: ${{ needs.affected-tests.outputs.e2e_test_files }}
@@ -359,7 +355,7 @@ jobs:
     permissions:
       contents: read
     with:
-      head_sha: ${{ github.event.pull_request.head.sha }}
+      head_sha: ${{ needs.changes.outputs.head_sha }}
       experiment_worker_e2e_changed: ${{ needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true' }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -373,7 +369,7 @@ jobs:
     permissions:
       contents: read
     with:
-      head_sha: ${{ github.event.pull_request.head.sha }}
+      head_sha: ${{ needs.changes.outputs.head_sha }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -386,7 +382,7 @@ jobs:
     permissions:
       contents: read
     with:
-      head_sha: ${{ github.event.pull_request.head.sha }}
+      head_sha: ${{ needs.changes.outputs.head_sha }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -404,7 +400,7 @@ jobs:
     permissions:
       contents: read
     with:
-      head_sha: ${{ github.event.pull_request.head.sha }}
+      head_sha: ${{ needs.changes.outputs.head_sha }}
       workspace_packages: ${{ needs.affected-tests.outputs.workspace_packages }}
       workspace_docker_packages: ${{ needs.affected-tests.outputs.workspace_docker_packages }}
     secrets:
@@ -413,9 +409,9 @@ jobs:
 
   memory-test:
     name: Memory Tests
-    needs: [affected-tests, prebuild]
+    needs: [changes, affected-tests, prebuild]
     if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.memory_changed == 'true' && needs.prebuild.result == 'success'
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     permissions:
       contents: read
     timeout-minutes: 15
@@ -448,7 +444,7 @@ jobs:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ needs.changes.outputs.head_sha }}
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -477,3 +473,111 @@ jobs:
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
           DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
+
+  # The Changesets release PR gates every release, so a red suite there should not wait for
+  # someone to open the PR. It alerts once when the suite goes red and once when it is green
+  # again, not on every push in between. Calls (e.g. the alpha cron) send their own alert.
+  notify-release-pr-status:
+    name: Notify Slack of release PR status
+    needs:
+      [
+        changes,
+        prebuild,
+        affected-tests,
+        test-suite,
+        e2e-tests,
+        mastracode-e2e,
+        combined-stores-tests,
+        workspace-tests,
+        memory-test,
+      ]
+    if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/')
+    runs-on: starsling-ubuntu-26.04
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Compare with the previous release PR run
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED: ${{ contains(needs.*.result, 'failure') }}
+          CANCELLED: ${{ contains(needs.*.result, 'cancelled') }}
+          BRANCH: ${{ github.head_ref }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # A cancelled run was usually superseded by a newer push, which reports instead.
+          # Failures seen before the cancel would otherwise alert once per superseded run.
+          if [ "$CANCELLED" = "true" ]; then
+            echo "Run was cancelled; leaving the alert state unchanged."
+            exit 0
+          fi
+
+          # Judge earlier runs by their test jobs, the same way this run is judged. The run
+          # conclusion is not usable: a newer push marks a run cancelled even when every job
+          # already passed, so a green run would be skipped and each later green push would
+          # alert "green again" against the last red one.
+          # Prints failure, success, or nothing when the run was cancelled or unreadable.
+          job_state() {
+            local conclusions
+            conclusions=$(gh api --paginate "$1?per_page=100" \
+              --jq '.jobs[] | select(.name | startswith("Notify Slack") | not) | .conclusion' 2>/dev/null) || return 0
+            if grep -qxE 'failure|timed_out' <<< "$conclusions"; then
+              echo failure
+            elif [ -n "$conclusions" ] && ! grep -qx cancelled <<< "$conclusions"; then
+              echo success
+            fi
+          }
+
+          # A re-run keeps its run ID, so its previous state is the earlier attempt of this run.
+          # Cancelled attempts are skipped, so walk back to the newest one that finished.
+          previous=''
+          attempt=$((GITHUB_RUN_ATTEMPT - 1))
+          while [ -z "$previous" ] && [ "$attempt" -ge 1 ]; do
+            previous=$(job_state "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$attempt/jobs")
+            attempt=$((attempt - 1))
+          done
+
+          # Otherwise this run is still in progress, so the newest completed run is the previous one.
+          # Most release PR runs are cancelled by newer pushes, so walk past them.
+          if [ -z "$previous" ]; then
+            if ! runs=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/prebuild.yml/runs" \
+              -f branch="$BRANCH" -f event=pull_request -f status=completed -F per_page=50 \
+              --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | \"\(.id)/attempts/\(.run_attempt)\""); then
+              echo "::warning::Could not read the previous run; alerting on failure only."
+              previous=unknown
+            fi
+            for run in $runs; do
+              previous=$(job_state "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs")
+              [ -n "$previous" ] && break
+            done
+          fi
+          previous=${previous:-none}
+          echo "Previous release PR run: $previous; this run failed: $FAILED"
+
+          pr="<$PR_URL|#$PR_NUMBER $PR_TITLE>"
+          if [ "$FAILED" = "true" ] && [ "$previous" != "failure" ]; then
+            echo "text=:rotating_light: Release PR tests failed: $pr. <$RUN_URL|View the run>." >> "$GITHUB_OUTPUT"
+          elif [ "$FAILED" != "true" ] && [ "$previous" = "failure" ]; then
+            echo "text=:white_check_mark: Release PR tests are green again: $pr." >> "$GITHUB_OUTPUT"
+          else
+            echo "No change since the previous run; not alerting."
+          fi
+
+      - name: Checkout Slack action
+        if: steps.state.outputs.text != ''
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          sparse-checkout: .github/actions
+          persist-credentials: false
+
+      - name: Post to Slack
+        if: steps.state.outputs.text != ''
+        uses: ./.github/actions/slack-alert
+        with:
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          text: ${{ steps.state.outputs.text }}

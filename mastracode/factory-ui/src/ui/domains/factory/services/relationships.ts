@@ -1,4 +1,5 @@
 import { gitlabIdentifierForItem, githubNumberForItem } from '../boardItems';
+import { rememberedBoardPath } from './boardViews';
 import type { WorkItem } from './workItems';
 import { isPullRequestSource } from './workItems';
 
@@ -92,7 +93,7 @@ export function inferredParentWorkItemId(
 }
 
 export function relationshipPath(item: Pick<WorkItem, 'source'>, factoryId: string): string {
-  return isPullRequestSource(item.source) ? `/factories/${factoryId}/review` : `/factories/${factoryId}/work`;
+  return rememberedBoardPath(factoryId, isPullRequestSource(item.source) ? 'review' : 'work');
 }
 
 export function relationshipLabel(item: WorkItem): string {

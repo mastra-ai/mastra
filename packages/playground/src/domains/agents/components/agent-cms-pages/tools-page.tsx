@@ -7,10 +7,12 @@ import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Sectio
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { passwordManagerOptOutProps } from '@mastra/playground-ui/primitives/password-manager-autofill';
 import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
+import { useTools } from '@mastra/react/hooks/tools';
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -21,7 +23,6 @@ import { DisplayConditionsDialog } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';
 import { IntegrationToolsSection } from '@/domains/tool-providers/components';
-import { useTools } from '@/domains/tools/hooks/use-all-tools';
 
 export function ToolsPage() {
   const { form, readOnly, isCodeAgentOverride, editorConfig } = useAgentEditFormContext();
@@ -154,10 +155,11 @@ export function ToolsPage() {
     return (
       <Entity key={tool.value} className="bg-background">
         <EntityContent>
-          <EntityName className="! text-subheading!">{tool.label}</EntityName>
+          <EntityName className="text-subheading">{tool.label}</EntityName>
           <EntityDescription>
             <input
               type="text"
+              {...passwordManagerOptOutProps}
               aria-label={`Description for ${tool.label}`}
               disabled={!canEditToolDescriptions}
               className={cn(

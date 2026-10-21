@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { AnchorHTMLAttributes } from 'react';

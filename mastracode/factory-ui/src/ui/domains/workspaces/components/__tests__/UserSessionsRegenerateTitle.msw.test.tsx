@@ -9,7 +9,9 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { UserSessionsSection } from '../UserSessionsSection';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { SessionsSection } from '../SessionsSection';
+import { testChatSession } from './fixtures/sessionsSection';
 
 const projectRepositoryId = 'ghp-1';
 const sessionId = 'sess-1';
@@ -54,7 +56,7 @@ function useFactoryFixtures(sessions: () => FactoryUserSession[]) {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
       HttpResponse.json({ sessions: sessions() }),
     ),
     http.get(`${TEST_BASE_URL}/api/agent-controller/:agentControllerId/sessions/:resourceId/threads`, () =>
@@ -66,9 +68,11 @@ function useFactoryFixtures(sessions: () => FactoryUserSession[]) {
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
-      </Routes>
+      <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
+        <Routes>
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
       <Toaster position="bottom-right" />
     </MemoryRouter>,
   );
@@ -79,25 +83,31 @@ async function openTitleAction(user: ReturnType<typeof userEvent.setup>, name: s
   await user.click(await screen.findByRole('menuitem', { name: 'Regenerate title' }));
 }
 
-describe('User session title regeneration', () => {
-  it('renames the row with the title the server generated', async () => {
-    let sessions = [session];
-    useFactoryFixtures(() => sessions);
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/title`, () => {
-        sessions = [{ ...session, title: 'Factory audit log review' }];
-        return HttpResponse.json({ title: 'Factory audit log review' });
-      }),
-    );
+describe('Session title regeneration', () => {
+  it.each(['user/my-feature', 'slack/1791936483-798759'])(
+    'renames the owned %s row with the generated title',
+    async branch => {
+      let sessions = [{ ...session, branch }];
+      useFactoryFixtures(() => sessions);
+      server.use(
+        http.get(`${TEST_BASE_URL}/auth/me`, () =>
+          HttpResponse.json({ authEnabled: true, authenticated: true, user: { userId: session.userId } }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/title`, () => {
+          sessions = [{ ...session, branch, title: 'Factory audit log review' }];
+          return HttpResponse.json({ title: 'Factory audit log review' });
+        }),
+      );
 
-    const user = userEvent.setup();
-    const { client } = renderSection();
+      const user = userEvent.setup();
+      const { client } = renderSection();
 
-    await openTitleAction(user, 'Tell me what have been done in the factory since');
-    await waitForMutationsIdle(client);
+      await openTitleAction(user, 'Tell me what have been done in the factory since');
+      await waitForMutationsIdle(client);
 
-    expect(await screen.findByRole('button', { name: 'Factory audit log review' })).toBeInTheDocument();
-  });
+      expect(await screen.findByRole('button', { name: 'Factory audit log review' })).toBeInTheDocument();
+    },
+  );
 
   it('keeps a pending session disabled while another session finishes first', async () => {
     const other: FactoryUserSession = { ...session, id: 'row-2', sessionId: 'sess-2', title: 'Second session' };
@@ -133,6 +143,51 @@ describe('User session title regeneration', () => {
     releaseFirst();
     await waitForMutationsIdle(client);
     expect(asked).toEqual([sessionId, 'sess-2']);
+  });
+
+  it('keeps a pending session disabled after its group folds and unfolds again', async () => {
+    const newerSessions = Array.from(
+      { length: 5 },
+      (_, index): FactoryUserSession => ({
+        ...session,
+        id: `row-newer-${index}`,
+        sessionId: `sess-newer-${index}`,
+        title: `Newer session ${index}`,
+        updatedAt: `2026-07-24T0${index}:00:00.000Z`,
+      }),
+    );
+    let releaseTitle = () => {};
+    const titleAnswered = new Promise<void>(resolve => {
+      releaseTitle = resolve;
+    });
+    const asked: string[] = [];
+    useFactoryFixtures(() => [session, ...newerSessions]);
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/title`, async ({ params }) => {
+        asked.push(String(params.sessionId));
+        await titleAnswered;
+        return HttpResponse.json({ title: 'Factory audit log review' });
+      }),
+    );
+
+    const user = userEvent.setup();
+    const { client } = renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Show 1 more' }));
+    await openTitleAction(user, 'Tell me what have been done in the factory since');
+    await user.click(screen.getByRole('button', { name: 'Show less' }));
+    await user.click(screen.getByRole('button', { name: 'Show 1 more' }));
+
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Session actions for Tell me what have been done in the factory since',
+      }),
+    );
+    expect(await screen.findByRole('menuitem', { name: 'Regenerate title' })).toHaveAttribute('aria-disabled', 'true');
+
+    releaseTitle();
+    await waitForMutationsIdle(client);
+    expect(asked).toEqual([sessionId]);
   });
 
   it('surfaces the server’s reason when there is nothing to name the session from', async () => {

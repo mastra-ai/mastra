@@ -155,10 +155,18 @@ const vectorStore = new PgVector({
   },
   {
     name: 'metric',
-    type: "'cosine' | 'euclidean' | 'dotproduct'",
+    type: "'cosine' | 'euclidean' | 'dotproduct' | 'hamming' | 'jaccard'",
     isOptional: true,
-    defaultValue: 'cosine',
-    description: 'Distance metric for similarity search',
+    defaultValue: "'cosine' ('hamming' when vectorType is 'bit')",
+    description:
+      "Distance metric for similarity search. 'hamming' and 'jaccard' are only valid with vectorType 'bit', and 'jaccard' requires an HNSW index.",
+  },
+  {
+    name: 'vectorType',
+    type: "'vector' | 'halfvec' | 'bit' | 'sparsevec'",
+    isOptional: true,
+    defaultValue: 'vector',
+    description: 'pgvector storage type for the embeddings',
   },
   {
     name: 'indexConfig',
@@ -341,33 +349,20 @@ Higher M values or efConstruction values will increase memory requirements subst
     name: 'minScore',
     type: 'number',
     isOptional: true,
-    defaultValue: '0',
+    defaultValue: '-1',
     description: 'Minimum similarity score threshold',
   },
   {
-    name: 'options',
-    type: '{ ef?: number; probes?: number }',
+    name: 'ef',
+    type: 'number',
     isOptional: true,
-    description: 'Additional options for HNSW and IVF indexes',
-    properties: [
-      {
-        type: 'object',
-        parameters: [
-          {
-            name: 'ef',
-            type: 'number',
-            description: 'HNSW search parameter',
-            isOptional: true,
-          },
-          {
-            name: 'probes',
-            type: 'number',
-            description: 'IVF search parameter',
-            isOptional: true,
-          },
-        ],
-      },
-    ],
+    description: 'HNSW search parameter. Higher values improve accuracy at the cost of speed.',
+  },
+  {
+    name: 'probes',
+    type: 'number',
+    isOptional: true,
+    description: 'IVFFlat search parameter. Number of lists to visit during search.',
   },
 ]}
 />
@@ -394,8 +389,9 @@ Returns:
 interface PGIndexStats {
   dimension: number
   count: number
-  metric: 'cosine' | 'euclidean' | 'dotproduct'
+  metric: 'cosine' | 'euclidean' | 'dotproduct' | 'hamming' | 'jaccard'
   type: 'flat' | 'hnsw' | 'ivfflat'
+  vectorType: 'vector' | 'halfvec' | 'bit' | 'sparsevec'
   config: {
     m?: number
     efConstruction?: number
@@ -537,7 +533,7 @@ Closes the database connection pool. Should be called when done using the store.
   },
   {
     name: 'metric',
-    type: "'cosine' | 'euclidean' | 'dotproduct'",
+    type: "'cosine' | 'euclidean' | 'dotproduct' | 'hamming' | 'jaccard'",
     isOptional: true,
     defaultValue: 'cosine',
     description: 'Distance metric for similarity search',
@@ -591,17 +587,21 @@ interface QueryResult {
 
 ## Error handling
 
-The store throws typed errors that can be caught:
+The store throws `MastraError` instances from `@mastra/core/error`:
 
 ```typescript
+import { MastraError } from '@mastra/core/error'
+
 try {
   await store.query({
     indexName: 'index_name',
     queryVector: queryVector,
   })
 } catch (error) {
-  if (error instanceof VectorStoreError) {
-    console.log(error.code) // 'connection_failed' | 'invalid_dimension' | etc
+  if (error instanceof MastraError) {
+    console.log(error.id) // 'MASTRA_VECTOR_PG_QUERY_FAILED'
+    console.log(error.domain) // 'MASTRA_VECTOR'
+    console.log(error.category) // 'USER' | 'THIRD_PARTY'
     console.log(error.details) // Additional error context
   }
 }

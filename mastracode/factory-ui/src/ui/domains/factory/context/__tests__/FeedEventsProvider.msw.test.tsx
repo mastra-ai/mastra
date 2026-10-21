@@ -28,7 +28,7 @@ function watch() {
   return {
     connected: useFeedEventsConnected(),
     comments: useWorkItemComments({ workItemId: ITEM_ID }),
-    attention: useFactoryAttentionHistory(PROJECT_ID, 'open', ''),
+    attention: useFactoryAttentionHistory(PROJECT_ID, 'open', []),
   };
 }
 

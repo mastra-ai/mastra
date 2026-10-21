@@ -1,299 +1,43 @@
-import { Check, MessageCircleQuestion } from 'lucide-react';
-import { useState } from 'react';
-import type { ComponentProps, KeyboardEvent, ReactNode } from 'react';
-import { Badge } from '@/ds/components/Badge';
-import { Button } from '@/ds/components/Button';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { Field, FieldItem, FieldLabel, Fieldset, FieldsetLegend } from '@/ds/components/Field';
-import type { FieldLabelProps } from '@/ds/components/Field';
-import { Input } from '@/ds/components/Input';
-import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons/Icon';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
-
-export type AskUserSelectionMode = 'single_select' | 'multi_select';
-export type AskUserAnswer = string | string[];
-
-export interface AskUserOption {
-  label: string;
-  description?: string;
-}
-
-export interface AskUserPayload {
-  question: string;
-  options?: AskUserOption[];
-  selectionMode?: AskUserSelectionMode;
-}
-
-export interface AskUserResult {
-  content: string;
-  isError?: boolean;
-}
-
-export const AskUserContainer = ({ className, ...props }: ComponentProps<'div'>) => (
-  <div
-    data-slot="ask-user"
-    className={cn(raisedSurfaceStyle, 'w-full overflow-hidden rounded-xl', className)}
-    {...props}
-  />
-);
-
-export const AskUserLabel = ({ children = 'Question', className, ...props }: ComponentProps<'div'>) => (
-  <div data-slot="ask-user-label" className={cn('flex min-h-10 items-center gap-2 px-4 pt-3', className)} {...props}>
-    <Icon size="xs" className="text-muted-foreground">
-      <MessageCircleQuestion />
-    </Icon>
-    <Txt as="span" variant="caption" tone="muted">
-      {children}
-    </Txt>
-  </div>
-);
-
-export const AskUserBody = ({ className, ...props }: ComponentProps<'div'>) => (
-  <div data-slot="ask-user-body" className={cn('px-4 pt-1 pb-4', className)} {...props} />
-);
-
-export const AskUserQuestion = ({ className, ...props }: ComponentProps<typeof Txt>) => (
-  <Txt as="p" variant="subheading" tone="ink" {...props} className={cn('mb-3', className)} />
-);
-
-export interface AskUserOptionRowProps extends Omit<FieldLabelProps, 'children'> {
-  control: ReactNode;
-  label: string;
-  description?: string;
-  disabled?: boolean;
-}
-
-export const AskUserOptionRow = ({
-  control,
-  label,
-  description,
-  disabled = false,
-  className,
-  ...props
-}: AskUserOptionRowProps) => (
-  <FieldItem disabled={disabled} className="contents">
-    <FieldLabel
-      // state-layer's wash only stops at :disabled/aria-disabled, and a <label> is neither
-      aria-disabled={disabled || undefined}
-      className={cn(
-        'state-layer flex items-start gap-2.5 rounded-lg bg-fill px-3 py-2 data-disabled:opacity-50',
-        className,
-      )}
-      {...props}
-    >
-      {control}
-      <span className="grid gap-0.5">
-        <Txt as="span" variant="body" tone="ink">
-          {label}
-        </Txt>
-        {description ? (
-          <Txt as="span" variant="caption" tone="muted">
-            {description}
-          </Txt>
-        ) : null}
-      </span>
-    </FieldLabel>
-  </FieldItem>
-);
-
-export type AskUserSubmitProps = Omit<ComponentProps<typeof Button>, 'children'> & { children?: ReactNode };
-
-export const AskUserSubmit = ({ children = 'Submit answer', ...props }: AskUserSubmitProps) => (
-  <Button icon={<Check />} type="button" size="sm" variant="primary" {...props}>
-    {children}
-  </Button>
-);
-
-export const AskUserPending = ({ children = 'Submitting…', ...props }: ComponentProps<typeof Txt>) => (
-  <Txt as="span" role="status" variant="caption" tone="muted" {...props}>
-    {children}
-  </Txt>
-);
-
-export interface AskUserOutputProps extends ComponentProps<'div'> {
-  result: AskUserResult;
-}
-
-export const AskUserOutput = ({ result, className, ...props }: AskUserOutputProps) => (
-  <div
-    data-slot="ask-user-output"
-    role={result.isError ? 'alert' : 'status'}
-    className={cn('grid gap-2 rounded-lg bg-fill p-3', className)}
-    {...props}
-  >
-    <Badge size="xs" variant={result.isError ? 'destructive' : 'success'} className="justify-self-start">
-      {result.isError ? 'Error' : 'Answered'}
-    </Badge>
-    <Txt as="p" variant="body" tone="ink" className={cn(result.isError && 'text-destructive-foreground')}>
-      {result.content}
-    </Txt>
-  </div>
-);
-
-export interface AskUserProps extends Omit<ComponentProps<typeof AskUserContainer>, 'children' | 'onSubmit'> {
-  payload: AskUserPayload;
-  result?: AskUserResult;
-  isAnswered?: boolean;
-  isSubmitting?: boolean;
-  onSubmit: (answer: AskUserAnswer) => void;
-  footer?: ReactNode;
-}
-
-const validOptions = (options: AskUserPayload['options']): AskUserOption[] =>
-  options?.filter((option): option is AskUserOption =>
-    Boolean(option && typeof option.label === 'string' && option.label),
-  ) ?? [];
-
-interface AskUserInputProps extends AskUserProps {
-  options: AskUserOption[];
-}
-
-const AskUserInput = ({
-  payload,
-  options,
-  result,
-  isAnswered = false,
-  isSubmitting = false,
-  onSubmit,
-  footer,
-  ...props
-}: AskUserInputProps) => {
-  const [text, setText] = useState('');
-  const [selected, setSelected] = useState<string[]>([]);
-
-  if (result || isAnswered) {
-    return (
-      <AskUserContainer data-testid="ask-user" {...props}>
-        <AskUserLabel />
-        <AskUserBody>
-          <AskUserQuestion>{payload.question}</AskUserQuestion>
-          {result ? <AskUserOutput result={result} /> : <Badge variant="success">Answered</Badge>}
-        </AskUserBody>
-      </AskUserContainer>
-    );
-  }
-
-  const submitText = () => {
-    const answer = text.trim();
-    if (answer && !isSubmitting) onSubmit(answer);
-  };
-
-  const handleTextKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      submitText();
-    }
-  };
-
-  if (options.length === 0) {
-    return (
-      <AskUserContainer data-testid="ask-user" {...props}>
-        <AskUserLabel />
-        <AskUserBody>
-          <Field>
-            <FieldLabel className="text-subheading">{payload.question}</FieldLabel>
-            <div className="flex items-center gap-2">
-              <Input
-                value={text}
-                onChange={event => setText(event.target.value)}
-                onKeyDown={handleTextKeyDown}
-                placeholder="Type your answer..."
-                disabled={isSubmitting}
-                size="sm"
-              />
-              <AskUserSubmit
-                className="shrink-0 whitespace-nowrap"
-                disabled={isSubmitting || !text.trim()}
-                onClick={submitText}
-              />
-            </div>
-          </Field>
-          {isSubmitting ? <AskUserPending className="mt-2 block" /> : null}
-          {footer}
-        </AskUserBody>
-      </AskUserContainer>
-    );
-  }
-
-  const isMulti = payload.selectionMode === 'multi_select';
-
-  return (
-    <AskUserContainer data-testid="ask-user" {...props}>
-      <AskUserLabel />
-      <AskUserBody>
-        {isMulti ? (
-          <Fieldset className="gap-2">
-            <FieldsetLegend className="mb-1 text-subheading">{payload.question}</FieldsetLegend>
-            {options.map(option => (
-              <AskUserOptionRow
-                key={option.label}
-                label={option.label}
-                description={option.description}
-                disabled={isSubmitting}
-                control={
-                  <Checkbox
-                    className="mt-0.5"
-                    disabled={isSubmitting}
-                    checked={selected.includes(option.label)}
-                    onCheckedChange={() =>
-                      setSelected(current =>
-                        current.includes(option.label)
-                          ? current.filter(selectedLabel => selectedLabel !== option.label)
-                          : [...current, option.label],
-                      )
-                    }
-                  />
-                }
-              />
-            ))}
-            <AskUserSubmit
-              className="mt-1 justify-self-start"
-              disabled={isSubmitting || selected.length === 0}
-              onClick={() => onSubmit(selected)}
-            >
-              Submit answer
-            </AskUserSubmit>
-          </Fieldset>
-        ) : (
-          <Fieldset
-            className="gap-2"
-            render={
-              <RadioGroup
-                disabled={isSubmitting}
-                value={selected[0] ?? null}
-                onValueChange={value => {
-                  const label = String(value);
-                  setSelected([label]);
-                  onSubmit(label);
-                }}
-              />
-            }
-          >
-            <FieldsetLegend className="mb-1 text-subheading">{payload.question}</FieldsetLegend>
-            {options.map(option => (
-              <AskUserOptionRow
-                key={option.label}
-                label={option.label}
-                description={option.description}
-                disabled={isSubmitting}
-                control={<RadioGroupItem className="mt-0.5" value={option.label} />}
-              />
-            ))}
-          </Fieldset>
-        )}
-        {isSubmitting ? <AskUserPending className="mt-3 block" /> : null}
-        {footer}
-      </AskUserBody>
-    </AskUserContainer>
-  );
-};
-
-export const AskUser = ({ payload, ...props }: AskUserProps) => {
-  const options = validOptions(payload.options);
-  const payloadKey = JSON.stringify([payload.question, options.map(option => option.label), payload.selectionMode]);
-
-  return <AskUserInput key={payloadKey} payload={payload} options={options} {...props} />;
-};
+export { AskUser } from './ask-user-card';
+export type { AskUserProps } from './ask-user-card';
+export { AskUserRoot, AskUserRoot as Root } from './ask-user-root';
+export type { AskUserRootProps } from './ask-user-root';
+export {
+  AskUserCustomAnswer,
+  AskUserCustomAnswer as CustomAnswer,
+  AskUserOptionItem,
+  AskUserOptionItem as Option,
+  AskUserOptions,
+  AskUserOptions as Options,
+  AskUserSubmit,
+  AskUserSubmit as Submit,
+  AskUserTextAnswer,
+  AskUserTextAnswer as TextAnswer,
+} from './ask-user-controls';
+export type {
+  AskUserCustomAnswerProps,
+  AskUserOptionItemProps,
+  AskUserSubmitProps,
+  AskUserTextAnswerProps,
+} from './ask-user-controls';
+export {
+  AskUserBody,
+  AskUserBody as Body,
+  AskUserContainer,
+  AskUserLabel,
+  AskUserOptionRow,
+  AskUserOutput,
+  AskUserOutput as Output,
+  AskUserPending,
+  AskUserPending as Pending,
+  AskUserQuestion,
+  AskUserQuestion as Question,
+} from './ask-user-layout';
+export type { AskUserOptionRowProps, AskUserOutputProps } from './ask-user-layout';
+export type {
+  AskUserAnswer,
+  AskUserOption,
+  AskUserPayload,
+  AskUserResult,
+  AskUserSelectionMode,
+} from './ask-user-types';

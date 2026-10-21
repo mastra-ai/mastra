@@ -3,6 +3,7 @@ import type { MastraAuthConfig } from '@mastra/core/server';
 import { describe, expect, it, vi } from 'vitest';
 
 import { MASTRA_USER_KEY } from '../constants';
+import { HTTPException } from '../http-exception';
 
 import {
   canAccessPublicly,
@@ -234,6 +235,15 @@ describe('auth helpers', () => {
   });
 
   describe('isCustomRoutePublic', () => {
+    it('should let an overlapping protected pattern win over an earlier public pattern', () => {
+      const config = new Map<string, boolean>([
+        ['GET:/custom/*', false],
+        ['GET:/custom/private/:id', true],
+      ]);
+      expect(isCustomRoutePublic('/custom/private/123', 'GET', config)).toBe(false);
+      expect(isCustomRoutePublic('/custom/other', 'GET', config)).toBe(true);
+    });
+
     it('should return false when customRouteAuthConfig is undefined', () => {
       expect(isCustomRoutePublic('/api/test', 'GET', undefined)).toBe(false);
     });
@@ -553,6 +563,44 @@ describe('auth helpers', () => {
     });
   });
 
+  describe('coreAuthMiddleware - public custom routes', () => {
+    const customRouteAuthConfig = new Map<string, boolean>([
+      ['GET:/custom/health', false],
+      ['POST:/webhooks/:id', false],
+      ['GET:/custom/private', true],
+    ]);
+
+    const run = (path: string, method: string, requiresAuth?: boolean) =>
+      coreAuthMiddleware({
+        path,
+        method,
+        getHeader: () => undefined,
+        mastra: { getServer: () => ({}), getLogger: () => null } as any,
+        authConfig: { protected: ['/*'], authenticateToken: async () => null },
+        customRouteAuthConfig,
+        requestContext: { get: () => undefined, set: () => {} } as any,
+        rawRequest: {},
+        token: undefined,
+        requiresAuth,
+        buildAuthorizeContext: () => null,
+      } as any);
+
+    it('passes static and parameterized custom routes with requiresAuth false', async () => {
+      expect((await run('/custom/health', 'GET')).action).toBe('next');
+      expect((await run('/webhooks/abc', 'POST')).action).toBe('next');
+    });
+
+    it('still authenticates other methods, private routes, and unregistered routes', async () => {
+      expect((await run('/custom/health', 'POST')).action).toBe('error');
+      expect((await run('/custom/private', 'GET')).action).toBe('error');
+      expect((await run('/custom/unknown', 'GET')).action).toBe('error');
+    });
+
+    it('still authenticates when the middleware explicitly requires auth', async () => {
+      expect((await run('/custom/health', 'GET', true)).action).toBe('error');
+    });
+  });
+
   describe('coreAuthMiddleware - mapUserToResourceId', () => {
     function createMockMastra() {
       return {
@@ -597,6 +645,86 @@ describe('auth helpers', () => {
       expect(result.action).toBe('next');
       expect(requestContext.get(MASTRA_USER_KEY)).toBe(user);
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-123');
+    });
+
+    describe('provider pending response headers', () => {
+      // Mirrors how providers key per-request state: by the underlying web Request.
+      const unwrap = (req: any): Request => (req instanceof Request ? req : req.raw);
+
+      function stashingProvider(extra: Record<string, unknown> = {}) {
+        const pending = new WeakMap<Request, Record<string, string>>();
+        return {
+          protected: ['/api/*'],
+          authenticateToken: async (_t: string, req: any) => {
+            pending.set(unwrap(req), { 'Set-Cookie': 'wos-session=v2; Path=/' });
+            return { id: 'user-1' };
+          },
+          consumePendingResponseHeaders: (req: any) => pending.get(unwrap(req)),
+          ...extra,
+        };
+      }
+
+      it('emits headers the provider stashed against the raw Request', async () => {
+        const result = await coreAuthMiddleware({
+          ...baseCtx,
+          rawRequest: new Request('https://studio.example/api/agents'),
+          mastra: createMockMastra(),
+          authConfig: stashingProvider() as any,
+          requestContext: createRequestContext(),
+        });
+
+        expect(result.action).toBe('next');
+        expect((result as any).headers).toEqual({ 'Set-Cookie': 'wos-session=v2; Path=/' });
+      });
+
+      it('emits headers stashed during the post-refresh retry, not the stale first attempt', async () => {
+        const pending = new WeakMap<Request, Record<string, string>>();
+        let calls = 0;
+        const provider = {
+          protected: ['/api/*'],
+          authenticateToken: async (_t: string, req: any) => {
+            calls++;
+            if (calls === 1) return null; // expired session → middleware refreshes
+            pending.set(unwrap(req), { 'Set-Cookie': 'wos-session=v3; Path=/' });
+            return { id: 'user-1' };
+          },
+          consumePendingResponseHeaders: (req: any) => pending.get(unwrap(req)),
+          getSessionIdFromRequest: () => 'v1',
+          refreshSession: async () => ({ id: 'v2', userId: 'user-1', expiresAt: new Date(), createdAt: new Date() }),
+          getSessionHeaders: (session: { id: string }) => ({ 'Set-Cookie': `wos-session=${session.id}; Path=/` }),
+          getClearSessionHeaders: () => ({}),
+          createSession: async () => ({}),
+          validateSession: async () => null,
+          destroySession: async () => {},
+        };
+
+        const result = await coreAuthMiddleware({
+          ...baseCtx,
+          rawRequest: new Request('https://studio.example/api/agents', { headers: { Cookie: 'wos-session=v1' } }),
+          mastra: createMockMastra(),
+          authConfig: provider as any,
+          requestContext: createRequestContext(),
+        });
+
+        expect(result.action).toBe('next');
+        expect((result as any).headers).toEqual({ 'Set-Cookie': 'wos-session=v3; Path=/' });
+      });
+
+      it('still authenticates when consumePendingResponseHeaders throws', async () => {
+        const result = await coreAuthMiddleware({
+          ...baseCtx,
+          rawRequest: new Request('https://studio.example/api/agents'),
+          mastra: createMockMastra(),
+          authConfig: stashingProvider({
+            consumePendingResponseHeaders: () => {
+              throw new Error('boom');
+            },
+          }) as any,
+          requestContext: createRequestContext(),
+        });
+
+        expect(result.action).toBe('next');
+      });
     });
 
     it('should support composite resource IDs', async () => {
@@ -697,6 +825,45 @@ describe('auth helpers', () => {
         body: { error: 'Failed to map authenticated user to a resource ID' },
       });
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+    });
+  });
+
+  describe('coreAuthMiddleware - errors thrown by authenticateToken', () => {
+    const run = (thrown: unknown) =>
+      coreAuthMiddleware({
+        path: '/api/agents',
+        method: 'GET',
+        getHeader: () => undefined,
+        rawRequest: {},
+        token: 'valid-token',
+        buildAuthorizeContext: () => null,
+        mastra: { getServer: () => ({}), getLogger: () => null } as any,
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => {
+            throw thrown;
+          },
+        },
+        requestContext: { get: () => undefined, set: () => {} } as any,
+      });
+
+    it.each([
+      [503, 'Authentication service unavailable'],
+      [403, 'Account disabled'],
+      [401, 'Session revoked'],
+    ] as const)('preserves HTTPException %s status and message', async (status, message) => {
+      const result = await run(new HTTPException(status, { message }));
+      expect(result).toMatchObject({ action: 'error', status, body: { error: message } });
+    });
+
+    it.each([
+      ['plain Error', new Error('db connection string leaked')],
+      ['object with status/message', { status: 503, message: 'secret' }],
+      ['HTTPException with 200', new HTTPException(200, { message: 'ok' })],
+      ['HTTPException with 302', new HTTPException(302, { message: 'redirect' })],
+    ])('redacts %s to a generic 401', async (_label, thrown) => {
+      const result = await run(thrown);
+      expect(result).toMatchObject({ action: 'error', status: 401, body: { error: 'Invalid or expired token' } });
     });
   });
 
@@ -820,6 +987,41 @@ describe('auth helpers', () => {
       expect(headers['Set-Cookie']).toContain('wos-session=new-session');
       expect(headers['Set-Cookie']).toContain('Secure');
       expect(headers['Set-Cookie']).toContain('Domain=.example.com');
+    });
+
+    it('should preserve an HTTPException thrown by the re-authentication after refresh', async () => {
+      let callCount = 0;
+      const authConfig: any = {
+        protected: ['/api/*'],
+        authenticateToken: async () => {
+          callCount++;
+          if (callCount === 1) return null;
+          throw new HTTPException(503, { message: 'Authentication service unavailable' });
+        },
+        getSessionIdFromRequest: () => 'old-session',
+        refreshSession: async () => ({
+          id: 'new-session',
+          userId: 'user-1',
+          expiresAt: new Date(Date.now() + 86400000),
+          createdAt: new Date(),
+        }),
+        getSessionHeaders: (session: any) => ({ 'Set-Cookie': `wos-session=${session.id}` }),
+      };
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig,
+        requestContext: createRequestContext(),
+        rawRequest: createRawRequest(),
+      });
+
+      expect(callCount).toBe(2);
+      expect(result).toMatchObject({
+        action: 'error',
+        status: 503,
+        body: { error: 'Authentication service unavailable' },
+      });
     });
 
     it('should return 401 when refresh token is also expired', async () => {

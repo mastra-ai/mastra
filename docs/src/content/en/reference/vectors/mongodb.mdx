@@ -710,6 +710,7 @@ interface QueryResult {
   score: number
   metadata: Record<string, any>
   vector?: number[] // Only included if includeVector is true
+  document?: string // Source text stored with the vector, when available
 }
 ```
 
@@ -805,10 +806,10 @@ const results = await store.query({
   },
   {
     name: 'numDimensions',
-    type: '256 | 512 | 1024 | 2048',
+    type: 'number',
     isOptional: true,
     defaultValue: '1024',
-    description: 'Length of the generated embeddings.',
+    description: 'Length of the generated embeddings. Common values are 256, 512, 1024, and 2048.',
   },
   {
     name: 'quantization',

@@ -11,15 +11,14 @@ import {
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border bg-badge-pink-subtle px-4 py-2 text-xs';
+const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border bg-badge-pink-subtle px-4 py-2';
 
 export function GoalPanel() {
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { goal } = useChatRuntime();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -43,9 +42,14 @@ export function GoalPanel() {
         {progress}
       </Txt>
       {goal.reason && (
-        <span className="text-muted-foreground max-w-52 overflow-hidden text-ellipsis whitespace-nowrap">
+        <Txt
+          as="span"
+          variant="caption"
+          tone="muted"
+          className="max-w-52 overflow-hidden text-ellipsis whitespace-nowrap"
+        >
           {goal.reason}
-        </span>
+        </Txt>
       )}
       {goal.status === 'active' && (
         <Button size="sm" onClick={() => void pauseGoalMutation.mutateAsync()}>

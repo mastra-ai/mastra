@@ -5,13 +5,13 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useProcessors } from '@mastra/react/hooks/processors';
 import { useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { NoProcessorsInfo } from '@/domains/processors/components/processors-list/no-processors-info';
 import { ProcessorsList } from '@/domains/processors/components/processors-list/processors-list';
 import type { ProcessorsSort } from '@/domains/processors/components/processors-list/processors-list';
-import { useProcessors } from '@/domains/processors/hooks/use-processors';
 
 const crumbs = [navCrumb('/processors')];
 

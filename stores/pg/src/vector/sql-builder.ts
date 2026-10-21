@@ -218,17 +218,13 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
   },
   // Element Operators
   $exists: (key, paramIndex, value) => {
-    const jsonPathKey = parseJsonPathKey(key);
-    // If value is false, check that the key does NOT exist
-    if (value === false) {
-      return {
-        sql: `NOT (metadata ? '${jsonPathKey}')`,
-        needsValue: false,
-      };
-    }
-    // Otherwise (true or truthy), check that the key exists
+    // `?` only checks top-level keys. Nested paths use `#>`, which yields SQL NULL only when the path is missing
+    // (a JSON null value still counts as existing, matching `?` semantics).
+    const existsSql = key.includes('.')
+      ? `${getJsonExtractExpr(key)} IS NOT NULL`
+      : `metadata ? '${parseJsonPathKey(key)}'`;
     return {
-      sql: `metadata ? '${jsonPathKey}'`,
+      sql: value === false ? `NOT (${existsSql})` : existsSql,
       needsValue: false,
     };
   },

@@ -103,7 +103,7 @@ function GithubIntakeSection({
         {connected &&
           config.github.enabled &&
           (slugs.length === 0 ? (
-            <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
+            <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
               No linked repositories yet — link a repository to a factory to add one.
             </Txt>
           ) : (
@@ -162,7 +162,7 @@ function GitLabIntakeSection({
         : "Open issues from the selected projects feed every member's board.";
   const accounts = status?.accounts ?? [];
   const action = configured ? (
-    <Txt as="span" variant="caption" className="text-muted-foreground">
+    <Txt tone="muted" as="span" variant="caption">
       {accounts.length === 1 ? `Connected to ${accounts[0]}` : `${accounts.length} GitLab accounts connected`}
     </Txt>
   ) : undefined;
@@ -268,7 +268,7 @@ function LinearIntakeSection({
     </Button>
   ) : (
     <span className="flex items-center gap-2">
-      <Txt as="span" variant="caption" className="text-muted-foreground">
+      <Txt tone="muted" as="span" variant="caption">
         Connected to {status?.workspace?.name ?? 'a Linear workspace'}
       </Txt>
       <Button size="sm" variant="ghost" onClick={() => connectLinear(baseUrl)}>
@@ -307,7 +307,7 @@ function LinearIntakeSection({
 
         {routedProjects.length > 0 && (
           <div className="flex flex-col">
-            <Txt as="p" variant="caption" className="text-muted-foreground">
+            <Txt tone="muted" as="p" variant="caption">
               Map Linear projects to repositories so their issues start in the intended repository.
             </Txt>
             {routedProjects.map(({ project, repositorySlugs }) => {
@@ -409,7 +409,7 @@ function JiraIntakeSection({
   );
   const action = configured ? (
     <span className="flex items-center gap-2">
-      <Txt as="span" variant="caption" className="text-muted-foreground">
+      <Txt tone="muted" as="span" variant="caption">
         {connectionLabel}
       </Txt>
       {actionButton}
@@ -504,14 +504,14 @@ function IncidentioIntakeSection({
   // so connect controls are only offered when Platform connections drive the
   // integration.
   const action = directConfigured ? (
-    <Txt as="span" variant="caption" className="text-muted-foreground">
+    <Txt tone="muted" as="span" variant="caption">
       incident.io API key configured on this server
     </Txt>
   ) : connections.length === 0 ? (
     <ProviderConnectControl provider={provider} label={`Connect ${meta.displayName}`} />
   ) : (
     <span className="flex items-center gap-2">
-      <Txt as="span" variant="caption" className="text-muted-foreground">
+      <Txt tone="muted" as="span" variant="caption">
         {active.length === 1
           ? (active[0]?.accountLabel ?? `${meta.displayName} connected`)
           : `${active.length} ${meta.displayName} accounts connected`}
@@ -647,7 +647,7 @@ export function IntakeSection() {
   }
   if (configQuery.isError || !config) {
     return (
-      <Txt as="p" variant="caption" className="text-muted-foreground">
+      <Txt tone="muted" as="p" variant="caption">
         Intake configuration is unavailable. Connect GitHub, GitLab, Linear, Jira, or incident.io first.
       </Txt>
     );

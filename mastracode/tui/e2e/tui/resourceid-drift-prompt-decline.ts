@@ -70,9 +70,14 @@ export const resourceidDriftPromptDeclineScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Project:/i, terminal, 10_000);
 
     terminal.submit('/thread');
-    await runtime.waitForScreenText(/Title: \(untitled\)/i, terminal, 10_000);
+    await runtime.waitForScreenText(/No active thread/i, terminal, 10_000);
     await runtime.waitForScreenText(/Pending new thread: yes/i, terminal, 5_000);
     runtime.printScreen('after declining clone', terminal);
+
+    const threadCount = Number(queryValue(scenarioDbPath, 'select count(*) from mastra_threads;'));
+    if (threadCount !== 1) {
+      throw new Error(`Expected only the old-resource thread to remain, found ${threadCount} threads`);
+    }
 
     const oldThreadResourceId = queryValue(
       scenarioDbPath,

@@ -1,8 +1,7 @@
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useUpdateConnection } from '@mastra/react/hooks/tool-providers';
 import { useEffect, useRef } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-
-import { useUpdateConnection } from '../hooks/use-update-connection';
 
 const LABEL_SAVE_DEBOUNCE_MS = 400;
 

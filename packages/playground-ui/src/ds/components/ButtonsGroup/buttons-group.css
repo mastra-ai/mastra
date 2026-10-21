@@ -30,19 +30,16 @@
   [data-slot='buttons-group'] {
     --segment-height: var(--spacing-control-md);
     --segment-glyph: var(--spacing-icon-md);
-    --segment-glyph-stroke: 1.5;
   }
 
   [data-slot='buttons-group'][data-size='sm'] {
     --segment-height: var(--spacing-control-sm);
     --segment-glyph: var(--spacing-icon-sm);
-    --segment-glyph-stroke: 1.75;
   }
 
   [data-slot='buttons-group'][data-size='lg'] {
     --segment-height: var(--spacing-control-lg);
     --segment-glyph: var(--spacing-icon-lg);
-    --segment-glyph-stroke: 1.25;
   }
 
   /* An InputGroup wrapping a textarea or a stacked addon is deliberately auto-height and
@@ -69,7 +66,6 @@
   [data-slot='buttons-group'] > :not([data-slot='buttons-group-text']) > svg {
     width: var(--segment-glyph);
     height: var(--segment-glyph);
-    stroke-width: var(--segment-glyph-stroke);
   }
 
   /* The control inside an InputGroup is sized to the root's content box, so it follows the
@@ -122,7 +118,7 @@
      hover and open together, and a grouped trigger reads like the same trigger standing
      alone. The inset also clips to the padding box, so the wash cannot composite through
      the translucent border and lighten it — which is the whole point. */
-  [data-slot='buttons-group'] > .shadow-raised {
+  [data-slot='buttons-group'] > :is(.shadow-raised, .shadow-input) {
     box-shadow: inset 0 0 0 9999px var(--surface-tint);
     border-width: 1px;
   }
@@ -130,9 +126,12 @@
   /* One border per seam, and no overlap. A border is a translucent alpha of the
      foreground, so two 1px edges collapsed onto the same pixel (the `-ml-px` trick) stack
      to double the alpha and out-read the ring around the group. The left segment owns the
-     seam with its right border; the segment after it drops its left edge entirely. */
+     seam with its right border; the segment after it drops its left edge entirely.
+     `~` rather than `:not(:first-child)`: an open Popover puts a focus guard BEFORE its
+     trigger, which would otherwise strip the first segment's leading corner. */
   [data-slot='buttons-group'][data-orientation='horizontal']
-    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(:first-child) {
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
+    ~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]) {
     border-left-width: 0;
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
@@ -156,7 +155,8 @@
   /* Vertical mirrors it: the top segment owns the seam. The children are capsules, so the
      outer ends are re-rounded to the container radius. */
   [data-slot='buttons-group'][data-orientation='vertical']
-    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(:first-child) {
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns])
+    ~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]) {
     border-top-width: 0;
     border-top-left-radius: 0;
     border-top-right-radius: 0;
@@ -168,12 +168,18 @@
     border-bottom-right-radius: 0;
   }
 
-  [data-slot='buttons-group'][data-orientation='vertical'] > :first-child {
+  [data-slot='buttons-group'][data-orientation='vertical']
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
+      :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]) ~ *
+    ) {
     border-top-left-radius: var(--radius-xl);
     border-top-right-radius: var(--radius-xl);
   }
 
-  [data-slot='buttons-group'][data-orientation='vertical'] > :last-child {
+  [data-slot='buttons-group'][data-orientation='vertical']
+    > :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]):not(
+      :has(~ :not([aria-hidden='true'], [data-base-ui-focus-guard], [aria-owns]))
+    ) {
     border-bottom-left-radius: var(--radius-xl);
     border-bottom-right-radius: var(--radius-xl);
   }

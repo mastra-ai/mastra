@@ -1,7 +1,7 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useAgents } from '@mastra/react/hooks/agents';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 export type TargetType = 'agent' | 'workflow' | 'scorer';
@@ -11,6 +11,8 @@ export interface TargetSelectorProps {
   setTargetType: (type: TargetType | '') => void;
   targetId: string;
   setTargetId: (id: string) => void;
+  /** Reports the picked target's display name, or undefined when the target is cleared. */
+  onTargetNameChange?: (name?: string) => void;
   container?: React.RefObject<HTMLElement | null>;
 }
 
@@ -20,7 +22,14 @@ const targetTypeOptions = [
   { value: 'scorer', label: 'Scorer' },
 ];
 
-export function TargetSelector({ targetType, setTargetType, targetId, setTargetId, container }: TargetSelectorProps) {
+export function TargetSelector({
+  targetType,
+  setTargetType,
+  targetId,
+  setTargetId,
+  onTargetNameChange,
+  container,
+}: TargetSelectorProps) {
   const { data: agents, isLoading: agentsLoading } = useAgents();
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows({});
   const { data: scorers, isLoading: scorersLoading } = useScorers();
@@ -53,6 +62,12 @@ export function TargetSelector({ targetType, setTargetType, targetId, setTargetI
   const handleTypeChange = (value: string) => {
     setTargetType(value as TargetType);
     setTargetId('');
+    onTargetNameChange?.(undefined);
+  };
+
+  const handleTargetChange = (id: string) => {
+    setTargetId(id);
+    onTargetNameChange?.(targetOptions.find(option => option.value === id)?.label || id);
   };
 
   const targetLabel = targetType === 'agent' ? 'Agent' : targetType === 'workflow' ? 'Workflow' : 'Scorer';
@@ -78,7 +93,7 @@ export function TargetSelector({ targetType, setTargetType, targetId, setTargetI
           <Combobox
             options={targetOptions}
             value={targetId}
-            onValueChange={setTargetId}
+            onValueChange={handleTargetChange}
             placeholder={`Select ${targetType}`}
             searchPlaceholder="Search..."
             emptyText="No targets available"

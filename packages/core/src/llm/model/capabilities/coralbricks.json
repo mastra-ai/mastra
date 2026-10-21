@@ -1,5 +1,13 @@
 {
-  "attachment": ["deepseek-v4.1-flash-fast-fp4", "glm-5.3-flash-fp4"],
-  "temperature": ["deepseek-v4.1-flash-fast-fp4", "glm-5.3-flash-fp4", "glm-5.3-fp4"],
-  "structuredOutput": ["deepseek-v4.1-flash-fast-fp4", "glm-5.3-flash-fp4", "glm-5.3-fp4"]
+  "attachment": ["deepseek-v4.1-flash-fast"],
+  "temperature": ["deepseek-v4.1-flash-fast"],
+  "structuredOutput": ["deepseek-v4.1-flash-fast"],
+  "reasoning": {
+    "deepseek-v4.1-flash-fast": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ]
+  }
 }

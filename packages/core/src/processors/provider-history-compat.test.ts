@@ -9,11 +9,13 @@ import {
   anthropicStripForeignReasoningContent,
   azureSystemReminderTransform,
   cerebrasStripReasoningContent,
+  ensureUserFirstTurn,
   isMaybeAnthropic,
   isMaybeAnthropicWithoutAssistantPrefill,
   isMaybeAzure,
   isMaybeCerebras,
   isMaybeGoogleWithoutTrailingModelTurn,
+  isMaybeRequiringUserFirstTurn,
   ProviderHistoryCompat,
   stripForeignProviderExecutedTools,
 } from './provider-history-compat';
@@ -433,6 +435,70 @@ describe('isMaybeAzure', () => {
   });
 });
 
+describe('isMaybeRequiringUserFirstTurn', () => {
+  it('matches Bedrock and Google/Vertex provider and gateway forms', () => {
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'amazon-bedrock', modelId: 'amazon.nova-lite-v1:0' })).toBe(true);
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'gateway', modelId: 'amazon/nova-lite' })).toBe(true);
+    expect(isMaybeRequiringUserFirstTurn('amazon-bedrock/anthropic.claude-sonnet-4-5')).toBe(true);
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'google.generative-ai', modelId: 'gemini-2.5-flash' })).toBe(true);
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'google.vertex.chat', modelId: 'gemini-2.5-flash' })).toBe(true);
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'openrouter', modelId: 'google/gemini-2.5-flash' })).toBe(true);
+  });
+
+  it('rejects providers that accept a leading assistant turn', () => {
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'openai.responses', modelId: 'gpt-4o-mini' })).toBe(false);
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'anthropic.messages', modelId: 'claude-haiku-4-5' })).toBe(false);
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'groq.chat', modelId: 'openai/gpt-oss-20b' })).toBe(false);
+    expect(isMaybeRequiringUserFirstTurn({ provider: 'mistral.chat', modelId: 'mistral-small-latest' })).toBe(false);
+    expect(isMaybeRequiringUserFirstTurn(undefined)).toBe(false);
+  });
+});
+
+describe('ensureUserFirstTurn', () => {
+  const bedrock = { provider: 'amazon-bedrock', modelId: 'amazon.nova-lite-v1:0' };
+  const gemini = { provider: 'google.generative-ai', modelId: 'gemini-2.5-flash' };
+  const openai = { provider: 'openai.responses', modelId: 'gpt-4o-mini' };
+  const greeting: LanguageModelV2Prompt = [
+    { role: 'system', content: 'Be terse.' },
+    { role: 'assistant', content: [{ type: 'text', text: 'Hi! How can I help?' }] },
+    { role: 'user', content: [{ type: 'text', text: 'What is 2+2?' }] },
+  ];
+
+  it.each([
+    ['Bedrock', bedrock],
+    ['Gemini', gemini],
+  ])('inserts a user turn after system messages for %s', (_name, model) => {
+    const result = ensureUserFirstTurn.applyToPrompt({ prompt: greeting, model });
+
+    expect(result).toEqual([
+      greeting[0],
+      { role: 'user', content: [{ type: 'text', text: '.' }] },
+      greeting[1],
+      greeting[2],
+    ]);
+    expect(greeting).toHaveLength(3);
+  });
+
+  it('leaves the prompt alone for providers that accept a leading assistant turn', () => {
+    expect(ensureUserFirstTurn.applyToPrompt({ prompt: greeting, model: openai })).toBeUndefined();
+  });
+
+  it('leaves user-first, system-only and empty prompts alone', () => {
+    expect(ensureUserFirstTurn.applyToPrompt({ prompt: greeting.slice(2), model: bedrock })).toBeUndefined();
+    expect(ensureUserFirstTurn.applyToPrompt({ prompt: greeting.slice(0, 1), model: bedrock })).toBeUndefined();
+    expect(ensureUserFirstTurn.applyToPrompt({ prompt: [], model: bedrock })).toBeUndefined();
+  });
+
+  it('runs as a default ProviderHistoryCompat rule', () => {
+    const handler = new ProviderHistoryCompat();
+
+    expect(handler.processLLMRequest(makeRequestArgs(greeting, bedrock))).toEqual({
+      prompt: [greeting[0], { role: 'user', content: [{ type: 'text', text: '.' }] }, greeting[1], greeting[2]],
+    });
+    expect(handler.processLLMRequest(makeRequestArgs(greeting, openai))).toBeUndefined();
+  });
+});
+
 describe('isMaybeCerebras', () => {
   it('matches the gateway-prefixed model id string', () => {
     expect(isMaybeCerebras('cerebras/zai-glm-4.7')).toBe(true);
@@ -774,6 +840,33 @@ describe('trailing assistant message protection', () => {
 
     expect(result).toBeDefined();
     expect((result![3].content as any[]).map(p => p.type)).toEqual(['reasoning', 'tool-call']);
+  });
+
+  it('omits assistant messages that become empty after stripping foreign reasoning', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'reasoning',
+            text: 'foreign thinking only',
+            providerOptions: { openai: { itemId: 'rs_123' } },
+          },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'what is 2+2?' }] },
+    ];
+
+    const result = anthropicStripForeignReasoningContent.applyToPrompt!({
+      prompt,
+      model: anthropicModel,
+    });
+
+    expect(result).toBeDefined();
+    expect(result!.length).toBe(2);
+    expect(result![0].role).toBe('user');
+    expect(result![1].role).toBe('user');
   });
 });
 

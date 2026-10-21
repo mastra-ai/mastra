@@ -37,6 +37,11 @@ export type FilterBarProps = FilterBarValueProps & {
   /** How deep advanced-filter groups may nest (root-level group = 1). Defaults to 3. */
   maxDepth?: number;
   'aria-label'?: string;
+  /**
+   * Text shown in a value list when the field's `suggestions` resolver rejects, for example
+   * to explain a server limit. Return `undefined` to keep the default "Couldn't load values.".
+   */
+  describeSuggestionsError?: (error: unknown) => string | undefined;
   /** Accessible label of the trailing "remove every filter" button. */
   clearLabel?: string;
   className?: string;
@@ -100,6 +105,7 @@ export function FilterBar({
   createItemId,
   maxDepth,
   'aria-label': ariaLabel = 'Filters',
+  describeSuggestionsError,
   clearLabel = 'Clear filters',
   className,
   children,
@@ -113,6 +119,7 @@ export function FilterBar({
       createItemId={createItemId}
       maxDepth={maxDepth}
       ariaLabel={ariaLabel}
+      describeSuggestionsError={describeSuggestionsError}
     >
       <FilterBarSurface className={className} clearLabel={clearLabel}>
         {children}

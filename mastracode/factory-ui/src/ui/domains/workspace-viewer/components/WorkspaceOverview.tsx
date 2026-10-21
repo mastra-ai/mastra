@@ -1,50 +1,42 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { FileDiff, MessageSquare, NotepadText } from 'lucide-react';
 
-import type { WorkspaceChanges, WorkspaceFilesListing } from '../../../../api/types';
+import type { WorkspaceChanges } from '../../../../api/types';
+import { RecreateSandboxAction } from './RecreateSandboxAction';
+import type { RecreateSandboxTarget } from './RecreateSandboxAction';
 import { WorkspaceOverviewStatus } from './WorkspaceOverviewStatus';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 interface WorkspaceOverviewProps {
-  listing?: WorkspaceFilesListing;
   changes?: WorkspaceChanges;
-  filesLoading: boolean;
   changesLoading: boolean;
-  filesError?: Error;
   changesError?: Error;
   onShowFiles: () => void;
   onShowChanges: () => void;
   /** From the board snapshot the thread already polls; absent when the thread has no work item. */
   commentCount?: number;
   onShowComments?: () => void;
-}
-
-function fileSummary(count: number) {
-  if (count === 0) return 'No files';
-  return `${count} ${count === 1 ? 'file' : 'files'}`;
+  /** Present only when the server says the viewer may recreate this session's sandbox. */
+  recreateSandbox?: RecreateSandboxTarget;
 }
 
 function changesSummary(changes: WorkspaceChanges | undefined) {
-  if (!changes?.available) return 'No sandbox';
+  if (!changes?.available) return null;
   if (changes.changes.length === 0) return 'No changes';
   return `${changes.changes.length} changed`;
 }
 
 export function WorkspaceOverview({
-  listing,
   changes,
-  filesLoading,
   changesLoading,
-  filesError,
   changesError,
   onShowFiles,
   onShowChanges,
   commentCount,
   onShowComments,
+  recreateSandbox,
 }: WorkspaceOverviewProps) {
-  const fileCount = listing?.files.length ?? 0;
   const changeCount = changes?.changes.length ?? 0;
-  const fileLabel = fileSummary(fileCount);
   const changesLabel = changesSummary(changes);
   const hasChangeStats =
     changes?.available === true &&
@@ -52,10 +44,10 @@ export function WorkspaceOverview({
     changes.additions !== undefined &&
     changes.deletions !== undefined;
   const changesStatus = hasChangeStats ? (
-    <span className="flex items-center gap-1 font-mono tabular-nums">
+    <Txt as="span" variant="body-sm" className="flex items-center gap-1 tabular-nums">
       <span className="text-success-indicator">+{changes.additions}</span>
       <span className="text-destructive-foreground">−{changes.deletions}</span>
-    </span>
+    </Txt>
   ) : (
     <span className="text-muted-foreground">{changesLabel}</span>
   );
@@ -74,11 +66,6 @@ export function WorkspaceOverview({
       <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowFiles}>
         <NotepadText />
         <span>Files</span>
-        <Txt as="span" variant="meta" className="ml-auto">
-          <WorkspaceOverviewStatus loading={filesLoading} error={filesError}>
-            <span className="text-muted-foreground">{fileLabel}</span>
-          </WorkspaceOverviewStatus>
-        </Txt>
       </Button>
       {onShowComments ? (
         <Button className="w-full justify-start" size="sm" variant="ghost" onClick={onShowComments}>
@@ -88,6 +75,14 @@ export function WorkspaceOverview({
             {commentCount === 0 ? 'None yet' : commentCount}
           </Txt>
         </Button>
+      ) : null}
+      {recreateSandbox ? (
+        <RecreateSandboxAction
+          target={recreateSandbox}
+          changes={changes}
+          changesLoading={changesLoading}
+          changesError={changesError}
+        />
       ) : null}
     </aside>
   );

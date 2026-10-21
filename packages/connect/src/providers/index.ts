@@ -7,6 +7,7 @@ import { clerkProvider } from './clerk/index.js';
 import { discordProvider } from './discord/index.js';
 import { firefliesProvider } from './fireflies/index.js';
 import { githubProvider } from './github/index.js';
+import { googleAnalyticsProvider } from './google-analytics/index.js';
 import { googleCalendarProvider } from './google-calendar/index.js';
 import { googleDocsProvider } from './google-docs/index.js';
 import { googleDriveProvider } from './google-drive/index.js';
@@ -34,6 +35,7 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   discordProvider,
   firefliesProvider,
   githubProvider,
+  googleAnalyticsProvider,
   googleCalendarProvider,
   googleDocsProvider,
   googleDriveProvider,

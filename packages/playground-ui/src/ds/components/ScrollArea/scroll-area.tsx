@@ -253,10 +253,20 @@ type ScrollAreaViewportContextValue = {
 const ScrollAreaViewportContext = React.createContext<ScrollAreaViewportContextValue | null>(null);
 
 export type ScrollAreaViewportProps = {
+  /**
+   * Viewport layout and scroll chaining overrides. Chaining stays native by default;
+   * use `overscroll-y-contain` to isolate vertical scrolling while allowing browser history swipes.
+   */
   className?: string;
+  contentClassName?: string;
   children?: React.ReactNode;
   /** The scrolling element, e.g. a virtualizer's `getScrollElement`. */
   ref?: React.Ref<HTMLDivElement>;
+  /**
+   * Renders the scrolling element as another component, for a library that has to own it
+   * (e.g. Base UI's `Select.List`, which Select scrolls to line the selected item up with the trigger).
+   */
+  render?: React.ComponentProps<typeof ScrollAreaPrimitive.Viewport>['render'];
 };
 
 function useScrollAreaViewportContext() {
@@ -265,7 +275,7 @@ function useScrollAreaViewportContext() {
   return viewport;
 }
 
-function ScrollAreaViewport({ className, children, ref }: ScrollAreaViewportProps) {
+function ScrollAreaViewport({ className, contentClassName, children, ref, render }: ScrollAreaViewportProps) {
   const viewport = useScrollAreaViewportContext();
   const { areaRef } = viewport;
   const viewportRef = React.useMemo(() => mergeRefs(areaRef, ref), [areaRef, ref]);
@@ -275,8 +285,9 @@ function ScrollAreaViewport({ className, children, ref }: ScrollAreaViewportProp
       ref={viewportRef}
       className={cn(viewport.className, className)}
       style={viewport.style}
+      render={render}
     >
-      <ScrollAreaPrimitive.Content style={viewport.contentStyle}>
+      <ScrollAreaPrimitive.Content className={contentClassName} style={viewport.contentStyle}>
         <ScrollAreaViewportContext value={null}>{children}</ScrollAreaViewportContext>
       </ScrollAreaPrimitive.Content>
     </ScrollAreaPrimitive.Viewport>
@@ -354,13 +365,17 @@ function ScrollBar({
 }: React.ComponentProps<typeof ScrollAreaPrimitive.Scrollbar> & { revealOnHover?: boolean }) {
   return (
     <ScrollAreaPrimitive.Scrollbar
+      data-slot="scroll-area-scrollbar"
       orientation={orientation}
       className={cn(
         'flex touch-none transition-opacity duration-normal ease-out-custom select-none',
         'opacity-0 data-[scrolling]:opacity-100 data-[scrolling]:duration-0',
         revealOnHover && 'data-[hovering]:opacity-100',
-        orientation === 'vertical' && 'h-full w-1.5 p-px',
-        orientation === 'horizontal' && 'h-1.5 w-full flex-col p-px',
+        // Base UI pins the bar to both ends of the area (top/bottom or left/right), so it spans it
+        // without a size class. `--scroll-area-scrollbar-inset` pulls its ends in, so a rounded
+        // container (a popup) doesn't clip them; 0 by default.
+        orientation === 'vertical' && 'my-(--scroll-area-scrollbar-inset,0px) w-1.5 p-px',
+        orientation === 'horizontal' && 'mx-(--scroll-area-scrollbar-inset,0px) h-1.5 flex-col p-px',
         className,
       )}
       {...props}

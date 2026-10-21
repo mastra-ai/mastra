@@ -23,6 +23,7 @@ constructor({
   id?: string;
   servers: Record<string, MastraMCPServerDefinition>;
   timeout?: number;
+  clientInfo?: { name?: string; version?: string };
 }: MCPClientOptions)
 ```
 
@@ -52,6 +53,20 @@ constructor({
     defaultValue: '60000',
     description: 'Global timeout value in milliseconds for all servers unless overridden in individual server configs.',
   },
+  {
+    name: 'clientInfo',
+    type: '{ name?: string; version?: string }',
+    isOptional: true,
+    description:
+      "Client name and version every server receives on connect and with each request, so servers can attribute traffic to your application. Defaults to the server key as `name` and `'1.0.0'` as `version`. Individual server configs can override either field with their own `clientInfo`. Doesn't change tool name prefixes, which always use the server key.",
+  },
+  {
+    name: 'webhook',
+    type: 'MCPClientWebhookOptions',
+    isOptional: true,
+    description:
+      'Experimental. Enables webhook delivery for [MCP events](#webhook-delivery). Servers POST occurrences to `webhook.url`, which must route to `events.handleWebhook()`.',
+  },
 ]}
 />
 
@@ -62,7 +77,7 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
 - If `command` is provided, it uses the Stdio transport.
 - If `url` is provided, it uses the Streamable HTTP transport.
 
-The client speaks the MCP `2026-07-28` revision. On connect it asks the server which revisions it offers (`server/discover`) and falls back to the pre-2026 `initialize` handshake for servers that haven't upgraded, so tools, resources and prompts keep working against either. Features the older revisions lack (`resources.subscribe()`, `inputRequests`) fail with an error naming the negotiated revision. Set `protocolVersion` to skip the probe.
+The client speaks the MCP `2026-07-28` revision. On connect it asks the server which revisions it offers (`server/discover`) and falls back to the pre-2026 `initialize` handshake for servers that haven't upgraded, so tools, resources and prompts keep working against either. Features the older revisions lack (`resources.subscribe()`, `inputRequests`) fail with an error naming the negotiated revision. `onListChanged()` handlers work against either revision, since older servers send list-changed notifications without a `subscriptions/listen` stream. Set `protocolVersion` to skip the probe.
 
 <br />
 
@@ -140,6 +155,13 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
     description: 'Server-specific timeout in milliseconds. Falls back to the client-level `timeout` when omitted.',
   },
   {
+    name: 'clientInfo',
+    type: '{ name?: string; version?: string }',
+    isOptional: true,
+    description:
+      'Overrides the top-level `clientInfo` for this server. Fields you set replace the top-level values; fields you omit keep them.',
+  },
+  {
     name: 'capabilities',
     type: 'MCPClientCapabilities',
     isOptional: true,
@@ -188,7 +210,7 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
     type: '() => MCPTraceContext | undefined',
     isOptional: true,
     description:
-      'Returns the W3C `traceparent`, optional `tracestate` and `baggage` to send as request `_meta` on every call to this server. Called when each request is sent so it can read a request-local carrier. Explicit `_meta` keys on a tool call take precedence. Servers built with `MCPServer` expose the received values to tools as `requestContext.get("traceContext")`; they are observability data and are never used for authorization.',
+      'Returns the W3C `traceparent`, optional `tracestate` and `baggage` to send as request `_meta` on every call to this server. Called when each request is sent so it can read a request-local carrier. Without this option, a tool call made by a traced agent or workflow sends the `traceparent` of its tool call span. When the reply names the server span that handled the call, as `MCPServer` does, the tool call span links to it. Set this option to send your own trace context, or return `undefined` to send none. Explicit `_meta` keys on a tool call take precedence. Servers built with `MCPServer` link their request span to the span the `traceparent` names and expose the received values to tools as `requestContext.get("traceContext")`; they are observability data and are never used for authorization.',
   },
   {
     name: 'forwardInstructions',
@@ -218,7 +240,7 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
     isOptional: true,
     defaultValue: "'throw'",
     description:
-      "How to handle tool execution failures the server reports in-band with `isError: true`. `'throw'` raises a `MastraError` carrying the server's error text, so the failure reaches tool spans, stream chunks, scorers, and the model. `'return'` resolves with the raw result and ignores `isError`.",
+      "How to handle tool execution failures the server reports in-band with `isError: true`. `'throw'` raises a `MastraError` carrying the server's error text, so the failure reaches tool spans, stream chunks, scorers, and the model. Any `structuredContent` is kept on `error.details.structuredContent` as a JSON string. `'return'` resolves with the full `CallToolResult` (`isError`, `content`, and `structuredContent`) instead of throwing.",
   },
   {
     name: 'jsonSchemaValidator',
@@ -514,6 +536,23 @@ await mcp.listTools()
 
 const instructionsByServer = mcp.getServerInstructions()
 console.log(instructionsByServer.db)
+```
+
+### `getServerInfo()`
+
+Returns the identity each configured MCP server announced when it connected (its `serverInfo`, from the `server/discover` result or, for servers on an older revision, the `initialize` handshake): `name` and `version`, plus `title`, `description`, `websiteUrl`, and `icons` when the server provides them. A server's entry is `undefined` if it hasn't connected yet, or if it connected over the `2026-07-28` revision without announcing an identity, which that revision allows. Don't use it to check whether a server is connected. The values come from the remote server and aren't validated, so treat icon and website URLs as untrusted.
+
+```typescript oxfmt:false
+getServerInfo(): Record<string, MCPServerImplementation | undefined>
+```
+
+Example:
+
+```typescript
+await mcp.listTools()
+
+const info = mcp.getServerInfo()
+console.log(info.myServer?.title, info.myServer?.version)
 ```
 
 ### `authenticate()`
@@ -887,6 +926,373 @@ Notes:
 
 - When `enableProgressTracking` is true, tool calls include a `progressToken` so you can correlate updates to a specific run. Servers only send progress for requests that carry a token.
 - If you pass a `runId` when executing a tool, it will be used as the `progressToken`.
+
+### `events` Property (experimental)
+
+The `events` property lists and subscribes to server events from servers that implement the [MCP Events extension (SEP-3415)](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415). Use it to react to things that happen on the server, such as a push to a repository, without polling a tool.
+
+For an end-to-end walkthrough, see the [MCP events guide](/docs/guides/mcp-events).
+
+:::warning
+SEP-3415 is a draft. This API may change in any release.
+:::
+
+```typescript
+const events = await mcpClient.events.list('github')
+
+const subscription = await mcpClient.events.subscribe(
+  'github',
+  'repo.push',
+  { repo: 'mastra-ai/mastra' },
+  { cursor: await loadCursor() },
+)
+
+for await (const event of subscription) {
+  await handlePush(event.data)
+  // Safe to persist after each handled occurrence
+  await saveCursor(subscription.cursor)
+}
+```
+
+Servers that don't advertise the `io.modelcontextprotocol/events` extension receive no `events/*` requests. `list()` rejects with a `MastraError` whose id is `MCP_CLIENT_LIST_EVENTS_FAILED`, and `subscribe()` rejects with `MCP_CLIENT_SUBSCRIBE_EVENT_FAILED`. In both cases `error.cause.id` is `MCP_EVENTS_NOT_SUPPORTED`. Other `list()` and `subscribe()` failures use the same two ids, with the specific reason in `error.cause`.
+
+#### `events.list(serverName: string)`
+
+Returns every event type the server offers, following pagination. Each descriptor has a `name`, an optional `description`, the `delivery` modes the server supports, and optional `inputSchema` and `payloadSchema`.
+
+```typescript oxfmt:false
+async list(serverName: string): Promise<MCPEventDescriptor[]>
+```
+
+The client doesn't receive notifications when the server's event list changes yet. Call `list()` again to pick up new event types.
+
+#### `events.subscribe(serverName, eventName, args?, options?)`
+
+Starts a subscription and resolves once the server confirms it. Errors such as an unknown event, invalid arguments, or a forbidden subscription reject the returned promise.
+
+```typescript oxfmt:false
+async subscribe(
+  serverName: string,
+  eventName: string,
+  args?: Record<string, unknown>,
+  options?: MCPEventSubscribeOptions,
+): Promise<MCPEventSubscription>
+```
+
+The client picks the first mode the event offers in this order: `webhook` (only when the client has [`webhook` settings](#webhook-delivery)), `push` (a long-lived `events/stream` request), then `poll` (repeated `events/poll` requests). Pass `options.delivery` to force a mode.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'delivery',
+    type: "'webhook' | 'push' | 'poll'",
+    isOptional: true,
+    description:
+      "Forces a delivery mode. When the event doesn't offer it, or for `webhook` without client `webhook` settings, `subscribe()` rejects with `MCP_CLIENT_SUBSCRIBE_EVENT_FAILED` and `error.cause.id` is `MCP_EVENTS_NO_COMPATIBLE_DELIVERY_MODE` or `MCP_EVENTS_WEBHOOK_NOT_CONFIGURED`.",
+  },
+  {
+    name: 'cursor',
+    type: 'string | null',
+    isOptional: true,
+    description: 'Resumes from a cursor saved earlier. Omit or pass `null` to start from now.',
+  },
+  {
+    name: 'maxAgeMs',
+    type: 'number',
+    isOptional: true,
+    description: 'Asks the server not to replay occurrences older than this.',
+  },
+  {
+    name: 'maxEvents',
+    type: 'number',
+    isOptional: true,
+    description: 'Maximum occurrences per poll response. Poll mode only.',
+  },
+  {
+    name: 'minPollIntervalMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description: 'Lower bound for the wait between polls, applied to the server-suggested `nextPollMs`.',
+  },
+  {
+    name: 'heartbeatTimeoutMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '60000',
+    description:
+      'Push mode reopens the stream from the last cursor after this long without any message from the server.',
+  },
+  {
+    name: 'streamOpenTimeoutMs',
+    type: 'number',
+    isOptional: true,
+    description: 'How long to wait for the server to confirm a push stream. Defaults to the server request timeout.',
+  },
+  {
+    name: 'dedupWindow',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description: 'Number of recent event ids remembered to drop duplicate occurrences.',
+  },
+  {
+    name: 'maxBufferedEvents',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description:
+      "Most occurrences held while your loop isn't reading. When full, the oldest unread occurrence is dropped, the next one has `truncated` set, and `onError` receives `MCP_EVENTS_BUFFER_OVERFLOW`.",
+  },
+  {
+    name: 'retry',
+    type: '{ initialDelayMs?: number; maxDelayMs?: number; factor?: number; maxAttempts?: number }',
+    isOptional: true,
+    description:
+      'Backoff with full jitter for transient failures. Defaults to 1000 ms initial delay, 30000 ms maximum, factor 2, unlimited retries.',
+  },
+  {
+    name: 'signal',
+    type: 'AbortSignal',
+    isOptional: true,
+    description: 'Aborting it cancels the subscription.',
+  },
+]}
+/>
+
+The returned `MCPEventSubscription` is an async iterable of occurrences (`eventId`, `name`, `timestamp`, `data`) with these members:
+
+- `cursor`: The latest position that's safe to persist. It never moves past an occurrence your loop hasn't received yet. It's `null` when the event type doesn't support replay.
+- `truncated`: `true` when the server reported a gap right before the occurrence your loop received last, for example because the saved cursor was older than its retention window. Read it inside the loop: it's `true` for the first occurrence after the gap and `false` for the ones after it.
+- `mode`: The delivery mode in use, `'webhook'`, `'push'`, or `'poll'`.
+- `deliveryStatus`: Webhook mode only. The server's latest report on delivery to your webhook URL (`active`, `lastDeliveryAt`, `lastError`, `failedSince`), updated on each refresh.
+- `onError(handler)`: Receives recoverable errors, such as a dropped stream that the client is reopening. Returns a function that removes the handler.
+- `cancel()`: Stops the subscription and ends the iterator. Breaking out of a `for await` loop also cancels it.
+
+The iterator throws a `MastraError` directly (not wrapped) when the subscription can't continue: `MCP_EVENTS_SUBSCRIPTION_FAILED` for a non-retryable server error, `MCP_EVENTS_SUBSCRIPTION_TERMINATED` when the server ends a push or webhook subscription, or `MCP_EVENTS_RETRIES_EXHAUSTED` after `retry.maxAttempts` failed attempts in a row. The client reopens dropped streams and resumes polling from the last cursor after a reconnect, including after `reconnectServer()`. `disconnect()` ends all subscriptions.
+
+#### `events.handleWebhook(request: Request)`
+
+Handles one webhook delivery and returns the response to send back. Mount it on the route that `webhook.url` points at.
+
+```typescript oxfmt:false
+async handleWebhook(request: Request): Promise<Response>
+```
+
+It verifies the Standard Webhooks signature on the raw body before parsing it, answers the server's verification handshake, and routes occurrences to their subscription by the `X-MCP-Subscription-Id` header. It responds with:
+
+- `200` after the occurrence is handed to its subscription, or with the echoed challenge for a verification request.
+- `401` when the signature is invalid or the timestamp is more than 5 minutes old.
+- `503` when the subscription id isn't known yet, so the server retries. This covers deliveries that arrive before the subscribe response.
+- `400` for a signed but malformed body, and `405` for methods other than `POST`.
+- `413` for a body over 1 MiB. The body is read only up to that limit, before any other check.
+- `404` when the client has no `webhook` settings.
+
+#### Webhook delivery
+
+With `webhook` settings, the client registers each subscription with `events/subscribe` and the server POSTs occurrences to your URL. The server must authenticate the client, and the URL must be publicly reachable over `https`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { registerApiRoute } from '@mastra/core/server'
+import { MCPClient } from '@mastra/mcp'
+
+export const mcpClient = new MCPClient({
+  servers: {
+    github: {
+      url: new URL('https://mcp.example.com/mcp'),
+      requestInit: { headers: { Authorization: `Bearer ${process.env.GITHUB_MCP_TOKEN}` } },
+    },
+  },
+  webhook: { url: 'https://agent.example.com/mcp/webhook' },
+})
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute('/mcp/webhook', {
+        method: 'POST',
+        // Deliveries are authenticated by their signature, not by Mastra auth
+        requiresAuth: false,
+        handler: c => mcpClient.events.handleWebhook(c.req.raw),
+      }),
+    ],
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'url',
+    type: 'string',
+    description: 'Public `https` URL that routes to `events.handleWebhook()`.',
+  },
+  {
+    name: 'secret',
+    type: 'string',
+    isOptional: true,
+    description:
+      "A `whsec_` signing secret used for every subscription. By default the client generates a fresh secret for each subscription, so one server can't sign deliveries for another server's subscriptions.",
+  },
+  {
+    name: 'ttlMs',
+    type: 'number | null',
+    isOptional: true,
+    description:
+      'Suggested subscription lifetime. `null` asks for no expiry, which the server may decline. Defaults to the server default.',
+  },
+  {
+    name: 'refreshMarginMs',
+    type: 'number',
+    isOptional: true,
+    description:
+      'How long before the server-granted `refreshBefore` time to refresh the subscription. Defaults to the smaller of 60 seconds and 20% of the grant.',
+  },
+]}
+/>
+
+The client refreshes each subscription before it expires by repeating `events/subscribe` with the latest cursor. When the server reports failing delivery in `deliveryStatus`, for example because your endpoint timed out, `onError` receives `MCP_EVENTS_WEBHOOK_DELIVERY_FAILING` with `lastError` in its details. The next refresh resumes a suspended subscription. `cancel()` sends `events/unsubscribe`.
+
+Webhook state lives in this process: run the receiving route in the same process as the `MCPClient` that subscribed.
+
+Webhook delivery needs an authenticated HTTP connection to the server, because the server ties each webhook subscription to the caller. Over stdio, or over HTTP without authentication, the server rejects `events/subscribe`; it also rejects new subscriptions once its webhook subscription cap is reached (`-32025`). A subscription that didn't force a mode then falls back to `push` or `poll`, and the first `onError` handler receives `MCP_EVENTS_WEBHOOK_UNAVAILABLE` with the rejection `code` and the `fallback` mode in its details. Forcing `delivery: 'webhook'` rejects instead.
+
+Subscriptions on one server with the same event name and arguments share a single server-side webhook subscription. Each one gets every occurrence through its own iterator, and the client sends `events/unsubscribe` only when the last of them is cancelled.
+
+### Events in agents and workflows (experimental)
+
+`MCPEventsSignalProvider` delivers MCP server events to agent threads as notifications. Add it to an agent's `signals`, then subscribe threads to events. The agent needs a notifications storage domain, which `InMemoryStore` and the standard storage adapters provide.
+
+:::warning
+SEP-3415 is a draft. This API may change in any release.
+:::
+
+```typescript title="src/mastra/agents/repo-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { MCPClient, MCPEventsSignalProvider } from '@mastra/mcp'
+
+const mcp = new MCPClient({
+  servers: { github: { url: new URL('https://example.com/mcp') } },
+})
+
+export const repoEvents = new MCPEventsSignalProvider({
+  client: mcp,
+  subscribeOptions: { maxAgeMs: 60 * 60 * 1000 },
+})
+
+export const repoAgent = new Agent({
+  id: 'repo-agent',
+  name: 'Repo Agent',
+  instructions: 'Triage repository activity.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  signals: [repoEvents],
+})
+
+await repoEvents.subscribeThread(
+  { resourceId: 'user-1', threadId: 'thread-1' },
+  { server: 'github', event: 'repo.push', args: { repo: 'mastra-ai/mastra' } },
+)
+```
+
+Threads that subscribe to the same server, event and arguments share one MCP subscription. Argument key order doesn't matter. Each occurrence becomes a notification with `kind: 'mcp-event'` and `attributes: { server, event }`. The raw occurrence is in `payload`. The notification `summary`, which is the only part the model reads, labels the event as untrusted and wraps its data, together with the server-advertised event name, in an `<untrusted-mcp-event-data>` block that the content can't close. When the server reports a gap, `attributes.truncated` is `true` and the summary says that events may have been skipped.
+
+If the subscription ends, for example because the server terminates it, each subscribed thread receives a `high` priority notification with `kind: 'mcp-event-subscription-ended'` and the threads are unsubscribed.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'client',
+    type: "Pick<MCPClient, 'events'>",
+    description: 'The client used to list and subscribe to events.',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "'mcp-events'",
+    description: 'Provider id, used as the notification `source`.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "'MCP Events'",
+    description: 'Display name.',
+  },
+  {
+    name: 'cursorStore',
+    type: 'MCPEventCursorStore',
+    isOptional: true,
+    defaultValue: 'InMemoryMCPEventCursorStore',
+    description:
+      'Stores the resume cursor for each subscription. Implement `get(key)`, `set(key, cursor)` and `delete(key)` with durable storage so a subscription continues from its last cursor when a thread is subscribed again after a restart. Only cursors are stored, not which threads are subscribed. Only non-null cursors are stored.',
+  },
+  {
+    name: 'subscribeOptions',
+    type: "Omit<MCPEventSubscribeOptions, 'cursor' | 'signal'>",
+    isOptional: true,
+    description: 'Options for every MCP subscription, for example `maxAgeMs` to bound the backlog replayed on resume.',
+  },
+  {
+    name: 'priority',
+    type: 'NotificationPriority',
+    isOptional: true,
+    defaultValue: "'medium'",
+    description: 'Priority of event notifications.',
+  },
+  {
+    name: 'coalesce',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      "Sets `coalesceKey: 'mcp-events:<key>'` on event notifications, whatever the provider `id`. Pending notifications from one subscription then merge, so a burst that arrives before the agent reads its inbox keeps only the latest occurrence. When off, every occurrence is its own notification.",
+  },
+  {
+    name: 'tools',
+    type: 'boolean | { servers: string[] }',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Gives the agent the `mcp_events_list`, `mcp_events_subscribe` and `mcp_events_unsubscribe` tools, which act on the current thread and require memory. Event descriptions and error messages from the server reach the model inside the same untrusted-data block as event data. Subscriptions made through the tools are lost on restart. Pass `servers` to limit them to those servers.',
+  },
+  {
+    name: 'onError',
+    type: '(error: unknown, info: { server: string; event: string; key: string }) => void',
+    isOptional: true,
+    description: 'Receives delivery, cursor store and subscription errors.',
+  },
+]}
+/>
+
+The provider has these methods:
+
+- `subscribeThread(thread, { server, event, args? })`: Subscribes a thread and resolves once the MCP subscription is confirmed. It resumes from the stored cursor. If the server rejects the subscription, the thread isn't subscribed and the promise rejects. Thread subscriptions are kept in memory only: after a restart, call `subscribeThread()` again for each thread that should keep receiving events.
+- `unsubscribeThread(thread, { server, event, args? })`: Resolves to `true` when the thread was subscribed. When the last thread leaves, the MCP subscription is cancelled and its stored cursor is deleted.
+- `stop()`: Cancels every MCP subscription and keeps the stored cursors, so a new provider with the same `cursorStore` resumes where this one stopped.
+- `MCPEventsSignalProvider.key({ server, event, args? })`: Returns the subscription key used by the cursor store.
+
+Delivery is at least once. The provider stores the cursor after it notifies the threads, so an occurrence notified right before a crash is replayed after the restart. The notification's `dedupeKey` includes the event id: if the first notification is still pending, the replay merges into it. If it was already delivered, the thread is notified again.
+
+To start a workflow run for each occurrence, iterate a subscription directly:
+
+```typescript title="src/mastra/triggers/repo-push.ts"
+const subscription = await mcp.events.subscribe(
+  'github',
+  'repo.push',
+  { repo: 'mastra-ai/mastra' },
+  { cursor: await loadCursor() },
+)
+
+process.once('SIGTERM', () => void subscription.cancel())
+
+for await (const event of subscription) {
+  const run = await triagePushWorkflow.createRun()
+  await run.start({ inputData: { eventId: event.eventId, push: event.data } })
+  if (subscription.cursor) await saveCursor(subscription.cursor)
+}
+```
 
 ## Answering input requests
 

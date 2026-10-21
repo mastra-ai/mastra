@@ -173,6 +173,36 @@ export function aiV4CoreMessageToV1PromptMessage(coreMessage: CoreMessageV4): La
 }
 
 /**
+ * Deep-copy plain objects with their keys sorted, so the serialized bytes of tool
+ * payloads depend only on content. Storage such as Postgres `jsonb` reorders object
+ * keys, and an unstable prompt busts provider prompt caches on resumed runs.
+ * Arrays keep their order; non-plain values (Dates, Uint8Arrays, class instances) pass through.
+ */
+function sortKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortKeysDeep);
+  }
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) {
+    return value;
+  }
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(value).sort()) {
+    // defineProperty keeps an own `__proto__` key as data instead of setting the prototype.
+    Object.defineProperty(sorted, key, {
+      value: sortKeysDeep((value as Record<string, unknown>)[key]),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return sorted;
+}
+
+/**
  * Convert an AI SDK V5 ModelMessage to a V2 LanguageModel prompt message.
  * Used for creating LLM prompt messages without AI SDK streamText/generateText.
  */
@@ -239,6 +269,7 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
         roleContent[role].push({
           ...part,
           toolName: sanitizeToolName(part.toolName),
+          input: sortKeysDeep(part.input),
         });
         break;
       }
@@ -247,13 +278,17 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
         if (role === `user`) {
           throw new Error(incompatibleMessage);
         }
+        // Providers read `output.type` unguarded (e.g. @ai-sdk/openai-compatible).
+        // An output-less tool result (lost result chunk, OM rewrite) must still
+        // present a valid LanguageModelV2ToolResultOutput shape.
+        const output = part.output ?? { type: 'json' as const, value: null };
         roleContent[role].push({
           ...part,
           toolName: sanitizeToolName(part.toolName),
-          // Providers read `output.type` unguarded (e.g. @ai-sdk/openai-compatible).
-          // An output-less tool result (lost result chunk, OM rewrite) must still
-          // present a valid LanguageModelV2ToolResultOutput shape.
-          output: part.output ?? { type: 'json' as const, value: null },
+          output:
+            output.type === 'json' || output.type === 'error-json'
+              ? { ...output, value: sortKeysDeep(output.value) as typeof output.value }
+              : output,
         });
         break;
       }

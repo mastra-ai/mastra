@@ -5,11 +5,12 @@ import type { ToolArgumentsInput } from './tool-presentation';
 
 export interface ToolCallArgumentsProps extends ToolArgumentsInput {
   'data-testid'?: string;
+  showFullContent?: boolean;
 }
 
-export function ToolCallArguments({ 'data-testid': testId, ...input }: ToolCallArgumentsProps) {
+export function ToolCallArguments({ 'data-testid': testId, showFullContent, ...input }: ToolCallArgumentsProps) {
   const edit = toolEdit(input.toolName, input.args);
-  if (edit) return <ToolCallEdit edit={edit} />;
+  if (edit) return <ToolCallEdit edit={edit} showFullContent={showFullContent} />;
 
   const text = visibleToolArgumentsText(input);
   if (!text) return null;

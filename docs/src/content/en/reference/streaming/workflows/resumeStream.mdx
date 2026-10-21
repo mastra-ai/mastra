@@ -120,6 +120,17 @@ if (result!.status === 'suspended') {
       {
         parameters: [
           {
+            name: 'nestUnderParent',
+            type: 'boolean',
+            isOptional: true,
+            description:
+              "Set to `true` together with `parentSpanId` to attach this run as a child of that span inside the existing trace, for example an LLM judge under the run it scores. Exporters then keep the trace's own name, input, output, and tags. Leave unset when `parentSpanId` comes from your own tracing system. Ignored without a valid `traceId` and `parentSpanId`.",
+          },
+        ],
+      },
+      {
+        parameters: [
+          {
             name: 'tags',
             type: 'string[]',
             isOptional: true,

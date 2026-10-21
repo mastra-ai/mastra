@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import '@/test/inert-resize-observer';
 import { SpanType } from '@mastra/core/observability';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -191,12 +191,12 @@ describe('TraceThreadItemView', () => {
 
       // Tool badges render in trace order: mcp-tool, client-tool, provider-tool.
       const [hotelBadge] = screen.getAllByTestId('tool-badge');
-      fireEvent.click(within(hotelBadge as HTMLElement).getAllByRole('button')[0] as HTMLElement);
+      fireEvent.click(within(hotelBadge).getAllByRole('button')[0]);
       expect(onHighlightSpans).not.toHaveBeenCalled();
 
       // Messages: user, workflow, mcp-tool, client-tool, provider-tool, assistant.
       const [, , hotelAction] = screen.getAllByRole('button', { name: 'Highlight spans' });
-      fireEvent.click(hotelAction as HTMLElement);
+      fireEvent.click(hotelAction);
       expect(onHighlightSpans).toHaveBeenCalledTimes(1);
       expect(onHighlightSpans).toHaveBeenCalledWith(['agent-root', 'mcp-tool']);
     });

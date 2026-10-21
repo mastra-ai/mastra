@@ -8,9 +8,8 @@ import {
   planTraceQuery,
   planTraceQueryObservedFields,
   planTraceQueryValues,
-  TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
-import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan } from '@mastra/core/storage';
+import type { TrustedThreadQueryPlan, TrustedTraceQueryPlan, TraceQueryResourceLimitError } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DuckDBConnection } from '../../db/index';
@@ -24,6 +23,8 @@ import {
 } from './trace-query';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
+// Bound first by the root_trace_ids narrowing scan, before root_scope binds the window again.
+const ROOT_SCAN_WINDOW = [TIME_RANGE.from, TIME_RANGE.to];
 
 function plan(input: Record<string, unknown> = {}): TrustedTraceQueryPlan {
   return planTraceQuery(parseTraceQueryRequest({ timeRange: TIME_RANGE, ...input }));
@@ -45,6 +46,24 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.values).toContain(5000);
   });
 
+  it('compiles time to first chunk predicates against the stored root and span columns', () => {
+    const compiled = compileDuckDBTraceQuery(
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'gt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 500 } },
+            { spans: { some: { op: 'notExists', path: 'timeToFirstChunkMs' } } },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.sql).toContain('r.timeToFirstChunkMs IS NOT NULL AND r.timeToFirstChunkMs > ?');
+    expect(compiled.sql).toContain('(s.timeToFirstChunkMs IS NULL)');
+    expect(compiled.values).toContain(500);
+  });
+
   it('normalizes discovery resource exhaustion without exposing driver details', async () => {
     const query = vi.fn().mockRejectedValue(new Error('Out of Memory Error: failed to allocate secret query'));
     const discoveryPlan = planTraceQueryObservedFields(
@@ -54,7 +73,7 @@ describe('DuckDB advanced trace query', () => {
     await expect(getTraceQueryObservedFields({ query } as unknown as DuckDBConnection, discoveryPlan)).rejects.toEqual(
       expect.objectContaining<Partial<TraceQueryResourceLimitError>>({
         code: 'TRACE_QUERY_RESOURCE_LIMIT',
-        message: 'The trace query exceeded its resource limit',
+        message: 'The query exceeded its resource limit',
       }),
     );
   });
@@ -160,6 +179,7 @@ describe('DuckDB advanced trace query', () => {
       `NULLIF(trim(CASE WHEN json_type(r.metadata, ?) = 'VARCHAR' THEN json_extract_string(r.metadata, ?) END), '')`,
     );
     expect(compiled.values).toEqual([
+      ...ROOT_SCAN_WINDOW,
       TIME_RANGE.from,
       TIME_RANGE.to,
       `$.${JSON.stringify(key)}`,
@@ -191,7 +211,17 @@ describe('DuckDB advanced trace query', () => {
     const compiled = compileDuckDBTraceQuery(ordered);
 
     expect(compiled.sql).not.toContain(key);
-    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, path, path, path, path, '10', 101]);
+    expect(compiled.values).toEqual([
+      ...ROOT_SCAN_WINDOW,
+      TIME_RANGE.from,
+      TIME_RANGE.to,
+      path,
+      path,
+      path,
+      path,
+      '10',
+      101,
+    ]);
     expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
   });
 
@@ -227,15 +257,17 @@ describe('DuckDB advanced trace query', () => {
       }),
     );
 
-    expect(traceOnly.sql.match(/FROM span_events/g)).toHaveLength(1);
+    // root_trace_ids, root_bounds and root_events each read span_events once.
+    expect(traceOnly.sql.match(/FROM span_events/g)).toHaveLength(3);
     expect(traceOnly.sql).not.toContain('score_events');
     expect(traceOnly.sql).not.toContain('current_spans AS');
 
-    expect(scoreOnly.sql.match(/FROM span_events/g)).toHaveLength(1);
+    expect(scoreOnly.sql.match(/FROM span_events/g)).toHaveLength(3);
     expect(scoreOnly.sql.match(/current_scores AS/g)).toHaveLength(1);
     expect(scoreOnly.sql).not.toContain('current_spans AS');
 
-    expect(spanOnly.sql.match(/FROM span_events/g)).toHaveLength(2);
+    // Plus span_bounds and current_span_rows for the spans relation.
+    expect(spanOnly.sql.match(/FROM span_events/g)).toHaveLength(5);
     expect(spanOnly.sql.match(/current_spans AS/g)).toHaveLength(1);
     expect(spanOnly.sql).not.toContain('score_events');
 
@@ -313,6 +345,9 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql).toMatch(/root_scope AS \([\s\S]*?r\.organizationId = \?\s+AND r\.resourceId = \?/);
     expect(compiled.sql).toMatch(/current_scores AS \([\s\S]*?WHERE s\.organizationId = \? AND s\.resourceId = \?/);
     expect(compiled.values).toEqual([
+      ...ROOT_SCAN_WINDOW,
+      'org-a',
+      'res-a',
       TIME_RANGE.from,
       TIME_RANGE.to,
       'org-a',
@@ -334,7 +369,7 @@ describe('DuckDB advanced trace query', () => {
 
     expect(compiled.sql).not.toContain('organizationId = ?');
     expect(compiled.sql).not.toContain('resourceId = ?');
-    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'factuality', 3]);
+    expect(compiled.values).toEqual([...ROOT_SCAN_WINDOW, TIME_RANGE.from, TIME_RANGE.to, 'factuality', 3]);
   });
 
   it('uses total null semantics for negative predicates', () => {
@@ -358,7 +393,7 @@ describe('DuckDB advanced trace query', () => {
 
     expect(compiled.sql).toContain('endedAt < CAST(? AS TIMESTAMP)');
     expect(compiled.sql).toContain('traceId > ?');
-    expect(compiled.sql).toContain('ORDER BY endedAt DESC, traceId ASC');
+    expect(compiled.sql).toContain('ORDER BY endedAt DESC NULLS LAST, traceId ASC');
     expect(compiled.values.at(-1)).toBe(3);
   });
 
@@ -380,11 +415,11 @@ describe('DuckDB advanced trace query', () => {
     );
 
     expect(compiled.sql).toContain('page_rows AS');
-    expect(compiled.sql).toContain('ORDER BY endedAt ASC, traceId ASC');
+    expect(compiled.sql).toContain('ORDER BY endedAt ASC NULLS LAST, traceId ASC');
     expect(compiled.sql).toContain('LIMIT ? OFFSET ?');
     expect(compiled.sql).toContain('SELECT COUNT(*) AS total\n    FROM candidates');
     expect(compiled.sql).toContain('LEFT JOIN page_rows ON TRUE');
-    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 25, 50]);
+    expect(compiled.values).toEqual([...ROOT_SCAN_WINDOW, TIME_RANGE.from, TIME_RANGE.to, 25, 50]);
   });
 
   it('compiles thread qualification over full eligible roots with dependencies from both scopes', () => {
@@ -436,6 +471,7 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql).not.toContain(metadataKey);
     expect(compiled.sql).not.toContain(metadataValue);
     expect(compiled.values).toEqual([
+      ...ROOT_SCAN_WINDOW,
       TIME_RANGE.from,
       TIME_RANGE.to,
       'medication_lookup',
@@ -461,7 +497,7 @@ describe('DuckDB advanced trace query', () => {
 
     expect(compiled.sql).toContain('FROM qualified_threads\nWHERE threadId > ?');
     expect(compiled.sql).toContain('ORDER BY threadId ASC');
-    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'thread-1', 2]);
+    expect(compiled.values).toEqual([...ROOT_SCAN_WINDOW, TIME_RANGE.from, TIME_RANGE.to, 'thread-1', 2]);
     expect(compiled.sql.match(/\?/g)).toHaveLength(compiled.values.length);
   });
 
@@ -486,7 +522,7 @@ describe('DuckDB advanced trace query', () => {
     expect(compiled.sql).toContain(`(len(${members}) > 0)`);
     expect(compiled.sql).toContain(`(len(${members}) = 0)`);
     expect(compiled.sql).not.toContain('r.tags IS');
-    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'beta', 'alpha', 101]);
+    expect(compiled.values).toEqual([...ROOT_SCAN_WINDOW, TIME_RANGE.from, TIME_RANGE.to, 'beta', 'alpha', 101]);
   });
 
   it('discovers tag values as one row per current root and distinct tag', () => {
@@ -500,7 +536,7 @@ describe('DuckDB advanced trace query', () => {
       'SELECT unnest(list_distinct(TRY_CAST(r.tags AS VARCHAR[]))) AS value FROM root_scope r WHERE r.tags IS NOT NULL',
     );
     expect(compiled.sql).toContain('GROUP BY value\nORDER BY count DESC, value ASC\nLIMIT ?');
-    expect(compiled.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 'be', 26]);
+    expect(compiled.values).toEqual([...ROOT_SCAN_WINDOW, TIME_RANGE.from, TIME_RANGE.to, 'be', 26]);
   });
 
   it('fails closed when a trusted plan contains an unmapped field', () => {
@@ -541,7 +577,7 @@ describe('DuckDB advanced trace query', () => {
       page: { next: expect.any(String) },
     });
     if (!('traces' in response)) throw new Error('Expected trace results');
-    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(19);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
       entityId: 'agent-1',
@@ -549,6 +585,8 @@ describe('DuckDB advanced trace query', () => {
       createdAt: '2026-01-01T12:00:00.000Z',
       metadata: { customer: { id: 'customer-1' }, count: 2 },
       inputPreview: 'Help with my order',
+      outputPreview: 'Sure, which order?',
+      errorPreview: null,
     });
     expect(response.traces[0]).not.toHaveProperty('input');
   });
@@ -558,7 +596,7 @@ describe('DuckDB advanced trace query', () => {
       ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
       entityId: null,
       metadata: null,
-      input: null,
+      inputPreview: '',
     };
     const query = vi.fn().mockResolvedValue([row]);
     const response = await queryTraces({ query } as unknown as DuckDBConnection, plan());
@@ -569,12 +607,15 @@ describe('DuckDB advanced trace query', () => {
       parentSpanId: null,
       metadata: null,
       inputPreview: null,
+      timeToFirstChunkMs: null,
     });
     expect(response.page.next).toBeNull();
   });
 
   it('returns exact list-compatible pagination metadata from one statement', async () => {
-    const query = vi.fn().mockResolvedValue([{ ...traceRow('trace-c', '2026-01-01T10:00:00.000Z'), total: 3n }]);
+    const query = vi
+      .fn()
+      .mockResolvedValue([{ ...traceRow('trace-c', '2026-01-01T10:00:00.000Z'), timeToFirstChunkMs: 0, total: 3n }]);
     const response = await queryTraces(
       { query } as unknown as DuckDBConnection,
       plan({ pagination: { page: 1, perPage: 2 } }),
@@ -582,7 +623,7 @@ describe('DuckDB advanced trace query', () => {
 
     expect(query).toHaveBeenCalledTimes(1);
     expect(response).toMatchObject({
-      traces: [{ traceId: 'trace-c' }],
+      traces: [{ traceId: 'trace-c', timeToFirstChunkMs: 0 }],
       pagination: { total: 3, page: 1, perPage: 2, hasMore: false },
     });
     expect(response).not.toHaveProperty('page');
@@ -629,7 +670,9 @@ function traceRow(traceId: string, startedAt: string) {
     entityId: 'agent-1',
     parentSpanId: null,
     metadata: JSON.stringify({ customer: { id: 'customer-1' }, count: 2 }),
-    input: JSON.stringify({ messages: [{ role: 'user', content: 'Help with my order' }] }),
+    inputPreview: 'Help with my order',
+    outputPreview: 'Sure, which order?',
+    errorPreview: '',
     threadId: null,
     resourceId: null,
     startedAt: new Date(startedAt),

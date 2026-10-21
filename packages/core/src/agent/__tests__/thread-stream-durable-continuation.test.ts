@@ -9,6 +9,7 @@ import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 function setup() {
   const runtime = new AgentThreadStreamRuntime();
   const pubsub = new EventEmitterPubSub();
+  const publishOriginal = pubsub.publish.bind(pubsub);
   const publish = vi.spyOn(pubsub, 'publish');
   const agent = { id: 'continuation-agent' } as Agent<any, any, any, any>;
   const options = { memory: { thread: 'continuation-thread', resource: 'continuation-user' } };
@@ -29,10 +30,108 @@ function setup() {
       stepResult: { reason: 'stop' },
     } as any);
   const registrations = () => publish.mock.calls.filter(([, event]) => event.type === 'run-registered');
-  return { runtime, pubsub, agent, options, runId, makeStream, chunk, finish, registrations };
+  const suspensions = () => publish.mock.calls.filter(([, event]) => event.type === 'run-suspended');
+  return {
+    runtime,
+    pubsub,
+    publish,
+    publishOriginal,
+    agent,
+    options,
+    runId,
+    makeStream,
+    chunk,
+    finish,
+    registrations,
+    suspensions,
+  };
 }
 
 describe('durable thread continuation', () => {
+  it('delivers every sibling suspension prompt to a remote subscriber', async () => {
+    const h = setup();
+    const subscriberRuntime = new AgentThreadStreamRuntime();
+    const first = h.makeStream();
+    await first.ready;
+    await h.runtime.registerRun(h.agent, first.output, h.options, h.pubsub, {
+      continuation: 'across-suspension',
+    });
+    const subscription = await subscriberRuntime.subscribeToThread(
+      h.agent,
+      {
+        threadId: h.options.memory.thread,
+        resourceId: h.options.memory.resource,
+      },
+      h.pubsub,
+    );
+    const parts: any[] = [];
+    const reading = (async () => {
+      for await (const part of subscription.stream) parts.push(part);
+    })();
+
+    await h.chunk('tool-call-approval', { toolCallId: 'call-1', toolName: 'one', args: {} });
+    await h.chunk('tool-call-approval', { toolCallId: 'call-2', toolName: 'two', args: {} });
+
+    await vi.waitFor(() =>
+      expect(parts.filter(part => part.type === 'tool-call-approval').map(part => part.payload.toolCallId)).toEqual([
+        'call-1',
+        'call-2',
+      ]),
+    );
+    expect(h.suspensions()).toHaveLength(2);
+
+    subscription.unsubscribe();
+    await reading;
+  });
+
+  it('keeps the continuation broadcast alive when a suspension boundary publish fails', async () => {
+    const h = setup();
+    let failSuspensionBoundary = true;
+    h.publish.mockImplementation(async (topic, event) => {
+      if (event.type === 'run-suspended' && failSuspensionBoundary) {
+        failSuspensionBoundary = false;
+        throw new Error('suspension boundary publish failed');
+      }
+      await h.publishOriginal(topic, event);
+    });
+    const first = h.makeStream();
+    await first.ready;
+    await h.runtime.registerRun(h.agent, first.output, h.options, h.pubsub, {
+      continuation: 'across-suspension',
+    });
+    const subscriberRuntime = new AgentThreadStreamRuntime();
+    const subscription = await subscriberRuntime.subscribeToThread(
+      h.agent,
+      {
+        threadId: h.options.memory.thread,
+        resourceId: h.options.memory.resource,
+      },
+      h.pubsub,
+    );
+    const parts: any[] = [];
+    const reading = (async () => {
+      for await (const part of subscription.stream) parts.push(part);
+    })();
+
+    await h.chunk('tool-call-approval', { toolCallId: 'call-1', toolName: 'one', args: {} });
+    await vi.waitFor(() => expect(first.output.status).toBe('suspended'));
+    await vi.waitFor(() => expect(h.suspensions()).toHaveLength(1));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const resumed = h.makeStream();
+    await resumed.ready;
+    expect(
+      h.runtime.continueRun(h.agent, resumed.output, { ...h.options, toolCallId: 'call-1' } as any, h.pubsub),
+    ).toBe(true);
+    await h.chunk('text-delta', { text: 'resumed' });
+    await vi.waitFor(() =>
+      expect(parts.some(part => part.type === 'text-delta' && part.payload.text === 'resumed')).toBe(true),
+    );
+
+    subscription.unsubscribe();
+    await reading;
+  });
+
   it.each([false, true])('broadcasts one answer and keeps the prefix with delayed reader=%s', async delayed => {
     const h = setup();
     const initialContext = new RequestContext();
@@ -59,6 +158,7 @@ describe('durable thread continuation', () => {
     await h.chunk('text-delta', { text: 'prefix' });
     await h.chunk('tool-call-approval', { toolCallId: 'call-1', toolName: 'read_page', args: {} });
     await vi.waitFor(() => expect(first.output.status).toBe('suspended'));
+    await vi.waitFor(() => expect(h.suspensions()).toHaveLength(1));
     if (!delayed) {
       await vi.waitFor(() => expect(parts.some(part => part.type === 'tool-call-approval')).toBe(true));
       expect(subscription.__getCurrentRunRequestContext!()).toBe(initialContext);
@@ -93,6 +193,7 @@ describe('durable thread continuation', () => {
 
     await h.chunk('tool-call-approval', { toolCallId: 'call-2', toolName: 'read_page', args: {} });
     await vi.waitFor(() => expect(resumed.output.status).toBe('suspended'));
+    await vi.waitFor(() => expect(h.suspensions()).toHaveLength(2));
     const resumedAgain = h.makeStream();
     await resumedAgain.ready;
     expect(

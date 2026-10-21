@@ -58,17 +58,41 @@ export async function createAcpSession(
       resolveDefaultThinkingLevel(settings, result.session.mode.get()).level,
     cleanup: () =>
       (cleanupPromise ??= (async () => {
-        result.session.abort();
-        result.session.thread.detachFromCurrent();
-        result.stopPluginSignalProviders();
-        result.githubSignals?.stopAllPolling();
+        // Release thread claims before the slow teardown, so a restarted
+        // process can claim the thread (and peers can reach it) right away.
+        try {
+          result.releaseThreadClaims();
+        } catch {
+          // Best-effort — cleanup continues regardless.
+        }
         await Promise.allSettled([
-          result.session.thread.clearAndReleaseLock(),
-          result.mcpManager?.disconnect(),
-          result.controller.getMastra()?.stopWorkers(),
-          result.controller.stopIntervals(),
-          (result.signalsPubSub as { close?: () => void | Promise<void> } | undefined)?.close?.(),
+          Promise.resolve().then(() => result.session.abort()),
+          Promise.resolve().then(() => result.session.thread.detachFromCurrent()),
+          Promise.resolve().then(() => result.stopPluginSignalProviders()),
+          Promise.resolve().then(() => result.githubSignals?.stopAllPolling()),
+          Promise.resolve().then(() => result.threadScheduler.stop()),
         ]);
+        // Leave time for the other cleanup phases within ACP's shared 10-second cap.
+        // A timed-out dispatch may still finish later; this grace is not cancellation.
+        let dispatchTimeout: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([
+          Promise.resolve()
+            .then(() => result.stopNotificationDispatch())
+            .catch(() => {}),
+          new Promise<void>(resolve => {
+            dispatchTimeout = setTimeout(resolve, 2_000);
+            dispatchTimeout.unref();
+          }),
+        ]).finally(() => clearTimeout(dispatchTimeout));
+        await Promise.allSettled([
+          Promise.resolve().then(() => result.session.thread.clearAndReleaseLock()),
+          Promise.resolve().then(() => result.mcpManager?.disconnect()),
+          Promise.resolve().then(() => result.controller.getMastra()?.stopWorkers()),
+          Promise.resolve().then(() => result.controller.stopIntervals()),
+        ]);
+        await Promise.resolve()
+          .then(() => (result.signalsPubSub as { close?: () => void | Promise<void> } | undefined)?.close?.())
+          .catch(() => {});
         await result.storage.close();
       })()),
   };

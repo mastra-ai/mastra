@@ -25,27 +25,32 @@ import {
   WorkspaceReadOnlyError,
 } from '@mastra/core/workspace';
 import { Mesa } from '@mesadev/sdk';
-import type { Bash, MesaBashOptions, MesaFileSystem, MesaOptions, RepoConfig, TelemetryConfig } from '@mesadev/sdk';
+import type {
+  Author,
+  Bash,
+  FsMountRuntimeOptions,
+  Layout,
+  MesaBashOptions,
+  MesaFileSystem,
+  MesaOptions,
+  Repo,
+  TelemetryConfig,
+} from '@mesadev/sdk';
 
 type MesaFsStat = Awaited<ReturnType<MesaFileSystem['stat']>>;
 type MesaDirent = Awaited<ReturnType<NonNullable<MesaFileSystem['readdirWithFileTypes']>>>[number];
 
 export interface MesaFilesystemOptions extends MastraFilesystemOptions {
-  /** Mesa API key. Falls back to MESA_API_KEY when omitted. */
-  apiKey?: string;
-  /** Block all write operations through the Mastra filesystem interface. */
+  /** Mesa private key. Falls back to MESA_PRIVATE_KEY when omitted. */
+  privateKey?: string;
+  /** Commit authors attributed to writes made through this filesystem. */
+  authors: readonly [Author, ...Author[]];
+  /** Mesa mount layout mapping absolute paths to repos, built with `repo()`. */
+  layout: Layout;
+  /** Mount every layout repo read-only and block writes through the Mastra filesystem interface. */
   readOnly?: boolean;
-  /** Mesa org slug. Falls back to Mesa SDK org inference when omitted. */
-  org?: string;
-  /** Mesa repos to mount. */
-  repos: RepoConfig[];
   /** Mesa filesystem cache configuration. */
-  cache?: {
-    diskCache?: {
-      path: string;
-      maxSizeBytes?: number;
-    };
-  };
+  cache?: FsMountRuntimeOptions['cache'];
   /** Mesa mount token lifetime in seconds. */
   ttl?: number;
   /** Mesa filesystem telemetry configuration. */
@@ -73,6 +78,27 @@ function matchesExtension(name: string, extensions?: string[]): boolean {
   if (!extensions) return true;
   const ext = getExtension(name);
   return extensions.some(candidate => candidate === ext || candidate === ext.slice(1));
+}
+
+function toReadOnlyLayout(layout: Record<string, Repo | Repo[]>): Layout {
+  const toReadOnly = (repo: Repo): Repo => {
+    if (repo.branchedFrom) {
+      throw new Error(
+        `MesaFilesystem readOnly cannot mount repo "${repo.name}" with branchedFrom, which requires mode "rw".`,
+      );
+    }
+    return {
+      ...repo,
+      mode: 'ro',
+      ...(repo.subPaths && { subPaths: toReadOnlyLayout(repo.subPaths) }),
+    } as Repo;
+  };
+  return Object.fromEntries(
+    Object.entries(layout).map(([key, entry]) => [
+      key,
+      Array.isArray(entry) ? entry.map(toReadOnly) : toReadOnly(entry),
+    ]),
+  ) as Layout;
 }
 
 function toMesaContent(content: FileContent): string | Uint8Array {
@@ -160,15 +186,10 @@ export class MesaFilesystem extends MastraFilesystem {
 
   status: ProviderStatus = 'pending';
 
-  private readonly _apiKey?: string;
-  private readonly _org?: string;
-  private readonly _repos?: RepoConfig[];
-  private readonly _cache?: {
-    diskCache?: {
-      path: string;
-      maxSizeBytes?: number;
-    };
-  };
+  private readonly _privateKey?: string;
+  private readonly _authors: readonly [Author, ...Author[]];
+  private readonly _layout: Layout;
+  private readonly _cache?: FsMountRuntimeOptions['cache'];
   private readonly _ttl?: number;
   private readonly _telemetry?: TelemetryConfig;
   private readonly _fetch?: MesaOptions['fetch'];
@@ -182,9 +203,9 @@ export class MesaFilesystem extends MastraFilesystem {
 
     this.id = generateId();
     this.readOnly = options.readOnly;
-    this._org = options.org;
-    this._repos = options.repos;
-    this._apiKey = options.apiKey;
+    this._privateKey = options.privateKey;
+    this._authors = options.authors;
+    this._layout = options.layout;
     this._cache = options.cache;
     this._ttl = options.ttl;
     this._telemetry = options.telemetry;
@@ -211,29 +232,24 @@ export class MesaFilesystem extends MastraFilesystem {
   }
 
   override async init(): Promise<void> {
-    if (!this._repos || this._repos.length === 0) {
-      throw new Error('MesaFilesystem requires at least one repo.');
+    if (Object.keys(this._layout).length === 0) {
+      throw new Error('MesaFilesystem requires a layout with at least one path.');
     }
 
     this._mesa = new Mesa({
-      apiKey: this._apiKey,
-      org: this._org,
+      privateKey: this._privateKey,
       fetch: this._fetch,
       userAgent: this._userAgent,
     });
 
-    const repos = this.readOnly ? this._repos.map(repo => ({ ...repo, readOnly: true })) : this._repos;
-    this._filesystem = await this._mesa.fs.mount({
-      repos,
-      cache: this._cache,
-      ttl: this._ttl,
-      telemetry: this._telemetry,
-    });
+    const layout = this.readOnly ? toReadOnlyLayout(this._layout) : this._layout;
+    this._filesystem = await this._mesa
+      .fs({ layout, ttl: this._ttl, authors: this._authors })
+      .mount({ cache: this._cache, telemetry: this._telemetry });
   }
 
   getInfo(): FilesystemInfo<{
-    org?: string;
-    repos?: string[];
+    paths: string[];
     mode: 'mounted' | 'client';
   }> {
     return {
@@ -245,27 +261,18 @@ export class MesaFilesystem extends MastraFilesystem {
       readOnly: this.readOnly,
       icon: this.icon,
       metadata: {
-        ...(this._org && { org: this._org }),
-        ...(this._repos && { repos: this._repos.map(repo => repo.name) }),
+        paths: Object.keys(this._layout),
         mode: 'client',
       },
     };
   }
 
   getInstructions(): string {
-    const parts = ['Mesa filesystem. Paths are rooted at the Mesa mount. Include the org and repo name in paths.'];
+    const paths = Object.keys(this._layout);
+    const parts = ['Mesa filesystem. Paths are rooted at the Mesa mount layout.'];
 
-    if (this._org) {
-      parts.push(`Org: "${this._org}".`);
-    } else {
-      parts.push('Use the Mesa org resolved by the SDK as the first path segment.');
-    }
-
-    if (this._repos && this._repos.length > 0) {
-      const repoNames = this._repos.map(repo => `"${repo.name}"`).join(', ');
-      const firstRepo = this._repos[0]?.name ?? 'repo';
-      const orgSegment = this._org ?? 'org';
-      parts.push(`Mounted repos: ${repoNames}. For example "/${orgSegment}/${firstRepo}/file.txt".`);
+    if (paths.length > 0) {
+      parts.push(`Mounted paths: ${paths.map(p => `"${p}"`).join(', ')}. For example "${paths[0]}/file.txt".`);
     }
 
     parts.push('Files are versioned by Mesa.');

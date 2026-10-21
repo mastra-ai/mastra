@@ -1,10 +1,13 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
-export const deleteOrganizationDomainInputSchema = z.object({ organization_id: z.string(), domain_id: z.string() });
+export const deleteOrganizationDomainInputSchema = z.object({
+  organization_id: z.string().min(1),
+  domain_id: z.string().min(1),
+});
 
 export const deleteOrganizationDomainOutputSchema = z.object({ id: z.string(), success: z.boolean() });
 

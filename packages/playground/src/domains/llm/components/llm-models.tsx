@@ -1,9 +1,9 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { useLLMProviders } from '@mastra/react/hooks/llm';
 import { useMemo } from 'react';
 import { useAllModels, useFilteredModels } from '../hooks/use-filtered-models';
-import { useLLMProviders } from '../hooks/use-llm-providers';
 import { useBuilderFilteredModels, useBuilderModelPolicy } from '@/domains/agent-builder';
 
 export interface LLMModelsProps {

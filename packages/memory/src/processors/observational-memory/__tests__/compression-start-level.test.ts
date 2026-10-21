@@ -1,7 +1,7 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { RequestContext } from '@mastra/core/di';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
 
@@ -25,6 +25,8 @@ function createNoopModel(modelId: string) {
 }
 
 describe('getCompressionStartLevel', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   it('returns level 2 for google/gemini-2.5-flash', async () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
@@ -42,6 +44,17 @@ describe('getCompressionStartLevel', () => {
     const level = await (om as any).getCompressionStartLevel();
 
     expect(level).toBe(2);
+  });
+
+  it('returns level 2 when auto selects the Gemini default from the Google API key', async () => {
+    vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'test-key');
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: 'auto',
+    });
+
+    expect(await (om as any).getCompressionStartLevel()).toBe(2);
   });
 
   it('returns level 1 for non-gemini-2.5-flash models', async () => {

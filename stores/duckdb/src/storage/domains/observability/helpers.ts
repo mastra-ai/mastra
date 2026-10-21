@@ -1,4 +1,5 @@
 import { DuckDBConnection } from '../../db/index';
+import { readPreview } from './preview-compat';
 
 /** Shorthand for {@link DuckDBConnection.sqlValue}. */
 export const v = DuckDBConnection.sqlValue;
@@ -7,6 +8,32 @@ export const v = DuckDBConnection.sqlValue;
 export function jsonV(val: unknown): string {
   if (val === null || val === undefined) return 'NULL';
   return DuckDBConnection.sqlValue(JSON.stringify(val));
+}
+
+/**
+ * `span_events` JSON columns that can hold large payloads. Missing values are
+ * stored as the JSON literal `null` instead of SQL NULL.
+ *
+ * DuckDB only reads the selected rows of a large-string column when the
+ * column's validity mask is constant (no NULLs in the row group). Any SQL NULL
+ * makes it fall back to reading the whole 2,048-row vector, which loads every
+ * large string in it even when the query needs one row. Keeping these columns
+ * NULL-free lets point lookups and page reads load only what they return.
+ */
+export const SPAN_PAYLOAD_COLUMNS = ['attributes', 'input', 'output', 'requestContext'] as const;
+
+/** Stored in {@link SPAN_PAYLOAD_COLUMNS} in place of SQL NULL; read back as missing. */
+export const JSON_NULL_PLACEHOLDER = 'null';
+
+/** Like {@link jsonV}, but writes the JSON `null` placeholder instead of SQL NULL. */
+export function payloadJsonV(val: unknown): string {
+  if (val === null || val === undefined) return `'${JSON_NULL_PLACEHOLDER}'`;
+  return jsonV(val);
+}
+
+/** SQL for a payload column that maps the JSON `null` placeholder back to SQL NULL. */
+export function payloadColumnSql(column: string): string {
+  return `NULLIF(${column}, '${JSON_NULL_PLACEHOLDER}')`;
 }
 
 /**
@@ -63,4 +90,18 @@ export function parseJsonArray(value: unknown): unknown[] | null {
   if (value === null || value === undefined) return null;
   const parsed = parseJson(value);
   return Array.isArray(parsed) ? parsed : null;
+}
+
+/**
+ * Preview of a payload read back from a span_events JSON column, for rows written before previews
+ * were stored. JSON text goes through `buildPreviewFromJson`, so the result matches what the writer
+ * would have stored for the same value; an already decoded value goes through `buildPreview`.
+ */
+export function previewFromPayload(value: unknown): string | null {
+  return readPreview(null, value, typeof value === 'string');
+}
+
+/** A stored preview as the API returns it: `''` (nothing to preview) and NULL both become null. */
+export function apiPreview(value: unknown): string | null {
+  return readPreview(value);
 }

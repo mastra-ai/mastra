@@ -10,6 +10,7 @@ import type { ObservabilityContext, Span, SpanType, TracingPolicy } from '../obs
 import { createObservabilityContext, resolveExportedSpanId } from '../observability';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { deepEqual } from '../utils/deep-equal';
+import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type {
@@ -38,6 +39,7 @@ import type {
   EntryExecutionResult,
   ExecutionContext,
   MutableContext,
+  NestedWorkflowParent,
   OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
@@ -49,6 +51,7 @@ import type {
   StepTripwireInfo,
   TimeTravelExecutionParams,
   WorkflowRunStatus,
+  WorkflowStateTracingContext,
 } from './types';
 // Used by the per-type execute methods (executeAgent/executeTool/executeMapping)
 // to build a runnable step from a declarative entry.
@@ -728,6 +731,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   async execute<TState, TInput, TOutput>(params: {
     workflowId: string;
     runId: string;
+    parentWorkflow?: NestedWorkflowParent;
     resourceId?: string;
     disableScorers?: boolean;
     graph: ExecutionGraph;
@@ -827,6 +831,50 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     let currentRequestContext = params.requestContext;
     for (let i = startIdx; i < steps.length; i++) {
       if (params.abortController.signal.aborted) {
+        if (params.abortController.signal.reason !== WORKFLOW_CANCELLED_SYMBOL) {
+          const executionContext = lastExecutionContext || {
+            workflowId,
+            runId,
+            executionPath: [i],
+            stepExecutionPath,
+            activeStepsPath: {},
+            suspendedPaths: {},
+            resumeLabels: {},
+            retryConfig: { attempts, delay },
+            format: params.format,
+            state: lastState ?? initialState,
+            tracingIds: params.tracingIds,
+          };
+
+          await this.persistStepUpdate({
+            workflowId,
+            runId,
+            resourceId,
+            stepResults,
+            serializedStepGraph: params.serializedStepGraph,
+            executionContext,
+            workflowStatus: 'waiting',
+            requestContext: currentRequestContext,
+            phase: 'executor-aborted',
+          });
+
+          workflowSpan?.end({ attributes: { status: 'waiting' } });
+
+          const formattedResult = await this.fmtReturnValue<any>(
+            params.pubsub,
+            stepResults,
+            { status: 'waiting', payload: undefined, startedAt: Date.now() },
+            undefined,
+            stepExecutionPath,
+          );
+
+          return {
+            ...formattedResult,
+            runId,
+            ...(params.outputOptions?.includeState ? { state: lastState } : {}),
+          } as any;
+        }
+
         await this.persistStepUpdate({
           workflowId,
           runId,
@@ -892,6 +940,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       const executionContext: ExecutionContext = {
         workflowId,
         runId,
+        parentWorkflow: params.parentWorkflow,
         executionPath: [i],
         stepExecutionPath,
         activeStepsPath: {},
@@ -936,6 +985,28 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         currentRequestContext = this.deserializeRequestContext(lastOutput.requestContext);
       }
 
+      if (
+        lastOutput.result.status === 'waiting' &&
+        params.abortController.signal.aborted &&
+        params.abortController.signal.reason !== WORKFLOW_CANCELLED_SYMBOL
+      ) {
+        workflowSpan?.end({ attributes: { status: 'waiting' } });
+
+        const formattedResult = await this.fmtReturnValue<any>(
+          params.pubsub,
+          stepResults,
+          lastOutput.result,
+          undefined,
+          stepExecutionPath,
+        );
+
+        return {
+          ...formattedResult,
+          runId,
+          ...(params.outputOptions?.includeState ? { state: lastState } : {}),
+        } as any;
+      }
+
       // if step result is not success, stop and return
       if (lastOutput.result.status !== 'success') {
         if (lastOutput.result.status === 'bailed') {
@@ -956,14 +1027,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         // never stored, and the resumed span's exported children would inherit it and
         // land as orphans. Undefined when nothing in the chain is exportable, which
         // correctly makes those children trace roots instead.
-        const persistTracingContext =
-          result.status === 'suspended' && workflowSpan
-            ? {
-                traceId: workflowSpan.traceId,
-                spanId: resolveExportedSpanId(workflowSpan),
-                parentSpanId: workflowSpan.getParentSpanId(),
-              }
-            : {};
+        let persistTracingContext: WorkflowStateTracingContext = {};
+        if (result.status === 'suspended') {
+          if (this.options.resumeTracingContext) {
+            persistTracingContext = this.options.resumeTracingContext;
+          } else if (workflowSpan) {
+            persistTracingContext = {
+              traceId: workflowSpan.traceId,
+              spanId: resolveExportedSpanId(workflowSpan),
+              parentSpanId: workflowSpan.getParentSpanId(),
+            };
+          }
+        }
 
         await this.persistStepUpdate({
           workflowId,

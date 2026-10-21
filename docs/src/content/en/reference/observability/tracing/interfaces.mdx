@@ -18,7 +18,7 @@ Primary interface for observability.
 ```typescript
 interface ObservabilityInstance {
   /** Get current configuration */
-  getConfig(): Readonly<Required<ObservabilityInstanceConfig>>
+  getConfig(): Readonly<ObservabilityInstanceConfig>
 
   /** Get all exporters */
   getExporters(): readonly ObservabilityExporter[]
@@ -232,6 +232,9 @@ interface Span<TType extends SpanType> {
 
   /** Tags for categorizing traces (only present on root spans) */
   tags?: string[]
+
+  /** Spans in other traces this span is related to */
+  links?: SpanLink[]
 
   /** End the span */
   end(options?: EndSpanOptions<TType>): void
@@ -686,6 +689,9 @@ interface AgentRunAttributes {
 
   /** Maximum steps allowed */
   maxSteps?: number
+
+  /** When the run's model streamed its first chunk, copied from the agent's own first generation */
+  completionStartTime?: Date
 }
 ```
 
@@ -704,8 +710,8 @@ interface ModelGenerationAttributes {
   /**
    * Definitions of the tools made available to the model for this generation
    * (name, description, and JSON-schema parameters), captured once per
-   * generation. Per-step tool names live on MODEL_INFERENCE spans as
-   * `availableTools`.
+   * generation. The definitions sent on each provider call live on
+   * MODEL_INFERENCE spans as `tools`.
    */
   tools?: ModelToolDefinition[]
 
@@ -783,6 +789,69 @@ interface ModelStepAttributes {
 
   /** Result warnings */
   warnings?: Record<string, any>
+
+  /** When the step's first inference streamed its first chunk */
+  completionStartTime?: Date
+}
+```
+
+### `ModelInferenceAttributes`
+
+Model Inference attributes - for a single call to the model provider within a step. The span covers only the provider call, so it doesn't include processors or tool executions.
+
+```typescript
+interface ModelInferenceAttributes {
+  /** Model name (e.g., 'gpt-5.4', 'claude-opus-4-6') */
+  model?: string
+
+  /** Model provider (e.g., 'openai', 'anthropic') */
+  provider?: string
+
+  /** Index of the parent step in the generation (0, 1, 2, ...) */
+  stepIndex?: number
+
+  /** Token usage statistics */
+  usage?: UsageStats
+
+  /** Reason this inference finished (stop, tool-calls, length, etc.) */
+  finishReason?: string
+
+  /** Whether this was a streaming response */
+  streaming?: boolean
+
+  /** When the first token/chunk of the completion was received */
+  completionStartTime?: Date
+
+  /** Result warnings */
+  warnings?: Record<string, any>
+
+  /** Actual model used in the response (may differ from request model) */
+  responseModel?: string
+
+  /** Unique identifier for the response */
+  responseId?: string
+
+  /** Model parameters sent on the request (temperature, maxOutputTokens, topP, etc.) */
+  parameters?: Record<string, unknown>
+
+  /** Provider-specific options forwarded on the request */
+  providerOptions?: Record<string, unknown>
+
+  /** Names of tools made available to the model on this inference call */
+  availableTools?: string[]
+
+  /**
+   * Definitions of the tools sent to the provider on this inference call
+   * (name, description, and JSON-schema parameters), after per-step changes
+   * from processors, `prepareStep`, `activeTools`, and `toolChoice`.
+   */
+  tools?: ModelToolDefinition[]
+
+  /** How the model was instructed to choose tools */
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }
+
+  /** Requested response format */
+  responseFormat?: 'text' | 'json' | 'json_schema' | { type: string; name?: string }
 }
 ```
 
@@ -811,6 +880,8 @@ interface ToolCallAttributes {
   toolDescription?: string
   toolCallId?: string
   success?: boolean
+  /** True when a dataset experiment tool mock intercepted the call (served, mismatched, exhausted or denied) and the tool never ran */
+  mocked?: boolean
 }
 ```
 
@@ -865,6 +936,12 @@ interface MCPServerRequestAttributes {
 
   /** Client implementation version, when the client reported one */
   clientVersion?: string
+
+  /** W3C `traceparent` the caller sent, when it parses */
+  callerTraceparent?: string
+
+  /** W3C `tracestate` the caller sent with a valid `traceparent`, capped at 512 characters */
+  callerTracestate?: string
 }
 ```
 
@@ -883,8 +960,9 @@ interface ProcessorRunAttributes {
   /**
    * Milliseconds spent inside `processOutputStream`, summed across every
    * chunk. Only set on output stream processor spans. The span's own duration
-   * covers the whole stream, model latency included, so this is what
-   * separates a slow processor from a slow model.
+   * covers its step, from the first chunk to the step's end with model latency
+   * and tool calls included, so this is what separates a slow processor from
+   * the rest of the step.
    */
   hookDurationMs?: number
 
@@ -1085,6 +1163,23 @@ interface StartSpanOptions<TType extends SpanType> {
 
   /** Options passed when using a custom sampler strategy */
   customSamplerOptions?: CustomSamplerOptions
+
+  /** Spans in other traces this span is related to. Links with invalid IDs are ignored. */
+  links?: SpanLink[]
+}
+```
+
+### `SpanLink`
+
+A reference to a span in another trace, such as the caller's span when an `MCPServer` serves a request. Unlike a parent, a link doesn't put the two spans in the same trace.
+
+```typescript
+interface SpanLink {
+  /** Trace ID of the linked span (1-32 hexadecimal characters) */
+  traceId: string
+
+  /** Span ID of the linked span (1-16 hexadecimal characters) */
+  spanId: string
 }
 ```
 
@@ -1203,6 +1298,13 @@ interface TracingOptions {
    * If provided, the root span will be created as a child of this span.
    */
   parentSpanId?: string
+
+  /**
+   * Set to true together with parentSpanId to attach this run as a child of
+   * that span inside the existing trace. Exporters then keep the trace's own
+   * name, input, output, and tags. Ignored without a valid traceId and parentSpanId.
+   */
+  nestUnderParent?: boolean
 
   /**
    * Tags to apply to this trace.

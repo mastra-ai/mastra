@@ -2,19 +2,36 @@ import type { PlanResume } from '@mastra/client-js';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { ReasoningPartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/reasoning-part-renderer';
 import { UserFilePartRenderer } from '@mastra/playground-ui/domains/chat/messages/renderers/user-file-part-renderer';
+import { MessageAttachments } from '@mastra/playground-ui/domains/chat/attachments/message-attachments';
+import { splitMessageAttachments } from '@mastra/playground-ui/domains/chat/attachments/split-message-attachments';
 import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 
 import { channelOrigin, messageAuthor } from '../services/message-author';
+import { replyCredentialLabel } from '../services/reply-credential';
+import type { ThreadOwner } from '../services/reply-credential';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
+import { PROVIDER_AUTH_REQUIRED_ERROR } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
-import { Message, MessageActions, MessageCopyButton, MessageTimestamp } from '@mastra/playground-ui/components/Message';
+import { SignalActivity } from '@mastra/playground-ui/components/ai/activity';
+import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcript-divider';
+import {
+  Message,
+  MessageActions,
+  MessageCopyButton,
+  MessageMetadata,
+  MessageTimestamp,
+} from '@mastra/playground-ui/components/Message';
 import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
+import { ProviderLoginAction } from './ProviderLoginAction';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup } from './tool/ToolGroup';
 import { ToolFactory } from './ToolFactory';
@@ -27,10 +44,9 @@ import {
 } from './TranscriptNotifications';
 import {
   HIDDEN_REACTIVE_SIGNAL_TAGS,
-  SignalRow,
   signalRowView,
+  skillSignalActivation,
   SUPPRESSED_STATE_SIGNAL_IDS,
-  TimeGap,
 } from './TranscriptSignals';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -55,6 +71,7 @@ export function MessageBubble({
   isSubmitting,
   onRespond,
   viewerId,
+  owner,
 }: {
   entry: MessageEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
@@ -62,21 +79,27 @@ export function MessageBubble({
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
   viewerId?: string;
+  owner?: ThreadOwner;
 }) {
   const written = renderableParts(entry);
   const parts = useRevealedParts(written, Boolean(entry.streaming));
-  const message = { ...entry.message, content: { ...entry.message.content, parts } };
+  const { attachments, content } =
+    entry.message.role === 'user' ? splitMessageAttachments(parts) : { attachments: [], content: parts };
+  const message = { ...entry.message, content: { ...entry.message.content, parts: content } };
   const hasRenderablePart = written.some(part => draws(part, suspensions, entry.runtimeTools));
 
   const toolGroups = collectToolGroups(parts, suspensions);
   const origin = channelOrigin(entry.message);
   const author = messageAuthor(entry.message);
   const sender = author && author.id !== viewerId ? author : undefined;
-  const prose = messageText(written);
+  const prose = messageText(entry.message.role === 'user' ? content : written);
   const meta = metaText(entry, prose, reply);
   const steeringStatus = steeringLabel(entry);
   const steeringPending = entry.deliveryStatus === 'pending';
   const steeringFailed = entry.deliveryStatus === 'failed';
+  const metadata = entry.message.content.metadata;
+  const replyModelId = meta && typeof metadata?.modelId === 'string' ? metadata.modelId : undefined;
+  const credentialLabel = replyModelId && metadata ? replyCredentialLabel(metadata, owner, viewerId) : undefined;
   const messageActions = meta ? (
     <MessageActions>
       <MessageCopyButton text={meta} />
@@ -88,6 +111,7 @@ export function MessageBubble({
       <Message
         from="user"
         pending={steeringPending}
+        attachments={attachments.length > 0 && <MessageAttachments parts={attachments} />}
         avatar={sender && <SenderAvatar author={sender} />}
         footer={
           <>
@@ -107,21 +131,47 @@ export function MessageBubble({
           </>
         }
       >
-        {children}
+        {(attachments.length === 0 || content.length > 0) && children}
       </Message>
     ),
     Assistant: ({ children }) => (
-      <Message from="assistant" footer={messageActions}>
+      <Message
+        from="assistant"
+        footer={
+          messageActions && (
+            <div className="flex flex-wrap items-center gap-2">
+              {replyModelId && (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <MessageMetadata tabIndex={0}>
+                        {formatModelName(replyModelId)}
+                        {credentialLabel && ` · ${credentialLabel}`}
+                      </MessageMetadata>
+                    }
+                  />
+                  <TooltipContent>{replyModelId}</TooltipContent>
+                </Tooltip>
+              )}
+              {messageActions}
+            </div>
+          )
+        }
+      >
         {children}
       </Message>
     ),
-    System: ({ children }) => <div className="text-caption text-muted-foreground">{children}</div>,
-    Signal: ({ children }) => <div className="text-caption text-muted-foreground">{children}</div>,
+    System: ({ children }) => <div className={textStyle({ variant: 'caption', tone: 'muted' })}>{children}</div>,
+    Signal: ({ children }) => <div className={textStyle({ variant: 'caption', tone: 'muted' })}>{children}</div>,
   };
 
   const renderers = {
     Error: (part: MastraErrorPart) => (
-      <Notice variant="destructive" title={part.error.name ?? 'Error'}>
+      <Notice
+        variant="destructive"
+        title={part.error.name ?? 'Error'}
+        action={part.error.name === PROVIDER_AUTH_REQUIRED_ERROR ? <ProviderLoginAction /> : undefined}
+      >
         <Notice.Message>{part.error.message}</Notice.Message>
       </Notice>
     ),
@@ -187,7 +237,7 @@ export function MessageBubble({
   const skillActivation =
     entry.message.role === 'user' && parts.length === 1 && parts[0].type === 'text'
       ? parseSkillActivation(parts[0].text)
-      : undefined;
+      : skillSignalActivation(entry);
   if (skillActivation) return <SkillMessage activation={skillActivation} />;
   if (isSkillNotificationSignal(entry)) return null;
 
@@ -213,14 +263,14 @@ export function MessageBubble({
   if (signalRow) {
     if (signalRow.kind === 'state') {
       if (SUPPRESSED_STATE_SIGNAL_IDS.has(signalRow.stateId)) return null;
-      return <SignalRow kind="state" label={signalRow.stateId} mode={signalRow.mode} message={signalRow.text} />;
+      return <SignalActivity kind="state" label={signalRow.stateId} mode={signalRow.mode} message={signalRow.text} />;
     }
-    if (signalRow.kind === 'gap') return <TimeGap text={signalRow.text} />;
+    if (signalRow.kind === 'divider') return <TranscriptDivider label={signalRow.label} title={signalRow.title} />;
     if (signalRow.kind === 'reminder') {
-      return <SignalRow kind="reminder" label="System reminder" message={signalRow.text} />;
+      return <SignalActivity kind="reminder" label="System reminder" message={signalRow.text} />;
     }
     if (!signalRow.tagName || HIDDEN_REACTIVE_SIGNAL_TAGS.has(signalRow.tagName)) return null;
-    return <SignalRow kind="reactive" label={signalRow.tagName} message={signalRow.text} />;
+    return <SignalActivity kind="reactive" label={signalRow.tagName} message={signalRow.text} />;
   }
 
   const status = statusMetadata(entry);

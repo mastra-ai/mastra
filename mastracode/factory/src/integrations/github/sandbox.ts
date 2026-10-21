@@ -277,10 +277,17 @@ function gitAuthenticationEnvironment(
     throw new MaterializeError('Repository access did not include usable credentials.', code);
   }
   const authorization = Buffer.from(`${username}:${token}`, 'utf8').toString('base64');
+  // Git applies `http.<url>.*` only when the config URL matches the remote at
+  // a path boundary, and `origin` may spell the repository either way: Factory
+  // clones with `.git`, a sandbox template clones from the normalized URL
+  // without it. Scope the header to both so neither checkout prompts.
+  const alternate = scope.endsWith('.git') ? scope.slice(0, -4) : `${scope}.git`;
   return {
-    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_COUNT: '2',
     GIT_CONFIG_KEY_0: `http.${scope}.extraHeader`,
     GIT_CONFIG_VALUE_0: `Authorization: Basic ${authorization}`,
+    GIT_CONFIG_KEY_1: `http.${alternate}.extraHeader`,
+    GIT_CONFIG_VALUE_1: `Authorization: Basic ${authorization}`,
     GIT_TERMINAL_PROMPT: '0',
   };
 }
@@ -509,6 +516,140 @@ export async function checkoutSessionBranch(
   options: SessionBranchOptions,
 ): Promise<void> {
   return timedPhase('workspace.checkout', () => checkoutSessionBranchImpl(sandbox, workdir, options));
+}
+
+export interface SyncEnvironmentRepositoryOptions {
+  /** The session branch to resume when the remote already carries it. */
+  branch: string;
+  /** The repository's default branch; new session branches start at its remote tip. */
+  defaultBranch: string;
+  token: string;
+  repoFullName: string;
+  cloneUrl?: string;
+  authUsername?: string;
+}
+
+export interface EnvironmentSyncResult {
+  outcome: 'resumed' | 'created' | 'kept';
+  /** The branch the checkout ends on; `null` when it stays detached. */
+  branch: string | null;
+}
+
+/**
+ * Bring a secondary environment repository onto the session branch at
+ * session start. The primary repository keeps {@link checkoutSessionBranch};
+ * every other repository follows a conservative rule: resume the session
+ * branch when the remote or the local clone has it, otherwise create it from
+ * the default branch tip (a detached HEAD, the template image pinned at its
+ * build commit, is moved there first). A checkout that sits on any other
+ * branch is left alone: it may carry local-only commits.
+ */
+export async function syncEnvironmentRepository(
+  sandbox: ExecutableSandbox,
+  workdir: string,
+  options: SyncEnvironmentRepositoryOptions,
+): Promise<EnvironmentSyncResult> {
+  const { branch, defaultBranch, token, repoFullName, cloneUrl, authUsername } = options;
+  if (!isValidGitRef(branch) || !isValidGitRef(defaultBranch)) {
+    throw new MaterializeError('Refusing to sync a repository from an invalid branch name.', 'pull-failed');
+  }
+  const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
+  const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
+
+  const current = await execute(sandbox, 'git', ['-C', workdir, 'branch', '--show-current']);
+  if (current.exitCode !== 0) throw classifyGitFailure(current, 'pull-failed');
+  const currentBranch = current.stdout.trim();
+  const kept = { outcome: 'kept' as const, branch: currentBranch || null };
+  if (currentBranch === branch) return kept;
+
+  // A local session branch may hold commits the remote never saw; switch
+  // to it instead of resetting it onto the remote tip.
+  const local = await execute(sandbox, 'git', [
+    '-C',
+    workdir,
+    'rev-parse',
+    '--verify',
+    '--quiet',
+    `refs/heads/${branch}`,
+  ]);
+  if (local.exitCode === 0) {
+    const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', branch], {
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment branch checkout',
+    });
+    if (checkout.exitCode === 0) return { outcome: 'resumed', branch };
+    if (isBlockedByLocalWork(checkout)) return kept;
+    throw classifyGitFailure(checkout, 'pull-failed');
+  }
+
+  const remoteHeads = await gitTransfer(
+    sandbox,
+    ['-C', workdir, 'ls-remote', '--heads', 'origin', `refs/heads/${branch}`],
+    { env: authEnv, timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'environment branch probe' },
+  );
+  if (remoteHeads.exitCode !== 0) throw classifyGitFailure(remoteHeads, 'pull-failed');
+  if (remoteHeads.stdout.trim()) {
+    const fetch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', branch], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment branch fetch',
+    });
+    if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'pull-failed');
+    const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-B', branch, 'FETCH_HEAD'], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment branch checkout',
+    });
+    if (checkout.exitCode === 0) return { outcome: 'resumed', branch };
+    if (isBlockedByLocalWork(checkout)) return kept;
+    throw classifyGitFailure(checkout, 'pull-failed');
+  }
+
+  // A checkout on any other branch stays where it is: it may hold work the
+  // remote never saw. The default branch and a detached HEAD (the template
+  // image pinned at its build commit) become the session branch.
+  if (currentBranch && currentBranch !== defaultBranch) return kept;
+  if (currentBranch) {
+    const status = await execute(sandbox, 'git', ['-C', workdir, 'status', '--porcelain']);
+    if (status.exitCode !== 0) throw classifyGitFailure(status, 'pull-failed');
+    if (status.stdout.trim()) return kept;
+  }
+  const fetch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', defaultBranch], {
+    env: authEnv,
+    timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+    phase: 'environment default fetch',
+  });
+  if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'pull-failed');
+  if (currentBranch) {
+    // Do not discard local-only commits on the default branch. A shallow
+    // checkout whose ancestry cannot be established is also left untouched.
+    const ancestor = await execute(sandbox, 'git', [
+      '-C',
+      workdir,
+      'merge-base',
+      '--is-ancestor',
+      'HEAD',
+      'FETCH_HEAD',
+    ]);
+    if (ancestor.exitCode === 1) return kept;
+    if (ancestor.exitCode !== 0) throw classifyGitFailure(ancestor, 'pull-failed');
+  } else {
+    const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-B', defaultBranch, 'FETCH_HEAD'], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment default checkout',
+    });
+    if (checkout.exitCode !== 0) {
+      if (isBlockedByLocalWork(checkout)) return kept;
+      throw classifyGitFailure(checkout, 'pull-failed');
+    }
+  }
+  const created = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-b', branch, 'FETCH_HEAD'], {
+    timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+    phase: 'environment branch create',
+  });
+  if (created.exitCode === 0) return { outcome: 'created', branch };
+  throw classifyGitFailure(created, 'pull-failed');
 }
 
 /** Refresh an existing GitLab review checkout without exposing its credential to the agent. */
@@ -794,6 +935,66 @@ async function pushAuthenticatedBranch(
   const env = gitAuthenticationEnvironment(cloneUrl, token, username, 'push-failed');
   const push = await execute(sandbox, 'git', ['-C', workdir, 'push', '-u', 'origin', branch], { env });
   if (push.exitCode !== 0) throw classifyGitFailure(push, 'push-failed');
+}
+
+/** Whether the checkout has a local `refs/heads/<branch>`. */
+export async function hasLocalBranch(sandbox: ExecutableSandbox, workdir: string, branch: string): Promise<boolean> {
+  const ref = await execute(sandbox, 'git', ['-C', workdir, 'show-ref', '--verify', '--quiet', `refs/heads/${branch}`]);
+  if (ref.exitCode === 0) return true;
+  if (ref.exitCode === 1) return false;
+  throw classifyGitFailure(ref, 'push-failed');
+}
+
+/**
+ * Advance the session branch to HEAD and switch to it, carrying over local work.
+ * Leave an already-ahead branch and its checkout unchanged; never discard its commits.
+ */
+export async function ensureLocalBranch(sandbox: ExecutableSandbox, workdir: string, branch: string): Promise<void> {
+  if (!isValidGitRef(branch)) {
+    throw new MaterializeError(`Refusing to materialize: invalid branch name '${branch}'.`, 'push-failed');
+  }
+  const exists = await hasLocalBranch(sandbox, workdir, branch);
+  if (exists) {
+    const ref = `refs/heads/${branch}`;
+    const tip = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--verify', ref]);
+    if (tip.exitCode !== 0) throw classifyGitFailure(tip, 'push-failed');
+    const head = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--verify', 'HEAD']);
+    if (head.exitCode !== 0) throw classifyGitFailure(head, 'push-failed');
+    const oldOid = tip.stdout.trim();
+    const headOid = head.stdout.trim();
+    const ancestor = await execute(sandbox, 'git', ['-C', workdir, 'merge-base', '--is-ancestor', oldOid, headOid]);
+    if (ancestor.exitCode === 1) {
+      const ahead = await execute(sandbox, 'git', ['-C', workdir, 'merge-base', '--is-ancestor', headOid, oldOid]);
+      if (ahead.exitCode === 0) return;
+      if (ahead.exitCode !== 1) throw classifyGitFailure(ahead, 'push-failed');
+      throw new MaterializeError(
+        `Refusing to move session branch '${branch}': it has diverged from the active HEAD. Check out or merge the session branch before pushing.`,
+        'push-failed',
+      );
+    }
+    if (ancestor.exitCode !== 0) throw classifyGitFailure(ancestor, 'push-failed');
+    const current = await execute(sandbox, 'git', ['-C', workdir, 'symbolic-ref', '--quiet', 'HEAD']);
+    if (current.exitCode !== 0 && current.exitCode !== 1) throw classifyGitFailure(current, 'push-failed');
+    if (current.stdout.trim() === ref) return;
+    // update-ref does not enforce worktree ownership, unlike branch -f.
+    const worktrees = await execute(sandbox, 'git', ['-C', workdir, 'worktree', 'list', '--porcelain', '-z']);
+    if (worktrees.exitCode !== 0) throw classifyGitFailure(worktrees, 'push-failed');
+    if (worktrees.stdout.split('\0').includes(`branch ${ref}`)) {
+      throw new MaterializeError(
+        `Refusing to move session branch '${branch}': it is checked out in another worktree.`,
+        'push-failed',
+      );
+    }
+    const advanced = await execute(sandbox, 'git', ['-C', workdir, 'update-ref', ref, headOid, oldOid]);
+    if (advanced.exitCode !== 0) throw classifyGitFailure(advanced, 'push-failed');
+  }
+  const switched = await execute(sandbox, 'git', ['-C', workdir, 'switch', ...(exists ? [] : ['-c']), branch]);
+  if (switched.exitCode !== 0) throw classifyGitFailure(switched, 'push-failed');
+}
+
+/** Whether `workdir` is a checkout of the repository at `cloneUrl`. */
+export async function isCheckoutOf(sandbox: ExecutableSandbox, workdir: string, cloneUrl: string): Promise<boolean> {
+  return (await existingCheckoutRemote(sandbox, workdir, cloneUrl)) !== null;
 }
 
 /**

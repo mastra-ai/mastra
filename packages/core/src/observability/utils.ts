@@ -7,7 +7,7 @@
  */
 
 import { EntityType, SpanType } from './types';
-import type { Span, GetOrCreateSpanOptions, AnySpan } from './types';
+import type { Span, GetOrCreateSpanOptions, AnySpan, TracingOptions, TracingProperties } from './types';
 
 const entityTypeValues = new Set<EntityType>(Object.values(EntityType));
 let currentSpanResolver: (() => AnySpan | undefined) | undefined;
@@ -35,6 +35,10 @@ export function generateSignalId(): string {
  * array means "no tools enabled for this step" and is honored as such.
  * Returns `[]` (not `undefined`) when `tools` is provided but empty, so a
  * tool-less agent still reports a definitive empty list to observers.
+ *
+ * @deprecated No longer used. `availableTools` is now derived from the tool
+ * definitions serialized for the MODEL_INFERENCE `tools` attribute, which
+ * also apply `toolChoice` and drop names that are not registered tools.
  */
 export function getStepAvailableToolNames(
   tools?: Record<string, unknown> | undefined,
@@ -175,6 +179,19 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
 }
 
 /**
+ * Builds `tracingOptions` that attach the next run as a child of a previous
+ * run, for example an LLM judge under the run it scores. Pass the previous
+ * run's result (or its `traceId` and `spanId`). When that run was not traced,
+ * the given options are returned unchanged.
+ */
+export function nestUnderRun(run: TracingProperties, tracingOptions?: TracingOptions): TracingOptions | undefined {
+  if (!run.traceId || !run.spanId) {
+    return tracingOptions;
+  }
+  return { ...tracingOptions, traceId: run.traceId, parentSpanId: run.spanId, nestUnderParent: true };
+}
+
+/**
  * Returns the top-most non-internal span that would appear in exported tracing output.
  *
  * Public API results should use this span for trace/span correlation because internal Mastra
@@ -233,7 +250,26 @@ export function getEntityTypeForSpan(span: {
       return EntityType.MCP_SERVER;
     case SpanType.PROCESSOR_RUN:
       return EntityType.OUTPUT_PROCESSOR;
+    case SpanType.CLASSIFIER_EVALUATION:
+      return EntityType.CLASSIFIER;
     default:
       return undefined;
   }
+}
+
+/**
+ * Time to first chunk in milliseconds for any span whose attributes carry
+ * `completionStartTime`, measured from that span's own start. Undefined when
+ * the span never saw a chunk.
+ */
+export function getTimeToFirstChunkMs(span: {
+  startTime: Date | string;
+  attributes?: object | undefined;
+}): number | undefined {
+  const completionStartTime = (span.attributes as { completionStartTime?: Date | string } | undefined)
+    ?.completionStartTime;
+  if (!completionStartTime) return undefined;
+  const ms = new Date(completionStartTime).getTime() - new Date(span.startTime).getTime();
+  // Clock skew between workers (durable runs) can put the first chunk before the start.
+  return Number.isNaN(ms) ? undefined : Math.max(0, ms);
 }

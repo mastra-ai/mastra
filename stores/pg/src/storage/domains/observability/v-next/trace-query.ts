@@ -29,6 +29,7 @@ import {
   encodeDeltaCursor,
   readSafeXactHorizon,
 } from './polling';
+import { needsPreview, readPreview } from './preview-compat';
 import { latestScorePredicate } from './scores';
 
 type SqlFragment = { sql: string; values: unknown[] };
@@ -39,9 +40,40 @@ type TraceSelection = {
   where?: TrustedTraceQueryPredicate;
 };
 
-const TRACE_STATUS_SQL = `CASE WHEN r."error" IS NOT NULL THEN 'error' ELSE 'success' END`;
+export const TRACE_STATUS_SQL = `CASE WHEN r."error" IS NOT NULL THEN 'error' ELSE 'success' END`;
 
-function durationMsSql(startedAt: string, endedAt: string): string {
+/** Core versions without the field reject it in strict query results, so it is only returned when core knows it. */
+export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;
+
+/** Core before the sort rejects `orderBy` on the field, so the sort is only declared when core plans it. */
+const timeToFirstChunkSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstChunkMs') === true;
+
+export const timeToFirstChunkFeatures = [
+  ...(timeToFirstChunkSupported ? (['trace-query-time-to-first-chunk'] as const) : []),
+  ...(timeToFirstChunkSortSupported ? (['trace-query-time-to-first-chunk-sort'] as const) : []),
+];
+
+/**
+ * Keyset bounds for a cursor's sort value: terms for rows strictly past it in `direction`, and the
+ * condition for rows level with it. Empty values sort last in both directions, so they are past
+ * every value and level only with each other.
+ */
+export function keysetSortBounds(
+  field: string,
+  direction: 'asc' | 'desc',
+  sortValue: string | number | null,
+  values: unknown[],
+): { past: string[]; level: string } {
+  if (sortValue === null) return { past: [], level: `${field} IS NULL` };
+  values.push(sortValue);
+  const parameter = `$${values.length}::${typeof sortValue === 'number' ? 'float8' : 'timestamptz'}`;
+  return {
+    past: [`${field} ${direction === 'asc' ? '>' : '<'} ${parameter}`, `${field} IS NULL`],
+    level: `${field} = ${parameter}`,
+  };
+}
+
+export function durationMsSql(startedAt: string, endedAt: string): string {
   return `EXTRACT(EPOCH FROM (${endedAt} - ${startedAt}))::numeric * 1000`;
 }
 
@@ -56,8 +88,12 @@ const TRACE_FIELDS = {
   startedAt: 'r."startedAt"',
   endedAt: 'r."endedAt"',
   durationMs: durationMsSql('r."startedAt"', 'r."endedAt"'),
+  timeToFirstChunkMs: 'r."timeToFirstChunkMs"',
+  entityId: 'r."entityId"',
   entityName: 'r."entityName"',
   entityType: 'r."entityType"',
+  name: 'r."name"',
+  spanType: 'r."spanType"',
   environment: 'r."environment"',
   status: TRACE_STATUS_SQL,
   tags: 'r."tags"',
@@ -71,6 +107,7 @@ const SPAN_FIELDS = {
   startedAt: 's."startedAt"',
   endedAt: 's."endedAt"',
   durationMs: 's."durationMs"',
+  timeToFirstChunkMs: 's."timeToFirstChunkMs"',
   status: 's."status"',
   error: 's."error"',
   entityType: 's."entityType"',
@@ -84,6 +121,27 @@ const SPAN_FIELDS = {
   userId: 's."userId"',
   organizationId: 's."organizationId"',
 } satisfies FieldRegistry<TraceQuerySpanField>;
+
+// Direct querySpans policy is separate from trace-related span predicates.
+const SPAN_QUERY_FIELDS = {
+  ...SPAN_FIELDS,
+  traceId: 's."traceId"',
+  spanId: 's."spanId"',
+  parentSpanId: 's."parentSpanId"',
+  threadId: 's."threadId"',
+  resourceId: 's."resourceId"',
+  requestId: 's."requestId"',
+  serviceName: 's."serviceName"',
+  experimentId: 's."experimentId"',
+  environment: 's."environment"',
+  executionSource: 's."executionSource"',
+  parentEntityType: 's."parentEntityType"',
+  parentEntityId: 's."parentEntityId"',
+  parentEntityName: 's."parentEntityName"',
+  rootEntityType: 's."rootEntityType"',
+  rootEntityId: 's."rootEntityId"',
+  rootEntityName: 's."rootEntityName"',
+};
 
 const SCORE_FIELDS = {
   scorerId: 's."scorerId"',
@@ -116,11 +174,15 @@ const TRACE_SELECT = `
   r."entityId" AS "entityId",
   r."parentSpanId" AS "parentSpanId",
   r."metadataRaw" AS "metadata",
-  r."input" AS "input",
+  r."inputPreview" AS "inputPreview",
+  r."outputPreview" AS "outputPreview",
+  r."errorPreview" AS "errorPreview",
+  r."cursorId" AS "cursorId",
   r."threadId" AS "threadId",
   r."resourceId" AS "resourceId",
   r."startedAt" AS "startedAt",
   r."endedAt" AS "endedAt",
+  r."timeToFirstChunkMs" AS "timeToFirstChunkMs",
   r."entityName" AS "entityName",
   r."entityType" AS "entityType",
   r."environment" AS "environment",
@@ -135,12 +197,59 @@ function fieldSql<TField extends string>(
   return sql;
 }
 
+/**
+ * Value of trace-root `metadata.<key>` (alias `r`) as filtering, discovery, and aggregate grouping
+ * all see it: the normalized search value, falling back to the trimmed raw string.
+ */
+export function traceMetadataValueSql(keyParameter: string): string {
+  return `COALESCE(
+      CASE WHEN jsonb_typeof(r."metadataSearch" -> ${keyParameter}) = 'string' THEN r."metadataSearch" ->> ${keyParameter} END,
+      CASE WHEN jsonb_typeof(r."metadataRaw" -> ${keyParameter}) = 'string' THEN NULLIF(btrim(r."metadataRaw" ->> ${keyParameter}), '') END
+    )`;
+}
+
 function isMetadataField(field: TraceQueryPredicateField): field is `metadata.${string}` {
   return field.startsWith('metadata.');
 }
 
 function placeholders(values: readonly unknown[], offset: number): string {
   return values.map((_, index) => `$${offset + index}`).join(', ');
+}
+
+/**
+ * Unicode letters, marks, and digits as PostgreSQL bracket ranges, so `[^<ranges>]` splits words
+ * like the planner's `[^\p{L}\p{M}\p{N}]`. PostgreSQL regexes have no `\p{…}` classes, and
+ * `[[:alnum:]]` depends on the locale: it leaves out digits such as `² ½ ₂ ①`, and glibc files
+ * some marks, such as the Devanagari virama, under punct. Derived once from the runtime's own
+ * Unicode tables. A run may also absorb unassigned code points, which are never stored.
+ * Private-use code points are not absorbed: the other stores treat them as separators.
+ */
+let pgWordRanges: string | undefined;
+function getPgWordRanges(): string {
+  if (pgWordRanges !== undefined) return pgWordRanges;
+  const escape = (cp: number) =>
+    cp > 0xffff ? `\\U${cp.toString(16).padStart(8, '0')}` : `\\u${cp.toString(16).padStart(4, '0')}`;
+  // Every code point except surrogates, built in chunks to keep the peak allocation small.
+  const chunks: string[] = [];
+  for (let start = 0; start <= 0x10ffff; start += 0x2000) {
+    const codePoints: number[] = [];
+    for (let cp = start; cp < start + 0x2000 && cp <= 0x10ffff; cp++) {
+      if (cp < 0xd800 || cp > 0xdfff) codePoints.push(cp);
+    }
+    chunks.push(String.fromCodePoint(...codePoints));
+  }
+  const text = chunks.join('');
+  const ranges: string[] = [];
+  for (const match of text.matchAll(/[\p{L}\p{M}\p{N}\p{Cn}]+/gu)) {
+    const first = match[0].codePointAt(0)!;
+    const lastUnit = match.index + match[0].length - 1;
+    const last = text.codePointAt(
+      text.charCodeAt(lastUnit) >= 0xdc00 && text.charCodeAt(lastUnit) <= 0xdfff ? lastUnit - 1 : lastUnit,
+    )!;
+    ranges.push(first === last ? escape(first) : `${escape(first)}-${escape(last)}`);
+  }
+  pgWordRanges = ranges.join('');
+  return pgWordRanges;
 }
 
 function compileScalarPredicate<TField extends string>(
@@ -169,10 +278,7 @@ function compileScalarPredicate<TField extends string>(
   if (isMetadataField(predicate.field)) {
     if (!allowMetadata) throw new Error(`Unsupported trusted trace-query field: ${predicate.field}`);
     const keyParameter = `$${parameterOffset++}`;
-    field = `COALESCE(
-      CASE WHEN jsonb_typeof(r."metadataSearch" -> ${keyParameter}) = 'string' THEN r."metadataSearch" ->> ${keyParameter} END,
-      CASE WHEN jsonb_typeof(r."metadataRaw" -> ${keyParameter}) = 'string' THEN NULLIF(btrim(r."metadataRaw" ->> ${keyParameter}), '') END
-    )`;
+    field = traceMetadataValueSql(keyParameter);
     fieldValues = [predicate.field.slice('metadata.'.length)];
   } else {
     field = fieldSql(registry, predicate.field);
@@ -197,6 +303,18 @@ function compileScalarPredicate<TField extends string>(
     return { sql: `cardinality(${field}) ${predicate.operator === 'empty' ? '=' : '>'} 0`, values: fieldValues };
   }
 
+  if (predicate.type === 'text') {
+    // Same normalization as `normalizeTraceQueryText`: NFC, lowercase, words = runs of letters,
+    // marks, and digits, listed as explicit ranges (see `getPgWordRanges`). `lower()` already folds
+    // `İ` to `i`; it follows the database locale, so a C-locale database folds ASCII only.
+    const words = `' ' || replace(lower(regexp_replace(normalize(${field}), '[^${getPgWordRanges()}]+', ' ', 'g')), 'ς', 'σ') || ' '`;
+    const found = `strpos(${words}, $${parameterOffset}) > 0`;
+    return {
+      sql: `COALESCE(${predicate.operator === 'matches' ? found : `NOT (${found})`}, false)`,
+      values: [...fieldValues, ` ${predicate.value} `],
+    };
+  }
+
   if (predicate.type === 'membership') {
     const list = placeholders(predicate.values, parameterOffset);
     if (predicate.operator === 'in') {
@@ -207,11 +325,13 @@ function compileScalarPredicate<TField extends string>(
 
   const parameter = `$${parameterOffset}`;
   const operators = { lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
+  // `value` is never null, so plain `=`/`<>` keep `IS [NOT] DISTINCT FROM` semantics while staying
+  // indexable. The null guards keep `NOT (...)` two-valued on null columns.
   if (predicate.operator === 'eq') {
-    return { sql: `${field} IS NOT DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
+    return { sql: `${field} IS NOT NULL AND ${field} = ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   if (predicate.operator === 'ne') {
-    return { sql: `${field} IS DISTINCT FROM ${parameter}`, values: [...fieldValues, predicate.value] };
+    return { sql: `${field} IS NULL OR ${field} <> ${parameter}`, values: [...fieldValues, predicate.value] };
   }
   const operator = operators[predicate.operator];
   if (operator === undefined) throw new Error(`Unsupported trusted trace-query operator: ${predicate.operator}`);
@@ -307,6 +427,65 @@ function collectThreadRelationCollections(
   return collections;
 }
 
+// Root columns with planner statistics. Computed fields (status, durationMs, metadata.*) and tags
+// are excluded: their default selectivity estimate is low enough to flip the latest-root anti-join
+// into a nested loop that probes every partition per root, which is far slower than filtering later.
+const ROOT_PUSHDOWN_FIELDS = new Set<string>([
+  'traceId',
+  'threadId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'userId',
+  'organizationId',
+  'startedAt',
+  'endedAt',
+  'entityId',
+  'entityName',
+  'entityType',
+  'name',
+  'spanType',
+  'environment',
+]);
+
+function isRootPushdownPredicate(predicate: TrustedTraceQueryPredicate): boolean {
+  if (predicate.type === 'relation') return false;
+  if (predicate.type === 'boolean') return predicate.args.every(isRootPushdownPredicate);
+  if (predicate.type === 'not') return isRootPushdownPredicate(predicate.arg);
+  return ROOT_PUSHDOWN_FIELDS.has(predicate.field);
+}
+
+/**
+ * Splits `where` into top-level AND conjuncts that can filter `root_scope` directly and the rest,
+ * which is applied in `candidates`. The latest-root check compares against the unfiltered span
+ * table, so filtering a root earlier cannot change which root is current, but it stops long windows
+ * from materializing every root (and running the latest-root check on it) before filtering.
+ */
+function splitRootPredicate(predicate: TrustedTraceQueryPredicate | undefined): {
+  root: TrustedTraceQueryPredicate[];
+  rest: TrustedTraceQueryPredicate[];
+} {
+  if (!predicate) return { root: [], rest: [] };
+  const conjuncts = predicate.type === 'boolean' && predicate.operator === 'and' ? predicate.args : [predicate];
+  const root: TrustedTraceQueryPredicate[] = [];
+  const rest: TrustedTraceQueryPredicate[] = [];
+  for (const conjunct of conjuncts) {
+    (isRootPushdownPredicate(conjunct) ? root : rest).push(conjunct);
+  }
+  return { root, rest };
+}
+
+function compileConjunction(predicates: TrustedTraceQueryPredicate[], values: unknown[]): string {
+  if (predicates.length === 0) return 'TRUE';
+  return predicates
+    .map(predicate => {
+      const compiled = compilePredicate(predicate, values.length + 1);
+      values.push(...compiled.values);
+      return `(${compiled.sql})`;
+    })
+    .join(' AND ');
+}
+
 function compilePredicate(predicate: TrustedTraceQueryPredicate, parameterOffset: number): SqlFragment {
   if (predicate.type === 'relation') {
     const compiled =
@@ -392,6 +571,7 @@ function compilePostgresTraceScope(
   relationCollections: Set<RelatedCollection>,
   scope: TraceQueryTenantScope | undefined,
   deltaWindow?: { xactId: string; cursorId: string; safeHorizon: string },
+  rootPredicates: TrustedTraceQueryPredicate[] = [],
 ): { ctes: string[]; values: unknown[] } {
   const spanTable = qualifiedTable(schema, TABLE_SPAN_EVENTS);
   const scoreTable = qualifiedTable(schema, TABLE_SCORE_EVENTS);
@@ -429,6 +609,7 @@ function compilePostgresTraceScope(
     ...deltaConditions,
     ...scopeConditions.map(condition => `r.${condition}`),
   ];
+  if (rootPredicates.length > 0) rootConditions.push(compileConjunction(rootPredicates, values));
   const ctes = [
     `root_scope AS MATERIALIZED (
     SELECT *
@@ -451,6 +632,7 @@ function compilePostgresTraceScope(
         WHEN s."isPending" THEN NULL
         ELSE ${durationMsSql('s."startedAt"', 's."endedAt"')}
       END AS "durationMs",
+      s."timeToFirstChunkMs",
       CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status",
       s."error",
       s."entityType",
@@ -513,13 +695,43 @@ function compilePostgresTraceScope(
   return { ctes, values };
 }
 
+/**
+ * Builds the CTE chain ending in `candidates`: the completed, current trace roots in the
+ * selection's time range and tenant scope that match its `where` predicate. Trace queries and
+ * trace aggregates both select from this CTE so they always see the same population.
+ */
+export function compilePostgresTraceCandidates(
+  schema: string,
+  selection: TraceSelection & { scope?: TraceQueryTenantScope },
+  columns: string,
+  deltaWindow?: { xactId: string; cursorId: string; safeHorizon: string },
+): { ctes: string[]; values: unknown[] } {
+  const relationCollections = collectRelationCollections(selection.where);
+  const { root, rest } = splitRootPredicate(selection.where);
+  const { ctes, values } = compilePostgresTraceScope(
+    schema,
+    selection,
+    relationCollections,
+    selection.scope,
+    deltaWindow,
+    root,
+  );
+
+  const predicateSql = compileConjunction(rest, values);
+  ctes.push(`candidates AS (
+    SELECT ${columns}
+    FROM root_scope r
+    WHERE ${predicateSql}
+  )`);
+  return { ctes, values };
+}
+
 export function compilePostgresTraceQuery(
   schema: string,
   plan: TrustedTraceQueryPlan,
   mode: 'data' | 'count' = 'data',
   safeHorizon?: string,
 ): CompiledPostgresTraceQuery {
-  const relationCollections = collectRelationCollections(plan.where);
   let deltaWindow: { xactId: string; cursorId: string; safeHorizon: string } | undefined;
   if (plan.paginationMode === 'delta') {
     const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'pg');
@@ -527,19 +739,12 @@ export function compilePostgresTraceQuery(
       throw new Error('Delta query requires a cursor and safe horizon');
     deltaWindow = { ...decodeTraceDeltaWatermark(watermark), safeHorizon };
   }
-  const { ctes, values } = compilePostgresTraceScope(schema, plan, relationCollections, plan.scope, deltaWindow);
-
-  let predicateSql = 'TRUE';
-  if (plan.where) {
-    const predicate = compilePredicate(plan.where, values.length + 1);
-    predicateSql = predicate.sql;
-    values.push(...predicate.values);
-  }
-  ctes.push(`candidates AS (
-    SELECT ${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r."xactId", r."cursorId"' : ''}
-    FROM root_scope r
-    WHERE ${predicateSql}
-  )`);
+  const { ctes, values } = compilePostgresTraceCandidates(
+    schema,
+    plan,
+    `${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r."xactId"' : ''}`,
+    deltaWindow,
+  );
   const candidates = `WITH ${ctes.join(',\n')}`;
 
   if (plan.paginationMode === 'page' && mode === 'count') {
@@ -578,8 +783,8 @@ LIMIT $${values.length}`,
     };
   }
 
-  const orderField = plan.orderBy.field === 'startedAt' ? '"startedAt"' : '"endedAt"';
-  const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
+  const orderField = `"${plan.orderBy.field}"`;
+  const direction = `${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST`;
   if (plan.paginationMode === 'page') {
     values.push(plan.perPage, plan.page * plan.perPage);
     return {
@@ -594,11 +799,9 @@ LIMIT $${values.length - 1} OFFSET $${values.length}`,
 
   let pageCondition = '';
   if (plan.cursor) {
-    const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
-    const sortParameter = `$${values.length + 1}`;
-    const idParameter = `$${values.length + 2}`;
-    pageCondition = `WHERE (${orderField} ${comparison} ${sortParameter} OR (${orderField} = ${sortParameter} AND "traceId" > ${idParameter}))`;
-    values.push(plan.cursor.sortValue, plan.cursor.traceId);
+    const { past, level } = keysetSortBounds(orderField, plan.orderBy.direction, plan.cursor.sortValue, values);
+    values.push(plan.cursor.traceId);
+    pageCondition = `WHERE (${[...past, `(${level} AND "traceId" > $${values.length})`].join(' OR ')})`;
   }
   values.push(plan.limit + 1);
 
@@ -725,10 +928,7 @@ export function compilePostgresTraceQueryValues(
     extracted = `SELECT value FROM (SELECT DISTINCT r."traceId", UNNEST(r."tags") AS value FROM root_scope r) t`;
   } else if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
     const keyParameter = `$${values.length + 1}`;
-    extracted = `SELECT COALESCE(
-      CASE WHEN jsonb_typeof(r."metadataSearch" -> ${keyParameter}) = 'string' THEN r."metadataSearch" ->> ${keyParameter} END,
-      CASE WHEN jsonb_typeof(r."metadataRaw" -> ${keyParameter}) = 'string' THEN NULLIF(btrim(r."metadataRaw" ->> ${keyParameter}), '') END
-    )::text AS value FROM root_scope r`;
+    extracted = `SELECT ${traceMetadataValueSql(keyParameter)}::text AS value FROM root_scope r`;
     values.push(plan.path.slice('metadata.'.length));
   } else {
     const field = fieldSql(discoveryRegistry(plan.predicateScope), plan.path as TraceQueryCanonicalField);
@@ -849,6 +1049,46 @@ async function setRemainingTimeout(transaction: TxClient, deadline: number): Pro
   await transaction.query(`SELECT set_config('statement_timeout', $1, true)`, [`${remainingTimeoutMs}ms`]);
 }
 
+const PREVIEW_PAYLOADS = [
+  ['inputPreview', 'input'],
+  ['outputPreview', 'output'],
+  ['errorPreview', 'error'],
+] as const;
+
+/**
+ * Fill the previews of root rows written before the preview columns existed (stored preview NULL)
+ * by reading just those rows' payloads, and only the payloads whose preview is missing. Rows are
+ * keyed by `cursorId`, which identifies the exact root row the list picked.
+ *
+ * jsonb comes back decoded, so the preview is built with `buildPreview(value)`. jsonb also
+ * normalizes object key order, so a compact-JSON fallback preview can differ from the one the
+ * writer would have stored from the original value. That is acceptable for these old rows.
+ */
+async function fillMissingTracePreviews(
+  transaction: TxClient,
+  schema: string,
+  rows: Record<string, unknown>[],
+  deadline: number,
+): Promise<void> {
+  const missing = rows.filter(row => PREVIEW_PAYLOADS.some(([preview]) => needsPreview(row[preview])));
+  if (!missing.length) return;
+  await setRemainingTimeout(transaction, deadline);
+  const payloads = await transaction.any<Record<string, unknown>>(
+    `SELECT e."cursorId"::text AS "cursorId",
+      ${PREVIEW_PAYLOADS.map(([preview, payload]) => `${missing.some(row => needsPreview(row[preview])) ? `e."${payload}"` : 'NULL'} AS "${payload}"`).join(',\n      ')}
+    FROM ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} e
+    WHERE (e."traceId", e."cursorId") IN (SELECT * FROM unnest($1::text[], $2::bigint[]))`,
+    [missing.map(row => String(row.traceId)), missing.map(row => String(row.cursorId))],
+  );
+  const byCursor = new Map(payloads.map(payload => [String(payload.cursorId), payload]));
+  for (const row of missing) {
+    const payload = byCursor.get(String(row.cursorId));
+    for (const [preview, column] of PREVIEW_PAYLOADS) {
+      if (needsPreview(row[preview])) row[preview] = readPreview(row[preview], payload?.[column]);
+    }
+  }
+}
+
 function traceRowToResult(row: Record<string, unknown>) {
   return {
     traceId: String(row.traceId),
@@ -858,11 +1098,16 @@ function traceRowToResult(row: Record<string, unknown>) {
     parentSpanId: row.parentSpanId ?? null,
     createdAt: asIsoTimestamp(row.startedAt),
     metadata: row.metadata ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+    inputPreview: readPreview(row.inputPreview),
+    outputPreview: readPreview(row.outputPreview),
+    errorPreview: readPreview(row.errorPreview),
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),
     endedAt: asIsoTimestamp(row.endedAt),
+    ...(timeToFirstChunkSupported && {
+      timeToFirstChunkMs: row.timeToFirstChunkMs == null ? null : Number(row.timeToFirstChunkMs),
+    }),
     entityName: row.entityName == null ? null : String(row.entityName),
     entityType: row.entityType == null ? null : String(row.entityType),
     environment: row.environment == null ? null : String(row.environment),
@@ -895,6 +1140,7 @@ export async function queryTraces(
           rows = await transaction.any<Record<string, unknown>>(query.text, query.values);
         }
         const visible = rows.slice(0, plan.limit);
+        await fillMissingTracePreviews(transaction, schema, visible, deadline);
         const last = visible.at(-1);
         return coreStorage.traceQueryResponseSchema.parse({
           traces: visible.map(traceRowToResult),
@@ -931,6 +1177,7 @@ export async function queryTraces(
         if (remainingTimeoutMs <= 0) throw new coreStorage.TraceQueryExecutionError();
         await transaction.query(`SELECT set_config('statement_timeout', $1, true)`, [`${remainingTimeoutMs}ms`]);
         const rows = await transaction.any<Record<string, unknown>>(dataQuery.text, dataQuery.values);
+        await fillMissingTracePreviews(transaction, schema, rows, deadline);
         return { total: Number(countRows[0]?.count ?? 0), rows, deltaCursor };
       },
       { repeatableRead: true },
@@ -949,9 +1196,13 @@ export async function queryTraces(
   }
 
   const query = compilePostgresTraceQuery(schema, plan);
-  const rows = await runWithPostgresTraceQueryTimeout(client, timeoutMs, transaction =>
-    transaction.any<Record<string, unknown>>(query.text, query.values),
-  );
+  const deadline = performance.now() + coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
+  const rows = await runWithPostgresTraceQueryTimeout(client, timeoutMs, async transaction => {
+    const rows = await transaction.any<Record<string, unknown>>(query.text, query.values);
+    if (plan.result === 'traces')
+      await fillMissingTracePreviews(transaction, schema, rows.slice(0, plan.limit), deadline);
+    return rows;
+  });
   const visibleRows = rows.slice(0, plan.limit);
 
   if (plan.result === 'groups') {
@@ -977,7 +1228,7 @@ export async function queryTraces(
         rows.length > plan.limit && last
           ? coreStorage.encodeTraceQueryCursor(plan, {
               result: 'traces',
-              sortValue: last[plan.orderBy.field],
+              sortValue: last[plan.orderBy.field] ?? null,
               traceId: last.traceId,
             })
           : null,
@@ -1006,4 +1257,16 @@ export async function queryThreads(
           : null,
     },
   });
+}
+
+/** Compile a direct span-query filter using its dedicated field mapping. */
+export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate, offset: number): SqlFragment {
+  return compileScalarPredicate(predicate, SPAN_QUERY_FIELDS, offset);
+}
+
+export function compileThreadQueryPredicate(predicate: TrustedTraceQueryScalarPredicate, offset: number): SqlFragment {
+  const fields = Object.fromEntries(
+    Object.keys(coreStorage.THREAD_QUERY_FIELD_REGISTRY).map(field => [field, `s."${field}"`]),
+  );
+  return compileScalarPredicate(predicate, fields, offset);
 }

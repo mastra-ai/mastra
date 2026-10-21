@@ -1,3 +1,4 @@
+import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useCallback, useContext } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
@@ -11,6 +12,7 @@ import { ChatAgentContext, useChatRunning, useChatSend } from '@/domains/chat/co
 import { AskUserTool } from '@/domains/chat/tools/ask-user-tool';
 import { CodeModeBadge } from '@/domains/chat/tools/badges/code-mode-badge';
 import { ObservationMarkerBadge } from '@/domains/chat/tools/badges/observation-marker-badge';
+import { ConnectPromptTool } from '@/domains/chat/tools/connect-prompt-tool';
 import {
   badgeStatus,
   codeModeCall,
@@ -21,7 +23,6 @@ import {
   toolInteraction,
 } from '@/domains/chat/tools/tool-card-kind';
 import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
-import { useMcpAppTools } from '@/domains/mcps/hooks/use-mcp-app-tools';
 import { PlaygroundWorkflowRunProvider } from '@/domains/workflows/context/playground-workflow-run-provider';
 
 /** A `data`-typed part the agent wrote via `writer.custom`, scoped to a call by `data.toolCallId`. */
@@ -78,7 +79,7 @@ export const ToolCardInner = ({
   const { isRunning } = useChatRunning();
   const handleMcpAppSendMessage = useCallback(
     (content: string) => {
-      send({ message: content });
+      void send({ message: content });
     },
     [send],
   );
@@ -106,6 +107,8 @@ export const ToolCardInner = ({
         return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
       }
       break;
+    case 'connect_prompt':
+      return <ConnectPromptTool output={output} readOnly={readOnly} />;
     case 'submit_plan':
       return (
         <SubmitPlanTool

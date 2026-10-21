@@ -1,5 +1,30 @@
 {
   "attachment": ["fugu", "fugu-ultra", "fugu-ultra-20260615", "sakana-namazu"],
   "temperature": ["sakana-namazu"],
-  "structuredOutput": ["fugu", "fugu-ultra", "fugu-ultra-20260615", "sakana-namazu"]
+  "structuredOutput": ["fugu", "fugu-ultra", "fugu-ultra-20260615", "sakana-namazu"],
+  "reasoning": {
+    "sakana-namazu": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "fugu-ultra": [
+      {
+        "type": "effort",
+        "values": ["high", "xhigh"]
+      }
+    ],
+    "fugu-ultra-20260615": [
+      {
+        "type": "effort",
+        "values": ["high", "xhigh"]
+      }
+    ],
+    "fugu": [
+      {
+        "type": "effort",
+        "values": ["high", "xhigh"]
+      }
+    ]
+  }
 }

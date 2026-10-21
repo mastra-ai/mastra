@@ -97,8 +97,9 @@ export interface CommandOptions {
    * Use 0 to disable retention, a positive integer to set a byte limit,
    * or Infinity to retain all output.
    *
-   * Defaults to 1048576 for spawned processes. The built-in executeCommand
-   * implementation retains all output unless this option is set.
+   * Defaults to 1048576, for both spawned processes and the built-in
+   * executeCommand implementation. Pass Infinity when the caller needs every
+   * byte of output (for example, file contents encoded on stdout).
    */
   maxRetainedBytes?: number;
 }

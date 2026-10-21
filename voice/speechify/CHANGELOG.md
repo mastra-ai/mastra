@@ -1,5 +1,17 @@
 # @mastra/voice-speechify
 
+## 0.14.2
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 0.14.2-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 0.14.1
 
 ### Patch Changes

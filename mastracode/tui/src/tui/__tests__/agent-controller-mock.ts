@@ -182,6 +182,7 @@ export function createMockState(opts: MockAgentControllerOptions & { extra?: Any
   return {
     controller,
     session: controller.session,
+    local: { controller, session: controller.session },
     ...extra,
   };
 }

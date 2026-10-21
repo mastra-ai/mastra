@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -121,6 +121,29 @@ describe('Subconscious reminder questions', () => {
         ifIdle: expect.objectContaining({ behavior: 'wake' }),
       }),
     );
+  });
+
+  it("points the question's request context at the sidekick thread, not the parent's", async () => {
+    const memory = new Memory({ storage: new InMemoryStore() });
+    const sendMessage = vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation((() => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'sidekick-run' }),
+    })) as any);
+    const tool = createAskMemoryTool({
+      memory,
+      config: { name: 'remind', builtIn: true, maxSteps: 5 },
+      getParentAgent: () => createParentAgent(),
+    });
+    const context = toolContext();
+    context.requestContext.set(MASTRA_THREAD_ID_KEY, parentThreadId);
+    context.requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+
+    await tool.execute?.({ question: 'What did I decide?' }, context);
+
+    const sent = sendMessage.mock.calls[0]![1]!.ifIdle!.streamOptions!.requestContext!;
+    expect(sent.get(MASTRA_THREAD_ID_KEY)).toBe(`subconscious:${parentThreadId}:remind`);
+    expect(sent.get(MASTRA_RESOURCE_ID_KEY)).toBe(resourceId);
+    expect(sent.get('organizationId')).toBe('org-1');
+    expect(context.requestContext.get(MASTRA_THREAD_ID_KEY)).toBe(parentThreadId);
   });
 
   it('rejects a question when native sidekick routing does not accept it', async () => {

@@ -120,8 +120,9 @@ By default, Mastra routes mount under `/api`. Use `prefix` to change it.
   },
   {
     name: 'tools',
-    type: 'Record<string, Tool>',
-    description: 'Registered tools for the server',
+    type: 'ToolsInput',
+    description:
+      'Additional tools to register. Accepts Mastra tools, Vercel AI SDK tools, provider-defined tools, and web search tools.',
     isOptional: true,
   },
   {

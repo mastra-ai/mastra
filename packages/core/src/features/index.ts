@@ -31,6 +31,7 @@ export const coreFeatures = new Set<string>([
   'internal-usage-rollup',
   'json-prompt-injection:inline',
   'observability-signal-deletion',
+  'knowledge-v2',
   // Experiments can be deleted, including experiments orphaned by dataset
   // deletion, and the deletion cascades to the experiment's observability traces.
   'experiment-deletion',

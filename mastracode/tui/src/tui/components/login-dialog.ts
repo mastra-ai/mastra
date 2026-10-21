@@ -5,7 +5,7 @@
 import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import { getOAuthProviders } from '@mastra/code-sdk/auth/index';
-import { openUrlInBrowser } from '../open-url.js';
+import { openUrlInBrowser } from '@mastra/code-sdk/utils/open-url';
 import { theme } from '../theme.js';
 import { MaskedInput } from './masked-input.js';
 

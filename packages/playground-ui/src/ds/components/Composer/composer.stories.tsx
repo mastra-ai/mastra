@@ -1,21 +1,20 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUp, Paperclip } from 'lucide-react';
+import { ArrowUp } from 'lucide-react';
 import { expect, userEvent, within } from 'storybook/test';
 import { ComposerModeStates, ComposerPreview } from '../../../../.storybook/fixtures/composer';
 
-import { Badge } from '../Badge/Badge';
 import { Button } from '../Button';
-import { Composer, ComposerActions, ComposerAttachments, ComposerBox, ComposerInput, ComposerRing } from './composer';
+import { Composer, ComposerActions, ComposerBox, ComposerInput, ComposerRing } from './composer';
 
 const meta: Meta<typeof Composer> = {
-  title: 'Elements/Composer',
+  title: 'AI/Composer',
   component: Composer,
   parameters: {
     layout: 'padded',
     docs: {
       description: {
         component:
-          'ComposerRing owns the pointer spotlight and busy rotation. Its typed tone defaults to green; purple and orange select the same light/dark colors used by ComposerToneLabel. The default tone uses the accent ring and a neutral label. Applications map their own modes to tones. ComposerInput uses the inline height by default, or variant="textarea" for a taller draft; maxHeight remains available. Compose the shared surface, input, and actions with application-owned controls, draft state, attachments, and send/cancel callbacks. Changing mode never implies a running state. The interactive previews simulate sending and stopping; they do not call an agent.',
+          'ComposerRing owns the pointer spotlight and busy rotation. Its typed tone defaults to green; purple and orange select the same light/dark colors used by ComposerToneLabel. The default tone uses the accent ring and a neutral label. Applications map their own modes to tones. ComposerInput uses the inline height by default, or variant="textarea" for a taller draft; maxHeight remains available. Compose the shared surface, input, and actions with application-owned controls, draft state, attachments, and send/cancel callbacks. See [Composer Attachments](?path=/docs/ai-composer-attachments--docs) for the shared Studio and Factory attachment cards, previews, and removal controls. Changing mode never implies a running state. The interactive previews simulate sending and stopping; they do not call an agent.',
       },
     },
   },
@@ -32,27 +31,6 @@ export const Empty: Story = {
         <ComposerActions>
           <span />
           <Button type="submit" size="icon-md" aria-label="Send message" disabled>
-            <ArrowUp />
-          </Button>
-        </ComposerActions>
-      </ComposerBox>
-    </Composer>
-  ),
-};
-
-export const WithAttachmentsAndActions: Story = {
-  render: () => (
-    <Composer aria-label="Message composer">
-      <ComposerAttachments>
-        <Badge size="sm">project-notes.txt</Badge>
-      </ComposerAttachments>
-      <ComposerBox>
-        <ComposerInput aria-label="Message" defaultValue="Summarize the attached notes." />
-        <ComposerActions>
-          <Button type="button" size="icon-md" aria-label="Attach file">
-            <Paperclip />
-          </Button>
-          <Button type="submit" size="icon-md" aria-label="Send message">
             <ArrowUp />
           </Button>
         </ComposerActions>

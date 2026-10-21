@@ -20,6 +20,7 @@ import {
   convertFullStreamChunkToUIMessageStream,
 } from './helpers';
 import type { ToolAgentChunkType, ToolWorkflowChunkType, ToolNetworkChunkType } from './helpers';
+import type { WithTraceId } from './public-types';
 import {
   isAgentExecutionDataChunkType,
   isDataChunkType,
@@ -71,11 +72,7 @@ export type WorkflowDataPart = {
     status: WorkflowRunStatus;
     steps: Record<string, StepResult>;
     output: {
-      usage: {
-        inputTokens: number;
-        outputTokens: number;
-        totalTokens: number;
-      };
+      usage: LanguageModelV2Usage;
     } | null;
   };
 };
@@ -406,7 +403,7 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
     sendFinish?: boolean;
     sendReasoning?: boolean;
     sendSources?: boolean;
-    messageMetadata?: (args: { part: any }) => unknown;
+    messageMetadata?: (args: { part: any; traceId?: string }) => unknown;
     onError?: (error: unknown) => string;
     includeSubAgentMetadata?: boolean;
   },
@@ -447,7 +444,9 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
         part: p as any,
         sendReasoning,
         sendSources,
-        messageMetadataValue: p ? messageMetadata?.({ part: p as TextStreamPart<ToolSet> }) : undefined,
+        messageMetadataValue: p
+          ? messageMetadata?.({ part: p as TextStreamPart<ToolSet>, traceId: chunk.traceId })
+          : undefined,
         sendStart,
         sendFinish,
         responseMessageId: lastMessageId,
@@ -586,7 +585,7 @@ export function AgentStreamToAISDKTransformer<OUTPUT>({
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
-  messageMetadata?: UIMessageStreamOptions<UIMessage>['messageMetadata'];
+  messageMetadata?: WithTraceId<UIMessageStreamOptions<UIMessage>['messageMetadata']>;
   onError?: UIMessageStreamOptions<UIMessage>['onError'];
   includeSubAgentMetadata?: boolean;
 }) {
@@ -617,7 +616,7 @@ export function AgentStreamToAISDKV6Transformer<OUTPUT>({
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
-  messageMetadata?: UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata'];
+  messageMetadata?: WithTraceId<UIMessageStreamOptionsV6<UIMessageV6>['messageMetadata']>;
   onError?: UIMessageStreamOptionsV6<UIMessageV6>['onError'];
   includeSubAgentMetadata?: boolean;
 }) {

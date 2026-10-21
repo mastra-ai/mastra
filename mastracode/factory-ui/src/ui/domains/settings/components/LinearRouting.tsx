@@ -71,7 +71,7 @@ export function IntakeSourceRouting({
       <ScrollArea orientation="vertical" maxHeight="20rem">
         <div role="group" aria-label={`${label} routing`} className="flex flex-col">
           {matchingSources.length === 0 ? (
-            <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
+            <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
               No matches
             </Txt>
           ) : (

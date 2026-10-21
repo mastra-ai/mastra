@@ -113,7 +113,7 @@ describe('output stream processor hookDurationMs', () => {
     const { tracingContext, spans } = createTracingContext();
     const processorStates = new Map<string, ProcessorState>();
 
-    await runner.processPart(textDelta('a'), processorStates, { tracingContext });
+    await expect(runner.processPart(textDelta('a'), processorStates, { tracingContext })).rejects.toThrow('boom');
 
     expect(spans[0]!.error).toHaveBeenCalledWith(
       expect.objectContaining({ endSpan: true, attributes: { hookDurationMs: 3 } }),

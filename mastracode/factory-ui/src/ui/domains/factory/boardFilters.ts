@@ -1,131 +1,92 @@
 import type { FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 
-import {
-  boardLabelsFromQuery,
-  boardLabelsQueryValues,
-  boardRelevanceFromQuery,
-  boardRelevanceOptions,
-  boardRelevanceQueryValue,
-} from './boardRelevance';
-import type { BoardRelevanceType } from './boardRelevance';
+import { BOARD_PERSON_FIELDS } from './boardPeople';
 import type { BoardKind } from './boardStages';
 
-/** Field ids shared by the filter bar chips and the query parameters they round-trip through. */
-export const BOARD_FILTER_FIELD = {
-  text: 'text',
-  teammate: 'teammate',
-  relevance: 'relevance',
-  label: 'label',
-} as const;
+/** Every board filter, in menu order. Each id is also its query parameter and its saved-view item's `fieldId`. */
+export const BOARD_FILTER_FIELDS = ['source', 'linearProject', ...BOARD_PERSON_FIELDS, 'label'] as const;
+export type BoardFilterFieldId = (typeof BOARD_FILTER_FIELDS)[number];
 
-/** Query parameters each board narrowing is stored in. */
-export const BOARD_FILTER_QUERY = {
-  search: 'q',
-  teammate: 'teammate',
-  relevance: 'relevance',
-  label: 'label',
-} as const;
+/** The values picked per filter. An empty set narrows nothing; filters combine with AND. */
+export type BoardFilterState = Readonly<Record<BoardFilterFieldId, ReadonlySet<string>>>;
 
-/** Every board narrowing in one value: what the URL carries, and what the cards are matched against. */
-export interface BoardFilterState {
-  search: string;
-  participantId?: string;
-  /** Relevance kinds kept for the selected teammate. The full set means "not narrowed". */
-  relevanceTypes: ReadonlySet<BoardRelevanceType>;
-  labels: ReadonlySet<string>;
+/** Requested reviewers only exist on pull requests, so only the Review board filters by them. */
+export function boardFilterFieldIds(kind: BoardKind): BoardFilterFieldId[] {
+  return BOARD_FILTER_FIELDS.filter(fieldId => fieldId !== 'reviewer' || kind === 'review');
+}
+
+function boardFilterState(kind: BoardKind, valuesOf: (fieldId: BoardFilterFieldId) => readonly unknown[]) {
+  const offered = new Set(boardFilterFieldIds(kind));
+  const state: Record<BoardFilterFieldId, ReadonlySet<string>> = {
+    source: new Set(),
+    linearProject: new Set(),
+    teammate: new Set(),
+    author: new Set(),
+    assignee: new Set(),
+    reviewer: new Set(),
+    worked: new Set(),
+    label: new Set(),
+  };
+  for (const fieldId of offered) {
+    state[fieldId] = new Set(
+      valuesOf(fieldId).flatMap(value => (typeof value === 'string' && value.trim() ? [value.trim()] : [])),
+    );
+  }
+  return state;
 }
 
 export function boardFiltersFromParams(params: URLSearchParams, kind: BoardKind): BoardFilterState {
-  return {
-    search: params.get(BOARD_FILTER_QUERY.search) ?? '',
-    participantId: params.get(BOARD_FILTER_QUERY.teammate) || undefined,
-    relevanceTypes: boardRelevanceFromQuery(params.get(BOARD_FILTER_QUERY.relevance), kind),
-    labels: boardLabelsFromQuery(params.getAll(BOARD_FILTER_QUERY.label)),
-  };
+  return boardFilterState(kind, fieldId => params.getAll(fieldId));
 }
 
 /** Copy of `params` carrying `state`, leaving every unrelated parameter untouched. */
-export function boardFilterParams(params: URLSearchParams, state: BoardFilterState, kind: BoardKind): URLSearchParams {
+export function boardFilterParams(params: URLSearchParams, state: BoardFilterState): URLSearchParams {
   const next = new URLSearchParams(params);
-  const relevance = state.participantId ? boardRelevanceQueryValue(state.relevanceTypes, kind) : undefined;
-  const set = (key: string, value: string | undefined) => (value ? next.set(key, value) : next.delete(key));
-
-  set(BOARD_FILTER_QUERY.search, state.search.trim() || undefined);
-  set(BOARD_FILTER_QUERY.teammate, state.participantId);
-  set(BOARD_FILTER_QUERY.relevance, relevance);
-  next.delete(BOARD_FILTER_QUERY.label);
-  for (const label of boardLabelsQueryValues(state.labels)) next.append(BOARD_FILTER_QUERY.label, label);
+  for (const fieldId of BOARD_FILTER_FIELDS) {
+    next.delete(fieldId);
+    for (const value of state[fieldId]) next.append(fieldId, value);
+  }
   return next;
 }
 
-/** Whether anything is narrowing the board — the one fact both the bar and the empty state read. */
-export function boardFiltersActive(state: BoardFilterState, kind: BoardKind): boolean {
-  return (
-    state.search !== '' ||
-    state.participantId !== undefined ||
-    state.labels.size > 0 ||
-    boardRelevanceQueryValue(state.relevanceTypes, kind) !== undefined
-  );
+/** The open card and the comment it deep-links to are one selection: clear them together. */
+export function clearOpenCard(params: URLSearchParams) {
+  params.delete('item');
+  params.delete('comment');
 }
 
-const asStrings = (value: unknown): string[] =>
-  Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+export function boardFilterItems(state: BoardFilterState): FilterBarItem[] {
+  return BOARD_FILTER_FIELDS.filter(fieldId => state[fieldId].size > 0).map(fieldId => ({
+    id: fieldId,
+    fieldId,
+    operatorId: 'in',
+    value: [...state[fieldId]],
+  }));
+}
 
-/** One chip per active narrowing, keyed by field id so the URL order is the chip order. */
-export function boardFilterItems(state: BoardFilterState, kind: BoardKind): FilterBarItem[] {
-  const items: FilterBarItem[] = [];
-  if (state.search) {
-    items.push({
-      id: BOARD_FILTER_FIELD.text,
-      fieldId: BOARD_FILTER_FIELD.text,
-      operatorId: 'contains',
-      value: state.search,
-    });
-  }
-  if (state.participantId) {
-    items.push({
-      id: BOARD_FILTER_FIELD.teammate,
-      fieldId: BOARD_FILTER_FIELD.teammate,
-      operatorId: 'is',
-      value: state.participantId,
-    });
-  }
-  if (state.participantId && boardRelevanceQueryValue(state.relevanceTypes, kind)) {
-    items.push({
-      id: BOARD_FILTER_FIELD.relevance,
-      fieldId: BOARD_FILTER_FIELD.relevance,
-      operatorId: 'in',
-      value: [...state.relevanceTypes],
-    });
-  }
-  if (state.labels.size > 0) {
-    items.push({
-      id: BOARD_FILTER_FIELD.label,
-      fieldId: BOARD_FILTER_FIELD.label,
-      operatorId: 'in',
-      value: [...state.labels],
-    });
-  }
-  return items;
+/** Whether anything is narrowing the board — the one fact both the menu and the empty state read. */
+export function boardFiltersActive(state: BoardFilterState): boolean {
+  return BOARD_FILTER_FIELDS.some(fieldId => state[fieldId].size > 0);
+}
+
+/** `state` with one filter's picks replaced. Linear projects only narrow Linear, so they leave with it. */
+export function withBoardFilterValues(
+  state: BoardFilterState,
+  fieldId: BoardFilterFieldId,
+  values: readonly string[],
+): BoardFilterState {
+  const next = { ...state, [fieldId]: new Set(values) };
+  if (fieldId === 'source' && !values.includes('linear')) next.linearProject = new Set();
+  return next;
 }
 
 /**
- * Filter state the chips describe. A chip whose value is still being picked carries an empty
- * value and narrows nothing; dropping the relevance chip restores every relevance kind. Each
- * dimension holds one chip, so re-picking a field replaces it rather than stacking a second.
+ * Filter state a saved view's items describe. Items for fields the board no longer has (the
+ * retired `relevance` and `q`) narrow nothing; a later item for a field replaces an earlier one.
  */
 export function boardFilterStateFromItems(items: readonly FilterBarItem[], kind: BoardKind): BoardFilterState {
-  const valueOf = (fieldId: string) => items.findLast(item => item.fieldId === fieldId)?.value;
-  const relevance = asStrings(valueOf(BOARD_FILTER_FIELD.relevance));
-  const available = boardRelevanceOptions(kind).map(option => option.id);
-  const selected = available.filter(type => relevance.includes(type));
-  const search = valueOf(BOARD_FILTER_FIELD.text);
-  const teammate = valueOf(BOARD_FILTER_FIELD.teammate);
-
-  return {
-    search: typeof search === 'string' ? search : '',
-    participantId: typeof teammate === 'string' && teammate !== '' ? teammate : undefined,
-    relevanceTypes: new Set(selected.length > 0 ? selected : available),
-    labels: new Set(asStrings(valueOf(BOARD_FILTER_FIELD.label))),
-  };
+  return boardFilterState(kind, fieldId => {
+    const value = items.findLast(item => item.fieldId === fieldId)?.value;
+    return Array.isArray(value) ? value : [value];
+  });
 }

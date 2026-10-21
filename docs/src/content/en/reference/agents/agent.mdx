@@ -361,14 +361,32 @@ AgentController Sessions observe the shared thread count when they subscribe, ev
 
 The count includes messages waiting in the local FIFO and a non-cancelled message while it acquires or transfers its lease. It drops at cancellation, execution handoff, forwarding to another owner, or failure, not when model generation completes. An idle `queueMessage()` handoff is immediate and isn't represented as a cancellable pending slot.
 
-Use [`cancelQueuedMessages()`](#cancelqueuedmessagesoptions) to cancel selected pending input or an owner group. Queue-count events still count only `queueMessage()` entries, not the other pending signal queues. Owner-scoped observation and cancellation match the calling Agent, its local runtime, resource, thread, and owner ID.
+Use [`cancelQueuedMessages()`](#cancelqueuedmessagesoptions) to cancel selected pending input or an owner group. Queue-count events count only entries in the queue shared by `queueMessage()` and `queueSignal()`, not signals waiting for delivery into an active run. Owner-scoped observation and cancellation match the calling Agent, its local runtime, resource, thread, and owner ID.
+
+### `queueSignal(signal, options)`
+
+Queues a typed signal for the next turn on a thread. It behaves like `queueMessage()`, but accepts any signal input, so the queued run keeps the signal's `type`, `tagName`, and `attributes`.
+
+```typescript
+agent.queueSignal(
+  {
+    type: 'reactive',
+    tagName: 'skill',
+    attributes: { name: 'triage' },
+    contents: 'Triage the new issue.',
+  },
+  { resourceId: 'user-123', threadId: 'thread-abc' },
+)
+```
+
+`queueSignal()` accepts the same `options` as `queueMessage()`, including `queueOwnerId`, and returns the same result shape. Queued signals share the `queueMessage()` queue, so they count toward queue-count events and `cancelQueuedMessages()` can cancel them.
 
 ### `cancelQueuedMessages(options)`
 
 Cancels pending input without aborting the active run. Supply exactly one selector:
 
 - `signalIds` cancels selected input across all Agents sharing the runtime and memory thread. It covers signals waiting for run preparation, signals pending in an active run, and queued messages waiting for a later run.
-- `queueOwnerId` cancels only the calling Agent's `queueMessage()` entries in that owner group. It doesn't cancel other Agents' input or signals in the other queues.
+- `queueOwnerId` cancels only the calling Agent's `queueMessage()` and `queueSignal()` entries in that owner group. It doesn't cancel other Agents' input or signals in the other queues.
 
 ```typescript
 const { cancelledSignalIds } = agent.cancelQueuedMessages({
@@ -1048,6 +1066,13 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     description: 'Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.',
   },
   {
+    name: 'scopes',
+    type: 'string[] | ({ requestContext: RequestContext }) => string[] | Promise<string[]>',
+    isOptional: true,
+    description:
+      'Scopes every run of this agent acts as, written as `<type>:<value>`. Combined with per-call `scopes` and the `mastra__scopes` request context key.',
+  },
+  {
     name: 'memory',
     type: 'MastraMemory | ({ requestContext: RequestContext }) => MastraMemory | Promise<MastraMemory>',
     isOptional: true,
@@ -1187,7 +1212,7 @@ The hook context `metadata` includes `agentId` and `agentName`. Per-execution ho
 
 ## Editor overrides
 
-When you register the [`MastraEditor`](/reference/editor/mastra-editor), the `editor` field controls which parts of a code-defined agent can be changed through the editor. Fields owned by code are read-only in Studio and are stripped from saved overrides.
+When you register the [`MastraEditor`](/reference/editor/mastra-editor), the `editor` field controls which parts of an agent are defined in code and which are owned by Studio. Fields owned by code are read-only in Studio and are stripped from saved overrides. Fields owned by Studio must be omitted from code; the agent reads them from stored overrides and fails closed when they're missing.
 
 <PropertiesTable
   content={[
@@ -1196,10 +1221,12 @@ When you register the [`MastraEditor`](/reference/editor/mastra-editor), the `ed
     type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean } }',
     isOptional: true,
     description:
-      'Omit to allow editing instructions and tools. Set to `false` to lock the agent. Set `instructions: true` to allow instruction edits. Set `tools: true` to allow tool membership and description edits, or `tools: { description: true }` to allow only description edits.',
+      'Omit to allow editing instructions and tools, using values in code as defaults. Set to `false` to lock the agent. Set `instructions: true` to make Studio own the instructions; omit `instructions` from code. Set `tools: true` to make Studio own tool membership and descriptions; omit `tools` from code. Set `tools: { description: true }` to keep tool membership in code and allow only description edits.',
   },
 ]}
 />
+
+When a field is owned by Studio, TypeScript rejects it in code: `instructions` with `editor: { instructions: true }` and `tools` with `editor: { tools: true }` are type errors. An agent whose instructions are owned by Studio fails closed until a stored version with instructions is published.
 
 The agent's `id`, `name`, and `model` always come from code and can't be overridden through Editor. See [Editor](/docs/studio/editor) for usage.
 

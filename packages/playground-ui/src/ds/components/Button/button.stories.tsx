@@ -1,12 +1,22 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Plus, Settings, Trash } from 'lucide-react';
+import { ArrowUpRight, Plus, Settings, Trash } from 'lucide-react';
 import { Fragment } from 'react';
+import { Input } from '../Input';
 import { TooltipProvider } from '../Tooltip';
 import { Txt } from '../Txt';
 import type { ButtonVariant } from './Button';
 import { Button } from './Button';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
-const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'ghost'];
+const ALL_VARIANTS: ButtonVariant[] = [
+  'default',
+  'primary',
+  'destructive',
+  'destructive-ghost',
+  'ghost',
+  'subtle',
+  'link',
+];
 
 const meta: Meta<typeof Button> = {
   title: 'Elements/Button',
@@ -50,7 +60,7 @@ export const Variants: Story = {
   render: () => (
     <div className="flex flex-wrap items-center gap-4">
       {ALL_VARIANTS.map(variant => (
-        <Button key={variant} variant={variant}>
+        <Button key={variant} variant={variant} render={variant === 'link' ? <a href="#" /> : undefined}>
           {variant}
         </Button>
       ))}
@@ -72,7 +82,7 @@ export const Disabled: Story = {
   render: () => (
     <div className="flex flex-wrap items-center gap-4">
       {ALL_VARIANTS.map(variant => (
-        <Button key={variant} variant={variant} disabled>
+        <Button key={variant} variant={variant} disabled render={variant === 'link' ? <a href="#" /> : undefined}>
           {variant}
         </Button>
       ))}
@@ -89,12 +99,21 @@ export const WithIcon: Story = {
 
 export const WithIconSizes: Story = {
   render: () => (
-    <div className="flex items-center gap-4">
-      {(['sm', 'md', 'lg'] as const).map(size => (
-        <Button key={size} size={size} icon={<Plus />}>
-          Add Item
-        </Button>
-      ))}
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-4">
+        {(['sm', 'md', 'lg'] as const).map(size => (
+          <Button key={size} size={size} icon={<Plus />}>
+            Add Item
+          </Button>
+        ))}
+      </div>
+      <div className="flex items-center gap-4">
+        {(['sm', 'md', 'lg'] as const).map(size => (
+          <Button key={size} size={size} iconEnd={<ArrowUpRight />}>
+            Open portal
+          </Button>
+        ))}
+      </div>
     </div>
   ),
 };
@@ -130,7 +149,7 @@ export const IconButtonDefault: Story = {
 export const IconButtonVariants: Story = {
   render: () => (
     <div className="flex flex-wrap items-center gap-2">
-      {ALL_VARIANTS.map(variant => (
+      {ALL_VARIANTS.filter(variant => variant !== 'link').map(variant => (
         <Button key={variant} size="icon-md" variant={variant} tooltip={variant}>
           <Settings />
         </Button>
@@ -178,20 +197,92 @@ export const VariantSizeMatrix: Story = {
           <Txt as="span" variant="meta" tone="muted">
             {variant}
           </Txt>
-          <Button variant={variant} size="sm">
+          <Button variant={variant} size="sm" render={variant === 'link' ? <a href="#" /> : undefined}>
             sm
           </Button>
-          <Button variant={variant} size="md">
+          <Button variant={variant} size="md" render={variant === 'link' ? <a href="#" /> : undefined}>
             md
           </Button>
-          <Button variant={variant} size="lg">
+          <Button variant={variant} size="lg" render={variant === 'link' ? <a href="#" /> : undefined}>
             lg
           </Button>
-          <Button variant={variant} size="lg">
+          <Button variant={variant} size="lg" render={variant === 'link' ? <a href="#" /> : undefined}>
             <Trash />
             with icon
           </Button>
         </Fragment>
+      ))}
+    </div>
+  ),
+};
+
+export const OnDifferentSurfaces: Story = {
+  render: () => (
+    <div className="flex w-[calc(100vw-2rem)] max-w-120 flex-col gap-4">
+      <div className="rounded-lg border border-border bg-background p-4">
+        <Txt variant="caption" tone="muted" className="mb-2">
+          Main canvas
+        </Txt>
+        <div className="flex gap-2">
+          <Input aria-label="Agent name on the main canvas" placeholder="Agent name" />
+          <Button>Rename</Button>
+        </div>
+      </div>
+      <div className={`${raisedSurfaceStyle} rounded-lg p-4`}>
+        <Txt variant="caption" tone="muted" className="mb-2">
+          Card
+        </Txt>
+        <div className="flex gap-2">
+          <Input aria-label="Agent name on a card" placeholder="Agent name" />
+          <Button>Rename</Button>
+        </div>
+      </div>
+    </div>
+  ),
+};
+
+export const Link: Story = {
+  render: () => (
+    <div className="flex w-120 flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <Txt as="span" variant="subheading">
+          Usage this month
+        </Txt>
+        <Button variant="link" render={<a href="#" />}>
+          View usage
+        </Button>
+      </div>
+      <div className="flex items-center justify-between">
+        <Txt as="span" variant="subheading">
+          Credit history
+        </Txt>
+        <Button
+          variant="link"
+          render={<a href="https://mastra.ai" target="_blank" rel="noopener noreferrer" />}
+          iconEnd={<ArrowUpRight />}
+        >
+          Open billing portal
+        </Button>
+      </div>
+      <div className="flex items-center justify-between">
+        <Txt as="span" variant="subheading">
+          Disabled
+        </Txt>
+        <Button variant="link" disabled render={<a href="#" />}>
+          View usage
+        </Button>
+      </div>
+    </div>
+  ),
+};
+
+export const WithIconEnd: Story = {
+  render: () => (
+    <div className="flex items-center gap-4">
+      {(['default', 'ghost', 'primary'] as const).map(variant => (
+        <Button key={variant} variant={variant} iconEnd={<ArrowUpRight />}>
+          Open portal
+        </Button>
       ))}
     </div>
   ),

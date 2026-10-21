@@ -1,15 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DataList } from './data-list';
-
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
-  }
-});
 
 afterEach(() => {
   cleanup();
@@ -23,6 +17,41 @@ const Header = () => (
 );
 
 describe('DataListRoot', () => {
+  it.each([true, false])('preserves custom root rendering and state-based styles with scrollable=%s', scrollable => {
+    const ref = createRef<HTMLDivElement>();
+    const scrollRef = createRef<HTMLDivElement>();
+    render(
+      <DataList
+        ref={ref}
+        columns="1fr"
+        scrollable={scrollable}
+        scrollRef={scrollRef}
+        render={<section aria-label="Styled list" />}
+        style={state => ({ paddingTop: state.hasOverflowY ? '4px' : '12px' })}
+        maxHeight="300px"
+        autoScroll={false}
+        scrollButtons={false}
+        revealScrollbarOnHover={false}
+      >
+        <DataList.RowButton>
+          <DataList.Cell>First row</DataList.Cell>
+        </DataList.RowButton>
+      </DataList>,
+    );
+
+    const root = screen.getByLabelText('Styled list');
+    expect(root.tagName).toBe('SECTION');
+    expect(ref.current).toBe(root);
+    expect(root.style.paddingTop).toBe('12px');
+    expect(root.hasAttribute('maxheight')).toBe(false);
+    expect(root.hasAttribute('autoscroll')).toBe(false);
+    expect(root.hasAttribute('scrollbuttons')).toBe(false);
+    expect(root.hasAttribute('revealscrollbaronhover')).toBe(false);
+    // Parent-scrolled lists must not introduce another clipping viewport.
+    if (scrollable) expect(scrollRef.current).not.toBeNull();
+    else expect(scrollRef.current).toBeNull();
+  });
+
   describe('unified treatment — ScrollArea (overlay scrollbar + horizontal mask)', () => {
     it('frames the list and separates its uniform rows', () => {
       const { container } = render(
@@ -276,6 +305,18 @@ describe('DataListRoot', () => {
       const [errorRow, defaultRow] = container.querySelectorAll<HTMLButtonElement>('.data-list-row');
       expect(errorRow.dataset.variant).toBe('error');
       expect(defaultRow.dataset.variant).toBe('default');
+    });
+
+    it('exposes the info tone as data-variant', () => {
+      const { container } = render(
+        <DataList columns="1fr">
+          <DataList.RowButton variant="info">
+            <DataList.Cell>highlighted</DataList.Cell>
+          </DataList.RowButton>
+        </DataList>,
+      );
+      const row = container.querySelector<HTMLButtonElement>('.data-list-row');
+      expect(row?.dataset.variant).toBe('info');
     });
 
     describe('when the error row is pressed', () => {

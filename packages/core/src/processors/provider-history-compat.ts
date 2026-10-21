@@ -546,6 +546,53 @@ export function isMaybeAzure(
 }
 
 /**
+ * Detects providers that reject a conversation whose first non-system turn is
+ * the assistant's: Amazon Bedrock ("A conversation must start with a user
+ * message") and Google/Vertex Gemini. OpenAI, Anthropic, Groq, Mistral,
+ * DeepSeek and Cerebras accept that shape, so they are left alone.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/5465
+ * @see https://github.com/mastra-ai/mastra/issues/8053
+ */
+export function isMaybeRequiringUserFirstTurn(model: unknown): boolean {
+  return (
+    getModelProviderFamily(model) === 'google' ||
+    matchesProviderPrefix(model, 'amazon') ||
+    matchesProviderPrefix(model, 'amazon-bedrock') ||
+    matchesProviderPrefix(model, 'bedrock')
+  );
+}
+
+/**
+ * Inserts a minimal user turn ahead of a leading assistant turn for providers
+ * that require conversations to start with the user (see
+ * {@link isMaybeRequiringUserFirstTurn}). History windows commonly start on an
+ * assistant turn — agents that greet first, or `lastMessages` cutting into a
+ * thread — and those providers reject the whole request otherwise.
+ */
+export const ensureUserFirstTurn = {
+  name: 'ensure-user-first-turn',
+  applyToPrompt({
+    prompt,
+    model,
+  }: {
+    prompt: LanguageModelV2Prompt;
+    model: unknown;
+  }): LanguageModelV2Prompt | undefined {
+    if (!isMaybeRequiringUserFirstTurn(model)) return undefined;
+
+    const firstTurnIndex = prompt.findIndex(message => message.role !== 'system');
+    if (firstTurnIndex === -1 || prompt[firstTurnIndex]!.role !== 'assistant') return undefined;
+
+    return [
+      ...prompt.slice(0, firstTurnIndex),
+      { role: 'user', content: [{ type: 'text', text: '.' }] },
+      ...prompt.slice(firstTurnIndex),
+    ];
+  },
+} satisfies CompatRule;
+
+/**
  * Returns the index of the trailing assistant message whose thinking blocks
  * Anthropic verifies byte-for-byte: the last message when it is an assistant
  * message, or the assistant message that only has tool messages after it (an
@@ -564,7 +611,8 @@ function getProtectedAssistantIndex(prompt: LanguageModelV2Prompt): number {
 
 /**
  * Returns a copy of the prompt with selected `reasoning` parts stripped from
- * assistant messages. Returns `undefined` if no changes were necessary.
+ * assistant messages, dropping any assistant message left with no content.
+ * Returns `undefined` if no changes were necessary.
  *
  * `skipIndex` excludes one message from stripping — used to protect the
  * trailing assistant message of an active tool-use continuation, which
@@ -583,16 +631,31 @@ function stripReasoningFromPrompt(
   skipIndex = -1,
 ): LanguageModelV2Prompt | undefined {
   let mutated = false;
-  const next: LanguageModelV2Prompt = prompt.map((message, index) => {
-    if (index === skipIndex) return message;
-    if (message.role !== 'assistant') return message;
-    if (typeof message.content === 'string') return message;
-    if (!Array.isArray(message.content)) return message;
+  const next: LanguageModelV2Prompt = [];
+  for (let index = 0; index < prompt.length; index++) {
+    const message = prompt[index]!;
+    if (
+      index === skipIndex ||
+      message.role !== 'assistant' ||
+      typeof message.content === 'string' ||
+      !Array.isArray(message.content)
+    ) {
+      next.push(message);
+      continue;
+    }
     const filtered = message.content.filter(part => part.type !== 'reasoning' || !shouldStrip(part as any));
-    if (filtered.length === message.content.length) return message;
+    if (filtered.length === message.content.length) {
+      next.push(message);
+      continue;
+    }
     mutated = true;
-    return { ...message, content: filtered };
-  });
+    // A reasoning-only turn is emptied by the strip. Processors run after
+    // conversion, so the empty-content filter in MessageList no longer
+    // applies — Anthropic rejects empty assistant content, so drop the
+    // message itself (same idiom as anthropicStripForeignSignedReasoning).
+    if (filtered.length === 0) continue;
+    next.push({ ...message, content: filtered });
+  }
   return mutated ? next : undefined;
 }
 
@@ -1082,6 +1145,8 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   azureSystemReminderTransform,
   openaiOrphanItemId,
   anthropicOrphanedThinkingStep,
+  // Last, so it sees the prompt after other rules have dropped emptied turns.
+  ensureUserFirstTurn,
 ];
 
 // ---------------------------------------------------------------------------
@@ -1133,6 +1198,9 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   see that thinking merged into the next step. Reactive (matches the
  *   "thinking blocks ... cannot be modified" 400); a recovery seatbelt for
  *   already-corrupted history.
+ * - **ensure-user-first-turn** — inserts a `.` user turn ahead of a leading
+ *   assistant turn for Amazon Bedrock and Google/Vertex, which reject
+ *   assistant-first conversations. Preemptive; the turn is never persisted.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts

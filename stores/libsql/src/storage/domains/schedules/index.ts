@@ -353,12 +353,13 @@ export class SchedulesLibSQL extends SchedulesStorage {
     newNextFireAt: number,
     lastFireAt: number,
     lastRunId: string,
+    newStatus?: ScheduleStatus,
   ): Promise<boolean> {
     const result = await this.#client.execute({
       sql: `UPDATE ${TABLE_SCHEDULES}
-            SET next_fire_at = ?, last_fire_at = ?, last_run_id = ?, updated_at = ?
+            SET next_fire_at = ?, last_fire_at = ?, last_run_id = ?, updated_at = ?, status = COALESCE(?, status)
             WHERE id = ? AND next_fire_at = ? AND status = ?`,
-      args: [newNextFireAt, lastFireAt, lastRunId, Date.now(), id, expectedNextFireAt, 'active'],
+      args: [newNextFireAt, lastFireAt, lastRunId, Date.now(), newStatus ?? null, id, expectedNextFireAt, 'active'],
     });
     return (result.rowsAffected ?? 0) > 0;
   }

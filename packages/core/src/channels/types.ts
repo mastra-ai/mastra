@@ -221,6 +221,7 @@ export type ToolDisplayEvent =
    * Fired once after the user approves an approval card. Only `post` results
    * are honored: the returned message replaces the approval card in place.
    * Returning nothing (or a blank message) keeps the default "Approved" card.
+   * `byUser` is the approving user's name, or undefined in DMs.
    */
   | {
       kind: 'approved';
@@ -229,6 +230,7 @@ export type ToolDisplayEvent =
       displayName: string;
       argsSummary: string;
       args: unknown;
+      byUser?: string;
     }
   /**
    * Fired once after the user denies an approval card. Only `post` results
@@ -411,12 +413,12 @@ export interface ChannelHandlerContext {
    */
   readonly signalMetadata: Record<string, unknown>;
   /**
-   * Earlier messages the Chat SDK batched into this dispatch when a
-   * `chatOptions.concurrency` strategy such as `burst`, `debounce`, or `queue`
-   * is set, oldest first. Empty when nothing was batched. `defaultHandler`
-   * merges consecutive messages from the same sender into one agent turn and
-   * dispatches each sender's messages as a separate turn. Only the turn that
-   * contains the current message uses this context's `requestContext`.
+   * Earlier messages from the same sender that the Chat SDK batched into this
+   * turn when a `chatOptions.concurrency` strategy such as `burst`, `debounce`,
+   * or `queue` is set, oldest first. Empty when nothing was batched. A batch
+   * spanning several senders is split into one turn per sender; the handler is
+   * called once per turn with its own context, and `defaultHandler` dispatches
+   * that turn.
    */
   readonly skipped: readonly Message[];
 }
@@ -487,6 +489,8 @@ export interface ResolveResourceIdContext {
   message: Message;
   /** The built-in default: `${platform}:${message.author.userId}`. Return this to keep current behavior. */
   defaultResourceId: string;
+  /** The per-message request context. Values set by channel handlers before `defaultHandler` runs are visible here. */
+  requestContext: RequestContext;
 }
 
 /**
@@ -511,6 +515,8 @@ export interface ResolveThreadIdContext {
   resourceId: string;
   /** The built-in default: a random UUID. Return this to keep current behavior. */
   defaultThreadId: string;
+  /** The per-message request context. Values set by channel handlers before `defaultHandler` runs are visible here. */
+  requestContext: RequestContext;
 }
 
 /**
@@ -938,9 +944,21 @@ export interface ChannelProvider {
 
   /**
    * List active installations for this platform.
-   * Returns public info only (no secrets).
+   * Returns public info only (no secrets). Must be a pure read — any state
+   * repair belongs in {@link reconcileInstallation}.
    */
   listInstallations?(): Promise<ChannelInstallationInfo[]>;
+
+  /**
+   * Reconcile an agent's installation with external platform state — e.g.
+   * confirm a pending install whose connect flow completed out-of-band, where
+   * the platform offers no callback. May persist changes, but only to this
+   * agent's installation: the server exposes it behind write authorization for
+   * that agent. Returns the (possibly updated) installation's public info, or
+   * `null` when the agent has no installation. Omit on platforms whose
+   * connect flows confirm synchronously or via webhook.
+   */
+  reconcileInstallation?(agentId: string): Promise<ChannelInstallationInfo | null>;
 }
 
 /**

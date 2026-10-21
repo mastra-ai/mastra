@@ -1,18 +1,18 @@
 'use client';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useWorkflowSchema } from '@mastra/react/hooks/datasets';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import type { JSONSchema7 } from 'json-schema';
-import { ChevronRight } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useAgentSchema } from '../hooks/use-agent-schema';
 import { useScorerSchema } from '../hooks/use-scorer-schema';
-import { useWorkflowSchema } from '../hooks/use-workflow-schema';
 import { SchemaField } from './schema-settings/schema-field';
 
 type SourceType = 'custom' | 'agent' | 'workflow' | 'scorer';
@@ -53,9 +53,10 @@ export function SchemaConfigSection({
   const workflowOptions = workflows ? Object.entries(workflows) : [];
 
   // Fetch workflow schema when workflow selected
-  const { data: workflowSchema, isLoading: workflowSchemaLoading } = useWorkflowSchema(
-    sourceType === 'workflow' ? selectedWorkflow : null,
-  );
+  const { data: workflowSchema, isLoading: workflowSchemaLoading } = useWorkflowSchema({
+    workflowId: sourceType === 'workflow' ? selectedWorkflow : null,
+    queryOptions: { enabled: !!(sourceType === 'workflow' ? selectedWorkflow : null) },
+  });
 
   // Static schemas for agent and scorer
   const agentSchema = useAgentSchema();
@@ -72,8 +73,8 @@ export function SchemaConfigSection({
       case 'workflow':
         if (!workflowSchema) return { inputSchema: null, outputSchema: null };
         return {
-          inputSchema: (workflowSchema.inputSchema as JSONSchema7) ?? null,
-          outputSchema: (workflowSchema.outputSchema as JSONSchema7) ?? null,
+          inputSchema: workflowSchema.inputSchema ?? null,
+          outputSchema: workflowSchema.outputSchema ?? null,
         };
       case 'scorer':
         return {
@@ -175,8 +176,8 @@ export function SchemaConfigSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className={cn(quietTextHover, 'flex w-full items-center gap-2 py-2 text-subheading')}>
-        <ChevronRight className="h-4 w-4" />
+      <CollapsibleTrigger className={cn(quietTextHover, 'flex w-full items-center gap-2 py-2', 'text-subheading')}>
+        <DisclosureChevron direction="right" className="size-4" />
         Schema Configuration (Optional)
       </CollapsibleTrigger>
 
@@ -200,7 +201,7 @@ export function SchemaConfigSection({
           <div className="flex flex-wrap items-end gap-2">
             <Field className="w-40">
               <FieldLabel size="bigger">Import From</FieldLabel>
-              <Select value={sourceType} onValueChange={v => handleSourceChange(v as SourceType)} disabled={disabled}>
+              <Select value={sourceType} onValueChange={v => handleSourceChange(v)} disabled={disabled}>
                 <SelectTrigger size="sm" className="w-40">
                   <SelectValue />
                 </SelectTrigger>
@@ -245,11 +246,7 @@ export function SchemaConfigSection({
             )}
 
             {sourceType === 'scorer' && (
-              <Select
-                value={scorerTargetType}
-                onValueChange={v => setScorerTargetType(v as ScorerTargetType)}
-                disabled={disabled}
-              >
+              <Select value={scorerTargetType} onValueChange={v => setScorerTargetType(v)} disabled={disabled}>
                 <SelectTrigger aria-label="Scorer target type" size="sm" className="w-32">
                   <SelectValue />
                 </SelectTrigger>

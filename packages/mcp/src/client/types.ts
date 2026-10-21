@@ -11,6 +11,7 @@ import type {
   jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
 import type { MCPTraceContext } from '../shared/trace-context';
+import type { EventsWebhookSetup } from './events/types';
 
 // FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
 export type { FetchLike } from '@modelcontextprotocol/client';
@@ -19,6 +20,8 @@ export type { FetchLike } from '@modelcontextprotocol/client';
 export type { ToolAnnotations } from '@modelcontextprotocol/client';
 // Re-export the MCP LoggingLevel for convenience
 export type { LoggingLevel } from '@modelcontextprotocol/client';
+/** The identity (`serverInfo`) a server announced when the connection was established. */
+export type { Implementation as MCPServerImplementation } from '@modelcontextprotocol/client';
 
 /** The current protocol revision; the one `/mcp` servers speak. */
 export const MCP_CLIENT_PROTOCOL_VERSION = '2026-07-28' as const;
@@ -182,10 +185,19 @@ export type RequireToolApprovalFn = (ctx: RequireToolApprovalContext) => boolean
  */
 export type RequireToolApproval = boolean | RequireToolApprovalFn;
 
+export type MCPClientInfo = {
+  /** Client name servers receive on connect and with each request. Defaults to the server key. */
+  name?: string;
+  /** Client version servers receive on connect and with each request. Defaults to `'1.0.0'`. */
+  version?: string;
+};
+
 /**
  * Base options common to all MCP server definitions.
  */
 export type BaseServerOptions = {
+  /** Overrides the `clientInfo` sent to this server, merged field-wise over `MCPClientOptions.clientInfo`. */
+  clientInfo?: MCPClientInfo;
   /** Optional handler for server log messages */
   logger?: LogHandler;
   /**
@@ -282,9 +294,11 @@ export type BaseServerOptions = {
    * - `'throw'` (default): surface the failure on Mastra's failed-tool-call path
    *   by throwing a `MastraError` that carries the server's `content` text. Tool
    *   spans, stream chunks, scorers, and persisted message parts then reflect the
-   *   failure, and the model sees the error text so it can self-correct.
-   * - `'return'`: resolve successfully with the raw result (or `structuredContent`),
-   *   ignoring `isError`.
+   *   failure, and the model sees the error text so it can self-correct. Any
+   *   `structuredContent` is kept on `error.details.structuredContent` as a JSON string.
+   * - `'return'`: resolve successfully with the full `CallToolResult` envelope
+   *   (`isError`, `content`, and `structuredContent`), so callers can still tell the
+   *   call failed.
    *
    * @default 'throw'
    */
@@ -504,8 +518,12 @@ export type InternalMastraMCPClientOptions = {
   server: MastraMCPServerDefinition;
   /** Optional client version */
   version?: string;
+  /** Optional `clientInfo` servers receive on connect and with each request */
+  clientInfo?: MCPClientInfo;
   /** Optional timeout in milliseconds */
   timeout?: number;
+  /** Webhook settings and receiver shared by the owning `MCPClient`'s servers. */
+  webhook?: EventsWebhookSetup;
 };
 
 /**

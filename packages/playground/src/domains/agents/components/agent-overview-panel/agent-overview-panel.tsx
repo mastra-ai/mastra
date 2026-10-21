@@ -1,3 +1,4 @@
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -6,10 +7,14 @@ import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-c
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { frameSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { toast } from '@mastra/playground-ui/utils/toast';
+import {
+  useAgent,
+  useReorderModelList,
+  useUpdateModelInModelList,
+  useChannelPlatforms,
+} from '@mastra/react/hooks/agents';
 import { Boxes, Brain, Cpu, Folder, Gauge, Globe, Radio, Sparkles, Workflow, Wrench } from 'lucide-react';
-import { useAgent } from '../../hooks/use-agent';
-import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
-import { useChannelPlatforms } from '../../hooks/use-channels';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { AgentChannels } from '../agent-channels/agent-channels';
 import {
@@ -39,10 +44,7 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
   return (
     <div
       data-testid="agent-overview-panel"
-      className={cn(
-        'ml-2 grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden rounded-studio-frame',
-        frameSurfaceStyle,
-      )}
+      className={cn('grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden rounded-studio-frame', frameSurfaceStyle)}
     >
       {/* The header route action owns the close control (see AgentDetailHeaderActions). */}
       <div className="flex h-10 min-h-10 items-center border-b border-border px-4">
@@ -62,10 +64,36 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
 }
 
 function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
-  const { mutate: reorderModelList } = useReorderModelList(agentId);
-  const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { mutateAsync: reorderModelList } = useReorderModelList({ agentId: agentId });
+  const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList({ agentId: agentId });
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
+
+  const reportModelListError = (error: Error & { body?: { error?: string } }) => {
+    toast.error(error.body?.error || error.message || 'Failed to update model list');
+  };
+
+  const handleReorderModelList = async (params: Parameters<typeof reorderModelList>[0]) => {
+    try {
+      return await reorderModelList(params);
+    } catch (error) {
+      reportModelListError(error as Error & { body?: { error?: string } });
+      throw error;
+    }
+  };
+
+  const handleUpdateModelInModelList = async (params: Parameters<typeof updateModelInModelList>[0]) => {
+    try {
+      return await updateModelInModelList(params);
+    } catch (error) {
+      reportModelListError(error as Error & { body?: { error?: string } });
+      throw error;
+    }
+  };
   const { data: channelPlatforms } = useChannelPlatforms();
 
   if (isLoading) {
@@ -106,8 +134,9 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
         <AgentMetadataSection title="Models" accent="blue" icon={<Boxes />}>
           <AgentMetadataModelList
             modelList={agent.modelList}
-            updateModelInModelList={updateModelInModelList}
-            reorderModelList={reorderModelList}
+            editable={agent.modelListEditable !== false}
+            updateModelInModelList={handleUpdateModelInModelList}
+            reorderModelList={handleReorderModelList}
           />
         </AgentMetadataSection>
       )}
@@ -134,7 +163,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
           title: 'Using Tools and MCP documentation',
         }}
       >
-        <AgentMetadataToolList tools={tools} agentId={agentId} />
+        <AgentMetadataToolList agentId={agentId} tools={tools} />
       </AgentMetadataSection>
 
       <AgentMetadataSection
@@ -215,8 +244,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
         {!isCmsLoading && !isCmsAvailable && (
           <Notice variant="warning" title="Read-only">
             <Notice.Message>
-              To edit the system prompt in Studio, add <code className="font-medium">@mastra/editor</code> to your
-              project. See the{' '}
+              To edit the system prompt in Studio, add <InlineCode>@mastra/editor</InlineCode> to your project. See the{' '}
               <a
                 href="https://mastra.ai/docs/editor/overview"
                 target="_blank"

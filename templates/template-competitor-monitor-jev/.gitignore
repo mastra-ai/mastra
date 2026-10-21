@@ -1,0 +1,13 @@
+node_modules/
+.mastra/
+.data/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+/scheduled-monitors.json
+*.db
+*.db-*
+*.log
+.DS_Store

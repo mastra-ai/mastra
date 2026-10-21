@@ -114,7 +114,32 @@ describe('traceAggregateRequestSchema', () => {
       'duration.p99',
       'errorCount',
       'errorRate',
+      'tokens.input.sum',
+      'tokens.input.avg',
+      'tokens.output.sum',
+      'tokens.output.avg',
+      'tokens.total.sum',
+      'tokens.total.avg',
+      'tokens.reasoning.sum',
+      'tokens.reasoning.avg',
+      'tokens.cached.sum',
+      'tokens.cached.avg',
+      'cost.sum',
+      'cost.avg',
     ]);
+  });
+
+  it('parses canonical example 4 (token spend and cost per agent)', () => {
+    const result = parsed({
+      timeRange: { from: '2026-06-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+      groupBy: ['entityName'],
+      interval: '1d',
+      measures: ['count', 'tokens.input.sum', 'tokens.output.sum', 'cost.sum'],
+      orderBy: { field: 'cost.sum', direction: 'desc' },
+      limit: 20,
+    });
+    expect(result.measures).toEqual(['count', 'tokens.input.sum', 'tokens.output.sum', 'cost.sum']);
+    expect(result.orderBy).toEqual({ field: 'cost.sum', direction: 'desc' });
   });
 
   it('accepts every interval literal', () => {
@@ -145,7 +170,18 @@ describe('traceAggregateRequestSchema', () => {
   it('rejects empty, duplicate, and unknown measures', () => {
     expectInvalidRequest({ ...baseRequest, measures: [] }, ['measures']);
     expectInvalidRequest({ ...baseRequest, measures: ['count', 'count'] }, ['measures']);
-    for (const measure of ['duration.p75', 'tokens.input.sum', 'countDistinct', 'countDistinct.', 'cost.sum']) {
+    for (const measure of [
+      'duration.p75',
+      'tokens.input',
+      'tokens.input.max',
+      'cost',
+      'cost.max',
+      'cost.coverage',
+      'cost.unit',
+      'costUnit',
+      'countDistinct',
+      'countDistinct.',
+    ]) {
       expectInvalidRequest({ ...baseRequest, measures: [measure] }, ['measures', 0]);
     }
   });
@@ -280,6 +316,42 @@ describe('traceAggregateResponseSchema', () => {
     expect(traceAggregateResponseSchema.parse(response)).toEqual(response);
   });
 
+  it('parses the example 4 response rows with null measures and row cost', () => {
+    const response = {
+      rows: [
+        {
+          dimensions: { entityName: 'support-agent' },
+          bucket: '2026-08-14T00:00:00.000Z',
+          measures: { count: 1840, 'tokens.input.sum': 2410233, 'tokens.output.sum': 388120, 'cost.sum': 41.27 },
+          cost: { coverage: 0.96, unit: 'usd' },
+        },
+        {
+          dimensions: { entityName: 'research-agent' },
+          bucket: '2026-08-14T00:00:00.000Z',
+          measures: { count: 120, 'tokens.input.sum': 903112, 'tokens.output.sum': 144870, 'cost.sum': null },
+          cost: { coverage: 0.5, unit: 'mixed' },
+        },
+        { measures: { count: 3, 'tokens.input.avg': null, 'cost.avg': null }, cost: { coverage: null, unit: null } },
+      ],
+      truncated: false,
+    };
+    expect(traceAggregateResponseSchema.parse(response)).toEqual(response);
+  });
+
+  it('only allows numeric or null measures and a well-formed row cost', () => {
+    const parse = (row: Record<string, unknown>) =>
+      traceAggregateResponseSchema.safeParse({ rows: [{ measures: {}, ...row }], truncated: false }).success;
+    expect(parse({ measures: { 'cost.sum': 'usd' } })).toBe(false);
+    expect(parse({ measures: { costUnit: 'usd' } })).toBe(false);
+    expect(parse({ measures: { 'cost.coverage': 0.5 } })).toBe(false);
+    expect(parse({ cost: { coverage: '0.5', unit: 'usd' } })).toBe(false);
+    expect(parse({ cost: { coverage: 1.5, unit: 'usd' } })).toBe(false);
+    expect(parse({ cost: { coverage: 0.5, unit: 1 } })).toBe(false);
+    expect(parse({ cost: { coverage: 0.5 } })).toBe(false);
+    expect(parse({ cost: { coverage: 0.5, unit: 'eur', extra: true } })).toBe(false);
+    expect(parse({ cost: { coverage: 0.5, unit: 'eur' } })).toBe(true);
+  });
+
   it('rejects unknown row keys, non-numeric measures, and unknown measure keys', () => {
     const row = { measures: { count: 1 } };
     expect(traceAggregateResponseSchema.safeParse({ rows: [{ ...row, total: 1 }], truncated: false }).success).toBe(
@@ -289,7 +361,7 @@ describe('traceAggregateResponseSchema', () => {
       traceAggregateResponseSchema.safeParse({ rows: [{ measures: { count: '1' } }], truncated: false }).success,
     ).toBe(false);
     expect(
-      traceAggregateResponseSchema.safeParse({ rows: [{ measures: { 'cost.sum': 1 } }], truncated: false }).success,
+      traceAggregateResponseSchema.safeParse({ rows: [{ measures: { 'cost.max': 1 } }], truncated: false }).success,
     ).toBe(false);
     expect(traceAggregateResponseSchema.safeParse({ rows: [row] }).success).toBe(false);
     expect(traceAggregateResponseSchema.safeParse({ rows: [row], truncated: false, page: null }).success).toBe(false);

@@ -581,11 +581,31 @@ export const transferThreadResponseSchema = threadSchema;
 /**
  * Body schema for PUT /memory/threads/:threadId/working-memory
  */
-export const updateWorkingMemoryBodySchema = z.object({
-  workingMemory: z.string(),
-  resourceId: z.string().optional(),
-  memoryConfig: z.record(z.string(), z.unknown()).optional(),
-});
+const isJsonObjectString = (value: string) => {
+  try {
+    const parsed = JSON.parse(value);
+    return !!parsed && typeof parsed === 'object' && !Array.isArray(parsed);
+  } catch {
+    return false;
+  }
+};
+
+export const updateWorkingMemoryBodySchema = z
+  .object({
+    workingMemory: z.string(),
+    resourceId: z.string().optional(),
+    memoryConfig: z.record(z.string(), z.unknown()).optional(),
+    /**
+     * `replace` (default) overwrites the whole record. `merge` atomically deep-merges a
+     * partial JSON object into resource-scoped schema working memory (requires a storage
+     * adapter with atomic merge support, e.g. PostgreSQL).
+     */
+    mode: z.enum(['replace', 'merge']).optional(),
+  })
+  .refine(body => body.mode !== 'merge' || isJsonObjectString(body.workingMemory), {
+    message: 'workingMemory must be a JSON object string when mode is "merge"',
+    path: ['workingMemory'],
+  });
 
 /**
  * Body schema for POST /memory/messages/delete

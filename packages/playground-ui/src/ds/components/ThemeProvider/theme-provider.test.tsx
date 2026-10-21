@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, renderHook } from '@testing-library/react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ThemeToggle } from '../ThemeToggle/theme-toggle';
 import { ThemeProvider, useTheme } from './theme-provider';
@@ -31,7 +31,7 @@ const mockMatchMedia = (matchesDark: boolean): SystemPreference => {
     dispatchEvent: () => false,
     onchange: null,
   };
-  window.matchMedia = vi.fn().mockReturnValue(mql) as unknown as typeof window.matchMedia;
+  window.matchMedia = vi.fn().mockReturnValue(mql);
 
   return {
     set(next: boolean) {
@@ -352,12 +352,6 @@ describe('ThemeProvider — remembering the choice', () => {
 });
 
 describe('ThemeToggle', () => {
-  beforeAll(() => {
-    if (typeof window.PointerEvent === 'undefined') {
-      Object.defineProperty(window, 'PointerEvent', { configurable: true, value: window.MouseEvent });
-    }
-  });
-
   it('renders the default options and accessible label', () => {
     const { getByRole } = render(<ThemeToggle value="dark" onChange={() => undefined} />);
 

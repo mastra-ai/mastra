@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import '@/test/inert-resize-observer';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
@@ -181,53 +181,25 @@ describe('TraceDataPanelView — className passthrough', () => {
   });
 });
 
-describe('TraceDataPanelView — Add tool mocks to item', () => {
-  it('fires onAddTraceMocksToItem with the traceId when the button is clicked', () => {
-    const onAddTraceMocksToItem = vi.fn();
-    render(<TraceDataPanelView {...baseProps} onAddTraceMocksToItem={onAddTraceMocksToItem} />);
-
-    openTraceActions();
-    fireEvent.click(screen.getByRole('menuitem', { name: /add tool mocks to item/i }));
-
-    expect(onAddTraceMocksToItem).toHaveBeenCalledTimes(1);
-    expect(onAddTraceMocksToItem).toHaveBeenCalledWith({ traceId: 'trace-1' });
-  });
-
-  it('does not render the action when the prop is omitted', () => {
-    render(<TraceDataPanelView {...baseProps} />);
-
-    openTraceActions();
-    expect(screen.queryByRole('menuitem', { name: /add tool mocks to item/i })).toBeNull();
-  });
-});
-
 describe('TraceDataPanelView — header actions', () => {
   it('keeps navigation and close visible while secondary actions stay in the menu', () => {
     render(<TraceDataPanelView {...baseProps} onPrevious={vi.fn()} onNext={vi.fn()} onEvaluateTrace={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: /previous trace/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /next trace/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /close panel/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /close trace/i })).toBeTruthy();
     expect(screen.queryByRole('menuitem', { name: /evaluate trace/i })).toBeNull();
 
     openTraceActions();
     expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
   });
 
-  it('exposes the dataset and mock actions from the header menu', () => {
-    render(
-      <TraceDataPanelView
-        {...baseProps}
-        onEvaluateTrace={vi.fn()}
-        onSaveAsDatasetItem={vi.fn()}
-        onAddTraceMocksToItem={vi.fn()}
-      />,
-    );
+  it('exposes the dataset action from the header menu', () => {
+    render(<TraceDataPanelView {...baseProps} onEvaluateTrace={vi.fn()} onSaveAsDatasetItem={vi.fn()} />);
 
     openTraceActions();
     expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /add full trace to dataset/i })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /add tool mocks to item/i })).toBeTruthy();
   });
 
   it('still saves the dataset item against the root span from the header', () => {
@@ -265,6 +237,34 @@ describe('TraceDataPanelView — trace summary description', () => {
     expect(screen.queryByText('Ended at')).toBeNull();
     expect(screen.queryByText('Trace input tokens')).toBeNull();
     expect(screen.queryByText('Trace est. cost')).toBeNull();
+  });
+});
+
+describe('TraceDataPanelView — trace error', () => {
+  const failedSpans = [
+    { ...rootSpanFixture[0], error: { name: 'AI_APICallError', message: 'Invalid reasoning effort' } },
+  ];
+
+  it("shows the root span's error without opening the span", () => {
+    render(<TraceDataPanelView {...baseProps} spans={failedSpans} />);
+
+    expect(screen.getByText('AI_APICallError')).toBeTruthy();
+    expect(screen.getByText('Invalid reasoning effort')).toBeTruthy();
+  });
+
+  it('opens the failed span from the error', () => {
+    const onSpanSelect = vi.fn();
+    render(<TraceDataPanelView {...baseProps} spans={failedSpans} onSpanSelect={onSpanSelect} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'View details' }));
+
+    expect(onSpanSelect).toHaveBeenLastCalledWith('root');
+  });
+
+  it('shows no error when the trace succeeded', () => {
+    render(<TraceDataPanelView {...baseProps} />);
+
+    expect(screen.queryByRole('button', { name: 'View details' })).toBeNull();
   });
 });
 
@@ -428,6 +428,35 @@ describe('TraceDataPanelView — the body', () => {
     expect(screen.getAllByRole('status', { name: 'Loading spans' }).length).toBeGreaterThan(0);
     expect(screen.queryByText('No spans found for this trace.')).toBeNull();
     expect(screen.queryByText('No spans match your search.')).toBeNull();
+  });
+
+  it('keeps a single search field while loading, so the header does not jump when spans land', () => {
+    render(<TraceDataPanelView {...baseProps} spans={[]} isLoading />);
+
+    expect(screen.getAllByLabelText('Search spans')).toHaveLength(1);
+    // The header owns the search; the tree placeholder starts straight at the legend, not with a second field.
+    const [placeholder] = screen.getAllByRole('status', { name: 'Loading spans' });
+    expect(placeholder.firstElementChild?.getAttribute('data-slot')).toBe('span-type-legend-skeleton');
+  });
+
+  it('holds back the side tabs until the spans land, so the first tab does not flip from Feedback to Messages', () => {
+    const { rerender } = render(
+      <TraceDataPanelView {...baseProps} spans={[]} isLoading feedbackTabSlot={() => <p>feedback body</p>} />,
+    );
+
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.queryByText('feedback body')).toBeNull();
+
+    rerender(
+      <TraceDataPanelView
+        {...baseProps}
+        feedbackTabSlot={() => <p>feedback body</p>}
+        messagesPanelSlot={<p>messages body</p>}
+      />,
+    );
+
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Messages', 'Feedback']);
+    expect(screen.getByText('messages body')).toBeTruthy();
   });
 
   it('says a settled trace has no spans', () => {
@@ -693,7 +722,7 @@ describe('TraceDataPanelView — following the spans it is given', () => {
       <TraceDataPanelView {...baseProps} spans={rootSpanFixture} onSaveAsDatasetItem={onSaveAsDatasetItem} />,
     );
 
-    const otherRoot = [{ ...(rootSpanFixture[0] as (typeof rootSpanFixture)[number]), spanId: 'other-root' }];
+    const otherRoot = [{ ...rootSpanFixture[0], spanId: 'other-root' }];
     rerender(<TraceDataPanelView {...baseProps} spans={otherRoot} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
 
     openTraceActions();
@@ -783,8 +812,7 @@ describe('TraceDataPanelView — messages column', () => {
       const messagesPanel = screen.getByTestId('messages-panel');
       expect(precedes(messagesPanel, screen.getByText('agent run'))).toBe(true);
       expect(columns().contains(messagesPanel)).toBe(true);
-      expect(columns().className).toContain('grid-cols-[18rem_1fr_0fr] lg:grid-cols-[24rem_1fr_0fr]');
-      expect(columns().className).toContain('transition-[grid-template-columns]');
+      expect(within(columns()).getAllByRole('separator', { hidden: true })).toHaveLength(1);
     });
 
     it('orders the columns messages → trace → span', () => {
@@ -793,7 +821,7 @@ describe('TraceDataPanelView — messages column', () => {
       const trace = screen.getByText('agent run');
       expect(precedes(screen.getByTestId('messages-panel'), trace)).toBe(true);
       expect(precedes(trace, screen.getByTestId('span-detail'))).toBe(true);
-      expect(columns().className).toContain('grid-cols-[18rem_1fr_1fr] lg:grid-cols-[24rem_1fr_1fr]');
+      expect(within(columns()).getAllByRole('separator', { hidden: true })).toHaveLength(2);
     });
 
     it('keeps the side column while the timeline view is active', () => {
@@ -824,7 +852,7 @@ describe('TraceDataPanelView — messages column', () => {
       const trace = screen.getByText('agent run');
       const span = screen.getByTestId('span-detail');
       expect(precedes(trace, span)).toBe(true);
-      expect(columns().className).toContain('grid-cols-[0px_1fr_1fr]');
+      expect(within(columns()).getAllByRole('separator', { hidden: true })).toHaveLength(1);
     });
   });
 
@@ -834,7 +862,7 @@ describe('TraceDataPanelView — messages column', () => {
 
       expect(screen.queryByTestId('messages-panel')).toBeNull();
       expect(document.body.querySelector('[data-trace-side-column]')).toBeNull();
-      expect(columns().className).toContain('grid-cols-[0px_1fr_0fr]');
+      expect(within(columns()).queryAllByRole('separator', { hidden: true })).toHaveLength(0);
     });
   });
 });
@@ -925,7 +953,9 @@ describe('TraceDataPanelView — side column views', () => {
 
     const tabs = screen.getAllByRole('tab');
     expect(tabs.every(tab => sideColumn()?.contains(tab))).toBe(true);
-    expect(tabs[0]?.closest('[role="tablist"]')?.parentElement?.parentElement?.className).toContain('border-b');
+    const bordered = tabs[0]?.closest('.border-b');
+    expect(bordered).not.toBeNull();
+    expect(sideColumn()?.contains(bordered ?? null)).toBe(true);
   });
 
   it('renders no side column when no slot is provided', () => {

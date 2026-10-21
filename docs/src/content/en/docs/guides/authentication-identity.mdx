@@ -244,7 +244,7 @@ This example uses the default bridge. Mastra first preserves any `req.auth` valu
 
 Return only the data the model needs. Remove credentials and sensitive upstream fields before returning a tool result.
 
-`RequestContext.serializeForSpan()` redacts `MASTRA_AUTH_TOKEN_KEY` when context is attached to tracing spans. Application logs and custom telemetry must apply the same principle to other credentials and sensitive identity fields.
+Reserved Mastra keys (those starting with `mastra__` or `__mastra_`, including `MASTRA_AUTH_TOKEN_KEY`) are omitted when request context is attached to tracing spans or saved on score records. Application logs and custom telemetry must apply the same principle to other credentials and sensitive identity fields.
 
 ## Add authorization after authentication
 

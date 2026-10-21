@@ -8,7 +8,7 @@ import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import type { McpServerStatus, McpSkippedServer } from '@mastra/code-sdk/mcp/types';
 import chalk from 'chalk';
 import { decodePrintableShortcut } from '../key-input.js';
-import { theme } from '../theme.js';
+import { theme, getContrastText } from '../theme.js';
 
 // =============================================================================
 // Types
@@ -179,7 +179,8 @@ export class McpSelectorComponent extends Box implements Focusable {
 
   private buildUI(): void {
     // Title
-    const titleText = chalk.bgHex('#16c858').white.bold(' Manage MCP servers ');
+    const accent = theme.getTheme().accent;
+    const titleText = chalk.bgHex(accent).hex(getContrastText(accent)).bold(' Manage MCP servers ');
     this.addChild(new Text(titleText, 0, 0));
     this.addChild(new Spacer(1));
 

@@ -1,8 +1,16 @@
 import { createHash } from 'node:crypto';
 
-import { boardForWorkItem, workItemPhaseSemantics } from '../../boards/index.js';
+import {
+  boardEventHandlers,
+  boardForWorkItem,
+  eventBoardId,
+  rulePhaseField,
+  withBoardClosure,
+  workItemPhaseSemantics,
+} from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
+import { selectEventRule } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -23,7 +31,8 @@ import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   WorkItemUpdateConflictError,
 } from '../../storage/domains/work-items/base.js';
-import type { IntegrationContext } from '../base.js';
+import type { IntegrationContext, IntegrationHooks } from '../base.js';
+import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
 import type { GithubRepositoryPermission } from './integration.js';
@@ -50,6 +59,11 @@ async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
 
 function object(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function timestamp(value: unknown): number | undefined {
+  const parsed = typeof value === 'string' ? Date.parse(value) : NaN;
+  return Number.isNaN(parsed) ? undefined : parsed;
 }
 
 function string(value: unknown): string | undefined {
@@ -141,7 +155,9 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
  * authoritative; the intake-stamped `githubRepositoryId` covers URL-less
  * cards. A card with neither signal cannot be attributed by number alone.
  */
-function cardBelongsToRepository(item: WorkItemRow, repositoryId: number, repositoryFullName: string): boolean {
+const MAX_STALE_RULE_ATTEMPTS = 3;
+
+export function cardBelongsToRepository(item: WorkItemRow, repositoryId: number, repositoryFullName: string): boolean {
   const url = item.externalSource?.url;
   if (url) {
     const match = /^https?:\/\/[^/]+\/(.+)\/(?:issues|pull)\/\d+(?:[/?#]|$)/.exec(url);
@@ -275,17 +291,24 @@ export interface GithubRulesOptions {
   storage: WorkItemsStorage;
   configVersion: string;
   boards: BoardRegistry;
-  /** Label routes decide which installed board a labelled issue lands on. Absent means Work. */
-  intake?: Pick<IntakeStorage, 'listLabelRoutes'>;
+  /**
+   * Decides which installed board an issue lands on: a label route first, then the repository's
+   * intake source binding. Absent means Work.
+   */
+  intake?: Pick<IntakeStorage, 'listLabelRoutes' | 'listBindings'>;
+  /** Hands a push to a linked repository off for an environment build. */
+  onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
 }
 
 /** Identity under which label-driven relocations are recorded. */
 const LABEL_ROUTE_USER_ID = 'factory-rule-dispatcher';
 
-function issueLabelChange(parsed: ParsedGithubWebhook): boolean {
-  const action = string(parsed.payload.action);
-  return parsed.event === 'issues' && (action === 'labeled' || action === 'unlabeled');
-}
+type IssueActionHandler = (
+  parsed: ParsedGithubWebhook,
+  repositoryId: number,
+  repositoryName: string,
+  project: ExternalRepositoryProjectTarget,
+) => Promise<{ status: 'ignored' | 'committed' }>;
 
 /**
  * Whether a login is Factory itself. Prefers the resolved identity, which is
@@ -322,18 +345,33 @@ export class GithubRules {
   }
 
   /**
-   * Board an issue's labels select under the project's label routes, when that board is installed.
-   * Undefined leaves built-in routing (Work) in charge.
+   * Board an issue lands on: the one its labels select under the project's label routes, else the
+   * board the repository's intake source binding names. Only installed boards count. Undefined
+   * leaves built-in routing (Work) in charge.
    */
-  async #labelRouteTarget(
-    orgId: string,
-    factoryProjectId: string,
+  async #intakeTarget(
+    project: ExternalRepositoryProjectTarget,
+    repositoryName: string,
     labels: readonly string[],
   ): Promise<{ board: string; initialPhase: string } | undefined> {
-    if (!this.options.intake || labels.length === 0) return undefined;
-    const routes = await this.options.intake.listLabelRoutes({ orgId, factoryProjectId, integrationId: 'github' });
-    const route = resolveIntakeLabelRoute(routes, labels);
-    const board = route ? this.options.boards.get(route.board) : undefined;
+    const intake = this.options.intake;
+    if (!intake) return undefined;
+    const { orgId, factoryProjectId } = project;
+    if (labels.length > 0) {
+      const routes = await intake.listLabelRoutes({ orgId, factoryProjectId, integrationId: 'github' });
+      const route = resolveIntakeLabelRoute(routes, labels);
+      const board = route ? this.options.boards.get(route.board) : undefined;
+      if (board) return { board: board.id, initialPhase: board.initialPhase };
+    }
+    // GitHub bindings are keyed by the internal repository id; the slug is accepted too since the
+    // bindings API stores whatever source id it is given.
+    const slug = repositoryName.toLowerCase();
+    const binding = (await intake.listBindings({ orgId, integrationId: 'github' })).find(
+      candidate =>
+        candidate.factoryProjectId === factoryProjectId &&
+        (candidate.sourceId === project.projectRepository.repositoryId || candidate.sourceId.toLowerCase() === slug),
+    );
+    const board = binding?.board ? this.options.boards.get(binding.board) : undefined;
     return board ? { board: board.id, initialPhase: board.initialPhase } : undefined;
   }
 
@@ -385,7 +423,7 @@ export class GithubRules {
       item = updated.item;
       changed = true;
     }
-    const target = await this.#labelRouteTarget(project.orgId, project.factoryProjectId, labels);
+    const target = await this.#intakeTarget(project, repositoryName, labels);
     const outcome = await moveCardToBoard({
       workItems: this.options.storage,
       boardRegistry: this.options.boards,
@@ -396,17 +434,101 @@ export class GithubRules {
     return { status: changed || outcome === 'moved' ? 'committed' : 'ignored' };
   }
 
+  /**
+   * `assigned` / `unassigned` are not rule events either: an existing issue card only mirrors the
+   * issue's full assignee list. No card is created, moved, or handed to a run.
+   */
+  async #syncIssueAssignees(
+    parsed: ParsedGithubWebhook,
+    repositoryId: number,
+    repositoryName: string,
+    project: ExternalRepositoryProjectTarget,
+  ): Promise<{ status: 'ignored' | 'committed' }> {
+    const issue = object(parsed.payload.issue);
+    const issueNumber = issue?.pull_request === undefined ? number(issue?.number) : undefined;
+    if (!issueNumber) return { status: 'ignored' };
+    const item = await this.#relatedItem(
+      project.orgId,
+      project.factoryProjectId,
+      repositoryId,
+      repositoryName,
+      issueNumber,
+      undefined,
+      undefined,
+      null,
+    );
+    if (!item || item.externalSource?.type !== 'issue') return { status: 'ignored' };
+    const assignees = actorLogins(issue?.assignees);
+    // GitHub can deliver webhooks out of order; drop payloads older than the last applied one.
+    // Timestamps have one-second resolution, so equal timestamps still apply.
+    const updatedAt = string(issue?.updated_at);
+    const payloadTime = timestamp(updatedAt);
+    const storedTime = timestamp(item.metadata?.githubAssigneesUpdatedAt);
+    if (payloadTime !== undefined && storedTime !== undefined && payloadTime < storedTime) {
+      return { status: 'ignored' };
+    }
+    // A newer payload with unchanged assignees still advances the stored time, so a delayed older
+    // payload cannot slip in behind it.
+    const advancesTime = payloadTime !== undefined && (storedTime === undefined || payloadTime > storedTime);
+    if (sameStrings(item.metadata?.assignees, assignees) && !advancesTime) return { status: 'ignored' };
+    try {
+      const updated = await this.options.storage.update({
+        orgId: item.orgId,
+        id: item.id,
+        userId: LABEL_ROUTE_USER_ID,
+        patch: {
+          metadata: {
+            ...(item.metadata ?? {}),
+            assignees,
+            ...(payloadTime !== undefined ? { githubAssigneesUpdatedAt: updatedAt } : {}),
+          },
+        },
+        expectedRevision: item.revision,
+      });
+      return { status: updated ? 'committed' : 'ignored' };
+    } catch (error) {
+      // A concurrent write won; nothing reconciles issue-card assignees, so they stay as the
+      // winner left them until the next assigned/unassigned delivery for this issue.
+      if (!(error instanceof WorkItemUpdateConflictError)) throw error;
+      return { status: 'ignored' };
+    }
+  }
+
+  /** `issues` actions that are not rule events but still update an existing card. */
+  #issueActionHandler(parsed: ParsedGithubWebhook): IssueActionHandler | undefined {
+    if (parsed.event !== 'issues') return undefined;
+    switch (string(parsed.payload.action)) {
+      case 'labeled':
+      case 'unlabeled':
+        return (...args) => this.#relocateLabeledIssue(...args);
+      case 'assigned':
+      case 'unassigned':
+        return (...args) => this.#syncIssueAssignees(...args);
+      default:
+        return undefined;
+    }
+  }
+
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
-    const labelChange = issueLabelChange(parsed);
     const repository = object(parsed.payload.repository);
     const installationId = number(object(parsed.payload.installation)?.id);
     const repositoryId = number(repository?.id);
     const repositoryName = string(repository?.full_name);
     const login = string(object(parsed.payload.sender)?.login);
-    if ((!event && !labelChange) || !installationId || !repositoryId || !repositoryName || !login) {
+    if (parsed.event === 'push' && installationId && repositoryId) {
+      await this.#handOffPush(parsed, installationId, repositoryId);
       return { status: 'ignored' };
     }
+    if (!installationId || !repositoryId || !repositoryName || !login) return { status: 'ignored' };
+    const issueAction = this.#issueActionHandler(parsed);
+    const handle = event
+      ? (project: ExternalRepositoryProjectTarget) =>
+          this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project)
+      : issueAction
+        ? (project: ExternalRepositoryProjectTarget) => issueAction(parsed, repositoryId, repositoryName, project)
+        : undefined;
+    if (!handle) return { status: 'ignored' };
 
     const projects = await this.options.sourceControl.projectRepositories.listByExternalRepository({
       installationExternalId: String(installationId),
@@ -415,15 +537,39 @@ export class GithubRules {
     if (projects.length === 0) return { status: 'ignored' };
     const results = [];
     for (const project of projects) {
-      results.push(
-        event
-          ? await this.#ingestProject(parsed, event, installationId, repositoryId, repositoryName, login, project)
-          : await this.#relocateLabeledIssue(parsed, repositoryId, repositoryName, project),
-      );
+      results.push(await handle(project));
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
     return results[0] ?? { status: 'ignored' };
+  }
+
+  /**
+   * A push is not a work-item event; it only reaches the environment build
+   * hand-off, once per project the repository is linked to. The hook decides
+   * whether the project builds on push.
+   */
+  async #handOffPush(parsed: ParsedGithubWebhook, installationId: number, repositoryId: number): Promise<void> {
+    const onRepositoryPush = this.options.onRepositoryPush;
+    const ref = string(parsed.payload.ref);
+    const defaultBranch = string(object(parsed.payload.repository)?.default_branch);
+    if (!onRepositoryPush || !ref || !defaultBranch) return;
+    const projects = await this.options.sourceControl.projectRepositories.listByExternalRepository({
+      installationExternalId: String(installationId),
+      repositoryExternalId: String(repositoryId),
+    });
+    for (const project of projects) {
+      onRepositoryPush({
+        orgId: project.orgId,
+        factoryProjectId: project.factoryProjectId,
+        projectRepository: {
+          id: project.projectRepository.id,
+          inEnvironment: project.projectRepository.inEnvironment,
+        },
+        ref,
+        defaultBranch,
+      });
+    }
   }
 
   async #ingestProject(
@@ -502,7 +648,7 @@ export class GithubRules {
     const relatedItem =
       reviewEntryRequested && resolvedItem?.externalSource?.type !== 'pull-request' ? undefined : resolvedItem;
     const intake = issueNumber
-      ? await this.#labelRouteTarget(project.orgId, project.factoryProjectId, labelNames(issue?.labels))
+      ? await this.#intakeTarget(project, repositoryName, labelNames(issue?.labels))
       : undefined;
     const actor = await githubActor(this.options.github, {
       installationId,
@@ -533,6 +679,7 @@ export class GithubRules {
       ingressIdentity: string,
       /** Set on the evaluation that files the pull request's own Review card. */
       pullRequestIntake = false,
+      attempt = 1,
     ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> => {
       const context: FactoryGithubRuleContext = {
         tenant: { orgId: project.orgId, projectId: project.factoryProjectId },
@@ -556,6 +703,8 @@ export class GithubRules {
               },
               board: boardForWorkItem(item),
               itemRevision: item.revision,
+              ...withBoardClosure(this.options.boards, item),
+              ...rulePhaseField(this.options.boards, item),
             }
           : {}),
         ...(intake ? { intake } : {}),
@@ -647,7 +796,11 @@ export class GithubRules {
           : {}),
       };
 
-      const rule = this.options.github.rules[event];
+      const rule = selectEventRule(
+        this.options.github.rules,
+        boardEventHandlers(this.options.boards, eventBoardId(context), 'github'),
+        event,
+      );
       let decision: FactoryRuleDecision | void;
       let decisions: Record<string, unknown>[] = [];
       let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
@@ -687,9 +840,61 @@ export class GithubRules {
         causalChain: [],
         now: new Date(),
       });
+      if (committed.status === 'stale') {
+        // The item was written concurrently. Re-read it and run the rule again
+        // against the fresh revision; nothing was persisted for this attempt.
+        if (attempt >= MAX_STALE_RULE_ATTEMPTS) {
+          throw new Error(`Factory GitHub rule evaluation for ${ingressIdentity} kept losing revision races.`);
+        }
+        const fresh = item ? await this.options.storage.get({ orgId: project.orgId, id: item.id }) : null;
+        if (item && !fresh) return { status: 'missing' };
+        return evaluate(fresh ?? undefined, ingressIdentity, pullRequestIntake, attempt + 1);
+      }
       return { status: committed.status };
     };
 
+    // A push moves the head a recorded review verdict was given on. Recording
+    // the new head lets the verdict badge show that it is outdated, while the
+    // verdict itself stays so the next pass still runs as a re-review. It is
+    // recorded before the push is evaluated: the dispatcher can apply the
+    // re-review transition as soon as it commits, and the pass it starts names
+    // the head it covers, which must be the pushed one.
+    const stampHead = async () => {
+      const headSha = string(object(pullRequest?.head)?.sha)?.toLowerCase();
+      if (event !== 'pullRequestUpdated' || !headSha || !pullRequestNumber) return;
+      const headAt = timestamp(pullRequest?.updated_at);
+      if (relatedItem?.externalSource?.type !== 'pull-request') return;
+      const parent = await this.#linkedClosureItem(
+        project.orgId,
+        project.factoryProjectId,
+        repositoryId,
+        repositoryName,
+        pullRequestNumber,
+        relatedItem,
+      );
+      // The authoring Work item mirrors the verdict of the pull request it has
+      // out; a push to an older one must not mark its successor's verdict.
+      await recordPullRequestHead(this.options.storage, {
+        orgId: relatedItem.orgId,
+        id: relatedItem.id,
+        headSha,
+        headAt,
+      });
+      if (parent) {
+        await recordPullRequestHead(this.options.storage, {
+          orgId: parent.orgId,
+          id: parent.id,
+          headSha,
+          headAt,
+          ownedPullRequestNumber: pullRequestNumber,
+        });
+      }
+    };
+    await stampHead();
+    const evaluated =
+      event === 'pullRequestUpdated' && relatedItem
+        ? ((await this.options.storage.get({ orgId: relatedItem.orgId, id: relatedItem.id })) ?? relatedItem)
+        : relatedItem;
     const deliveryIdentity = `${installationId}:${parsed.deliveryId}`;
     // A pull request opening concerns two cards: its own Review card, which the
     // arrival rule files — committed against the Work item that authored the
@@ -699,7 +904,7 @@ export class GithubRules {
     // identity suffixed with its id, because ingress identities are the replay
     // key and reusing the delivery's own would drop it as a duplicate.
     const pullRequestOpened = event === 'pullRequestOpened';
-    const primary = await evaluate(relatedItem, deliveryIdentity, pullRequestOpened);
+    const primary = await evaluate(evaluated, deliveryIdentity, pullRequestOpened);
     // A closed pull request is the one *other* event both linked cards need:
     // the Review card has to close, and the Work item that wrote the code has
     // to finish (on merge) or at least stop recording it as open. Resolution binds the delivery to
@@ -744,11 +949,21 @@ export class GithubRules {
             ? reviewCard !== undefined && reviewCard.metadata?.state !== 'closed'
             : reviewCard?.metadata?.state !== 'closed';
         if (authoringItem && trusted && stillOpen) {
+          // The head comes along so a head recorded for an earlier pull
+          // request cannot mark this one's verdict outdated. A replayed opening
+          // of the pull request already recorded keeps the head its pushes left.
+          const rebinding = authoringItem.metadata?.openPullRequestNumber !== pullRequestNumber;
+          const head = rebinding
+            ? {
+                pullRequestHeadSha: string(object(pullRequest?.head)?.sha)?.toLowerCase() ?? null,
+                pullRequestHeadAt: timestamp(pullRequest?.updated_at) ?? null,
+              }
+            : {};
           await this.options.storage.update({
             orgId: authoringItem.orgId,
             id: authoringItem.id,
             userId: 'factory-rule-dispatcher',
-            patch: { metadata: { openPullRequestNumber: pullRequestNumber } },
+            patch: { metadata: { openPullRequestNumber: pullRequestNumber, ...head } },
           });
         }
         return;
@@ -938,6 +1153,10 @@ export interface ReconcilePullRequestState {
   mergedBy?: string;
 }
 
+export interface PolledPullRequestState extends ReconcilePullRequestState {
+  createdAt: string;
+}
+
 export type GithubPullRequestFetcher = (input: {
   installationId: number;
   repository: string;
@@ -1077,7 +1296,7 @@ export function reconciledIssueClosedEvent(
         ...(state.stateReason ? { state_reason: state.stateReason } : {}),
         ...(state.createdAt ? { created_at: state.createdAt } : {}),
         ...(state.updatedAt ? { updated_at: state.updatedAt } : {}),
-        assignees: (state.assignees ?? []).map(login => ({ login })),
+        assignees: githubUsers(state.assignees),
       },
     },
   };
@@ -1123,8 +1342,8 @@ export function reconciledIssueRelabeledEvent(
         state: 'open',
         ...(state.createdAt ? { created_at: state.createdAt } : {}),
         ...(state.updatedAt ? { updated_at: state.updatedAt } : {}),
-        assignees: (state.assignees ?? []).map(login => ({ login })),
-        labels: labels.map(name => ({ name })),
+        assignees: githubUsers(state.assignees),
+        labels: githubLabels(labels),
       },
     },
   };
@@ -1146,37 +1365,70 @@ export function reconciledIssueOpenedEvent(
   return { ...event, deliveryId: `reconcile:${repository.id}:issue:${issueNumber}:opened` };
 }
 
+export function polledPullRequestEvent(
+  repository: ReconcileRepository,
+  pullRequestNumber: number,
+  state: PolledPullRequestState,
+): ParsedGithubWebhook {
+  return {
+    event: 'pull_request',
+    deliveryId: `poll:${repository.id}:pull-request:${pullRequestNumber}:${state.createdAt}`,
+    payload: {
+      action: 'opened',
+      installation: { id: repository.installationId },
+      repository: { id: repository.id, full_name: repository.fullName },
+      sender: { login: state.author ?? '__unknown__' },
+      pull_request: pullRequestPayload(pullRequestNumber, state),
+    },
+  };
+}
+
 export function reconciledClosedEvent(
   repository: ReconcileRepository,
   pullRequestNumber: number,
   state: ReconcilePullRequestState,
 ): ParsedGithubWebhook {
+  const outcome = state.merged ? 'merged' : 'closed';
   return {
     event: 'pull_request',
     // Stable per (repository, PR, outcome): the ingress dedupe makes repeat
     // reconcile cycles replay instead of re-committing decisions.
-    deliveryId: `reconcile:${repository.id}:pull-request:${pullRequestNumber}:${state.merged ? 'merged' : 'closed'}`,
+    deliveryId: `reconcile:${repository.id}:pull-request:${pullRequestNumber}:${outcome}`,
     payload: {
       action: 'closed',
       installation: { id: repository.installationId },
       repository: { id: repository.id, full_name: repository.fullName },
       sender: { login: state.mergedBy ?? 'github' },
-      pull_request: {
-        number: pullRequestNumber,
-        title: state.title,
-        html_url: state.url,
-        ...(state.createdAt ? { created_at: state.createdAt } : {}),
-        state: 'closed',
-        draft: state.draft,
-        merged: state.merged,
-        assignees: (state.assignees ?? []).map(login => ({ login })),
-        requested_reviewers: (state.requestedReviewers ?? []).map(login => ({ login })),
-        labels: (state.labels ?? []).map(name => ({ name })),
-        head: { ref: state.headBranch },
-        base: { ref: state.baseBranch },
-      },
+      pull_request: pullRequestPayload(pullRequestNumber, { ...state, state: 'closed' }),
     },
   };
+}
+
+function pullRequestPayload(pullRequestNumber: number, state: ReconcilePullRequestState): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    number: pullRequestNumber,
+    title: state.title,
+    html_url: state.url,
+    state: state.state,
+    draft: state.draft,
+    merged: state.merged,
+    assignees: githubUsers(state.assignees),
+    requested_reviewers: githubUsers(state.requestedReviewers),
+    labels: githubLabels(state.labels),
+    head: { ref: state.headBranch },
+    base: { ref: state.baseBranch },
+  };
+  if (state.createdAt) payload.created_at = state.createdAt;
+  if (state.author) payload.user = { login: state.author };
+  return payload;
+}
+
+function githubUsers(logins: readonly string[] = []): Array<{ login: string }> {
+  return logins.map(login => ({ login }));
+}
+
+function githubLabels(names: readonly string[] = []): Array<{ name: string }> {
+  return names.map(name => ({ name }));
 }
 
 function reconciledPullRequestMetadata(
@@ -1429,6 +1681,7 @@ export function githubRulesOptions(
     configVersion: context.runtime.configVersion,
     boards: context.runtime.boards,
     intake: context.storage.intake,
+    ...(context.hooks?.onRepositoryPush ? { onRepositoryPush: context.hooks.onRepositoryPush } : {}),
   };
 }
 

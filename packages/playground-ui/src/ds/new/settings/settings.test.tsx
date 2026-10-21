@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   SettingsContainer,
   SettingsDescription,
@@ -15,11 +15,6 @@ import { Form } from '@/ds/components/Form';
 import { Input } from '@/ds/components/Input';
 import { Switch } from '@/ds/components/Switch';
 
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    Object.defineProperty(window, 'PointerEvent', { configurable: true, value: window.MouseEvent });
-  }
-});
 afterEach(cleanup);
 
 describe('Settings', () => {
@@ -69,6 +64,31 @@ describe('Settings', () => {
           .getByRole('region', { name: 'Connection' })
           .contains(screen.getByRole('heading', { name: 'Connection' })),
       ).toBe(true);
+    });
+  });
+
+  describe('SettingsContainer variants', () => {
+    it('defaults to the divided variant', () => {
+      render(
+        <SettingsContainer>
+          <SettingsRow label="Theme" />
+        </SettingsContainer>,
+      );
+
+      expect(document.querySelector('[data-slot="settings-container"]')?.getAttribute('data-variant')).toBe('default');
+    });
+
+    it('renders every row inside the inset variant', () => {
+      render(
+        <SettingsContainer variant="inset">
+          <SettingsRow label="Theme" />
+          <SettingsRow label="Notifications" />
+        </SettingsContainer>,
+      );
+
+      const container = document.querySelector('[data-slot="settings-container"]');
+      expect(container?.getAttribute('data-variant')).toBe('inset');
+      expect(container?.querySelectorAll('[data-slot="settings-row"]')).toHaveLength(2);
     });
   });
 

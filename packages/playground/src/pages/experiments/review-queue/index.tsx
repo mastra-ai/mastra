@@ -6,14 +6,16 @@ import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/se
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useExperimentsForDatasetFilter } from '@mastra/react/hooks/experiments';
 import { ArrowUpRight } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
-import { useExperimentsForDatasetFilter } from '@/domains/experiments/hooks/use-experiments-for-dataset-filter';
 import { navCrumb } from '@/domains/navigation/crumbs';
-import { DatasetReview, type ReviewListFilters } from '@/domains/review/components/dataset-review';
-import { ReviewQueueFilterBar, type ReviewQueueFilters } from '@/domains/review/components/review-queue-filter-bar';
+import { DatasetReview } from '@/domains/review/components/dataset-review';
+import type { ReviewListFilters } from '@/domains/review/components/dataset-review';
+import { ReviewQueueFilterBar } from '@/domains/review/components/review-queue-filter-bar';
+import type { ReviewQueueFilters } from '@/domains/review/components/review-queue-filter-bar';
 import { TARGET_ID_PARAM, TARGET_TYPE_PARAM } from '@/domains/shared/hooks/use-target-filter-params';
 
 const crumbs = [navCrumb('/experiments'), navCrumb('/experiments/review-queue')];
@@ -37,7 +39,7 @@ function ReviewQueuePage() {
   const { Link, paths } = useLinkComponent();
   // Servers without the trace-query API don't expose feedback either.
   const traceQuery = useTraceQueryAvailable();
-  const { data, error } = useExperimentsForDatasetFilter(undefined, { targetType, targetId });
+  const { data, error } = useExperimentsForDatasetFilter({ datasetId: undefined, target: { targetType, targetId } });
   const selected = data?.experiments.find(experiment => experiment.id === selectedId);
 
   const handleFiltersChange = (next: ReviewQueueFilters, list: ReviewListFilters) => {

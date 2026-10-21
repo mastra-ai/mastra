@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const removeGuildMemberRoleInputSchema = z.object({
   guild_id: z.string().describe('Guild ID. Example: "123456789"'),
@@ -25,15 +26,7 @@ export function removeGuildMemberRoleTool(proxy: PlatformProxy) {
     outputSchema: removeGuildMemberRoleOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof removeGuildMemberRoleOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{ botToken: string }>();
-      const botToken = metadata?.botToken;
-
-      if (!botToken) {
-        throw new platformProxy.ActionError({
-          type: 'missing_bot_token',
-          message: 'Bot token is required in metadata. Please configure the botToken in your connection metadata.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // https://discord.com/developers/docs/resources/guild#delete-guild-member-role
       const response = await platformProxy.delete({

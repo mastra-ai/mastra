@@ -13,7 +13,7 @@ import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 import { mapMastraMessagesToConversationItems } from './responses.adapter';
 import { findConversationThreadAcrossAgents, getAgentMemoryStore } from './responses.storage';
-import { getEffectiveResourceId } from './utils';
+import { getEffectiveResourceId, validateThreadOwnership } from './utils';
 
 function buildConversationObject({ thread }: { thread: ConversationObject['thread'] }): ConversationObject {
   return {
@@ -69,6 +69,13 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
 
       const threadId = conversation_id ?? globalThis.crypto.randomUUID();
       const resourceId = getEffectiveResourceId(requestContext, resource_id) ?? threadId;
+
+      // Creating with an existing id upserts the thread, so validate ownership of any existing thread first
+      if (conversation_id) {
+        const existing = await memory.getThreadById({ threadId });
+        await validateThreadOwnership(existing, getEffectiveResourceId(requestContext, undefined));
+      }
+
       const thread = await memory.createThread({
         threadId,
         resourceId,

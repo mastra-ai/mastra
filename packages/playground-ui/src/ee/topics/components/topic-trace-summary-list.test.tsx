@@ -33,10 +33,10 @@ describe('TopicTraceSummaryList keyboard navigation', () => {
     const [first, second] = rows;
     first?.focus();
 
-    fireEvent.keyDown(first as HTMLElement, { key: 'ArrowDown' });
+    fireEvent.keyDown(first, { key: 'ArrowDown' });
     expect(document.activeElement).toBe(rows[1]);
 
-    fireEvent.keyDown(second as HTMLElement, { key: 'End' });
+    fireEvent.keyDown(second, { key: 'End' });
     expect(document.activeElement).toBe(rows[2]);
   });
 

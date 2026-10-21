@@ -1,4 +1,4 @@
-import type { StepTripwireData } from '../../../../stream/types';
+import type { LanguageModelUsage, StepTripwireData } from '../../../../stream/types';
 import type { DurableAgenticExecutionOutput } from '../../types';
 import type { AccumulatedUsage, BaseIterationState } from './schemas';
 
@@ -15,19 +15,19 @@ export interface IterationStateUpdateInput {
 /**
  * Step record for tracking iteration history.
  *
- * Deliberate shape divergence from the main loop: main accumulates full
- * `DefaultStepResult` objects (with `content`, `response`, etc.); durable
- * serializes this reduced record across step boundaries instead. Processor
- * hooks receive these records via the `(inputData as any).accumulatedSteps`
- * casts in llm-execution.ts, so a processor reading `steps[i].content` gets
- * `undefined` on durable. Converging the shapes would require reworking
- * durable's serialized iteration state, so the divergence is kept for now.
+ * Main accumulates full `DefaultStepResult` objects; durable serializes this
+ * reduced record across step boundaries instead. `content` is the step's model
+ * content, the same value stopWhen and `stream.steps` see. It is absent on
+ * records written before it was added, where `buildDurableStepContent`
+ * rebuilds it from `text`/`toolCalls`/`toolResults`. Other fields of
+ * `DefaultStepResult` (`response`, etc.) are still not carried.
  */
 export interface StepRecord {
   text?: string;
+  content?: unknown[];
   toolCalls?: unknown[];
   toolResults?: unknown[];
-  usage?: unknown;
+  usage?: LanguageModelUsage;
   finishReason?: string;
   tripwire?: StepTripwireData;
 }
@@ -46,10 +46,13 @@ export function calculateAccumulatedUsage(
     reasoningTokens?: number;
   },
 ): AccumulatedUsage {
+  const accumulate = (current: number | undefined, next: number | undefined) =>
+    current !== undefined && next !== undefined ? current + next : undefined;
+
   const usage: AccumulatedUsage = {
-    inputTokens: currentUsage.inputTokens + (executionUsage?.inputTokens || 0),
-    outputTokens: currentUsage.outputTokens + (executionUsage?.outputTokens || 0),
-    totalTokens: currentUsage.totalTokens + (executionUsage?.totalTokens || 0),
+    inputTokens: accumulate(currentUsage.inputTokens, executionUsage?.inputTokens),
+    outputTokens: accumulate(currentUsage.outputTokens, executionUsage?.outputTokens),
+    totalTokens: accumulate(currentUsage.totalTokens, executionUsage?.totalTokens),
   };
   // Only emit detail fields once some step reported them, so providers without caching don't show a misleading 0
   for (const key of ['cachedInputTokens', 'cacheCreationInputTokens', 'reasoningTokens'] as const) {
@@ -68,6 +71,7 @@ export function calculateAccumulatedUsage(
 export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput): StepRecord {
   return {
     text: executionOutput.output.text,
+    content: executionOutput.output.content,
     toolCalls: executionOutput.output.toolCalls,
     toolResults: executionOutput.toolResults,
     usage: executionOutput.output.usage,
@@ -104,8 +108,22 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
 export function createBaseIterationStateUpdate(input: IterationStateUpdateInput): BaseIterationState {
   const { currentState, executionOutput } = input;
 
-  const newUsage = calculateAccumulatedUsage(currentState.accumulatedUsage, executionOutput.output.usage);
-  const stepRecord = buildStepRecord(executionOutput);
+  // Legacy states with completed steps cannot prove whether their numeric totals
+  // include every provider measurement. Preserve the zero identity only for a
+  // pre-first-step state; otherwise migrate the accumulator to unknown.
+  const currentUsage =
+    currentState.usageAggregationVersion === 1 || currentState.accumulatedSteps.length === 0
+      ? currentState.accumulatedUsage
+      : {
+          ...currentState.accumulatedUsage,
+          inputTokens: undefined,
+          outputTokens: undefined,
+          totalTokens: undefined,
+        };
+  const signalPreempted = executionOutput.stepResult.signalPreempted === true;
+  const newUsage = signalPreempted
+    ? currentState.accumulatedUsage
+    : calculateAccumulatedUsage(currentUsage, executionOutput.output.usage);
   const lastStepResult = { ...executionOutput.stepResult };
   delete lastStepResult.request;
 
@@ -114,6 +132,7 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     agentId: currentState.agentId,
     agentName: currentState.agentName,
     messageListState: executionOutput.messageListState,
+    initialUntaggedSystemMessages: currentState.initialUntaggedSystemMessages,
     toolsMetadata: currentState.toolsMetadata,
     modelConfig: currentState.modelConfig,
     options: currentState.options,
@@ -122,10 +141,15 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     // Carried, not recomputed: the request context is fixed for the run, and
     // the steps that rebuild from Mastra have no other source for it.
     requestContextEntries: currentState.requestContextEntries,
-    iterationCount: currentState.iterationCount + 1,
-    accumulatedSteps: [...currentState.accumulatedSteps, stepRecord],
+    inputTripwire: signalPreempted ? currentState.inputTripwire : undefined,
+    iterationCount: currentState.iterationCount + (signalPreempted ? 0 : 1),
+    accumulatedSteps: signalPreempted
+      ? currentState.accumulatedSteps
+      : [...currentState.accumulatedSteps, buildStepRecord(executionOutput)],
     accumulatedUsage: newUsage,
+    usageAggregationVersion: signalPreempted ? currentState.usageAggregationVersion : 1,
     lastStepResult,
+    deferredStepFinishChunk: executionOutput.deferredStepFinishChunk,
     backgroundTaskPending: executionOutput.backgroundTaskPending,
     delegationBailed: executionOutput.delegationBailed,
     // Preserve the two-phase stop flag set by the dowhile predicate's
@@ -137,5 +161,7 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     // Carry span identity forward unchanged so every iteration shares one trace.
     agentSpanData: currentState.agentSpanData,
     modelSpanData: currentState.modelSpanData,
+    // First inference wins; later iterations never overwrite it.
+    completionStartTime: currentState.completionStartTime ?? executionOutput.completionStartTime,
   };
 }

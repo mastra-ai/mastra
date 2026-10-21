@@ -172,7 +172,7 @@ describe('implicit maxProcessorRetries budget', () => {
     expect(getCallCount()).toBe(7);
   });
 
-  it('counts each processor retry against the agent step budget', async () => {
+  it('does not count processor retries against the agent step budget', async () => {
     const { model, getCallCount } = createAlwaysFailingModel();
 
     const agent = new Agent({
@@ -183,12 +183,11 @@ describe('implicit maxProcessorRetries budget', () => {
       errorProcessors: [createAlwaysRetryProcessor()],
     });
 
-    // `stopWhen` defaults to stepCountIs(5), and processor retries are loop
-    // iterations, so the step budget bounds the retries before the retry budget
-    // does. This is why a high maxProcessorRetries needs a raised maxSteps too.
+    // Processor retries re-run the same step, so they do not count against the
+    // default 5-step budget: maxProcessorRetries alone bounds them (1 + 20 calls).
     await runExpectingFailure(() => agent.generate('hello', { maxProcessorRetries: 20 }));
 
-    expect(getCallCount()).toBe(5);
+    expect(getCallCount()).toBe(21);
   });
 
   it('still lets a well-behaved processor recover on its first retry', async () => {

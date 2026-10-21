@@ -3,6 +3,7 @@ import type { LanguageModelV3, LanguageModelV3CallOptions } from '@ai-sdk/provid
 import { aiV5PromptToAIV6Prompt } from '../../../../agent/message-list/conversion';
 import type { MastraLanguageModelV3 } from '../../shared.types';
 import { createStreamFromGenerateResult } from '../generate-to-stream';
+import { toSingleSystemMessage } from '../single-system-message';
 
 type StreamResult = Awaited<ReturnType<LanguageModelV3['doStream']>>;
 
@@ -53,7 +54,7 @@ export class AISDKV6LanguageModel implements MastraLanguageModelV3 {
   /**
    * The language model must specify which language model interface version it implements.
    */
-  readonly specificationVersion: 'v3' = 'v3';
+  readonly specificationVersion = 'v3' as const;
   /**
    * Name of the provider for logging purposes.
    */
@@ -62,6 +63,8 @@ export class AISDKV6LanguageModel implements MastraLanguageModelV3 {
    * Provider-specific model ID for logging purposes.
    */
   readonly modelId: string;
+  /** Full `provider/model` ID this model was resolved from, when known. */
+  id?: string;
   /**
    * Supported URL patterns by media type for the provider.
    *
@@ -72,6 +75,11 @@ export class AISDKV6LanguageModel implements MastraLanguageModelV3 {
    * @returns A map of supported URL patterns by media type (as a promise or a plain object).
    */
   supportedUrls: PromiseLike<Record<string, RegExp[]>> | Record<string, RegExp[]>;
+  /**
+   * Whether the wrapped provider model sends native structured output (for example
+   * `@ai-sdk/openai-compatible` models created with `supportsStructuredOutputs: true`).
+   */
+  readonly supportsStructuredOutputs?: boolean;
 
   #model: LanguageModelV3;
 
@@ -80,10 +88,14 @@ export class AISDKV6LanguageModel implements MastraLanguageModelV3 {
     this.provider = this.#model.provider;
     this.modelId = this.#model.modelId;
     this.supportedUrls = this.#model.supportedUrls;
+    const supportsStructuredOutputs = (config as { supportsStructuredOutputs?: unknown }).supportsStructuredOutputs;
+    if (typeof supportsStructuredOutputs === 'boolean') {
+      this.supportsStructuredOutputs = supportsStructuredOutputs;
+    }
   }
 
   async doGenerate(options: LanguageModelV3CallOptions) {
-    const result = await this.#model.doGenerate(remapCallOptionsToV3(options));
+    const result = await this.#model.doGenerate(remapCallOptionsToV3(this.#withSingleSystemMessage(options)));
 
     return {
       ...result,
@@ -94,7 +106,12 @@ export class AISDKV6LanguageModel implements MastraLanguageModelV3 {
   }
 
   async doStream(options: LanguageModelV3CallOptions) {
-    return await this.#model.doStream(remapCallOptionsToV3(options));
+    return await this.#model.doStream(remapCallOptionsToV3(this.#withSingleSystemMessage(options)));
+  }
+
+  #withSingleSystemMessage(options: LanguageModelV3CallOptions): LanguageModelV3CallOptions {
+    const prompt = toSingleSystemMessage(this.provider, options.prompt);
+    return prompt === options.prompt ? options : { ...options, prompt };
   }
 
   /**

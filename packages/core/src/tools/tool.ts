@@ -227,7 +227,7 @@ export class Tool<
    * Schema for validating request context values.
    * When provided, the request context will be validated against this schema before tool execution.
    */
-  requestContextSchema?: PublicSchema<TRequestContext>;
+  requestContextSchema?: PublicSchema<TRequestContext, any>;
 
   /**
    * Tool execution function
@@ -270,9 +270,32 @@ export class Tool<
   needsApprovalFn?: NeedsApprovalFn;
 
   /**
+   * Runs before the approval gate for calls that require approval and can reject the call
+   * with `{ proceed: false, output }`, returning `output` to the model without suspending
+   * or executing.
+   * @example
+   * ```typescript
+   * beforeApproval: async ({ orderId }) => {
+   *   if (!(await orderExists(orderId))) {
+   *     return { proceed: false, output: { error: `Order ${orderId} not found` } };
+   *   }
+   * }
+   * ```
+   */
+  beforeApproval?: NonNullable<
+    ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['beforeApproval']
+  >;
+
+  /**
    * Enables strict tool input generation for providers that support it.
    */
   strict?: boolean;
+
+  /**
+   * How a result that fails `outputSchema` validation is handled: replaced with a
+   * validation error (`'strict'`, the default) or logged and returned as-is (`'warn'`).
+   */
+  outputValidation?: 'strict' | 'warn';
 
   /**
    * Provider-specific options passed to the model when this tool is used.
@@ -382,7 +405,9 @@ export class Tool<
     this.requestContextSchema = opts.requestContextSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
+    this.beforeApproval = opts.beforeApproval;
     this.strict = opts.strict;
+    this.outputValidation = opts.outputValidation;
     this.providerOptions = opts.providerOptions;
     this.toModelOutput = opts.toModelOutput;
     this.transform = opts.transform;
@@ -577,6 +602,12 @@ export class Tool<
         const outputValidation = validateToolOutput(this.outputSchema, output, this.id, skiptOutputValidation);
 
         if (outputValidation.error) {
+          const logger = organizedContext.mastra?.getLogger?.() ?? this.mastra?.getLogger?.();
+          logger?.warn(outputValidation.error.message, { toolId: this.id });
+          if (this.outputValidation === 'warn') {
+            // The tool already ran, so keep its real result and only report the mismatch.
+            return output;
+          }
           return outputValidation.error as any;
         }
 

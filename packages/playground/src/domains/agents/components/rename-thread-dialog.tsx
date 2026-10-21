@@ -4,8 +4,9 @@ import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { toast } from '@mastra/playground-ui/utils/toast';
+import { useUpdateThread } from '@mastra/react/hooks/memory';
 import { useState } from 'react';
-import { useUpdateThread } from '@/domains/memory/hooks/use-memory';
 
 export interface RenameThreadDialogProps {
   agentId: string;
@@ -26,7 +27,16 @@ export function RenameThreadDialog({ agentId, threadId, initialTitle, onOpenChan
     e.preventDefault();
     if (!canSave) return;
 
-    mutate({ threadId, agentId, title: trimmed }, { onSuccess: () => onOpenChange(false) });
+    mutate(
+      { threadId, agentId, title: trimmed },
+      {
+        onSuccess: () => {
+          toast.success('Chat renamed');
+          onOpenChange(false);
+        },
+        onError: () => toast.error('Failed to rename chat'),
+      },
+    );
   };
 
   return (

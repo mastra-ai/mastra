@@ -133,7 +133,7 @@ export class TelegramProvider implements ChannelProvider {
     return {
       id: this.id,
       name: 'Telegram',
-      isConfigured: this.#configured,
+      isConfigured: this.isConfigured(),
       connectOptionsSchema: {
         type: 'object',
         properties: {
@@ -489,12 +489,15 @@ export class TelegramProvider implements ChannelProvider {
   }
 
   /**
-   * Whether at least one bot is actively registered. Mirrors
-   * `SlackProvider.isConfigured` (Telegram has no global credential to check —
-   * "configured" means an active installation exists).
+   * Whether the provider is ready to connect agents: either a bot is already
+   * registered (#configured) or a credential source exists — a default
+   * `botToken`, or a `tokenResolver` in delegated mode (@mastra/connect).
+   * Without the credential-source half, a freshly attached platform credential
+   * reports unconfigured and UIs hide the connect action entirely. Mirrors
+   * `DiscordProvider.isConfigured` / `SlackProvider.isConfigured`.
    */
   isConfigured(): boolean {
-    return this.#configured;
+    return this.#configured || Boolean(this.#config.tokenResolver ?? this.#config.botToken);
   }
 
   /**
@@ -715,6 +718,14 @@ export class TelegramProvider implements ChannelProvider {
   #getBaseUrl(): string | undefined {
     if (this.#config.baseUrl) return stripTrailingSlash(this.#config.baseUrl);
     const server = this.#mastra?.getServer();
+    // MASTRA_SERVER_URL is the server's public URL (deployment platforms
+    // inject it). It beats bind-address derivation — a deployed server binds
+    // 0.0.0.0, which Telegram rejects for webhooks — but explicit
+    // `server.studio*` overrides in user config still win.
+    const hasPublicOverride =
+      server?.studioHost != null || server?.studioPort != null || server?.studioProtocol != null;
+    const envUrl = process.env.MASTRA_SERVER_URL?.trim();
+    if (!hasPublicOverride && envUrl) return stripTrailingSlash(envUrl);
     if (!server) return undefined;
     const protocol = server.studioProtocol ?? 'http';
     const host = server.studioHost ?? server.host ?? 'localhost';

@@ -1,12 +1,12 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
 export const revokeOrganizationInvitationInputSchema = z.object({
-  organization_id: z.string(),
-  invitation_id: z.string(),
+  organization_id: z.string().min(1),
+  invitation_id: z.string().min(1),
   requesting_user_id: z.string().optional(),
 });
 
@@ -17,7 +17,7 @@ const ResourceSchema = z
     email_address: z.string(),
     organization_id: z.string().optional(),
     role: z.string().optional(),
-    status: z.enum(['pending', 'accepted', 'revoked', 'expired']).optional(),
+    status: z.enum(['pending', 'accepted', 'revoked', 'expired']).or(z.string()).optional(),
     created_at: z.number().optional(),
     updated_at: z.number().optional(),
   })

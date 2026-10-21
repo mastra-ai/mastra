@@ -15,6 +15,7 @@ import type {
 } from '@internal/ai-sdk-v4';
 import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
+import type { StoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { AgentSignalType } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
@@ -89,6 +90,8 @@ export type StreamTransportRef = {
 
 interface BaseChunkType {
   runId: string;
+  /** Trace ID of the run that produced this chunk. Undefined when tracing is disabled. */
+  traceId?: string;
   from: ChunkFrom;
   metadata?: Record<string, any>;
 }
@@ -204,6 +207,8 @@ export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   output?: TOutput;
   dynamic?: boolean;
   title?: string;
+  /** Tool-owned metadata for UI hosts (e.g. `app` holds the MCP App UI pointer). */
+  toolMetadata?: JSONObject;
   /**
    * W3C trace context carrier for client-side tool execution.
    *
@@ -237,6 +242,7 @@ interface ToolCallInputStreamingStartPayload {
   providerMetadata?: ProviderMetadata;
   dynamic?: boolean;
   title?: string;
+  toolMetadata?: JSONObject;
   observability?: ClientObservabilityCarrier;
 }
 
@@ -306,6 +312,8 @@ export interface StepStartPayload {
   messageId?: string;
   /** Epoch milliseconds sampled immediately before the model provider call. Absent when no provider call occurred. */
   startedAt?: number;
+  modelId?: string;
+  provider?: string;
   request: {
     body?: string;
     [key: string]: unknown;
@@ -823,6 +831,8 @@ interface ToolCallApprovalPayload {
   resumeSchema: string;
   /** Epoch ms when approval was requested; matches the tool part's `updatedAt`. */
   updatedAt?: number;
+  /** Token usage of the model step that produced this tool call. */
+  usage?: LanguageModelUsage;
 }
 
 interface ToolCallSuspendedPayload {
@@ -831,6 +841,8 @@ interface ToolCallSuspendedPayload {
   suspendPayload: any;
   args: Record<string, any>;
   resumeSchema: string;
+  /** Token usage of the model step that produced this tool call. */
+  usage?: LanguageModelUsage;
 }
 
 interface ToolCallResumedPayload {
@@ -850,6 +862,15 @@ export type DataChunkType = {
   /** When true, the chunk is streamed to the client but not persisted to storage. */
   transient?: boolean;
 };
+
+/**
+ * Whether a stream chunk or message part is a custom `data-*` chunk (e.g. written via `writer.custom()`).
+ * The `data-` type prefix is the discriminant for these chunks, shared with the AI SDK.
+ */
+export function isDataChunk<T>(value: T): value is T & { type: `data-${string}` } {
+  const type = (value as { type?: unknown } | null | undefined)?.type;
+  return typeof type === 'string' && type.startsWith('data-');
+}
 
 export type NetworkChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'routing-agent-start'; payload: RoutingAgentStartPayload })
@@ -982,11 +1003,7 @@ export type WorkflowStreamEvent =
         workflowStatus: WorkflowRunStatus;
         finalWorkflowResult?: unknown;
         output: {
-          usage: {
-            inputTokens: number;
-            outputTokens: number;
-            totalTokens: number;
-          };
+          usage: LanguageModelUsage;
         };
         metadata: Record<string, any>;
       };
@@ -1076,7 +1093,13 @@ export type TypedChunkType<OUTPUT = undefined> =
   | AgentChunkType<OUTPUT>
   | WorkflowStreamEvent
   | NetworkChunkType<OUTPUT>
-  | (DataChunkType & { from: never; runId: never; metadata?: BaseChunkType['metadata']; payload: never });
+  | (DataChunkType & {
+      from: never;
+      runId: never;
+      traceId?: never;
+      metadata?: BaseChunkType['metadata'];
+      payload: never;
+    });
 
 // Default ChunkType for backward compatibility using dynamic (any) tool types
 export type ChunkType<OUTPUT = undefined> = TypedChunkType<OUTPUT>;
@@ -1167,6 +1190,13 @@ export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPU
   totalUsage: LanguageModelUsage;
   model?: partialModel;
   runId?: string;
+  /** Model messages the run added to the conversation (the response messages). */
+  messages?: ModelMessage[];
+  /**
+   * @internal Cumulative usage already recorded by earlier suspended legs of this run, so the
+   * MODEL_GENERATION span of a resumed leg records only its own share.
+   */
+  generationReportedUsage?: LanguageModelUsage;
 };
 
 /**
@@ -1184,6 +1214,12 @@ export type CustomChunkWriter = {
 /** Context passed as the second argument to `MastraOnFinishCallback`. */
 export type MastraOnFinishCallbackContext = {
   writer?: CustomChunkWriter;
+  /**
+   * Set when an output processor aborted the run from `processOutputResult`. The run-level
+   * message save never happens in that case, so the agent removes any response messages the
+   * run already saved (before a tool-approval suspension, or with `savePerStep`).
+   */
+  outputResultTripwire?: StepTripwireData;
 };
 
 export type MastraOnFinishCallback<OUTPUT = undefined> = (
@@ -1229,8 +1265,12 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
    */
   deferErrorChunks?: boolean;
   returnScorerData?: boolean;
+  /** Loads response messages the run pruned from its message list (kept there by id only) for scorer data. */
+  loadStoredMessages?: StoredMessageLoader;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
+  /** The run's abort signal, forwarded to output processors. */
+  abortSignal?: AbortSignal;
   transportRef?: StreamTransportRef;
   /** Experimental transforms applied whenever `fullStream` is consumed. */
   experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;

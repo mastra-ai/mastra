@@ -12,9 +12,11 @@
  */
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
+import type { FactoryStorageOps } from '@mastra/core/storage';
 
 import { externalSourceKey } from '../work-items/base.js';
 import type { ExternalWorkItemSource } from '../work-items/base.js';
+import { bumpBoardVersions, FACTORY_BOARD_VERSIONS_SCHEMA, trackBoardWrites } from '../work-items/board-version.js';
 import { fanOutWorkItemActivity, listActivityForUser, PARTICIPANT_SCAN_LIMIT } from './activity.js';
 import type { WorkItemActivityRow } from './activity.js';
 import type { FactoryActorExternalIdentity, FactoryActorRef } from './actor.js';
@@ -316,7 +318,14 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
       WORK_ITEM_COMMENTS_SCHEMA,
       WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
       WORK_ITEM_ACTIVITY_SCHEMA,
+      FACTORY_BOARD_VERSIONS_SCHEMA,
     ]);
+  }
+
+  /** Comment counts live on the card, so these writes change the board too. */
+  protected override get ops(): FactoryStorageOps {
+    const ops = super.ops;
+    return trackBoardWrites(ops, scope => bumpBoardVersions(ops, [scope]));
   }
 
   async dangerouslyClearAll(): Promise<void> {

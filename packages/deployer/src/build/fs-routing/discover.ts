@@ -1,8 +1,8 @@
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { parseFrontmatter } from '@internal/core/frontmatter';
 import { MAX_FS_SUBAGENT_DEPTH } from '@mastra/core/agent';
 import type { AgentSchedulePromptDefinition } from '@mastra/core/schedules';
-import matter from 'gray-matter';
 import { slash } from '../utils';
 
 /**
@@ -328,7 +328,7 @@ async function parsePackagedSkill(
   references: Record<string, string> = {},
 ): Promise<Extract<DiscoveredFsSkill, { kind: 'packaged' }>> {
   const raw = await readFile(skillMdPath, 'utf-8');
-  const parsed = matter(raw);
+  const parsed = parseFrontmatter(raw);
   const frontmatter = parsed.data as { name?: string; description?: string };
   const name = frontmatter.name ?? fallbackName;
   const description = frontmatter.description;
@@ -412,9 +412,9 @@ async function discoverSkills(skillsDir: string): Promise<DiscoveredFsSkill[]> {
 async function parseMarkdownSchedule(path: string, key: string): Promise<MarkdownScheduleDefinition> {
   const raw = await readFile(path, 'utf-8');
 
-  let parsed: ReturnType<typeof matter>;
+  let parsed: ReturnType<typeof parseFrontmatter>;
   try {
-    parsed = matter(raw);
+    parsed = parseFrontmatter(raw);
   } catch (error) {
     // The most common cron form starts with `*`, which YAML reads as an alias
     // indicator, so `cron: */5 * * * *` fails with an opaque parser error.
@@ -426,7 +426,7 @@ async function parseMarkdownSchedule(path: string, key: string): Promise<Markdow
     );
   }
 
-  const frontmatter = (parsed.data ?? {}) as Record<string, unknown>;
+  const frontmatter = parsed.data;
   const prompt = parsed.content.trim();
 
   const unknown = Object.keys(frontmatter).filter(

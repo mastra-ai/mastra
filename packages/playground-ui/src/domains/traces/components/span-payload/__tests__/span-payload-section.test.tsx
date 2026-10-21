@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SpanPayloadSection } from '../span-payload-section';
 
@@ -29,14 +29,37 @@ describe('SpanPayloadSection', () => {
         </SpanPayloadSection>,
       );
       const clip = () => container.querySelector<HTMLElement>('[data-slot="collapsible-box"]');
-      expect(clip()?.style.maxHeight).toBe('220px');
+      expect(clip()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('220px');
       fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
-      expect(clip()?.style.maxHeight).toBe('');
+      expect(clip()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('');
       fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));
-      expect(clip()?.style.maxHeight).toBe('220px');
+      expect(clip()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('220px');
       fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
-      expect(clip()?.style.maxHeight).toBe('220px');
+      expect(clip()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('220px');
       expect(container.querySelector('[data-slot="span-payload-json"]')).toBeTruthy();
+    });
+
+    it('clips inside the card so its rounded frame stays intact', () => {
+      const { container } = render(
+        <SpanPayloadSection title="Input" raw={{ a: 1 }}>
+          <p>Long content</p>
+        </SpanPayloadSection>,
+      );
+      const card = container.querySelector<HTMLElement>('[data-slot="span-payload-card"]');
+      if (!card) throw new Error('Missing payload card');
+      expect(card.querySelector('[data-slot="collapsible-box"]')).toBeTruthy();
+      fireEvent.click(within(card).getByRole('button', { name: 'Expand' }));
+      expect(card.contains(screen.getByRole('button', { name: 'Collapse' }))).toBe(false);
+    });
+
+    it('leaves self-framed content unwrapped when framed is off', () => {
+      const { container } = render(
+        <SpanPayloadSection title="Error" raw={{ message: 'boom' }} framed={false}>
+          <p>Long content</p>
+        </SpanPayloadSection>,
+      );
+      expect(container.querySelector('[data-slot="span-payload-card"]')).toBeNull();
+      expect(container.querySelector('[data-slot="collapsible-box"]')).toBeTruthy();
     });
   });
 });

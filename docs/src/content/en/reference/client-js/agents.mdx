@@ -218,6 +218,23 @@ await agent.queueMessage({
 })
 ```
 
+### `queueSignal()`
+
+Queue a typed signal for the next thread turn. It follows the same ordering as `queueMessage()`, but keeps the signal's `type`, `tagName`, and `attributes`.
+
+```typescript
+await agent.queueSignal({
+  signal: {
+    type: 'reactive',
+    tagName: 'skill',
+    attributes: { name: 'triage' },
+    contents: 'Triage the new issue.',
+  },
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+})
+```
+
 ### `sendSignal()`
 
 Send a lower-level signal to an active agent run or memory thread. Use this for system-generated context such as reactive reminders or notification-shaped context that doesn't need inbox storage. For durable notification records, use the server-side [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) API. For user-authored input, prefer `sendMessage()` or `queueMessage()`.
@@ -350,7 +367,27 @@ await subscription.processDataStream({
 
 Pass `withInitialHistory: true` (or `{ perPage }`) to receive the stored messages as a first `thread-history` chunk instead of fetching history separately. Finished runs aren't replayed after it, so completed answers don't stream again on reconnect.
 
-`subscribeToThread()` returns the underlying `Response` plus a `processDataStream()` helper. The helper reads the subscription stream until the connection closes or the request is aborted. Pass `reconnect: true` to resubscribe when the transport closes or a reconnect request fails, such as after a proxy idle timeout.
+In the React SDK, `useChat()` exposes the `hasMore` flag from that first page as `initialHistoryPagination`, so you can decide whether to offer loading older messages without another history request:
+
+```typescript
+import { useChat } from '@mastra/react'
+
+const { messages, initialHistoryPagination } = useChat({
+  agentId: 'support-agent',
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+  enableThreadSignals: true,
+  withInitialHistory: { perPage: 20 },
+})
+
+// { hasMore: true }: older messages exist
+// { hasMore: false }: the page reaches the start of the thread
+// undefined: history is disabled, still loading, or the subscription ended
+```
+
+`initialHistoryPagination` only describes the initial subscription page for the current agent, resource, thread, and `withInitialHistory` value. It isn't changed by live output or `setMessages()`. After you load older pages yourself, use the `hasMore` value from those responses.
+
+`subscribeToThread()` returns the underlying `Response` plus a `processDataStream()` helper. The helper reads the subscription stream until the connection closes or the request is aborted. Pass `reconnect: true` to resubscribe when the transport closes or a reconnect request fails, such as after a proxy idle timeout. If a reconnect request fails with a 4xx status (for example `401` or `403`) or `501`, `processDataStream()` stops reconnecting and rejects with the original `MastraClientError`. `408` and `429` are still retried.
 
 <PropertiesTable
   content={[
@@ -370,7 +407,7 @@ Pass `withInitialHistory: true` (or `{ perPage }`) to receive the stored message
     type: 'boolean | { maxRetries?: number; delayMs?: number }',
     isOptional: true,
     description:
-      'Reconnects the subscription stream after it closes or a reconnect request fails. `true` retries indefinitely with a one-second delay.',
+      'Reconnects the subscription stream after it closes or a reconnect request fails. `true` retries indefinitely with a one-second delay. A 4xx (other than `408` and `429`) or `501` response stops reconnecting and rejects with that error.',
   },
 ]}
 />
@@ -1118,7 +1155,7 @@ console.log(diff.changes) // Fields that changed between versions
 In the React SDK, pass an `agentVersionId` through `requestContext` when using the `useChat` hook:
 
 ```typescript title="Version targeting with React SDK"
-import { useChat } from '@mastra/react'
+import { useChat } from '@mastra/react/chat'
 
 function Chat() {
   const { messages, input, handleInputChange, handleSubmit } = useChat({

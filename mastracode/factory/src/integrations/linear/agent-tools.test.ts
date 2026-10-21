@@ -124,18 +124,25 @@ describe('buildLinearAgentTools — exposure gating', () => {
     expect(tools).toHaveProperty('linear_create_comment');
   });
 
+  it('resolves a session that runs under its Factory resource without caching its session id as a project', async () => {
+    await seedProject();
+    await seedConnection();
+    const sessionId = '00000000-0000-4000-8000-0000000000aa';
+    // A legacy session whose resource is its own id is not a project.
+    expect(await buildLinearAgentTools({ linear, requestContext: requestContextFor(sessionId) })).toEqual({});
+    // The same session under its Factory resource resolves the Factory's org.
+    const ctx = new RequestContext();
+    ctx.set('controller', { sessionId, resourceId: PROJECT_ID, getState: () => ({}) });
+    const tools = await buildLinearAgentTools({ linear, requestContext: ctx });
+    expect(tools).toHaveProperty('linear_get_issue');
+    expect(await linear.resolveOrgId(sessionId)).toBeNull();
+    expect(await linear.resolveOrgId(PROJECT_ID)).toBe(ORG_ID);
+  });
+
   it('exposes nothing for a board run whose project org has not connected Linear', async () => {
     await seedProject();
     const tools = await buildLinearAgentTools({ linear, requestContext: boardRunRequestContext(PROJECT_ID) });
     expect(tools).toEqual({});
-  });
-
-  it('falls back to a project-scoped resourceId when factoryProjectId is absent', async () => {
-    await seedProject();
-    await seedConnection();
-    const tools = await buildLinearAgentTools({ linear, requestContext: requestContextFor(PROJECT_ID) });
-    expect(tools).toHaveProperty('linear_get_issue');
-    expect(tools).toHaveProperty('linear_create_comment');
   });
 
   it('withholds linear_create_comment when the connection scope is read-only', async () => {

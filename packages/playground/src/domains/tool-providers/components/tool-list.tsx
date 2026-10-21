@@ -5,10 +5,9 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useProviderTools } from '@mastra/react/hooks/tool-providers';
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-
-import { useProviderTools } from '../hooks/use-provider-tools';
 
 interface ToolListProps {
   providerId: string;
@@ -26,9 +25,13 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
 
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
 
-  const { data, isLoading } = useProviderTools(providerId, {
-    toolkit,
-    search: search || undefined,
+  const { data, isLoading } = useProviderTools({
+    providerId: providerId,
+    params: {
+      toolkit,
+      search: search || undefined,
+    },
+    queryOptions: { enabled: !!providerId },
   });
   const tools = data?.data ?? [];
 

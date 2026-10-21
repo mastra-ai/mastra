@@ -298,17 +298,21 @@ interface QueryResult {
 
 ## Error handling
 
-The store throws typed errors that can be caught:
+The store throws `MastraError` instances from `@mastra/core/error`:
 
 ```typescript
+import { MastraError } from '@mastra/core/error'
+
 try {
   await store.query({
     indexName: 'index_name',
     queryVector: queryVector,
   })
 } catch (error) {
-  if (error instanceof VectorStoreError) {
-    console.log(error.code) // 'connection_failed' | 'invalid_dimension' | etc
+  if (error instanceof MastraError) {
+    console.log(error.id) // 'MASTRA_VECTOR_VECTORIZE_QUERY_FAILED'
+    console.log(error.domain) // 'STORAGE'
+    console.log(error.category) // 'USER' | 'THIRD_PARTY'
     console.log(error.details) // Additional error context
   }
 }

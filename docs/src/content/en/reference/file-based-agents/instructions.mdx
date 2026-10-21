@@ -7,12 +7,6 @@ packages:
 
 # Instructions
 
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
-
 An agent's instructions hold its always-on system prompt: the model reads it on every turn. Use them to define the agent's identity, tone, role, and standing rules.
 
 Write them in one of two files at the agent root. Use `instructions.md` when the prompt is fixed text. Use `instructions.ts` when the prompt needs code, for example when it's built from shared constants or resolved per request.
@@ -65,7 +59,7 @@ export default agentInstructions(({ requestContext }) => {
 })
 ```
 
-The function can be `async` and receives `mastra` alongside `requestContext`, so it can read from storage or another registered primitive before returning the prompt.
+The function can be `async`. Alongside `requestContext`, it receives `mastra`, the Mastra instance the agent is registered with, so it can read from storage or another registered primitive before returning the prompt. `mastra` is optional in the function type, so guard its use (for example, `mastra?.getStorage()`).
 
 Both files can also live in a [subagent](/reference/file-based-agents/subagents) directory, which follows the same rules.
 

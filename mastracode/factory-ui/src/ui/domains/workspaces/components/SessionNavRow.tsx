@@ -1,21 +1,24 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
-import { MainSidebar, useMaybeSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MoreHorizontal, Pin, PinOff, RefreshCw, Trash2 } from 'lucide-react';
+import { Lock, MoreHorizontal, Pin, PinOff, RefreshCw, Trash2, User, Users } from 'lucide-react';
 import { useRef } from 'react';
 import type { RefObject } from 'react';
 
+import { SourceIcon } from '../../factory/components/BoardIcons';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
+import type { SessionSource } from '../services/sessionPresentation';
 import type { SessionRowStatus } from '../services/sessionStatus';
 import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
+import { SessionSharingPopover } from './SessionSharingPopover';
 
 /**
- * Shared sidebar row for workspace/user sessions. Built on `MainSidebar.NavLink`
+ * Shared sidebar row for workspace/user sessions. Built on `Sidebar.NavLink`
  * so every session list (work, review, user) renders with identical density,
  * hover, and active states. Lifecycle lives on the left as an activity belt;
  * the trailing slot beside the label is left to the spinner, the merge badge
@@ -28,6 +31,7 @@ export function SessionNavRow({
   name,
   title,
   url,
+  source,
   active,
   disabled,
   loading,
@@ -41,11 +45,16 @@ export function SessionNavRow({
   onDelete,
   onRegenerateTitle,
   regeneratingTitle,
+  visibility,
+  onVisibilityChange,
+  changingVisibility,
 }: {
   name: string;
   /** Hover tooltip, typically the branch name. */
   title?: string;
   url: string;
+  /** Leading icon: a user session, or the source of the session's work item. */
+  source?: SessionSource;
   active: boolean;
   disabled: boolean;
   /** True while this row's async open is in flight — shows a spinner and blocks clicks. */
@@ -64,6 +73,12 @@ export function SessionNavRow({
   /** Omitted for sessions the viewer does not own: the server only lets owners rename. */
   onRegenerateTitle?: () => void;
   regeneratingTitle?: boolean;
+  /** Private rows show a sharing popover; shared rows have no visibility badge. */
+  visibility?: 'org' | 'private';
+  /** Omitted for sessions the viewer does not own: the server only lets owners change visibility. */
+  onVisibilityChange?: (visibility: 'org' | 'private') => void;
+  /** Disables the visibility item while a change is in flight, so overlapping requests cannot land out of order. */
+  changingVisibility?: boolean;
 }) {
   const anchor = useRef<HTMLLIElement>(null);
   // Selecting a session navigates away, so the mobile nav drawer must close.
@@ -82,7 +97,8 @@ export function SessionNavRow({
       }}
       title={preview ? undefined : title}
     >
-      <MainSidebar.NavLabel>{name}</MainSidebar.NavLabel>
+      {source ? <SessionSourceIcon source={source} /> : null}
+      <Sidebar.NavLabel>{name}</Sidebar.NavLabel>
       {pinned && !loading ? (
         <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
       ) : null}
@@ -94,6 +110,14 @@ export function SessionNavRow({
   const action = (
     <>
       {belt ? <ActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
+      {visibility === 'private' ? (
+        <SessionSharingPopover
+          name={name}
+          disabled={disabled || loading}
+          onShare={onVisibilityChange ? () => onVisibilityChange('org') : undefined}
+          sharing={changingVisibility}
+        />
+      ) : null}
       <span className={cn(trailingSlot, trailing ? 'grid' : revealedSlot)}>
         {trailing === 'loading' ? (
           <Spinner size="sm" aria-label={`Opening ${name}`} className="text-muted-foreground" />
@@ -118,13 +142,16 @@ export function SessionNavRow({
             onDelete={onDelete}
             onRegenerateTitle={onRegenerateTitle}
             regeneratingTitle={regeneratingTitle}
+            visibility={visibility}
+            onVisibilityChange={onVisibilityChange}
+            changingVisibility={changingVisibility}
           />
         )}
       </span>
     </>
   );
   const row = (
-    <MainSidebar.NavLink
+    <Sidebar.NavLink
       ref={anchor}
       link={{ name, url }}
       isActive={active}
@@ -143,6 +170,13 @@ export function SessionNavRow({
       <SessionPreviewCard name={name} anchor={anchor} status={status} merged={merged} details={preview} />
     </HoverCard>
   );
+}
+
+function SessionSourceIcon({ source }: { source: SessionSource }) {
+  if (source === 'user') {
+    return <User data-source="user" aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
+  }
+  return <SourceIcon source={source} className="size-3.5" />;
 }
 
 const trailingSlot = 'size-control-sm shrink-0 place-items-center *:col-start-1 *:row-start-1';
@@ -172,6 +206,9 @@ function SessionActionsMenu({
   onDelete,
   onRegenerateTitle,
   regeneratingTitle,
+  visibility,
+  onVisibilityChange,
+  changingVisibility,
 }: {
   name: string;
   anchor: RefObject<HTMLElement | null>;
@@ -181,6 +218,9 @@ function SessionActionsMenu({
   onDelete?: () => void;
   onRegenerateTitle?: () => void;
   regeneratingTitle?: boolean;
+  visibility?: 'org' | 'private';
+  onVisibilityChange?: (visibility: 'org' | 'private') => void;
+  changingVisibility?: boolean;
 }) {
   return (
     <DropdownMenu>
@@ -207,6 +247,15 @@ function SessionActionsMenu({
           <DropdownMenu.Item disabled={regeneratingTitle} onClick={onRegenerateTitle}>
             <RefreshCw className={cn(regeneratingTitle && 'animate-spin')} />
             Regenerate title
+          </DropdownMenu.Item>
+        ) : null}
+        {onVisibilityChange && visibility ? (
+          <DropdownMenu.Item
+            disabled={changingVisibility}
+            onClick={() => onVisibilityChange(visibility === 'private' ? 'org' : 'private')}
+          >
+            {visibility === 'private' ? <Users /> : <Lock />}
+            {visibility === 'private' ? 'Share with organization' : 'Make private'}
           </DropdownMenu.Item>
         ) : null}
         {onDelete ? (

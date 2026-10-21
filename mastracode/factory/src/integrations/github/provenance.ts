@@ -3,6 +3,7 @@ import type { IntegrationStorageHandle } from '../../storage/domains/integration
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { FactoryRunBindingRecord, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { GithubIntegration } from './integration.js';
+import { cardBelongsToRepository } from './rules.js';
 import { parseCreatedPullRequest } from './session-subscriptions.js';
 
 export interface RecordFactoryPullRequestProvenanceInput {
@@ -151,8 +152,9 @@ export async function recordFactoryPullRequestProvenance(
       item =>
         item.externalSource?.integrationId === 'github' &&
         item.externalSource.type === 'pull-request' &&
-        (item.externalSource.externalId === `github-pr:${pullRequestNumber}` ||
-          item.externalSource.externalId === `github:${repositoryId}:pull-request:${pullRequestNumber}`),
+        (item.externalSource.externalId === `github:${repositoryId}:pull-request:${pullRequestNumber}` ||
+          (item.externalSource.externalId === `github-pr:${pullRequestNumber}` &&
+            cardBelongsToRepository(item, repositoryId, repositorySlug))),
     );
     if (reviewItem) {
       await workItems.setParentWorkItemIfMissing({

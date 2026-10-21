@@ -23,9 +23,9 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
   const {
     span,
     spanUI,
-    depth,
     isRootSpan,
     isLastChild,
+    guides,
     isExpanded,
     isSelected,
     isFaded,
@@ -41,8 +41,9 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
   // Nested rows mount late, once expansion opens, so scroll on mount as well as on change.
   useEffect(() => {
     if (!shouldScrollIntoView) return;
-    rowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [shouldScrollIntoView]);
+    // A highlighted span is centered so it never sits at the panel's edge; a clicked one only moves if hidden.
+    rowRef.current?.scrollIntoView({ block: isRevealed ? 'center' : 'nearest', behavior: 'smooth' });
+  }, [shouldScrollIntoView, isRevealed]);
 
   const { startShiftMs, leftPercent, widthPercent } = getSpanTimingLayout(span, overallLatency, overallStartTime);
   const toggleLabel = isExpanded
@@ -64,32 +65,40 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
         },
       )}
     >
-      <div className="flex min-w-0 items-stretch" style={{ paddingLeft: `${depth}rem` }}>
-        {!isRootSpan && <TimelineStructureSign isLastChild={isLastChild} />}
+      <div className="flex min-w-0 items-stretch pl-1">
+        <TimelineStructureSign
+          guides={guides}
+          isRootSpan={isRootSpan}
+          isLastChild={isLastChild}
+          hasStem={expansion.hasChildren && isExpanded}
+          dot={
+            <span
+              aria-hidden
+              title={spanUI?.label}
+              style={{ backgroundColor: spanUI?.color }}
+              className="size-2 shrink-0 rounded-full"
+            />
+          }
+        />
 
         <button
           type="button"
           className={cn(
-            'flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-2 text-left text-caption text-foreground',
+            'text-foreground',
+            'flex min-w-0 flex-1 cursor-pointer items-center rounded-md pr-2 pl-1.5 text-left',
             focusRingInset,
           )}
         >
-          {spanUI?.color && (
-            <span
-              aria-hidden
-              title={spanUI.label}
-              className="inline-block size-2 shrink-0 rounded-full"
-              style={{ backgroundColor: spanUI.color }}
-            />
-          )}
-          <span
+          <Txt
+            as="span"
+            variant="caption"
             data-highlight={span.matchedInPayloadOnly ? undefined : ''}
             data-highlight-indirect={span.matchedInPayloadOnly ? '' : undefined}
             title={span.matchedInPayloadOnly ? 'Matches your search in this span’s details' : undefined}
             className="min-w-0 truncate"
           >
             {span.name}
-          </span>
+          </Txt>
         </button>
 
         {/* Slot is always present so names stay aligned whether or not the span has children. */}
@@ -131,7 +140,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
               }}
             />
           </div>
-          <Txt as="div" variant="meta" tone="muted" font="mono" className="w-12 text-right">
+          <Txt as="p" variant="meta" font="mono" tone="muted" className="w-12 text-right">
             {formatDurationPrecise(span.latency)}
           </Txt>
         </HoverCardTrigger>

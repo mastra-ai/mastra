@@ -98,7 +98,7 @@ export function RunWorkflowHeader({
           {timing && <RunDuration span={timing.span} spansSuspension={timing.spansSuspension} />}
         </div>
       </div>
-      <div className="flex min-w-0 items-center gap-1 text-meta text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-1 text-muted-foreground">
         <Txt as="span" variant="meta" font="mono" className="min-w-0 truncate" title={runId}>
           {runId}
         </Txt>

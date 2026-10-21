@@ -640,21 +640,23 @@ const sidebars = {
           label: 'Guides',
           link: {
             type: 'doc',
-            id: 'guides/multi-agent-systems',
+            id: 'guides/overview',
           },
           collapsed: true,
           customProps: {
             contextualSidebar: true,
-            contextualSidebarLabel: 'Multi-agent systems',
+            contextualSidebarLabel: 'Guides',
           },
           items: [
             {
               type: 'doc',
+              id: 'guides/multi-agent-systems',
+              label: 'Multi-agent systems',
+            },
+            {
+              type: 'doc',
               id: 'guides/context-engineering',
               label: 'Context engineering',
-              customProps: {
-                tags: ['new'],
-              },
             },
             {
               type: 'doc',
@@ -668,14 +670,19 @@ const sidebars = {
               type: 'doc',
               id: 'guides/authentication-identity',
               label: 'Authentication',
-              customProps: {
-                tags: ['new'],
-              },
             },
             {
               type: 'doc',
               id: 'guides/mcp-authentication-authorization',
               label: 'MCP authentication',
+            },
+            {
+              type: 'doc',
+              id: 'guides/mcp-events',
+              label: 'MCP events',
+              customProps: {
+                tags: ['beta'],
+              },
             },
             {
               type: 'doc',
@@ -720,6 +727,41 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/regions',
       label: 'Regions',
+    },
+    {
+      type: 'category',
+      label: 'Connect',
+      collapsed: true,
+      link: {
+        type: 'doc',
+        id: 'mastra-platform/connect/overview',
+      },
+      customProps: {
+        contextualSidebar: true,
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-platform/connect/providers',
+          label: 'Providers',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/connect/tools',
+          label: 'Tools',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/connect/channels',
+          label: 'Channels',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/connect/end-user-connections',
+          label: 'End-user connections',
+        },
+      ],
     },
     {
       type: 'doc',

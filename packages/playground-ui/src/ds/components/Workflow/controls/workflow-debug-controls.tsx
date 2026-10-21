@@ -28,7 +28,7 @@ export function WorkflowDebugControls({
 
   return (
     <div className="flex min-w-0 flex-col gap-3" data-testid="workflow-debug-step-controls">
-      <div className="rounded-xl border border-border/50 bg-background p-3">
+      <div className="rounded-xl border border-surface-rim bg-background p-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <Txt as="span" variant="meta" tone="muted">
             Next step
