@@ -120,6 +120,13 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     },
     'auth',
   ],
+  ['another service’s authentication failure', new Error('GitHub authentication failed: token expired'), 'unknown'],
+  [
+    'another service’s 403 in free text',
+    new Error('MCP tool call failed: 403 Forbidden from mcp.linear.app'),
+    'unknown',
+  ],
+  ['a bare unauthorized provider code', { type: 'error', error: { code: 'unauthorized', message: 'Denied.' } }, 'auth'],
   [
     'OpenAI insufficient_quota on 429',
     apiError(429, 'You exceeded your current quota, please check your plan and billing details.', undefined, {
@@ -347,6 +354,12 @@ describe('toPersistedErrorIdentity', () => {
       statusCode: 400,
       reason: 'prompt is too long: 1 > 0 maximum',
     });
+  });
+
+  it('leaves a cause that holds no provider response out of history', () => {
+    const wrapped = new Error('Tool failed', { cause: new Error('ENOENT: open /Users/me/.config/acme/token.json') });
+
+    expect(toPersistedErrorIdentity(wrapped)).toEqual({ name: 'Error', message: 'Tool failed' });
   });
 });
 

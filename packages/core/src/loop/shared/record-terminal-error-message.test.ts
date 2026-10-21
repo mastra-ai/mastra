@@ -41,7 +41,6 @@ describe('toPersistedErrorIdentity', () => {
       message: 'boom',
       statusCode: 429,
       code: 'insufficient_quota',
-      reason: 'inner',
     });
     expect(Object.keys(toPersistedErrorIdentity(new Error('boom')))).toEqual(['name', 'message']);
     expect(
@@ -372,8 +371,9 @@ describe('recordTerminalErrorMessage', () => {
       .filter(part => part?.type === 'error') as MastraErrorPart[];
 
     expect(storedParts).toHaveLength(1);
-    expect(storedParts[0]?.error).toEqual({ name: 'Error', message: 'boom', statusCode: 500, reason: 'inner' });
-    expect(Object.keys(storedParts[0]?.error ?? {})).toEqual(['name', 'message', 'statusCode', 'reason']);
+    expect(storedParts[0]?.error).toEqual({ name: 'Error', message: 'boom', statusCode: 500 });
+    expect(Object.keys(storedParts[0]?.error ?? {})).toEqual(['name', 'message', 'statusCode']);
     expect(serialized).not.toContain('LIED');
+    expect(serialized).not.toContain('inner');
   });
 });
