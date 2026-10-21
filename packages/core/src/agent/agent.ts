@@ -9633,7 +9633,7 @@ export class Agent<
     if (store && !(await store.getThreadById({ threadId }))) {
       const now = new Date();
       await store.saveThread({
-        thread: { id: threadId, resourceId: resourceId ?? threadId, createdAt: now, updatedAt: now },
+        thread: { id: threadId, resourceId: resourceId ?? threadId, title: '', createdAt: now, updatedAt: now },
       });
     }
     const memoryInstance = store ? await this.getMemory({ requestContext }) : undefined;

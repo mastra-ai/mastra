@@ -1,8 +1,11 @@
 import { createClient } from '@libsql/client';
-import { runAgent } from '@mastra/core/new-message-format';
+import { Agent } from '@mastra/core/agent';
+import type { AgentInput } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
 import type { PersistableAction } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { LibSQLStore } from '../../index';
 import { MemoryLibSQL } from './index';
 
 let seq = 0;
@@ -31,6 +34,14 @@ describe('MemoryLibSQL actions', () => {
     store = new MemoryLibSQL({ client, maxRetries: 1, initialBackoffMs: 10 });
     await store.init();
   });
+
+  /** Runs an agent on the internal action path, writing to this test's database, and waits for it to settle. */
+  const runOnStore = async (model: never, input: AgentInput) => {
+    const agent = new Agent({ id: 'a', name: 'a', instructions: '', model });
+    new Mastra({ logger: false, storage: new LibSQLStore({ id: 'actions-test', client }), agents: { a: agent } });
+    const out = await agent.__streamActions(input, { memory: { thread: 't1', resource: 'user-1' } });
+    await out.result.catch(() => {});
+  };
 
   it('round-trips actions with all fields, ordered by id', async () => {
     const a = text('t1', 'r1', 'first');
@@ -210,18 +221,7 @@ describe('MemoryLibSQL actions', () => {
       parts: [{ type: 'text', text: value }],
     });
     const resent = [ui('m1', 'user', 'hello'), ui('m2', 'assistant', 'Hi!'), ui('m3', 'user', 'what now?')];
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await (async () => {
-        for await (const _ of runAgent({
-          model: failing,
-          threadId: 't1',
-          resourceId: 'user-1',
-          memory: store,
-          input: resent,
-        }))
-          void _;
-      })().catch(() => {});
-    }
+    for (let attempt = 0; attempt < 2; attempt++) await runOnStore(failing, resent);
 
     const log = await store.listActions({ threadId: 't1' });
     expect(log.flatMap(a => (a.type === 'text' ? [`${a.role}:${a.text}`] : []))).toEqual([
@@ -245,10 +245,7 @@ describe('MemoryLibSQL actions', () => {
       },
     } as never;
     const inputs = ['hello', [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hello' }] }]];
-    for (const input of inputs) {
-      for await (const _ of runAgent({ model: failing, threadId: 't1', resourceId: 'user-1', memory: store, input }))
-        void _;
-    }
+    for (const input of inputs) await runOnStore(failing, input as AgentInput);
 
     const log = await store.listActions({ threadId: 't1' });
     expect(log.flatMap(a => (a.type === 'text' ? [`${a.role}:${a.text}`] : []))).toEqual(['user:hello']);

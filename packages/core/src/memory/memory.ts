@@ -469,11 +469,6 @@ https://mastra.ai/en/docs/memory/overview`,
     return Math.ceil(text.split(' ').length * 1.3);
   }
 
-  /**
-   * Retrieves a specific thread by its ID
-   * @param threadId - The unique identifier of the thread
-   * @returns Promise resolving to the thread or null if not found
-   */
   /** Appends persistable actions to the thread log. Implemented by `@mastra/memory`. */
   async saveActions(_args: { actions: PersistableAction[] }): Promise<void> {
     throw new Error(`Actions are not supported by this memory (${this.constructor.name}).`);
@@ -489,6 +484,11 @@ https://mastra.ai/en/docs/memory/overview`,
     throw new Error(`Actions are not supported by this memory (${this.constructor.name}).`);
   }
 
+  /**
+   * Retrieves a specific thread by its ID
+   * @param threadId - The unique identifier of the thread
+   * @returns Promise resolving to the thread or null if not found
+   */
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
   /**
