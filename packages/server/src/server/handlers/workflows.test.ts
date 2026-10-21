@@ -33,6 +33,7 @@ import {
   LIST_WORKFLOW_RUNS_ROUTE,
   STREAM_WORKFLOW_ROUTE,
   TIME_TRAVEL_WORKFLOW_ROUTE,
+  TIME_TRAVEL_STREAM_WORKFLOW_ROUTE,
   EXECUTE_WORKFLOW_STEP_ROUTE,
 } from './workflows';
 
@@ -1143,6 +1144,46 @@ describe('vNext Workflow Handlers', () => {
         process.off('unhandledRejection', onUnhandled);
         createRunSpy.mockRestore();
       }
+    });
+  });
+
+  describe('TIME_TRAVEL_STREAM_WORKFLOW_ROUTE', () => {
+    it('streams time travel for an owned nested child run after a server restart', async () => {
+      const runId = 'nested-time-travel-stream';
+      const resourceId = 'nested-run-owner';
+      const run = await mockWorkflow.createRun({
+        runId,
+        resourceId,
+        parentWorkflow: { workflowId: 'parent', runId: 'parent-run', stepId: 'child-step' },
+      });
+      await run.start({ inputData: {} });
+
+      const freshWorkflow = createMockWorkflow('test-workflow');
+      const freshMastra = new Mastra({
+        logger: false,
+        workflows: { 'test-workflow': freshWorkflow },
+        storage: mockMastra.getStorage(),
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+      const stream = await TIME_TRAVEL_STREAM_WORKFLOW_ROUTE.handler({
+        ...createTestServerContext({ mastra: freshMastra }),
+        requestContext,
+        workflowId: 'test-workflow',
+        runId,
+        step: 'test-step',
+        inputData: {},
+      } as any);
+      const reader = stream.getReader();
+      const chunks: unknown[] = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(await freshWorkflow.getWorkflowRunById(runId)).toMatchObject({ resourceId });
     });
   });
 

@@ -1312,7 +1312,7 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
 
       const serverCache = mastra.getServerCache();
 
-      const run = await workflow.createRun({ runId, resourceId: existingRun.resourceId });
+      const run = await workflow.createRunForExistingRun({ runId, resourceId: existingRun.resourceId });
       const result = run.timeTravelStream({ ...params, requestContext });
 
       if (serverCache) {
