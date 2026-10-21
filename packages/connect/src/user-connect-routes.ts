@@ -218,7 +218,7 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
   if (options.providers !== undefined && (!Array.isArray(options.providers) || options.providers.length === 0)) {
     throw new MastraConnectError(
       'invalid_options',
-      'Invalid providers: pass a non-empty allowlist, or omit the option to expose the full platform catalog.',
+      'Invalid providers: pass a non-empty allowlist, or omit the option to use the project provider configuration.',
     );
   }
   const providers = options.providers?.map(provider => {

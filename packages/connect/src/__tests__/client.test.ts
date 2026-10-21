@@ -251,6 +251,18 @@ describe('getProjectIntegrationSettings', () => {
       getProjectIntegrationSettings(makeClient(malformedFetch, { baseUrl: 'https://example.test' }), 'proj_1'),
     ).rejects.toMatchObject({ code: 'platform_error' });
   });
+
+  it('reports a missing project integration-settings endpoint as a platform error', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ detail: 'Project not found' }, { status: 404 }));
+
+    await expect(
+      getProjectIntegrationSettings(makeClient(fetchMock, { baseUrl: 'https://example.test' }), 'proj_404'),
+    ).rejects.toMatchObject({
+      code: 'platform_error',
+      status: 404,
+      message: 'Integration settings were not found for project proj_404.',
+    });
+  });
 });
 
 describe('getConnectionContext', () => {

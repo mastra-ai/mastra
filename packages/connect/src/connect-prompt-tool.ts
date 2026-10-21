@@ -14,6 +14,8 @@ export interface ConnectPromptProvider {
   displayName: string | null;
   logoUrl: string | null;
   authType: string | null;
+  /** Fields the UI must collect before starting headless authorization. */
+  authFields: NonNullable<IntegrationCatalogEntry['authFields']> | null;
   /** Whether a usable (active) connection already serves this provider for the caller. */
   connected: boolean;
   /** Which connection serves it when connected: the caller's own wins over a global one. */
@@ -93,6 +95,7 @@ export function buildConnectPromptTool({
           displayName: entry.displayName ?? null,
           logoUrl: entry.logoUrl ?? null,
           authType: entry.authType ?? null,
+          authFields: entry.authFields ?? null,
           connected: usable.length > 0,
           scope: own ? 'user' : usable.length > 0 ? 'global' : null,
         };

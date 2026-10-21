@@ -114,6 +114,37 @@ describe('ConnectPromptTool', () => {
     });
   });
 
+  describe('when a provider requires auth parameters that chat cannot collect', () => {
+    it('uses the hosted flow instead of starting invalid headless authorization', async () => {
+      const popup = { location: { href: '' }, close: vi.fn(), closed: false };
+      const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
+      server.use(
+        http.post(`${BASE_URL}/connect/linear/sessions`, () => HttpResponse.json(connectPromptSession)),
+        http.get(`${BASE_URL}/connect/connections/${connectPromptSession.connectionId}/status`, () =>
+          HttpResponse.json({ ...connectPromptStatusActive, status: 'pending' }),
+        ),
+      );
+      const [provider] = connectPromptPayload.providers;
+      if (!provider) throw new Error('Expected a connect prompt provider fixture');
+      const output = {
+        ...connectPromptPayload,
+        providers: [
+          {
+            ...provider,
+            authFields: [{ name: 'workspace', target: 'params' as const, label: 'Workspace', required: true }],
+          },
+        ],
+      };
+
+      renderConnectPrompt({ output });
+      fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+
+      await waitFor(() => expect(popup.location.href).toBe(launchPath));
+      expect(open).toHaveBeenCalledWith('', 'mastra-connect', 'popup,width=600,height=720');
+      expect(nangoMocks.auth).not.toHaveBeenCalled();
+    });
+  });
+
   describe('when authorization fails in the provider popup', () => {
     it('shows the failure reason and re-enables the connect action', async () => {
       server.use(

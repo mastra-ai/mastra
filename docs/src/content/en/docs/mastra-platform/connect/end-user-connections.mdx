@@ -86,8 +86,8 @@ export const mastra = new Mastra({
     },
     apiRoutes: [
       ...userConnectRoutes({
-        // Optional: restrict which providers end users can connect.
-        // Omit to expose the full platform catalog.
+        // Optional: override the project's provider configuration.
+        // Omit to use endUserProviders from Mastra Platform.
         providers: ['linear', 'slack'],
       }),
     ],
@@ -131,7 +131,7 @@ The provider's authorization link is a bearer capability: anyone who opens it ca
 
 Resource-scoped tool resolutions include a built-in `request_connection` tool. When a task needs a provider the user hasn't connected (or the user asks to connect one), the agent calls it and gets back a structured list of connectable providers with their current connection state. Chat UIs that understand the payload (Studio does) render it as a connect card: the user clicks Connect, authorizes in a popup through the mounted routes, and the agent can retry the task against fresh tools.
 
-The connectable set follows your `tools()` configuration: the `providers` allowlist when you set one, otherwise the full platform catalog. The tool never creates sessions or handles authorization links. It only reports what can be connected. It's also never added to global-only resolutions, since there is no user to scope a new connection to. To turn it off, pass `connectPrompt: false` to [`tools()`](/reference/connect/tools).
+The connectable set follows your `tools()` configuration. A `providers` allowlist overrides the project's provider configuration in Mastra Platform. When you omit it, an unset project configuration exposes the full catalog, a configured list restricts providers, and an empty list disables new connections. The tool never creates sessions or handles authorization links. It only reports what can be connected. It's also never added to global-only resolutions, since there is no user to scope a new connection to. To turn it off, pass `connectPrompt: false` to [`tools()`](/reference/connect/tools).
 
 ## Inspect connections in Studio
 

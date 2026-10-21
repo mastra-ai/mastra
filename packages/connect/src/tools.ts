@@ -136,9 +136,10 @@ export interface ToolsOptions {
    * `request_connection` tool, which lets the agent prompt the end user to
    * connect a provider account mid-conversation (chat UIs render its
    * structured output as a connect card). The connectable set follows the
-   * `providers` allowlist when one was given, otherwise the full platform
-   * catalog. Default `true`; global-only resolutions never include it (there
-   * is no end user to scope a new connection to).
+   * `providers` allowlist when one was given. Otherwise it uses the project's
+   * provider configuration in Mastra Platform, with the full catalog only when
+   * that configuration is unset. Default `true`; global-only resolutions never
+   * include it (there is no end user to scope a new connection to).
    */
   connectPrompt?: boolean;
 }
