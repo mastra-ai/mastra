@@ -90,7 +90,7 @@ describe('TemporalRun', () => {
 
   it('persists a running snapshot before returning from startAsync', async () => {
     const storage = new MockStore();
-    const start = vi.fn().mockResolvedValue({ result: vi.fn() });
+    const start = vi.fn().mockResolvedValue({ result: vi.fn(() => new Promise(() => {})) });
     const schema = z.object({ value: z.number() });
     const workflow = createWorkflow(
       { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
@@ -108,6 +108,104 @@ describe('TemporalRun', () => {
       resourceId: 'resource-1',
       status: 'running',
       payload: { value: 1 },
+    });
+  });
+
+  it('persists a failed snapshot and rethrows when startAsync dispatch fails', async () => {
+    const storage = new MockStore();
+    const error = new Error('Temporal service unavailable');
+    const start = vi.fn().mockRejectedValue(error);
+    const schema = z.object({ value: z.number() });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+    ).commit();
+    new Mastra({ workflows: { workflow }, storage, logger: false });
+    const run = await workflow.createRun({ runId: 'test-run', resourceId: 'resource-1' });
+
+    await expect(run.startAsync({ inputData: { value: 1 } })).rejects.toThrow(error);
+
+    await expect(workflow.getWorkflowRunById('test-run')).resolves.toMatchObject({
+      status: 'failed',
+      payload: { value: 1 },
+      error: { message: 'Temporal service unavailable' },
+    });
+  });
+
+  it('projects the eventual startAsync result without blocking dispatch', async () => {
+    const storage = new MockStore();
+    let resolveResult!: (result: unknown) => void;
+    const resultPromise = new Promise(resolve => {
+      resolveResult = resolve;
+    });
+    const start = vi.fn().mockResolvedValue({ result: vi.fn(() => resultPromise) });
+    const schema = z.object({ value: z.number() });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+    ).commit();
+    new Mastra({ workflows: { workflow }, storage, logger: false });
+    const run = await workflow.createRun({ runId: 'test-run', resourceId: 'resource-1' });
+
+    await expect(run.startAsync({ inputData: { value: 1 } })).resolves.toEqual({ runId: 'test-run' });
+    await expect(workflow.getWorkflowRunById('test-run')).resolves.toMatchObject({ status: 'running' });
+
+    resolveResult({
+      status: 'success',
+      input: { value: 1 },
+      result: { value: 2 },
+      state: { seen: true },
+      steps: {
+        increment: {
+          status: 'success',
+          payload: { value: 1 },
+          output: { value: 2 },
+          startedAt: 1,
+          endedAt: 2,
+        },
+      },
+    });
+    await vi.waitFor(async () => {
+      await expect(workflow.getWorkflowRunById('test-run')).resolves.toMatchObject({
+        status: 'success',
+        result: { value: 2 },
+        steps: {
+          increment: {
+            status: 'success',
+            payload: { value: 1 },
+            output: { value: 2 },
+          },
+        },
+      });
+    });
+  });
+
+  it('persists and logs eventual startAsync failures', async () => {
+    const storage = new MockStore();
+    const error = new Error('Workflow execution failed');
+    const start = vi.fn().mockResolvedValue({ result: vi.fn().mockRejectedValue(error) });
+    const schema = z.object({ value: z.number() });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+    ).commit();
+    const mastra = new Mastra({ workflows: { workflow }, storage, logger: false });
+    const logError = vi.fn();
+    vi.spyOn(mastra, 'getLogger').mockReturnValue({ error: logError } as any);
+    const run = await workflow.createRun({ runId: 'test-run', resourceId: 'resource-1' });
+
+    await expect(run.startAsync({ inputData: { value: 1 } })).resolves.toEqual({ runId: 'test-run' });
+
+    await vi.waitFor(async () => {
+      await expect(workflow.getWorkflowRunById('test-run')).resolves.toMatchObject({
+        status: 'failed',
+        error: { message: 'Workflow execution failed' },
+      });
+    });
+    expect(logError).toHaveBeenCalledWith('Background Temporal workflow execution failed', {
+      error,
+      runId: 'test-run',
+      workflowId: 'test-workflow',
     });
   });
 

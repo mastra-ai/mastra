@@ -217,21 +217,71 @@ export class TemporalRun<
 
     await this.persistSnapshot({ status: 'running', input, state: initialState, requestContext });
 
-    await this.client.workflow.start(toWorkflowType(this.workflowId), {
-      taskQueue: this.taskQueue,
-      workflowId: this.runId,
-      args: [
-        {
-          inputData: input,
-          initialState,
+    let handle;
+    try {
+      handle = await this.client.workflow.start(toWorkflowType(this.workflowId), {
+        taskQueue: this.taskQueue,
+        workflowId: this.runId,
+        args: [
+          {
+            inputData: input,
+            initialState,
+            requestContext,
+            runId: this.runId,
+            resourceId: this.resourceId,
+            outputOptions: args.outputOptions,
+            tracingOptions: args.tracingOptions,
+            perStep: args.perStep,
+          },
+        ],
+      });
+    } catch (error) {
+      const workflowError = error instanceof Error ? error : new Error(String(error));
+      await this.persistSnapshot({
+        status: 'failed',
+        input,
+        state: initialState,
+        error: workflowError,
+        requestContext,
+      });
+      throw error;
+    }
+
+    void (async () => {
+      let workflowResult: WorkflowResult<TState, TInput, TOutput, TSteps>;
+      try {
+        workflowResult = (await handle.result()) as WorkflowResult<TState, TInput, TOutput, TSteps>;
+      } catch (error) {
+        const workflowError = error instanceof Error ? error : new Error(String(error));
+        await this.persistSnapshot({
+          status: 'failed',
+          input,
+          state: initialState,
+          error: workflowError,
           requestContext,
+        });
+        this.mastra?.getLogger()?.error('Background Temporal workflow execution failed', {
+          error: workflowError,
           runId: this.runId,
-          resourceId: this.resourceId,
-          outputOptions: args.outputOptions,
-          tracingOptions: args.tracingOptions,
-          perStep: args.perStep,
-        },
-      ],
+          workflowId: this.workflowId,
+        });
+        return;
+      }
+
+      await this.persistSnapshot({
+        status: 'success',
+        input,
+        result: (workflowResult as any).result as Record<string, any>,
+        state: workflowResult.state ?? initialState,
+        steps: workflowResult.steps as Record<string, StepResult<any, any, any, any>>,
+        requestContext,
+      });
+    })().catch(error => {
+      this.mastra?.getLogger()?.error('Failed to persist background Temporal workflow result', {
+        error,
+        runId: this.runId,
+        workflowId: this.workflowId,
+      });
     });
 
     return { runId: this.runId };
