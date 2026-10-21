@@ -14,6 +14,12 @@ Open `http://localhost:5173`. To restart one side without losing the other, star
 
 Keep policy, validation, and persistence in [`@mastra/factory`](../factory/README.md), not in React.
 
+## Session sharing
+
+Private user sessions show a lock in the sidebar and a **Share** button in the session header. Either opens a privacy popover where the owner can **Share with organization**, letting teammates view and continue the conversation. Shared sessions have no visibility badge in the sidebar.
+
+The session's three-dot menu also offers **Share with organization** or **Make private**. Slack sessions keep their source-managed visibility, and teammates cannot change another person's session visibility.
+
 ## Onboarding
 
 The onboarding Setup step offers three equal choices, one per existing `modelScope` creation value:
