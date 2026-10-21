@@ -1,5 +1,34 @@
 # @mastra/playground-ui
 
+## 65.0.0-alpha.13
+
+### Patch Changes
+
+- Added `scrollable={false}` to DataList so a parent can own scrolling without clipping row effects. ([#27964](https://github.com/mastra-ai/mastra/pull/27964))
+
+  ```tsx
+  <DataList columns="minmax(0,1fr)" fit="container" scrollable={false}>
+    {rows}
+  </DataList>
+  ```
+
+- The search and collapse buttons at the top of the sidebar now look the same: both are round, sit close together, and show their keyboard shortcut in a tooltip on hover instead of next to the icon. `Sidebar.SearchTrigger` renders a search icon by default and takes an optional `label` (defaults to `Search`), and the new `Sidebar.Badge` gives a quiet label such as `Beta` next to the brand. ([#27688](https://github.com/mastra-ai/mastra/pull/27688))
+
+  ```tsx
+  <Sidebar.Header collapsedLogo={<Logo />}>
+    <Sidebar.Brand logo={<Logo />} title="Mastra" />
+    <Sidebar.Badge>Beta</Sidebar.Badge>
+    <Sidebar.SearchTrigger shortcut="⌘ K" onClick={openSearch} />
+    <Sidebar.Trigger />
+  </Sidebar.Header>
+  ```
+
+  Also fixed the sidebar lagging behind the cursor while it is resized, which let the header buttons spill past its edge, and keyboard shortcut keys now sit vertically centered in any monospace font, not only Commit Mono.
+
+- Fixed adding dataset items with plain text. The Add item dialog and Add trace to dataset now accept plain text as the input and ground truth. Previously, only JSON was accepted. Text that is valid JSON is still saved as JSON, and anything else is saved as a string. ([#27966](https://github.com/mastra-ai/mastra/pull/27966))
+
+- Fixed shared component edits resetting React state in Studio and Factory during development. Watch builds now keep stable chunk names so hot reload swaps the module in place instead of remounting it. ([#27654](https://github.com/mastra-ai/mastra/pull/27654))
+
 ## 65.0.0-alpha.12
 
 ### Minor Changes
