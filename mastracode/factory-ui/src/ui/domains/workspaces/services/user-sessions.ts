@@ -115,3 +115,21 @@ export async function regenerateSessionTitle(baseUrl: string, sessionId: string)
   if (!res.ok || !body.title) throw new Error(body.error ?? `Failed to rename session (${res.status})`);
   return body.title;
 }
+
+/** Move a teammate's org-visible session to the viewer. `expectedOwnerId` is the owner the viewer saw; the server refuses a stale one with 409. */
+export async function takeUserSessionOwnership(
+  baseUrl: string,
+  sessionId: string,
+  expectedOwnerId: string,
+): Promise<FactoryUserSession> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/owner`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ expectedOwnerId }),
+  });
+  const body: { session?: FactoryUserSessionPayload; error?: string } = await res.json().catch(() => ({}));
+  if (res.status === 409) throw new Error('Someone else owns this session now');
+  if (!res.ok || !body.session) throw new Error(body.error ?? `Failed to take ownership (${res.status})`);
+  return normalizeUserSession(body.session);
+}

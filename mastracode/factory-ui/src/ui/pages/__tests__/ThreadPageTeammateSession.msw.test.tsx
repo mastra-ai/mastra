@@ -1,4 +1,5 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -125,6 +126,45 @@ describe("a teammate's Factory session", () => {
 
       expect(await screen.findByText('You’re steering a teammate’s session')).toBeInTheDocument();
       expect(screen.queryByText(/user-ward/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when a teammate takes ownership', () => {
+    it('moves the session to the viewer and drops the steering line', async () => {
+      const session = { ...wardSession };
+      const transfers: unknown[] = [];
+      server.use(
+        http.post(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}/owner`, async ({ request }) => {
+          transfers.push(await request.json());
+          Object.assign(session, { userId: 'user-damien', owner: { id: 'user-damien', name: 'Damien' } });
+          return HttpResponse.json({ session });
+        }),
+      );
+      const client = openWardSessionAs('user-damien', { session });
+
+      await userEvent.setup().click(await screen.findByRole('button', { name: 'Take ownership' }));
+      await waitForMutationsIdle(client);
+
+      expect(transfers).toEqual([{ expectedOwnerId: 'user-ward' }]);
+      await waitFor(() => expect(screen.queryByText(/You’re steering/)).not.toBeInTheDocument());
+    });
+
+    it('keeps the steering line when someone else took it first', async () => {
+      server.use(
+        http.post(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}/owner`, () =>
+          HttpResponse.json(
+            { error: 'Session ownership conflict', reason: 'stale_owner', currentOwnerId: 'user-caleb' },
+            { status: 409 },
+          ),
+        ),
+      );
+      const client = openWardSessionAs('user-damien');
+
+      await userEvent.setup().click(await screen.findByRole('button', { name: 'Take ownership' }));
+      await waitForMutationsIdle(client);
+
+      expect(screen.getByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Take ownership' })).toBeEnabled();
     });
   });
 
