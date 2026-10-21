@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastify",
-  "version": "1.5.23-alpha.11",
+  "version": "1.5.23",
   "description": "Mastra Fastify adapter for the server",
   "type": "module",
   "main": "dist/index.js",

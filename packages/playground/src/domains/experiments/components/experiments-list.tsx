@@ -4,6 +4,7 @@ import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playgro
 import { getShortId } from '@mastra/playground-ui/components/Text';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
+import type { ExperimentListMetrics } from '@mastra/react/hooks/experiments';
 import { Trash2 } from 'lucide-react';
 import type { MouseEvent, ReactNode, SyntheticEvent } from 'react';
 import { useMemo, useRef, useState } from 'react';
@@ -14,6 +15,7 @@ import {
   EXPERIMENT_DESCRIPTION_COLUMN,
   EXPERIMENT_DETAIL_COLUMNS,
   EXPERIMENT_NAME_COLUMN,
+  EXPERIMENT_USAGE_COLUMNS,
   experimentColumnLabels,
 } from './experiment-columns';
 import { ExperimentRowCells } from './experiment-row-cells';
@@ -22,6 +24,11 @@ export interface ExperimentsListProps {
   experiments: DatasetExperiment[];
   datasets?: DatasetRecord[];
   reviewByExperiment?: Map<string, { needsReview: number; complete: number; total: number }>;
+  /**
+   * Token usage, cost and average duration keyed by experiment id. When provided, the list shows
+   * the avg duration, tokens and cost columns; leave it off when the store cannot serve metrics.
+   */
+  metricsByExperiment?: Map<string, ExperimentListMetrics>;
   isLoading: boolean;
   search?: string;
   statusFilter?: string;
@@ -60,8 +67,17 @@ const BASE_COLUMNS = `${EXPERIMENT_NAME_COLUMN} ${EXPERIMENT_DESCRIPTION_COLUMN}
 
 // Trailing `auto` track hosts the row actions cell (delete), which only navigating rows render.
 const COLUMNS = `${BASE_COLUMNS} auto`;
+const COLUMNS_WITH_USAGE = `${BASE_COLUMNS} ${EXPERIMENT_USAGE_COLUMNS} auto`;
 
-const columnHeaders: { label: string; className?: string; sortKey?: ExperimentsSortKey }[] = [
+type ColumnHeader = { label: string; className?: string; sortKey?: ExperimentsSortKey };
+
+const usageColumnHeaders: ColumnHeader[] = [
+  { label: experimentColumnLabels.avgDuration, className: 'text-center' },
+  { label: experimentColumnLabels.tokens, className: 'text-center' },
+  { label: experimentColumnLabels.cost, className: 'text-center' },
+];
+
+const getColumnHeaders = (showUsage: boolean): ColumnHeader[] => [
   { label: experimentColumnLabels.experiment },
   { label: experimentColumnLabels.description },
   { label: experimentColumnLabels.dataset },
@@ -70,6 +86,8 @@ const columnHeaders: { label: string; className?: string; sortKey?: ExperimentsS
   { label: experimentColumnLabels.items, className: 'text-center' },
   { label: experimentColumnLabels.succeeded, className: 'text-center' },
   { label: experimentColumnLabels.failed, className: 'text-center' },
+  { label: experimentColumnLabels.duration, className: 'text-center' },
+  ...(showUsage ? usageColumnHeaders : []),
   { label: experimentColumnLabels.review, className: 'text-center' },
   { label: experimentColumnLabels.date, sortKey: 'createdAt' },
 ];
@@ -155,6 +173,7 @@ export function ExperimentsList({
   experiments,
   datasets,
   reviewByExperiment,
+  metricsByExperiment,
   isLoading,
   search = '',
   statusFilter = 'all',
@@ -204,8 +223,11 @@ export function ExperimentsList({
 
   const [experimentToDelete, setExperimentToDelete] = useState<DatasetExperiment | null>(null);
 
+  const showUsage = metricsByExperiment !== undefined;
+  const columns = showUsage ? COLUMNS_WITH_USAGE : COLUMNS;
+
   if (isLoading) {
-    return <DataListSkeleton columns={COLUMNS} />;
+    return <DataListSkeleton columns={columns} />;
   }
 
   const selectedCount = selection?.selectedExperimentIds.length ?? 0;
@@ -215,8 +237,8 @@ export function ExperimentsList({
       : filteredData.every(exp => selection?.selectedExperimentIds.includes(exp.id))
         ? true
         : ('indeterminate' as const);
-  const gridColumns = selection ? `auto ${COLUMNS}` : COLUMNS;
-  const headerCells = columnHeaders.map(col =>
+  const gridColumns = selection ? `auto ${columns}` : columns;
+  const headerCells = getColumnHeaders(showUsage).map(col =>
     col.sortKey && onSortChange ? (
       <DataList.SortableTopCell
         key={col.label}
@@ -276,6 +298,8 @@ export function ExperimentsList({
             experiment={exp}
             datasetName={dsName}
             review={reviewByExperiment?.get(exp.id)}
+            showUsage={showUsage}
+            metrics={metricsByExperiment?.get(exp.id)}
             selectionRole={
               isSelected
                 ? {

@@ -26,13 +26,14 @@ export const TracesListProvider = memo(function TracesListProvider({
   onSortChange,
   children,
 }: TracesListProviderProps) {
-  const { withQueryTrace, withRootDuration, isCapabilitiesLoading } = useTracesConfig();
+  const { withQueryTrace, withRootDuration, withDeltaPolling, isCapabilitiesLoading } = useTracesConfig();
   const { filters, dateFrom, dateTo } = useTracesFilters();
   const list = useTracesListSource({
     rolling: !dateTo,
     query: now => buildTracesQueryRequest({ filters, dateFrom, dateTo, withRootDuration, now }),
     orderBy: [{ field: 'startedAt', direction: sortDirection }],
     withQueryTrace,
+    withDeltaPolling,
     enabled: !isCapabilitiesLoading,
     legacyFilters: buildTracesLegacyFilters({ filters, dateFrom, dateTo }),
   });

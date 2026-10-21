@@ -184,8 +184,8 @@ describe('AddDatasetItemDialog', () => {
 
       expect(screen.getByRole('dialog', { name: 'Input and ground truth' })).not.toBeNull();
       expect(currentStep()).toBe('Step 1 of 3');
-      expect(editor('Input JSON').value).toBe('{}');
-      expect(editor('Ground truth JSON').value).toBe('');
+      expect(editor('Input').value).toBe('{}');
+      expect(editor('Ground truth').value).toBe('');
       expect(screen.queryByRole('textbox', { name: 'Tool mocks JSON' })).toBeNull();
       expect(screen.queryByText('Optional')).toBeNull();
       expect(screen.getByRole('button', { name: 'Cancel' })).not.toBeNull();
@@ -202,7 +202,7 @@ describe('AddDatasetItemDialog', () => {
       expect(screen.getByRole('dialog', { name: /^Tool mocks/ })).not.toBeNull();
       expect(screen.getByText('Optional')).not.toBeNull();
       expect(editor('Tool mocks JSON').value).toBe('');
-      expect(screen.queryByRole('textbox', { name: 'Input JSON' })).toBeNull();
+      expect(screen.queryByRole('textbox', { name: 'Input' })).toBeNull();
       expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
       expect(screen.getByRole('button', { name: 'Back' })).not.toBeNull();
       expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
@@ -231,26 +231,59 @@ describe('AddDatasetItemDialog', () => {
       setupHandlers();
       renderDialog();
 
-      type('Input JSON', '{"city":"Seattle"}');
+      type('Input', '{"city":"Seattle"}');
       click('Next');
       click('Back');
 
       expect(currentStep()).toBe('Step 1 of 3');
-      expect(editor('Input JSON').value).toBe('{"city":"Seattle"}');
+      expect(editor('Input').value).toBe('{"city":"Seattle"}');
     });
   });
 
-  describe('when the input is not valid JSON', () => {
-    it('explains why and stays on the first step', async () => {
+  describe('when the input is plain text', () => {
+    it('posts the text as a string input', async () => {
       const { posted } = setupHandlers();
       renderDialog();
 
-      type('Input JSON', '{nope');
+      type('Input', 'What is the weather in Paris?');
+
+      expect(await addItem(posted)).toEqual({ input: 'What is the weather in Paris?' });
+    });
+  });
+
+  describe('when the input looks like broken JSON', () => {
+    it('posts it as plain text', async () => {
+      const { posted } = setupHandlers();
+      renderDialog();
+
+      type('Input', '{nope');
+
+      expect(await addItem(posted)).toEqual({ input: '{nope' });
+    });
+  });
+
+  describe('when the input is empty', () => {
+    it('explains the input is required and stays on the first step', async () => {
+      const { posted } = setupHandlers();
+      renderDialog();
+
+      type('Input', '   ');
       click('Next');
 
-      expect(await screen.findByText('Input must be valid JSON')).not.toBeNull();
+      expect(await screen.findByText('Input is required')).not.toBeNull();
       expect(currentStep()).toBe('Step 1 of 3');
       expect(posted).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the ground truth is plain text', () => {
+    it('posts the text as a string ground truth', async () => {
+      const { posted } = setupHandlers();
+      renderDialog();
+
+      type('Ground truth', 'Rainy, around 12°C');
+
+      expect(await addItem(posted)).toMatchObject({ input: {}, groundTruth: 'Rainy, around 12°C' });
     });
   });
 
@@ -259,7 +292,7 @@ describe('AddDatasetItemDialog', () => {
       const { posted } = setupHandlers();
       renderDialog();
 
-      type('Input JSON', '{"city":"Seattle"}');
+      type('Input', '{"city":"Seattle"}');
 
       expect(await addItem(posted)).toEqual({ input: { city: 'Seattle' } });
     });
@@ -270,7 +303,7 @@ describe('AddDatasetItemDialog', () => {
       const { posted } = setupHandlers();
       renderDialog();
 
-      type('Ground truth JSON', '{"answer":"rainy"}');
+      type('Ground truth', '{"answer":"rainy"}');
 
       expect(await addItem(posted)).toMatchObject({ input: {}, groundTruth: { answer: 'rainy' } });
     });
@@ -561,7 +594,7 @@ describe('AddDatasetItemDialog', () => {
       setupHandlers();
       renderDialog();
 
-      type('Input JSON', '{"city":"Seattle"}');
+      type('Input', '{"city":"Seattle"}');
       goToStep(3);
       toggle('Request context');
       click('Close');
@@ -570,7 +603,7 @@ describe('AddDatasetItemDialog', () => {
 
       expect(await screen.findByRole('dialog')).not.toBeNull();
       expect(currentStep()).toBe('Step 1 of 3');
-      expect(editor('Input JSON').value).toBe('{}');
+      expect(editor('Input').value).toBe('{}');
       goToStep(3);
       expect(isOn('Request context')).toBe(false);
     });
@@ -590,8 +623,8 @@ describe('AddDatasetItemDialog', () => {
       setupHandlers();
       renderPrefilled();
 
-      expect(editor('Input JSON').value).toBe('{"city":"Seattle"}');
-      expect(editor('Ground truth JSON').value).toBe('{"answer":"rainy"}');
+      expect(editor('Input').value).toBe('{"city":"Seattle"}');
+      expect(editor('Ground truth').value).toBe('{"answer":"rainy"}');
       goToStep(2);
       expect(editor('Tool mocks JSON').value).toBe(initialToolMocks);
       goToStep(3);

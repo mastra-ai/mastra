@@ -105,8 +105,46 @@ describe('TraceAsItemDialog', () => {
 
       renderDialog(input, output);
 
-      expect((await editor('Input JSON')).value).toContain('"self": "[Circular]"');
-      expect((await editor('Ground truth JSON')).value).toContain('"self": "[Circular]"');
+      expect((await editor('Input')).value).toContain('"self": "[Circular]"');
+      expect((await editor('Ground truth')).value).toContain('"self": "[Circular]"');
+    });
+  });
+
+  describe('when the trace input and output are plain strings', () => {
+    it('prefills the editors with the raw text', async () => {
+      setupHandlers({ trajectory: trajectoryWithoutToolCalls });
+      renderDialog('hello', 'hi there');
+
+      expect((await editor('Input')).value).toBe('hello');
+      expect((await editor('Ground truth')).value).toBe('hi there');
+    });
+
+    it('saves the text as string input and ground truth', async () => {
+      const { posted } = setupHandlers({ trajectory: trajectoryWithoutToolCalls });
+      renderDialog('hello', 'hi there');
+
+      await pickDataset('Dataset 1');
+      next();
+      next();
+      fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
+
+      await waitFor(() => expect(posted).toHaveBeenCalledTimes(1));
+      expect(posted.mock.calls[0]?.[0]).toMatchObject({ input: 'hello', groundTruth: 'hi there' });
+    });
+  });
+
+  describe('when the trace output is a string that reads as JSON', () => {
+    it('saves it back as a string', async () => {
+      const { posted } = setupHandlers({ trajectory: trajectoryWithoutToolCalls });
+      renderDialog('hello', '42');
+
+      await pickDataset('Dataset 1');
+      next();
+      next();
+      fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
+
+      await waitFor(() => expect(posted).toHaveBeenCalledTimes(1));
+      expect(posted.mock.calls[0]?.[0]).toMatchObject({ groundTruth: '42' });
     });
   });
 

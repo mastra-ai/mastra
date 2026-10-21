@@ -82,6 +82,19 @@ function renderSection() {
   );
 }
 
+async function requestedVisibility(request: Request) {
+  const body: unknown = await request.json();
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    !('visibility' in body) ||
+    (body.visibility !== 'org' && body.visibility !== 'private')
+  ) {
+    throw new Error('Expected a valid session visibility request');
+  }
+  return body.visibility;
+}
+
 async function openActions(user: ReturnType<typeof userEvent.setup>, name: string) {
   await user.click(await screen.findByRole('button', { name: `Session actions for ${name}` }));
 }
@@ -89,13 +102,13 @@ async function openActions(user: ReturnType<typeof userEvent.setup>, name: strin
 const name = 'Tell me what have been done in the factory since';
 
 describe('User session visibility', () => {
-  it('lets the owner share a private session and make it private again', async () => {
+  it.each(['lock', 'menu'])('lets the owner share from the %s and make it private again', async entry => {
     let sessions = [session];
     const requested: unknown[] = [];
     useFactoryFixtures(() => sessions);
     server.use(
       http.put(`${TEST_BASE_URL}/web/user-sessions/:sessionId/visibility`, async ({ request }) => {
-        const { visibility } = (await request.json()) as { visibility: 'org' | 'private' };
+        const visibility = await requestedVisibility(request);
         requested.push(visibility);
         sessions = [{ ...session, visibility }];
         return HttpResponse.json({ session: sessions[0] });
@@ -105,17 +118,30 @@ describe('User session visibility', () => {
     const user = userEvent.setup();
     const { client } = renderSection();
 
-    await openActions(user, name);
-    await user.click(await screen.findByRole('menuitem', { name: 'Share with organization' }));
+    expect(await screen.findByRole('button', { name: `Private session: ${name}` })).toBeInTheDocument();
+    if (entry === 'lock') {
+      await user.click(screen.getByRole('button', { name: `Private session: ${name}` }));
+      expect(
+        await screen.findByText(
+          'Only you can see this session. Share it to let anyone in your organization view and continue the conversation.',
+        ),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Share with organization' }));
+    } else {
+      await openActions(user, name);
+      await user.click(await screen.findByRole('menuitem', { name: 'Share with organization' }));
+    }
     await waitForMutationsIdle(client);
     expect(await screen.findByText('Session shared with your organization')).toBeInTheDocument();
-    expect(await screen.findByLabelText(`${name} shared with organization`)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: `Private session: ${name}` })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(`${name} shared with organization`)).not.toBeInTheDocument();
 
     await openActions(user, name);
     await user.click(await screen.findByRole('menuitem', { name: 'Make private' }));
     await waitForMutationsIdle(client);
     expect(await screen.findByText('Session is now private')).toBeInTheDocument();
     expect(screen.queryByLabelText(`${name} shared with organization`)).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: `Private session: ${name}` })).toBeInTheDocument();
     expect(requested).toEqual(['org', 'private']);
   });
 
@@ -127,7 +153,8 @@ describe('User session visibility', () => {
 
     await screen.findByRole('button', { name: /^Sessions properties/ });
     await pickSessionProperty(user, 'Owner', 'All owners');
-    expect(await screen.findByLabelText(`${name} shared with organization`)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: `Private session: ${name}` })).not.toBeInTheDocument();
     await openActions(user, name);
     expect(await screen.findByRole('menuitem', { name: 'Pin session' })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Make private' })).not.toBeInTheDocument();
@@ -154,7 +181,7 @@ describe('User session visibility', () => {
     useFactoryFixtures(() => [session]);
     server.use(
       http.put(`${TEST_BASE_URL}/web/user-sessions/:sessionId/visibility`, async ({ request }) => {
-        const { visibility } = (await request.json()) as { visibility: 'org' | 'private' };
+        const visibility = await requestedVisibility(request);
         requested.push(visibility);
         await answered;
         return HttpResponse.json({ session: { ...session, visibility } });
@@ -164,8 +191,11 @@ describe('User session visibility', () => {
     const user = userEvent.setup();
     const { client } = renderSection();
 
-    await openActions(user, name);
-    await user.click(await screen.findByRole('menuitem', { name: 'Share with organization' }));
+    await user.click(await screen.findByRole('button', { name: `Private session: ${name}` }));
+    const share = await screen.findByRole('button', { name: 'Share with organization' });
+    await user.click(share);
+    expect(share).toBeDisabled();
+    await user.keyboard('{Escape}');
     await openActions(user, name);
     const pending = await screen.findByRole('menuitem', { name: 'Share with organization' });
     expect(pending).toHaveAttribute('aria-disabled', 'true');
@@ -193,8 +223,8 @@ describe('User session visibility', () => {
     const user = userEvent.setup();
     const { client } = renderSection();
 
-    await openActions(user, name);
-    await user.click(await screen.findByRole('menuitem', { name: 'Share with organization' }));
+    await user.click(await screen.findByRole('button', { name: `Private session: ${name}` }));
+    await user.click(await screen.findByRole('button', { name: 'Share with organization' }));
     await waitForMutationsIdle(client);
     expect(
       await screen.findByText(
@@ -202,5 +232,7 @@ describe('User session visibility', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText(`${name} shared with organization`)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'This session is private' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share with organization' })).toBeEnabled();
   });
 });
