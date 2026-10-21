@@ -23,7 +23,7 @@ const session: FactoryUserSession = {
   projectRepositoryId,
   orgId: 'org-1',
   userId: 'user-1',
-  visibility: 'private',
+  visibility: 'private' as const,
   branch: 'user/my-feature',
   baseBranch: 'main',
   title: 'Tell me what have been done in the factory since',
@@ -104,7 +104,7 @@ const name = 'Tell me what have been done in the factory since';
 describe('User session visibility', () => {
   it.each(['lock', 'menu'])('lets the owner share from the %s and make it private again', async entry => {
     let sessions = [session];
-    const requested: FactoryUserSession['visibility'][] = [];
+    const requested: unknown[] = [];
     useFactoryFixtures(() => sessions);
     server.use(
       http.put(`${TEST_BASE_URL}/web/user-sessions/:sessionId/visibility`, async ({ request }) => {

@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState, EmptyStateIllustration } from '@mastra/playground-ui/components/EmptyState';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Lock, Users } from 'lucide-react';
 import { useId } from 'react';
 
@@ -32,7 +33,13 @@ export function SessionSharingPopover({
             aria-label={inHeader && onShare ? 'Share session' : `Private session: ${name}`}
             disabled={disabled}
           >
-            <Lock />
+            {inHeader ? (
+              <Lock />
+            ) : (
+              <Icon size="xs">
+                <Lock />
+              </Icon>
+            )}
             {inHeader ? (onShare ? 'Share' : 'Private') : null}
           </Button>
         }
