@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createBoardRegistry } from '../../boards/index.js';
+import { createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
+import type { FactoryLinearRuleContext } from '../../rules/types.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { linearClaimKey } from './claim.js';
 import { resolveLinearRules } from './default-rules.js';
@@ -354,6 +355,37 @@ describe('LinearRules', () => {
     },
   );
 
+  it('re-reads the card and commits at its fresh revision when a concurrent write makes the commit stale', async () => {
+    const { project, service, workItems } = await setup();
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: `linear:${issue.identifier}`,
+          url: issue.url,
+        },
+        title: `${issue.identifier}: ${issue.title}`,
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const original = workItems.commitRuleEvaluation.bind(workItems);
+    const commit = vi
+      .spyOn(workItems, 'commitRuleEvaluation')
+      .mockImplementationOnce(input => original({ ...input, expectedRevision: (input.expectedRevision ?? 0) - 1 }));
+
+    await expect(
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
+    ).resolves.toEqual({ status: 'committed', ingested: 1 });
+    expect(commit).toHaveBeenCalledTimes(2);
+    expect(commit.mock.calls[1]?.[0].workItemId).toEqual(expect.any(String));
+  });
+
   it('retains ingestion bookkeeping when an event is disabled', async () => {
     const { project, service, workItems } = await setup({ issueObserved: null });
     const input = { orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] };
@@ -464,5 +496,111 @@ describe('LinearRules', () => {
 
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions).toHaveLength(2);
+  });
+
+  describe('board event handlers', () => {
+    function deliveryBoard(issueClosed: ((context: FactoryLinearRuleContext) => unknown) | null) {
+      return defineBoard({
+        id: 'delivery',
+        title: 'Delivery',
+        initialPhase: 'queued',
+        phases: {
+          queued: { title: 'Queued', kind: 'resting', next: 'building' },
+          building: {
+            title: 'Building',
+            kind: 'working',
+            role: 'work',
+            outcomes: { done: 'shipped', canceled: 'dropped' },
+          },
+          shipped: { title: 'Shipped', kind: 'terminal' },
+          dropped: { title: 'Dropped', kind: 'terminal' },
+        },
+        events: { linear: { issueClosed: issueClosed as never } },
+      });
+    }
+
+    async function seed(
+      workItems: Awaited<ReturnType<typeof setup>>['workItems'],
+      projectId: string,
+      board: string,
+      stage: string,
+    ) {
+      await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: projectId,
+        input: {
+          title: issue.title,
+          board,
+          stages: [stage],
+          sessions: {},
+          externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: issue.url },
+        },
+      });
+    }
+
+    it('runs the card board handler with the phase it sits in', async () => {
+      const issueClosed = vi.fn((context: FactoryLinearRuleContext) => ({
+        type: 'transition' as const,
+        board: context.board ?? '',
+        stage:
+          context.issue.stateType === 'canceled' && context.phase?.outcomes.includes('canceled')
+            ? 'dropped'
+            : 'shipped',
+        idempotencyKey: 'delivery-closed',
+      }));
+      const { project, service, workItems } = await setup(
+        undefined,
+        createBoardRegistry({ boards: [deliveryBoard(issueClosed)] }),
+      );
+      await seed(workItems, project.id, 'delivery', 'building');
+      await service.ingest({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        issues: [{ ...issue, stateType: 'canceled' }],
+      });
+      expect(issueClosed.mock.calls[0]?.[0]).toMatchObject({
+        board: 'delivery',
+        phase: { id: 'building', kind: 'working', role: 'work', outcomes: ['done', 'canceled'] },
+      });
+      expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+        { decision: { type: 'transition', board: 'delivery', stage: 'dropped' } },
+      ]);
+    });
+
+    it('leaves Work cards on the integration default when another board switches the event off', async () => {
+      const { project, service, workItems } = await setup(
+        undefined,
+        createBoardRegistry({ boards: [deliveryBoard(null)] }),
+      );
+      await seed(workItems, project.id, 'work', 'execute');
+      await service.ingest({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        issues: [{ ...issue, stateType: 'completed' }],
+      });
+      expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+        { decision: { type: 'transition', board: 'work', stage: 'done' } },
+      ]);
+    });
+
+    it('keeps an explicit integration handler ahead of the board handler', async () => {
+      const boardHandler = vi.fn();
+      const { project, service, workItems } = await setup(
+        { issueClosed: null },
+        createBoardRegistry({ boards: [deliveryBoard(boardHandler)] }),
+      );
+      await seed(workItems, project.id, 'delivery', 'building');
+      await service.ingest({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        issues: [{ ...issue, stateType: 'completed' }],
+      });
+      expect(boardHandler).not.toHaveBeenCalled();
+      expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    });
   });
 });

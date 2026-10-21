@@ -21,10 +21,11 @@ import type { DatePreset, DateRange } from '@mastra/playground-ui/domains/metric
 import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
 import {
   applyMetricsPropertyFilterTokens,
-  createMetricsPropertyFilterFields,
+  createMetricsFilterBarFields,
   getMetricsPropertyFilterTokens,
   hasAnyMetricsFilterParams,
   loadMetricsFiltersFromStorage,
+  saveMetricsFiltersToStorage,
 } from '@mastra/playground-ui/domains/metrics/metrics-filters';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useAgentRunsKpiMetrics } from '@mastra/react/hooks/metrics';
@@ -126,6 +127,8 @@ export default function Metrics() {
         prev => {
           const params = new URLSearchParams(prev);
           applyMetricsPropertyFilterTokens(params, nextTokens);
+          // Every filter change is remembered for the next visit, as on Traces.
+          saveMetricsFiltersToStorage(params);
           return params;
         },
         { replace: true },
@@ -173,40 +176,21 @@ export default function Metrics() {
 
 /** Fetches and renders dashboard data only after the storage gate confirms metrics support. */
 function MetricsContent() {
-  const { error, isLoading: isMetricsLoading } = useAgentRunsKpiMetrics(useMetricsFilters());
+  const { error } = useAgentRunsKpiMetrics(useMetricsFilters());
 
   const { isInMemory } = useObservabilityStorageCapabilities();
 
-  const { data: tagsData, isLoading: isTagsLoading } = useTags();
-  const { data: entityNamesData, isLoading: isEntityNamesLoading } = useEntityNames();
-  const { data: serviceNamesData, isLoading: isServiceNamesLoading } = useServiceNames();
-  const { data: environmentsData, isLoading: isEnvironmentsLoading } = useEnvironments();
+  const { data: tagsData } = useTags();
+  const { data: entityNamesData } = useEntityNames();
+  const { data: serviceNamesData } = useServiceNames();
+  const { data: environmentsData } = useEnvironments();
 
-  const filterFields = useMemo(
-    () =>
-      createMetricsPropertyFilterFields({
-        availableTags: tagsData ?? [],
-        availableEntityNames: entityNamesData ?? [],
-        availableServiceNames: serviceNamesData ?? [],
-        availableEnvironments: environmentsData ?? [],
-        loading: {
-          tags: isTagsLoading,
-          entityNames: isEntityNamesLoading,
-          serviceNames: isServiceNamesLoading,
-          environments: isEnvironmentsLoading,
-        },
-      }),
-    [
-      tagsData,
-      entityNamesData,
-      serviceNamesData,
-      environmentsData,
-      isTagsLoading,
-      isEntityNamesLoading,
-      isServiceNamesLoading,
-      isEnvironmentsLoading,
-    ],
-  );
+  const filterFields = createMetricsFilterBarFields({
+    availableTags: tagsData ?? [],
+    availableEntityNames: entityNamesData ?? [],
+    availableServiceNames: serviceNamesData ?? [],
+    availableEnvironments: environmentsData ?? [],
+  });
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -236,7 +220,7 @@ function MetricsContent() {
   }
 
   return (
-    <MetricsPageLayout filterFields={filterFields} isLoading={isMetricsLoading}>
+    <MetricsPageLayout filterFields={filterFields}>
       <div className="grid content-start gap-4">
         {isInMemory && (
           <Notice variant="info" title="Metrics are not persisted">

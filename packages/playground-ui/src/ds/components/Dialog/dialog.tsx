@@ -5,34 +5,64 @@ import * as React from 'react';
 import { DialogAction } from './dialog-action';
 import { DialogContext, dialogActionLayoutClasses, dialogActionSizeClasses, useDialogContext } from './dialog-context';
 import type { DialogIntent } from './dialog-context';
-import { dialogContentSizeClasses, dialogPopupClassName } from './dialog-shell';
+import { DIALOG_DRAWER_BREAKPOINT_PX, dialogContentSizeClasses, dialogPopupClassName } from './dialog-shell';
 import type { DialogSize } from './dialog-shell';
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
+import { Drawer, DrawerContent } from '@/ds/components/Drawer';
+import type { DrawerProps } from '@/ds/components/Drawer';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
+import { useIsMobile } from '@/hooks/use-is-mobile';
 import { cn } from '@/lib/utils';
 
 import './dialog.css';
 
-export type DialogProps = DialogPrimitive.Root.Props & {
+type DialogOpenChangeDetails = Parameters<NonNullable<DialogPrimitive.Root.Props['onOpenChange']>>[1];
+type DrawerOpenChangeDetails = Parameters<NonNullable<DrawerProps['onOpenChange']>>[1];
+
+export type DialogProps = Omit<DialogPrimitive.Root.Props, 'handle' | 'onOpenChange'> & {
   intent?: DialogIntent;
   pending?: boolean;
+  /** `details` comes from the bottom drawer on phones, where a swipe can also close it. */
+  onOpenChange?: (open: boolean, details: DialogOpenChangeDetails | DrawerOpenChangeDetails) => void;
 };
 
-function Dialog({ intent = 'default', pending = false, onOpenChange, disablePointerDismissal, ...props }: DialogProps) {
+const useIsDrawer = () => useIsMobile(DIALOG_DRAWER_BREAKPOINT_PX);
+
+// Below 640px every dialog is a bottom drawer. Open state lives here so crossing the breakpoint keeps it open.
+function Dialog({
+  intent = 'default',
+  pending = false,
+  open,
+  defaultOpen = false,
+  onOpenChange,
+  disablePointerDismissal,
+  ...props
+}: DialogProps) {
+  const isDrawer = useIsDrawer();
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen);
+  const rootProps = {
+    ...props,
+    open: open ?? uncontrolledOpen,
+    disablePointerDismissal: disablePointerDismissal ?? intent === 'destructive',
+  };
+
+  function handleOpenChange(nextOpen: boolean, details: DialogOpenChangeDetails | DrawerOpenChangeDetails) {
+    if (!nextOpen && pending) {
+      details.cancel();
+      return;
+    }
+    setUncontrolledOpen(nextOpen);
+    onOpenChange?.(nextOpen, details);
+  }
+
   return (
     <DialogContext.Provider value={{ intent, pending }}>
-      <DialogPrimitive.Root
-        {...props}
-        disablePointerDismissal={disablePointerDismissal ?? intent === 'destructive'}
-        onOpenChange={(open, details) => {
-          if (!open && pending) {
-            details.cancel();
-            return;
-          }
-          onOpenChange?.(open, details);
-        }}
-      />
+      {isDrawer ? (
+        <Drawer {...rootProps} onOpenChange={handleOpenChange} />
+      ) : (
+        <DialogPrimitive.Root {...rootProps} onOpenChange={handleOpenChange} />
+      )}
     </DialogContext.Provider>
   );
 }
@@ -59,8 +89,10 @@ function DialogOverlay({ className, ...props }: DialogOverlayProps) {
 
 export type { DialogSize };
 
-type DialogContentProps = Omit<DialogPrimitive.Popup.Props, 'className'> & {
+// No `render` or function `style`: the popup is a Dialog or a Drawer, and their state callbacks differ.
+type DialogContentProps = Omit<DialogPrimitive.Popup.Props, 'className' | 'render' | 'style'> & {
   className?: string;
+  style?: React.CSSProperties;
   size?: DialogSize;
   showOverlay?: boolean;
   showCloseButton?: boolean;
@@ -78,40 +110,66 @@ function DialogContent({
   ...props
 }: DialogContentProps) {
   const { intent, pending } = useDialogContext();
+  const isDrawer = useIsDrawer();
   const closeRef = React.useRef<HTMLButtonElement>(null);
   const isDestructive = intent === 'destructive';
+  const popupProps = {
+    'data-slot': 'dialog-content',
+    'data-size': size,
+    'data-intent': intent,
+    role: isDestructive ? 'alertdialog' : 'dialog',
+    initialFocus: initialFocus ?? (isDestructive && showCloseButton ? closeRef : true),
+    'aria-busy': pending || undefined,
+    ...props,
+  };
+  const closeButton = showCloseButton && (
+    <DialogPrimitive.Close
+      ref={closeRef}
+      disabled={pending}
+      data-slot="dialog-close"
+      className={cn('absolute right-4', isDrawer ? 'top-1.5' : 'top-4')}
+      render={
+        <Button variant="ghost" size="icon-sm" aria-label="Close">
+          <X />
+        </Button>
+      }
+    />
+  );
+
+  if (isDrawer) {
+    return (
+      <DrawerContent
+        {...popupProps}
+        showCloseButton={false}
+        className={cn(
+          'pb-3',
+          size === 'full' && 'h-[calc(85vh+3rem)]',
+          showCloseButton && '[&_[data-slot=dialog-header]]:pr-12',
+          className,
+        )}
+      >
+        {children}
+        {closeButton}
+        {/* Fills the drawer's 3rem swipe bleed below the screen edge; an element so call-site padding can't shrink it. */}
+        <div aria-hidden className="h-12 shrink-0" />
+      </DrawerContent>
+    );
+  }
+
   return (
     <DialogPortal>
       {showOverlay && <DialogOverlay className={overlayClassName} />}
       <DialogPrimitive.Popup
-        data-slot="dialog-content"
-        data-size={size}
-        data-intent={intent}
-        role={isDestructive ? 'alertdialog' : 'dialog'}
-        initialFocus={initialFocus ?? (isDestructive && showCloseButton ? closeRef : true)}
-        aria-busy={pending || undefined}
+        {...popupProps}
         className={cn(
           dialogPopupClassName,
           dialogContentSizeClasses[size],
-          '[&_[data-slot=dialog-header]]:pr-12',
+          showCloseButton && '[&_[data-slot=dialog-header]]:pr-12',
           className,
         )}
-        {...props}
       >
         {children}
-        {showCloseButton && (
-          <DialogPrimitive.Close
-            ref={closeRef}
-            disabled={pending}
-            data-slot="dialog-close"
-            className="absolute top-4 right-4"
-            render={
-              <Button variant="ghost" size="icon-sm" aria-label="Close">
-                <X />
-              </Button>
-            }
-          />
-        )}
+        {closeButton}
       </DialogPrimitive.Popup>
     </DialogPortal>
   );

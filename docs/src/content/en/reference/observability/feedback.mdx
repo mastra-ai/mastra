@@ -496,7 +496,13 @@ Use `FeedbackInput` with `mastra.observability.addFeedback()`, `recordedTrace.ad
     description: 'Additional feedback-specific metadata.',
     isOptional: true,
   },
-  { name: 'experimentId', type: 'string', description: 'Experiment or eval run identifier.', isOptional: true },
+  {
+    name: 'experimentId',
+    type: 'string',
+    description:
+      'Deprecated. The experiment is derived from the target trace or span. Read `correlationContext.experimentId` on the exported event instead.',
+    isOptional: true,
+  },
   {
     name: 'sourceId',
     type: 'string',

@@ -93,3 +93,47 @@ export function initialMessageOptions(
     resumeSkipNotice: `Resumed the existing conversation for this directory, so ${skipped} not sent. Use ${TUI_PROMPT_FLAG} to send ${pipedInput ? 'them' : 'it'} anyway.`,
   };
 }
+
+export const PACK_FLAG = '--pack' as const;
+
+export type PackFlagArgs = {
+  /** argv with `--pack` and its value removed. */
+  argv: string[];
+  /** The raw pack id argument, when `--pack` was passed. */
+  value?: string;
+  /** Set when the flag was passed without a value. */
+  error?: string;
+};
+
+/**
+ * Extracts `--pack <id>` (or `--pack=<id>`) from argv. The pack id is validated
+ * later against the packs in settings (built-in ids, `custom:<name>`, or a bare
+ * custom-pack name); here we only strip the flag so other argv consumers never
+ * mistake the id for a positional prompt.
+ */
+export function takePackFlag(argv: string[]): PackFlagArgs {
+  const rest: string[] = [];
+  let value: string | undefined;
+  let error: string | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (arg === PACK_FLAG) {
+      const next = argv[++i];
+      if (next === undefined || next.startsWith('-')) {
+        error = `${PACK_FLAG} needs a value`;
+        break;
+      }
+      value = next;
+    } else if (arg.startsWith(`${PACK_FLAG}=`)) {
+      const inline = arg.slice(PACK_FLAG.length + 1);
+      if (inline === '' || inline.startsWith('-')) {
+        error = `${PACK_FLAG} needs a value`;
+        break;
+      }
+      value = inline;
+    } else {
+      rest.push(arg);
+    }
+  }
+  return { argv: rest, ...(value !== undefined ? { value } : {}), ...(error ? { error } : {}) };
+}

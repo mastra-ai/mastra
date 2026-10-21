@@ -1,4 +1,6 @@
 import { APICallError } from '@internal/ai-sdk-v5';
+import { MastraFGAPermissions } from '../../../auth/ee';
+import type { MastraFGAPermissionInput } from '../../../auth/ee';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
@@ -11,8 +13,9 @@ import type { RequestContext } from '../../../request-context';
 import type { MastraOnFinishCallbackContext } from '../../../stream/types';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
-import type { MessageList } from '../../message-list';
+import type { MastraDBMessage, MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
+import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
@@ -39,8 +42,10 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   agentSpan?: Span<SpanType.AGENT_RUN>;
   agentId: string;
   agentVersionId?: string;
+  resolvedScopes?: string[];
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
+  authorizeMemory: (permission: MastraFGAPermissionInput, threadId: string) => Promise<void>;
   runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
@@ -56,8 +61,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
   agentSpan,
   agentId,
   agentVersionId,
+  resolvedScopes,
   methodType,
   saveQueueManager,
+  authorizeMemory,
   runScope,
 }: MapResultsStepOptions<OUTPUT>): Step<
   string,
@@ -68,7 +75,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   },
   ModelLoopStreamArgs<any, OUTPUT>
 >['execute'] {
-  return async ({ inputData, bail, ..._observabilityContext }) => {
+  return async ({ inputData, bail }) => {
     const memoryData = inputData['prepare-memory-step'];
 
     // Class instances written to runScope by upstream steps. These never travel
@@ -78,10 +85,15 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
     let threadCreatedByStep = false;
 
+    // Output only ever merges into the latest message, so that is the only earlier-turn message
+    // snapshotted for undoSavedResponseMessages, after client tool output mapping has enriched it.
+    let earlierTurnSnapshot: MastraDBMessage | undefined;
+
     const result = {
       ...options,
       agentId,
       agentVersionId,
+      resolvedScopes,
       tools: convertedTools,
       runId,
       temperature: options.modelSettings?.temperature,
@@ -95,6 +107,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
         // When OM is enabled saving per step corrupts things because OM handles its own saving
         const shouldSavePerStep = options.savePerStep && !memoryConfig?.observationalMemory;
         if (shouldSavePerStep && !memoryConfig?.readOnly) {
+          if (memoryData.thread?.id) {
+            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
+          }
           if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
             await memory.createThread({
               threadId: memoryData.thread?.id,
@@ -213,6 +228,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
       logger: capabilities.logger,
     });
 
+    const latestMessage = messageList.get.all.db().at(-1);
+    earlierTurnSnapshot = latestMessage?.role === 'assistant' ? structuredClone(latestMessage) : undefined;
+
     // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
     let effectiveOutputProcessors = capabilities.outputProcessors
       ? typeof capabilities.outputProcessors === 'function'
@@ -288,10 +306,12 @@ export function createMapResultsStep<OUTPUT = undefined>({
       methodType: modelMethodType,
       agentId,
       agentVersionId,
+      resolvedScopes,
       requestContext: result.requestContext!,
       actor: options.actor,
       mcp: options.mcp,
       ...createObservabilityContext({ currentSpan: agentSpan }),
+      agentRunSpan: agentSpan,
       runId,
       toolChoice: result.toolChoice,
       tools: result.tools,
@@ -378,12 +398,28 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
             agentSpan?.end({ endTree: true });
           } else {
+            if (context?.outputResultTripwire) {
+              await undoSavedResponseMessages({
+                memory,
+                threadId: memoryData.thread?.id ?? threadIdFromArgs,
+                memoryConfig,
+                messageList,
+                saveQueueManager,
+                earlierTurnSnapshot,
+                logger: capabilities.logger,
+                runId,
+              });
+            }
+
             try {
               const outputText =
                 options.structuredOutput?.schema && payload.object != null
                   ? JSON.stringify(payload.object)
                   : payload.text || '';
 
+              if (!memoryConfig?.readOnly && result.threadId) {
+                await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, result.threadId);
+              }
               await capabilities.executeOnFinish({
                 result: payload,
                 outputText,

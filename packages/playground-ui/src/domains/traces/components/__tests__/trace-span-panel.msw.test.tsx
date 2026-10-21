@@ -6,7 +6,8 @@ import { useState } from 'react';
 import type { ComponentProps } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { TraceSpanPanel, type TraceSpanPanelProps } from '../trace-span-panel';
+import { TraceSpanPanel } from '../trace-span-panel';
+import type { TraceSpanPanelProps } from '../trace-span-panel';
 import { queryPageFromList } from './fixtures/thread-traces';
 import { TRACE_ID, panelTraceSpans, spanDetailById } from './fixtures/trace-span-panel';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -340,7 +341,7 @@ describe('TraceSpanPanel', () => {
     const { queryClient } = renderPanel({ onClose });
 
     expect(await screen.findByRole('heading', { name: `Trace ${TRACE_ID}` })).not.toBeNull();
-    fireEvent.click(screen.getByLabelText('Close Panel'));
+    fireEvent.click(screen.getByLabelText('Close trace'));
     expect(onClose).toHaveBeenCalledOnce();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
@@ -360,7 +361,8 @@ describe('TraceSpanPanel', () => {
 
     // Start time + duration are shown; the old key-value rows are gone.
     expect(screen.getByLabelText(/^Started at /)).not.toBeNull();
-    expect(screen.getByText('1s')).not.toBeNull();
+    // ("1s" also appears as the root span's duration in the tree, so allow multiple matches.)
+    expect(screen.getAllByText('1s').length).toBeGreaterThan(0);
     expect(screen.queryByText('Status')).toBeNull();
     expect(screen.queryByText('Ended at')).toBeNull();
     // Tab labels ("Spans") only render when score/feedback slots are provided;

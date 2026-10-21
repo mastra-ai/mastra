@@ -19,6 +19,12 @@ export interface ConnectClientOptions {
   /** Organization id. Falls back to MASTRA_ORG_ID; the x-organization-id header is omitted when absent. */
   orgId?: string;
   /**
+   * Project id, sent as the x-mastra-project-id header so the platform can
+   * attribute proxy activity to this project. Falls back to MASTRA_PROJECT_ID;
+   * the header is omitted when absent.
+   */
+  projectId?: string;
+  /**
    * Integrations service base URL. Falls back to MASTRA_INTEGRATIONS_API_URL,
    * then the regional default from MASTRA_PLATFORM_REGION ('us' | 'eu'),
    * then https://integrations.mastra.ai.
@@ -26,6 +32,15 @@ export interface ConnectClientOptions {
   baseUrl?: string;
   /** Fetch implementation, for testing or custom transports. Defaults to globalThis.fetch. */
   fetch?: typeof globalThis.fetch;
+  /**
+   * End-user resource key this client acts for. When set, every platform call
+   * asserts it via the `x-mastra-resource-id` header and connection listings
+   * are scoped to global + that resource's connections. The platform rejects
+   * calls against a resource-scoped connection whose key does not match (404),
+   * and ignores the header on global connections. No env fallback on purpose:
+   * a resource scope is always an explicit, per-identity decision.
+   */
+  resourceId?: string;
 }
 
 export interface ResolvedClient {
@@ -33,6 +48,8 @@ export interface ResolvedClient {
   headers: Record<string, string>;
   fetch: typeof globalThis.fetch;
   accessToken: string;
+  /** Validated end-user resource key this client asserts, when scoped. */
+  resourceId?: string;
 }
 
 const DEFAULT_INTEGRATIONS_URL = 'https://integrations.mastra.ai';
@@ -60,6 +77,29 @@ function stripTrailingSlashes(url: string): string {
   return url.slice(0, end);
 }
 
+/** Header asserting the end-user resource key on platform data-path calls. */
+export const RESOURCE_ID_HEADER = 'x-mastra-resource-id';
+
+/**
+ * Validates an end-user resource key against the platform contract: an opaque
+ * string of 1–256 characters after trimming. Returns the trimmed key.
+ * Mirrors the platform's `resourceIdSchema` so an invalid key fails here —
+ * before any platform call — instead of as an opaque 400.
+ */
+export function validateResourceId(resourceId: string): string {
+  if (typeof resourceId !== 'string') {
+    throw new MastraConnectError('invalid_options', `Invalid resourceId: expected a string, got ${typeof resourceId}.`);
+  }
+  const trimmed = resourceId.trim();
+  if (trimmed.length < 1 || trimmed.length > 256) {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Invalid resourceId: expected 1-256 characters after trimming, got ${trimmed.length}.`,
+    );
+  }
+  return trimmed;
+}
+
 export function resolveClient(options?: ConnectClientOptions): ResolvedClient {
   const accessToken =
     options?.accessToken?.trim() ||
@@ -84,8 +124,16 @@ export function resolveClient(options?: ConnectClientOptions): ResolvedClient {
   if (orgId) {
     headers['x-organization-id'] = orgId;
   }
+  const projectId = options?.projectId?.trim() || process.env.MASTRA_PROJECT_ID?.trim();
+  if (projectId) {
+    headers['x-mastra-project-id'] = projectId;
+  }
+  const resourceId = options?.resourceId !== undefined ? validateResourceId(options.resourceId) : undefined;
+  if (resourceId !== undefined) {
+    headers[RESOURCE_ID_HEADER] = resourceId;
+  }
 
-  return { baseUrl, headers, fetch: options?.fetch ?? globalThis.fetch, accessToken };
+  return { baseUrl, headers, fetch: options?.fetch ?? globalThis.fetch, accessToken, resourceId };
 }
 
 function redact(message: string, accessToken: string): string {
@@ -199,6 +247,8 @@ export const connectionSchema = z.object({
   connectedAt: z.string().nullish(),
   createdAt: z.string().nullish(),
   accountLabel: z.string().nullish(),
+  /** End-user resource key the connection is scoped to; null/absent = global. */
+  resourceId: z.string().nullish(),
 });
 
 export type ProjectConnection = z.infer<typeof connectionSchema>;
@@ -207,11 +257,33 @@ const connectionListSchema = z.object({
   connections: z.array(connectionSchema),
 });
 
+/**
+ * One credential-form field from the platform catalog, as the hosted connect
+ * surface needs it. Lenient subset of the platform's `VendorAuthField`.
+ */
+export const catalogAuthFieldSchema = z.object({
+  name: z.string(),
+  label: z.string().nullish(),
+  description: z.string().nullish(),
+  placeholder: z.string().nullish(),
+  secret: z.boolean().nullish(),
+  required: z.boolean().nullish(),
+  order: z.number().nullish(),
+});
+
+export type CatalogAuthField = z.infer<typeof catalogAuthFieldSchema>;
+
 export const integrationCatalogEntrySchema = z.object({
   id: z.string(),
   capabilities: z.object({
     mcp: z.boolean().optional(),
   }),
+  // Display/auth fields consumed by the end-user connect surface. Nullish so
+  // an older platform catalog shape never fails tool resolution.
+  displayName: z.string().nullish(),
+  logoUrl: z.string().nullish(),
+  authType: z.string().nullish(),
+  authFields: z.array(catalogAuthFieldSchema).nullish(),
 });
 
 export type IntegrationCatalogEntry = z.infer<typeof integrationCatalogEntrySchema>;
@@ -262,7 +334,14 @@ export type ConnectionContext = z.infer<typeof connectionContextSchema>;
 // —— endpoint functions ——
 
 export async function listProjectConnections(client: ResolvedClient, projectId: string): Promise<ProjectConnection[]> {
-  const response = await platformFetch(client, `/v2/projects/${encodeURIComponent(projectId)}/connections`);
+  // A resource-scoped client lists global + that resource's connections in one
+  // round trip; an unscoped client keeps the platform's fail-safe default
+  // (global-only), so pre-resourceId deployments never see end-user rows.
+  const query =
+    client.resourceId !== undefined
+      ? `?${new URLSearchParams({ resourceId: client.resourceId, includeGlobal: 'true' })}`
+      : '';
+  const response = await platformFetch(client, `/v2/projects/${encodeURIComponent(projectId)}/connections${query}`);
   if (!response.ok) {
     await throwPlatformError(response, `listing connections for project ${projectId}`);
   }
@@ -516,5 +595,59 @@ export async function proxyRequestWithResponse(
     return { ...metadata, data: JSON.parse(text) };
   } catch {
     return { ...metadata, data: text };
+  }
+}
+
+export const connectSessionSchema = z.object({
+  connectionId: z.string(),
+  integrationId: z.string(),
+  connectUrl: z.string(),
+  sessionToken: z.string(),
+  expiresAt: z.string(),
+});
+
+export type ConnectSession = z.infer<typeof connectSessionSchema>;
+
+/**
+ * Creates a project-scoped connect session. A resource-scoped client passes
+ * its resource key in the body, so the resulting connection is owned by that
+ * end user; an unscoped client creates a global connection.
+ */
+export async function createProjectConnectSession(
+  client: ResolvedClient,
+  projectId: string,
+  integrationId: string,
+): Promise<ConnectSession> {
+  const response = await platformFetch(
+    client,
+    `/v2/projects/${encodeURIComponent(projectId)}/integrations/${encodeURIComponent(integrationId)}/connect-sessions`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(client.resourceId !== undefined ? { resourceId: client.resourceId } : {}),
+    },
+  );
+  if (!response.ok) {
+    await throwPlatformError(response, `creating a connect session for ${integrationId}`);
+  }
+  const parsed = connectSessionSchema.safeParse(
+    await parsePlatformJson(response, `creating a connect session for ${integrationId}`),
+  );
+  if (!parsed.success) {
+    throw new MastraConnectError(
+      'platform_error',
+      `Platform returned an unexpected connect-session shape for ${integrationId}.`,
+    );
+  }
+  return parsed.data;
+}
+
+/** Disconnects a connection. The platform tears down the vendor side asynchronously. */
+export async function disconnectConnection(client: ResolvedClient, connectionId: string): Promise<void> {
+  const response = await platformFetch(client, `/v2/connections/${encodeURIComponent(connectionId)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    await throwPlatformError(response, `disconnecting connection ${connectionId}`);
   }
 }

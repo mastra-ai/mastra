@@ -10,7 +10,7 @@ const siblings = [experiments, reviewQueue];
 describe('getIsLinkActive', () => {
   describe('when on the review queue page', () => {
     it('activates Review Queue only, not its Experiments parent', () => {
-      const pathname = '/experiments/review-queue?experiment=exp-1'.split('?')[0]!;
+      const pathname = '/experiments/review-queue?experiment=exp-1'.split('?')[0];
       expect(getIsLinkActive(reviewQueue, pathname, siblings)).toBe(true);
       expect(getIsLinkActive(experiments, pathname, siblings)).toBe(false);
     });

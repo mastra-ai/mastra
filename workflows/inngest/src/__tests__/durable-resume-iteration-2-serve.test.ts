@@ -71,11 +71,13 @@ function mockModel(): any {
 
 async function drain(stream: AsyncIterable<any>, timeoutMs: number, stopOnSuspension = true) {
   const types: string[] = [];
+  const chunks: any[] = [];
   const errors: unknown[] = [];
   await Promise.race([
     (async () => {
       try {
         for await (const chunk of stream) {
+          chunks.push(chunk);
           types.push(chunk?.type);
           if (chunk?.type === 'error') errors.push(chunk.payload?.error ?? chunk);
           if (
@@ -90,7 +92,7 @@ async function drain(stream: AsyncIterable<any>, timeoutMs: number, stopOnSuspen
     })(),
     new Promise(resolve => setTimeout(resolve, timeoutMs)),
   ]);
-  return { types, errors };
+  return { types, chunks, errors };
 }
 
 describe('durable agent resume after a suspend in a later loop iteration (#24749)', () => {
@@ -100,6 +102,156 @@ describe('durable agent resume after a suspend in a later loop iteration (#24749
 
   afterAll(async () => {
     await teardownSharedTestInfrastructure();
+  });
+
+  it('runs the approved tool when approval is sent right after the approval prompt (#27382)', async () => {
+    const agentId = `approve-immediately-${Date.now()}`;
+    const execute = vi.fn().mockResolvedValue({ ok: true });
+    let call = 0;
+    const model: any = {
+      specificationVersion: 'v2',
+      provider: 'mock',
+      modelId: 'mock-model',
+      supportedUrls: {},
+      async doStream() {
+        const chunks =
+          call++ % 2 === 0
+            ? toolCallChunks(String(call), 'refund', { amount: 20 })
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: `done-${call}`, modelId: 'mock-model', timestamp: new Date(0) },
+                { type: 'text-start', id: 't1' },
+                { type: 'text-delta', id: 't1', delta: 'Refund issued.' },
+                { type: 'text-end', id: 't1' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+              ];
+        return {
+          stream: simulateReadableStream({ chunks: chunks as any }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    };
+    const agent = new Agent({
+      id: agentId,
+      name: 'Approve Immediately Agent',
+      instructions: 'Issue refunds.',
+      model,
+      tools: {
+        refund: createTool({
+          id: 'refund',
+          description: 'Issue a refund',
+          inputSchema: z.object({ amount: z.number() }),
+          requireApproval: true,
+          execute,
+        }),
+      },
+      memory: new Memory({ storage: new DefaultStorage({ id: agentId, url: dbUrl }) }),
+    });
+    const inngestAgent = createInngestAgent({ agent, inngest: getSharedInngest() });
+    getSharedMastra().addAgent(inngestAgent);
+
+    // The race hit about 40% of runs before the fix; 10 runs make a miss very unlikely.
+    for (let i = 0; i < 10; i++) {
+      const first = await inngestAgent.stream('Refund $20', {
+        memory: { thread: `thread-${agentId}-${i}`, resource: `resource-${agentId}` },
+      });
+      const suspended = await drain(first.output.fullStream, 60_000);
+      const toolCallId = suspended.chunks.find(c => c.type === 'tool-call-approval')?.payload.toolCallId;
+      expect(toolCallId).toBeDefined();
+
+      const resumed = await inngestAgent.approveToolCall({ runId: first.runId, toolCallId });
+      const done = await drain(resumed.fullStream, 60_000, false);
+      expect(done.errors).toEqual([]);
+      expect(done.types).toContain('finish');
+      expect(await resumed.text).toBe('Refund issued.');
+      expect(execute).toHaveBeenCalledTimes(i + 1);
+    }
+  });
+
+  it('redacts an approved tool result after public cleanup restores a cold run (#26148)', async () => {
+    const agentId = `resume-output-processors-${Date.now()}`;
+    const toolId = `secret-${agentId}`;
+    const rawSentinel = 'UNREDACTED_RESUMED_TOOL_SECRET';
+    const execute = vi.fn().mockResolvedValue({ secret: rawSentinel });
+    const watchedResults: unknown[] = [];
+    let call = 0;
+    const model: any = {
+      specificationVersion: 'v2',
+      provider: 'mock',
+      modelId: 'mock-model',
+      supportedUrls: {},
+      async doStream() {
+        const chunks =
+          call++ === 0
+            ? toolCallChunks('secret', toolId, {})
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'done', modelId: 'mock-model', timestamp: new Date(0) },
+                { type: 'text-start', id: 't1' },
+                { type: 'text-delta', id: 't1', delta: 'Done.' },
+                { type: 'text-end', id: 't1' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+              ];
+        return {
+          stream: simulateReadableStream({ chunks: chunks as any }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    };
+    const storage = new DefaultStorage({ id: agentId, url: dbUrl });
+    const agent = new Agent({
+      id: agentId,
+      name: 'Cold Resume Output Processor Agent',
+      instructions: 'Call the secret tool, then answer.',
+      model,
+      tools: {
+        [toolId]: createTool({
+          id: toolId,
+          description: 'Return a secret after approval',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute,
+        }),
+      },
+      memory: new Memory({ storage }),
+      outputProcessors: [
+        {
+          id: 'resumed-tool-redactor',
+          processOutputStream: async ({ part }) => {
+            if (part.type !== 'tool-result' || part.payload.toolName !== toolId) return part;
+            watchedResults.push(part.payload.result);
+            return { ...part, payload: { ...part.payload, result: { secret: '[REDACTED]' } } };
+          },
+        },
+      ],
+    });
+    const inngestAgent = createInngestAgent({ agent, inngest: getSharedInngest() });
+    getSharedMastra().addAgent(inngestAgent);
+
+    const first = await inngestAgent.stream([{ role: 'user', content: 'Fetch the secret' }], {
+      memory: { thread: `thread-${agentId}`, resource: `resource-${agentId}` },
+      closeOnSuspend: true,
+    });
+    const suspended = await drain(first.output.fullStream, 60_000);
+    first.cleanup();
+    expect(suspended.errors).toEqual([]);
+    expect(suspended.types).toContain('tool-call-approval');
+    expect(execute).not.toHaveBeenCalled();
+    expect(watchedResults).toEqual([]);
+
+    const resumed = await inngestAgent.approveToolCall({ runId: first.runId, toolCallId: 'call-secret' });
+    const result = await drain(resumed.fullStream, 60_000, false);
+    expect(result.errors).toEqual([]);
+    expect(result.types).toContain('finish');
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(watchedResults).toEqual([{ secret: rawSentinel }]);
+    const toolResults = result.chunks.filter(
+      chunk => chunk.type === 'tool-result' && chunk.payload.toolName === toolId,
+    );
+    expect(toolResults).toHaveLength(1);
+    expect(toolResults[0].payload.result).toEqual({ secret: '[REDACTED]' });
+    // Stream processors redact publication, not persisted results in step-finish or finish payloads.
+    expect(JSON.stringify(toolResults)).not.toContain(rawSentinel);
   });
 
   it('resumes a tool that suspended in iteration 2 immediately after the suspension is streamed', async () => {

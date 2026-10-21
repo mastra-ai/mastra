@@ -1,6 +1,6 @@
 {
   "name": "@mastra/duckdb",
-  "version": "1.14.0-alpha.0",
+  "version": "1.15.0",
   "description": "DuckDB vector store provider for Mastra - embedded high-performance vector storage with HNSW indexing",
   "type": "module",
   "main": "dist/index.js",
@@ -23,8 +23,8 @@
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
     "typecheck": "tsc --noEmit"
   },
   "license": "Apache-2.0",
@@ -39,7 +39,6 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
     "rimraf": "^5.0.10",
     "tsdown": "0.22.9",
     "tsx": "catalog:",

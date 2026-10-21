@@ -14,7 +14,7 @@ import type { DoneSound } from '../services/doneSound';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import { SettingsSubsection } from './SettingsSubsection';
-import { SoundPicker, ThinkingLevelPicker } from './SettingsFields';
+import { SoundPicker } from './SettingsFields';
 
 export function GeneralSettings() {
   const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
@@ -35,27 +35,6 @@ export function GeneralSettings() {
         </SettingsRow>
       </SettingsContainer>
     </SettingsSubsection>
-  );
-}
-
-interface ModelSettingsProps {
-  settings: AgentControllerSessionSettings | null;
-  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => Promise<unknown>;
-}
-
-export function ModelSettings({ settings, onBehaviorChange }: ModelSettingsProps) {
-  return (
-    <SettingsRow
-      label="Thinking level"
-      description="Reasoning budget for chats opened from this Factory — overrides the Factory run defaults"
-    >
-      <ThinkingLevelPicker
-        ariaLabel="Thinking level"
-        value={settings?.thinkingLevel ?? 'off'}
-        disabled={!settings}
-        onChange={level => onBehaviorChange({ thinkingLevel: level ?? 'off' })}
-      />
-    </SettingsRow>
   );
 }
 

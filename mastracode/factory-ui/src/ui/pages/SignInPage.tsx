@@ -19,6 +19,7 @@ import {
   signUpWithPassword,
 } from '../domains/auth/services/auth';
 import { FactoryHalftoneField } from '../domains/auth/components/FactoryHalftoneField';
+import { AuthPendingSkeleton } from '../domains/auth/components/RootGuards';
 import '../domains/auth/components/sign-in-page.css';
 
 // Browsers can normalize backslashes into cross-origin redirects.
@@ -167,7 +168,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
 
 export function SignInPage() {
   const { baseUrl } = useApiConfig();
-  const auth = useFactoryAuth();
+  const auth = useFactoryAuth({ monitorSession: true });
   const [searchParams] = useSearchParams();
   const [redirecting, setRedirecting] = useState(false);
   const returnTo = safeReturnTo(searchParams.get('returnTo') ?? undefined);
@@ -184,7 +185,12 @@ export function SignInPage() {
   const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
   const hostedLoginPendingLabel = studioAuth ? 'Opening Mastra Platform…' : 'Opening GitHub…';
 
-  if (!auth.isPending && (!auth.data?.authEnabled || auth.data.authenticated)) {
+  // A cached signed-in result may predate the redirect here. Check the cookie
+  // again before sending the user back into the protected app.
+  if (auth.isPending || !auth.isFetchedAfterMount) return <AuthPendingSkeleton />;
+
+  const canReturnToApp = auth.data && (!auth.data.authEnabled || auth.data.authenticated);
+  if (!auth.isFetching && !auth.isError && canReturnToApp) {
     return <Navigate to={returnTo} replace />;
   }
 
@@ -218,7 +224,16 @@ export function SignInPage() {
                 ) : null}
               </div>
             ) : null}
-            {customDomainBlocked ? (
+            {auth.isError ? (
+              <div role="alert" className="space-y-3">
+                <Txt as="p" variant="body" tone="muted">
+                  Unable to check your sign-in status. Check your connection and try again.
+                </Txt>
+                <Button onClick={() => void auth.refetch()} disabled={auth.isFetching}>
+                  Try again
+                </Button>
+              </div>
+            ) : customDomainBlocked ? (
               <CustomDomainAuthError hostname={window.location.hostname} />
             ) : credentialForm ? (
               <>

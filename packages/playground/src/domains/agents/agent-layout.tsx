@@ -3,10 +3,14 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import {
+  TRACE_PROPERTY_FILTER_PARAM_BY_FIELD,
+  traceFilterOperatorParam,
+} from '@mastra/playground-ui/domains/traces/trace-filters';
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useAgent } from '@mastra/react/hooks/agents';
-import { useParams, useLocation, useNavigate } from 'react-router';
+import { matchPath, useParams, useLocation, useNavigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentDetailHeaderActions } from '@/domains/agents/components/agent-detail-header-actions';
 import { AgentOverviewPanel } from '@/domains/agents/components/agent-overview-panel/agent-overview-panel';
@@ -29,6 +33,23 @@ const AgentShortcuts = ({ agentId }: { agentId: string }) => {
   useKeydown({ 'g$+t': () => navigate(`/agents/${agentId}/traces`) });
   return null;
 };
+
+const THREAD_FILTER_PARAM = TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.threadId;
+
+/** The conversation the user is looking at: the open thread on Chat, or the thread Traces is filtered to. */
+function getConversationThreadId(activeTab: AgentPageTab | 'none', pathname: string, search: string) {
+  if (activeTab === 'chat') {
+    const threadId = matchPath('/agents/:agentId/threads/:threadId', pathname)?.params.threadId;
+    return threadId === 'new' ? undefined : threadId;
+  }
+  if (activeTab === 'traces') {
+    const params = new URLSearchParams(search);
+    const operator = params.get(traceFilterOperatorParam(THREAD_FILTER_PARAM));
+    if (operator && operator !== 'is') return undefined;
+    return params.get(THREAD_FILTER_PARAM) || undefined;
+  }
+  return undefined;
+}
 
 export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const { agentId } = useParams();
@@ -56,6 +77,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
       : location.pathname.includes('/traces')
         ? 'traces'
         : 'none';
+  const threadId = getConversationThreadId(activeTab, location.pathname, location.search);
 
   return (
     <PlaygroundModelProvider
@@ -80,6 +102,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
             <AgentPageTabs
               agentId={agentId!}
               activeTab={activeTab}
+              threadId={threadId}
               showPlayground={showPlayground}
               showObservability={showObservability}
             />

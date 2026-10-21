@@ -75,7 +75,11 @@ VALUES (${quoteSql(threadId)}, ${quoteSql(project.resourceId)}, ${quoteSql(title
       try {
         runtime.startLiveOutput(terminal);
         await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
-        await runtime.waitForScreenText(new RegExp(`▐build▌${modelId}`, 'i'), terminal, 8_000);
+        await runtime.waitForScreenText(
+          new RegExp(`build · (?:[\\w-]+\\/)?${modelId.split('/').pop()}`, 'i'),
+          terminal,
+          8_000,
+        );
         await assertSelection(threadId, modelId);
 
         terminal.submit('/threads');
@@ -84,7 +88,7 @@ VALUES (${quoteSql(threadId)}, ${quoteSql(project.resourceId)}, ${quoteSql(title
         await runtime.waitForScreenText(new RegExp(otherTitle, 'i'), terminal, 8_000);
         terminal.write('\r');
         await runtime.waitForScreenTextAbsent(/Select Thread/i, terminal, 8_000);
-        await runtime.waitForScreenText(/▐build▌other-restore-e2e\/build-model/i, terminal, 8_000);
+        await runtime.waitForScreenText(/build · (?:other-restore-e2e\/)?build-model/i, terminal, 8_000);
         await assertSelection(otherThreadId, otherModelId);
 
         terminal.submit('/threads');
@@ -93,7 +97,11 @@ VALUES (${quoteSql(threadId)}, ${quoteSql(project.resourceId)}, ${quoteSql(title
         await runtime.waitForScreenText(new RegExp(title, 'i'), terminal, 8_000);
         terminal.write('\r');
         await runtime.waitForScreenTextAbsent(/Select Thread/i, terminal, 8_000);
-        await runtime.waitForScreenText(new RegExp(`▐build▌${modelId}`, 'i'), terminal, 8_000);
+        await runtime.waitForScreenText(
+          new RegExp(`build · (?:[\\w-]+\\/)?${modelId.split('/').pop()}`, 'i'),
+          terminal,
+          8_000,
+        );
         await assertSelection(threadId, modelId);
         terminal.keyCtrlC();
       } finally {

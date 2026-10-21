@@ -90,7 +90,7 @@ export const traceQueryPage: TraceQueryKeysetTraceResponse = {
 export const traceQueryPageWithThreadAndEnvironment: Awaited<ReturnType<MastraClient['queryTraces']>> = {
   traces: [
     {
-      ...traceQueryPage.traces[0]!,
+      ...traceQueryPage.traces[0],
       traceId: 'trace-env',
       rootSpanId: 'span-env',
       environment: 'production',
@@ -143,6 +143,15 @@ export const legacyTraceCapabilities: GetObservabilityCapabilitiesResponse = {
     threadQuery: false,
     spanQuery: false,
     feedback: false,
+  },
+};
+
+/** Store runs trace queries but cannot filter on the root span duration. */
+export const noRootDurationCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    traceQueryRootDuration: false,
   },
 };
 

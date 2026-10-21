@@ -9,5 +9,17 @@
     "kimi-k2.5",
     "minimax-m2.5",
     "tc-code-latest"
-  ]
+  ],
+  "reasoning": {
+    "glm-5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k2.5": [
+      {
+        "type": "toggle"
+      }
+    ]
+  }
 }

@@ -1,4 +1,3 @@
-import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { WorkflowCardDisplayStatus, WorkflowStepCardViewProps } from '../../types';
@@ -9,6 +8,7 @@ import { WorkflowClock } from '../workflow-clock';
 import { WorkflowTypeBadge } from '../workflow-type-badge';
 import { ActivityWick } from '@/ds/components/Activity';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Shimmer } from '@/ds/components/Shimmer';
 import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
@@ -198,7 +198,7 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
                 <span>
                   {expanded ? 'Collapse' : 'Expand'} {isForEach ? 'loop' : 'workflow'}
                 </span>
-                <ChevronRight aria-hidden size={14} />
+                <DisclosureChevron direction="right" className="size-3.5" />
               </CollapsibleTrigger>
               <CollapsibleContent className="h-155 overflow-hidden border-t border-dashed border-border">
                 {body}

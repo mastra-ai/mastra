@@ -22,6 +22,7 @@ createTestSuite(
     id: 'elasticsearch-test-store',
     url,
   }),
+  { workflowResultsNoopWhenRunMissing: false },
 );
 
 // Configuration validation tests

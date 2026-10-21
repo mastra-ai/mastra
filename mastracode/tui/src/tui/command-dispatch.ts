@@ -36,6 +36,8 @@ import {
   handleSettingsCommand,
   handleConnectCommand,
   handleLoginCommand,
+  handleFactoryCommand,
+  handleLocalCommand,
   handleReviewCommand as handleReviewCmd,
   handleReportIssueCommand as handleReportIssueCmd,
   handleSetupCommand,
@@ -63,11 +65,15 @@ import {
   isGoalJudgeInputLocked,
   showGoalJudgeInputLockInfo,
 } from './goal-input-lock.js';
+import { isLocalOnlyCommand, requireLocal } from './runtime.js';
 import type { TUIState } from './state.js';
 
+/** Commands that need the in-process runtime (local agent, storage, auth, workspace, managers). */
 const TRACKED_COMMANDS = new Set([
   'connect',
   'login',
+  'factory',
+  'local',
   'model',
   'models',
   'packs',
@@ -151,6 +157,11 @@ export async function dispatchSlashCommand(
   const ctx = buildCtx();
   trackCommand(ctx, command);
 
+  if (!state.local && isLocalOnlyCommand(command)) {
+    showInfo(state, `/${command} is not available in Factory mode.`);
+    return true;
+  }
+
   if (command.startsWith('goal/')) {
     await handleGoalSourceCommand(state, command.slice('goal/'.length), args, ctx);
     return true;
@@ -232,6 +243,12 @@ export async function dispatchSlashCommand(
     case 'login':
       await handleLoginCommand(ctx, 'login');
       return true;
+    case 'factory':
+      await handleFactoryCommand(ctx, args);
+      return true;
+    case 'local':
+      await handleLocalCommand(ctx);
+      return true;
     case 'logout':
       await handleLoginCommand(ctx, 'logout');
       return true;
@@ -286,6 +303,8 @@ export async function dispatchSlashCommand(
       await handleThemeCommand(ctx, args);
       return true;
     case 'update':
+    // Hidden alias: works when typed, but isn't listed in autocomplete or help.
+    case 'upgrade':
       await handleUpdateCommand(ctx);
       return true;
     case 'gateway':
@@ -363,8 +382,9 @@ async function handleGoalSourceCommand(
   if (goalSkill) {
     try {
       let workspace = ctx.getResolvedWorkspace();
-      if (!workspace && ctx.controller?.hasWorkspace?.()) {
-        workspace = await ctx.controller.resolveWorkspace({ session: ctx.state.session });
+      const local = requireLocal(state, 'Goal skills');
+      if (!workspace && local.controller.hasWorkspace()) {
+        workspace = await local.controller.resolveWorkspace({ session: local.session });
       }
       const skill = await workspace?.skills?.get(goalSkill.path || goalSkill.name);
       if (!skill || skill.metadata?.goal !== true) {

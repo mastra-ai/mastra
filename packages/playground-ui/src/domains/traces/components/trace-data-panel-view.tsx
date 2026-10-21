@@ -9,11 +9,10 @@ import {
   MessageSquareTextIcon,
   MoreHorizontalIcon,
   SaveIcon,
-  WrenchIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Panel } from 'react-resizable-panels';
+import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { useTraceSearch } from '../hooks/use-trace-search';
@@ -59,8 +58,6 @@ export interface TraceDataPanelViewProps {
   onEvaluateTrace?: () => void;
   /** When set, an "Add full trace to dataset" button appears; the consumer owns the dialog. */
   onSaveAsDatasetItem?: (args: { traceId: string; rootSpanId: string | undefined }) => void;
-  /** When set, an "Add tool mocks to item" button appears; the consumer owns the dialog. */
-  onAddTraceMocksToItem?: (args: { traceId: string }) => void;
   initialSpanId?: string | null;
   onPrevious?: () => void;
   onNext?: () => void;
@@ -145,7 +142,6 @@ export function TraceDataPanelView({
   onSpanSelect,
   onEvaluateTrace,
   onSaveAsDatasetItem,
-  onAddTraceMocksToItem,
   initialSpanId,
   onPrevious,
   onNext,
@@ -304,6 +300,7 @@ export function TraceDataPanelView({
     () => (anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : spans?.find(s => s.parentSpanId == null)),
     [spans, anchorSpanId],
   );
+  const rootError = getSpanError(rootSpan?.error);
   const handleSpanClick = (id: string) => {
     const newId = selectedSpanId === id ? undefined : id;
     setSelectedSpanId(newId);
@@ -328,12 +325,6 @@ export function TraceDataPanelView({
           <DropdownMenu.Item onSelect={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}>
             <SaveIcon />
             Add full trace to dataset
-          </DropdownMenu.Item>
-        )}
-        {!isOnTracePage && onAddTraceMocksToItem && (
-          <DropdownMenu.Item onSelect={() => onAddTraceMocksToItem({ traceId })}>
-            <WrenchIcon />
-            Add tool mocks to item
           </DropdownMenu.Item>
         )}
         {!isOnTracePage && LinkComponent && traceHref && (
@@ -365,16 +356,20 @@ export function TraceDataPanelView({
           </DataPanel.Header>
         ) : (
           <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
-            <DataPanel.Header className="border-b border-border">
-              <TabList variant="pill-ghost" size="sm">
-                {sideViews.map(view => (
-                  <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
-                    {view.label}
-                  </Tab>
-                ))}
-              </TabList>
+            {/* `flex-nowrap` + a shrinkable tab column: the tab list's scroll wrapper is full-width,
+                so in a wrapping row it would push the actions onto a second line. */}
+            <DataPanel.Header className="flex-nowrap border-b border-border">
+              <div className="min-w-0 flex-1">
+                <TabList variant="pill-ghost" size="sm">
+                  {sideViews.map(view => (
+                    <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
+                      {view.label}
+                    </Tab>
+                  ))}
+                </TabList>
+              </div>
               {sideHeaderActions && (
-                <div className="ml-auto flex shrink-0 items-center whitespace-nowrap">
+                <div className="flex shrink-0 items-center whitespace-nowrap">
                   {sideHeaderActions({ compact: compactSide })}
                 </div>
               )}
@@ -418,7 +413,6 @@ export function TraceDataPanelView({
               </>
             ) : (
               <>
-                <DataPanel.CloseButton onClick={onClose} />
                 <DataPanel.HeaderContent>
                   <DataPanel.Heading>
                     Trace
@@ -443,12 +437,14 @@ export function TraceDataPanelView({
                       nextLabel="Go to next trace"
                     />
                   )}
+                  <DataPanel.CloseButton icon="x" onClick={onClose} label="Close trace" tooltip="Close trace" />
                 </DataPanel.HeaderActions>
               </>
             )}
           </DataPanel.Header>
 
           <TracePanelColumns
+            layoutKey={rootSpan ? (rootSpan.entityType ?? 'unknown') : undefined}
             sideColumnSlot={sideColumn}
             spanPanelSlot={spanPanelSlot}
             highlightQuery={query}
@@ -469,13 +465,14 @@ export function TraceDataPanelView({
                       size="sm"
                       value={query}
                       onValueChange={setQuery}
-                      className="w-full"
+                      className="min-w-0 flex-1"
                     />
                     <ButtonsGroup size="sm" className="shrink-0">
                       <Button
                         variant={isTimeline ? 'default' : 'primary'}
                         aria-pressed={!isTimeline}
                         tooltip="Span tree"
+                        tooltipPosition="bottom"
                         onClick={() => setSpanView('tree')}
                       >
                         <ListTreeIcon />
@@ -484,6 +481,7 @@ export function TraceDataPanelView({
                         variant={isTimeline ? 'primary' : 'default'}
                         aria-pressed={isTimeline}
                         tooltip="Timeline"
+                        tooltipPosition="bottom"
                         onClick={() => setSpanView('timeline')}
                       >
                         <ChartGanttIcon />
@@ -509,18 +507,34 @@ export function TraceDataPanelView({
                   <>
                     {searchHeader}
                     <DataPanel.Content>
-                      {!isOnTracePage &&
-                        !onEvaluateTrace &&
-                        !onSaveAsDatasetItem &&
-                        !onAddTraceMocksToItem &&
-                        showUnavailableFeaturesMsg && (
-                          <Notice variant="info" className="mb-6">
-                            <Notice.Message>
-                              Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
-                              deployed).
-                            </Notice.Message>
-                          </Notice>
-                        )}
+                      {!isOnTracePage && !onEvaluateTrace && !onSaveAsDatasetItem && showUnavailableFeaturesMsg && (
+                        <Notice variant="info" className="mb-6">
+                          <Notice.Message>
+                            Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
+                            deployed).
+                          </Notice.Message>
+                        </Notice>
+                      )}
+
+                      {rootSpan && rootError && (
+                        <Notice
+                          variant="destructive"
+                          title={rootError.name ?? 'Error'}
+                          action={
+                            <Notice.Button
+                              onClick={() => {
+                                setSelectedSpanId(rootSpan.spanId);
+                                onSpanSelect?.(rootSpan.spanId);
+                              }}
+                            >
+                              View details
+                            </Notice.Button>
+                          }
+                          className="mb-4"
+                        >
+                          <Notice.Message className="line-clamp-3">{rootError.message}</Notice.Message>
+                        </Notice>
+                      )}
 
                       {/* Both views share selection + expansion state, and stay mounted with no
                     results because they host the search field: unmounting would strand the
@@ -539,6 +553,15 @@ export function TraceDataPanelView({
   );
 }
 
+/** The error a span recorded, when it has the `{ name?, message }` shape spans store. */
+function getSpanError(error: unknown): { name?: string; message: string } | undefined {
+  if (typeof error !== 'object' || error === null || !('message' in error) || typeof error.message !== 'string') {
+    return undefined;
+  }
+  const name = 'name' in error && typeof error.name === 'string' ? error.name : undefined;
+  return { name, message: error.message };
+}
+
 /**
  * Lays out the card body as three columns — `[side] [trace] [span]` — inside the
  * same card. The side column (messages / feedback / scores) is independent of the
@@ -547,13 +570,40 @@ export function TraceDataPanelView({
  * Search matches — span names in the timeline tree as well as values in the span
  * detail — are highlighted while a query is active.
  */
+// localStorage access throws when storage is blocked (privacy modes, sandboxed iframes), and the
+// library parses stored values without a guard; fall back to defaults instead of crashing the panel.
+const safeLayoutStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      const value = localStorage.getItem(key);
+      if (value !== null) JSON.parse(value);
+      return value;
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // Persisting is best-effort.
+    }
+  },
+};
+
 function TracePanelColumns({
+  layoutKey,
   sideColumnSlot,
   spanPanelSlot,
   highlightQuery,
   spanPanelKey,
   children,
 }: {
+  /**
+   * Root entity type of the trace; column sizes are persisted per value in localStorage.
+   * Undefined while the root span is unknown, in which case nothing is persisted.
+   */
+  layoutKey?: string;
   /** Resizable column on the left (messages / feedback / scores). */
   sideColumnSlot?: ReactNode;
   spanPanelSlot?: ReactNode;
@@ -571,9 +621,24 @@ function TracePanelColumns({
   // The timeline column must never be scrolled by this.
   const { ref: scrollToMatchRef } = useScrollToFirstHighlight<HTMLDivElement>(highlightQuery, spanPanelKey);
 
+  // One stored layout per panel combination, so opening/closing the span panel doesn't clobber the other.
+  const panelIds = [...(sideColumnSlot ? ['trace-side'] : []), 'trace-main', ...(spanPanelSlot ? ['trace-span'] : [])];
+  const { defaultLayout, onLayoutChanged } = useDefaultLayout({
+    id: `mastra:trace-panel-layout:${layoutKey ?? 'unknown'}`,
+    panelIds,
+    storage: safeLayoutStorage,
+  });
+
   return (
     <div ref={highlightRef} data-trace-columns className="flex min-h-0 flex-1">
-      <PanelGroup orientation="horizontal" className="min-h-0 flex-1">
+      <PanelGroup
+        // defaultLayout is only read on mount: remount once the entity type is known.
+        key={layoutKey ?? 'unknown'}
+        orientation="horizontal"
+        className="min-h-0 flex-1"
+        defaultLayout={layoutKey ? defaultLayout : undefined}
+        onLayoutChanged={layoutKey ? onLayoutChanged : undefined}
+      >
         {sideColumnSlot && (
           <>
             <Panel id="trace-side" minSize={280} defaultSize="40%">

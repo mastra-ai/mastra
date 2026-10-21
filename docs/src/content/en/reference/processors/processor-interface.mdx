@@ -625,6 +625,13 @@ processLLMRequest?(
     isOptional: true,
   },
   {
+    name: 'workspace',
+    type: 'Workspace',
+    description:
+      "The workspace of this step, the one the agent's tools use. Undefined when the agent has no workspace.",
+    isOptional: true,
+  },
+  {
     name: 'stepNumber',
     type: 'number',
     description: 'Current step number (0-indexed). Step 0 is the initial LLM call.',
@@ -1229,6 +1236,14 @@ processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
 ]}
 />
 
+#### Return value
+
+`processOutputStep` returns a `MessageList` or `MastraDBMessage[]`, directly or in a promise.
+
+- Return the supplied `messageList` instance to keep it, including any in-place changes.
+- Return a messages array to replace the current messages. Return the supplied `messages` array to leave them unchanged.
+- Returning `[]` removes all current messages, including the conversation history and the latest response. It isn't a no-op.
+
 #### Use cases
 
 - Implementing quality guardrails that can request retries
@@ -1244,7 +1259,7 @@ import type { Processor } from '@mastra/core/processors'
 export class QualityGuardrail implements Processor {
   id = 'quality-guardrail'
 
-  async processOutputStep({ text, abort, retryCount }) {
+  async processOutputStep({ messages, text, abort, retryCount }) {
     const score = await evaluateResponseQuality(text)
 
     if (score < 0.7) {
@@ -1260,7 +1275,7 @@ export class QualityGuardrail implements Processor {
       }
     }
 
-    return []
+    return messages
   }
 }
 ```

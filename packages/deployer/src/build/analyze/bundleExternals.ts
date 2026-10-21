@@ -397,21 +397,7 @@ async function buildExternalDependencies(
           }
         }
 
-        if (importedFromPackages.size > 1) {
-          throw new MastraBaseError({
-            id: 'DEPLOYER_BUNDLE_EXTERNALS_SHARED_CHUNK',
-            domain: ErrorDomain.DEPLOYER,
-            category: ErrorCategory.USER,
-            details: {
-              chunkName: chunkInfo.name,
-              packages: JSON.stringify(Array.from(importedFromPackages)),
-            },
-            text: `Please open an issue. We found a shared chunk "${
-              chunkInfo.name
-            }" used by multiple workspace packages: ${Array.from(importedFromPackages).join(', ')}.`,
-          });
-        }
-
+        // A chunk spanning multiple workspace packages has no single owning cache dir, so it falls through to the output dir.
         if (importedFromPackages.size === 1) {
           const [pkgName] = importedFromPackages;
           const workspaceLocation = workspaceMap.get(pkgName!)!.location;

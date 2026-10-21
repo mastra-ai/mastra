@@ -8,6 +8,7 @@
 
 import { Box, Container, getKeybindings, Input, SelectList, SettingsList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, SettingItem, TUI } from '@earendil-works/pi-tui';
+import type { OMModel } from '@mastra/core/agent-controller';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
 import { ModelSelectorComponent } from './model-selector.js';
 import type { ModelItem } from './model-selector.js';
@@ -17,8 +18,14 @@ import type { ModelItem } from './model-selector.js';
 // =============================================================================
 
 export interface OMSettingsConfig {
+  observerModel: OMModel;
   observerModelId: string;
+  observerAutoModelId: string;
+  reflectorModel: OMModel;
   reflectorModelId: string;
+  reflectorAutoModelId: string;
+  /** Set while the active mode pack has its own memory model, which overrides both roles. */
+  packMemoryModelId?: string;
   observationThreshold: number;
   reflectionThreshold: number;
   cavemanObservations: boolean;
@@ -27,12 +34,72 @@ export interface OMSettingsConfig {
 
 export interface OMSettingsCallbacks {
   onObserverModelChange: (model: ModelItem) => void | Promise<void>;
+  onObserverAuto: () => void | Promise<void>;
   onReflectorModelChange: (model: ModelItem) => void | Promise<void>;
+  onReflectorAuto: () => void | Promise<void>;
   onObservationThresholdChange: (value: number) => void;
   onReflectionThresholdChange: (value: number) => void;
   onCavemanObservationsChange: (enabled: boolean) => void;
   onObserveAttachmentsChange: (value: 'auto' | boolean) => void | Promise<void>;
   onClose: () => void;
+}
+
+const AUTO_MODEL_ID = '__auto__';
+
+class OMModelSubmenu extends Container implements Focusable {
+  private readonly selector: ModelSelectorComponent;
+  private _focused = false;
+
+  get focused(): boolean {
+    return this._focused;
+  }
+
+  set focused(value: boolean) {
+    this._focused = value;
+    this.selector.focused = value;
+  }
+
+  constructor(args: {
+    model: OMModel;
+    effectiveModelId: string;
+    models: ModelItem[];
+    onAuto: () => void | Promise<void>;
+    onModel: (model: ModelItem) => void | Promise<void>;
+    onDone: (value?: string) => void;
+    tui: TUI;
+    title: string;
+  }) {
+    super();
+    const autoModel: ModelItem = {
+      id: AUTO_MODEL_ID,
+      provider: 'auto',
+      modelName: 'auto',
+      displayName: `Auto (${getShortModelName(args.effectiveModelId)})`,
+      hasApiKey: true,
+      useCount: Number.MAX_SAFE_INTEGER,
+    };
+    this.selector = new ModelSelectorComponent({
+      tui: args.tui,
+      models: [autoModel, ...args.models],
+      currentModelId: args.model === 'auto' ? AUTO_MODEL_ID : args.model,
+      title: args.title,
+      onSelect: async model => {
+        if (model.id === AUTO_MODEL_ID) {
+          await args.onAuto();
+          args.onDone(autoModel.displayName);
+          return;
+        }
+        await args.onModel(model);
+        args.onDone(getShortModelName(model.id));
+      },
+      onCancel: () => args.onDone(),
+    });
+    this.addChild(this.selector);
+  }
+
+  handleInput(data: string): void {
+    this.selector.handleInput(data);
+  }
 }
 
 interface BooleanSubmenuLabels {
@@ -225,45 +292,54 @@ export class OMSettingsComponent extends Box implements Focusable {
         id: 'observer-model',
         label: 'Observer model',
         description: 'Model used for observing and summarizing message history',
-        currentValue: getShortModelName(config.observerModelId),
+        currentValue: formatModel(config.observerModel, config.observerModelId, config.packMemoryModelId),
         submenu: (_currentValue, done) =>
-          new ModelSelectorComponent({
+          new OMModelSubmenu({
             tui,
             models,
-            currentModelId: config.observerModelId,
+            model: config.observerModel,
+            effectiveModelId: config.observerAutoModelId,
             title: 'Observer Model',
-            onSelect: async model => {
-              await callbacks.onObserverModelChange(model);
-              config.observerModelId = model.id;
-              done(getShortModelName(model.id));
+            onAuto: async () => {
+              await callbacks.onObserverAuto();
+              config.observerModel = 'auto';
             },
-            onCancel: () => done(),
+            onModel: async model => {
+              await callbacks.onObserverModelChange(model);
+              config.observerModel = model.id;
+              config.observerModelId = model.id;
+            },
+            onDone: done,
           }),
       },
       {
         id: 'reflector-model',
         label: 'Reflector model',
         description: 'Model used for compressing observations when they grow too large',
-        currentValue: getShortModelName(config.reflectorModelId),
+        currentValue: formatModel(config.reflectorModel, config.reflectorModelId, config.packMemoryModelId),
         submenu: (_currentValue, done) =>
-          new ModelSelectorComponent({
+          new OMModelSubmenu({
             tui,
             models,
-            currentModelId: config.reflectorModelId,
+            model: config.reflectorModel,
+            effectiveModelId: config.reflectorAutoModelId,
             title: 'Reflector Model',
-            onSelect: async model => {
-              await callbacks.onReflectorModelChange(model);
-              config.reflectorModelId = model.id;
-              done(getShortModelName(model.id));
+            onAuto: async () => {
+              await callbacks.onReflectorAuto();
+              config.reflectorModel = 'auto';
             },
-            onCancel: () => done(),
+            onModel: async model => {
+              await callbacks.onReflectorModelChange(model);
+              config.reflectorModel = model.id;
+              config.reflectorModelId = model.id;
+            },
+            onDone: done,
           }),
       },
       {
         id: 'obs-threshold',
         label: 'Messages before observation',
-        description:
-          'Message tokens before the Observer runs. ' + 'More means a larger message window per observation.',
+        description: 'Message tokens before the Observer runs. More means a larger message window per observation.',
         currentValue: formatTokens(config.observationThreshold),
         submenu: (_currentValue, done) =>
           new ThresholdSubmenu(
@@ -323,8 +399,7 @@ export class OMSettingsComponent extends Box implements Focusable {
       {
         id: 'observe-attachments',
         label: 'Observe attachments',
-        description:
-          'Forward image and file attachments to the Observer LLM. ' + 'Auto checks model capabilities to decide',
+        description: 'Forward image and file attachments to the Observer LLM. Auto checks model capabilities to decide',
         currentValue: formatAttachmentValue(config.observeAttachments),
         submenu: (_currentValue, done) => {
           const items: SelectItem[] = [
@@ -377,6 +452,11 @@ function getShortModelName(modelId: string): string {
   if (!modelId) return '(none)';
   const parts = modelId.split('/');
   return parts.length > 1 ? parts.slice(1).join('/') : modelId;
+}
+
+function formatModel(model: OMModel, effectiveModelId: string, packMemoryModelId?: string): string {
+  if (packMemoryModelId) return `${getShortModelName(effectiveModelId)} (set by active pack)`;
+  return model === 'auto' ? `Auto (${getShortModelName(effectiveModelId)})` : getShortModelName(model);
 }
 
 function formatAttachmentValue(value: 'auto' | boolean): string {

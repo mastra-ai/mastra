@@ -14,17 +14,21 @@ import {
   resolveStagehandModel,
   saveSettings,
   setProfileProvider,
+  STAGEHAND_PROVIDER_ENV_VARS,
   toActiveBrowserSettings,
   VIEWPORT_PRESETS,
 } from '@mastra/code-sdk/onboarding/settings';
 import { remapOpenAIModelForCodexOAuth } from '@mastra/code-sdk/providers/model-ids';
 import type { MastraBrowser } from '@mastra/core/browser';
-import { STAGEHAND_MODEL_PROVIDERS } from '@mastra/stagehand';
 import type { ModelItem } from '../components/model-selector.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import { askModalQuestion } from '../modal-question.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
+
+// The SDK's mirror of `STAGEHAND_MODEL_PROVIDERS`: importing `@mastra/stagehand` here would load the
+// whole browser stack (~25 MB) at startup, before anyone runs /browser.
+const STAGEHAND_MODEL_PROVIDERS = Object.keys(STAGEHAND_PROVIDER_ENV_VARS).sort();
 
 /**
  * Key used to store the active browser settings in controller state.
@@ -90,7 +94,7 @@ function stagehandModelError(modelId: string): string | undefined {
     return `Invalid model: ${modelId}. Use <provider>/<model>, for example anthropic/claude-sonnet-4-5.`;
   }
   const provider = modelId.slice(0, slashIndex);
-  if (!(STAGEHAND_MODEL_PROVIDERS as readonly string[]).includes(provider)) {
+  if (!STAGEHAND_MODEL_PROVIDERS.includes(provider)) {
     return `Unsupported model provider: ${provider}. Supported providers: ${STAGEHAND_MODEL_PROVIDERS.join(', ')}.`;
   }
   return undefined;
@@ -310,7 +314,7 @@ function applyBrowserToAgents(
     const agent = resolveModeAgent(mode, (agentControllerState ??= ctx.state.session.state.get()));
     agent?.setBrowser?.(browser);
   }
-  ctx.controller.setBrowser?.(browser);
+  ctx.state.local?.controller.setBrowser(browser);
   // Track the active browser settings in controller state, plus the model the
   // browser was actually created with (credentials/chat model may change afterwards).
   void ctx.state.session.state.set({

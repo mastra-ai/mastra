@@ -120,6 +120,58 @@ describe('foreach nested workflow runs', () => {
       }
     },
   );
+  it.each([2, 3, 5])(
+    'resumes the last suspended iteration first on its own nested run (concurrency %i)',
+    async concurrency => {
+      const maybeSuspend = createStep({
+        id: 'maybe-suspend',
+        inputSchema: z.number(),
+        outputSchema: z.number(),
+        resumeSchema: z.object({ ok: z.boolean() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          if (inputData % 2 === 1 && !resumeData) {
+            return suspend({});
+          }
+          return inputData * 10;
+        },
+      });
+
+      const child = createWorkflow({ id: 'child', inputSchema: z.number(), outputSchema: z.number() })
+        .then(maybeSuspend)
+        .commit();
+
+      const parent = createWorkflow({
+        id: 'parent',
+        inputSchema: z.array(z.number()),
+        outputSchema: z.array(z.number()),
+      })
+        .foreach(child, { concurrency })
+        .commit();
+
+      const mastra = new Mastra({ workflows: { parent }, storage: new MockStore(), logger: false });
+      const run = await mastra.getWorkflow('parent').createRun();
+      const items = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+      let result = await run.start({ inputData: items });
+      expect(result.status).toBe('suspended');
+
+      // Each suspended iteration must have been started, and must be resumable, on its own run.
+      for (let guard = 0; result.status === 'suspended' && guard < items.length; guard++) {
+        const snapshot = await (await mastra.getStorage()!.getStore('workflows'))!.loadWorkflowSnapshot({
+          workflowName: 'parent',
+          runId: run.runId,
+        });
+        const foreachOutput = (snapshot!.context.child as any).suspendPayload.__workflow_meta.foreachOutput as any[];
+        // Resume the last suspended iteration first so each resume targets a non-first suspended index.
+        const forEachIndex = foreachOutput.findLastIndex(entry => entry?.status === 'suspended');
+        result = await run.resume({ forEachIndex, resumeData: { ok: true } });
+      }
+
+      expect(result.status).toBe('success');
+      expect((result as any).result).toEqual(items.map(i => i * 10));
+    },
+  );
+
   it('allows only one nested child to resume the suspended parent at a time', async () => {
     let alphaResumeStarted!: () => void;
     const alphaResumeHasStarted = new Promise<void>(resolve => {

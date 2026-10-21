@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import ExperimentsPage from '..';
+import { storageWithoutMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import {
   buildListExperimentsResponse,
@@ -26,6 +27,7 @@ function setupHandlers() {
   const calls = { globalQueries: [] as URLSearchParams[] };
 
   server.use(
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(storageWithoutMetrics)),
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(agents)),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
     http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
@@ -103,16 +105,16 @@ describe('Experiments page — target filter from URL', () => {
     renderPage('/experiments?targetType=agent&targetId=nobody');
 
     expect(await screen.findByText('Target')).toBeDefined();
-    expect(screen.getByRole('button', { name: /reset/i })).toBeDefined();
+    expect(screen.getByRole('group', { name: 'Experiments filters' })).toBeDefined();
     expect(screen.queryByText('No Experiments yet')).toBeNull();
   });
 
-  it('clears the target params when filters are reset', async () => {
+  it('clears both target params when the Target type chip is removed', async () => {
     setupHandlers();
     renderPage('/experiments?dataset=dataset-1&targetType=agent&targetId=agent-1');
 
-    fireEvent.click(await screen.findByRole('button', { name: /reset/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Target type filter' }));
 
-    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/experiments'));
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/experiments?dataset=dataset-1'));
   });
 });

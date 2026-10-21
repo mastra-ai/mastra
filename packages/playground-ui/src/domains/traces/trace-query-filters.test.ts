@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildTraceQueryRequest,
-  clampTraceDiscoveryTimeRange,
+  resolveTraceQueryTimeRange,
   TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS,
 } from './trace-query-filters';
 
@@ -107,21 +107,34 @@ describe('buildTraceQueryRequest', () => {
 
   describe('when a presence-only field carries a value operator (hand-edited URL)', () => {
     it.each([
-      ['feedback.comment', 'is'],
-      ['feedback.comment', undefined],
-      ['feedback.comment', 'notIn'],
       ['spans.error', 'is'],
+      ['spans.error', undefined],
+      ['spans.error', 'notIn'],
     ] as const)('drops the %s token with operator %s instead of sending it', (fieldId, operatorId) => {
       expect(
         buildTraceQueryRequest({
-          tokens: [{ fieldId, value: 'wrong answer', ...(operatorId ? { operatorId } : {}) }],
+          tokens: [{ fieldId, value: 'boom', ...(operatorId ? { operatorId } : {}) }],
           now,
         }).where,
       ).toBeUndefined();
     });
   });
 
-  describe('when a presence-only field carries a presence operator', () => {
+  describe('when the feedback comment carries an exact value operator', () => {
+    it('sends the value predicate', () => {
+      expect(
+        buildTraceQueryRequest({
+          tokens: [{ fieldId: 'feedback.comment', operatorId: 'is', value: 'wrong answer' }],
+          now,
+        }).where,
+      ).toEqual({
+        op: 'and',
+        args: [{ feedback: { some: { op: 'eq', left: { path: 'comment' }, right: { literal: 'wrong answer' } } } }],
+      });
+    });
+  });
+
+  describe('when the feedback comment carries a presence operator', () => {
     it('keeps the predicate', () => {
       expect(
         buildTraceQueryRequest({
@@ -447,6 +460,69 @@ describe('buildTraceQueryRequest', () => {
     });
   });
 
+  describe('when a root durationMs token carries gt', () => {
+    it('emits a top-level gt predicate with a number literal, not wrapped in spans.some', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: 'durationMs', value: '1000', operatorId: 'gt' }], now }).where,
+      ).toEqual({ op: 'and', args: [{ op: 'gt', left: { path: 'durationMs' }, right: { literal: 1000 } }] });
+    });
+  });
+
+  describe('when a root durationMs token carries a non-numeric value', () => {
+    it('drops the token', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: 'durationMs', value: 'slow', operatorId: 'gt' }], now }).where,
+      ).toBeUndefined();
+    });
+  });
+
+  describe('when a root durationMs token carries isNot', () => {
+    it('also matches running traces without a duration', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: 'durationMs', value: '500', operatorId: 'isNot' }], now }).where,
+      ).toEqual({
+        op: 'and',
+        args: [
+          {
+            op: 'or',
+            args: [
+              { op: 'ne', left: { path: 'durationMs' }, right: { literal: 500 } },
+              { op: 'notExists', path: 'durationMs' },
+            ],
+          },
+        ],
+      });
+    });
+  });
+
+  describe('when a root durationMs token carries exists', () => {
+    it('emits a top-level exists predicate', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: 'durationMs', value: '', operatorId: 'exists' }], now }).where,
+      ).toEqual({ op: 'and', args: [{ op: 'exists', path: 'durationMs' }] });
+    });
+  });
+
+  describe('when root and span duration tokens are combined', () => {
+    it('emits two independent predicates', () => {
+      expect(
+        buildTraceQueryRequest({
+          tokens: [
+            { fieldId: 'durationMs', value: '2000', operatorId: 'gte' },
+            { fieldId: 'spans.durationMs', value: '100', operatorId: 'lt' },
+          ],
+          now,
+        }).where,
+      ).toEqual({
+        op: 'and',
+        args: [
+          { op: 'gte', left: { path: 'durationMs' }, right: { literal: 2000 } },
+          { spans: { some: { op: 'lt', left: { path: 'durationMs' }, right: { literal: 100 } } } },
+        ],
+      });
+    });
+  });
+
   describe('when several tokens target the same related scope', () => {
     it('merges positive spans tokens into one spans.some and-predicate', () => {
       expect(
@@ -727,22 +803,21 @@ describe('buildTraceQueryRequest with groups', () => {
   });
 });
 
-describe('clampTraceDiscoveryTimeRange', () => {
-  const to = '2026-09-15T12:00:00.000Z';
-
-  it('keeps ranges of 31 days or less untouched', () => {
-    const range = { from: '2026-09-01T00:00:00.000Z', to };
-    expect(clampTraceDiscoveryTimeRange(range)).toBe(range);
-  });
-
-  it('clamps wider ranges to the 31 days ending at to', () => {
-    expect(clampTraceDiscoveryTimeRange({ from: '2026-01-01T00:00:00.000Z', to })).toEqual({
-      from: '2026-08-15T12:00:00.000Z',
-      to,
+describe('resolveTraceQueryTimeRange', () => {
+  describe('when the window has no ends', () => {
+    it('covers the last seven days up to now', () => {
+      expect(resolveTraceQueryTimeRange(undefined, undefined, now)).toEqual({
+        from: '2026-09-08T12:00:00.000Z',
+        to: now.toISOString(),
+      });
     });
   });
 
-  it('falls back to the 31-day window when from is not before to', () => {
-    expect(clampTraceDiscoveryTimeRange({ from: to, to })).toEqual({ from: '2026-08-15T12:00:00.000Z', to });
+  describe('when the window has both ends', () => {
+    it('uses them', () => {
+      const from = new Date('2026-01-01T00:00:00.000Z');
+      const to = new Date('2026-01-02T00:00:00.000Z');
+      expect(resolveTraceQueryTimeRange(from, to, now)).toEqual({ from: from.toISOString(), to: to.toISOString() });
+    });
   });
 });

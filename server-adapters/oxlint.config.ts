@@ -15,4 +15,16 @@ export default defineConfig({
     'koa/**/vitest.perf.config.ts',
     'koa/**/performance-test.ts',
   ],
+  overrides: [
+    {
+      // ESLint never linted these (the root ignorePatterns reached it relative to each package), only oxlint did.
+      files: ['*/examples/**'],
+      rules: {
+        'mastra/import-order': 'off',
+        'no-undef': 'off',
+        'typescript/no-floating-promises': 'off',
+        'typescript/no-misused-promises': 'off',
+      },
+    },
+  ],
 });

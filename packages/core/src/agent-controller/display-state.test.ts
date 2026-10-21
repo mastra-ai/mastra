@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { ChunkFrom } from '../stream/types';
+import { getSuspensionAddressKey } from './session';
 import type { Session } from './session';
 import { createTestSession } from './test-utils';
 import type { AgentControllerEvent, AgentControllerSubagent, AgentControllerSubagentHistoryEntry } from './types';
@@ -666,6 +667,120 @@ describe('tool lifecycle', () => {
       expect(suspension!.toolName).toBe('confirmAction');
       expect(suspension!.args).toEqual({ action: 'deploy' });
       expect(suspension!.suspendPayload).toEqual({ reason: 'Needs confirmation' });
+    });
+
+    it("clears the ending run's own prompts on a non-suspended agent_end and keeps other runs' prompts", () => {
+      // A run can end with its prompt never answered or cancelled, e.g. when it
+      // loses the thread lease: the error path skips the per-prompt cancel.
+      for (const runId of ['run-own', 'run-other']) {
+        emit(session, {
+          type: 'tool_suspended',
+          resourceId: 'resource',
+          threadId: 'thread',
+          runId,
+          toolCallId: `call-${runId}`,
+          toolName: 'ask_user',
+          args: {},
+          suspendPayload: {},
+        });
+      }
+      session.run.setRunId({ runId: 'run-own' });
+
+      emit(session, { type: 'agent_end', reason: 'error' });
+
+      expect([...session.displayState.get().pendingSuspensions.values()].map(s => s.runId)).toEqual(['run-other']);
+    });
+
+    it('clears the prompts of the run that ended even when the tracked run moves on before agent_end', async () => {
+      for (const runId of ['run-own', 'run-other']) {
+        emit(session, {
+          type: 'tool_suspended',
+          resourceId: 'resource',
+          threadId: 'thread',
+          runId,
+          toolCallId: `call-${runId}`,
+          toolName: 'ask_user',
+          args: {},
+          suspendPayload: {},
+        });
+      }
+      session.run.setRunId({ runId: 'run-own' });
+      session.onBeforeAgentEnd(() => session.run.setRunId({ runId: 'run-other' }));
+
+      await session.finishAgentRun('error');
+
+      expect([...session.displayState.get().pendingSuspensions.values()].map(s => s.runId)).toEqual(['run-other']);
+    });
+
+    it('keeps duplicate tool-call ids from separate runs independently addressable', () => {
+      for (const runId of ['run-a', 'run-b']) {
+        emit(session, {
+          type: 'tool_suspended',
+          resourceId: 'resource',
+          threadId: 'thread',
+          runId,
+          toolCallId: 'shared-call',
+          toolName: 'ask_user',
+          args: { runId },
+          suspendPayload: { runId },
+        });
+      }
+
+      const pendingBeforeCancel = session.displayState.get().pendingSuspensions;
+      expect(pendingBeforeCancel.size).toBe(2);
+      for (const runId of ['run-a', 'run-b']) {
+        expect(
+          pendingBeforeCancel.get(
+            getSuspensionAddressKey({ resourceId: 'resource', threadId: 'thread', runId, toolCallId: 'shared-call' }),
+          ),
+        ).toMatchObject({ runId, args: { runId } });
+      }
+
+      emit(session, {
+        type: 'tool_suspension_cancelled',
+        resourceId: 'resource',
+        threadId: 'thread',
+        runId: 'run-b',
+        toolCallId: 'shared-call',
+        toolName: 'ask_user',
+        reason: 'answered',
+      });
+
+      const pending = session.displayState.get().pendingSuspensions;
+      expect(pending.size).toBe(1);
+      expect(
+        pending.get(
+          getSuspensionAddressKey({
+            resourceId: 'resource',
+            threadId: 'thread',
+            runId: 'run-a',
+            toolCallId: 'shared-call',
+          }),
+        ),
+      ).toMatchObject({ runId: 'run-a', args: { runId: 'run-a' } });
+    });
+
+    it('uses collision-safe keys for addressed suspensions, including empty components', () => {
+      const addresses = [
+        { resourceId: 'resource\0thread', threadId: '', runId: 'run', toolCallId: 'call' },
+        { resourceId: 'resource', threadId: '\0thread', runId: 'run', toolCallId: 'call' },
+      ];
+      for (const address of addresses) {
+        emit(session, {
+          type: 'tool_suspended',
+          ...address,
+          toolName: 'ask_user',
+          args: address,
+          suspendPayload: {},
+        });
+      }
+
+      const pending = session.displayState.get().pendingSuspensions;
+      expect(pending.size).toBe(2);
+      expect(getSuspensionAddressKey(addresses[0]!)).not.toBe(getSuspensionAddressKey(addresses[1]!));
+      for (const address of addresses) {
+        expect(pending.get(getSuspensionAddressKey(address))).toMatchObject({ ...address, args: address });
+      }
     });
 
     it('preserves pendingSuspensions on agent_start so resuming one keeps the rest', () => {

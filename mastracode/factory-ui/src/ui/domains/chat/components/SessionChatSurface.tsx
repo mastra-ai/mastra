@@ -18,6 +18,7 @@ interface SessionChatSurfaceProps {
   secondaryBar?: ReactNode;
   emptyState: ReactNode;
   composerLabel: string;
+  composerFooter?: ReactNode;
   className?: string;
   contentRef?: RefObject<HTMLDivElement | null>;
   contentOverlay?: ReactNode;
@@ -29,6 +30,7 @@ export function SessionChatSurface({
   secondaryBar,
   emptyState,
   composerLabel,
+  composerFooter,
   className,
   contentRef,
   contentOverlay,
@@ -68,8 +70,9 @@ export function SessionChatSurface({
               <ChatShell.ScrollButton aria-label="Jump to latest message" />
               <ChatShell.Column className={cn('gap-2', composerColumnClass)}>
                 <TaskPanel />
-                <div role="region" aria-label={composerLabel}>
+                <div role="region" aria-label={composerLabel} className="flex flex-col gap-2">
                   <ComposerPanel />
+                  {composerFooter}
                 </div>
               </ChatShell.Column>
             </ChatShell.Dock>

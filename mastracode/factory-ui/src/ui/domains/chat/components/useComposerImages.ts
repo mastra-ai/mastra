@@ -1,14 +1,8 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import type { ChangeEvent, ClipboardEvent, DragEvent } from 'react';
 
-import { useChatTranscript } from '../context/useChatTranscript';
-
-export interface PendingImage {
-  id: string;
-  data: string;
-  mediaType: string;
-  filename?: string;
-}
+import type { PendingImage } from '../context/ComposerImagesContext';
+import { useComposerImagesState } from '../context/useComposerImagesState';
 
 let pendingImageSequence = 0;
 
@@ -28,16 +22,11 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
-export function useComposerImages({ onUserDraft, disabled }: { onUserDraft: boolean; disabled: boolean }) {
-  const { pushNotice } = useChatTranscript();
-  const [images, setImages] = useState<PendingImage[]>([]);
+export function useComposerImages({ disabled }: { disabled: boolean }) {
+  const { images, setImages } = useComposerImagesState();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addImageFiles = async (fileList: Iterable<File>) => {
-    if (onUserDraft) {
-      pushNotice('Images can be attached once the session is ready.');
-      return;
-    }
     const imageFiles = Array.from(fileList).filter(
       file => file.type.startsWith('image/') && file.size <= MAX_IMAGE_BYTES,
     );

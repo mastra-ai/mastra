@@ -9,6 +9,7 @@ import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWo
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
 import { getUserSessionLabel } from '../../workspaces/services/sessionPresentation';
+import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
 import { rememberedBoardPath } from '../services/boardViews';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
@@ -64,7 +65,7 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const sessionQuery = useUserSessionQuery(userSessionId);
   const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
   const items = useWorkItemsQuery(factoryId);
-  const workspaces = useWorkspacesQuery(projectRepositoryId);
+  const workspaces = useWorkspacesQuery(factoryId);
 
   const allItems = items.data ?? [];
   const currentItem = activeWorkItem(allItems, factoryId, sessionId, threadId);
@@ -105,6 +106,7 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
       crumbs={crumbs}
       headerActions={
         <>
+          {isUserThread && factoryId && session ? <UserSessionSharing factoryId={factoryId} session={session} /> : null}
           {currentItem && factoryId && threadId ? (
             <WorkItemActions
               item={currentItem}

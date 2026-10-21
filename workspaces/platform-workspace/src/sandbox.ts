@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { RequestContext } from '@mastra/core/di';
 import type {
   CommandResult,
@@ -15,17 +17,20 @@ import {
   MastraSandbox,
   ProcessHandle,
   UnsupportedStdinCloseError,
+  SandboxError,
   SandboxNotReadyError,
   SandboxProcessManager,
 } from '@mastra/core/workspace';
+import { AuthenticationError } from 'e2b';
 import type { PlatformClientOptions, PlatformRequestOptions } from './client.js';
 import { PlatformApiError, PlatformClient } from './client.js';
 import type { DirectExecWebSocketFactory, ExecLease } from './direct-exec.js';
 import { execViaLease } from './direct-exec.js';
-import type { E2BExecRunner } from './e2b-exec.js';
-import { execViaE2BLease } from './e2b-exec.js';
+import type { E2BExecRunner, E2BFiles, E2BFilesFactory } from './e2b-exec.js';
+import { e2bFilesForLease, execViaE2BLease } from './e2b-exec.js';
 import type { PrivateNetExecOptions, PrivateNetExecResult, PrivateNetFetch } from './private-net-exec.js';
 import { execViaPrivateNetwork, PrivateNetExecHttpError } from './private-net-exec.js';
+import { isBrokenSandboxError, PlatformSandboxFilesystem } from './sandbox-filesystem.js';
 import type { SandboxTemplateBuilder, SerializedSandboxTemplate } from './template.js';
 import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './template.js';
 
@@ -63,6 +68,15 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   id?: string;
   environmentId?: string;
   sandboxId?: string;
+  /**
+   * What `start()` does when `sandboxId` is set but the platform reports that
+   * sandbox is gone (404, 410, or a destroyed record).
+   *
+   * - `'best-effort'` (default): provision a replacement sandbox.
+   * - `'required'`: throw a `SandboxError` with code `SANDBOX_REATTACH_FAILED`
+   *   instead of provisioning, so the caller can surface the lost VM.
+   */
+  reattach?: 'best-effort' | 'required';
   /** Boot-only fallback checkpoint for a fresh sandbox whose primary recovery key has no state. */
   seedCheckpointName?: string;
   /**
@@ -94,6 +108,8 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   webSocketFactory?: DirectExecWebSocketFactory;
   /** Injected E2B direct-exec implementation used by tests. */
   e2bExecRunner?: E2BExecRunner;
+  /** Injected E2B files-API handle used by {@link PlatformSandbox.filesystem} in tests. */
+  e2bFilesFactory?: E2BFilesFactory;
   /**
    * Injected fetch implementation used by the private-network exec code path
    * to dial the in-sandbox sidecar. Defaults to `globalThis.fetch` and only
@@ -303,6 +319,9 @@ export class SandboxDestroyedError extends Error {
   }
 }
 
+/** Cap on one file command (a recursive copy can be large) when the sandbox sets no timeout. */
+const FILE_COMMAND_TIMEOUT_MS = 10 * 60_000;
+
 /**
  * Compose a shell command line from a `command` string and optional `args`.
  *
@@ -413,10 +432,22 @@ export class PlatformSandbox extends MastraSandbox {
    */
   templatePending?: SandboxTemplatePending;
 
+  /**
+   * The platform's id for the provisioned sandbox, as returned by the create
+   * or reattach response. Persist this to reattach later via the `sandboxId`
+   * option. Undefined until the sandbox has been started in this process; a
+   * `sandboxId` passed to the constructor is only a hint for `start()` and is
+   * not reported here until the proxy confirms it.
+   */
+  get sandboxId(): string | undefined {
+    return this.status === 'running' ? this._sandboxId : undefined;
+  }
+
   private readonly _client: PlatformClient;
   private readonly _usesProviderRoutes: boolean;
   private readonly _environmentId: string;
   private _sandboxId?: string;
+  private readonly _reattach: 'best-effort' | 'required';
   private readonly _seedCheckpointName?: string;
   private _templateDefinition?: SerializedSandboxTemplate;
   private _templateBuildEnvs?: Record<string, string>;
@@ -430,6 +461,10 @@ export class PlatformSandbox extends MastraSandbox {
   private _createdAt: Date | null = null;
   private readonly _webSocketFactory?: DirectExecWebSocketFactory;
   private readonly _e2bExecRunner: E2BExecRunner;
+  private readonly _e2bFilesFactory: E2BFilesFactory;
+  /** Files handle for the current lease, rebuilt whenever the lease changes. */
+  private _e2bFiles: { lease: CachedExecLease; files: E2BFiles } | null = null;
+  private _filesystem?: PlatformSandboxFilesystem;
   private readonly _privateNetFetch?: PrivateNetFetch;
   /**
    * Registry that maps `sandboxId → instanceUrl` for the private-network
@@ -505,6 +540,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
     if (!this._environmentId && !options.sandboxId) throw new Error('environmentId is required');
     this._sandboxId = options.sandboxId;
+    this._reattach = options.reattach ?? 'best-effort';
     this._seedCheckpointName = options.seedCheckpointName;
     this._usesProviderRoutes = options.template !== undefined;
     this._template = options.template;
@@ -515,12 +551,28 @@ export class PlatformSandbox extends MastraSandbox {
     this._instructionsOverride = options.instructions;
     this._webSocketFactory = options.webSocketFactory;
     this._e2bExecRunner = options.e2bExecRunner ?? execViaE2BLease;
+    this._e2bFilesFactory = options.e2bFilesFactory ?? e2bFilesForLease;
     this._privateNetFetch = options.privateNetFetch;
     this._addressRegistry = options.addressRegistry;
   }
 
   private generateId(): string {
     return `platform-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private _failIfReattachRequired(reason: string, cause?: unknown): void {
+    if (this._reattach !== 'required') return;
+    throw new SandboxError(
+      `Platform sandbox ${this._sandboxId} could not be reattached (${reason}); refusing to provision a replacement because reattach is 'required'. Clear the persisted sandboxId to start a fresh sandbox.`,
+      'SANDBOX_REATTACH_FAILED',
+      {
+        provider: 'platform',
+        sandboxId: this._sandboxId,
+        logicalId: this.id,
+        reason,
+        ...(cause !== undefined && { cause }),
+      },
+    );
   }
 
   private _request(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
@@ -564,6 +616,7 @@ export class PlatformSandbox extends MastraSandbox {
       fetch: this._client.fetch,
       environmentId: this._environmentId,
       ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
+      reattach: this._reattach,
       ...(seedCheckpointName !== undefined && { seedCheckpointName }),
       ...(this._template !== undefined && { template: this._template }),
       idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
@@ -617,9 +670,14 @@ export class PlatformSandbox extends MastraSandbox {
           this._logStartComplete(json.id, startedAt, requestMs, 'reattach');
           return { outcome: 'connected' };
         }
+        this._failIfReattachRequired('destroyed');
         this._sandboxId = undefined;
       } catch (error) {
-        if (!(error instanceof PlatformApiError) || error.status !== 404) throw error;
+        // 404: the proxy never issued this id. 410: it did, and has since
+        // marked the record destroyed (idle GC, manual delete). Neither is
+        // reattachable; both fall through to a fresh provision.
+        if (!(error instanceof PlatformApiError) || (error.status !== 404 && error.status !== 410)) throw error;
+        this._failIfReattachRequired(String(error.status), error);
         this._sandboxId = undefined;
       }
     }
@@ -722,6 +780,18 @@ export class PlatformSandbox extends MastraSandbox {
       mode,
       totalMs: Date.now() - startedAt,
       requestMs,
+      // Only a provision ran the template; on reattach the stored definition
+      // is whatever this instance provisioned earlier, not what is running.
+      ...(mode === 'provision' && this._templateDefinition
+        ? {
+            templateHash: templateHash(this._templateDefinition),
+            // `exact` means the proxy booted the requested build. `pending`
+            // means it booted a prior family build or the base image while
+            // that build runs; the proxy does not say which of the two.
+            templateBoot: this.templatePending ? 'pending' : 'exact',
+            ...(this.templatePending ? { pendingTemplateId: this.templatePending.templateId } : {}),
+          }
+        : {}),
     });
   }
 
@@ -867,29 +937,34 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   /**
-   * Stop the sandbox while **preserving its recovery checkpoint**.
+   * Stop this process's use of the sandbox without touching the remote one.
    *
-   * Semantic parity with `@mastra/railway` `RailwaySandbox.stop()`: the VM
-   * is released but the on-provider checkpoint survives, so a subsequent
-   * `start()` on a sandbox constructed with the same `id` can restore from
-   * it. Any in-flight capture is awaited first so the preserved checkpoint
-   * reflects the latest disk state we asked for.
+   * Nothing is sent to workspace-proxy. The VM keeps running and idles out
+   * under the environment's own idle policy, the recovery checkpoint stays,
+   * and `_sandboxId` is kept so a later `start()` on this instance, or on a
+   * new instance constructed with the same `id` or `sandboxId`, reattaches
+   * instead of provisioning. `Mastra.shutdown()` stops every registered
+   * workspace on SIGINT; releasing the VM here would destroy every live
+   * session on a host restart. Use {@link destroy} to release the VM and
+   * its checkpoint.
    *
-   * Corresponds to `DELETE /v1/:provider/projects/:pid/sandbox/:sandboxId` on
-   * workspace-proxy, which by contract does not touch the checkpoint. Use
-   * {@link destroy} when you want the checkpoint released too.
+   * Any in-flight capture is awaited first so the checkpoint reflects the
+   * latest disk state the caller asked for.
    */
   async stop(): Promise<void> {
-    // Await any in-flight capture so the preserved checkpoint reflects the
-    // latest capture the caller triggered. Never rethrow — a failing capture
-    // must not block teardown; the proxy's safety-net refresh timer is a
-    // fallback for the checkpoint state.
+    // Never rethrow: a failing capture must not block stop; the proxy's
+    // safety-net refresh timer is a fallback for the checkpoint state.
     if (this._captureInFlight) {
       await this._captureInFlight.catch(error => {
-        this.logger.warn(`stop(): failed to flush in-flight capture before teardown:`, error);
+        this.logger.warn(`stop(): failed to flush in-flight capture before stop:`, error);
       });
     }
-    await this._teardownSandbox();
+    // Drop only what is tied to this process: the sidecar probe and the exec
+    // lease. The next start() re-populates both from the proxy's response.
+    this._probeGeneration++;
+    this._probeTarget = null;
+    this._transportReadyPromise = null;
+    this._lease = null;
   }
 
   /**
@@ -946,12 +1021,9 @@ export class PlatformSandbox extends MastraSandbox {
   /**
    * Release the remote sandbox VM and clear the local state pointing at it.
    *
-   * Shared body of {@link stop} and {@link destroy} — both funnel through
-   * here after they've dealt with the checkpoint (preserve vs release).
-   * The VM DELETE is safe to issue in either mode: the proxy's DELETE
-   * route does not touch the checkpoint on its own, so `stop()` correctly
-   * leaves the checkpoint intact and `destroy()` has already removed it
-   * before this call.
+   * Body of {@link destroy}, called after the checkpoint has been released.
+   * The proxy's DELETE route releases the VM (on E2B that kills it), so
+   * only destroy() may reach here; stop() never does.
    */
   private async _teardownSandbox(): Promise<void> {
     if (!this._sandboxId) return;
@@ -1136,6 +1208,21 @@ export class PlatformSandbox extends MastraSandbox {
    * execution on the remote sandbox.
    */
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
+    return this._executeCommand(command, args, options, { once: false });
+  }
+
+  /**
+   * `executeCommand`, optionally sent at most once. With `once`, a transport
+   * failure after the command may have started is thrown instead of retried
+   * (on the lease or over the private network), so a script that changes files
+   * never runs twice.
+   */
+  private async _executeCommand(
+    command: string,
+    args: string[] | undefined,
+    options: ExecuteCommandOptions | undefined,
+    { once }: { once: boolean },
+  ): Promise<CommandResult> {
     await this.ensureRunning();
     if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
 
@@ -1171,7 +1258,7 @@ export class PlatformSandbox extends MastraSandbox {
     // path — application-level failures (sidecar returns 5xx) still fall
     // back for this call but do NOT invalidate the entry. See
     // `.scratch/factory-deploy/issue-platform-sandbox-exec-via-private-network.md`.
-    const instanceUrl = this._addressRegistry?.get(this._sandboxId);
+    const instanceUrl = once ? undefined : this._addressRegistry?.get(this._sandboxId);
     if (instanceUrl) {
       const privateNet = await this._tryExecViaPrivateNetwork(
         instanceUrl,
@@ -1203,7 +1290,7 @@ export class PlatformSandbox extends MastraSandbox {
     // `PlatformApiError` for other `/exec-lease` errors (404/500/501).
     // See ./direct-exec.ts and `docs/factory/direct-sandbox-connection.md`
     // in the Platform repo.
-    const result = await this._runDirectExec(fullCommand, effectiveTimeout, execCallOptions);
+    const result = await this._runDirectExec(fullCommand, effectiveTimeout, execCallOptions, once ? 1 : 2);
     // `_runDirectExec` throws on transport failure (see its jsdoc), so a
     // `null` exitCode here can only mean `timedOut: true` — the sandbox
     // never got to send an exit frame because we cut the command short.
@@ -1261,19 +1348,20 @@ export class PlatformSandbox extends MastraSandbox {
     fullCommand: string,
     effectiveTimeout: number | undefined,
     options: ExecuteCommandOptions | undefined,
+    attempts = 2,
   ): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }> {
     const filteredEnv = this._execEnv(options);
 
     let lastResult: Awaited<ReturnType<typeof execViaLease>> | undefined;
     let lastLease: CachedExecLease | undefined;
     let attemptsMade = 0;
-    // Two attempts: initial + one retry. On the second attempt we drop the
+    // Two attempts by default: initial + one retry. On the second attempt we drop the
     // cached lease so we don't reuse a JWT that may itself be the cause of
     // the transport failure — but only if the cache still holds the same
     // lease we just failed against. A concurrent exec sharing this instance
     // may have already cached a fresh, unrelated lease in between, and we
     // must not discard that.
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < attempts; attempt++) {
       if (attempt > 0 && lastLease && this._lease === lastLease) this._lease = null;
       let lease: CachedExecLease;
       try {
@@ -1487,8 +1575,113 @@ export class PlatformSandbox extends MastraSandbox {
     }
   }
 
+  /**
+   * The sandbox's disk through E2B's files API, called directly on the VM with
+   * the same lease `executeCommand` uses. Paths are absolute inside the
+   * sandbox and are not confined to any root. Absent on non-E2B sandboxes, so
+   * callers fall back to `executeCommand`.
+   */
+  get filesystem(): PlatformSandboxFilesystem | undefined {
+    if (this._client.sandboxProvider !== 'e2b') return undefined;
+    this._filesystem ??= new PlatformSandboxFilesystem({
+      id: this.id,
+      withFiles: (operation, fn) => this._withE2BFiles(operation, fn),
+      // Sent once: a replayed append or no-clobber move would change files twice.
+      // A sandbox without a configured timeout would let a hung `cp` block forever.
+      runCommand: script =>
+        this._executeCommand(
+          'sh',
+          ['-c', script],
+          this._timeout === undefined ? { timeout: FILE_COMMAND_TIMEOUT_MS } : {},
+          { once: true },
+        ),
+    });
+    return this._filesystem;
+  }
+
+  /**
+   * Run a filesystem operation against the VM through the files API. Each
+   * files call that envd rejects for its token is retried once with a fresh
+   * lease: the rejection proves that call did nothing, and the calls before it
+   * already succeeded, so nothing is replayed. Any other failure is thrown
+   * unchanged. A dead sandbox or a broken transport also drops the cached
+   * lease, so the next operation re-mints it and learns about a destroyed
+   * sandbox (410) the same way `executeCommand` does.
+   */
+  private async _withE2BFiles<T>(operation: string, fn: (files: E2BFiles) => Promise<T>): Promise<T> {
+    await this.ensureRunning();
+    if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
+    let current = await this._filesHandle(operation, 1);
+    const call = async <R>(invoke: (files: E2BFiles) => Promise<R>): Promise<R> => {
+      try {
+        return await invoke(current.files);
+      } catch (error) {
+        if (error instanceof AuthenticationError) {
+          if (this._lease === current.lease) this._lease = null;
+          current = await this._filesHandle(operation, 2);
+          try {
+            return await invoke(current.files);
+          } catch (retryError) {
+            if (isBrokenSandboxError(retryError) && this._lease === current.lease) this._lease = null;
+            throw retryError;
+          }
+        }
+        if (isBrokenSandboxError(error) && this._lease === current.lease) this._lease = null;
+        throw error;
+      }
+    };
+    return fn({
+      read: (path, opts) => call(files => files.read(path, opts)),
+      write: (path, data) => call(files => files.write(path, data)),
+      list: (path, opts) => call(files => files.list(path, opts)),
+      makeDir: path => call(files => files.makeDir(path)),
+      rename: (oldPath, newPath) => call(files => files.rename(oldPath, newPath)),
+      remove: path => call(files => files.remove(path)),
+      getInfo: path => call(files => files.getInfo(path)),
+    });
+  }
+
+  /** The files handle for the current lease, rebuilt only when the lease changes. */
+  private async _filesHandle(
+    operation: string,
+    attempts: number,
+  ): Promise<{ lease: CachedExecLease; files: E2BFiles }> {
+    const lease = await this._fileLease(operation, attempts);
+    if (lease.provider !== 'e2b') {
+      throw new Error(
+        `PlatformSandbox.filesystem requires an E2B-backed sandbox; this sandbox's provider is "${lease.provider}"`,
+      );
+    }
+    if (this._e2bFiles?.lease !== lease) this._e2bFiles = { lease, files: this._e2bFilesFactory(lease) };
+    return this._e2bFiles;
+  }
+
+  /** `_ensureLease`, with a 410 handled the same way `_runDirectExec` handles it. */
+  private async _fileLease(operation: string, attempts: number): Promise<CachedExecLease> {
+    try {
+      return await this._ensureLease();
+    } catch (error) {
+      if (error instanceof PlatformApiError && error.status === 410) {
+        this._lease = null;
+        const priorSandboxId = this._sandboxId;
+        this._sandboxId = undefined;
+        this.status = 'stopped';
+        throw new SandboxDestroyedError(
+          `Sandbox ${priorSandboxId ?? '(unknown)'} was destroyed; /exec-lease returned 410`,
+          { ...(priorSandboxId && { sandboxId: priorSandboxId }), command: `filesystem.${operation}`, attempts },
+        );
+      }
+      throw error;
+    }
+  }
+
   async getInfo(): Promise<SandboxInfo> {
-    if (!this._sandboxId) {
+    // Before this process has started the sandbox, `_sandboxId` is at best a
+    // caller-supplied hint for `start()` to reattach by. Asking the proxy
+    // about it here would surface a 404 for a hint the proxy does not know
+    // (and the workspace tools call `getInfo()` before their first exec),
+    // where `start()` would have fallen through to a fresh provision.
+    if (!this._sandboxId || this.status !== 'running') {
       return {
         id: this.id,
         name: this.name,
@@ -1550,4 +1743,16 @@ export class PlatformSandbox extends MastraSandbox {
     if (typeof this._instructionsOverride === 'string') return this._instructionsOverride;
     return defaultInstructions;
   }
+}
+
+/**
+ * Diagnostic fingerprint of the serialized template a sandbox was provisioned
+ * with: the same definition (repositories, pinned heads, setup commands,
+ * resources) hashes the same on warm and cold boots. `family` is excluded, as
+ * in the server's exact-content identity. Not the server's cache digest, which
+ * also normalizes resources.
+ */
+function templateHash(definition: SerializedSandboxTemplate): string {
+  const { family: _family, ...content } = definition;
+  return createHash('sha256').update(JSON.stringify(content)).digest('hex').slice(0, 16);
 }

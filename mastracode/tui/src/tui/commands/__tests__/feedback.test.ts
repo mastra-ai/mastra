@@ -20,12 +20,13 @@ function createCtx(options?: {
       getId: vi.fn(() => (options && 'threadId' in options ? options.threadId : 'thread-123')),
     },
   };
+  const controller = {
+    getMastra: vi.fn(() => ({ observability: { addFeedback } })),
+  };
   return {
-    state: { session },
+    state: { session, local: { controller, session } },
     session,
-    controller: {
-      getMastra: vi.fn(() => ({ observability: { addFeedback } })),
-    },
+    controller,
     showInfo: vi.fn(),
     showError: vi.fn(),
     addFeedback,

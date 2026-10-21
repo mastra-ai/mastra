@@ -42,6 +42,7 @@ export {
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
   MASTRA_STUDIO_CLIENT_TYPE,
+  RESERVED_REQUEST_CONTEXT_KEYS,
   isReservedRequestContextKey,
   isStudioClientTypeHeader,
 } from '../constants';
@@ -315,6 +316,20 @@ function parseComplexQueryParams(
 }
 
 /**
+ * Property names that must never be written onto objects built from untrusted
+ * input: assigning them can mutate the object's prototype chain.
+ */
+const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+
+/**
+ * Returns whether `key` is safe to use as a property name when building an
+ * object from untrusted input (query strings, form fields, etc.).
+ */
+export function isSafeObjectKey(key: string): boolean {
+  return !UNSAFE_OBJECT_KEYS.has(key);
+}
+
+/**
  * Normalizes query parameters from various HTTP framework formats to a consistent structure.
  * Handles both single string values and arrays (for repeated query params like ?tag=a&tag=b).
  * Reconstructs bracket-notation keys (e.g., `orderBy[field]=createdAt`) into JSON strings
@@ -339,15 +354,20 @@ export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<
         : typeof value === 'string'
           ? value
           : undefined;
-      if (strValue !== undefined) {
-        if (!bracketGroups[parent]) {
+      if (strValue !== undefined && isSafeObjectKey(parent) && isSafeObjectKey(child)) {
+        if (!Object.hasOwn(bracketGroups, parent)) {
           bracketGroups[parent] = {};
         }
         bracketGroups[parent]![child] = strValue;
       }
     } else if (typeof value === 'string') {
-      queryParams[key] = value;
+      if (isSafeObjectKey(key)) {
+        queryParams[key] = value;
+      }
     } else if (Array.isArray(value)) {
+      if (!isSafeObjectKey(key)) {
+        continue;
+      }
       // Filter to only string values (some frameworks include nested objects)
       const stringValues = value.filter((v): v is string => typeof v === 'string');
       // Convert single-value arrays back to strings for compatibility
@@ -357,7 +377,7 @@ export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<
 
   // Merge bracket groups as JSON strings (only if the parent key wasn't already set directly)
   for (const [parent, children] of Object.entries(bracketGroups)) {
-    if (!(parent in queryParams)) {
+    if (!Object.hasOwn(queryParams, parent)) {
       queryParams[parent] = JSON.stringify(children);
     }
   }
@@ -380,6 +400,9 @@ export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<
  * @template TResponse - The type of the response object
  */
 export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServerBase<TApp> {
+  /** Request bodies cannot set agent scopes: handlers strip `scopes`, and `mastra__scopes` is a reserved key. */
+  readonly reservesAgentScopes = true;
+
   protected mastra: Mastra;
   protected bodyLimitOptions?: BodyLimitOptions;
   protected tools?: ToolsInput;
@@ -1267,7 +1290,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // Custom routes are served at root (/), not under the API prefix — add per-path servers override.
     const allCustomRoutes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
     if (allCustomRoutes && allCustomRoutes.length > 0) {
-      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes);
+      const componentSchemas = openApiSpec.components?.schemas ?? Object.create(null);
+      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes, componentSchemas);
+      if (Object.keys(componentSchemas).length > 0) {
+        openApiSpec.components = { ...openApiSpec.components, schemas: componentSchemas };
+      }
       if (prefix) {
         for (const pathKey of Object.keys(customPaths)) {
           if (!customPaths[pathKey].servers) {

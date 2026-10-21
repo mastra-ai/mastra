@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../../agent';
 import { GOAL_STATE_TYPE, GOAL_SCORE_WAITING } from '../../../agent/goal';
-import { RequestContext } from '../../../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../../request-context';
 import type { GoalObjectiveRecord } from '../../../storage/domains/thread-state/base';
 import { createMockModel } from '../../../test-utils/llm-mock';
 import { createGoalStep } from './goal-step';
@@ -285,6 +285,36 @@ describe('goal step waiting semantics', () => {
         resource: 'resource-1',
       });
       expect(parentContext.get('MastraMemory')).toBe(parentMemory);
+    } finally {
+      streamSpy.mockRestore();
+    }
+  });
+
+  it('does not bind the default judge to the parent run thread through reserved memory keys', async () => {
+    const parentContext = new RequestContext();
+    parentContext.set('tenantId', 'tenant-1');
+    parentContext.set(MASTRA_THREAD_ID_KEY, THREAD_ID);
+    parentContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-1');
+    let judgeContext: RequestContext | undefined;
+    const streamSpy = vi.spyOn(Agent.prototype, 'stream').mockImplementation((async (
+      _prompt: unknown,
+      options: any,
+    ) => {
+      judgeContext = options.requestContext;
+      return { object: Promise.resolve({ decision: 'done', reason: 'complete' }) } as any;
+    }) as any);
+
+    try {
+      await runGoalStep('done', makeRecord({ id: 'goal-1' }), {
+        requestContext: parentContext,
+        useMemory: true,
+      });
+
+      expect(judgeContext?.get('tenantId')).toBe('tenant-1');
+      expect(judgeContext?.has(MASTRA_THREAD_ID_KEY)).toBe(false);
+      expect(judgeContext?.has(MASTRA_RESOURCE_ID_KEY)).toBe(false);
+      expect(parentContext.get(MASTRA_THREAD_ID_KEY)).toBe(THREAD_ID);
+      expect(parentContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('resource-1');
     } finally {
       streamSpy.mockRestore();
     }

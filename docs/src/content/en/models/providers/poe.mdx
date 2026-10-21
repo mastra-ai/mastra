@@ -7,7 +7,7 @@ description: "Browse Poe model IDs, capabilities, context windows, and pricing. 
 
 # <img src="https://models.dev/logos/poe.svg" alt="Poe logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Poe
 
-Access 137 Poe models through Mastra's model router. Authentication is handled automatically using the `POE_API_KEY` environment variable.
+Access 142 Poe models through Mastra's model router. Authentication is handled automatically using the `POE_API_KEY` environment variable.
 
 Learn more in the [Poe documentation](https://creator.poe.com/docs/external-applications/openai-compatible-api).
 
@@ -366,8 +366,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
-    "inputCost": 0.4,
-    "outputCost": 2.4
+    "inputCost": 0.404,
+    "outputCost": 2.4242
   },
   {
     "model": "poe/google/gemini-3.1-flash-lite",
@@ -378,8 +378,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
-    "inputCost": 0.25,
-    "outputCost": 1.5
+    "inputCost": 0.2525,
+    "outputCost": 1.5152
   },
   {
     "model": "poe/google/gemini-3.1-pro",
@@ -390,18 +390,78 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
-    "inputCost": 2,
-    "outputCost": 12
+    "inputCost": 2.0202,
+    "outputCost": 12.1212
   },
   {
     "model": "poe/google/gemini-3.5-flash",
     "imageInput": true,
-    "audioInput": true,
-    "videoInput": false,
+    "audioInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
+    "inputCost": 1.5152,
+    "outputCost": 9.0909
+  },
+  {
+    "model": "poe/google/gemini-3.5-flash-lite",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.303,
+    "outputCost": 2.5253
+  },
+  {
+    "model": "poe/google/gemini-3.6-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.7576,
+    "outputCost": 3.7879
+  },
+  {
+    "model": "poe/google/gemini-3.7-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.7576,
+    "outputCost": 3.7879
+  },
+  {
+    "model": "poe/google/gemini-3.8-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.7576,
+    "outputCost": 3.7879
+  },
+  {
+    "model": "poe/google/gemini-omni-1.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 57920,
     "inputCost": 1.5152,
     "outputCost": 9.0909
   },

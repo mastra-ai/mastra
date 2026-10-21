@@ -1,24 +1,15 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
-import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Settings } from 'lucide-react';
-import { useLocation, useNavigate, useParams } from 'react-router';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 
-import { SidebarAccountLink } from './domains/auth/components/SidebarAccountLink';
+import { SidebarUserMenu } from './domains/auth/components/SidebarUserMenu';
 import { FactorySection } from './domains/factory/components/FactorySection';
-import { SidebarAttention } from './domains/factory/components/SidebarAttention';
+import { SidebarActivityLink } from './domains/factory/components/SidebarActivityLink';
 import { SidebarGlobalSearchButton } from './domains/search/components/SidebarGlobalSearchButton';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
-import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
-import { settingsSectionPath } from './domains/settings/settingsSections';
+import { useSettingsOpen } from './domains/settings/hooks/useSettingsOpen';
 import { FactorySwitcher } from './domains/workspaces/components/FactorySwitcher';
-import { UserSessionsSection } from './domains/workspaces/components/UserSessionsSection';
-import { WorkspacesSection } from './domains/workspaces/components/WorkspacesSection';
-
-function useSettingsOpen() {
-  const { pathname } = useLocation();
-  return /^\/factories\/[^/]+\/settings(?:\/|$)/.test(pathname);
-}
+import { SessionsSection } from './domains/workspaces/components/SessionsSection';
 
 function BetaBadge() {
   return (
@@ -58,6 +49,7 @@ function BetaBadge() {
  */
 export function AppSidebar() {
   const settingsOpen = useSettingsOpen();
+  const { desktopState } = useSidebar();
 
   return (
     <Sidebar aria-label="Main sidebar" className="h-full">
@@ -67,6 +59,8 @@ export function AppSidebar() {
           title={<BetaBadge />}
         />
         <SidebarGlobalSearchButton />
+        {/* Collapsed, the sidebar is hidden and the page header carries the toggle (useSidebarHeaderSlots) */}
+        {desktopState !== 'collapsed' && <Sidebar.Trigger />}
       </Sidebar.CommandHeader>
       <Sidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
         {settingsOpen ? (
@@ -77,62 +71,18 @@ export function AppSidebar() {
               <FactorySwitcher />
             </section>
             <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
-              <FactorySection>
-                <WorkspacesSection />
-              </FactorySection>
-              <UserSessionsSection />
+              <FactorySection />
+              <SessionsSection />
             </section>
           </div>
         )}
       </Sidebar.Nav>
-      <Sidebar.Footer aria-label="Attention, account, and settings">
-        <AppSidebarFooter />
+      <Sidebar.Footer aria-label="Activity, account, and settings">
+        <Sidebar.NavList>
+          <SidebarActivityLink />
+          <SidebarUserMenu />
+        </Sidebar.NavList>
       </Sidebar.Footer>
     </Sidebar>
-  );
-}
-
-function AppSidebarFooter() {
-  const { factoryId } = useParams<{ factoryId: string }>();
-  const settingsOpen = useSettingsOpen();
-  const closeSettings = useCloseSettings();
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  const toggleSettings = () => {
-    if (settingsOpen) {
-      closeSettings();
-      return;
-    }
-    if (factoryId) {
-      void navigate(settingsSectionPath(factoryId, 'preferences'), { state: { from: location } });
-    }
-  };
-
-  return (
-    <Sidebar.NavList>
-      <SidebarAttention />
-      <SidebarAccountLink />
-      <Sidebar.NavLink
-        asChild
-        link={{
-          name: 'Settings',
-          url: '#',
-          icon: <Settings />,
-        }}
-        isActive={settingsOpen}
-      >
-        <button
-          id="settings-trigger"
-          type="button"
-          onClick={toggleSettings}
-          aria-label="Settings"
-          aria-current={settingsOpen ? 'page' : undefined}
-        >
-          <Settings />
-          <Sidebar.NavLabel>Settings</Sidebar.NavLabel>
-        </button>
-      </Sidebar.NavLink>
-    </Sidebar.NavList>
   );
 }

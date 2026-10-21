@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { createWorkflow } from '../../../../workflows/create';
+import { MessageList } from '../../../message-list';
+import { globalRunRegistry } from '../../run-registry';
+import { createDurableLLMExecutionStep } from '../steps/llm-execution';
+import { createDurableLLMMappingStep } from '../steps/llm-mapping';
 import { calculateAccumulatedUsage, createBaseIterationStateUpdate } from './iteration-state';
+import { baseDurableAgenticInputSchema, baseIterationStateSchema } from './schemas';
 
 const providerRequest = {
   body: {
@@ -136,6 +142,46 @@ describe('calculateAccumulatedUsage', () => {
 });
 
 describe('createBaseIterationStateUpdate', () => {
+  it('preserves a cold input rejection across preemption and clears it after the terminal step (COR-1481)', () => {
+    const runId = 'cold-input-tripwire';
+    const inputTripwire = {
+      reason: 'Deploy target rejected',
+      retry: false,
+      processorId: 'preflight',
+      metadata: { target: 'staging' },
+    };
+    expect(globalRunRegistry.get(runId)).toBeUndefined();
+    const input = baseDurableAgenticInputSchema.parse(
+      JSON.parse(
+        JSON.stringify(iterationState({ runId, inputTripwire, modelConfig: { provider: 'test', modelId: 'mock' } })),
+      ),
+    );
+    const initial = baseIterationStateSchema.parse({
+      ...input,
+      iterationCount: 0,
+      accumulatedSteps: [],
+      accumulatedUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    });
+    const discarded = executionOutput();
+    discarded.stepResult = { reason: 'other', isContinued: true, signalPreempted: true };
+    const resumed = baseIterationStateSchema.parse(
+      JSON.parse(JSON.stringify(createBaseIterationStateUpdate({ currentState: initial, executionOutput: discarded }))),
+    );
+    const llm = createDurableLLMExecutionStep();
+    const workerInput = llm.inputSchema.parse(JSON.parse(JSON.stringify(resumed)));
+    expect(workerInput.inputTripwire).toEqual(inputTripwire);
+    expect(resumed.iterationCount).toBe(0);
+
+    const terminal = executionOutput();
+    terminal.stepResult = { reason: 'tripwire', isContinued: false };
+    const completed = baseIterationStateSchema.parse(
+      JSON.parse(JSON.stringify(createBaseIterationStateUpdate({ currentState: resumed, executionOutput: terminal }))),
+    );
+    expect(completed.inputTripwire).toBeUndefined();
+    expect(completed.lastStepResult).toMatchObject({ reason: 'tripwire', isContinued: false });
+    expect(globalRunRegistry.get(runId)).toBeUndefined();
+  });
+
   it('does not carry the provider request into the next iteration', () => {
     const update = createUpdate();
 
@@ -146,6 +192,121 @@ describe('createBaseIterationStateUpdate', () => {
       totalUsage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
     });
     expect(JSON.stringify(update)).not.toContain('tool-19');
+  });
+
+  it('carries preemption through cold schemas, actual mapping and snapshots, then clears it on acceptance', async () => {
+    const runId = 'cold-signal-preemption';
+    expect(globalRunRegistry.get(runId)).toBeUndefined();
+    const messages = new MessageList({ threadId: 'cold-thread', resourceId: 'cold-resource' });
+    messages.add(
+      {
+        id: 'earlier',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'earlier accepted' }] },
+      },
+      'memory',
+    );
+    const llm = createDurableLLMExecutionStep();
+    const mapping = createDurableLLMMappingStep();
+    const workflow = createWorkflow({
+      id: 'cold-mapping',
+      inputSchema: mapping.inputSchema,
+      outputSchema: mapping.outputSchema,
+    })
+      .then(mapping)
+      .commit();
+    const currentState = baseIterationStateSchema.parse(
+      iterationState({
+        runId,
+        messageListState: messages.serialize(),
+        iterationCount: 1,
+        accumulatedSteps: [{ text: 'earlier accepted' }],
+        accumulatedUsage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        usageAggregationVersion: 1,
+      }),
+    );
+    const discarded = llm.outputSchema.parse(
+      JSON.parse(
+        JSON.stringify({
+          messageListState: messages.serialize(),
+          text: '',
+          toolCalls: [],
+          stepResult: { reason: 'other', warnings: [], isContinued: true, signalPreempted: true },
+          metadata: {},
+          state: { threadId: 'cold-thread', resourceId: 'cold-resource', threadExists: true },
+        }),
+      ),
+    );
+    const run = await workflow.createRun();
+    const result = await run.start({
+      inputData: mapping.inputSchema.parse(
+        JSON.parse(
+          JSON.stringify({
+            llmOutput: discarded,
+            toolResults: [],
+            runId,
+            agentId: 'agent-1',
+            messageId: 'replacement',
+            state: discarded.state,
+          }),
+        ),
+      ),
+    });
+    if (result.status !== 'success') throw new Error(`Cold mapping failed: ${result.status}`);
+    const mapped = mapping.outputSchema.parse(JSON.parse(JSON.stringify(result.result)));
+    const snapshot = baseIterationStateSchema.parse(
+      JSON.parse(JSON.stringify(createBaseIterationStateUpdate({ currentState, executionOutput: mapped }))),
+    );
+    expect(snapshot.lastStepResult).toMatchObject({ signalPreempted: true, isContinued: true });
+    expect(snapshot.iterationCount).toBe(1);
+    expect(snapshot.accumulatedSteps).toEqual(currentState.accumulatedSteps);
+    expect(snapshot.accumulatedUsage).toEqual(currentState.accumulatedUsage);
+    const accepted = llm.outputSchema.parse(
+      JSON.parse(
+        JSON.stringify({
+          ...discarded,
+          text: 'replacement answer',
+          stepResult: {
+            reason: 'stop',
+            warnings: [],
+            isContinued: false,
+            totalUsage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 },
+          },
+        }),
+      ),
+    );
+    const replacementRun = await workflow.createRun();
+    const replacement = await replacementRun.start({
+      inputData: mapping.inputSchema.parse(
+        JSON.parse(
+          JSON.stringify({
+            llmOutput: accepted,
+            toolResults: [],
+            runId,
+            agentId: 'agent-1',
+            messageId: 'replacement',
+            state: accepted.state,
+          }),
+        ),
+      ),
+    });
+    if (replacement.status !== 'success') throw new Error(`Cold replacement mapping failed: ${replacement.status}`);
+    const completed = baseIterationStateSchema.parse(
+      JSON.parse(
+        JSON.stringify(
+          createBaseIterationStateUpdate({
+            currentState: snapshot,
+            executionOutput: mapping.outputSchema.parse(JSON.parse(JSON.stringify(replacement.result))),
+          }),
+        ),
+      ),
+    );
+    expect(completed.lastStepResult.signalPreempted).toBeUndefined();
+    expect(completed.iterationCount).toBe(2);
+    expect(completed.accumulatedSteps).toHaveLength(2);
+    expect(completed.accumulatedUsage).toEqual({ inputTokens: 15, outputTokens: 23, totalTokens: 38 });
+    expect(globalRunRegistry.get(runId)).toBeUndefined();
   });
 
   it('uses the zero identity for a legacy pre-first-step state', () => {
@@ -175,4 +336,34 @@ describe('createBaseIterationStateUpdate', () => {
     });
     expect(result.usageAggregationVersion).toBe(1);
   });
+
+  it.each([undefined, 1])(
+    'preserves accepted state and usage-version %s through serialized signal discards',
+    version => {
+      const currentState = iterationState({
+        iterationCount: 1,
+        accumulatedSteps: [{ text: 'earlier accepted' }],
+        accumulatedUsage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, reasoningTokens: 4 },
+        usageAggregationVersion: version,
+      });
+      for (const usage of [
+        undefined,
+        { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        { inputTokens: 7, outputTokens: 5, totalTokens: 12 },
+      ]) {
+        const discarded = executionOutput(usage);
+        discarded.stepResult = { reason: 'other', isContinued: true, signalPreempted: true };
+        const update = createBaseIterationStateUpdate({
+          currentState,
+          executionOutput: JSON.parse(JSON.stringify(discarded)),
+        });
+        expect(update.iterationCount).toBe(currentState.iterationCount);
+        expect(update.accumulatedSteps).toBe(currentState.accumulatedSteps);
+        expect(update.accumulatedUsage).toBe(currentState.accumulatedUsage);
+        expect(update.usageAggregationVersion).toBe(version);
+        expect(update.lastStepResult).toMatchObject({ isContinued: true, signalPreempted: true });
+        expect(JSON.parse(JSON.stringify(update)).lastStepResult.signalPreempted).toBe(true);
+      }
+    },
+  );
 });

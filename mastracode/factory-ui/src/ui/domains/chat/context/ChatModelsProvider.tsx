@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
-import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
+import { useChatModelScope } from './useChatModelScope';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatModelsContext } from './ChatModelsContext';
@@ -24,11 +24,12 @@ export function ChatModelsProvider({ children }: ChatModelsProviderProps) {
 }
 
 function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
-  const { factorySessionState } = useChatSessionContext();
-  const factoryProjectQuery = useFactoryProjectQuery(factorySessionState?.factoryProjectId);
+  const { projectQuery: factoryProjectQuery, modelScope } = useChatModelScope();
   const defaultModelQuery = useDefaultModelQuery();
   const [draftModelId, setDraftModelId] = useState<string>();
-  const defaultModelId = defaultModelQuery.data?.modelId ?? undefined;
+  const defaultModelId =
+    (modelScope === 'factory' ? factoryProjectQuery.data?.defaultModelId : defaultModelQuery.data?.modelId) ??
+    undefined;
   const value: ChatModelsApi = {
     activeModelId: draftModelId ?? defaultModelId ?? factoryProjectQuery.data?.defaultModelId ?? undefined,
     defaultModelId,
@@ -44,22 +45,28 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
 }
 
 function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
-  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
   const { state } = useChatConnection();
+  const { projectQuery, modelScope, sessionModelsQuery } = useChatModelScope();
   const defaultModelQuery = useDefaultModelQuery();
+  const localDefaultModelId =
+    modelScope === 'factory' ? projectQuery.data?.defaultModelId : defaultModelQuery.data?.modelId;
+  const defaultModelId = sessionModelsQuery.isSuccess
+    ? (('defaultModelId' in sessionModelsQuery.data ? sessionModelsQuery.data.defaultModelId : localDefaultModelId) ??
+      undefined)
+    : undefined;
   const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   });
   const value: ChatModelsApi = {
     activeModelId: state?.modelId,
-    defaultModelId: defaultModelQuery.data?.modelId ?? undefined,
-    isLoading: false,
-    error: undefined,
-    setModel: modelId => switchModel(modelId),
+    defaultModelId,
+    isLoading: sessionModelsQuery.isPending,
+    error: sessionModelsQuery.error ?? undefined,
+    setModel: modelId => switchModel({ modelId }),
   };
 
   return <ChatModelsContext.Provider value={value}>{children}</ChatModelsContext.Provider>;

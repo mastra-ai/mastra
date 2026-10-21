@@ -14,7 +14,7 @@ import { MastraNonRetryableError } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
-import { RequestContext } from '../request-context';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../request-context';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools/tool';
 import { PUBSUB_SYMBOL } from './constants';
@@ -344,6 +344,38 @@ describe('Workflow (Default Engine Specifics)', () => {
       });
       expect(dispatchSnapshot.serializedStepGraph).toBeDefined();
       expect((snapshotAfterStartReturned?.snapshot as any)?.status).not.toBe('pending');
+    });
+
+    it('does not persist the auth token in the durable dispatch snapshot', async () => {
+      const workflow = createWorkflow({
+        id: 'token-startAsync-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(
+          createStep({
+            id: 'step',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute: vi.fn().mockResolvedValue({}),
+          }),
+        )
+        .commit();
+      const storage = new MockStore();
+      new Mastra({ storage, workflows: { 'token-startAsync-workflow': workflow } });
+      const workflowsStore = await storage.getStore('workflows');
+      const persistSnapshot = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'live-bearer-token');
+      requestContext.set('tenant', 'acme');
+      const run = await workflow.createRun();
+      await run.startAsync({ inputData: {}, requestContext });
+
+      const dispatchSnapshot = persistSnapshot.mock.calls.find(
+        ([args]) => (args.snapshot as any).status === 'waiting',
+      )?.[0].snapshot as any;
+      expect(dispatchSnapshot.requestContext).toEqual({ tenant: 'acme' });
     });
 
     it('preserves null input in the durable dispatch snapshot', async () => {

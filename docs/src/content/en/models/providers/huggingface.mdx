@@ -7,7 +7,7 @@ description: "Browse Hugging Face model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/huggingface.svg" alt="Hugging Face logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Hugging Face
 
-Access 78 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
+Access 82 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
 
 Learn more in the [Hugging Face documentation](https://huggingface.co).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "huggingface/MiniMaxAI/MiniMax-M2"
+  model: "huggingface/MiniMaxAI/MiniMax-M1-80k"
 });
 
 // Generate a response
@@ -65,7 +65,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 163840,
-    "maxOutput": 163840,
+    "maxOutput": 32768,
     "inputCost": 3,
     "outputCost": 5
   },
@@ -190,6 +190,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
+    "model": "huggingface/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 384000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
     "model": "huggingface/google/gemma-3-12b-it",
     "imageInput": true,
     "audioInput": false,
@@ -272,6 +284,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 4096,
     "inputCost": 0.59,
     "outputCost": 0.79
+  },
+  {
+    "model": "huggingface/MiniMaxAI/MiniMax-M1-80k",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 80000,
+    "inputCost": 0.55,
+    "outputCost": 2.2
   },
   {
     "model": "huggingface/MiniMaxAI/MiniMax-M2",
@@ -485,7 +509,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 131072,
+    "maxOutput": 81920,
     "inputCost": 0.3,
     "outputCost": 3
   },
@@ -533,7 +557,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 262144,
-    "maxOutput": 66536,
+    "maxOutput": 65536,
     "inputCost": 2,
     "outputCost": 2
   },
@@ -556,8 +580,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 32000,
-    "maxOutput": 2048,
+    "contextWindow": 32768,
+    "maxOutput": null,
     "inputCost": 0.01,
     "outputCost": null
   },
@@ -568,8 +592,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 32000,
-    "maxOutput": 4096,
+    "contextWindow": 32768,
+    "maxOutput": null,
     "inputCost": 0.01,
     "outputCost": null
   },
@@ -581,21 +605,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 262144,
-    "maxOutput": 66536,
+    "maxOutput": 32768,
     "inputCost": 0.25,
     "outputCost": 1
-  },
-  {
-    "model": "huggingface/Qwen/Qwen3-Next-80B-A3B-Thinking",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 2
   },
   {
     "model": "huggingface/Qwen/Qwen3-VL-235B-A22B-Instruct",
@@ -620,6 +632,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.98,
     "outputCost": 3.95
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3-VL-30B-A3B-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.2,
+    "outputCost": 0.7
   },
   {
     "model": "huggingface/Qwen/Qwen3.5-122B-A10B",
@@ -802,18 +826,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
-    "model": "huggingface/XiaomiMiMo/MiMo-V2-Flash",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 4096,
-    "inputCost": 0.1,
-    "outputCost": 0.3
-  },
-  {
     "model": "huggingface/XiaomiMiMo/MiMo-V2.5",
     "imageInput": false,
     "audioInput": false,
@@ -838,16 +850,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3
   },
   {
-    "model": "huggingface/zai-org/GLM-4.5",
-    "imageInput": false,
+    "model": "huggingface/zai-org/AutoGLM-Phone-9B-Multilingual",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 98304,
-    "inputCost": 0.6,
-    "outputCost": 2.2
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.035,
+    "outputCost": 0.138
   },
   {
     "model": "huggingface/zai-org/GLM-4.5-Air",
@@ -996,7 +1008,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://router.huggingface.co/v1",
-    id: "huggingface/MiniMaxAI/MiniMax-M2",
+    id: "huggingface/MiniMaxAI/MiniMax-M1-80k",
     apiKey: process.env.HF_TOKEN,
     headers: {
       "X-Custom-Header": "value"
@@ -1015,7 +1027,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "huggingface/zai-org/GLM-5.3-Flash"
-      : "huggingface/MiniMaxAI/MiniMax-M2";
+      : "huggingface/MiniMaxAI/MiniMax-M1-80k";
   }
 });
 ```

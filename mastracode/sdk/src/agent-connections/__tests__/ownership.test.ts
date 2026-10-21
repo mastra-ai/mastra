@@ -89,6 +89,28 @@ describe('createThreadOwnershipManager', () => {
     }
   });
 
+  it('caps the claim retry delay at one second', async () => {
+    vi.useFakeTimers();
+    try {
+      const claimThread = vi.fn(async () => ({ claimed: false, unsubscribe: vi.fn() }));
+      const manager = createThreadOwnershipManager(claimThread);
+
+      await manager.claim('thread-1');
+      // Retries at 250ms, +500ms, +1s, then every 1s while the holder stays alive.
+      await vi.advanceTimersByTimeAsync(250 + 500 + 1_000);
+      expect(claimThread).toHaveBeenCalledTimes(4);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(claimThread).toHaveBeenCalledTimes(4);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(claimThread).toHaveBeenCalledTimes(5);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(claimThread).toHaveBeenCalledTimes(6);
+      manager.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps previously claimed threads when handed no thread', async () => {
     const unsubscribe = vi.fn();
     const manager = createThreadOwnershipManager(async () => ({ claimed: true, unsubscribe }));

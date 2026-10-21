@@ -1,8 +1,6 @@
 import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalType } from '../agent/signals';
-import { MastraFGAPermissions } from '../auth/ee';
-import type { MastraFGAPermissionInput, ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
@@ -10,6 +8,8 @@ import type { EmbeddingModelId, ModelRouterModelId } from '../llm/model';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type {
+  ErrorProcessor,
+  ErrorProcessorOrWorkflow,
   InputProcessor,
   OutputProcessor,
   InputProcessorOrWorkflow,
@@ -17,6 +17,7 @@ import type {
 } from '../processors';
 import { isProcessorWorkflow, TokenLimiterProcessor } from '../processors';
 import { MemoryInputFilter, MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
+import { assertEmbeddingDimension } from '../processors/memory/embedding-dimension';
 import type { RequestContext } from '../request-context';
 import type {
   MastraCompositeStore,
@@ -37,6 +38,8 @@ import {
   getMemoryTokenBoundary,
   normalizeMessageHistoryConfig,
 } from './message-history-config';
+import { checkThreadFGA } from './thread-fga';
+import type { CheckThreadFGAOptions } from './thread-fga';
 
 import type {
   SharedMemoryConfig,
@@ -131,6 +134,8 @@ export abstract class MastraMemory extends MastraBase {
   vector?: MastraVector;
   embedder?: MastraEmbeddingModel<string>;
   embedderOptions?: MastraEmbeddingOptions;
+  /** Configured embedder output dimension; when set, the dimension probe is skipped. */
+  protected readonly embeddingDimension?: number;
   protected threadConfig: MemoryConfigInternal = { ...memoryDefaultOptions };
   private readonly hasExplicitLastMessages: boolean;
   #mastra?: Mastra;
@@ -141,6 +146,19 @@ export abstract class MastraMemory extends MastraBase {
     this.hasExplicitLastMessages = config.options?.lastMessages !== undefined;
 
     if (config.options) this.threadConfig = this.getMergedThreadConfig(config.options);
+
+    if (
+      config.embeddingDimension !== undefined &&
+      !(Number.isInteger(config.embeddingDimension) && config.embeddingDimension > 0)
+    ) {
+      throw new MastraError({
+        id: 'MASTRA_MEMORY_INVALID_EMBEDDING_DIMENSION',
+        domain: ErrorDomain.MASTRA_MEMORY,
+        category: 'USER',
+        text: `embeddingDimension must be a positive integer, received ${String(config.embeddingDimension)}.`,
+      });
+    }
+    this.embeddingDimension = config.embeddingDimension;
 
     // DEPRECATION: Block old processors config
     if (config.processors) {
@@ -301,11 +319,12 @@ https://mastra.ai/en/docs/memory/overview`,
   private _embeddingDimensionPromise?: Promise<number | undefined>;
 
   /**
-   * Probe the embedder to determine its actual output dimension.
-   * The result is cached so subsequent calls are free.
+   * Determine the embedder's output dimension: the configured `embeddingDimension` when set,
+   * otherwise probe the embedder. The probe result is cached so subsequent calls are free.
    */
   protected async getEmbeddingDimension(): Promise<number | undefined> {
     if (!this.embedder) return undefined;
+    if (this.embeddingDimension !== undefined) return this.embeddingDimension;
     if (!this._embeddingDimensionPromise) {
       this._embeddingDimensionPromise = (async () => {
         try {
@@ -356,6 +375,8 @@ https://mastra.ai/en/docs/memory/overview`,
     if (this.isSelfEmbedding) {
       return `memory${separator}messages${separator}selfembed`;
     }
+    assertEmbeddingDimension(this.embeddingDimension, dimensions);
+
     const defaultDimensions = 1536;
     const usedDimensions = dimensions ?? defaultDimensions;
     const isDefault = usedDimensions === defaultDimensions;
@@ -659,46 +680,8 @@ https://mastra.ai/en/docs/memory/overview`,
    * Static helper to check FGA authorization for thread access.
    * Can be called from HTTP handlers and agent execution paths.
    */
-  static async checkThreadFGA(options: {
-    mastra?: Mastra;
-    user?: Record<string, unknown>;
-    threadId: string;
-    resourceId?: string;
-    requestContext?: RequestContext;
-    permission?: MastraFGAPermissionInput;
-    actor?: ActorSignal;
-  }): Promise<void> {
-    const {
-      mastra,
-      user,
-      threadId,
-      resourceId,
-      requestContext,
-      permission = MastraFGAPermissions.MEMORY_READ,
-      actor,
-    } = options;
-    const fgaProvider = mastra?.getServer()?.fga;
-    if (!fgaProvider) return;
-
-    const { requireFGA } = await import('../auth/ee/fga-check');
-    await requireFGA({
-      fgaProvider,
-      user,
-      resource: { type: 'thread', id: threadId },
-      permission,
-      requestContext,
-      actor,
-      context:
-        resourceId || requestContext
-          ? {
-              resourceId,
-            }
-          : undefined,
-      metadata: {
-        threadId,
-        resourceId,
-      },
-    });
+  static async checkThreadFGA(options: CheckThreadFGAOptions): Promise<void> {
+    return checkThreadFGA(options);
   }
 
   /**
@@ -876,6 +859,10 @@ https://mastra.ai/en/docs/memory/overview`,
               'version' in effectiveConfig.workingMemory &&
               effectiveConfig.workingMemory.version === 'vnext',
             templateProvider: this,
+            readOnly:
+              effectiveConfig.readOnly ||
+              (typeof effectiveConfig.workingMemory === 'object' &&
+                effectiveConfig.workingMemory.agentManaged === false),
           }),
         );
       }
@@ -958,6 +945,7 @@ https://mastra.ai/en/docs/memory/overview`,
             vector: this.vector,
             embedder: this.embedder,
             embedderOptions: this.embedderOptions,
+            embeddingDimension: this.embeddingDimension,
             indexName,
             ...semanticConfig,
           }),
@@ -1013,6 +1001,21 @@ https://mastra.ai/en/docs/memory/overview`,
     // Return only the auto-generated processors (not the configured ones)
     // The agent will merge them with configuredProcessors
     return processors;
+  }
+
+  /**
+   * Get error processors for this memory instance.
+   * An agent appends these to its resolved `errorProcessors`, so memory can recover from failed
+   * model calls (for example, a request rejected for exceeding the context window) without the
+   * user registering a processor. They are kept when a call overrides `errorProcessors`.
+   * @param configuredProcessors - Error processors already resolved for the agent (for deduplication)
+   * @returns Error processors for this memory instance. The base implementation contributes none.
+   */
+  async getErrorProcessors(
+    _configuredProcessors: ErrorProcessorOrWorkflow[] = [],
+    _context?: RequestContext,
+  ): Promise<ErrorProcessor[]> {
+    return [];
   }
 
   /**
@@ -1085,6 +1088,7 @@ https://mastra.ai/en/docs/memory/overview`,
             vector: this.vector,
             embedder: this.embedder,
             embedderOptions: this.embedderOptions,
+            embeddingDimension: this.embeddingDimension,
             indexName,
             ...semanticRecallConfig,
           }),

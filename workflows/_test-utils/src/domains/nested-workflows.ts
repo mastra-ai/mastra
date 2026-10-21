@@ -354,6 +354,56 @@ export function createNestedWorkflowsWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should keep state set by a nested workflow that runs as a loop body
+  {
+    const stateSchema = z.object({ log: z.array(z.string()) });
+
+    const bodyStep = createStep({
+      id: 'body',
+      execute: async ({ inputData, state, setState }: any) => {
+        const n = inputData.n + 1;
+        await setState({ ...state, log: [...state.log, `body${n}`] });
+        return { n };
+      },
+      inputSchema: z.object({ n: z.number() }),
+      outputSchema: z.object({ n: z.number() }),
+      stateSchema,
+    });
+
+    const nestedWorkflow = createWorkflow({
+      id: 'nested-loop-setstate-inner',
+      inputSchema: z.object({ n: z.number() }),
+      outputSchema: z.object({ n: z.number() }),
+      stateSchema,
+      steps: [bodyStep],
+    })
+      .then(bodyStep)
+      .commit();
+
+    const finalStep = createStep({
+      id: 'final',
+      execute: async ({ state }: any) => ({ log: state.log }),
+      inputSchema: z.object({ n: z.number() }),
+      outputSchema: z.object({ log: z.array(z.string()) }),
+      stateSchema,
+    });
+
+    const mainWorkflow = createWorkflow({
+      id: 'nested-loop-setstate-main',
+      inputSchema: z.object({ n: z.number() }),
+      outputSchema: z.object({ log: z.array(z.string()) }),
+      stateSchema,
+    })
+      .dowhile(nestedWorkflow, async ({ inputData }: any) => inputData.n < 3)
+      .then(finalStep)
+      .commit();
+
+    workflows['nested-loop-setstate'] = {
+      workflow: mainWorkflow,
+      mocks: {},
+    };
+  }
+
   return workflows;
 }
 
@@ -466,5 +516,17 @@ export function createNestedWorkflowsTests(ctx: WorkflowTestContext, registry?: 
         });
       },
     );
+
+    it.skipIf(skipTests.state)('should keep state set by a nested workflow that runs as a loop body', async () => {
+      const { workflow } = registry!['nested-loop-setstate']!;
+
+      const result = await execute(workflow, { n: 0 }, { initialState: { log: [] } });
+
+      expect(result.status).toBe('success');
+      expect(result.steps.final).toMatchObject({
+        status: 'success',
+        output: { log: ['body1', 'body2', 'body3'] },
+      });
+    });
   });
 }

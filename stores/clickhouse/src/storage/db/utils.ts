@@ -38,7 +38,6 @@ import {
   TABLE_KNOWLEDGE_NODES,
   TABLE_KNOWLEDGE_RECORDS,
   TABLE_KNOWLEDGE_MENTIONS,
-  TABLE_KNOWLEDGE_CURSORS,
   TABLE_KNOWLEDGE_ACTIVITY,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
 } from '@mastra/core/storage';
@@ -89,7 +88,6 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_KNOWLEDGE_NODES]: `ReplacingMergeTree()`,
   [TABLE_KNOWLEDGE_RECORDS]: `ReplacingMergeTree()`,
   [TABLE_KNOWLEDGE_MENTIONS]: `ReplacingMergeTree()`,
-  [TABLE_KNOWLEDGE_CURSORS]: `ReplacingMergeTree()`,
   [TABLE_KNOWLEDGE_ACTIVITY]: `ReplacingMergeTree()`,
   [TABLE_KNOWLEDGE_SEMANTIC_OUTBOX]: `ReplacingMergeTree()`,
 };

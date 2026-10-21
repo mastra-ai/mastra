@@ -64,7 +64,6 @@ const sidebars = {
         { type: 'doc', id: 'agents/getMetadata', label: '.getMetadata()' },
         { type: 'doc', id: 'agents/getModel', label: '.getModel()' },
         { type: 'doc', id: 'agents/getSkill', label: '.getSkill()' },
-        { type: 'doc', id: 'agents/getTools', label: '.getTools()' },
         { type: 'doc', id: 'agents/getVoice', label: '.getVoice()' },
         { type: 'doc', id: 'agents/listAgents', label: '.listAgents()' },
         { type: 'doc', id: 'agents/listScorers', label: '.listScorers()' },
@@ -207,6 +206,7 @@ const sidebars = {
         { type: 'doc', id: 'connect/credential', label: 'credential()' },
         { type: 'doc', id: 'connect/providers', label: 'Provider toolsets' },
         { type: 'doc', id: 'connect/tools', label: 'tools()' },
+        { type: 'doc', id: 'connect/user-connect-routes', label: 'userConnectRoutes()' },
       ],
     },
     {
@@ -503,7 +503,7 @@ const sidebars = {
             { type: 'doc', id: 'observability/tracing/configuration', label: 'Configuration' },
             {
               type: 'doc',
-              id: 'observability/tracing/trace-query',
+              id: 'observability/tracing/advanced-queries',
               label: 'Advanced trace queries',
             },
             { type: 'doc', id: 'observability/tracing/instances', label: 'Instances' },
@@ -600,6 +600,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/batch-parts-processor', label: 'BatchPartsProcessor' },
         { type: 'doc', id: 'processors/classifier-processor', label: 'ClassifierProcessor' },
         { type: 'doc', id: 'processors/cyber-refusal-handler', label: 'CyberRefusalHandler' },
+        { type: 'doc', id: 'processors/file-upload-processor', label: 'FileUploadProcessor' },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
         { type: 'doc', id: 'processors/memory-input-filter', label: 'MemoryInputFilter' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },
@@ -633,6 +634,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/tool-call-filter', label: 'ToolCallFilter' },
         { type: 'doc', id: 'processors/tool-search-processor', label: 'ToolSearchProcessor' },
         { type: 'doc', id: 'processors/unicode-normalizer', label: 'UnicodeNormalizer' },
+        { type: 'doc', id: 'processors/unsupported-file-handler', label: 'UnsupportedFileHandler' },
         { type: 'doc', id: 'processors/working-memory-processor', label: 'WorkingMemory' },
       ],
     },
@@ -894,6 +896,7 @@ const sidebars = {
       label: 'Workspaces',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'workspace/factory-sandbox', label: 'FactorySandbox' },
         { type: 'doc', id: 'workspace/local-filesystem', label: 'LocalFilesystem' },
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
         { type: 'doc', id: 'workspace/platform-filesystem', label: 'PlatformFilesystem' },

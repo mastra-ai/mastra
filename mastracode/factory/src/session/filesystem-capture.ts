@@ -1,15 +1,20 @@
 import type { AgentControllerEvent, SessionBeforeAgentEndListener } from '@mastra/core/agent-controller';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
+import { peekSessionSandbox, sessionLayout } from '../sandbox/session-sandbox.js';
+import type { SessionLayoutRepository } from '../sandbox/session-sandbox.js';
 
 import type { FilesystemFile, FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { peekSessionEnvironment } from './environment-state-processor.js';
 import { isMeaningfulToolName } from './first-exec-capture.js';
 
+/** Exit code of `GIT_CHANGED_FILES_SCRIPT` when the checkout is not there: the repository is skipped, not failed. */
+const CHECKOUT_MISSING_EXIT_CODE = 3;
 const GIT_CHANGED_FILES_SCRIPT = `
 set -e
 workdir=$1
 base_branch=$2
+test -d "$workdir" || exit ${CHECKOUT_MISSING_EXIT_CODE}
 base=HEAD
 if merge_base=$(git -C "$workdir" merge-base HEAD "origin/$base_branch" 2>/dev/null); then
   base=$merge_base
@@ -18,9 +23,33 @@ git -C "$workdir" diff --name-only -z --find-renames --diff-filter=ACMRTUXB "$ba
 git -C "$workdir" ls-files --others --exclude-standard -z
 `;
 const ARTIFACTS_LIST_COMMAND = 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true';
+/**
+ * Regular files directly under the workspace root written since the session
+ * was created ($2 is a UTC `touch -t` stamp, `YYYYMMDDhhmm.SS`), such as the
+ * agent's notes. Files the template shipped with predate the session and stay
+ * out; the checkouts are covered by git. Dotfiles are never listed: a listed
+ * path becomes readable through the thread's file route, and the root is where
+ * setup leaves `.env`, `.pgpass`, `.netrc` and other credential files.
+ * `touch -t` plus `-newer` works on GNU and BSD find alike; `-newermt
+ * "@epoch"` is GNU only.
+ */
+export const ROOT_FILES_LIST_COMMAND = [
+  'cd "$1" && ref=$(mktemp) && TZ=UTC touch -t "$2" "$ref"',
+  '&& find . -mindepth 1 -maxdepth 1 -type f ! -name \'.*\' -newer "$ref" -print0',
+  '; status=$?; rm -f "$ref"; exit $status',
+].join(' ');
+
+/** `touch -t` stamp of a moment, in UTC. */
+export function touchStamp(date: Date): string {
+  const two = (value: number) => String(value).padStart(2, '0');
+  return (
+    `${date.getUTCFullYear()}${two(date.getUTCMonth() + 1)}${two(date.getUTCDate())}` +
+    `${two(date.getUTCHours())}${two(date.getUTCMinutes())}.${two(date.getUTCSeconds())}`
+  );
+}
 
 export interface FilesystemCaptureSession {
-  readonly identity: { getResourceId(): string };
+  readonly identity: { getId(): string };
   readonly thread: { requireId(): string };
   getWorkspace(): { sandbox?: Pick<WorkspaceSandbox, 'executeCommand'> } | undefined;
   onBeforeAgentEnd(listener: SessionBeforeAgentEndListener): () => void;
@@ -48,14 +77,14 @@ export function parseFilesystemCaptureFiles(output: string): FilesystemFile[] {
 export async function captureSessionFilesystem(
   session: FilesystemCaptureSession,
   { filesystem, sourceControl }: FilesystemCaptureDependencies,
-  ids?: { resourceId: string; threadId: string },
+  ids?: { sessionId: string; threadId: string },
 ): Promise<void> {
   try {
     // Scheduled captures pass ids read at schedule time: a session deleted
     // before the queued capture runs has already cleared its thread.
-    const resourceId = ids?.resourceId ?? session.identity.getResourceId();
+    const sessionId = ids?.sessionId ?? session.identity.getId();
     const threadId = ids?.threadId ?? session.thread.requireId();
-    const sourceSession = await sourceControl.sessions.getBySessionId(resourceId);
+    const sourceSession = await sourceControl.sessions.getBySessionId(sessionId);
     // Chat-only sessions run without a workspace; there is nothing to capture.
     const sandbox = session.getWorkspace()?.sandbox;
     if (!sourceSession || !sandbox?.executeCommand) return;
@@ -74,29 +103,61 @@ export async function captureSessionFilesystem(
     // running sandbox.
     if (entry.sandbox.status !== 'running') return;
     // Running-but-unresolved should not happen (the start hook resolves the
-    // workdir), but capture is best-effort — skip rather than guess.
-    const workdir = entry.workdir;
-    if (!workdir) return;
+    // workdir), but capture is best-effort: skip rather than guess.
+    const layout = sessionLayout(entry);
+    if (!layout) return;
 
-    const result = await sandbox.executeCommand(
-      'sh',
-      ['-c', GIT_CHANGED_FILES_SCRIPT, 'mastracode-changed-files', workdir, sourceSession.baseBranch],
-      { timeout: 30_000 },
+    // One git pass per checkout, in parallel so three repositories stay well
+    // inside the 10 s readers wait for a pending capture. The session's own
+    // repository compares against the session base branch; the others sit on
+    // their default branch and compare against that. A repository whose
+    // checkout is missing (exit 3) is skipped: it has nothing to list and
+    // must not block the others. Any other failure is treated as transient
+    // and leaves the previous listing in place.
+    const multiRepo = layout.repos.length > 1;
+    const environment = multiRepo ? peekSessionEnvironment(sourceSession.sessionId) : undefined;
+    const ownRepo = entry.ownRepo.toLowerCase();
+    // The boot records the state at its end, after every setup command; until
+    // then a secondary checkout compares against its own `origin/HEAD`.
+    const baseBranchFor = (repo: SessionLayoutRepository): string => {
+      if (repo.slug.toLowerCase() === ownRepo) return sourceSession.baseBranch;
+      const state = environment?.repositories.find(
+        candidate => candidate.slug.toLowerCase() === repo.slug.toLowerCase(),
+      );
+      return state?.defaultBranch ?? 'HEAD';
+    };
+    const targets = layout.repos.map(repo => ({ repo, baseBranch: baseBranchFor(repo) }));
+    const executeCommand = sandbox.executeCommand.bind(sandbox);
+    const results = await Promise.all(
+      targets.map(({ repo, baseBranch }) =>
+        executeCommand('sh', ['-c', GIT_CHANGED_FILES_SCRIPT, 'mastracode-changed-files', repo.dir, baseBranch], {
+          timeout: 30_000,
+        }),
+      ),
     );
-    if (result.exitCode !== 0) {
-      console.warn('[Factory filesystem capture] Unable to inspect Git changes.', result.stderr);
-      return;
+    const files = new Map<string, FilesystemFile>();
+    let captured = 0;
+    for (const [index, result] of results.entries()) {
+      if (result.exitCode === CHECKOUT_MISSING_EXIT_CODE) continue;
+      if (result.exitCode !== 0) {
+        console.warn('[Factory filesystem capture] Unable to inspect Git changes.', result.stderr);
+        return;
+      }
+      captured += 1;
+      const prefix = targets[index]!.repo.prefix;
+      for (const file of parseFilesystemCaptureFiles(result.stdout)) {
+        files.set(`${prefix}${file.path}`, { path: `${prefix}${file.path}` });
+      }
     }
+    if (captured === 0) return;
 
-    const artifacts = await sandbox.executeCommand('sh', ['-c', ARTIFACTS_LIST_COMMAND, 'sh', workdir], {
+    const artifacts = await executeCommand('sh', ['-c', ARTIFACTS_LIST_COMMAND, 'sh', layout.root], {
       timeout: 30_000,
     });
     if (artifacts.exitCode !== 0) {
       console.warn('[Factory filesystem capture] Unable to list workspace artifacts.', artifacts.stderr);
       return;
     }
-
-    const files = new Map(parseFilesystemCaptureFiles(result.stdout).map(file => [file.path, file]));
     for (const path of artifacts.stdout.split('\0')) {
       const normalizedPath = path.replace(/^\.\//, '');
       if (normalizedPath) {
@@ -104,8 +165,29 @@ export async function captureSessionFilesystem(
       }
     }
 
+    // With several checkouts the root is a plain directory nothing else lists.
+    // A failed listing is logged and the git and artifact results still land.
+    if (multiRepo) {
+      const since = touchStamp(sourceSession.createdAt);
+      const rootFiles = await executeCommand('sh', ['-c', ROOT_FILES_LIST_COMMAND, 'sh', layout.root, since], {
+        timeout: 30_000,
+      });
+      if (rootFiles.exitCode !== 0) {
+        console.warn('[Factory filesystem capture] Unable to list workspace root files.', rootFiles.stderr);
+      } else {
+        for (const path of rootFiles.stdout.split('\0')) {
+          const normalizedPath = path.replace(/^\.\//, '');
+          if (normalizedPath && !normalizedPath.startsWith('.')) {
+            files.set(normalizedPath, { path: normalizedPath });
+          }
+        }
+      }
+    }
+
+    // The listing describes the session's workspace, not its memory resource,
+    // which the session shares with others: rows are keyed by the session id.
     await filesystem.replaceFiles({
-      resourceId,
+      resourceId: sessionId,
       threadId,
       files: [...files.values()].toSorted((a, b) => a.path.localeCompare(b.path)),
     });
@@ -115,11 +197,10 @@ export async function captureSessionFilesystem(
 }
 
 /**
- * In-flight capture chains keyed by session resource id. Serves two purposes:
- * readers of the persisted file listing (the /web/workspace routes) await the
- * capture for the turn that just ended instead of racing it, and captures for
- * the same resource stay sequential (last write wins) even when multiple
- * scoped sessions observe the same resource id. In-process only: the factory
+ * In-flight capture chains keyed by session id. Serves two purposes: readers
+ * of the persisted file listing (the /web/workspace routes) await the capture
+ * for the turn that just ended instead of racing it, and captures for the same
+ * session stay sequential (last write wins). In-process only: the factory
  * server that runs the session controller also serves those routes.
  */
 const pendingCaptures = new Map<string, Promise<void>>();
@@ -130,8 +211,8 @@ const pendingCaptures = new Map<string, Promise<void>>();
  * never blocked by the execs' worst-case 30s timeouts. Never rejects: the
  * capture body is fully try/catch contained.
  */
-export async function waitForPendingFilesystemCapture(resourceId: string, timeoutMs = 10_000): Promise<void> {
-  let pending = pendingCaptures.get(resourceId);
+export async function waitForPendingFilesystemCapture(sessionId: string, timeoutMs = 10_000): Promise<void> {
+  let pending = pendingCaptures.get(sessionId);
   if (!pending) return;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
@@ -146,7 +227,7 @@ export async function waitForPendingFilesystemCapture(resourceId: string, timeou
     // until the latest chain settles so the final snapshot is not lost.
     while (pending && !timedOut) {
       await Promise.race([pending, deadline]);
-      const next = pendingCaptures.get(resourceId);
+      const next = pendingCaptures.get(sessionId);
       pending = next === pending ? undefined : next;
     }
   } finally {
@@ -215,32 +296,29 @@ export function observeSessionFilesystem(
     // leak an unhandled rejection: captureSessionFilesystem's entire body
     // runs inside its own try/catch, and disposal of this listener does not
     // cancel an in-flight chain, so a final turn's capture still persists.
-    let resourceId: string | undefined;
+    let sessionId: string;
     try {
-      resourceId = session.identity.getResourceId();
+      sessionId = session.identity.getId();
     } catch {
-      // No resource id means no route can address this session's listing;
-      // keep a per-observer chain so captures still run sequentially.
+      // No identity means no route can address this session's listing; keep
+      // a per-observer chain so captures still run sequentially.
       fallbackChain = fallbackChain.then(() => captureSessionFilesystem(session, dependencies));
       return;
     }
-    // Extend the resource-level chain rather than a per-session one: sessions
-    // are deduplicated by (resourceId, scope), so multiple scoped sessions can
-    // observe the same resource, and their captures must not interleave.
     let threadId: string;
     try {
       threadId = session.thread.requireId();
     } catch {
       return;
     }
-    const ids = { resourceId, threadId };
-    const chain = (pendingCaptures.get(resourceId) ?? Promise.resolve()).then(() =>
+    const ids = { sessionId, threadId };
+    const chain = (pendingCaptures.get(sessionId) ?? Promise.resolve()).then(() =>
       captureSessionFilesystem(session, dependencies, ids),
     );
-    pendingCaptures.set(resourceId, chain);
+    pendingCaptures.set(sessionId, chain);
     void chain.finally(() => {
-      if (pendingCaptures.get(resourceId) === chain) {
-        pendingCaptures.delete(resourceId);
+      if (pendingCaptures.get(sessionId) === chain) {
+        pendingCaptures.delete(sessionId);
       }
     });
   });

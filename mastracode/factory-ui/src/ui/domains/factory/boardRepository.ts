@@ -49,3 +49,12 @@ export function cardRepositorySlug(
   if (projectId === undefined) return undefined;
   return config?.linear.repositoryByLinearProject?.[projectId];
 }
+
+/** The linked repository a card's source lives in, else the board's primary repository. */
+export function cardProjectRepositoryId(
+  repositories: LinkedRepositoryPayload[],
+  card: { source: string; metadata?: Record<string, unknown> },
+  fallback: string,
+) {
+  return findUniqueRepositoryByProviderId(repositories, card.source, card.metadata)?.projectRepositoryId ?? fallback;
+}

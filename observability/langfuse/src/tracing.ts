@@ -439,7 +439,15 @@ function mapMastraToLangfuseAttributes(
     // evaluators mapped to Trace input/output and leaves the trace view without
     // the top-level request/response. Serialization failures (circular refs,
     // bigint) skip the attribute rather than failing the span export.
-    const traceInput = serializeTraceIo(span.input);
+    // A resumed run (after a suspend such as tool-call approval) continues the
+    // original trace: core marks it with parentSpanId === resumedFromSpanId.
+    // Its input is the resume payload, not the user's message, and Langfuse
+    // applies trace-level attributes from any span (last writer wins), so it
+    // must not replace the trace input the original run already set. Its
+    // output IS the turn's final reply, so trace output is still written.
+    const resumedContinuation =
+      span.parentSpanId !== undefined && span.parentSpanId === span.metadata?.resumedFromSpanId;
+    const traceInput = resumedContinuation ? undefined : serializeTraceIo(span.input);
     if (traceInput !== undefined) {
       attributes['langfuse.trace.input'] = traceInput;
     }
@@ -510,6 +518,35 @@ function mapMastraToLangfuseAttributes(
     attributes['langfuse.observation.metadata.operationName'] = attributes['gen_ai.operation.name'];
   }
 
+  // Span-type attributes (mastra.<span_type>.<snake_key>, e.g.
+  // mastra.model_step.step_index) are promoted the same way, as camelCase keys,
+  // so scalar span attributes are filterable in observation-level evaluator
+  // rules without a per-key mapping. Input/output have their own mapping below.
+  // Attributes whose raw value is an object or array (entryMetadata,
+  // truthyIndexes, ...) are already JSON strings here and make no useful
+  // filter, so they stay in the nested attributes only. Values are sent as strings.
+  if (span.type) {
+    const spanAttrPrefix = `mastra.${String(span.type).toLowerCase()}.`;
+    const rawAttributes = (span.attributes ?? {}) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(attributes)) {
+      if (!key.startsWith(spanAttrPrefix) || value === null || value === undefined) {
+        continue;
+      }
+      const name = snakeToCamel(key.slice(spanAttrPrefix.length));
+      if (name === 'input' || name === 'output') {
+        continue;
+      }
+      const raw = rawAttributes[name];
+      if (typeof raw === 'object' && raw !== null && !(raw instanceof Date)) {
+        continue;
+      }
+      const metadataKey = `langfuse.observation.metadata.${name}`;
+      if (attributes[metadataKey] === undefined) {
+        attributes[metadataKey] = typeof value === 'string' ? value : JSON.stringify(value);
+      }
+    }
+  }
+
   // Input/Output: mastra.*.input/output → langfuse.observation.input/output
   // For gen_ai spans, Langfuse reads gen_ai.input.messages natively.
   // For non-gen_ai spans, we map the first mastra.*.input/output we find.
@@ -531,6 +568,10 @@ function mapMastraToLangfuseAttributes(
       }
     }
   }
+}
+
+function snakeToCamel(name: string): string {
+  return name.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }
 
 /**

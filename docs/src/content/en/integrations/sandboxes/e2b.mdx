@@ -95,8 +95,16 @@ const agent = new Agent({
     name: 'sandboxId',
     type: 'string',
     description:
-      'Persisted E2B provider sandbox ID to reattach to deterministically. When set, `start()` connects to this exact sandbox (resuming it if paused) instead of discovering by logical `id` metadata. Only a typed "sandbox gone" error (not found, killed, or not running) falls through to the usual logical-id lookup and create ladder; auth, quota, rate-limit, timeout, and network errors propagate without creating a new sandbox. A sandbox tagged with a different logical id is refused. Read the resolved provider ID from the `sandboxId` property after start.',
+      'Persisted E2B provider sandbox ID to reattach to deterministically. When set, `start()` connects to this exact sandbox (resuming it if paused) instead of discovering by logical `id` metadata. Under the default `reattach: \'best-effort\'`, only a typed "sandbox gone" error (not found, killed, or not running) falls through to the usual logical-id lookup and create ladder; auth, quota, rate-limit, timeout, and network errors propagate without creating a new sandbox. A sandbox tagged with a different logical id is refused. Read the resolved provider ID from the `sandboxId` property after start.',
     isOptional: true,
+  },
+  {
+    name: 'reattach',
+    type: "'best-effort' | 'required'",
+    description:
+      "What `start()` does when `sandboxId` is set but that sandbox is gone. `'best-effort'` falls through to the logical-id lookup, which may reconnect to another sandbox with the same `id` before creating a new one. `'required'` throws a `SandboxError` with code `SANDBOX_REATTACH_FAILED` instead of looking up or creating a sandbox. See [Requiring reattachment](#requiring-reattachment).",
+    isOptional: true,
+    defaultValue: "'best-effort'",
   },
   {
     name: 'domain',
@@ -169,8 +177,28 @@ const agent = new Agent({
     description:
       'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
   },
+  {
+    name: 'filesystem',
+    type: 'E2BSandboxFilesystem',
+    description:
+      "The sandbox's disk through E2B's files API. Each operation starts the sandbox if needed and retries once when the sandbox died server-side. Paths are absolute and not confined to a root. Copies, appends, and no-overwrite writes run as one command in the VM. See [Native filesystem](/reference/workspace/sandbox#native-filesystem).",
+  },
 ]}
 />
+
+## Requiring reattachment
+
+When you pass a persisted `sandboxId` and that sandbox is gone, the default `reattach: 'best-effort'` falls through to the logical-id lookup, which may reconnect to another sandbox with the same `id` or create a new one. When a different sandbox would silently lose state your app depends on, set `reattach: 'required'`:
+
+```typescript title="src/mastra/workspaces.ts"
+const sandbox = new E2BSandbox({
+  id: 'session-123',
+  sandboxId: persistedSandboxId,
+  reattach: 'required',
+})
+```
+
+With `reattach: 'required'`, a gone sandbox rejects `start()` with a `SandboxError` whose `code` is `SANDBOX_REATTACH_FAILED`, and no lookup or create runs. The error's `details` include `provider`, `sandboxId`, and `logicalId` (the sandbox's logical `id`). Other errors propagate unchanged, as they do under `'best-effort'`. To start fresh, clear your persisted `sandboxId` and construct the sandbox without it. Clones inherit the `reattach` setting.
 
 ## Background processes
 
@@ -385,6 +413,58 @@ name.
 step. `workingDirectory` sets the cwd for the build and the sandbox, and the
 repository is cloned to `<workingDirectory>/<repo>`.
 
+#### Several repositories in one template
+
+Pass `repos` instead of `getRepositoryAccess` to clone several repositories
+into one template, each with its own credential resolver and setup command (a string or an
+array, each entry its own build step):
+
+```typescript
+const sandbox = new E2BSandbox({
+  id: sessionId,
+  template: createRepoTemplate({
+    repos: [
+      {
+        getRepositoryAccess: async () => ({
+          cloneUrl: 'https://github.com/mastra-ai/mastra.git',
+        }),
+        setupCommand: 'pnpm install --frozen-lockfile',
+      },
+      {
+        getRepositoryAccess: async () => ({
+          cloneUrl: 'https://github.com/mastra-ai/template-docs-expert.git',
+        }),
+        setupCommand: 'npm install',
+      },
+    ],
+    workspaceSetupCommand: 'npm install --global @mastra/mcp-docs-server',
+    continueOnSetupFailure: true,
+    workingDirectory: '/home/user/repos',
+  }),
+})
+```
+
+Every repository is cloned to `<workingDirectory>/<repo>`. Public repositories
+are built before private ones, keeping the caller's order within each group.
+Private credentials are build envs visible to every build step, so any
+repository's setup command can read every other repository's token: only list
+repositories whose setup commands you trust together.
+
+`workspaceSetupCommand` runs at the working directory after every repository
+is set up. `continueOnSetupFailure` (default `false`) lets a failing setup
+command record its repository in `.mastra-sandbox/setup-failed` and continue
+instead of failing the build.
+
+Markers tell a session what the image already ran: `.mastra-sandbox/repos/<repo>`
+per repository and `.mastra-sandbox/workspace-setup` after the workspace
+commands, all under the working directory. With `continueOnSetupFailure`,
+check `.mastra-sandbox/setup-failed` first.
+
+Adding or removing a repository starts a new template, as does editing a
+setup command, while a rotated credential reuses the existing one. If any entry's access can't be resolved the sandbox falls
+back to its default template. A repository whose head can't be resolved is
+cloned unpinned while the others keep their pins.
+
 Templates build at E2B's default machine size (2 vCPU, 1024 MB) unless the
 spec asks for more. Pass `cpuCount` and `memoryMB` to size the machine the
 template's sandboxes run on:
@@ -447,6 +527,21 @@ Failure handling is designed so a broken template never wedges a session:
   named ref fails, the cached resolution is dropped and creation retries
   down the fallback ladder.
 
+If a sandbox without the template's toolchain is worse than a failed start, set `fallbackTemplate: false` on the resolved spec. A failed build, or a ref that can't create a sandbox, then rejects `start()` with the original error instead of falling back:
+
+```typescript title="src/mastra/workspaces.ts"
+const repoTemplate = createRepoTemplate({
+  getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/acme/app.git' }),
+  setupCommand: 'pnpm install',
+})!
+
+const sandbox = new E2BSandbox({
+  template: {
+    resolveSpec: async () => ({ ...(await repoTemplate.resolveSpec()), fallbackTemplate: false }),
+  },
+})
+```
+
 Private repositories build warm templates when `getRepositoryAccess` returns
 an `authorization` alongside the clone URL — a fresh, short-lived credential
 (such as a GitHub App installation token) minted per template resolution.
@@ -478,28 +573,25 @@ anything — useful for pruning old sha tags with the E2B CLI.
 ### Per-session sandboxes
 
 Hosts that construct one sandbox per session, such as Mastra Factory's
-`sandbox` config, combine the pieces above in a small callback: sandbox
-identity is the session id (id-keyed getOrCreate — the sandbox pauses on
-E2B's idle timeout and resumes by id), and the repo template comes from
-`createRepoTemplate`. The host's session context carries everything the
-template needs, so it can be passed straight through:
+`sandbox` config, use `E2BFactorySandbox`: sandbox identity is the session id
+(id-keyed getOrCreate, so the sandbox pauses on E2B's idle timeout and resumes
+by id), the repo template comes from `createRepoTemplate` over the session's
+repositories, and the project's `cpuCount` and `memoryMb` settings flow into
+the template. See the [FactorySandbox reference](/reference/workspace/factory-sandbox).
 
 ```typescript
 import { MastraFactory } from '@mastra/factory'
-import { E2BSandbox, createRepoTemplate } from '@mastra/e2b'
+import { E2BFactorySandbox } from '@mastra/e2b'
 
 new MastraFactory({
-  sandbox: ctx =>
-    new E2BSandbox({
-      id: ctx.sessionId,
-      // Undefined for a session with no repository.
-      template: createRepoTemplate(ctx),
-    }),
+  sandbox: new E2BFactorySandbox({ apiKey: process.env.E2B_API_KEY }),
 })
 ```
 
-Factory attaches its own session setup to the sandbox it gets back, so the
-callback doesn't wire up a start hook.
+The bare callback form, `sandbox: ctx => new E2BSandbox({ id: ctx.sessionId, template: createRepoTemplate(ctx) })`,
+is also supported: factory sees it as a custom provider with no settings to
+tune. Either way, factory attaches its own session setup to the
+sandbox it gets back.
 
 ## Using with Code Mode
 

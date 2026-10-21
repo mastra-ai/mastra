@@ -21,7 +21,6 @@ import type {
 } from '@mastra/core/storage';
 import {
   BRANCH_SPAN_TYPES,
-  buildInputPreview,
   computeTraceStatus,
   listBranchesArgsSchema,
   listTracesArgsSchema,
@@ -40,8 +39,11 @@ import {
   normalizeTags,
   JSON_NULL_PLACEHOLDER,
   SPAN_PAYLOAD_COLUMNS,
+  apiPreview,
+  previewFromPayload,
 } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled, encodeDeltaCursor, validateCursorId } from './polling';
+import { storedPreview as buildStoredPreview, needsPreview } from './preview-compat';
 
 // ============================================================================
 // Columns & Reconstruction
@@ -58,6 +60,7 @@ const COLUMNS = [
   'spanType',
   'isEvent',
   'endedAt',
+  'timeToFirstChunkMs',
   'experimentId',
   'entityType',
   'entityId',
@@ -65,6 +68,12 @@ const COLUMNS = [
   'entityVersionId',
   'parentEntityVersionId',
   'rootEntityVersionId',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
   'userId',
   'organizationId',
   'resourceId',
@@ -84,6 +93,12 @@ const COLUMNS = [
   'output',
   'error',
   'requestContext',
+  'inputPreview',
+  'outputPreview',
+  'errorPreview',
+  'hasInputPayload',
+  'hasOutputPayload',
+  'hasErrorPayload',
 ] as const;
 
 const COLUMNS_SQL = COLUMNS.join(', ');
@@ -101,6 +116,25 @@ function argMaxNonNull(col: string): string {
   return `arg_max(${col}, timestamp) FILTER (WHERE ${col} IS NOT NULL${placeholder}) as ${col}`;
 }
 
+/** The payload column each stored preview column describes, and its payload-presence flag. */
+const PREVIEW_PAYLOADS = [
+  ['inputPreview', 'input', 'hasInputPayload'],
+  ['outputPreview', 'output', 'hasOutputPayload'],
+  ['errorPreview', 'error', 'hasErrorPayload'],
+] as const;
+
+/**
+ * Select the preview from the latest event carrying its payload (or an explicit preview).
+ * Wrapping the preview preserves NULL on that event instead of reviving an older preview.
+ * The stored presence flag tells blank content from a payload-less event without reading the
+ * payload. Rows written before the flag (NULL) always qualify: their NULL preview sends the span
+ * to {@link fillMissingReconstructedPreviews}, which rebuilds it from the payloads.
+ */
+const RECONSTRUCT_PREVIEWS_SQL = PREVIEW_PAYLOADS.map(
+  ([preview, , present]) =>
+    `(coalesce(arg_max(struct_pack(value := ${preview}), timestamp) FILTER (WHERE coalesce(${present}, true) OR ${preview} <> ''), arg_max(struct_pack(value := ${preview}), timestamp))).value as ${preview}`,
+).join(',\n    ');
+
 const SPAN_RECONSTRUCT_SELECT = `
   SELECT
     traceId, spanId,
@@ -117,6 +151,12 @@ const SPAN_RECONSTRUCT_SELECT = `
     ${argMaxNonNull('entityVersionId')},
     ${argMaxNonNull('parentEntityVersionId')},
     ${argMaxNonNull('rootEntityVersionId')},
+    ${argMaxNonNull('parentEntityType')},
+    ${argMaxNonNull('parentEntityId')},
+    ${argMaxNonNull('parentEntityName')},
+    ${argMaxNonNull('rootEntityType')},
+    ${argMaxNonNull('rootEntityId')},
+    ${argMaxNonNull('rootEntityName')},
     ${argMaxNonNull('userId')},
     ${argMaxNonNull('organizationId')},
     ${argMaxNonNull('resourceId')},
@@ -158,8 +198,8 @@ const SPAN_RECONSTRUCT_SELECT_LIGHT = `
 
 /**
  * Lightweight list variant — also reconstructs `metadata` for the list's
- * configurable columns and `input` so the row mapper can derive `inputPreview`
- * without shipping the blob to the caller.
+ * configurable columns and the stored previews (see {@link RECONSTRUCT_PREVIEWS_SQL}),
+ * so the list never ships the payload blobs to the caller.
  */
 const SPAN_RECONSTRUCT_SELECT_LIGHT_LIST = `
   SELECT
@@ -177,7 +217,7 @@ const SPAN_RECONSTRUCT_SELECT_LIGHT_LIST = `
     ${argMaxNonNull('resourceId')},
     ${argMaxNonNull('error')},
     ${argMaxNonNull('metadata')},
-    ${argMaxNonNull('input')}
+    ${RECONSTRUCT_PREVIEWS_SQL}
   FROM span_events
 `;
 
@@ -321,6 +361,33 @@ function rowToLightSpanRecord(row: Record<string, unknown>): LightSpanRecord {
   };
 }
 
+/**
+ * Builds the previews of spans written before previews were stored (NULL after
+ * {@link RECONSTRUCT_PREVIEWS_SQL}) from those spans' reconstructed payloads. Runs only while such
+ * spans are on the page.
+ */
+async function fillMissingReconstructedPreviews(db: DuckDBConnection, rows: Record<string, unknown>[]): Promise<void> {
+  const flagged = rows.filter(row => PREVIEW_PAYLOADS.some(([preview]) => needsPreview(row[preview])));
+  if (flagged.length === 0) return;
+
+  const traceIds = [...new Set(flagged.map(row => row.traceId as string))];
+  const payloads = await db.query<Record<string, unknown>>(
+    `SELECT traceId, spanId, ${PREVIEW_PAYLOADS.map(([, payload]) => argMaxNonNull(payload)).join(', ')}
+     FROM span_events
+     WHERE traceId IN (${traceIds.map(() => '?').join(', ')})
+       AND (traceId, spanId) IN (SELECT * FROM (VALUES ${flagged.map(() => '(?, ?)').join(', ')}))
+     GROUP BY traceId, spanId`,
+    [...traceIds, ...flagged.flatMap(row => [row.traceId, row.spanId])],
+  );
+  const byKey = new Map(payloads.map(payload => [`${payload.traceId}\u0000${payload.spanId}`, payload]));
+  for (const row of flagged) {
+    const payload = byKey.get(`${row.traceId}\u0000${row.spanId}`);
+    for (const [preview, column] of PREVIEW_PAYLOADS) {
+      if (needsPreview(row[preview])) row[preview] = previewFromPayload(payload?.[column] ?? null);
+    }
+  }
+}
+
 function rowToLightSpanRecordWithPreview(row: Record<string, unknown>): LightSpanRecord {
   const record = rowToLightSpanRecord(row);
   return {
@@ -329,7 +396,9 @@ function rowToLightSpanRecordWithPreview(row: Record<string, unknown>): LightSpa
     threadId: (row.threadId as string) ?? null,
     resourceId: (row.resourceId as string) ?? null,
     metadata: parseJson(row.metadata) as Record<string, unknown> | null,
-    inputPreview: buildInputPreview(row.input),
+    inputPreview: apiPreview(row.inputPreview),
+    outputPreview: apiPreview(row.outputPreview),
+    errorPreview: apiPreview(row.errorPreview),
   };
 }
 
@@ -350,6 +419,12 @@ function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
     entityVersionId: (row.entityVersionId as string) ?? null,
     parentEntityVersionId: (row.parentEntityVersionId as string) ?? null,
     rootEntityVersionId: (row.rootEntityVersionId as string) ?? null,
+    parentEntityType: (row.parentEntityType as SpanRecord['parentEntityType']) ?? null,
+    parentEntityId: (row.parentEntityId as SpanRecord['parentEntityId']) ?? null,
+    parentEntityName: (row.parentEntityName as SpanRecord['parentEntityName']) ?? null,
+    rootEntityType: (row.rootEntityType as SpanRecord['rootEntityType']) ?? null,
+    rootEntityId: (row.rootEntityId as SpanRecord['rootEntityId']) ?? null,
+    rootEntityName: (row.rootEntityName as SpanRecord['rootEntityName']) ?? null,
     userId: (row.userId as string) ?? null,
     organizationId: (row.organizationId as string) ?? null,
     resourceId: (row.resourceId as string) ?? null,
@@ -558,6 +633,7 @@ interface SpanEventRow {
   spanType: string | null;
   isEvent: boolean | null;
   endedAt: Date | null;
+  timeToFirstChunkMs: number | null;
   experimentId: string | null;
   entityType: string | null;
   entityId: string | null;
@@ -565,6 +641,12 @@ interface SpanEventRow {
   entityVersionId: string | null;
   parentEntityVersionId: string | null;
   rootEntityVersionId: string | null;
+  parentEntityType: string | null;
+  parentEntityId: string | null;
+  parentEntityName: string | null;
+  rootEntityType: string | null;
+  rootEntityId: string | null;
+  rootEntityName: string | null;
   userId: string | null;
   organizationId: string | null;
   resourceId: string | null;
@@ -580,10 +662,45 @@ interface SpanEventRow {
   tags: string[] | null;
   scope: Record<string, unknown> | null;
   links: unknown[] | null;
-  input: Record<string, unknown> | null;
-  output: Record<string, unknown> | null;
-  error: Record<string, unknown> | null;
+  /** Serialized JSON of the payload, or null when the row does not carry it. */
+  input: string | null;
+  output: string | null;
+  error: string | null;
   requestContext: Record<string, unknown> | null;
+  /**
+   * Stored previews, on every row: built from the payload where the row carries it, `''` where it
+   * does not or there is nothing to preview. NULL only on rows written before previews were stored.
+   * See {@link previewOf}.
+   */
+  inputPreview: string | null;
+  outputPreview: string | null;
+  errorPreview: string | null;
+  /** Whether the row carries a non-null payload in each slot. See {@link RECONSTRUCT_PREVIEWS_SQL}. */
+  hasInputPayload: boolean;
+  hasOutputPayload: boolean;
+  hasErrorPayload: boolean;
+}
+
+/** JSON text of a payload value, or null when it is missing. */
+function serializePayload(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  return JSON.stringify(value) ?? null;
+}
+
+/**
+ * The payload JSON and stored preview for one payload slot of an event row. A row that carries the
+ * slot gets a preview built from the serialized value actually written, unless the record carries
+ * an upstream preview; `''` when there is nothing to preview. A row that does not carry the slot
+ * gets no payload and `''`, so a NULL preview only ever means a row written before previews.
+ */
+function previewOf(
+  carried: boolean,
+  value: unknown,
+  upstream: string | null | undefined,
+): { json: string | null; preview: string | null } {
+  if (!carried) return { json: null, preview: '' };
+  const json = serializePayload(value);
+  return { json, preview: buildStoredPreview(upstream, json === null ? null : value, json) };
 }
 
 function toValuesTuple(row: SpanEventRow): string {
@@ -598,6 +715,7 @@ function toValuesTuple(row: SpanEventRow): string {
     v(row.spanType),
     v(row.isEvent),
     v(row.endedAt),
+    v(row.timeToFirstChunkMs),
     v(row.experimentId),
     v(row.entityType),
     v(row.entityId),
@@ -605,6 +723,12 @@ function toValuesTuple(row: SpanEventRow): string {
     v(row.entityVersionId),
     v(row.parentEntityVersionId),
     v(row.rootEntityVersionId),
+    v(row.parentEntityType),
+    v(row.parentEntityId),
+    v(row.parentEntityName),
+    v(row.rootEntityType),
+    v(row.rootEntityId),
+    v(row.rootEntityName),
     v(row.userId),
     v(row.organizationId),
     v(row.resourceId),
@@ -620,10 +744,16 @@ function toValuesTuple(row: SpanEventRow): string {
     jsonV(row.tags),
     jsonV(row.scope),
     jsonV(row.links),
-    payloadJsonV(row.input),
-    payloadJsonV(row.output),
-    jsonV(row.error),
+    row.input === null ? payloadJsonV(null) : v(row.input),
+    row.output === null ? payloadJsonV(null) : v(row.output),
+    row.error === null ? 'NULL' : v(row.error),
     payloadJsonV(row.requestContext),
+    v(row.inputPreview),
+    v(row.outputPreview),
+    v(row.errorPreview),
+    v(row.hasInputPayload),
+    v(row.hasOutputPayload),
+    v(row.hasErrorPayload),
   ].join(', ');
 }
 
@@ -642,6 +772,7 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
   // and reconstruction takes the latest non-null value per column, so the start
   // row does not need its own copy of the large payload columns.
   const payloadOnEndRow = !!s.endedAt && !s.isEvent;
+  const input = previewOf(!payloadOnEndRow, s.input, s.inputPreview);
   return {
     eventType: 'start',
     timestamp: s.startedAt,
@@ -653,6 +784,7 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     isEvent: s.isEvent,
     // Event spans are point-in-time: they end at the instant they start.
     endedAt: s.isEvent ? s.startedAt : null,
+    timeToFirstChunkMs: s.timeToFirstChunkMs ?? null,
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
@@ -660,6 +792,12 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     entityVersionId: s.entityVersionId ?? null,
     parentEntityVersionId: s.parentEntityVersionId ?? null,
     rootEntityVersionId: s.rootEntityVersionId ?? null,
+    parentEntityType: s.parentEntityType ?? null,
+    parentEntityId: s.parentEntityId ?? null,
+    parentEntityName: s.parentEntityName ?? null,
+    rootEntityType: s.rootEntityType ?? null,
+    rootEntityId: s.rootEntityId ?? null,
+    rootEntityName: s.rootEntityName ?? null,
     userId: s.userId ?? null,
     organizationId: s.organizationId ?? null,
     resourceId: s.resourceId ?? null,
@@ -675,14 +813,23 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     tags: s.tags == null ? null : normalizeTags(s.tags),
     scope: (s.scope as Record<string, unknown>) ?? null,
     links: null,
-    input: payloadOnEndRow ? null : ((s.input as Record<string, unknown>) ?? null),
+    input: input.json,
     output: null,
     error: null,
     requestContext: payloadOnEndRow ? null : ((s.requestContext as Record<string, unknown>) ?? null),
+    inputPreview: input.preview,
+    outputPreview: '',
+    errorPreview: '',
+    hasInputPayload: input.json !== null,
+    hasOutputPayload: false,
+    hasErrorPayload: false,
   };
 }
 
 function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
+  const input = previewOf(true, s.input, s.inputPreview);
+  const output = previewOf(true, s.output, s.outputPreview);
+  const error = previewOf(true, s.error, s.errorPreview);
   return {
     eventType: 'end',
     timestamp: s.endedAt!,
@@ -693,6 +840,7 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     spanType: s.spanType,
     isEvent: s.isEvent,
     endedAt: s.endedAt ?? null,
+    timeToFirstChunkMs: s.timeToFirstChunkMs ?? null,
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
@@ -700,6 +848,12 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     entityVersionId: s.entityVersionId ?? null,
     parentEntityVersionId: s.parentEntityVersionId ?? null,
     rootEntityVersionId: s.rootEntityVersionId ?? null,
+    parentEntityType: s.parentEntityType ?? null,
+    parentEntityId: s.parentEntityId ?? null,
+    parentEntityName: s.parentEntityName ?? null,
+    rootEntityType: s.rootEntityType ?? null,
+    rootEntityId: s.rootEntityId ?? null,
+    rootEntityName: s.rootEntityName ?? null,
     userId: s.userId ?? null,
     organizationId: s.organizationId ?? null,
     resourceId: s.resourceId ?? null,
@@ -715,10 +869,16 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     tags: s.tags == null ? null : normalizeTags(s.tags),
     scope: (s.scope as Record<string, unknown>) ?? null,
     links: s.links ?? null,
-    input: (s.input as Record<string, unknown>) ?? null,
-    output: (s.output as Record<string, unknown>) ?? null,
-    error: (s.error as Record<string, unknown>) ?? null,
+    input: input.json,
+    output: output.json,
+    error: error.json,
     requestContext: (s.requestContext as Record<string, unknown>) ?? null,
+    inputPreview: input.preview,
+    outputPreview: output.preview,
+    errorPreview: error.preview,
+    hasInputPayload: input.json !== null,
+    hasOutputPayload: output.json !== null,
+    hasErrorPayload: error.json !== null,
   };
 }
 
@@ -1087,17 +1247,19 @@ export async function listTracesLight(db: DuckDBConnection, args: ListTracesArgs
 
   const currentDeltaCursor = deltaPollingFeatureEnabled() ? await getTraceDeltaCursor(db, filters) : undefined;
 
-  const { pagination: resultPagination, spans } = await listTraceRows(
+  const { pagination: resultPagination, spans: rows } = await listTraceRows(
     db,
     { filters, pagination, orderBy },
     SPAN_RECONSTRUCT_SELECT_LIGHT_LIST,
-    rowToLightSpanRecordWithPreview,
-    spans => spans,
+    row => row,
+    rows => rows,
   );
+  const pageRows = rows as Record<string, unknown>[];
+  await fillMissingReconstructedPreviews(db, pageRows);
 
   return {
     pagination: resultPagination,
-    spans: spans as LightSpanRecord[],
+    spans: pageRows.map(rowToLightSpanRecordWithPreview),
     ...(deltaPollingFeatureEnabled() ? { deltaCursor: currentDeltaCursor } : {}),
   };
 }

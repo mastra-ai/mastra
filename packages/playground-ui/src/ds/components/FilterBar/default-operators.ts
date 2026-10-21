@@ -2,7 +2,7 @@ import type { FilterBarOperator } from './types';
 
 /** Opt-in starter set. Pure data: the component attaches no semantics to ids. */
 export const DEFAULT_FILTER_OPERATORS: FilterBarOperator[] = [
-  { id: 'is', label: 'is' },
+  { id: 'is', label: 'is', widensTo: 'in' },
   { id: 'is-not', label: 'is not' },
   { id: 'contains', label: 'contains' },
   { id: 'not-contains', label: 'does not contain' },

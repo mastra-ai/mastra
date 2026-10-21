@@ -1,0 +1,17 @@
+node_modules/
+.npm-cache/
+dist/
+.data/
+coverage/
+*.tsbuildinfo
+!package-lock.json
+!.npmrc
+.env
+.env.*
+!.env.example
+.next/
+next-env.d.ts
+
+.mastra/
+
+.vscode/

@@ -221,6 +221,7 @@ export type ToolDisplayEvent =
    * Fired once after the user approves an approval card. Only `post` results
    * are honored: the returned message replaces the approval card in place.
    * Returning nothing (or a blank message) keeps the default "Approved" card.
+   * `byUser` is the approving user's name, or undefined in DMs.
    */
   | {
       kind: 'approved';
@@ -229,6 +230,7 @@ export type ToolDisplayEvent =
       displayName: string;
       argsSummary: string;
       args: unknown;
+      byUser?: string;
     }
   /**
    * Fired once after the user denies an approval card. Only `post` results
@@ -487,6 +489,8 @@ export interface ResolveResourceIdContext {
   message: Message;
   /** The built-in default: `${platform}:${message.author.userId}`. Return this to keep current behavior. */
   defaultResourceId: string;
+  /** The per-message request context. Values set by channel handlers before `defaultHandler` runs are visible here. */
+  requestContext: RequestContext;
 }
 
 /**
@@ -511,6 +515,8 @@ export interface ResolveThreadIdContext {
   resourceId: string;
   /** The built-in default: a random UUID. Return this to keep current behavior. */
   defaultThreadId: string;
+  /** The per-message request context. Values set by channel handlers before `defaultHandler` runs are visible here. */
+  requestContext: RequestContext;
 }
 
 /**

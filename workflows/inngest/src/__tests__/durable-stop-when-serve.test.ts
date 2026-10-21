@@ -2,9 +2,9 @@
  * Regression test for #25851: the Inngest agentic loop never evaluated `stopWhen`.
  *
  * The mock model calls a tool on every turn, so without `stopWhen` the loop would
- * run until `maxSteps`. The predicate stops after the second step, so the first (false) evaluation is replayed on later requests. The predicate is
- * evaluated inside a memoized Inngest step, so serve-mode replays must not call it
- * again — it should run exactly once per evaluated iteration.
+ * run until `maxSteps`. The predicate stops after the second step, so the first (false) evaluation is replayed on later requests. The predicate and
+ * step-finish emission use memoized Inngest steps, so serve-mode replays must not
+ * repeat either side effect — each should run exactly once per evaluated iteration.
  */
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
@@ -95,12 +95,16 @@ describe('Inngest agent stopWhen (#25851)', () => {
     });
 
     let finishReceived = false;
+    const stepFinishes: Array<{ reason?: string; isContinued?: boolean }> = [];
     let timedOut = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
         (async () => {
           for await (const chunk of result.output.fullStream) {
+            if ((chunk as any)?.type === 'step-finish') {
+              stepFinishes.push((chunk as any).payload?.stepResult ?? {});
+            }
             if ((chunk as any)?.type === 'finish') finishReceived = true;
           }
         })(),
@@ -120,5 +124,69 @@ describe('Inngest agent stopWhen (#25851)', () => {
     expect(finishReceived).toBe(true);
     expect(modelCalls).toBe(2);
     expect(predicateStepCounts).toEqual([1, 2]);
+    expect(stepFinishes).toMatchObject([
+      { reason: 'tool-calls', isContinued: true },
+      { reason: 'tool-calls', isContinued: false },
+    ]);
+  });
+
+  it('rejects the stream without terminal chunks when stopWhen throws', async () => {
+    let modelCalls = 0;
+    const agent = new Agent({
+      id: `stop-when-error-agent-${Date.now()}`,
+      name: 'Stop When Error Agent',
+      instructions: 'Call ping.',
+      model: alwaysToolCallingModel(() => modelCalls++),
+      tools: {
+        ping: createTool({
+          id: 'ping',
+          description: 'ping',
+          inputSchema: z.object({}),
+          execute: async () => ({ ok: true }),
+        }),
+      },
+    });
+
+    const inngestAgent = createInngestAgent({ agent, inngest: getSharedInngest() });
+    getSharedMastra().addAgent(inngestAgent);
+
+    const result = await inngestAgent.stream([{ role: 'user', content: 'Go.' }], {
+      maxSteps: 5,
+      stopWhen: () => {
+        throw new TypeError('stopWhen failed');
+      },
+    });
+
+    const chunkTypes: string[] = [];
+    let streamError: unknown;
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        (async () => {
+          try {
+            for await (const chunk of result.output.fullStream) {
+              chunkTypes.push((chunk as any).type);
+            }
+          } catch (error) {
+            streamError = error;
+          }
+        })(),
+        new Promise<void>(resolve => {
+          timer = setTimeout(() => {
+            timedOut = true;
+            resolve();
+          }, STREAM_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+      result.cleanup();
+    }
+
+    expect(timedOut).toBe(false);
+    expect(modelCalls).toBe(1);
+    expect(chunkTypes).toEqual(['start', 'step-start', 'tool-call', 'tool-result']);
+    expect(streamError).toMatchObject({ name: 'TypeError', message: 'stopWhen failed' });
   });
 });

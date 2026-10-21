@@ -66,9 +66,11 @@ export function createNextRouteHandler(options: NextRouteHandlerOptions): NextRo
   let appPromise: Promise<Hono> | undefined;
 
   function getApp(): Promise<Hono> {
-    if (!appPromise) {
-      appPromise = initApp(mastra, tools, prefix);
-    }
+    // Clear a failed initialization so the next request can retry it
+    appPromise ??= initApp(mastra, tools, prefix).catch(error => {
+      appPromise = undefined;
+      throw error;
+    });
     return appPromise;
   }
 

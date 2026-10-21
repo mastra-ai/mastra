@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AlertDialog } from './alert-dialog';
 import { Button } from '@/ds/components/Button';
@@ -103,6 +103,48 @@ describe('AlertDialog', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onOpenChange).toHaveBeenCalledWith(false, expect.anything());
+  });
+});
+
+describe('AlertDialog on a phone viewport', () => {
+  beforeEach(() => {
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      query =>
+        ({
+          matches: query === '(max-width: 639px)',
+          media: query,
+          onchange: null,
+          addListener: () => {},
+          removeListener: () => {},
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          dispatchEvent: () => false,
+        }) satisfies MediaQueryList,
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('opens as a bottom drawer that still announces an alert and closes from Cancel', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <AlertDialog open onOpenChange={onOpenChange}>
+        <AlertDialog.Content>
+          <AlertDialog.Title>Delete dataset?</AlertDialog.Title>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel>Keep</AlertDialog.Cancel>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>,
+    );
+
+    const popup = screen.getByRole('alertdialog', { name: 'Delete dataset?' });
+    expect(popup.classList.contains('drawer-popup')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
     expect(onOpenChange).toHaveBeenCalledWith(false, expect.anything());
   });
 });

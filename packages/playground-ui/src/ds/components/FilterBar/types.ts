@@ -13,6 +13,12 @@ export type FilterBarOperator = {
    * and a `strict` field accepts free text.
    */
   freeText?: boolean;
+  /**
+   * Id of the `many` operator that holds several of this operator's values (`is` → `is any of`).
+   * When items are keyed by field (`createItemId`), adding another value to a field filtered
+   * with this operator widens its chip to that operator instead of replacing the value.
+   */
+  widensTo?: string;
 };
 
 export type FilterBarOption = {

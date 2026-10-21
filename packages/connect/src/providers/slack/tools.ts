@@ -42,6 +42,7 @@ import { removeFromChannelTool } from './tools/remove-from-channel.js';
 import { removeReactionTool } from './tools/remove-reaction.js';
 import { renameChannelTool } from './tools/rename-channel.js';
 import { scheduleMessageTool } from './tools/schedule-message.js';
+import { searchChannelsTool } from './tools/search-channels.js';
 import { searchFilesTool } from './tools/search-files.js';
 import { searchMessagesTool } from './tools/search-messages.js';
 import { sendEphemeralMessageTool } from './tools/send-ephemeral-message.js';
@@ -97,6 +98,7 @@ export function createSlackTools(options?: ProviderToolsOptions) {
     slack_remove_reaction: removeReactionTool(platformProxy),
     slack_rename_channel: renameChannelTool(platformProxy),
     slack_schedule_message: scheduleMessageTool(platformProxy),
+    slack_search_channels: searchChannelsTool(platformProxy),
     slack_search_files: searchFilesTool(platformProxy),
     slack_search_messages: searchMessagesTool(platformProxy),
     slack_send_ephemeral_message: sendEphemeralMessageTool(platformProxy),

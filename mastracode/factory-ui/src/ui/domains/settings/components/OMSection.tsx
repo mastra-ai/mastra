@@ -1,5 +1,12 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Input } from '@mastra/playground-ui/components/Input';
+import { InputGroupAddon, InputGroupText } from '@mastra/playground-ui/components/InputGroup';
+import {
+  InputNumber,
+  InputNumberDecrement,
+  InputNumberGroup,
+  InputNumberIncrement,
+  InputNumberInput,
+} from '@mastra/playground-ui/components/InputNumber';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -16,6 +23,7 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
+type OMRole = 'observer' | 'reflector';
 
 function attachmentToChoice(value: 'auto' | boolean): AttachmentChoice {
   if (value === true) return 'on';
@@ -29,64 +37,90 @@ function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
   return 'auto';
 }
 
-function ThresholdInput({
-  value,
-  disabled,
-  onCommit,
-}: {
-  value: number;
-  disabled: boolean;
-  onCommit: (value: number) => void;
-}) {
-  const [draft, setDraft] = useState(String(value));
+/**
+ * Token count field with steppers. It stays editable while a save is in flight, since
+ * disabling it would drop focus mid-edit; each save returns the full config.
+ */
+function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (value: number) => void }) {
+  const [draft, setDraft] = useState<number | null>(value);
+  // The last value this field asked to save, so a draft is compared with what was sent,
+  // not with a saved value whose response may still be on its way.
+  const [sent, setSent] = useState(value);
+  const [editing, setEditing] = useState(false);
+  const [syncedValue, setSyncedValue] = useState(value);
+  // Follow the saved value (e.g. after another surface changed it) without remounting, so
+  // focus stays put. While the person is still in the field, a save landing must not
+  // overwrite what they are typing; leaving the field saves the draft.
+  if (syncedValue !== value) {
+    setSyncedValue(value);
+    if (!editing) {
+      setDraft(value);
+      setSent(value);
+    }
+  }
 
-  const commit = () => {
-    const parsed = Number(draft);
-    const rounded = Number.isFinite(parsed) ? Math.round(parsed) : NaN;
+  const commit = (next: number | null) => {
+    const rounded = next == null ? NaN : Math.round(next);
     if (!Number.isFinite(rounded) || rounded <= 0) {
-      setDraft(String(value));
+      setDraft(sent);
       return;
     }
-    setDraft(String(rounded));
-    if (rounded !== value) onCommit(rounded);
+    setDraft(rounded);
+    if (rounded === sent) return;
+    setSent(rounded);
+    onCommit(rounded);
   };
 
   return (
-    <Input
-      size="sm"
-      type="number"
+    <InputNumber
+      value={draft}
       min={1}
       step={1000}
-      value={draft}
-      disabled={disabled}
-      onChange={event => setDraft(event.target.value)}
-      onBlur={commit}
-    />
+      largeStep={10000}
+      format={{ maximumFractionDigits: 0 }}
+      onValueChange={setDraft}
+      onValueCommitted={(next, details) => {
+        // Typing and arrow-key stepping save once on blur; a stepper press saves when released.
+        if (details.reason === 'increment-press' || details.reason === 'decrement-press') commit(next);
+      }}
+      className="sm:w-64 sm:shrink-0"
+    >
+      <InputNumberGroup
+        size="sm"
+        onFocus={() => setEditing(true)}
+        onBlur={event => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setEditing(false);
+        }}
+      >
+        <InputNumberInput onBlur={() => commit(draft)} />
+        <InputGroupAddon align="inline-end" variant="flush">
+          <InputGroupText className="mr-2">tokens</InputGroupText>
+          <InputNumberDecrement />
+          <InputNumberIncrement />
+        </InputGroupAddon>
+      </InputNumberGroup>
+    </InputNumber>
   );
 }
 
 export function OMSection({
-  resourceId,
-  scope,
+  sessionId,
   factoryId,
   models,
 }: {
-  resourceId?: string;
-  scope?: string;
+  sessionId?: string;
   factoryId?: string;
   models: AvailableModelOption[];
 }) {
-  const omQuery = useOMQuery(resourceId, scope, factoryId);
-  const observerMutation = useUpdateOMModel(resourceId, 'observer', scope, factoryId);
-  const reflectorMutation = useUpdateOMModel(resourceId, 'reflector', scope, factoryId);
-  const thresholdsMutation = useUpdateOMThresholds(resourceId, scope, factoryId);
-  const attachmentsMutation = useUpdateOMObserveAttachments(resourceId, scope, factoryId);
+  const omQuery = useOMQuery(sessionId, factoryId);
+  const observerMutation = useUpdateOMModel(sessionId, 'observer', factoryId);
+  const reflectorMutation = useUpdateOMModel(sessionId, 'reflector', factoryId);
+  const thresholdsMutation = useUpdateOMThresholds(sessionId, factoryId);
+  const attachmentsMutation = useUpdateOMObserveAttachments(sessionId, factoryId);
 
   const config = omQuery.data?.config;
-  const configuredModelIds = new Set(models.map(model => model.id));
-  const observerAvailable = config !== undefined && configuredModelIds.has(config.observerModelId);
-  const reflectorAvailable = config !== undefined && configuredModelIds.has(config.reflectorModelId);
-  const modelsAvailable = observerAvailable && reflectorAvailable;
+  const modelsAvailable =
+    config?.observer.providerStatus === 'available' && config.reflector.providerStatus === 'available';
   const loading = omQuery.isPending;
   const busy =
     observerMutation.isPending ||
@@ -101,7 +135,7 @@ export function OMSection({
   ].find(error => error instanceof Error);
   const error = mutationError?.message ?? (omQuery.error instanceof Error ? omQuery.error.message : undefined);
 
-  const switchModel = (role: 'observer' | 'reflector', modelId: string) => {
+  const switchModel = (role: OMRole, modelId: string) => {
     if (!modelId) return;
     const mutation = role === 'observer' ? observerMutation : reflectorMutation;
     mutation.mutate({ modelId });
@@ -138,9 +172,10 @@ export function OMSection({
       <SettingsRow label="Observer model" description="Summarizes the conversation into observations">
         <ModelCombobox
           models={models}
-          value={config?.observerModelId ?? ''}
+          value={config?.observer.model ?? ''}
+          auto={{ effectiveModelId: config?.observer.effectiveModelId }}
           placeholder="Select observer model…"
-          disabled={busy}
+          disabled={busy || !config}
           onValueChange={modelId => switchModel('observer', modelId)}
         />
       </SettingsRow>
@@ -148,25 +183,20 @@ export function OMSection({
       <SettingsRow label="Reflector model" description="Distills observations into longer-term memory">
         <ModelCombobox
           models={models}
-          value={config?.reflectorModelId ?? ''}
+          value={config?.reflector.model ?? ''}
+          auto={{ effectiveModelId: config?.reflector.effectiveModelId }}
           placeholder="Select reflector model…"
-          disabled={busy}
+          disabled={busy || !config}
           onValueChange={modelId => switchModel('reflector', modelId)}
         />
       </SettingsRow>
 
       <SettingsRow label="Messages before observation" description="Message tokens processed before the observer runs.">
         {config && (
-          <div className="w-full max-w-40">
-            <ThresholdInput
-              key={config.observationThreshold}
-              value={config.observationThreshold}
-              disabled={busy}
-              onCommit={observationThreshold => {
-                thresholdsMutation.mutate({ observationThreshold });
-              }}
-            />
-          </div>
+          <TokenThresholdInput
+            value={config.observationThreshold}
+            onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
+          />
         )}
       </SettingsRow>
 
@@ -175,16 +205,10 @@ export function OMSection({
         description="Observation tokens accumulated before the reflector runs."
       >
         {config && (
-          <div className="w-full max-w-40">
-            <ThresholdInput
-              key={config.reflectionThreshold}
-              value={config.reflectionThreshold}
-              disabled={busy}
-              onCommit={reflectionThreshold => {
-                thresholdsMutation.mutate({ reflectionThreshold });
-              }}
-            />
-          </div>
+          <TokenThresholdInput
+            value={config.reflectionThreshold}
+            onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
+          />
         )}
       </SettingsRow>
 

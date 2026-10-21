@@ -8,6 +8,8 @@ import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
 
 function dynamicMemoryTest(version: 'v1' | 'v2') {
+  // Cases that only resolve agent config (no model call) are identical across versions; run them once.
+  const modelIndependent = version === 'v2';
   describe(`${version} - dynamic memory configuration`, () => {
     let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
     if (version === 'v1') {
@@ -46,92 +48,100 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
       });
     }
 
-    it('should support static memory configuration', async () => {
-      const storage = new InMemoryStore();
-      const mockMemory = new MockMemory({ storage });
-      const agent = new Agent({
-        id: 'static-memory-agent',
-        name: 'Static Memory Agent',
-        instructions: 'test agent',
-        model: dummyModel,
-        memory: mockMemory,
+    if (modelIndependent) {
+      it('should support static memory configuration', async () => {
+        const storage = new InMemoryStore();
+        const mockMemory = new MockMemory({ storage });
+        const agent = new Agent({
+          id: 'static-memory-agent',
+          name: 'Static Memory Agent',
+          instructions: 'test agent',
+          model: dummyModel,
+          memory: mockMemory,
+        });
+
+        const memory = await agent.getMemory();
+        expect(memory).toBe(mockMemory);
       });
+    }
 
-      const memory = await agent.getMemory();
-      expect(memory).toBe(mockMemory);
-    });
+    if (modelIndependent) {
+      it('should support dynamic memory configuration with requestContext', async () => {
+        const premiumMemory = new MockMemory({ storage: new InMemoryStore() });
+        const standardMemory = new MockMemory({ storage: new InMemoryStore() });
 
-    it('should support dynamic memory configuration with requestContext', async () => {
-      const premiumMemory = new MockMemory({ storage: new InMemoryStore() });
-      const standardMemory = new MockMemory({ storage: new InMemoryStore() });
+        const agent = new Agent({
+          id: 'dynamic-memory-agent',
+          name: 'Dynamic Memory Agent',
+          instructions: 'test agent',
+          model: dummyModel,
+          memory: ({ requestContext }) => {
+            const userTier = requestContext.get('userTier');
+            return userTier === 'premium' ? premiumMemory : standardMemory;
+          },
+        });
 
-      const agent = new Agent({
-        id: 'dynamic-memory-agent',
-        name: 'Dynamic Memory Agent',
-        instructions: 'test agent',
-        model: dummyModel,
-        memory: ({ requestContext }) => {
-          const userTier = requestContext.get('userTier');
-          return userTier === 'premium' ? premiumMemory : standardMemory;
-        },
+        // Test with premium context
+        const premiumContext = new RequestContext();
+        premiumContext.set('userTier', 'premium');
+        const premiumResult = await agent.getMemory({ requestContext: premiumContext });
+        expect(premiumResult).toBe(premiumMemory);
+
+        // Test with standard context
+        const standardContext = new RequestContext();
+        standardContext.set('userTier', 'standard');
+        const standardResult = await agent.getMemory({ requestContext: standardContext });
+        expect(standardResult).toBe(standardMemory);
       });
+    }
 
-      // Test with premium context
-      const premiumContext = new RequestContext();
-      premiumContext.set('userTier', 'premium');
-      const premiumResult = await agent.getMemory({ requestContext: premiumContext });
-      expect(premiumResult).toBe(premiumMemory);
+    if (modelIndependent) {
+      it('should support async dynamic memory configuration', async () => {
+        const mockMemory = new MockMemory({ storage: new InMemoryStore() });
 
-      // Test with standard context
-      const standardContext = new RequestContext();
-      standardContext.set('userTier', 'standard');
-      const standardResult = await agent.getMemory({ requestContext: standardContext });
-      expect(standardResult).toBe(standardMemory);
-    });
+        const agent = new Agent({
+          id: 'async-memory-agent',
+          name: 'Async Memory Agent',
+          instructions: 'test agent',
+          model: dummyModel,
+          memory: async ({ requestContext }) => {
+            const userId = requestContext.get('userId') as string;
+            // Simulate async memory creation/retrieval
+            await new Promise(resolve => setTimeout(resolve, 10));
 
-    it('should support async dynamic memory configuration', async () => {
-      const mockMemory = new MockMemory({ storage: new InMemoryStore() });
+            await mockMemory.createThread({
+              resourceId: userId,
+              threadId: `user-${userId}`,
+            });
 
-      const agent = new Agent({
-        id: 'async-memory-agent',
-        name: 'Async Memory Agent',
-        instructions: 'test agent',
-        model: dummyModel,
-        memory: async ({ requestContext }) => {
-          const userId = requestContext.get('userId') as string;
-          // Simulate async memory creation/retrieval
-          await new Promise(resolve => setTimeout(resolve, 10));
+            return mockMemory;
+          },
+        });
 
-          await mockMemory.createThread({
-            resourceId: userId,
-            threadId: `user-${userId}`,
-          });
+        const requestContext = new RequestContext();
+        requestContext.set('userId', 'user123');
 
-          return mockMemory;
-        },
+        const memory = await agent.getMemory({ requestContext });
+        expect(memory).toBe(mockMemory);
+        const thread = await mockMemory.getThreadById({ threadId: `user-user123` });
+        expect(thread).toBeDefined();
+        expect(thread?.resourceId).toBe('user123');
       });
+    }
 
-      const requestContext = new RequestContext();
-      requestContext.set('userId', 'user123');
+    if (modelIndependent) {
+      it('should throw error when dynamic memory function returns empty value', async () => {
+        const agent = new Agent({
+          id: 'invalid-memory-agent',
+          name: 'Invalid Memory Agent',
+          instructions: 'test agent',
+          model: dummyModel,
+          memory: () => null as any,
+        });
 
-      const memory = await agent.getMemory({ requestContext });
-      expect(memory).toBe(mockMemory);
-      const thread = await mockMemory.getThreadById({ threadId: `user-user123` });
-      expect(thread).toBeDefined();
-      expect(thread?.resourceId).toBe('user123');
-    });
-
-    it('should throw error when dynamic memory function returns empty value', async () => {
-      const agent = new Agent({
-        id: 'invalid-memory-agent',
-        name: 'Invalid Memory Agent',
-        instructions: 'test agent',
-        model: dummyModel,
-        memory: () => null as any,
+        await expect(agent.getMemory()).rejects.toThrow('Function-based memory returned empty value');
       });
-
-      await expect(agent.getMemory()).rejects.toThrow('Function-based memory returned empty value');
-    });
+    }
 
     it('should work with memory in generate method with dynamic configuration', async () => {
       const mockMemory = new MockMemory({ storage: new InMemoryStore() });

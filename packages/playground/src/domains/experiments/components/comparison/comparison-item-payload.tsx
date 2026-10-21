@@ -1,25 +1,20 @@
-import { Code } from '@mastra/playground-ui/components/Code';
+import { ComparisonPayload } from './comparison-payload';
 import { ComparisonSection } from './comparison-section';
 
 export interface ComparisonItemPayloadProps {
   label: string;
   value: unknown;
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
-/**
- * Collapsed-by-default view of an item payload (input or ground truth) so the
- * comparison table can show it in place instead of sending the user back to the
- * dataset item page.
- */
-export function ComparisonItemPayload({ label, value }: ComparisonItemPayloadProps) {
+/** Item payload (input or ground truth) shown in place in the comparison table. */
+export function ComparisonItemPayload({ label, value, expanded, onExpandedChange }: ComparisonItemPayloadProps) {
   if (value == null) return null;
 
   return (
-    <ComparisonSection title={label} defaultOpen={false}>
-      <Code
-        className="max-h-40 overflow-auto rounded-md bg-card p-3 text-caption whitespace-pre-wrap text-muted-foreground"
-        code={typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
-      />
+    <ComparisonSection title={label} framed expanded={expanded} onExpandedChange={onExpandedChange}>
+      <ComparisonPayload value={value} />
     </ComparisonSection>
   );
 }

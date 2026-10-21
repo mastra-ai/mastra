@@ -28,10 +28,13 @@ import {
   createPromptCacheMiddleware,
   opencodeClaudeMaxProvider,
 } from '../providers/claude-max.js';
-import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
+import { githubCopilotProvider } from '../providers/github-copilot.js';
 import { createGoogleThinkingMiddleware } from '../providers/google-thinking.js';
-import { KIMI_CODING_MODELS, kimiCodingProvider } from '../providers/kimi-coding.js';
+import { kimiCodingProvider } from '../providers/kimi-coding.js';
 import {
+  getCredentialProviderId,
+  KIMI_CODING_CREDENTIAL_ID,
+  KIMI_CODING_PROVIDER_ID,
   normalizeAnthropicModelId,
   OPENAI_PREFIX,
   remapOpenAIModelForCodexOAuth,
@@ -46,6 +49,11 @@ import {
   THINKING_LEVEL_TO_REASONING_EFFORT,
 } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
+import {
+  ModelRouterLanguageModelWithThinking,
+  providerThinkingOptions,
+  withThinkingOptionsModel,
+} from '../providers/provider-thinking.js';
 import { xaiProvider } from '../providers/xai.js';
 import { getAppDataDir } from '../utils/project.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
@@ -173,23 +181,23 @@ function openaiApiKeyProvider(
   });
 }
 
-function getAuthProviderId(providerId: string): string {
-  return providerId === 'openai' ? 'openai-codex' : providerId;
-}
-
 function getProviderAuthKey(
   providerId: string,
   credentials: CredentialStore = getGlobalAuthStorage(),
 ): string | undefined {
-  const authProviderId = getAuthProviderId(providerId);
+  const authProviderId = getCredentialProviderId(providerId);
   const storedCred = credentials.get(authProviderId);
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
   }
   const dedicatedKey = credentials.getStoredApiKey(authProviderId)?.trim();
   if (dedicatedKey) return dedicatedKey;
+  // `/api-keys` stores keys under the catalog provider id (`kimi-code-plan-cn`),
+  // which can differ from the credential id.
+  const catalogKey = authProviderId !== providerId ? credentials.getStoredApiKey(providerId)?.trim() : undefined;
+  if (catalogKey) return catalogKey;
   if (credentials.allowEnvironmentFallback === false) return undefined;
-  return authProviderId === 'kimi-for-coding' ? process.env.KIMI_API_KEY?.trim() || undefined : undefined;
+  return authProviderId === KIMI_CODING_CREDENTIAL_ID ? process.env.KIMI_API_KEY?.trim() || undefined : undefined;
 }
 
 export function resolveAuth(request: GatewayAuthRequest, mastraGatewayApiKey?: string): GatewayAuthResult | undefined {
@@ -274,6 +282,17 @@ function getApiKeyEnvVar(providerConfig: Pick<ProviderConfig, 'apiKeyEnvVar'> | 
   return Array.isArray(envVars) ? envVars[0] : envVars;
 }
 
+/**
+ * Whether the process environment has a key for a models.dev provider. Checks every
+ * env var the registry lists, as the models.dev gateway does when `resolveModel`
+ * gets no gateway credential (e.g. `GOOGLE_API_KEY` or `GOOGLE_GENERATIVE_AI_API_KEY`).
+ */
+export function hasProviderEnvironmentKey(providerId: string): boolean {
+  const envVars = (PROVIDER_REGISTRY as Record<string, ProviderConfig>)[providerId]?.apiKeyEnvVar;
+  if (!envVars) return false;
+  return (Array.isArray(envVars) ? envVars : [envVars]).some(envVar => Boolean(process.env[envVar]?.trim()));
+}
+
 export class MastraCodeGateway extends MastraModelGateway {
   readonly id = MASTRACODE_GATEWAY_ID;
   readonly name = 'MastraCode Gateway';
@@ -356,7 +375,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       return { apiKey: mastraGatewayApiKey, source: 'gateway' };
     }
 
-    const authProviderId = getAuthProviderId(request.providerId);
+    const authProviderId = getCredentialProviderId(request.providerId);
     const storedCred = credentials.get(authProviderId);
     if (storedCred?.type === 'oauth') {
       return { bearerToken: 'oauth', source: 'gateway' };
@@ -409,6 +428,10 @@ export class MastraCodeGateway extends MastraModelGateway {
   }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+    // Catalog auth (`handlesModel`, `resolveAuth`) reads this store, while
+    // `/api-keys` and logins write through other AuthStorage instances. Pick
+    // up their changes on every catalog refresh.
+    this.#credentials.reload();
     const providers: Record<string, ProviderConfig> = {};
     for (const provider of this.#getCustomProviders()) {
       const models = provider.models ?? [];
@@ -423,27 +446,10 @@ export class MastraCodeGateway extends MastraModelGateway {
       };
     }
 
-    providers['kimi-for-coding'] = {
-      name: 'Kimi For Coding',
-      apiKeyEnvVar: 'KIMI_API_KEY',
-      apiKeyHeader: 'Authorization',
-      gateway: this.id,
-      models: [...KIMI_CODING_MODELS],
-    };
-
-    try {
-      const copilotModels = await getCopilotModelCatalog({ authStorage: this.#credentials });
-      providers['github-copilot'] = {
-        name: 'GitHub Copilot',
-        apiKeyEnvVar: '',
-        apiKeyHeader: 'Authorization',
-        gateway: this.id,
-        models: copilotModels.map(model => model.id),
-      };
-    } catch (error) {
-      console.warn('Failed to load GitHub Copilot model catalog:', error);
-    }
-
+    // Subscription providers are not listed here: catalog ids from this gateway
+    // are namespaced (`mastracode/<provider>/...`). Kimi augments the models.dev
+    // `kimi-code-plan-cn` provider (claimed via `handlesModel`), and Copilot,
+    // which models.dev excludes, has its own `github-copilot` gateway.
     return providers;
   }
 
@@ -493,12 +499,12 @@ export class MastraCodeGateway extends MastraModelGateway {
       const reasoningEffort = this.#thinkingLevel ? THINKING_LEVEL_TO_REASONING_EFFORT[this.#thinkingLevel] : undefined;
       const middleware = createReasoningEffortMiddleware(args.providerId, reasoningEffort);
       if (!middleware) {
-        return provider.chatModel(args.modelId) as unknown as GatewayLanguageModel;
+        return provider.chatModel(args.modelId);
       }
       return wrapLanguageModel({
         model: provider.chatModel(args.modelId),
         middleware: [middleware],
-      }) as unknown as GatewayLanguageModel;
+      });
     }
 
     if (args.providerId === 'github-copilot') {
@@ -522,7 +528,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         baseURL: 'https://api.moonshot.ai/anthropic/v1',
         name: 'moonshotai.anthropicv1',
         headers: args.headers,
-      })(args.modelId) as unknown as GatewayLanguageModel;
+      })(args.modelId);
     }
 
     if (args.providerId === 'anthropic') {
@@ -535,21 +541,19 @@ export class MastraCodeGateway extends MastraModelGateway {
     }
 
     if (args.providerId === 'xai' && this.#credentials.get('xai')?.type === 'oauth') {
-      return xaiProvider(args.modelId, {
-        headers: args.headers,
-        authStorage: this.#credentials,
-      }) as unknown as GatewayLanguageModel;
+      return withThinkingOptionsModel(
+        xaiProvider(args.modelId, { headers: args.headers, authStorage: this.#credentials }),
+        providerThinkingOptions(`xai/${args.modelId}`, this.#thinkingLevel),
+      );
     }
+
+    if (this.#routeThroughMastraGateway) return this.#mastraGateway.resolveLanguageModel(args);
 
     if (args.providerId === 'google') {
       return this.#resolveGoogleModel(args);
     }
 
-    if (this.#routeThroughMastraGateway) {
-      return this.#mastraGateway.resolveLanguageModel(args) as GatewayLanguageModel;
-    }
-
-    if (args.providerId === 'kimi-for-coding') {
+    if (args.providerId === KIMI_CODING_PROVIDER_ID || args.providerId === KIMI_CODING_CREDENTIAL_ID) {
       return kimiCodingProvider(args.modelId, {
         apiKey: args.apiKey,
         headers: args.headers,
@@ -557,11 +561,11 @@ export class MastraCodeGateway extends MastraModelGateway {
       }) as unknown as GatewayLanguageModel;
     }
 
-    return new ModelRouterLanguageModel({
-      id: `${args.providerId}/${args.modelId}` as `${string}/${string}`,
-      apiKey: args.apiKey,
-      headers: args.headers,
-    }) as unknown as GatewayLanguageModel;
+    const routedModelId: `${string}/${string}` = `${args.providerId}/${args.modelId}`;
+    return new ModelRouterLanguageModelWithThinking(
+      { id: routedModelId, apiKey: args.apiKey, headers: args.headers },
+      providerThinkingOptions(routedModelId, this.#thinkingLevel),
+    ) as unknown as GatewayLanguageModel;
   }
 
   #resolveAnthropicModel(args: {
@@ -585,7 +589,7 @@ export class MastraCodeGateway extends MastraModelGateway {
             [GATEWAY_AUTH_HEADER]: `Bearer ${args.apiKey}`,
             ...args.headers,
           },
-          fetch: buildAnthropicOAuthFetch({ authStorage: this.#credentials }) as any,
+          fetch: buildAnthropicOAuthFetch({ authStorage: this.#credentials }),
         });
 
         return wrapLanguageModel({
@@ -595,18 +599,10 @@ export class MastraCodeGateway extends MastraModelGateway {
             createPromptCacheMiddleware(this.#anthropicPromptCacheScope),
             ...(thinkingMiddleware ? [thinkingMiddleware] : []),
           ],
-        }) as unknown as GatewayLanguageModel;
+        });
       }
 
-      const gatewayModel = this.#mastraGateway.resolveLanguageModel({
-        ...args,
-        modelId: bareModelId,
-      }) as GatewayLanguageModel;
-      if (!thinkingMiddleware) return gatewayModel;
-      return wrapLanguageModel({
-        model: gatewayModel as any,
-        middleware: [thinkingMiddleware],
-      }) as unknown as GatewayLanguageModel;
+      return this.#mastraGateway.resolveLanguageModel({ ...args, modelId: bareModelId });
     }
 
     if (storedCred?.type === 'oauth') {
@@ -625,7 +621,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         args.headers,
         this.#thinkingLevel,
         this.#anthropicPromptCacheScope,
-      ) as unknown as GatewayLanguageModel;
+      );
     }
 
     const apiKey = getAnthropicApiKey(this.#credentials);
@@ -636,7 +632,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         args.headers,
         this.#thinkingLevel,
         this.#anthropicPromptCacheScope,
-      ) as unknown as GatewayLanguageModel;
+      );
     }
 
     // No stored credentials: use the OAuth-backed provider so the first request can trigger login.
@@ -662,8 +658,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       if (storedCred?.type === 'oauth') {
         const resolvedModelId = remapOpenAIModelForCodexOAuth(`openai/${args.modelId}`);
         const resolvedBareModelId = resolvedModelId.substring(OPENAI_PREFIX.length);
-        const requestedLevel: ThinkingLevel = this.#thinkingLevel ?? 'medium';
-        const effectiveLevel = getEffectiveThinkingLevel(resolvedBareModelId, requestedLevel);
+        const effectiveLevel = getEffectiveThinkingLevel(args.modelId, this.#thinkingLevel ?? 'medium');
         const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
         const middleware = createCodexMiddleware(reasoningEffort);
         const openai = createOpenAI({
@@ -673,22 +668,22 @@ export class MastraCodeGateway extends MastraModelGateway {
             [GATEWAY_AUTH_HEADER]: `Bearer ${args.apiKey}`,
             ...args.headers,
           },
-          fetch: buildOpenAICodexOAuthFetch({ authStorage: this.#credentials, rewriteUrl: false }) as any,
+          fetch: buildOpenAICodexOAuthFetch({ authStorage: this.#credentials, rewriteUrl: false }),
         });
 
         return wrapLanguageModel({
           model: openai.responses(resolvedBareModelId),
           middleware: [middleware],
-        }) as unknown as GatewayLanguageModel;
+        });
       }
 
-      return this.#mastraGateway.resolveLanguageModel(args) as GatewayLanguageModel;
+      return this.#mastraGateway.resolveLanguageModel(args);
     }
 
     if (storedCred?.type === 'oauth') {
       const resolvedModelId = remapOpenAIModelForCodexOAuth(`openai/${args.modelId}`);
       return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
-        thinkingLevel: this.#thinkingLevel,
+        thinkingLevel: this.#thinkingLevel && getEffectiveThinkingLevel(args.modelId, this.#thinkingLevel),
         headers: args.headers,
         authStorage: this.#credentials,
       }) as unknown as GatewayLanguageModel;
@@ -696,12 +691,7 @@ export class MastraCodeGateway extends MastraModelGateway {
 
     const apiKey = getOpenAIApiKey(this.#credentials);
     if (apiKey) {
-      return openaiApiKeyProvider(
-        args.modelId,
-        apiKey,
-        args.headers,
-        this.#thinkingLevel,
-      ) as unknown as GatewayLanguageModel;
+      return openaiApiKeyProvider(args.modelId, apiKey, args.headers, this.#thinkingLevel);
     }
 
     return undefined;
@@ -715,20 +705,17 @@ export class MastraCodeGateway extends MastraModelGateway {
     transport?: any;
     responsesWebSocket?: any;
   }): GatewayLanguageModel {
-    const baseModel = this.#routeThroughMastraGateway
-      ? (this.#mastraGateway.resolveLanguageModel(args) as GatewayLanguageModel)
-      : (new ModelRouterLanguageModel({
-          id: `${args.providerId}/${args.modelId}` as `${string}/${string}`,
-          apiKey: args.apiKey,
-          headers: args.headers,
-        }) as unknown as GatewayLanguageModel);
-
+    const routerModel = new ModelRouterLanguageModel({
+      id: `${args.providerId}/${args.modelId}`,
+      apiKey: args.apiKey,
+      headers: args.headers,
+    }) as unknown as GatewayLanguageModel;
     const thinkingMiddleware = createGoogleThinkingMiddleware(args.modelId, this.#thinkingLevel);
-    if (!thinkingMiddleware) return baseModel;
+    if (!thinkingMiddleware) return routerModel;
 
     return wrapLanguageModel({
-      model: baseModel as any,
+      model: routerModel as any,
       middleware: [thinkingMiddleware],
-    }) as unknown as GatewayLanguageModel;
+    });
   }
 }

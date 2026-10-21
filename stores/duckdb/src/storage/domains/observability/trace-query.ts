@@ -21,8 +21,10 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DuckDBConnection } from '../../db/index';
-import { parseJson, payloadColumnSql } from './helpers';
+import { timeToFirstChunkSupported } from '../../features';
+import { apiPreview, parseJson, payloadColumnSql, previewFromPayload } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
+import { needsPreview } from './preview-compat';
 
 type ParameterType = 'scalar' | 'timestamp';
 type FieldDefinition = { sql: string; parameterType: ParameterType };
@@ -58,8 +60,12 @@ const TRACE_FIELDS = {
   startedAt: { sql: 'r.startedAt', parameterType: 'timestamp' },
   endedAt: { sql: 'r.endedAt', parameterType: 'timestamp' },
   durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'scalar' },
+  timeToFirstChunkMs: { sql: 'r.timeToFirstChunkMs', parameterType: 'scalar' },
+  entityId: { sql: 'r.entityId', parameterType: 'scalar' },
   entityName: { sql: 'r.entityName', parameterType: 'scalar' },
   entityType: { sql: 'r.entityType', parameterType: 'scalar' },
+  name: { sql: 'r.name', parameterType: 'scalar' },
+  spanType: { sql: 'r.spanType', parameterType: 'scalar' },
   environment: { sql: 'r.environment', parameterType: 'scalar' },
   status: { sql: TRACE_STATUS_SQL, parameterType: 'scalar' },
   tags: { sql: 'r.tags', parameterType: 'scalar' },
@@ -73,6 +79,7 @@ const SPAN_FIELDS = {
   startedAt: { sql: 's.startedAt', parameterType: 'timestamp' },
   endedAt: { sql: 's.endedAt', parameterType: 'timestamp' },
   durationMs: { sql: 's.durationMs', parameterType: 'scalar' },
+  timeToFirstChunkMs: { sql: 's.timeToFirstChunkMs', parameterType: 'scalar' },
   status: { sql: 's.status', parameterType: 'scalar' },
   error: { sql: 's.error', parameterType: 'scalar' },
   entityType: { sql: 's.entityType', parameterType: 'scalar' },
@@ -86,6 +93,27 @@ const SPAN_FIELDS = {
   userId: { sql: 's.userId', parameterType: 'scalar' },
   organizationId: { sql: 's.organizationId', parameterType: 'scalar' },
 } satisfies FieldRegistry<TraceQuerySpanField>;
+
+// Direct querySpans policy is separate from trace-related span predicates.
+const SPAN_QUERY_FIELDS = {
+  ...SPAN_FIELDS,
+  traceId: { sql: 's.traceId', parameterType: 'scalar' },
+  spanId: { sql: 's.spanId', parameterType: 'scalar' },
+  parentSpanId: { sql: 's.parentSpanId', parameterType: 'scalar' },
+  threadId: { sql: 's.threadId', parameterType: 'scalar' },
+  resourceId: { sql: 's.resourceId', parameterType: 'scalar' },
+  requestId: { sql: 's.requestId', parameterType: 'scalar' },
+  serviceName: { sql: 's.serviceName', parameterType: 'scalar' },
+  experimentId: { sql: 's.experimentId', parameterType: 'scalar' },
+  environment: { sql: 's.environment', parameterType: 'scalar' },
+  executionSource: { sql: 's.executionSource', parameterType: 'scalar' },
+  parentEntityType: { sql: 's.parentEntityType', parameterType: 'scalar' },
+  parentEntityId: { sql: 's.parentEntityId', parameterType: 'scalar' },
+  parentEntityName: { sql: 's.parentEntityName', parameterType: 'scalar' },
+  rootEntityType: { sql: 's.rootEntityType', parameterType: 'scalar' },
+  rootEntityId: { sql: 's.rootEntityId', parameterType: 'scalar' },
+  rootEntityName: { sql: 's.rootEntityName', parameterType: 'scalar' },
+} as const;
 
 const SCORE_FIELDS = {
   scorerId: { sql: 's.scorerId', parameterType: 'scalar' },
@@ -118,11 +146,17 @@ const TRACE_SELECT = `
   r.entityId AS entityId,
   r.parentSpanId AS parentSpanId,
   r.metadata AS metadata,
-  ${payloadColumnSql('r.input')} AS input,
+  r.inputPreview AS inputPreview,
+  r.outputPreview AS outputPreview,
+  r.errorPreview AS errorPreview,
+  r.eventType AS rootEventType,
+  r.timestamp AS rootTimestamp,
+  r.cursorId AS rootCursorId,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,
   r.endedAt AS endedAt,
+  r.timeToFirstChunkMs AS timeToFirstChunkMs,
   r.entityName AS entityName,
   r.entityType AS entityType,
   r.environment AS environment,
@@ -378,8 +412,12 @@ const ROOT_PUSHDOWN_FIELDS = new Set<string>([
   'userId',
   'organizationId',
   'endedAt',
+  'timeToFirstChunkMs',
+  'entityId',
   'entityName',
   'entityType',
+  'name',
+  'spanType',
   'environment',
 ]);
 
@@ -526,6 +564,7 @@ function compileDuckDBTraceScope(
         startedAt,
         endedAt,
         ${durationMsSql('startedAt', 'endedAt')} AS durationMs,
+        timeToFirstChunkMs,
         CASE WHEN error IS NOT NULL THEN 'error' ELSE 'success' END AS status,
         error,
         entityType,
@@ -645,14 +684,15 @@ ORDER BY delta_rows.deltaWatermark ASC NULLS LAST, delta_rows.traceId ASC`,
 
   const orderField = plan.orderBy.field;
   const direction = plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC';
+  const order = `${orderField} ${direction} NULLS LAST, traceId ASC`;
   if (plan.paginationMode === 'page') {
     values.push(plan.perPage, plan.page * plan.perPage);
     return {
       sql: `${candidates},
   page_rows AS (
-    SELECT *, row_number() OVER (ORDER BY ${orderField} ${direction}, traceId ASC) AS __row_position
+    SELECT *, row_number() OVER (ORDER BY ${order}) AS __row_position
     FROM candidates
-    ORDER BY ${orderField} ${direction}, traceId ASC
+    ORDER BY ${order}
     LIMIT ? OFFSET ?
   ),
   page_total AS (
@@ -668,9 +708,14 @@ ORDER BY page_rows.__row_position ASC NULLS LAST`,
   }
 
   let pageCondition = '';
-  if (plan.cursor) {
+  if (plan.cursor?.sortValue === null) {
+    // Empty values sort last, so an empty cursor is only followed by its ties.
+    pageCondition = `WHERE ${orderField} IS NULL AND traceId > ?`;
+    values.push(plan.cursor.traceId);
+  } else if (plan.cursor) {
     const comparison = plan.orderBy.direction === 'asc' ? '>' : '<';
-    pageCondition = `WHERE (${orderField} ${comparison} CAST(? AS TIMESTAMP) OR (${orderField} = CAST(? AS TIMESTAMP) AND traceId > ?))`;
+    const value = `CAST(? AS ${typeof plan.cursor.sortValue === 'number' ? 'DOUBLE' : 'TIMESTAMP'})`;
+    pageCondition = `WHERE (${orderField} ${comparison} ${value} OR ${orderField} IS NULL OR (${orderField} = ${value} AND traceId > ?))`;
     values.push(plan.cursor.sortValue, plan.cursor.sortValue, plan.cursor.traceId);
   }
   values.push(plan.limit + 1);
@@ -680,7 +725,7 @@ ORDER BY page_rows.__row_position ASC NULLS LAST`,
 SELECT *
 FROM candidates
 ${pageCondition}
-ORDER BY ${orderField} ${direction}, traceId ASC
+ORDER BY ${order}
 LIMIT ?`,
     values,
   };
@@ -863,32 +908,83 @@ export function asIsoTimestamp(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(value as string | number).toISOString();
 }
 
+const TRACE_PREVIEW_PAYLOADS = [
+  ['inputPreview', 'input'],
+  ['outputPreview', 'output'],
+  ['errorPreview', 'error'],
+] as const;
+
+/**
+ * Builds the previews of listed roots whose current row was written before previews were stored
+ * (NULL preview), from that same row's payload. Only the flagged rows' payloads are read, so the
+ * fallback fades out as old rows age out of the listed range. Rows written since then carry a
+ * non-NULL preview (`''` when there is nothing to preview) for every payload they hold.
+ */
+async function fillMissingTracePreviews(db: DuckDBConnection, rows: Record<string, unknown>[]): Promise<void> {
+  const flagged = rows.filter(
+    row => row.traceId != null && TRACE_PREVIEW_PAYLOADS.some(([preview]) => needsPreview(row[preview])),
+  );
+  if (flagged.length === 0) return;
+
+  const values: unknown[] = [];
+  const where = flagged
+    .map(row => {
+      values.push(row.traceId, row.rootSpanId, row.rootEventType, row.rootTimestamp, row.rootCursorId);
+      return '(traceId = ? AND spanId = ? AND eventType = ? AND timestamp = ? AND cursorId IS NOT DISTINCT FROM ?)';
+    })
+    .join(' OR ');
+  const payloads = await db.query<Record<string, unknown>>(
+    `SELECT traceId,
+      ${payloadColumnSql('input')} AS input,
+      ${payloadColumnSql('output')} AS output,
+      error
+    FROM span_events
+    WHERE parentSpanId IS NULL AND (${where})`,
+    values,
+  );
+  const byTrace = new Map(payloads.map(payload => [String(payload.traceId), payload]));
+  for (const row of flagged) {
+    const payload = byTrace.get(String(row.traceId));
+    for (const [preview, column] of TRACE_PREVIEW_PAYLOADS) {
+      if (needsPreview(row[preview])) row[preview] = previewFromPayload(payload?.[column] ?? null);
+    }
+  }
+}
+
+function traceFromRow(row: Record<string, unknown>) {
+  return {
+    traceId: String(row.traceId),
+    rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: parseJson(row.metadata) ?? null,
+    inputPreview: apiPreview(row.inputPreview),
+    outputPreview: apiPreview(row.outputPreview),
+    errorPreview: apiPreview(row.errorPreview),
+    threadId: row.threadId == null ? null : String(row.threadId),
+    resourceId: row.resourceId == null ? null : String(row.resourceId),
+    startedAt: asIsoTimestamp(row.startedAt),
+    endedAt: asIsoTimestamp(row.endedAt),
+    entityName: row.entityName == null ? null : String(row.entityName),
+    entityType: row.entityType == null ? null : String(row.entityType),
+    environment: row.environment == null ? null : String(row.environment),
+    status: row.status,
+    ...(timeToFirstChunkSupported && {
+      timeToFirstChunkMs: row.timeToFirstChunkMs == null ? null : Number(row.timeToFirstChunkMs),
+    }),
+  };
+}
+
 export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
   if (plan.paginationMode === 'delta') assertDeltaPollingEnabled();
   if (plan.paginationMode === 'page') {
     const query = compileDuckDBTraceQuery(plan);
     const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
     const total = Number(rows[0]?.total ?? 0);
-    const traces = rows
-      .filter(row => row.traceId != null)
-      .map(row => ({
-        traceId: String(row.traceId),
-        rootSpanId: String(row.rootSpanId),
-        name: row.name,
-        entityId: row.entityId ?? null,
-        parentSpanId: row.parentSpanId ?? null,
-        createdAt: asIsoTimestamp(row.startedAt),
-        metadata: parseJson(row.metadata) ?? null,
-        inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-        threadId: row.threadId == null ? null : String(row.threadId),
-        resourceId: row.resourceId == null ? null : String(row.resourceId),
-        startedAt: asIsoTimestamp(row.startedAt),
-        endedAt: asIsoTimestamp(row.endedAt),
-        entityName: row.entityName == null ? null : String(row.entityName),
-        entityType: row.entityType == null ? null : String(row.entityType),
-        environment: row.environment == null ? null : String(row.environment),
-        status: row.status,
-      }));
+    await fillMissingTracePreviews(db, rows);
+    const traces = rows.filter(row => row.traceId != null).map(traceFromRow);
     return coreStorage.traceQueryResponseSchema.parse({
       traces,
       // The list-polling feature predates the trace-query cursor encoder.
@@ -923,24 +1019,8 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     });
   }
 
-  const traces = visibleRows.map(row => ({
-    traceId: String(row.traceId),
-    rootSpanId: String(row.rootSpanId),
-    name: row.name,
-    entityId: row.entityId ?? null,
-    parentSpanId: row.parentSpanId ?? null,
-    createdAt: asIsoTimestamp(row.startedAt),
-    metadata: parseJson(row.metadata) ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-    threadId: row.threadId == null ? null : String(row.threadId),
-    resourceId: row.resourceId == null ? null : String(row.resourceId),
-    startedAt: asIsoTimestamp(row.startedAt),
-    endedAt: asIsoTimestamp(row.endedAt),
-    entityName: row.entityName == null ? null : String(row.entityName),
-    entityType: row.entityType == null ? null : String(row.entityType),
-    environment: row.environment == null ? null : String(row.environment),
-    status: row.status,
-  }));
+  await fillMissingTracePreviews(db, visibleRows);
+  const traces = visibleRows.map(traceFromRow);
   if (plan.paginationMode === 'delta') {
     const previous = coreStorage.getTraceQueryDeltaWatermark(plan, 'duckdb') ?? '0';
     const head = String(rows[0]?.streamHead ?? 0);
@@ -963,7 +1043,7 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
         rows.length > plan.limit && last
           ? coreStorage.encodeTraceQueryCursor(plan, {
               result: 'traces',
-              sortValue: last[plan.orderBy.field],
+              sortValue: last[plan.orderBy.field] ?? null,
               traceId: last.traceId,
             })
           : null,
@@ -987,7 +1067,17 @@ export async function queryThreads(db: DuckDBConnection, plan: TrustedThreadQuer
   });
 }
 
-/** Compile a span-row filter with exactly the same rules as trace span predicates. */
+/** Compile a direct span-query filter using its dedicated field mapping. */
 export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate): SqlFragment {
-  return compileScalarPredicate(predicate, SPAN_FIELDS);
+  return compileScalarPredicate(predicate, SPAN_QUERY_FIELDS);
+}
+
+export function compileThreadQueryPredicate(predicate: TrustedTraceQueryScalarPredicate): SqlFragment {
+  const fields = Object.fromEntries(
+    Object.entries(coreStorage.THREAD_QUERY_FIELD_REGISTRY).map(([field, rule]) => [
+      field,
+      { sql: `s.${field}`, parameterType: rule.valueKind === 'timestamp' ? 'timestamp' : 'scalar' },
+    ]),
+  ) as Record<string, FieldDefinition>;
+  return compileScalarPredicate(predicate, fields);
 }

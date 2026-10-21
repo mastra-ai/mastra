@@ -38,7 +38,7 @@ import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
 
 const REVIEW_LIST_COLUMNS = [
   { name: 'itemId', label: 'Item ID', size: 'auto' },
-  { name: 'input', label: 'Input', size: 'minmax(0,1fr)' },
+  { name: 'input', label: 'Input', size: '20rem' },
   { name: 'tags', label: 'Tags', size: 'auto' },
   { name: 'scores', label: 'Scores', size: '6rem' },
 ];
@@ -170,15 +170,6 @@ export function DatasetReview({
     }
     return [...tags].sort();
   }, [dataset, items]);
-
-  const syncTagToDataset = useCallback(
-    (tag: string) => {
-      if (!dataset || !datasetId) return;
-      const currentTags = dataset.tags ?? [];
-      if (currentTags.includes(tag)) return;
-    },
-    [dataset, datasetId],
-  );
 
   const filteredItems = useMemo(() => {
     if (!activeTagFilter) return items;
@@ -559,19 +550,6 @@ export function DatasetReview({
         featuredItem?.experimentId
           ? paths.experimentItemLink(featuredItem.experimentId, featuredItem.itemId)
           : undefined
-      }
-      tagVocabulary={datasetTagVocabulary}
-      onTagsChange={
-        showCompleted || !featuredItem
-          ? undefined
-          : tags => {
-              setItemTags(featuredItem.id, tags);
-              for (const tag of tags) {
-                if (!datasetTagVocabulary.includes(tag)) {
-                  syncTagToDataset(tag);
-                }
-              }
-            }
       }
       onComplete={showCompleted || !featuredItem ? undefined : () => completeItem(featuredItem.id)}
       onPrevious={toPreviousItem}

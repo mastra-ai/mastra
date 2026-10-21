@@ -63,7 +63,6 @@ export function ScoresCard() {
           data={data?.buckets ?? []}
           series={scorerSeries(scorers)}
           height="fill"
-          showYAxis={false}
           yDomain={[0, 1]}
           valueFormatter={formatScore}
           axisFormatter={axisScore}

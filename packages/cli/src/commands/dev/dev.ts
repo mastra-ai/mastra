@@ -33,9 +33,12 @@ let isRestarting = false;
 let serverStartTime: number | undefined;
 let requestContextPresetsJson: string | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
+// How long a stopping server gets to drain and run Mastra's shutdown (including its final
+// usage telemetry report) before it is killed, on both hot reload and Ctrl-C.
+const SERVER_SHUTDOWN_TIMEOUT_MS = 5000;
 const environmentState = createEnvironmentState();
 
-function waitForProcessExit(child: ChildProcess, timeoutMs = 2000): Promise<void> {
+function waitForProcessExit(child: ChildProcess, timeoutMs = SERVER_SHUTDOWN_TIMEOUT_MS): Promise<void> {
   if (child.exitCode !== null) {
     return Promise.resolve();
   }
@@ -393,7 +396,7 @@ async function rebundleAndRestart(
               resolve();
             }
           }
-        }, 5000);
+        }, SERVER_SHUTDOWN_TIMEOUT_MS);
       });
       if (currentServerProcess === serverProcess) {
         currentServerProcess = undefined;
@@ -615,10 +618,12 @@ export async function dev({
     if (isShuttingDown) return;
     isShuttingDown = true;
 
+    // Leave the server its full shutdown window: exiting first would let execa's cleanup
+    // signal it again, which force-quits it.
     const forceExit = setTimeout(() => {
       releaseDevLock(dotMastraPath);
       process.exit(0);
-    }, 3000);
+    }, SERVER_SHUTDOWN_TIMEOUT_MS + 1000);
     forceExit.unref();
 
     devLogger.shutdown();

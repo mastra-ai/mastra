@@ -3,6 +3,7 @@ import { forwardRef } from 'react';
 
 import { ScrollArea } from '../ScrollArea';
 import { useComposerPointer } from './use-composer-pointer';
+import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
 import { cn } from '@/lib/utils';
 
 import './composer.css';
@@ -33,7 +34,9 @@ export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
       ref={ref}
       data-slot="composer-box"
       className={cn(
-        'composer-box @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border transition-colors duration-normal focus-within:border-border-strong',
+        // The suggestions list and the input scroll flush with the top corners, so their scrollbars
+        // take the inset for this radius.
+        'composer-box @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border transition-colors duration-normal scrollbar-inset-[22px] focus-within:border-border-strong',
         className,
       )}
       {...props}
@@ -98,7 +101,7 @@ export const ComposerAttachments = forwardRef<HTMLDivElement, ComponentPropsWith
 ComposerAttachments.displayName = 'ComposerAttachments';
 
 export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>(
-  ({ className, variant = 'inline', maxHeight, ...props }, ref) => (
+  ({ className, variant = 'inline', maxHeight, autoComplete, ...props }, ref) => (
     <ScrollArea maxHeight={maxHeight ?? (variant === 'textarea' ? '16rem' : '13rem')}>
       <textarea
         ref={ref}
@@ -109,6 +112,7 @@ export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>
           className,
         )}
         {...props}
+        {...textFieldAutofillProps(autoComplete)}
       />
     </ScrollArea>
   ),

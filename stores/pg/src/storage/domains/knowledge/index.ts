@@ -1,14 +1,51 @@
+import { randomUUID } from 'node:crypto';
+
+import type {
+  ListKnowledgeScopeMembersInput,
+  ListKnowledgeScopeMembersOutput,
+  ListKnowledgeScopeNodesInput,
+  ListKnowledgeScopeNodesOutput,
+} from '@internal/core/knowledge-compat';
 import {
-  assertKnowledgeCeilingRaised,
-  assertKnowledgeScopeWithinCeiling,
+  pageKnowledgeScopeMembers,
+  pageKnowledgeScopeNodes,
+  parseListKnowledgeScopeMembersInput,
+  parseListKnowledgeScopeNodesInput,
+  KNOWLEDGE_ACCESS_STATE_SCHEMA,
+  KNOWLEDGE_IMPORT_RUNS_SCHEMA,
+  KNOWLEDGE_IMPORT_STATE_SCHEMA,
+  KNOWLEDGE_NODE_ADDRESSES_SCHEMA,
+  KNOWLEDGE_NODE_SCOPES_SCHEMA,
+  KNOWLEDGE_PROPOSALS_SCHEMA,
+  KNOWLEDGE_RECORD_SCOPES_SCHEMA,
+  KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA,
+  KNOWLEDGE_SCOPE_GRANTS_SCHEMA,
+  KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+  KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  KNOWLEDGE_TABLE_NAMES,
+  PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES,
+  PUBLISHED_KNOWLEDGE_V1_TABLE_NAMES,
+  RETIRED_KNOWLEDGE_TABLE_NAMES,
+  createKnowledgeV2CoreLoader,
+  KNOWLEDGE_V2_ACTIVITY_SCHEMA,
+  KNOWLEDGE_V2_MENTIONS_SCHEMA,
+  KNOWLEDGE_V2_NODES_SCHEMA,
+  KNOWLEDGE_V2_RECORDS_SCHEMA,
+  TABLE_KNOWLEDGE_ACCESS_STATE,
+  TABLE_KNOWLEDGE_IMPORT_RUNS,
+  TABLE_KNOWLEDGE_IMPORT_STATE,
+  TABLE_KNOWLEDGE_NODE_ADDRESSES,
+  TABLE_KNOWLEDGE_NODE_SCOPES,
+  TABLE_KNOWLEDGE_PROPOSALS,
+  TABLE_KNOWLEDGE_RECORD_SCOPES,
+  TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
+  TABLE_KNOWLEDGE_SCOPE_GRANTS,
+} from '@internal/core/knowledge-compat';
+import { coreFeatures } from '@mastra/core/features';
+import {
   canonicalizeKnowledgeScope,
   createKnowledgeUlid,
   isKnowledgeScopeVisible,
-  KNOWLEDGE_ACTIVITY_SCHEMA,
-  KNOWLEDGE_CURSORS_SCHEMA,
-  KNOWLEDGE_RECORDS_SCHEMA,
-  KNOWLEDGE_MENTIONS_SCHEMA,
-  KNOWLEDGE_NODES_SCHEMA,
   KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
   knowledgeScopeKey,
   knowledgeSemanticDocumentId,
@@ -19,10 +56,9 @@ import {
   parseKnowledgeNodeCursor,
   parseKnowledgeWikilinks,
   TABLE_KNOWLEDGE_ACTIVITY,
-  TABLE_KNOWLEDGE_CURSORS,
-  TABLE_KNOWLEDGE_RECORDS,
   TABLE_KNOWLEDGE_MENTIONS,
   TABLE_KNOWLEDGE_NODES,
+  TABLE_KNOWLEDGE_RECORDS,
   TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
 } from '@mastra/core/storage';
 import type {
@@ -36,42 +72,42 @@ import type {
   KnowledgeRecord,
   KnowledgeScope,
   KnowledgeSemanticDocumentType,
+  KnowledgeStructurePlan,
+  KnowledgeStructureReconcileResult,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
+  ListKnowledgeNodesInput,
   QueryKnowledgeBySourceInput,
   QueryKnowledgeInput,
   QueryKnowledgeOutput,
-  ListKnowledgeNodesInput,
   SearchKnowledgeInput,
+  KNOWLEDGE_TABLE_NAME,
   SearchKnowledgeResult,
+  StorageColumn,
+  TABLE_NAMES,
   UpdateKnowledgeNodeInput,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
+
+import { defaults as pgDefaults } from 'pg';
 
 import { parseSchemaName } from '../../../shared/schema-name';
 import type { QueryValues, TxClient } from '../../client';
 import { generateTableSQL, PgDB, resolvePgConfig } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
 import { toPgJson } from '../../db/sanitize-json';
+import { getSchemaSnapshot } from '../../db/schema-snapshot';
 
-// #21830 shipped this helper in core 1.63.1; resolve it lazily so an older
-// installed core fails feature-detection instead of breaking module load.
-let assertDescriptionWithinBound: ((description: string | undefined) => void) | undefined;
+const loadKnowledgeV2Core = createKnowledgeV2CoreLoader(coreFeatures, () => import('@mastra/core/storage'));
+
 async function assertKnowledgeDescriptionWithinBoundCompat(description: string | undefined): Promise<void> {
-  let assertWithinBound = assertDescriptionWithinBound;
-  if (!assertWithinBound) {
-    const mod: Partial<typeof import('@mastra/core/storage')> = await import('@mastra/core/storage');
-    const resolvedAssert: (description: string | undefined) => void =
-      mod.assertKnowledgeDescriptionWithinBound ??
-      (value => {
-        if (value !== undefined && value.length > 400) {
-          throw new Error('Knowledge node description exceeds the 400 UTF-16 code unit limit');
-        }
-      });
-    assertDescriptionWithinBound = resolvedAssert;
-    assertWithinBound = resolvedAssert;
-  }
-  assertWithinBound(description);
+  const { assertKnowledgeDescriptionWithinBound } = await loadKnowledgeV2Core();
+  assertKnowledgeDescriptionWithinBound(description);
+}
+
+async function assertKnowledgeRecordTextWithinBoundCompat(text: string): Promise<void> {
+  const { assertKnowledgeRecordTextWithinBound } = await loadKnowledgeV2Core();
+  assertKnowledgeRecordTextWithinBound(text);
 }
 
 interface QueryResult {
@@ -81,6 +117,7 @@ interface QueryResult {
 
 interface Executor {
   execute(statement: string | { sql: string; args?: QueryValues }): Promise<QueryResult>;
+  executeRaw(statement: string | { sql: string; args?: QueryValues }): Promise<QueryResult>;
 }
 
 const camelCaseColumns = [
@@ -92,7 +129,6 @@ const camelCaseColumns = [
   'node',
   'sourceThreadId',
   'capturedAt',
-  'maxScope',
   'deletedAt',
   'deletedBy',
   'sourceType',
@@ -107,6 +143,29 @@ const camelCaseColumns = [
   'claimedAt',
   'claimedBy',
   'completedAt',
+  'isScope',
+  'nodeId',
+  'targetNodeId',
+  'scopeNodeId',
+  'scopeRefId',
+  'canSuggest',
+  'schemaVersion',
+  'importerId',
+  'importKind',
+  'triggerKind',
+  'transcriptThreadId',
+  'traceId',
+  'queuedAt',
+  'startedAt',
+  'targetType',
+  'targetId',
+  'contextScopeId',
+  'importRunId',
+  'proposerContextScopeId',
+  'expectedVersion',
+  'reviewerContextScopeId',
+  'reviewedAt',
+  'addedAt',
 ] as const;
 
 function transformSqlCode(sql: string, transform: (code: string) => string): string {
@@ -128,14 +187,7 @@ export function postgresSql(sql: string, schemaName?: string): string {
     const quotedSchema = `"${parseSchemaName(schemaName)}"`;
     normalized = transformSqlCode(normalized, code => {
       let transformed = code;
-      for (const table of [
-        TABLE_KNOWLEDGE_NODES,
-        TABLE_KNOWLEDGE_RECORDS,
-        TABLE_KNOWLEDGE_MENTIONS,
-        TABLE_KNOWLEDGE_CURSORS,
-        TABLE_KNOWLEDGE_ACTIVITY,
-        TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-      ]) {
+      for (const table of [...KNOWLEDGE_TABLE_NAMES, ...RETIRED_KNOWLEDGE_TABLE_NAMES]) {
         transformed = transformed.replaceAll(`"${table}"`, `${quotedSchema}."${table}"`);
       }
       return transformed;
@@ -146,17 +198,42 @@ export function postgresSql(sql: string, schemaName?: string): string {
 }
 
 function createExecutor(client: Pick<DbClient, 'query'> | TxClient, schemaName?: string): Executor {
+  const execute = async (
+    statement: string | { sql: string; args?: QueryValues },
+    qualifyWithSchema: boolean,
+  ): Promise<QueryResult> => {
+    const sql = typeof statement === 'string' ? statement : statement.sql;
+    const args = typeof statement === 'string' ? [] : (statement.args ?? []);
+    const result = await client.query(postgresSql(sql, qualifyWithSchema ? schemaName : undefined), args);
+    return { rows: result.rows as Record<string, unknown>[], rowsAffected: result.rowCount ?? 0 };
+  };
   return {
-    async execute(statement) {
-      const sql = typeof statement === 'string' ? statement : statement.sql;
-      const args = typeof statement === 'string' ? [] : (statement.args ?? []);
-      const result = await client.query(postgresSql(sql, schemaName), args);
-      return { rows: result.rows as Record<string, unknown>[], rowsAffected: result.rowCount ?? 0 };
-    },
+    execute: statement => execute(statement, true),
+    executeRaw: statement => execute(statement, false),
   };
 }
 
-const visibleSql = `(scopeKey = ? OR LEFT(?, LENGTH(scopeKey) + 1) = scopeKey || chr(31))`;
+/**
+ * Scope keys visible to a caller holding `scope`: a row is visible when its scope is a subset of the
+ * caller's (companion entries such as `resource:x:uncurated` make this more than a prefix match).
+ * Matching rows by `scopeKey` keeps visibility filters on an index; a caller scope has only a few
+ * entries, so the list stays small.
+ */
+function visibleScopeKeys(scope: KnowledgeScope): string[] {
+  const canonical = canonicalizeKnowledgeScope(scope);
+  const keys = new Set<string>();
+  for (let mask = 1; mask < 1 << canonical.length; mask++) {
+    try {
+      keys.add(knowledgeScopeKey(canonical.filter((_, index) => mask & (1 << index))));
+    } catch {
+      // Not a valid scope, so no stored row can carry it.
+    }
+  }
+  return [...keys];
+}
+
+const visibleSql = (keys: string[], scopeKeyColumn = 'scopeKey') =>
+  `${scopeKeyColumn} IN (${keys.map(() => '?').join(',')})`;
 
 function parseJson<T>(value: unknown): T {
   if (typeof value === 'string') return JSON.parse(value) as T;
@@ -216,9 +293,10 @@ function parseNode(row: Record<string, unknown>): KnowledgeNode {
     id: String(row.id),
     type: 'node',
     name: String(row.name),
-    kind: String(row.kind),
+    kind: row.kind == null ? '' : String(row.kind),
     content: row.content == null ? undefined : String(row.content),
     description: row.description == null ? undefined : String(row.description),
+    isScope: row.isScope === true || row.isScope === 1 ? true : undefined,
     scope: parseJson(row.scopeJson ?? row.scope),
     version: Number(row.version),
     mergedInto: row.mergedInto == null ? undefined : String(row.mergedInto),
@@ -236,7 +314,6 @@ function parseKnowledge(row: Record<string, unknown>): KnowledgeRecord {
     sourceThreadId: String(row.sourceThreadId),
     capturedAt: toDate(row.capturedAt),
     when: optionalDate(row.when),
-    maxScope: row.maxScope == null ? undefined : (String(row.maxScope) as KnowledgeRecord['maxScope']),
     metadata: row.metadata == null ? undefined : parseJson<Record<string, unknown>>(row.metadata),
     deletedAt: optionalDate(row.deletedAt),
     deletedBy: row.deletedBy == null ? undefined : String(row.deletedBy),
@@ -276,6 +353,10 @@ function knowledgeIndexes(schemaName?: string): Array<{ name: string; sql: strin
       sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_scope ON ${table(TABLE_KNOWLEDGE_NODES)} ("scopeKey", "type");`,
     },
     {
+      name: 'idx_knowledge_nodes_name',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_name ON ${table(TABLE_KNOWLEDGE_NODES)} ("type", "canonicalName");`,
+    },
+    {
       name: 'idx_knowledge_records_node_latest',
       sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_records_node_latest ON ${table(TABLE_KNOWLEDGE_RECORDS)} ("node", "id" DESC);`,
     },
@@ -292,12 +373,44 @@ function knowledgeIndexes(schemaName?: string): Array<{ name: string; sql: strin
       sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_latest ON ${table(TABLE_KNOWLEDGE_ACTIVITY)} ("id" DESC);`,
     },
     {
+      name: 'idx_knowledge_records_scope',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_records_scope ON ${table(TABLE_KNOWLEDGE_RECORDS)} ("scopeKey", "id");`,
+    },
+    {
+      name: 'idx_knowledge_activity_scope',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_scope ON ${table(TABLE_KNOWLEDGE_ACTIVITY)} ("scopeKey", "id" DESC);`,
+    },
+    {
       name: 'idx_knowledge_outbox_idempotency',
       sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_outbox_idempotency ON ${table(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX)} ("idempotencyKey");`,
     },
     {
       name: 'idx_knowledge_outbox_claim',
       sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_outbox_claim ON ${table(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX)} ("status", "availableAt", "createdAt");`,
+    },
+    {
+      name: 'idx_knowledge_node_scopes_scope',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_node_scopes_scope ON ${table(TABLE_KNOWLEDGE_NODE_SCOPES)} ("scopeNodeId", "nodeId");`,
+    },
+    {
+      name: 'idx_knowledge_record_scopes_scope',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_record_scopes_scope ON ${table(TABLE_KNOWLEDGE_RECORD_SCOPES)} ("scopeNodeId", "recordId");`,
+    },
+    {
+      name: 'idx_knowledge_scope_grants_ref',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_scope_grants_ref ON ${table(TABLE_KNOWLEDGE_SCOPE_GRANTS)} ("scopeRefId", "scopeNodeId");`,
+    },
+    {
+      name: 'idx_knowledge_node_addresses_node',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_node_addresses_node ON ${table(TABLE_KNOWLEDGE_NODE_ADDRESSES)} ("nodeId");`,
+    },
+    {
+      name: 'idx_knowledge_import_runs_lookup',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_import_runs_lookup ON ${table(TABLE_KNOWLEDGE_IMPORT_RUNS)} ("importerId", "binding", "queuedAt" DESC);`,
+    },
+    {
+      name: 'idx_knowledge_activity_import_run',
+      sql: `CREATE INDEX IF NOT EXISTS idx_knowledge_activity_import_run ON ${table(TABLE_KNOWLEDGE_ACTIVITY)} ("importRunId", "id" DESC);`,
     },
   ];
 }
@@ -306,56 +419,133 @@ function knowledgeIndexDDL(schemaName?: string): string[] {
   return knowledgeIndexes(schemaName).map(index => index.sql);
 }
 
+// Duplicated from Core so this adapter keeps working against Core versions that predate the deprecation.
+const KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE =
+  'Knowledge curation cursors were removed: observation-time curate is the only Knowledge writer and needs no cursor.';
+
+const knowledgeTableDefinitions: Array<{
+  tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
+  schema: Record<string, StorageColumn>;
+  compositePrimaryKey?: string[];
+}> = [
+  { tableName: TABLE_KNOWLEDGE_NODES, schema: KNOWLEDGE_V2_NODES_SCHEMA },
+  { tableName: TABLE_KNOWLEDGE_RECORDS, schema: KNOWLEDGE_V2_RECORDS_SCHEMA },
+  {
+    tableName: TABLE_KNOWLEDGE_MENTIONS,
+    schema: KNOWLEDGE_V2_MENTIONS_SCHEMA,
+    compositePrimaryKey: ['recordId', 'sourceId'],
+  },
+  {
+    tableName: TABLE_KNOWLEDGE_NODE_SCOPES,
+    schema: KNOWLEDGE_NODE_SCOPES_SCHEMA,
+    compositePrimaryKey: ['nodeId', 'scopeNodeId'],
+  },
+  {
+    tableName: TABLE_KNOWLEDGE_RECORD_SCOPES,
+    schema: KNOWLEDGE_RECORD_SCOPES_SCHEMA,
+    compositePrimaryKey: ['recordId', 'scopeNodeId'],
+  },
+  {
+    tableName: TABLE_KNOWLEDGE_SCOPE_GRANTS,
+    schema: KNOWLEDGE_SCOPE_GRANTS_SCHEMA,
+    compositePrimaryKey: ['scopeNodeId', 'scopeRefId'],
+  },
+  { tableName: TABLE_KNOWLEDGE_ACCESS_STATE, schema: KNOWLEDGE_ACCESS_STATE_SCHEMA },
+  { tableName: TABLE_KNOWLEDGE_SCOPE_ADDRESSES, schema: KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA },
+  {
+    tableName: TABLE_KNOWLEDGE_NODE_ADDRESSES,
+    schema: KNOWLEDGE_NODE_ADDRESSES_SCHEMA,
+    compositePrimaryKey: ['source', 'address'],
+  },
+  {
+    tableName: TABLE_KNOWLEDGE_IMPORT_STATE,
+    schema: KNOWLEDGE_IMPORT_STATE_SCHEMA,
+    compositePrimaryKey: ['importerId', 'binding', 'key'],
+  },
+  { tableName: TABLE_KNOWLEDGE_IMPORT_RUNS, schema: KNOWLEDGE_IMPORT_RUNS_SCHEMA },
+  { tableName: TABLE_KNOWLEDGE_PROPOSALS, schema: KNOWLEDGE_PROPOSALS_SCHEMA },
+  { tableName: TABLE_KNOWLEDGE_ACTIVITY, schema: KNOWLEDGE_V2_ACTIVITY_SCHEMA },
+  { tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX, schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA },
+];
+
+type PgKnowledgeIsolationConfig = {
+  schemaName?: string;
+  client?: DbClient;
+  pool?: object;
+  connectionString?: string;
+  host?: string;
+  port?: number | string;
+  database?: string;
+  user?: string;
+};
+
+type PgConnectionField = 'host' | 'port' | 'database' | 'user';
+
+// Mirrors how `pg` resolves each connection field: explicit option, then PG* env var, then pg.defaults.
+function pgSetting(config: Partial<Record<PgConnectionField, unknown>>, key: PgConnectionField): string | undefined {
+  const value = config[key] || process.env[`PG${key.toUpperCase()}`] || pgDefaults[key];
+  return value === undefined || value === null || value === '' ? undefined : String(value);
+}
+
+function effectivePgTarget(config: Partial<Record<PgConnectionField, unknown>>): string | undefined {
+  const host = pgSetting(config, 'host');
+  const database = pgSetting(config, 'database') ?? pgSetting(config, 'user');
+  if (!host || !database) return undefined;
+  const canonicalHost = host.startsWith('/') ? host : host.toLocaleLowerCase();
+  return `${canonicalHost}:${pgSetting(config, 'port') ?? '5432'}/${database}`;
+}
+
+function canonicalPgTarget(config: PgKnowledgeIsolationConfig): string | undefined {
+  if (config.connectionString) {
+    try {
+      const parsed = new URL(config.connectionString);
+      return effectivePgTarget({
+        host: decodeURIComponent(parsed.hostname) || config.host,
+        port: parsed.port || config.port,
+        database: decodeURIComponent(parsed.pathname.slice(1)) || config.database,
+        user: decodeURIComponent(parsed.username) || config.user,
+      });
+    } catch {
+      return config.connectionString;
+    }
+  }
+  return effectivePgTarget(config);
+}
+
+function pgSourceConfig(source: object | undefined): PgKnowledgeIsolationConfig | undefined {
+  if (!source || !('options' in source)) return undefined;
+  return (source as { options?: PgKnowledgeIsolationConfig }).options;
+}
+
+function pgClientPool(client: DbClient | undefined): object | undefined {
+  if (!client || !('$pool' in client)) return undefined;
+  return (client as DbClient & { $pool?: object }).$pool;
+}
+
+export function getPgKnowledgeIsolationKey(config: PgKnowledgeIsolationConfig): unknown {
+  const schema = config.schemaName ?? 'public';
+  const pool = config.pool ?? pgClientPool(config.client);
+  const poolConfig = pgSourceConfig(pool);
+  const hasOwnTarget = Boolean(config.connectionString || config.host || config.database);
+  const target = hasOwnTarget ? canonicalPgTarget(config) : poolConfig ? canonicalPgTarget(poolConfig) : undefined;
+  if (target) return `pg:${target}:schema:${schema}`;
+  // Without a resolvable target, assume any two such stores may share a database so registration fails closed.
+  // Callers that know the stores are distinct can pass storageIsolationKey.
+  return `pg:unidentified:schema:${schema}`;
+}
+
 export class KnowledgePG extends KnowledgeStorage {
-  static readonly MANAGED_TABLES = [
-    TABLE_KNOWLEDGE_NODES,
-    TABLE_KNOWLEDGE_RECORDS,
-    TABLE_KNOWLEDGE_MENTIONS,
-    TABLE_KNOWLEDGE_CURSORS,
-    TABLE_KNOWLEDGE_ACTIVITY,
-    TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-  ] as const;
+  static readonly MANAGED_TABLES = KNOWLEDGE_TABLE_NAMES;
 
   static getExportDDL(schemaName?: string): string[] {
     return [
-      generateTableSQL({
-        tableName: TABLE_KNOWLEDGE_NODES,
-        schema: KNOWLEDGE_NODES_SCHEMA,
-        schemaName,
-        includeAllConstraints: true,
-      }),
-      generateTableSQL({
-        tableName: TABLE_KNOWLEDGE_RECORDS,
-        schema: KNOWLEDGE_RECORDS_SCHEMA,
-        schemaName,
-        includeAllConstraints: true,
-      }),
-      generateTableSQL({
-        tableName: TABLE_KNOWLEDGE_MENTIONS,
-        schema: KNOWLEDGE_MENTIONS_SCHEMA,
-        schemaName,
-        compositePrimaryKey: ['sourceType', 'sourceId', 'recordId'],
-        includeAllConstraints: true,
-      }),
-      generateTableSQL({
-        tableName: TABLE_KNOWLEDGE_CURSORS,
-        schema: KNOWLEDGE_CURSORS_SCHEMA,
-        schemaName,
-        compositePrimaryKey: ['sourceThreadId', 'agent'],
-        includeAllConstraints: true,
-      }),
-      generateTableSQL({
-        tableName: TABLE_KNOWLEDGE_ACTIVITY,
-        schema: KNOWLEDGE_ACTIVITY_SCHEMA,
-        schemaName,
-        includeAllConstraints: true,
-      }),
-      generateTableSQL({
-        tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-        schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
-        schemaName,
-        includeAllConstraints: true,
-      }),
+      ...knowledgeTableDefinitions.map(definition =>
+        generateTableSQL({
+          ...definition,
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      ),
       ...knowledgeIndexDDL(schemaName),
     ];
   }
@@ -368,7 +558,7 @@ export class KnowledgePG extends KnowledgeStorage {
   readonly #schemaName?: string;
 
   constructor(config: PgDomainConfig) {
-    super();
+    super({ storageIsolationKey: config.storageIsolationKey ?? getPgKnowledgeIsolationKey(config) });
     const { client, readClient, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
     this.#client = client;
     this.#schemaName = schemaName;
@@ -377,48 +567,387 @@ export class KnowledgePG extends KnowledgeStorage {
     this.#db = new PgDB({ client, readClient, schemaName, skipDefaultIndexes });
   }
 
-  async init(): Promise<void> {
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_NODES, schema: KNOWLEDGE_NODES_SCHEMA });
-    // Add description column for backwards compatibility with existing databases
-    await this.#db.alterTable({
-      tableName: TABLE_KNOWLEDGE_NODES,
-      schema: KNOWLEDGE_NODES_SCHEMA,
-      ifNotExists: ['description'],
+  override getCapabilities() {
+    return {
+      contractVersion: KNOWLEDGE_STORAGE_CONTRACT_VERSION,
+      schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+      supportsV2: true,
+      supportsSchemaInspection: true,
+      supportsExplicitReset: true,
+    } as const;
+  }
+
+  override async inspectSchema() {
+    const { inspectKnowledgeSchema } = await loadKnowledgeV2Core();
+    try {
+      const snapshot = getSchemaSnapshot(this.#client, this.#schemaName);
+      if (snapshot) {
+        const tableNames = KNOWLEDGE_TABLE_NAMES.filter(table => snapshot.tables.has(table));
+        return this.#classifySchema(this.#executor, tableNames, snapshot.columns);
+      }
+      return this.#inspectSchemaWithExecutor(this.#executor);
+    } catch (error) {
+      return inspectKnowledgeSchema({
+        available: false,
+        tableNames: [],
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  async #inspectSchemaWithExecutor(executor: Executor) {
+    const tableResult = await executor.execute({
+      sql: `SELECT table_name FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name = ANY(?::text[])`,
+      args: [this.#schemaName ?? null, [...KNOWLEDGE_TABLE_NAMES]],
     });
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_RECORDS, schema: KNOWLEDGE_RECORDS_SCHEMA });
-    await this.#db.createTable({
-      tableName: TABLE_KNOWLEDGE_MENTIONS,
-      schema: KNOWLEDGE_MENTIONS_SCHEMA,
-      compositePrimaryKey: ['sourceType', 'sourceId', 'recordId'],
+    const tableNames = tableResult.rows.map(row => String(row.table_name));
+    const columnResult = await executor.execute({
+      sql: `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = COALESCE(?, current_schema()) AND table_name = ANY(?::text[])`,
+      args: [this.#schemaName ?? null, [...KNOWLEDGE_TABLE_NAMES]],
     });
-    await this.#db.createTable({
-      tableName: TABLE_KNOWLEDGE_CURSORS,
-      schema: KNOWLEDGE_CURSORS_SCHEMA,
-      compositePrimaryKey: ['sourceThreadId', 'agent'],
-    });
-    await this.#db.createTable({ tableName: TABLE_KNOWLEDGE_ACTIVITY, schema: KNOWLEDGE_ACTIVITY_SCHEMA });
-    await this.#db.createTable({
-      tableName: TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
-      schema: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
-    });
-    await Promise.all(
-      knowledgeIndexes(this.#schemaName).map(index => this.#db.createIndexFromStatement(index.name, index.sql)),
+    const columns = new Map<string, Set<string>>();
+    for (const row of columnResult.rows) {
+      const table = String(row.table_name);
+      const names = columns.get(table) ?? new Set<string>();
+      names.add(String(row.column_name));
+      columns.set(table, names);
+    }
+    return this.#classifySchema(executor, tableNames, columns);
+  }
+
+  async #classifySchema(executor: Executor, tableNames: string[], columns: Map<string, Set<string>>) {
+    const { inspectKnowledgeSchema } = await loadKnowledgeV2Core();
+    if (tableNames.length === 0) return inspectKnowledgeSchema({ available: true, tableNames });
+    const missingTables = KNOWLEDGE_TABLE_NAMES.filter(table => !tableNames.includes(table));
+    if (missingTables.length > 0) {
+      return inspectKnowledgeSchema({
+        available: true,
+        tableNames,
+        reason: `Missing Knowledge v2 tables: ${missingTables.join(', ')}`,
+      });
+    }
+
+    for (const { tableName: table, schema } of knowledgeTableDefinitions) {
+      const actual = columns.get(table) ?? new Set<string>();
+      const missing = Object.keys(schema).filter(column => !actual.has(column));
+      if (missing.length > 0) {
+        return inspectKnowledgeSchema({
+          available: true,
+          tableNames,
+          reason: `Knowledge table ${table} is missing v2 columns: ${missing.join(', ')}`,
+        });
+      }
+    }
+    const accessState = await executor.execute(
+      `SELECT schemaVersion FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`,
     );
+    if (Number(accessState.rows[0]?.schemaVersion) !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
+      return inspectKnowledgeSchema({
+        available: true,
+        tableNames,
+        reason: 'Knowledge schema version marker is missing or incompatible',
+      });
+    }
+    return inspectKnowledgeSchema({
+      available: true,
+      tableNames,
+      schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+    });
+  }
+
+  async init(): Promise<void> {
+    await this.#transaction(async tx => {
+      await tx.execute({
+        sql: 'SELECT pg_advisory_xact_lock(hashtext(?))',
+        args: [`mastra-knowledge-v2:${this.#schemaName ?? 'current_schema'}`],
+      });
+      const { assertKnowledgeSchemaCompatible } = await loadKnowledgeV2Core();
+      let inspection = await this.#inspectSchemaWithExecutor(tx);
+      if (inspection.status === 'incompatible-reset-required' && (await this.#isPublishedV1Layout(tx))) {
+        // Knowledge v1 was experimental and its data is not migrated: replace the published v1 layout,
+        // discarding any rows it holds.
+        const tables = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()]
+          .map(table => `"${table}"`)
+          .join(', ');
+        await tx.execute(`DROP TABLE IF EXISTS ${tables}`);
+        inspection = await this.#inspectSchemaWithExecutor(tx);
+      }
+      assertKnowledgeSchemaCompatible(inspection);
+
+      for (const definition of knowledgeTableDefinitions) {
+        await tx.executeRaw(
+          generateTableSQL({ ...definition, schemaName: this.#schemaName, includeAllConstraints: true }),
+        );
+      }
+      for (const index of knowledgeIndexes(this.#schemaName)) await tx.executeRaw(index.sql);
+      await tx.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_ACCESS_STATE}" (id, epoch, schemaVersion) VALUES ('global', 0, ?) ON CONFLICT (id) DO NOTHING`,
+        args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
+      });
+    });
+  }
+
+  /**
+   * True when the only Knowledge objects are the tables and indexes published v1 adapters created,
+   * with or without rows. Anything else (v2 tables, unknown tables, views, triggers, extra indexes)
+   * needs an explicit reset.
+   */
+  async #isPublishedV1Layout(executor: Executor): Promise<boolean> {
+    const schema = this.#schemaName ?? null;
+    const relations = await executor.execute({
+      sql: `SELECT table_name, table_type FROM information_schema.tables WHERE table_schema = COALESCE(?, current_schema()) AND table_name LIKE 'mastra\\_knowledge\\_%'`,
+      args: [schema],
+    });
+    const tables: string[] = [];
+    for (const row of relations.rows) {
+      const name = String(row.table_name);
+      if (row.table_type !== 'BASE TABLE' || !PUBLISHED_KNOWLEDGE_V1_TABLE_NAMES.has(name)) return false;
+      tables.push(name);
+    }
+    const indexes = await executor.execute({
+      sql: `SELECT indexname FROM pg_indexes WHERE schemaname = COALESCE(?, current_schema()) AND tablename = ANY(?::text[])`,
+      args: [schema, tables],
+    });
+    for (const row of indexes.rows) {
+      const name = String(row.indexname);
+      if (!PUBLISHED_KNOWLEDGE_V1_INDEX_NAMES.has(name) && !name.endsWith('_pkey')) return false;
+    }
+    const dependents = await executor.execute({
+      sql: `SELECT 1 FROM information_schema.view_table_usage WHERE table_schema = COALESCE(?, current_schema()) AND table_name = ANY(?::text[]) UNION ALL SELECT 1 FROM information_schema.triggers WHERE event_object_schema = COALESCE(?, current_schema()) AND event_object_table = ANY(?::text[]) LIMIT 1`,
+      args: [schema, tables, schema, tables],
+    });
+    if (dependents.rows.length > 0) return false;
+    return true;
   }
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#transaction(async tx => {
       for (const table of [
+        TABLE_KNOWLEDGE_RECORD_SCOPES,
+        TABLE_KNOWLEDGE_NODE_SCOPES,
+        TABLE_KNOWLEDGE_SCOPE_GRANTS,
+        TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
+        TABLE_KNOWLEDGE_NODE_ADDRESSES,
         TABLE_KNOWLEDGE_MENTIONS,
+        TABLE_KNOWLEDGE_PROPOSALS,
+        TABLE_KNOWLEDGE_ACTIVITY,
+        TABLE_KNOWLEDGE_IMPORT_STATE,
+        TABLE_KNOWLEDGE_IMPORT_RUNS,
+        TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
         TABLE_KNOWLEDGE_RECORDS,
         TABLE_KNOWLEDGE_NODES,
-        TABLE_KNOWLEDGE_CURSORS,
-        TABLE_KNOWLEDGE_ACTIVITY,
-        TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
       ]) {
         await tx.execute(`DELETE FROM "${table}"`);
       }
+      await tx.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET epoch = 0 WHERE id = 'global'`);
     });
+  }
+
+  override async dangerouslyReset(): Promise<void> {
+    const tables = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()]
+      .map(table => `"${table}"`)
+      .join(', ');
+    await this.#executor.execute(`DROP TABLE IF EXISTS ${tables}`);
+    await this.init();
+  }
+
+  override async reconcileStructure(plan: KnowledgeStructurePlan): Promise<KnowledgeStructureReconcileResult> {
+    return this.#transaction(async tx => {
+      await tx.execute({
+        sql: `SELECT pg_advisory_xact_lock(hashtext(?))`,
+        args: [`mastra-knowledge-reconcile:${this.#schemaName}`],
+      });
+      const scopes: Record<string, string> = {};
+      const createdScopeIds: string[] = [];
+      const createdAddresses = new Set<string>();
+      const retrofit = plan.retrofit ?? true;
+      let structureChanged = false;
+      const deletedScopeAddresses = new Set<string>();
+      const resolveAddress = async (address: string): Promise<string | undefined> => {
+        if (scopes[address]) return scopes[address];
+        const result = await tx.execute({
+          sql: `SELECT a."scopeNodeId",n."isScope",n."deletedAt" FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=a."scopeNodeId" WHERE a.address=?`,
+          args: [address],
+        });
+        const row = result.rows[0];
+        if (!row) return undefined;
+        if (!row.isScope) throw new Error(`Knowledge address ${address} does not reference a scope`);
+        if (row.deletedAt) deletedScopeAddresses.add(address);
+        scopes[address] = String(row.scopeNodeId);
+        return scopes[address];
+      };
+
+      for (const scope of plan.scopes) {
+        const existingId = await resolveAddress(scope.address);
+        if (existingId) continue;
+        const id = randomUUID();
+        const now = new Date().toISOString();
+        await tx.execute({
+          sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODES}" (id,type,name,"canonicalName",kind,description,"isScope",metadata,version,"createdAt","updatedAt") VALUES (?,'node',?,?,?,?,TRUE,?,1,?,?)`,
+          args: [
+            id,
+            scope.name,
+            canonicalName(scope.name),
+            scope.kind ?? null,
+            scope.description ?? null,
+            scope.metadata ?? null,
+            now,
+            now,
+          ],
+        });
+        await tx.execute({
+          sql: `INSERT INTO "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" (address,"scopeNodeId") VALUES (?,?)`,
+          args: [scope.address, id],
+        });
+        scopes[scope.address] = id;
+        createdAddresses.add(scope.address);
+        createdScopeIds.push(id);
+        structureChanged = true;
+      }
+
+      for (const scope of plan.scopes) {
+        if (!createdAddresses.has(scope.address) && (!retrofit || deletedScopeAddresses.has(scope.address))) continue;
+        const scopeNodeId = scopes[scope.address]!;
+        for (const parentAddress of scope.parentAddresses ?? []) {
+          const parentId = await resolveAddress(parentAddress);
+          if (!parentId || deletedScopeAddresses.has(parentAddress)) {
+            const deletedParentId = scopes[parentAddress];
+            const existing = deletedParentId
+              ? await tx.execute({
+                  sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE "nodeId"=? AND "scopeNodeId"=?`,
+                  args: [scopeNodeId, deletedParentId],
+                })
+              : undefined;
+            if (existing?.rows.length) continue;
+            throw new Error(`Knowledge parent scope does not exist: ${parentAddress}`);
+          }
+          const edge = await tx.execute({
+            sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE "nodeId"=? AND "scopeNodeId"=?`,
+            args: [scopeNodeId, parentId],
+          });
+          if (edge.rows.length) continue;
+          // Only scope children can collide by name; content nodes placed under the parent share its edges table.
+          const sibling = await tx.execute({
+            sql: `SELECT n.id FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=ns."nodeId" WHERE ns."scopeNodeId"=? AND n."isScope" AND n."canonicalName"=? AND n."deletedAt" IS NULL AND n.id<>? LIMIT 1`,
+            args: [parentId, canonicalName(scope.name), scopeNodeId],
+          });
+          if (sibling.rows.length) {
+            throw new Error(`Knowledge scope name ${scope.name} already exists under ${parentAddress}`);
+          }
+          const inserted = await tx.execute({
+            sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" ("nodeId","scopeNodeId","addedAt") VALUES (?,?,?) ON CONFLICT DO NOTHING`,
+            args: [scopeNodeId, parentId, new Date().toISOString()],
+          });
+          structureChanged ||= inserted.rowsAffected > 0;
+        }
+        for (const grant of scope.grants ?? []) {
+          const scopeRefId = await resolveAddress(grant.scopeRefAddress);
+          if (!scopeRefId || deletedScopeAddresses.has(grant.scopeRefAddress)) {
+            const deletedScopeRefId = scopes[grant.scopeRefAddress];
+            const existing = deletedScopeRefId
+              ? await tx.execute({
+                  sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" WHERE "scopeNodeId"=? AND "scopeRefId"=?`,
+                  args: [scopeNodeId, deletedScopeRefId],
+                })
+              : undefined;
+            if (existing?.rows.length) continue;
+            throw new Error(`Knowledge grant scope does not exist: ${grant.scopeRefAddress}`);
+          }
+          const inserted = await tx.execute({
+            sql: `INSERT INTO "${TABLE_KNOWLEDGE_SCOPE_GRANTS}" ("scopeNodeId","scopeRefId",role,"canSuggest") VALUES (?,?,?,?) ON CONFLICT DO NOTHING`,
+            args: [scopeNodeId, scopeRefId, grant.role, grant.canSuggest ?? null],
+          });
+          structureChanged ||= inserted.rowsAffected > 0;
+        }
+      }
+
+      if (structureChanged) {
+        await tx.execute(`UPDATE "${TABLE_KNOWLEDGE_ACCESS_STATE}" SET epoch=epoch+1 WHERE id='global'`);
+      }
+      const state = await tx.execute(`SELECT epoch FROM "${TABLE_KNOWLEDGE_ACCESS_STATE}" WHERE id='global'`);
+      return {
+        scopes,
+        createdScopeIds,
+        deletedScopeAddresses: [...deletedScopeAddresses],
+        changed: structureChanged,
+        accessEpoch: Number(state.rows[0]?.epoch ?? 0),
+      };
+    });
+  }
+
+  override async listScopeNodes(input: ListKnowledgeScopeNodesInput = {}): Promise<ListKnowledgeScopeNodesOutput> {
+    const { limit, after } = parseListKnowledgeScopeNodesInput(input);
+    if (input.addresses?.length === 0 || input.ids?.length === 0) return { scopes: [], nextCursor: null };
+    const args: Array<string | number> = [];
+    const where = [`n."isScope"`, `n."deletedAt" IS NULL`];
+    let within = '';
+    if (input.withinAddress !== undefined) {
+      // The subtree follows parent edges transitively; UNION dedupes scopes reachable through several parents.
+      within = `WITH RECURSIVE within_scope(id) AS (SELECT r.id FROM "${TABLE_KNOWLEDGE_NODES}" r JOIN "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" ra ON ra."scopeNodeId"=r.id WHERE ra.address=? AND r."isScope" AND r."deletedAt" IS NULL UNION SELECT ns."nodeId" FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns JOIN within_scope w ON ns."scopeNodeId"=w.id JOIN "${TABLE_KNOWLEDGE_NODES}" c ON c.id=ns."nodeId" WHERE c."isScope" AND c."deletedAt" IS NULL) `;
+      args.push(input.withinAddress);
+      where.push('n.id IN (SELECT id FROM within_scope)');
+    }
+    if (input.addresses) {
+      where.push(`a.address IN (${input.addresses.map(() => '?').join(',')})`);
+      args.push(...input.addresses);
+    }
+    if (input.ids) {
+      where.push(`n.id IN (${input.ids.map(() => '?').join(',')})`);
+      args.push(...input.ids);
+    }
+    if (after) {
+      where.push('(n.name COLLATE "C" > ? OR (n.name = ? AND n.id > ?))');
+      args.push(after.name, after.name, after.id);
+    }
+    args.push(limit + 1);
+    const scopes = await this.#readExecutor.execute({
+      sql: `${within}SELECT n.id,n.name,n.kind,n.description,a.address FROM "${TABLE_KNOWLEDGE_NODES}" n LEFT JOIN "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a ON a."scopeNodeId"=n.id WHERE ${where.join(' AND ')} ORDER BY n.name COLLATE "C", n.id LIMIT ?`,
+      args,
+    });
+    const rows = scopes.rows as Array<Record<string, unknown>>;
+    if (rows.length === 0) return { scopes: [], nextCursor: null };
+    // Parent edges for this page only, so the read stays bounded by the page size.
+    const parents = await this.#readExecutor.execute({
+      sql: `SELECT ns."nodeId",ns."scopeNodeId" FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns WHERE ns."nodeId" IN (${rows.map(() => '?').join(',')}) ORDER BY ns."scopeNodeId" COLLATE "C"`,
+      args: rows.map(row => String(row.id)),
+    });
+    const parentsByScopeId = new Map<string, string[]>();
+    for (const row of parents.rows as Array<Record<string, unknown>>) {
+      const scopeId = String(row.nodeId);
+      const parentId = String(row.scopeNodeId);
+      const existing = parentsByScopeId.get(scopeId);
+      if (existing) existing.push(parentId);
+      else parentsByScopeId.set(scopeId, [parentId]);
+    }
+    return pageKnowledgeScopeNodes(
+      rows.map(row => ({
+        id: String(row.id),
+        address: String(row.address),
+        name: String(row.name),
+        ...(row.kind == null ? {} : { kind: String(row.kind) }),
+        ...(row.description == null ? {} : { description: String(row.description) }),
+        parentIds: parentsByScopeId.get(String(row.id)) ?? [],
+      })),
+      limit,
+      input,
+    );
+  }
+
+  override async listScopeMembers(input: ListKnowledgeScopeMembersInput): Promise<ListKnowledgeScopeMembersOutput> {
+    const { limit, after } = parseListKnowledgeScopeMembersInput(input);
+    const args: unknown[] = [input.scopeNodeId];
+    let keyset = '';
+    if (after) {
+      const updatedAt = postgresTimestamp(after.updatedAt);
+      keyset = ` AND (n."updatedAt" < ? OR (n."updatedAt" = ? AND (n.name > ? OR (n.name = ? AND n.id > ?))))`;
+      args.push(updatedAt, updatedAt, after.name, after.name, after.id);
+    }
+    args.push(limit + 1);
+    const result = await this.#readExecutor.execute({
+      sql: `SELECT *, scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_NODES}" n WHERE EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" ns WHERE ns."nodeId"=n.id AND ns."scopeNodeId"=?) AND n."deletedAt" IS NULL AND n."mergedInto" IS NULL${keyset} ORDER BY n."updatedAt" DESC, n.name ASC, n.id ASC LIMIT ?`,
+      args,
+    });
+    return pageKnowledgeScopeMembers((result.rows as Array<Record<string, unknown>>).map(parseNode), limit, input);
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
@@ -431,6 +960,8 @@ export class KnowledgePG extends KnowledgeStorage {
         if (!isKnowledgeScopeVisible(terminal.scope, scope)) {
           throw new Error(`Merged knowledge node is not visible from scope: ${input.name}`);
         }
+        // Writing about a node that already exists still places it where the caller asked.
+        await this.#placeNodeInScopes(tx, terminal.id, input.scopeAddresses, new Date());
         return terminal;
       }
       const now = new Date();
@@ -447,7 +978,7 @@ export class KnowledgePG extends KnowledgeStorage {
         updatedAt: now,
       };
       await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODES}" (id,type,name,canonicalName,kind,content,description,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,jsonb(?),?,?,NULL,?,?)`,
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODES}" (id,type,name,canonicalName,kind,content,description,isScope,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,?,?,FALSE,jsonb(?),?,?,NULL,?,?)`,
         args: [
           node.id,
           'node',
@@ -463,6 +994,8 @@ export class KnowledgePG extends KnowledgeStorage {
           now.toISOString(),
         ],
       });
+      await this.#replaceNodeScopes(tx, node.id, scope, now);
+      await this.#placeNodeInScopes(tx, node.id, input.scopeAddresses, now);
       await this.#replaceMentions(tx, 'node', node.id, node.content ?? '', input.resolutionScope ?? scope, scope);
       await this.#activity(tx, 'node-created', 'node', node.id, scope);
       await this.#outbox(tx, 'node', node.id, 'upsert', node.version, scope);
@@ -484,9 +1017,9 @@ export class KnowledgePG extends KnowledgeStorage {
 
   async listNodes(input: ListKnowledgeNodesInput): Promise<KnowledgeNode[]> {
     const scope = canonicalizeKnowledgeScope(input.scope);
-    const key = knowledgeScopeKey(scope);
-    const clauses = [`type = 'node'`, 'mergedInto IS NULL', visibleSql];
-    const args: QueryValues = [key, key];
+    const keys = visibleScopeKeys(scope);
+    const clauses = [`type = 'node'`, 'mergedInto IS NULL', visibleSql(keys)];
+    const args: QueryValues = [...keys];
     if (input.namePrefix) {
       clauses.push("canonicalName LIKE ? ESCAPE '='");
       args.push(`${escapeLikePattern(canonicalName(input.namePrefix))}%`);
@@ -542,6 +1075,9 @@ export class KnowledgePG extends KnowledgeStorage {
         ],
       });
       if (result.rowsAffected === 0) throw new KnowledgeConflictError(input.id);
+      if (knowledgeScopeKey(existing.scope) !== knowledgeScopeKey(scope)) {
+        await this.#swapIdentityScopes(tx, input.id, existing.scope, scope, now);
+      }
       if (input.content !== undefined || input.name !== undefined || input.scope !== undefined) {
         await this.#replaceMentions(tx, 'node', input.id, content ?? '', input.resolutionScope ?? scope, scope);
       }
@@ -599,8 +1135,8 @@ export class KnowledgePG extends KnowledgeStorage {
       });
       if (updated.rowsAffected === 0) throw new KnowledgeConflictError(source.id);
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET node=? WHERE node=?`,
-        args: [target.id, source.id],
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET node=?,version=version+1,updatedAt=? WHERE node=?`,
+        args: [target.id, new Date().toISOString(), source.id],
       });
       await tx.execute({
         sql: `DELETE FROM "${TABLE_KNOWLEDGE_MENTIONS}" WHERE recordId=? AND EXISTS (SELECT 1 FROM "${TABLE_KNOWLEDGE_MENTIONS}" target WHERE target.sourceType="${TABLE_KNOWLEDGE_MENTIONS}".sourceType AND target.sourceId="${TABLE_KNOWLEDGE_MENTIONS}".sourceId AND target.recordId=?)`,
@@ -658,10 +1194,10 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async appendKnowledge(input: AppendKnowledgeInput): Promise<KnowledgeRecord> {
+    await assertKnowledgeRecordTextWithinBoundCompat(input.text);
     const scope = canonicalizeKnowledgeScope(input.scope);
     const resolutionScope = canonicalizeKnowledgeScope(input.resolutionScope);
     const defaultScope = canonicalizeKnowledgeScope(input.defaultScope);
-    assertKnowledgeScopeWithinCeiling(scope, input.maxScope);
     return this.#transaction(async tx => {
       const parent = await this.#resolveTerminalNode(tx, nodeReferenceId(input.node));
       if (!parent) throw new KnowledgeNotFoundError('node', nodeReferenceId(input.node));
@@ -674,11 +1210,10 @@ export class KnowledgePG extends KnowledgeStorage {
         sourceThreadId: input.sourceThreadId,
         capturedAt: new Date(),
         when: input.when ? new Date(input.when) : undefined,
-        maxScope: input.maxScope,
         metadata: input.metadata,
       };
       await tx.execute({
-        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,text,scope,scopeKey,sourceThreadId,capturedAt,"when",maxScope,metadata,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,?,jsonb(?),NULL,NULL)`,
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORDS}" (id,node,text,scope,scopeKey,sourceThreadId,capturedAt,"when",metadata,version,updatedAt,deletedAt,deletedBy) VALUES (?,?,?,jsonb(?),?,?,?,?,jsonb(?),?,?,NULL,NULL)`,
         args: [
           record.id,
           record.node,
@@ -688,10 +1223,12 @@ export class KnowledgePG extends KnowledgeStorage {
           record.sourceThreadId,
           record.capturedAt.toISOString(),
           record.when?.toISOString() ?? null,
-          record.maxScope ?? null,
           metadataJson,
+          1,
+          record.capturedAt.toISOString(),
         ],
       });
+      await this.#replaceRecordScopes(tx, record.id, scope, record.capturedAt);
       await this.#replaceMentions(tx, 'record', record.id, record.text, resolutionScope, defaultScope);
       await this.#activity(tx, 'record-created', 'record', record.id, scope, record.sourceThreadId);
       await this.#outbox(tx, 'record', record.id, 'upsert', record.id, scope);
@@ -720,13 +1257,13 @@ export class KnowledgePG extends KnowledgeStorage {
 
   async knowledgeBySource(input: QueryKnowledgeBySourceInput): Promise<QueryKnowledgeOutput> {
     const scope = canonicalizeKnowledgeScope(input.scope);
-    const key = knowledgeScopeKey(scope);
-    const args: QueryValues = [input.sourceThreadId, key, key];
+    const keys = visibleScopeKeys(scope);
+    const args: QueryValues = [input.sourceThreadId, ...keys];
     if (input.after) args.push(input.after);
     const limit = input.limit ?? 100;
     args.push(limit + 1);
     const result = await this.#readExecutor.execute({
-      sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE sourceThreadId=? AND ${visibleSql}${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}${input.after ? ' AND id > ?' : ''} ORDER BY id ASC LIMIT ?`,
+      sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE sourceThreadId=? AND ${visibleSql(keys)}${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}${input.after ? ' AND id > ?' : ''} ORDER BY id ASC LIMIT ?`,
       args,
     });
     const records = result.rows.map(parseKnowledge);
@@ -743,8 +1280,8 @@ export class KnowledgePG extends KnowledgeStorage {
       if (record.deletedAt) return record;
       const deletedAt = new Date();
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=?,deletedBy=? WHERE id=? AND deletedAt IS NULL`,
-        args: [deletedAt.toISOString(), input.deletedBy, input.id],
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=?,deletedBy=?,version=version+1,updatedAt=? WHERE id=? AND deletedAt IS NULL`,
+        args: [deletedAt.toISOString(), input.deletedBy, deletedAt.toISOString(), input.id],
       });
       await this.#activity(tx, 'record-deleted', 'record', input.id, record.scope, record.sourceThreadId);
       await this.#outbox(tx, 'record', input.id, 'delete', deletedAt.toISOString(), record.scope);
@@ -758,8 +1295,8 @@ export class KnowledgePG extends KnowledgeStorage {
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
       if (!record.deletedAt) return record;
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=NULL,deletedBy=NULL WHERE id=?`,
-        args: [input.id],
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET deletedAt=NULL,deletedBy=NULL,version=version+1,updatedAt=? WHERE id=?`,
+        args: [new Date().toISOString(), input.id],
       });
       await this.#activity(tx, 'record-restored', 'record', input.id, record.scope, record.sourceThreadId);
       await this.#outbox(tx, 'record', input.id, 'upsert', createKnowledgeUlid(), record.scope);
@@ -772,11 +1309,12 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#transaction(async tx => {
       const record = await this.#getKnowledge(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
-      assertKnowledgeScopeWithinCeiling(scope, record.maxScope);
+      const updatedAt = new Date();
       await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET scope=jsonb(?),scopeKey=? WHERE id=?`,
-        args: [JSON.stringify(scope), knowledgeScopeKey(scope), input.id],
+        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET scope=jsonb(?),scopeKey=?,version=version+1,updatedAt=? WHERE id=?`,
+        args: [JSON.stringify(scope), knowledgeScopeKey(scope), updatedAt.toISOString(), input.id],
       });
+      await this.#replaceRecordScopes(tx, input.id, scope, updatedAt);
       await this.#activity(tx, 'record-rescoped', 'record', input.id, scope, record.sourceThreadId);
       if (knowledgeScopeKey(record.scope) !== knowledgeScopeKey(scope))
         await this.#outbox(tx, 'record', input.id, 'delete', createKnowledgeUlid(), record.scope);
@@ -785,29 +1323,15 @@ export class KnowledgePG extends KnowledgeStorage {
     });
   }
 
-  async raiseKnowledgeCeiling(input: { id: string; maxScope?: KnowledgeRecord['maxScope'] }): Promise<KnowledgeRecord> {
-    return this.#transaction(async tx => {
-      const record = await this.#getKnowledge(tx, input.id, true);
-      if (!record) throw new KnowledgeNotFoundError('record', input.id);
-      assertKnowledgeScopeWithinCeiling(record.scope, input.maxScope);
-      assertKnowledgeCeilingRaised(record.maxScope, input.maxScope);
-      await tx.execute({
-        sql: `UPDATE "${TABLE_KNOWLEDGE_RECORDS}" SET maxScope=? WHERE id=?`,
-        args: [input.maxScope ?? null, input.id],
-      });
-      return { ...record, maxScope: input.maxScope };
-    });
-  }
-
   async search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]> {
     const scope = canonicalizeKnowledgeScope(input.scope);
-    const key = knowledgeScopeKey(scope);
+    const keys = visibleScopeKeys(scope);
     const normalizedQuery = input.query.trim().toLocaleLowerCase();
     if (!normalizedQuery) return [];
     const query = `%${escapeLikePattern(normalizedQuery)}%`;
     const records = await this.#readExecutor.execute({
-      sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_NODES}" WHERE mergedInto IS NULL AND ${visibleSql} AND (canonicalName LIKE ? ESCAPE '=' OR lower(COALESCE(kind,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(content,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(description,'')) LIKE ? ESCAPE '=') ORDER BY updatedAt DESC LIMIT ?`,
-      args: [key, key, query, query, query, query, input.limit ?? 20],
+      sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_NODES}" WHERE mergedInto IS NULL AND ${visibleSql(keys)} AND (canonicalName LIKE ? ESCAPE '=' OR lower(COALESCE(kind,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(content,'')) LIKE ? ESCAPE '=' OR lower(COALESCE(description,'')) LIKE ? ESCAPE '=') ORDER BY updatedAt DESC LIMIT ?`,
+      args: [...keys, query, query, query, query, input.limit ?? 20],
     });
     const results: SearchKnowledgeResult[] = records.rows.map(row => ({
       type: String(row.type) as 'node',
@@ -824,8 +1348,8 @@ export class KnowledgePG extends KnowledgeStorage {
     }));
     if (results.length < (input.limit ?? 20)) {
       const records = await this.#readExecutor.execute({
-        sql: `SELECT f.*,f.scope AS "scopeJson",r.name,r.scope AS "parentScopeJson" FROM "${TABLE_KNOWLEDGE_RECORDS}" f JOIN "${TABLE_KNOWLEDGE_NODES}" r ON r.id=f.node AND r.type='node' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')} AND lower(f.text) LIKE ? ESCAPE '=' ORDER BY f.id DESC LIMIT ?`,
-        args: [key, key, query, (input.limit ?? 20) - results.length],
+        sql: `SELECT f.*,f.scope AS "scopeJson",r.name,r.scope AS "parentScopeJson" FROM "${TABLE_KNOWLEDGE_RECORDS}" f JOIN "${TABLE_KNOWLEDGE_NODES}" r ON r.id=f.node AND r.type='node' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql(keys, 'f.scopeKey')} AND lower(f.text) LIKE ? ESCAPE '=' ORDER BY f.id DESC LIMIT ?`,
+        args: [...keys, query, (input.limit ?? 20) - results.length],
       });
       results.push(
         ...records.rows.map(row => {
@@ -833,7 +1357,7 @@ export class KnowledgePG extends KnowledgeStorage {
           return {
             type: 'record' as const,
             id: String(row.id),
-            recordId: String(row.node),
+            recordId: parentVisible ? String(row.node) : String(row.id),
             name: parentVisible ? String(row.name) : '(private node)',
             text: String(row.text),
             scope: parseJson<KnowledgeScope>(row.scopeJson),
@@ -844,34 +1368,24 @@ export class KnowledgePG extends KnowledgeStorage {
     return results;
   }
 
-  async getCurationCursor(input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null> {
-    const result = await this.#executor.execute({
-      sql: `SELECT * FROM "${TABLE_KNOWLEDGE_CURSORS}" WHERE sourceThreadId=? AND agent=?`,
-      args: [input.sourceThreadId, input.agent],
-    });
-    const row = result.rows[0];
-    return row
-      ? {
-          sourceThreadId: String(row.sourceThreadId),
-          agent: String(row.agent),
-          lastKnowledgeId: String(row.lastKnowledgeId),
-          updatedAt: toDate(row.updatedAt),
-        }
-      : null;
+  /**
+   * @deprecated Curation cursors were removed. Observation-time curate is the only Knowledge writer and needs no
+   * cursor. Always throws.
+   */
+  async getCurationCursor(_input: { sourceThreadId: string; agent: string }): Promise<KnowledgeCurationCursor | null> {
+    throw new Error(KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE);
   }
 
-  async advanceCurationCursor(input: {
+  /**
+   * @deprecated Curation cursors were removed. Observation-time curate is the only Knowledge writer and needs no
+   * cursor. Always throws.
+   */
+  async advanceCurationCursor(_input: {
     sourceThreadId: string;
     agent: string;
     lastKnowledgeId: string;
   }): Promise<KnowledgeCurationCursor> {
-    const updatedAt = new Date();
-    const result = await this.#executor.execute({
-      sql: `INSERT INTO "${TABLE_KNOWLEDGE_CURSORS}" (sourceThreadId,agent,lastKnowledgeId,updatedAt) VALUES (?,?,?,?) ON CONFLICT(sourceThreadId,agent) DO UPDATE SET lastKnowledgeId=excluded.lastKnowledgeId,updatedAt=excluded.updatedAt WHERE excluded.lastKnowledgeId >= "${TABLE_KNOWLEDGE_CURSORS}".lastKnowledgeId`,
-      args: [input.sourceThreadId, input.agent, input.lastKnowledgeId, updatedAt.toISOString()],
-    });
-    if (result.rowsAffected === 0) throw new Error('Knowledge curation cursor cannot move backwards');
-    return { ...input, updatedAt };
+    throw new Error(KNOWLEDGE_CURATION_CURSOR_REMOVED_MESSAGE);
   }
 
   async listActivity(input: {
@@ -880,10 +1394,10 @@ export class KnowledgePG extends KnowledgeStorage {
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]> {
     const scope = canonicalizeKnowledgeScope(input.scope);
-    const key = knowledgeScopeKey(scope);
+    const keys = visibleScopeKeys(scope);
     const result = await this.#readExecutor.execute({
-      sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_ACTIVITY}" WHERE ${visibleSql}${input.after ? ' AND id < ?' : ''} ORDER BY id DESC LIMIT ?`,
-      args: [key, key, ...(input.after ? [input.after] : []), input.limit ?? 100],
+      sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_ACTIVITY}" WHERE ${visibleSql(keys)}${input.after ? ' AND id < ?' : ''} ORDER BY id DESC LIMIT ?`,
+      args: [...keys, ...(input.after ? [input.after] : []), input.limit ?? 100],
     });
     return result.rows.map(row => ({
       id: String(row.id),
@@ -906,9 +1420,9 @@ export class KnowledgePG extends KnowledgeStorage {
       args.push(input.status);
     }
     if (input.scope) {
-      const key = knowledgeScopeKey(canonicalizeKnowledgeScope(input.scope));
-      clauses.push(visibleSql);
-      args.push(key, key);
+      const keys = visibleScopeKeys(input.scope);
+      clauses.push(visibleSql(keys));
+      args.push(...keys);
     }
     args.push(input.limit ?? 100);
     const result = await this.#executor.execute({
@@ -929,9 +1443,9 @@ export class KnowledgePG extends KnowledgeStorage {
       ];
       const args: QueryValues = [now.toISOString(), stale.toISOString()];
       if (input.scope) {
-        const key = knowledgeScopeKey(canonicalizeKnowledgeScope(input.scope));
-        clauses.push(visibleSql);
-        args.push(key, key);
+        const keys = visibleScopeKeys(input.scope);
+        clauses.push(visibleSql(keys));
+        args.push(...keys);
       }
       args.push(input.limit ?? 100);
       const selected = await tx.execute({
@@ -993,12 +1507,17 @@ export class KnowledgePG extends KnowledgeStorage {
     return result.rows[0] ? parseNode(result.rows[0]) : null;
   }
   async #resolveNode(executor: Executor, name: string, scope: KnowledgeScope): Promise<KnowledgeNode | null> {
-    for (let length = scope.length; length > 0; length--) {
-      const node = await this.#getNodeByName(executor, name, scope.slice(0, length));
-      if (node) {
-        const terminal = await this.#resolveTerminalNode(executor, node.id);
-        if (terminal && isKnowledgeScopeVisible(terminal.scope, scope)) return terminal;
-      }
+    // An unmerged node outside the caller's scope resolves to itself and can never be visible, so only
+    // visible-scope rows and merged aliases (whose terminal may be visible) are candidates.
+    const keys = visibleScopeKeys(scope);
+    const result = await executor.execute({
+      sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_NODES}" WHERE type='node' AND canonicalName=? AND ("scopeKey" IN (${keys.map(() => '?').join(',')}) OR "mergedInto" IS NOT NULL)`,
+      args: [canonicalName(name), ...keys],
+    });
+    const candidates = result.rows.map(parseNode).sort((left, right) => right.scope.length - left.scope.length);
+    for (const candidate of candidates) {
+      const terminal = await this.#resolveTerminalNode(executor, candidate.id);
+      if (terminal && isKnowledgeScopeVisible(terminal.scope, scope)) return terminal;
     }
     return null;
   }
@@ -1027,12 +1546,12 @@ export class KnowledgePG extends KnowledgeStorage {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const node = await this.#resolveTerminalNode(this.#readExecutor, nodeReferenceId(input.node));
     if (!node) return { records: [] };
-    const key = knowledgeScopeKey(scope);
-    const args: QueryValues = [node.id, ...(relationship === 'related' ? [node.id] : []), key, key];
+    const keys = visibleScopeKeys(scope);
+    const args: QueryValues = [node.id, ...(relationship === 'related' ? [node.id] : []), ...keys];
     if (input.after) args.push(input.after);
     args.push((input.limit ?? 100) + 1);
     const result = await this.#readExecutor.execute({
-      sql: `SELECT DISTINCT f.*,f.scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_RECORDS}" f${relationship === 'about' ? '' : ` LEFT JOIN "${TABLE_KNOWLEDGE_MENTIONS}" m ON m.sourceType='record' AND m.sourceId=f.id`} WHERE ${relationship === 'about' ? 'f.node=?' : relationship === 'mentioning' ? 'm.recordId=?' : '(f.node=? OR m.recordId=?)'} AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')}${input.includeDeleted ? '' : ' AND f.deletedAt IS NULL'}${input.after ? ' AND f.id < ?' : ''} ORDER BY f.id DESC LIMIT ?`,
+      sql: `SELECT DISTINCT f.*,f.scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_RECORDS}" f${relationship === 'about' ? '' : ` LEFT JOIN "${TABLE_KNOWLEDGE_MENTIONS}" m ON m.sourceType='record' AND m.sourceId=f.id`} WHERE ${relationship === 'about' ? 'f.node=?' : relationship === 'mentioning' ? 'm.recordId=?' : '(f.node=? OR m.recordId=?)'} AND ${visibleSql(keys, 'f.scopeKey')}${input.includeDeleted ? '' : ' AND f.deletedAt IS NULL'}${input.after ? ' AND f.id < ?' : ''} ORDER BY f.id DESC LIMIT ?`,
       args,
     });
     const records = result.rows.map(parseKnowledge);
@@ -1041,6 +1560,104 @@ export class KnowledgePG extends KnowledgeStorage {
       records: records.slice(0, limit),
       nextCursor: records.length > limit ? records[limit - 1]?.id : undefined,
     };
+  }
+
+  async #resolveScopeNodeIds(executor: Executor, addresses: KnowledgeScope): Promise<string[]> {
+    const scopeNodeIds = new Set<string>();
+    for (const address of addresses) {
+      const result = await executor.execute({
+        sql: `SELECT scopeNodeId FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" WHERE address=?`,
+        args: [address],
+      });
+      if (result.rows[0]?.scopeNodeId != null) scopeNodeIds.add(String(result.rows[0].scopeNodeId));
+    }
+    return [...scopeNodeIds];
+  }
+
+  async #replaceNodeScopes(
+    executor: Executor,
+    nodeId: string,
+    addresses: KnowledgeScope,
+    addedAt: Date,
+  ): Promise<void> {
+    await executor.execute({ sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=?`, args: [nodeId] });
+    for (const scopeNodeId of await this.#resolveScopeNodeIds(executor, addresses)) {
+      await executor.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" (nodeId,scopeNodeId,addedAt) VALUES (?,?,?) ON CONFLICT DO NOTHING`,
+        args: [nodeId, scopeNodeId, addedAt.toISOString()],
+      });
+    }
+  }
+
+  /**
+   * Move a node's identity memberships from `from` to `to` without touching structural
+   * placements added by `#placeNodeInScopes`, which a scope change must not erase.
+   */
+  async #swapIdentityScopes(
+    executor: Executor,
+    nodeId: string,
+    from: KnowledgeScope,
+    to: KnowledgeScope,
+    addedAt: Date,
+  ): Promise<void> {
+    const next = await this.#resolveScopeNodeIds(executor, to);
+    for (const scopeNodeId of await this.#resolveScopeNodeIds(executor, from)) {
+      if (next.includes(scopeNodeId)) continue;
+      await executor.execute({
+        sql: `DELETE FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId=? AND scopeNodeId=?`,
+        args: [nodeId, scopeNodeId],
+      });
+    }
+    for (const scopeNodeId of next) {
+      await executor.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" (nodeId,scopeNodeId,addedAt) VALUES (?,?,?) ON CONFLICT DO NOTHING`,
+        args: [nodeId, scopeNodeId, addedAt.toISOString()],
+      });
+    }
+  }
+
+  /**
+   * Additive structural placement: every address must resolve to a live scope node
+   * (unlike identity membership, an unknown address is a caller error, not a lazy
+   * materialization miss). Runs inside the caller's transaction, so a throw aborts
+   * the whole mutation.
+   */
+  async #placeNodeInScopes(
+    executor: Executor,
+    nodeId: string,
+    addresses: string[] | undefined,
+    addedAt: Date,
+  ): Promise<void> {
+    for (const address of addresses ?? []) {
+      const result = await executor.execute({
+        sql: `SELECT sa.scopeNodeId AS "scopeNodeId" FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" sa JOIN "${TABLE_KNOWLEDGE_NODES}" n ON n.id=sa."scopeNodeId" WHERE sa.address=? AND n."isScope" AND n."deletedAt" IS NULL`,
+        args: [address],
+      });
+      const scopeNodeId = result.rows[0]?.scopeNodeId;
+      if (scopeNodeId == null) throw new KnowledgeNotFoundError('scope', address);
+      await executor.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODE_SCOPES}" ("nodeId","scopeNodeId","addedAt") VALUES (?,?,?) ON CONFLICT DO NOTHING`,
+        args: [nodeId, String(scopeNodeId), addedAt.toISOString()],
+      });
+    }
+  }
+
+  async #replaceRecordScopes(
+    executor: Executor,
+    recordId: string,
+    addresses: KnowledgeScope,
+    addedAt: Date,
+  ): Promise<void> {
+    await executor.execute({
+      sql: `DELETE FROM "${TABLE_KNOWLEDGE_RECORD_SCOPES}" WHERE recordId=?`,
+      args: [recordId],
+    });
+    for (const scopeNodeId of await this.#resolveScopeNodeIds(executor, addresses)) {
+      await executor.execute({
+        sql: `INSERT INTO "${TABLE_KNOWLEDGE_RECORD_SCOPES}" (recordId,scopeNodeId,addedAt) VALUES (?,?,?) ON CONFLICT DO NOTHING`,
+        args: [recordId, scopeNodeId, addedAt.toISOString()],
+      });
+    }
   }
 
   async #replaceMentions(
@@ -1073,7 +1690,7 @@ export class KnowledgePG extends KnowledgeStorage {
             updatedAt: now,
           };
           await tx.execute({
-            sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODES}" (id,type,name,canonicalName,kind,content,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,NULL,jsonb(?),?,?,NULL,?,?)`,
+            sql: `INSERT INTO "${TABLE_KNOWLEDGE_NODES}" (id,type,name,canonicalName,kind,content,isScope,scope,scopeKey,version,mergedInto,createdAt,updatedAt) VALUES (?,?,?,?,?,NULL,FALSE,jsonb(?),?,?,NULL,?,?)`,
             args: [
               node.id,
               'node',
@@ -1087,6 +1704,7 @@ export class KnowledgePG extends KnowledgeStorage {
               now.toISOString(),
             ],
           });
+          await this.#replaceNodeScopes(tx, node.id, defaultScope, now);
           await this.#activity(tx, 'node-created', 'node', node.id, defaultScope);
           await this.#outbox(tx, 'node', node.id, 'upsert', 1, defaultScope);
         }
@@ -1107,11 +1725,15 @@ export class KnowledgePG extends KnowledgeStorage {
     sourceThreadId?: string,
   ): Promise<void> {
     const now = new Date();
+    const [contextScopeId] = await this.#resolveScopeNodeIds(executor, scope);
     await executor.execute({
-      sql: `INSERT INTO "${TABLE_KNOWLEDGE_ACTIVITY}" (id,action,recordType,recordId,scope,scopeKey,sourceThreadId,createdAt) VALUES (?,?,?,?,jsonb(?),?,?,?)`,
+      sql: `INSERT INTO "${TABLE_KNOWLEDGE_ACTIVITY}" (id,action,targetType,targetId,contextScopeId,recordType,recordId,scope,scopeKey,sourceThreadId,createdAt) VALUES (?,?,?,?,?,?,?,jsonb(?),?,?,?)`,
       args: [
         createKnowledgeUlid(),
         action,
+        recordType,
+        recordId,
+        contextScopeId ?? null,
         recordType,
         recordId,
         JSON.stringify(scope),

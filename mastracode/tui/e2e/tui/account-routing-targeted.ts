@@ -151,7 +151,6 @@ export const accountRoutingTargetedScenario: McE2eScenario = {
       completedAt: new Date(0).toISOString(),
       skippedAt: null,
       version: 1,
-      quietModePreferenceSelected: true,
     };
     settings.models = {
       ...settings.models,
@@ -327,7 +326,7 @@ export const accountRoutingTargetedScenario: McE2eScenario = {
         { cause: error },
       );
     }
-    await runtime.waitForScreenTextAbsent(/Starting on Kimi account:|\(subscription routing\)/i, terminal, 8_000);
+    await runtime.waitForScreenTextAbsent(/\(subscription routing\)/i, terminal, 8_000);
     runtime.printScreen('after targeted route hop', terminal);
 
     // The regression: account A is healthy and would answer, but the pinned
@@ -380,7 +379,7 @@ export const accountRoutingTargetedScenario: McE2eScenario = {
       30_000,
     );
     await runtime.waitForScreenText(/Using fallback Anthropic \(target-kimi failed\)/i, terminal, 10_000);
-    await runtime.waitForScreenTextAbsent(/Starting on Kimi account:|\(subscription routing\)/i, terminal, 8_000);
+    await runtime.waitForScreenTextAbsent(/\(subscription routing\)/i, terminal, 8_000);
     runtime.printScreen('after restart history reload', terminal);
 
     const requestsBeforeFollowup = outbound.length;

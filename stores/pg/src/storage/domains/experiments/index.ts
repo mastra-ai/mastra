@@ -110,6 +110,9 @@ export class ExperimentsPG extends ExperimentsStorage {
         'scorerIds',
       ],
     });
+    // Tables created before targetType/targetId became nullable keep NOT NULL,
+    // which breaks caller-driven experiments.
+    await this.#db.dropNotNull({ tableName: TABLE_EXPERIMENTS, columns: ['targetType', 'targetId'] });
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,

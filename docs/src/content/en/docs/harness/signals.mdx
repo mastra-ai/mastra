@@ -57,6 +57,18 @@ for await (const chunk of subscription.stream) {
 
 When the thread has a running agent stream, `sendMessage()` becomes new input inside that agent loop. When the thread is idle, Mastra starts a stream with the message as the first input.
 
+### Input during reasoning
+
+In the default loop and experimental durable and evented agents, accepted pending messages and signals interrupt a model request that has produced only reasoning or metadata. This includes the wait for its first token. Mastra cancels that request, discards its response from model history and memory, and includes queued input in the next request within the same run. Earlier completed responses stay in history.
+
+Once text, tool calls, or other response content starts, signals wait for the next loop boundary. Running tools aren't cancelled or repeated. If the run reaches `maxSteps`, queued input may be saved without a response. `queueMessage()` still waits for the active run to finish. Signals that processors write directly to the message history don't interrupt their own request.
+
+Interrupted requests don't count toward `maxSteps` or advance `stepNumber`. The next request uses the same logical step, so `maxSteps: 1` still allows a replacement response. Mastra doesn't set a separate interruption limit. Repeated signals can keep restarting reasoning until a request completes, the run is cancelled, or its total timeout expires.
+
+Already-streamed reasoning may remain visible until the client reloads history. When input arrives while per-step input processors (`processInputStep`) run, the processors finish and Mastra cancels the model request they prepared. Custom output processors also keep running after a cancellation, and the next request waits for their in-flight work to settle. Mastra discards framework-owned response buffers, but doesn't undo processor state, data that processors write while the cancelled request settles, or external side effects. Usage totals exclude interrupted requests, including any usage the provider reports for them. Providers may still bill for those requests.
+
+Reasoning interruption doesn't apply to the Inngest engine, or to durable and evented steps that run in a different process from the one that accepted the input.
+
 ## Message input
 
 ### Send a message now
@@ -96,6 +108,26 @@ agent.queueMessage('Also check whether the tests need updates.', {
 ```
 
 When the thread is idle, `queueMessage()` starts a run immediately. When the thread is active, it preserves turn order by starting a new run after the active run completes.
+
+### Queue a typed signal for the next turn
+
+Use `queueSignal()` when system-generated input needs the same turn ordering as `queueMessage()` but should keep its own signal type, tag, and attributes. For example, a skill invocation can render as a `<skill>` element instead of a plain user message:
+
+```typescript title="src/mastra/signals.ts"
+agent.queueSignal(
+  {
+    type: 'reactive',
+    tagName: 'skill',
+    attributes: { name: 'triage' },
+    contents: 'Triage the new issue.',
+  },
+  { resourceId: 'user_123', threadId: 'thread_456' },
+)
+```
+
+The model receives `<skill name="triage">Triage the new issue.</skill>`. Queued signals share the `queueMessage()` queue, so they count toward queue-count events and you can cancel them with `cancelQueuedMessages()`.
+
+When a signal starts a run, the run's `AGENT_RUN` span records the signal's `id`, `type`, `tagName`, and `attributes` under `attributes.signal`.
 
 ### Cancel pending input
 
@@ -182,6 +214,8 @@ The model receives the signal as context like this:
 ```xml
 <notification source="github" pr="123">PR #123 has a new review comment from User X about the API surface.</notification>
 ```
+
+When Mastra wraps a signal in its tag, it passes `contents` to the model as written and XML-escapes attribute values. A closing tag that matches the signal's own tag, such as `</skill>` inside a `skill` signal, is escaped to `&lt;/skill&gt;` so the contents can't end the tag early. This keeps the wrapper intact, but it isn't a prompt-injection defense: treat third-party text you forward in a signal as untrusted.
 
 Use XML-safe `tagName` and attribute names. They can contain letters, numbers, periods, hyphens, and the underscore character (`_`). They must start with a letter or underscore.
 
@@ -393,7 +427,9 @@ Use the connection tools for distinct operations:
 
 Saved connections remain in the sender thread until explicitly disconnected. Every send independently refreshes discovery and verifies the exact endpoint before routing begins. A saved connection therefore records collaboration intent. It doesn't indicate current presence.
 
-After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy. A send that isn't acknowledged by the advertised thread owner returns an error and doesn't consume its `messageId`, so the sender can retry it.
+After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy. A send that fails a direct delivery because no thread owner acknowledged it isn't lost: the signal stays pending in the target's notification inbox and the send reports `persist` instead of claiming delivery. The notification dispatcher retries that delivery on its own, so the sender doesn't need to resend it. The `messageId` isn't recorded in sent history and isn't rejected as a duplicate, although the pending notification still matches on it. A resend with the same `messageId` merges into that notification while it's pending, and delivers a second copy once the retry has succeeded. A send made with `expectsReply: true` returns an error there, because the reply obligation isn't established until the signal is delivered.
+
+When the delivery policy routes a signal to a notification summary rather than delivering it directly, the send records the `messageId`, so retrying with the same id reports a duplicate instead of routing again. A low-priority send always takes this route and reports `persist`. A high- or medium-priority send to an active thread takes it too, but there the summary signal is emitted immediately, so the send reports that signal's routing result (`wake`, `deliver`, or `persist`) and records the `messageId` the same way, including when `expectsReply: true`. Only when the policy schedules a summary without emitting a signal at send time does an `expectsReply: true` send fail to establish its reply obligation: it returns an error and doesn't record the send in sent history, so establishing the reply obligation takes a new signal at a priority that routes directly.
 
 ### Discover agents in other projects
 
@@ -505,12 +541,14 @@ Use heartbeats together with client-side reconnect logic. Heartbeats reduce idle
 
 - [`Agent.sendMessage()`](/reference/agents/agent#sendmessagemessage-options)
 - [`Agent.queueMessage()`](/reference/agents/agent#queuemessagemessage-options)
+- [`Agent.queueSignal()`](/reference/agents/agent#queuesignalsignal-options)
 - [`Agent.sendSignal()`](/reference/agents/agent#sendsignalsignal-options)
 - [`Agent.sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options)
 - [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions)
 - [`createNotificationInboxTool()`](/reference/signals/create-notification-inbox-tool)
 - [`client.getAgent().sendMessage()`](/reference/client-js/agents#sendmessage)
 - [`client.getAgent().queueMessage()`](/reference/client-js/agents#queuemessage)
+- [`client.getAgent().queueSignal()`](/reference/client-js/agents#queuesignal)
 - [`client.getAgent().sendSignal()`](/reference/client-js/agents#sendsignal)
 - [Server agent routes](/reference/server/routes#agent-message-routes)
 - [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread)

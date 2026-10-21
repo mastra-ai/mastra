@@ -9,9 +9,11 @@ packages:
 
 `createClassifierScorer()` adapts one constructor-configured [`Classifier`](/reference/classifier/classifier) question to Mastra's scorer pipeline. It returns a normal `MastraScorer` with a numeric `score` and retains the selected answer, probabilities, usage, warnings, and safe response metadata in `analyzeStepResult`.
 
-The adapter evaluates exactly one question and always returns a score between 0 and 1. It doesn't aggregate questions, apply boolean thresholds, infer choice ordering, or call a second judge model.
+Each scorer run calls `Classifier.decide()` to evaluate all questions configured on the classifier, then projects only the answer selected by `question` into a score between 0 and 1. The `question` option doesn't limit which questions are sent to the model. The adapter doesn't aggregate questions, apply boolean thresholds, infer choice ordering, or call a second judge model.
 
-Agent scorer runs contain message objects that `Classifier.evaluate()` can't accept directly, so `state` is required. Use it to extract JSON-compatible text, for example with the helpers from `@mastra/evals/scorers/utils`.
+To evaluate exactly one question per scorer run, use a separate classifier configured with only that question. For example, five rubric scorers that share a five-question classifier each evaluate all five questions on every run, rather than only their selected question.
+
+Agent scorer runs contain message objects that `Classifier.decide()` can't accept directly, so `state` is required. Use it to extract JSON-compatible text, for example with the helpers from `@mastra/evals/scorers/utils`.
 
 ## Example
 
@@ -26,7 +28,7 @@ import {
 
 const responseJudge = new Classifier({
   id: 'response-judge',
-  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   questions: {
     quality: {
       type: 'score',
@@ -60,6 +62,8 @@ export const qualityScorer = createClassifierScorer({
   }),
 })
 ```
+
+This classifier configures three questions so the examples below can reuse it. Each `qualityScorer.run()` evaluates `quality`, `route`, and `factual`, but only the `quality` answer determines its score. To evaluate only `quality`, remove `route` and `factual` from this classifier's `questions`.
 
 For a score question with N criteria, the classifier answers with a level from `0` to `N - 1`, and `result.score` divides that level by `N - 1`. With three criteria, `Partially correct` scores `0.5`.
 
@@ -171,7 +175,8 @@ Running an ID-backed scorer before registering it with Mastra rejects with an er
   {
     name: 'question',
     type: 'keyof classifier.questions',
-    description: 'The single configured question to evaluate and project.',
+    description:
+      'The configured question whose answer is projected into the score. All questions configured on the classifier are evaluated on each scorer run.',
     isOptional: false,
   },
   {
@@ -203,7 +208,7 @@ Running an ID-backed scorer before registering it with Mastra rejects with an er
   {
     name: 'providerOptions',
     type: 'SharedV4ProviderOptions',
-    description: 'Provider-specific options passed to Classifier.evaluate().',
+    description: 'Provider-specific options passed to Classifier.decide().',
     isOptional: true,
   },
   {
@@ -229,6 +234,7 @@ The factory also accepts `name` and `description` from `createScorer()`.
 Failures while the scorer runs reject `scorer.run()` with a `ScorerRunError` whose `failedStep` is `analyze`, and the original error is available as its `cause`. This covers:
 
 - Classifier evaluation fails or doesn't return an answer for the selected question.
+- The decision model refuses the selected question. The error names the classifier, the question, and the scorer.
 - A classifier ID is used before the scorer is registered with Mastra, or the ID isn't present in `classifiers`.
 - A registered classifier has an invalid configuration for this scorer.
 
@@ -239,9 +245,9 @@ Failures while the scorer runs reject `scorer.run()` with a `ScorerRunError` who
 - `question`: The selected question key.
 - `answer`: The exact typed choice, score, or boolean answer, including optional probabilities.
 - `usage`: Normalized classifier token usage.
-- `warnings`, `rounding`, and `providerMetadata`: Evidence returned by the evaluation model.
+- `warnings`, `rounding`, and `providerMetadata`: Evidence returned by the decision model.
 - `response`: Safe response identity with `id`, `timestamp`, and `modelId`.
 
-Raw provider response bodies and headers aren't copied into scorer results. Call `Classifier.evaluate()` directly when you need the full raw response.
+Raw provider response bodies and headers aren't copied into scorer results. Call `Classifier.decide()` directly when you need the full raw response.
 
 Classifier evaluation runs inside the scorer's active trace context.

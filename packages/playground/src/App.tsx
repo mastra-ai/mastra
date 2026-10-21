@@ -1,4 +1,5 @@
 import { coreFeatures } from '@mastra/core/features';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
@@ -61,7 +62,6 @@ import DatasetPage from './pages/datasets/dataset';
 import EditDatasetPage from './pages/datasets/dataset/edit';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
-import CreateDatasetPage from './pages/datasets/new';
 import Experiments from './pages/experiments';
 import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
@@ -445,10 +445,6 @@ export const routes: RouteObject[] = [
         ? [
             { path: '/datasets', element: <Datasets /> },
             {
-              path: '/datasets/new',
-              element: <CreateDatasetPage />,
-            },
-            {
               path: '/datasets/:datasetId',
               element: <DatasetPage />,
               children: [
@@ -517,7 +513,12 @@ function App() {
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
     // between the first tanstack resolution and the React useLayoutEffect where headers are not set yet on the first HTTP request.
-    return null;
+    // The instance probe can also be slow, so show the same spinner as RoutePermissionsGate instead of a blank page.
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
   }
 
   if (!baseUrl) {

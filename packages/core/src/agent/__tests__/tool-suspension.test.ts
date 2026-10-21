@@ -143,6 +143,6 @@ describe('Tool suspension memory persistence', () => {
     expect(assistantWithToolCall).toBeDefined();
   });
 
-  // Test moved to tool-suspension.e2e.test.ts: 'should save thread and messages to memory before suspension when tool calls suspend()'
+  // Test moved to loop/test-utils/aimock/scenarios/tool-suspension-persistence.scenario.test.ts: 'should save thread and messages to memory before suspension when tool calls suspend()'
   // That test uses real OpenAI model: 'openai/gpt-4o-mini'
 });

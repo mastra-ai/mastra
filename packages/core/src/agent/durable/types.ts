@@ -4,10 +4,11 @@ import type {
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
-import type { LanguageModelUsage } from '@internal/ai-sdk-v5';
+import type { LanguageModelUsage, ModelMessage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
 
+import type { MastraFGAPermissionInput } from '../../auth/ee';
 import type { ActorSignal } from '../../auth/ee/fga-check';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
@@ -16,6 +17,7 @@ import type { SystemMessage } from '../../llm';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../llm/model/shared.types';
 import type { ToolCallConcurrency } from '../../loop/types';
 import type { Mastra } from '../../mastra';
+import type { RunScope } from '../../mastra/run-scope';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
 import type { AIModelGenerationSpan, Span, SpanType, TracingContext, TracingOptions } from '../../observability';
@@ -38,11 +40,13 @@ import type {
 } from '../../tools/types';
 import type { Workspace } from '../../workspace';
 import type { AgentExecutionOptions } from '../agent.types';
-import type { MessageList } from '../message-list';
+import type { AIV5ResponseMessage, MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 import type { CreatedAgentSignal } from '../signals';
+import type { TripwireData } from '../trip-wire';
 import type { GoalConfig, StructuredOutputOptions } from '../types';
+import type { ExecutionFence } from './execution-fence';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -74,15 +78,11 @@ export interface SerializableModelConfig {
   specificationVersion?: string;
   /** Original model string/config for resolution at runtime (e.g., 'openai/gpt-4o') */
   originalConfig?: string | Record<string, unknown>;
-  /** Additional model settings */
-  settings?: {
-    temperature?: number;
-    maxTokens?: number;
-    topP?: number;
-    frequencyPenalty?: number;
-    presencePenalty?: number;
-    [key: string]: unknown;
-  };
+  /**
+   * Per-entry call settings from a model list entry's `modelSettings`, merged
+   * over call-time `modelSettings` on each attempt. Headers are excluded.
+   */
+  settings?: SerializableModelSettings;
   /** Provider-specific options for the model call */
   providerOptions?: SharedProviderOptions;
 }
@@ -139,6 +139,12 @@ export interface SerializableDurableState {
   savePerStep?: boolean;
   /** Whether observational memory is enabled (suppresses savePerStep) */
   observationalMemory?: boolean;
+  /**
+   * Whether the agent's memory is a fixed instance. Only then may the stored
+   * transcript reference recalled messages instead of copying them: function or
+   * inherited memory can resolve to another store when the run resumes.
+   */
+  fixedMemory?: boolean;
 }
 
 /**
@@ -155,6 +161,15 @@ export interface SerializableStructuredOutput {
   useAgent?: boolean;
   /** Model config for a dedicated structuring model (if different from the main model) */
   structuringModelConfig?: SerializableModelConfig;
+  /**
+   * Whether the caller set `structuredOutput.model`. The main model then answers in plain
+   * text and the finish step runs a separate structuring pass, like Agent.
+   */
+  hasStructuringModel?: boolean;
+  /** How validation failures are handled (see `StructuredOutputOptionsBase.errorStrategy`) */
+  errorStrategy?: 'strict' | 'warn' | 'fallback';
+  /** Value used when `errorStrategy` is `'fallback'`. Omitted when it is not JSON-safe. */
+  fallbackValue?: unknown;
 }
 
 /**
@@ -203,6 +218,12 @@ export interface SerializableClientTool {
 export interface SerializableDurableOptions {
   /** Call-time client tools, keyed by tool name, for cross-process rebuilds */
   clientTools?: Record<string, SerializableClientTool>;
+  /**
+   * Names of call-time `toolsets` tools. Their `execute` closures cannot cross
+   * a process boundary, so a worker rebuilding tools uses these names to fail
+   * loudly instead of silently dropping them.
+   */
+  toolsetToolNames?: string[];
   /** Maximum number of agentic loop iterations */
   maxSteps?: number;
   /** Tool selection strategy */
@@ -344,14 +365,19 @@ export interface DurableAgenticWorkflowInput {
    * Only plain JSON-safe entries should appear here.
    */
   requestContextEntries?: Record<string, unknown>;
+  /** Initial processor rejection, with metadata snapshotted for cross-process execution. */
+  inputTripwire?: TripwireData;
 }
 
 /**
  * Output from a single LLM execution step
  */
 export interface DurableLLMStepOutput {
-  /** Updated MessageList state after LLM execution */
-  messageListState: SerializedMessageListState;
+  /**
+   * Updated MessageList state after LLM execution. Absent when the run keeps
+   * the transcript in workflow state (the durable loop does).
+   */
+  messageListState?: SerializedMessageListState;
   /** Text generated by this LLM step */
   text?: string;
   /** Tool calls generated by the LLM */
@@ -361,6 +387,7 @@ export interface DurableLLMStepOutput {
     reason: LanguageModelV2FinishReason | 'abort' | 'tripwire' | 'retry';
     warnings: LanguageModelV2CallWarning[];
     isContinued: boolean;
+    signalPreempted?: boolean;
     logprobs?: LanguageModelV1LogProbs;
     totalUsage?: LanguageModelUsage;
     headers?: Record<string, string>;
@@ -390,10 +417,10 @@ export interface DurableLLMStepOutput {
   stepSpanData?: unknown;
   /** Step finish payload data for closing step span later */
   stepFinishPayload?: unknown;
-  /** Deferred step-finish chunk for intermediate steps.
-   *  llm-execution defers emission so llm-mapping can emit it AFTER tool-result
-   *  chunks, matching the regular agent's chunk ordering. */
+  /** Deferred step-finish chunk carried until continuation policy resolves. */
   deferredStepFinishChunk?: unknown;
+  /** When this step's inference streamed its first chunk (the first one is kept for the generation) */
+  completionStartTime?: Date;
 }
 
 /**
@@ -407,13 +434,15 @@ export interface DurableToolCallInput {
   /** Arguments for the tool */
   args: Record<string, unknown>;
   /** Provider-specific metadata */
-  providerMetadata?: Record<string, unknown>;
+  providerMetadata?: SharedV2ProviderMetadata;
   /** Whether the tool was already executed by the provider */
   providerExecuted?: boolean;
   /** Output if provider-executed */
   output?: unknown;
   /** Tool names enabled for the step that produced this call, or null if a processor cleared the restriction */
   activeTools?: string[] | null;
+  /** First-chunk clock of the step that produced this call, applied when spans end on suspend */
+  completionStartTime?: Date;
   /**
    * Serialized from the step's *effective* tool set at emission time (processors may add
    * tools that never appear in the run-start `toolsMetadata`). Persisted with the call so
@@ -425,6 +454,8 @@ export interface DurableToolCallInput {
   hasSuspendSchema?: boolean;
   /** Exported model_step span data so the TOOL_CALL span nests under the LLM call */
   stepSpanData?: unknown;
+  /** Model usage of the step that produced this call, reported on its suspension chunk */
+  stepUsage?: LanguageModelUsage;
 }
 
 /**
@@ -508,8 +539,11 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
  * Output from the full agentic execution workflow (one iteration)
  */
 export interface DurableAgenticExecutionOutput {
-  /** Updated MessageList state */
-  messageListState: SerializedMessageListState;
+  /**
+   * Updated MessageList state. Absent when the run keeps the transcript in
+   * workflow state (the durable loop does).
+   */
+  messageListState?: SerializedMessageListState;
   /** Message ID */
   messageId: string;
   /** Step result with continuation info */
@@ -522,6 +556,8 @@ export interface DurableAgenticExecutionOutput {
     toolCalls?: DurableToolCallInput[];
     usage: LanguageModelUsage;
     steps: unknown[]; // StepResult is complex, we'll serialize what we need
+    /** Model content of this step, as reported on the step-finish chunk */
+    content?: unknown[];
   };
   /** Updated state */
   state: SerializableDurableState;
@@ -532,6 +568,10 @@ export interface DurableAgenticExecutionOutput {
   backgroundTaskPending?: boolean;
   /** Whether a delegation hook called ctx.bail() during this iteration */
   delegationBailed?: boolean;
+  /** Step-finish chunk awaiting the loop's final continuation decision */
+  deferredStepFinishChunk?: unknown;
+  /** When this iteration's inference streamed its first chunk */
+  completionStartTime?: Date;
 }
 
 /**
@@ -565,7 +605,8 @@ export type AgentStreamEventType =
   | 'error'
   | 'suspended'
   | 'abort'
-  | 'iteration-complete';
+  | 'iteration-complete'
+  | 'ownership-claimed';
 
 /**
  * Event emitted via pubsub for agent streaming
@@ -579,6 +620,8 @@ export interface AgentStreamEvent<T = unknown> {
   data: T;
   /** Epoch ms at which a `chunk` event's chunk was produced. */
   producedAt?: number;
+  /** Claim generation of the execution that published the event. See {@link Event.generation}. */
+  generation?: number;
   /**
    * The `chunk` event's chunk already ran through the run's output processors
    * before it was published, so the stream consumer must not run them again.
@@ -600,11 +643,22 @@ export interface AgentStepFinishEventData {
 }
 
 /**
+ * Payload passed to a durable agent's `onStepFinish` callback: the step-finish event data plus the run it belongs to.
+ */
+export type DurableAgentStepFinishResult = AgentStepFinishEventData & { runId: string };
+
+/**
  * Finish event data
  */
 export interface AgentFinishEventData {
   output: DurableAgenticLoopOutput['output'];
   stepResult: DurableLLMStepOutput['stepResult'];
+  /** The run's conversation, as on the default loop's finish chunk. */
+  messages?: {
+    all: ModelMessage[];
+    user: ModelMessage[];
+    nonUser: AIV5ResponseMessage[];
+  };
 }
 
 /**
@@ -612,10 +666,13 @@ export interface AgentFinishEventData {
  */
 export interface AgentErrorEventData {
   error: {
+    /** Stable error id (e.g. `AGENT_RESUME_ALREADY_CLAIMED`) when the source was a `MastraError`. */
+    id?: string;
     name: string;
     message: string;
     stack?: string;
   };
+  delivery?: 'reject';
 }
 
 /**
@@ -683,6 +740,8 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /** Effective public ID of the owning agent; absent on legacy or manually seeded entries. */
+  agentId?: string;
   /**
    * Marks a minimal cross-process placeholder entry (e.g. seeded by
    * @mastra/inngest resume() to carry an abort controller). Placeholder
@@ -709,10 +768,19 @@ export interface RunRegistryEntry {
    * `tools` when seeding a step (issue #22933).
    */
   baseTools?: Record<string, CoreTool>;
+  /**
+   * The tools built for the request that started (or last resumed) the run.
+   * A warm resume rebuilds these with the resuming call's request context and
+   * swaps out only entries that still hold one of them, so processor-added or
+   * replaced tools are kept (#25960).
+   */
+  requestTools?: Record<string, CoreTool>;
   /** SaveQueueManager for message persistence (undefined when memory is not configured) */
   saveQueueManager?: SaveQueueManager;
   /** Memory instance for thread creation and message persistence */
   memory?: MastraMemory;
+  /** Successful in-flight memory authorization checks shared across this run. */
+  memoryAuthorizationChecks?: Map<MastraFGAPermissionInput, Promise<void>>;
   /** The language model instance (non-serializable, has doStream method) */
   model: MastraLanguageModel;
   /** Model list for fallback support (stores actual model instances) */
@@ -725,6 +793,8 @@ export interface RunRegistryEntry {
   mcp?: MCPToolExecutionContext;
   /** Cleanup function to call when run completes */
   cleanup?: () => void;
+  /** Per-run state shared by durable steps, released with the registry entry. */
+  runScope?: RunScope;
   /** MessageList for tracking conversation messages (non-serializable) */
   messageList?: MessageList;
   /** Resolved input processors (non-serializable, combined into workflow) */
@@ -761,6 +831,8 @@ export interface RunRegistryEntry {
   /** Exported forms of the resume spans, read by the workflow steps (same process). */
   resumeAgentSpanData?: unknown;
   resumeModelSpanData?: unknown;
+  /** First-chunk clock of the resumed segment's spans; the originals' clock lives in the loop state. */
+  resumeCompletionStartTime?: Date;
   /**
    * Loop stop-condition predicate(s). Non-serializable (a closure), so the
    * durable workflow reads this from the in-process registry rather than from
@@ -832,6 +904,10 @@ export interface RunRegistryEntry {
    * signals sent to a restarted worker will not be drained.
    */
   drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  /** Owner-queue notifications, in-process only like the drain closure. */
+  subscribePendingSignals?: (listener: () => void) => () => void;
+  /** Releases the latest LLM step's pending-signal listener, whichever way that step exited. */
+  stopStepSignalListener?: () => void;
   /**
    * Thread title generation closure — mirrors the non-durable `#executeOnFinish`
    * title-generation branch, which was never ported to the durable finish step
@@ -849,7 +925,15 @@ export interface RunRegistryEntry {
     messageListState: SerializedMessageListState;
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
-  }) => Promise<void>;
+  }) => Promise<string | undefined>;
+  /**
+   * True for a stream() run whose merged `generateTitle` config sets `emitEvent`. The finish
+   * step then waits for the title and streams it as a transient `data-thread-title` chunk
+   * before FINISH, as the in-process loop does. Cross-process engines lose it and skip the chunk.
+   */
+  streamThreadTitle?: boolean;
+  /** `memory.onTitleGenerated` from the call options. Non-serializable, like generateThreadTitle. */
+  onTitleGenerated?: (title: string) => void | Promise<void>;
   /**
    * Signal messages already present in the `messageList` at run start (from
    * persisted history). These are echoed as `data-signal` stream data parts
@@ -907,6 +991,26 @@ export interface RunRegistryEntry {
    * surface — purely an internal coordination primitive.
    */
   workflowExecution?: Promise<unknown>;
+  /**
+   * Execution lease claimed by the `stream()` / `generate()` / `resume()` /
+   * `recover()` call currently driving this run in this process. Settled when
+   * that execution segment ends.
+   */
+  executionFence?: ExecutionFence;
+  /**
+   * Tool call resumed by the `resume()` currently driving this run in this
+   * process. Its in-flight marker is cleared when the segment suspends again.
+   * @internal
+   */
+  resumeToolCallId?: string;
+  /**
+   * Set while an engine that persists the suspended snapshot before returning
+   * is executing. The tool-call step queues suspension chunks/events here so
+   * they are published only after the snapshot is saved; otherwise a crash in
+   * between leaves a client holding a question that `resume()` rejects (#26435).
+   * @internal
+   */
+  pendingSuspensionEvents?: Array<() => Promise<void>>;
   /**
    * Mastra instance that owns this in-process run. Used during shutdown to
    * wait only for executions that may still need this instance's storage.

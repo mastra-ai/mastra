@@ -12,6 +12,7 @@ import {
   RequestContext,
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_RESOURCE_ID_KEY,
+  MASTRA_SCOPES_KEY,
   MASTRA_THREAD_ID_KEY,
 } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
@@ -170,7 +171,9 @@ export function createRequestContextTests({ createAgent }: DurableAgentTestConte
         // restart or resume.
         const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
           .requestContextEntries;
-        expect(entries).toEqual({ userId: 'user-123' });
+        // The run's scope set is always recorded ([] when it held none) so a
+        // resume can tell "no scopes" apart from a run suspended before scopes existed.
+        expect(entries).toEqual({ userId: 'user-123', [MASTRA_SCOPES_KEY]: [] });
 
         // The framework-managed auth token must never be persisted.
         const serialized = JSON.stringify(result.workflowInput);
