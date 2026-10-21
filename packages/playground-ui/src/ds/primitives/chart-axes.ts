@@ -65,7 +65,8 @@ export function niceYTicks(max: number, maxCount: number, integer = false): numb
     for (const nice of NICE_STEPS) {
       const step = Number((nice * scale).toPrecision(12));
       if (integer && !Number.isInteger(step)) continue;
-      const count = Math.ceil(max / step - 1e-9) + 1;
+      // Rounding the ratio drops float noise (0.3 / 0.1) without letting the top fall under `max`.
+      const count = Math.ceil(Number((max / step).toPrecision(12))) + 1;
       if (count < MIN_Y_TICKS || count > maxCount) continue;
       const top = (count - 1) * step;
       if (!best || top < best.top || (top === best.top && count > best.count)) best = { top, step, count };

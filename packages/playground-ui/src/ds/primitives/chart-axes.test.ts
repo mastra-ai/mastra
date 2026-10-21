@@ -176,6 +176,10 @@ describe('niceYTicks', () => {
     expect(niceYTicks(140, 5, true)).toEqual([0, 50, 100, 150]);
   });
 
+  it('never puts the top tick under the data', () => {
+    expect(niceYTicks(4.0000000001, 5)).toEqual([0, 2.5, 5]);
+  });
+
   it('keeps small values free of float noise', () => {
     expect(niceYTicks(0.3, 5)).toEqual([0, 0.1, 0.2, 0.3]);
   });
