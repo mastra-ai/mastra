@@ -249,8 +249,9 @@ describe('thread stream runtime reads stored run state', () => {
       { threadId: harness.threadId, resourceId: harness.resourceId },
       pubsub,
     );
+    const replayedTypes: string[] = [];
     const consumed = (async () => {
-      for await (const _part of subscription.stream);
+      for await (const part of subscription.stream) replayedTypes.push((part as any).type);
     })();
     await flush();
     pubsub.owners.delete(key);
@@ -260,5 +261,7 @@ describe('thread stream runtime reads stored run state', () => {
 
     subscription.unsubscribe();
     await consumed;
+    // The approval was already answered, so its stale prompt must not reach the subscriber.
+    expect(replayedTypes).not.toContain('tool-call-approval');
   });
 });

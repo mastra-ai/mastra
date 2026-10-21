@@ -5464,6 +5464,19 @@ export class AgentThreadStreamRuntime {
             storedStreamIds.add(eventStreamId);
           }
         }
+        // A replayed run-suspended can describe a run that has since resumed and
+        // finished. Both loops persist the suspended row before publishing
+        // run-suspended and delete it when the run finishes, so a readable store
+        // without that row (or with a terminal one) means the run is no longer parked.
+        // A missing row only counts for replayed streams: a local run whose
+        // persistence policy skips suspended rows is still parked.
+        const storedStatus =
+          data.type === 'run-suspended' ? await this.#readStoredRunStatus(agent, data.runId) : undefined;
+        const suspendedRunEnded =
+          (storedStatus === 'missing' && (deferredRecord !== undefined || replayedStreamIds.has(eventStreamId))) ||
+          (storedStatus !== undefined && storedStatus !== 'missing' && TERMINAL_STORED_RUN_STATUSES.has(storedStatus));
+        // Its prompt was answered; keep the history but drop the stale prompt.
+        if (suspendedRunEnded) answeredStreamIds.add(eventStreamId);
         if (deferredRecord) {
           deferredRunsByStreamId.delete(eventStreamId);
           const bufferedRun = remoteRuns.get(eventStreamId);
@@ -5484,14 +5497,6 @@ export class AgentThreadStreamRuntime {
             discardDeferredRun(eventStreamId);
           }
         }
-        // A replayed run-suspended can describe a run that has since resumed and
-        // finished. Both loops persist the suspended row before publishing
-        // run-suspended and delete it when the run finishes, so a readable store
-        // without that row (or with a terminal one) means the run is no longer parked.
-        const storedStatus =
-          data.type === 'run-suspended' ? await this.#readStoredRunStatus(agent, data.runId) : undefined;
-        const suspendedRunEnded =
-          storedStatus === 'missing' || (storedStatus !== undefined && TERMINAL_STORED_RUN_STATUSES.has(storedStatus));
         if (data.type === 'run-suspended' && !suspendedRunEnded) {
           suspendedStreamIdsByRunId.set(data.runId, eventStreamId);
           noteRunHalf(data.runId);
