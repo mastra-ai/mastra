@@ -1,5 +1,7 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 
+import { classifyProviderError } from '../error/provider-error';
+import type { ProviderFailureKind } from '../error/provider-error';
 import { clampDelayMs, DEFAULT_MAX_RETRY_AFTER_MS, getRetryAfterMs, waitDelay } from '../utils/retry-after';
 import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './index';
 
@@ -47,23 +49,8 @@ export type StreamErrorRetryProcessorOptions = {
 };
 
 const DEFAULT_MAX_RETRIES = 1;
-const RETRYABLE_OPENAI_ERROR_CODES = [
-  'rate_limit',
-  'server_error',
-  'internal_error',
-  'timeout',
-  'temporarily_unavailable',
-  'service_unavailable',
-  'overloaded',
-];
+const RETRYABLE_FAILURE_KINDS = new Set<ProviderFailureKind>(['rate_limited', 'unavailable', 'timeout']);
 const OPENAI_RETRY_MESSAGE_PATTERN = /you can retry your request/i;
-const TERMINAL_AUTHORIZATION_ERROR_CODES = new Set([
-  'access_denied',
-  'authentication_error',
-  'forbidden',
-  'invalid_api_key',
-  'permission_denied',
-]);
 const DEFAULT_MATCHERS = [isRetryableOpenAIResponsesStreamError];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -104,16 +91,6 @@ function getOpenAIErrorPayload(error: unknown): Record<string, unknown> | undefi
   return undefined;
 }
 
-function hasRetryableOpenAIErrorCode(payload: Record<string, unknown>): boolean {
-  const code = getStringProperty(payload, 'code') ?? getStringProperty(payload, 'type');
-  if (!code) {
-    return false;
-  }
-
-  const normalizedCode = code.toLowerCase();
-  return RETRYABLE_OPENAI_ERROR_CODES.some(retryableCode => normalizedCode.includes(retryableCode));
-}
-
 function hasExplicitRetryMessage(payload: Record<string, unknown>): boolean {
   const message = getStringProperty(payload, 'message');
   return message !== undefined && OPENAI_RETRY_MESSAGE_PATTERN.test(message);
@@ -125,7 +102,7 @@ export function isRetryableOpenAIResponsesStreamError(error: unknown): boolean {
     return false;
   }
 
-  return hasRetryableOpenAIErrorCode(payload) || hasExplicitRetryMessage(payload);
+  return RETRYABLE_FAILURE_KINDS.has(classifyProviderError(payload)) || hasExplicitRetryMessage(payload);
 }
 
 /**
@@ -137,7 +114,7 @@ export function isRetryableOpenAIResponsesStreamError(error: unknown): boolean {
  */
 export function isBadRequestError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
-  if (isKnownTerminalAuthorizationError(error)) return false;
+  if (classifyProviderError(error) === 'auth') return false;
 
   if ('statusCode' in error && (error as { statusCode?: unknown }).statusCode === 400) return true;
 
@@ -152,36 +129,6 @@ function isRetryableProviderMetadata(error: unknown): boolean {
       : undefined;
 
   return retryable === true;
-}
-
-function isKnownTerminalAuthorizationError(error: unknown): boolean {
-  const visited = new WeakSet<object>();
-
-  function visit(candidate: unknown): boolean {
-    if (!isRecord(candidate)) return false;
-    if (visited.has(candidate)) return false;
-    visited.add(candidate);
-
-    const statusCode = candidate.statusCode ?? candidate.status;
-    if (statusCode === 401 || statusCode === 403) return true;
-
-    const code = getStringProperty(candidate, 'code') ?? getStringProperty(candidate, 'type');
-    if (code && TERMINAL_AUTHORIZATION_ERROR_CODES.has(code.trim().toLowerCase())) return true;
-
-    const responseBody = getStringProperty(candidate, 'responseBody');
-    let parsedResponseBody: unknown;
-    if (responseBody) {
-      try {
-        parsedResponseBody = JSON.parse(responseBody);
-      } catch {
-        // Ignore non-JSON provider response bodies.
-      }
-    }
-
-    return visit(candidate.error) || visit(candidate.data) || visit(parsedResponseBody) || visit(candidate.cause);
-  }
-
-  return visit(error);
 }
 
 type MatchedPolicy = {
@@ -249,7 +196,7 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
 
     const matchedPolicy = findMatchingPolicy(error, this.#entries);
     const policy =
-      matchedPolicy ?? (this.#retryUnknownErrors && !isKnownTerminalAuthorizationError(error) ? {} : undefined);
+      matchedPolicy ?? (this.#retryUnknownErrors && classifyProviderError(error) !== 'auth' ? {} : undefined);
     if (!policy) return;
 
     const effectiveMaxRetries = policy.maxRetries ?? this.#maxRetries;

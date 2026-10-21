@@ -1,4 +1,5 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { classifyProviderError } from '@mastra/core/error';
 import { parseMemoryRequestContext } from '@mastra/core/memory';
 import type { MemoryRunState } from '@mastra/core/memory';
 import type { MemoryOperationAttributes, ObservabilityContext } from '@mastra/core/observability';
@@ -15,7 +16,6 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
-import { isContextOverflowError } from './context-overflow';
 import { omDebug } from './debug';
 import { getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
@@ -486,7 +486,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     if (state[GATEWAY_STATE_KEY]) return;
     // One recovery per step: if the retry overflows again, observing more won't help.
     if (state[CONTEXT_OVERFLOW_STEP_KEY] === stepNumber) return;
-    if (!isContextOverflowError(error)) return;
+    if (classifyProviderError(error) !== 'context_overflow') return;
 
     const context = this.engine.getThreadContext(requestContext, messageList);
     if (!context) return;

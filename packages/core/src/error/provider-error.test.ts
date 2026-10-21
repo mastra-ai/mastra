@@ -1,0 +1,281 @@
+import { APICallError } from '@internal/ai-sdk-v5';
+import { describe, expect, it } from 'vitest';
+
+import { classifyProviderError, providerErrorFacts, providerErrorReason } from './provider-error';
+
+function apiError(statusCode: number, message: string, responseBody?: string, data?: unknown) {
+  return new APICallError({
+    message,
+    url: 'https://api.example.com/v1/chat',
+    requestBodyValues: {},
+    statusCode,
+    responseBody,
+    data,
+  });
+}
+
+const responsesServerErrorFrame = {
+  type: 'error',
+  sequence_number: 1,
+  error: { type: 'server_error', code: 'internal_error', message: 'An internal error occurred.' },
+};
+
+describe('classifyProviderError', () => {
+  it.each([
+    [
+      'OpenAI chat completions overflow',
+      apiError(
+        400,
+        "This model's maximum context length is 128000 tokens. However, your messages resulted in 130512 tokens. Please reduce the length of the messages.",
+        undefined,
+        { error: { code: 'context_length_exceeded' } },
+      ),
+      'context_overflow',
+    ],
+    [
+      'OpenAI responses overflow',
+      apiError(400, 'Your input exceeds the context window of this model.'),
+      'context_overflow',
+    ],
+    ['Anthropic overflow', apiError(400, 'prompt is too long: 210345 tokens > 200000 maximum'), 'context_overflow'],
+    [
+      'Anthropic max_tokens overflow',
+      apiError(400, 'input length and `max_tokens` exceed context limit: 198000 + 8192 > 200000'),
+      'context_overflow',
+    ],
+    [
+      'Google overflow',
+      apiError(400, 'The input token count (1100000) exceeds the maximum number of tokens allowed (1048576).'),
+      'context_overflow',
+    ],
+    ['Bedrock overflow', apiError(400, 'Input is too long for requested model.'), 'context_overflow'],
+    [
+      'xAI overflow',
+      apiError(400, "This model's maximum prompt length is 131072 but the request contains 140000 tokens."),
+      'context_overflow',
+    ],
+    [
+      'local server overflow',
+      apiError(400, 'the request exceeds the available context size, try increasing it'),
+      'context_overflow',
+    ],
+    [
+      'overflow code only in the response body',
+      apiError(400, 'Bad Request', '{"error":{"code":"context_length_exceeded"}}'),
+      'context_overflow',
+    ],
+    [
+      'overflow behind a wrapping cause',
+      new Error('Model call failed', { cause: apiError(400, 'prompt is too long: 1 > 0 maximum') }),
+      'context_overflow',
+    ],
+    [
+      'overflow stream payload without a status',
+      {
+        type: 'error',
+        error: { type: 'invalid_request_error', message: 'prompt is too long: 210345 tokens > 200000 maximum' },
+      },
+      'context_overflow',
+    ],
+    [
+      'token-per-minute limit that asks to shorten the request',
+      apiError(
+        429,
+        'Request too large for gpt-4o: Limit 30000, Requested 45000 tokens per min. Please reduce the length of the messages.',
+      ),
+      'rate_limited',
+    ],
+    [
+      'wrapped token-per-minute limit',
+      new Error('Model call failed', {
+        cause: apiError(
+          429,
+          'Request too large for gpt-4o: Limit 30000, Requested 45000 tokens per min. Please reduce the length of the messages.',
+        ),
+      }),
+      'rate_limited',
+    ],
+    ['401', apiError(401, 'Incorrect API key provided'), 'auth'],
+    ['403 by status alone', apiError(403, 'Bad Request'), 'auth'],
+    [
+      'invalid_api_key frame with a derived 400',
+      { type: 'error', code: 'invalid_api_key', message: 'Incorrect API key provided.', statusCode: 400 },
+      'auth',
+    ],
+    ['persisted "Incorrect API key provided."', { name: 'Error', message: 'Incorrect API key provided.' }, 'auth'],
+    [
+      'Google "API key not valid"',
+      { name: 'AI_APICallError', message: 'API key not valid. Please pass a valid API key.' },
+      'auth',
+    ],
+    ['Bedrock AccessDeniedException', { name: 'AI_APICallError', message: 'AccessDeniedException' }, 'auth'],
+    [
+      'Anthropic permission_error envelope',
+      {
+        name: 'AI_APICallError',
+        message: JSON.stringify({
+          error: { type: 'permission_error', message: 'Your API key does not have permission.' },
+        }),
+      },
+      'auth',
+    ],
+    [
+      'OpenAI insufficient_quota on 429',
+      apiError(429, 'You exceeded your current quota, please check your plan and billing details.', undefined, {
+        error: { code: 'insufficient_quota', type: 'insufficient_quota' },
+      }),
+      'quota',
+    ],
+    [
+      'Anthropic low credit balance on 400',
+      apiError(400, 'Your credit balance is too low to access the Anthropic API.', undefined, {
+        error: { type: 'invalid_request_error' },
+      }),
+      'quota',
+    ],
+    ['402', apiError(402, 'Payment Required'), 'quota'],
+    [
+      'message-only insufficient balance',
+      { name: 'AI_APICallError', message: 'Insufficient balance to complete this request' },
+      'quota',
+    ],
+    ['message-only credits exhausted', { name: 'AI_APICallError', message: 'API credits exhausted' }, 'quota'],
+    [
+      'message-only weekly limit',
+      { name: 'AI_APICallError', message: 'Your weekly limit has been reached, try again later' },
+      'quota',
+    ],
+    [
+      'message-only usage limit',
+      { name: 'AI_APICallError', message: 'You have exceeded your usage limit for Claude Max' },
+      'quota',
+    ],
+    [
+      'request size limit is not a quota',
+      { name: 'AI_APICallError', message: 'You exceeded your request size limit' },
+      'unknown',
+    ],
+    [
+      'Anthropic not_found_error envelope',
+      {
+        name: 'AI_APICallError',
+        message: JSON.stringify({ error: { type: 'not_found_error', message: 'model: claude-x' } }),
+      },
+      'model_rejected',
+    ],
+    [
+      'unsupported parameter',
+      { name: 'AI_APICallError', message: "Unsupported_parameter: 'reasoning.effort'" },
+      'model_rejected',
+    ],
+    [
+      'tool call without its result',
+      { name: 'AI_APICallError', message: 'No tool output found for function call call_123.' },
+      'tool_history_rejected',
+    ],
+    [
+      'invalid_request_error whose value mentions a timeout',
+      {
+        name: 'AI_APICallError',
+        message: JSON.stringify({
+          error: { type: 'invalid_request_error', message: 'Invalid value for parameter timeout.' },
+        }),
+      },
+      'invalid_request',
+    ],
+    [
+      'invalid_request_error whose value mentions a server error',
+      {
+        name: 'AI_APICallError',
+        message: JSON.stringify({
+          error: { type: 'invalid_request_error', message: "Invalid value 'server_error' for parameter mode." },
+        }),
+      },
+      'invalid_request',
+    ],
+    ['408', apiError(408, 'Request Timeout'), 'timeout'],
+    ['timed out APICallError', { name: 'AI_APICallError', message: 'Request timed out.' }, 'timeout'],
+    ['TimeoutError name', { name: 'TimeoutError', message: 'The operation was aborted due to timeout' }, 'timeout'],
+    ['Bedrock ThrottlingException', { name: 'AI_APICallError', message: 'ThrottlingException' }, 'rate_limited'],
+    [
+      'Google RESOURCE_EXHAUSTED status',
+      {
+        error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'Resource has been exhausted (e.g. check quota).' },
+      },
+      'rate_limited',
+    ],
+    ['500', apiError(500, 'The server had an error while processing your request'), 'unavailable'],
+    ['529 overloaded', apiError(529, 'Overloaded', undefined, { error: { type: 'overloaded_error' } }), 'unavailable'],
+    ['Responses server_error frame', responsesServerErrorFrame, 'unavailable'],
+    [
+      'Responses server_error frame persisted under a plain Error',
+      { name: 'Error', message: JSON.stringify(responsesServerErrorFrame) },
+      'unavailable',
+    ],
+    [
+      'Bedrock ServiceUnavailableException',
+      { name: 'AI_APICallError', message: 'ServiceUnavailableException' },
+      'unavailable',
+    ],
+    ['400 without a reason', apiError(400, 'Bad Request'), 'invalid_request'],
+    [
+      'persisted "Bad Request" without a status',
+      { name: 'AI_APICallError', message: 'Bad Request' },
+      'invalid_request',
+    ],
+    ['plain error', new Error('Network connection lost'), 'unknown'],
+    ['undefined', undefined, 'unknown'],
+  ])('%s → %s', (_name, error, kind) => {
+    expect(classifyProviderError(error)).toBe(kind);
+  });
+
+  it('survives a throwing getter and a cycle', () => {
+    const hostile: Record<string, unknown> = { message: 'Bad Request', statusCode: 400 };
+    Object.defineProperty(hostile, 'code', {
+      get() {
+        throw new Error('nope');
+      },
+      enumerable: true,
+    });
+    hostile.cause = hostile;
+    expect(classifyProviderError(hostile)).toBe('invalid_request');
+  });
+});
+
+describe('providerErrorFacts', () => {
+  it('keeps the status and the most specific provider code', () => {
+    const error = apiError(429, 'quota', undefined, {
+      error: { type: 'insufficient_quota', code: 'insufficient_quota' },
+    });
+    expect(providerErrorFacts(error)).toEqual({ statusCode: 429, code: 'insufficient_quota' });
+    expect(providerErrorFacts({ type: 'error', error: { type: 'rate_limit_error', message: 'slow down' } })).toEqual({
+      code: 'rate_limit_error',
+    });
+    expect(providerErrorFacts({ error: { code: 429, status: 'RESOURCE_EXHAUSTED' } })).toEqual({
+      statusCode: 429,
+      code: 'RESOURCE_EXHAUSTED',
+    });
+  });
+
+  it('returns no keys for an error without provider facts', () => {
+    expect(providerErrorFacts(new Error('boom'))).toEqual({});
+    expect(providerErrorFacts('boom')).toEqual({});
+  });
+});
+
+describe('providerErrorReason', () => {
+  it('unwraps envelopes and stringified layers down to the provider sentence', () => {
+    const nested = JSON.stringify({
+      message: JSON.stringify({
+        type: 'response.failed',
+        response: { error: { code: 'invalid_request_error', message: 'Invalid schema for function search.' } },
+      }),
+    });
+    expect(providerErrorReason(nested)).toBe('Invalid schema for function search.');
+    expect(
+      providerErrorReason(apiError(400, 'Bad Request', '{"error":{"message":"Unsupported value: temperature"}}')),
+    ).toBe('Unsupported value: temperature');
+    expect(providerErrorReason({ name: 'Error', message: '  Something broke  ' })).toBe('Something broke');
+    expect(providerErrorReason({ name: 'Error', message: '' })).toBeUndefined();
+  });
+});

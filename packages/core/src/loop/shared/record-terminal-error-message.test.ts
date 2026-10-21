@@ -29,14 +29,20 @@ function makeListWithPartialAttempt(attemptId: string, parts: MastraDBMessage['c
 }
 
 describe('toPersistedErrorIdentity', () => {
-  it('keeps only name and message', () => {
+  it('keeps name, message and the provider facts, nothing else', () => {
     const error = Object.assign(new TypeError('boom'), {
       statusCode: 429,
+      responseBody: '{"error":{"code":"insufficient_quota"}}',
       cause: new Error('inner'),
     });
 
-    expect(toPersistedErrorIdentity(error)).toEqual({ name: 'TypeError', message: 'boom' });
-    expect(Object.keys(toPersistedErrorIdentity(error))).toEqual(['name', 'message']);
+    expect(toPersistedErrorIdentity(error)).toEqual({
+      name: 'TypeError',
+      message: 'boom',
+      statusCode: 429,
+      code: 'insufficient_quota',
+    });
+    expect(Object.keys(toPersistedErrorIdentity(new Error('boom')))).toEqual(['name', 'message']);
   });
 
   it('does not mutate the supplied error or invoke toJSON', () => {
@@ -337,7 +343,7 @@ describe('recordTerminalErrorMessage', () => {
     expect(errorPartsOf(all[1])).toHaveLength(1);
   });
 
-  it('stores only a JSON-safe name/message payload', () => {
+  it('stores only a JSON-safe identity payload', () => {
     const messageList = makeListWithPartialAttempt('attempt-1', []);
     const error = Object.assign(new Error('boom'), {
       statusCode: 500,
@@ -357,9 +363,9 @@ describe('recordTerminalErrorMessage', () => {
       .filter(part => part?.type === 'error') as MastraErrorPart[];
 
     expect(storedParts).toHaveLength(1);
-    expect(storedParts[0]?.error).toEqual({ name: 'Error', message: 'boom' });
-    expect(Object.keys(storedParts[0]?.error ?? {})).toEqual(['name', 'message']);
+    expect(storedParts[0]?.error).toEqual({ name: 'Error', message: 'boom', statusCode: 500 });
+    expect(Object.keys(storedParts[0]?.error ?? {})).toEqual(['name', 'message', 'statusCode']);
     expect(serialized).not.toContain('LIED');
-    expect(serialized).not.toContain('statusCode');
+    expect(serialized).not.toContain('inner');
   });
 });

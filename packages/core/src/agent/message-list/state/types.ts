@@ -35,7 +35,8 @@ export type MastraStepStartPart = {
 
 // Persisted record of a terminal agent failure (retries, error processors and
 // fallback models all exhausted). Deliberately stores only JSON-safe identity
-// fields: stack traces, causes and custom enumerable properties stay on the
+// fields plus the provider's HTTP status and error code when it sent them:
+// stack traces, causes and other custom enumerable properties stay on the
 // runtime error surfaces (stream chunk, onError, result.error) and are never
 // written to thread history.
 export type MastraErrorPart = {
@@ -43,6 +44,8 @@ export type MastraErrorPart = {
   error: {
     name: string;
     message: string;
+    statusCode?: number;
+    code?: string;
   };
 } & MastraPartExtensions;
 

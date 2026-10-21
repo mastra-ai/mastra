@@ -1,5 +1,6 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
+import { classifyProviderError } from '@mastra/core/error';
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
@@ -97,24 +98,12 @@ const CREDENTIAL_RESOLUTION_FAILURE = 'tenant model credential policy could not 
 // The resolver's reason when the request context has no user; it recurs on every retry of the same start.
 const NO_AUTHENTICATED_USER = 'the request has no authenticated user';
 
-function httpStatus(error: unknown): number | undefined {
-  if (!error || typeof error !== 'object') return undefined;
-  if ('statusCode' in error && typeof error.statusCode === 'number') return error.statusCode;
-  return 'status' in error && typeof error.status === 'number' ? error.status : undefined;
-}
-
-function causeOf(error: unknown): unknown {
-  return error && typeof error === 'object' && 'cause' in error ? error.cause : undefined;
-}
-
 function runErrorCode(error: unknown, message: string): FactoryDispatchFailureCode {
   const lower = message.toLowerCase();
   if (lower.includes(CREDENTIAL_RESOLUTION_FAILURE)) {
     return lower.includes(NO_AUTHENTICATED_USER) ? 'run_user_unauthenticated' : 'run_credentials_unavailable';
   }
-  // Model credentials a person can fix: a provider's structured 401/403.
-  const status = httpStatus(error) ?? httpStatus(causeOf(error));
-  return status === 401 || status === 403 ? 'run_credentials_unavailable' : 'run_failed';
+  return classifyProviderError(error) === 'auth' ? 'run_credentials_unavailable' : 'run_failed';
 }
 
 function runErrorFailure(label: string, error: unknown): RunEndedInError {

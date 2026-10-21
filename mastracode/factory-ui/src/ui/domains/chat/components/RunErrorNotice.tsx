@@ -19,8 +19,7 @@ export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['err
   const { title, message, recovery } = describeRunError(error);
   const diagnostics = JSON.stringify(
     {
-      name: error.name,
-      message: error.message,
+      ...error,
       entryId,
       resourceId: session?.resourceId,
       threadId: displayedThread?.threadId ?? session?.sessionThreadId,
