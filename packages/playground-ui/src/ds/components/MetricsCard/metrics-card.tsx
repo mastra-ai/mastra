@@ -12,6 +12,7 @@ import { MetricsCardTitleAndDescription } from './metrics-card-title-and-descrip
 import { MetricsCardTitleMenu } from './metrics-card-title-menu';
 import { MetricsCardToolbar } from './metrics-card-toolbar';
 import { MetricsCardTopBar } from './metrics-card-top-bar';
+import { MetricsCardTotal } from './metrics-card-total';
 import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
 
 export const MetricsCard = Object.assign(MetricsCardRoot, {
@@ -27,6 +28,7 @@ export const MetricsCard = Object.assign(MetricsCardRoot, {
   TitleMenu: MetricsCardTitleMenu,
   Description: MetricsCardDescription,
   Summary: MetricsCardSummary,
+  Total: MetricsCardTotal,
   Loading: MetricsCardLoading,
   Error: MetricsCardError,
   Content: MetricsCardContent,

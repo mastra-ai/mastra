@@ -42,10 +42,9 @@ const LINE_STYLES: Record<MetricsLineChartLineStyle, { width: number; emphasis: 
 
 /**
  * Fills fade out sideways over their first and last 24px, so they don't end in a hard vertical
- * edge where the line starts and stops. A CSS mask, sized to each fill's own box.
+ * edge where the line starts and stops. A mask sized to each fill's own box.
  */
-const THIN_FILL_FADE =
-  '[&_.recharts-area-area]:[mask-image:linear-gradient(to_right,transparent,black_24px,black_calc(100%_-_24px),transparent)]';
+const THIN_FILL_FADE = '[&_.recharts-area-area]:mask-x-from-[calc(100%-24px)]';
 /** A series with this few points gets a dot on each: a lone point draws no line at all. */
 const SPARSE_POINTS = 12;
 

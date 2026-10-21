@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import type { MetricsCardTitleMenuProps } from '@/ds/components/MetricsCard';
-import { SkeletonText } from '@/ds/components/Skeleton';
 import { cn } from '@/lib/utils';
 
 export type ChartCardProps = {
@@ -52,25 +51,12 @@ export function ChartCard({
 }: ChartCardProps) {
   const fade = cn('transition-opacity duration-200', isUpdating && 'opacity-50');
   const compact = variant === 'compact';
-  const heading = titleMenu ? (
-    <MetricsCard.TitleMenu title={title} {...titleMenu} />
-  ) : compact ? (
-    <MetricsCard.Title as="h3" className="font-medium">
-      {title}
-    </MetricsCard.Title>
-  ) : (
-    <MetricsCard.TitleAndDescription title={title} description={description} />
-  );
   return (
     <MetricsCard className={cn('min-h-0! min-w-0!', compact && 'h-84', className)}>
       <MetricsCard.TopBar>
-        {titleMenu || compact ? <div className="flex flex-col">{heading}</div> : heading}
+        <ChartCardHeading title={title} description={description} titleMenu={titleMenu} compact={compact} />
         {actions && <MetricsCard.Actions reveal="hover">{actions}</MetricsCard.Actions>}
-        {compact && total !== undefined && (
-          <span className={cn('order-last shrink-0 text-body font-medium text-foreground tabular-nums', fade)}>
-            {isLoading ? <SkeletonText line="text-body" className="h-4 w-14" /> : total}
-          </span>
-        )}
+        {compact && total !== undefined && <MetricsCard.Total value={total} isLoading={isLoading} className={fade} />}
         {!compact && summary && <div className={cn('order-last flex w-24 shrink-0 justify-end', fade)}>{summary}</div>}
       </MetricsCard.TopBar>
       <MetricsCard.Content className={cn('flex flex-col gap-4 overflow-visible', compact && 'min-h-0')}>
@@ -81,4 +67,28 @@ export function ChartCard({
       </MetricsCard.Content>
     </MetricsCard>
   );
+}
+
+/** The title: a view menu, a lone compact title, or the default title and description. */
+function ChartCardHeading({
+  title,
+  description,
+  titleMenu,
+  compact,
+}: Pick<ChartCardProps, 'title' | 'description' | 'titleMenu'> & { compact: boolean }) {
+  if (titleMenu) {
+    return (
+      <div className="flex flex-col">
+        <MetricsCard.TitleMenu title={title} {...titleMenu} />
+      </div>
+    );
+  }
+  if (compact) {
+    return (
+      <MetricsCard.Title as="h3" weight="medium">
+        {title}
+      </MetricsCard.Title>
+    );
+  }
+  return <MetricsCard.TitleAndDescription title={title} description={description} />;
 }
