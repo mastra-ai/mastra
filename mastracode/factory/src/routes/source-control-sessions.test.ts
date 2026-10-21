@@ -435,7 +435,7 @@ describe('source-control session routes', () => {
     await memory.saveThread({
       thread: { id: sessionId, resourceId: project.id, title: 'Shared', createdAt: new Date(), updatedAt: new Date() },
     });
-    // The owner's request parks after moving the thread off the Factory and before writing the row private.
+    // The owner's request parks after reading the row and before moving the thread off the Factory.
     let markParked = () => {};
     const parked = new Promise<void>(resolve => {
       markParked = resolve;
@@ -446,11 +446,11 @@ describe('source-control session routes', () => {
     });
     let moves = 0;
     const moveThread: RouteOptions['moveThread'] = async input => {
-      await memory.updateThreadResourceId(input);
       if (++moves === 1) {
         markParked();
         await released;
       }
+      await memory.updateThreadResourceId(input);
     };
     const app = buildApp(
       [sourceControl],
@@ -561,9 +561,39 @@ describe('source-control session routes', () => {
     await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({ userId: 'user-1' });
   });
 
-  it('keeps Slack thread and Factory run sessions with their owner, and says so before the click', async () => {
+  it("keeps a shared session with its owner while its conversation is still on the owner's memory", async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const sessionId = 'factory-unmoved-shared';
+    await sourceControl.sessions.create({
+      sessionId,
+      projectRepositoryId: projectRepository.id,
+      factoryProjectId: project.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: `user/session-${sessionId}`,
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const storage = new InMemoryStore({ id: sessionId });
+    const memory = (await storage.getStore('memory'))!;
+    await memory.saveThread({
+      thread: { id: sessionId, resourceId: 'user-1', title: 'Unmoved', createdAt: new Date(), updatedAt: new Date() },
+    });
+    const controller = await startOwnershipController(sessionId, storage);
+    const teammate = buildApp([sourceControl], seed, controller, noRuns, {
+      workosId: 'user-2',
+      organizationId: 'org-1',
+    });
+
+    const response = await takeOwnership(teammate, sessionId, 'user-1');
+
+    expect(response.status).toBe(404);
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ userId: 'user-1' });
+  });
+
+  it('keeps Slack thread, Factory run and side sessions with their owner, and says so before the click', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
-    const create = (sessionId: string, branch: string) =>
+    const create = (sessionId: string, branch: string, origin?: { sessionId: string; threadId: string }) =>
       sourceControl.sessions.create({
         sessionId,
         projectRepositoryId: projectRepository.id,
@@ -572,10 +602,12 @@ describe('source-control session routes', () => {
         branch,
         baseBranch: 'main',
         visibility: 'org',
+        ...(origin ? { origin } : {}),
       });
     await create('user-session', 'user/session-user-session');
     await create('slack-thread', 'slack/C123-1700000000.000100');
     await create('factory-run', 'factory/run-1');
+    await create('side-session', 'user/session-side-session', { sessionId: 'user-session', threadId: 'user-session' });
     const controller = { queryThreadById: async () => null } as unknown as RouteOptions['controller'];
     const workItems: RouteOptions['workItems'] = {
       clearSessionReferences: async () => 0,
@@ -595,7 +627,7 @@ describe('source-control session routes', () => {
 
     expect(await offersTakeover(teammate, 'user-session')).toBe(true);
     expect(await offersTakeover(owner, 'user-session')).toBe(false);
-    for (const sessionId of ['slack-thread', 'factory-run']) {
+    for (const sessionId of ['slack-thread', 'factory-run', 'side-session']) {
       expect(await offersTakeover(teammate, sessionId)).toBe(false);
       const refused = await takeOwnership(teammate, sessionId, 'user-1');
       expect(refused.status).toBe(409);

@@ -12,6 +12,8 @@ import type { SessionRetirementCoordinator } from '../sandbox/session-retirement
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { seedSessionOrg } from '../session/org-seed.js';
 import {
+  isRunBound,
+  isWorkerSession,
   sessionMemoryResourceId,
   listFactorySessionThreads,
   sessionThreadsToMove,
@@ -106,19 +108,6 @@ function withCapabilities<T extends object>(session: T, capabilities: SessionCap
   return { ...session, capabilities };
 }
 
-async function isUserStartedSession(
-  session: SourceControlSession,
-  workItems: NonNullable<SourceControlSessionRoutesOptions['workItems']>,
-): Promise<boolean> {
-  if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)) return false;
-  if (session.factoryProjectId === null) return true;
-  return !(await workItems.hasRunBindingForSession({
-    orgId: session.orgId,
-    factoryProjectId: session.factoryProjectId,
-    sessionId: session.sessionId,
-  }));
-}
-
 type OwnershipRefusal = { status: 409 | 503; error: string };
 
 async function ownershipRefusal(
@@ -135,8 +124,9 @@ async function ownershipRefusal(
       error: "Session ownership can't change yet: Factory storage is still starting up. Try again in a moment.",
     };
   }
-  // Slack finds a thread's session by its sender, and a Factory run's session follows its work item.
-  if (!(await isUserStartedSession(session, options.workItems))) {
+  // Slack finds a thread's session by its sender, a Factory run's session follows its work item,
+  // and a side session acts for the session that started it.
+  if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) || (await isWorkerSession(session, options.workItems))) {
     return { status: 409, error: 'Only user sessions can change owner' };
   }
   return null;
@@ -241,6 +231,18 @@ async function resolveSession(
   );
   if (matches.length > 1) throw new Error('Factory session exists in multiple source-control providers.');
   return matches[0] ?? null;
+}
+
+async function resolveReadableSession(
+  options: SourceControlSessionRoutesOptions,
+  sessionId: string,
+  viewer: { orgId: string; userId: string },
+) {
+  const match = await resolveSession(options.sourceControls, sessionId);
+  if (!match || !canViewSourceControlSession(match.session, viewer)) return null;
+  const resourceId = await sessionMemoryResourceId(options.controller, match.session, options.workItems);
+  if (!canReadSessionResource(match.session, resourceId, viewer)) return null;
+  return { ...match, resourceId };
 }
 
 /**
@@ -538,16 +540,9 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
-        const match = await resolveSession(options.sourceControls, c.req.param('sessionId'));
-        const session = match?.session;
-        if (!session || !canViewSourceControlSession(session, resolved.tenant)) {
-          return c.json({ error: 'Session not found' }, 404);
-        }
-        // The client opens the session by its id and creates it under this resource.
-        const resourceId = await sessionMemoryResourceId(options.controller, session, options.workItems);
-        if (!canReadSessionResource(session, resourceId, resolved.tenant)) {
-          return c.json({ error: 'Session not found' }, 404);
-        }
+        const readable = await resolveReadableSession(options, c.req.param('sessionId'), resolved.tenant);
+        if (!readable) return c.json({ error: 'Session not found' }, 404);
+        const { session, resourceId } = readable;
         const owners = await resolveOwnerProfiles([session.userId]);
         const recreateSandbox =
           canRecreateSandbox(options) &&
@@ -557,6 +552,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         return c.json({
           session: {
             ...withCapabilities(withOwnerProfile(session, owners), { recreateSandbox, takeOwnership }),
+            // The client opens the session by its id and creates it under this resource.
             resourceId,
           },
         });
@@ -662,11 +658,9 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if ('response' in resolved) return resolved.response;
         const { orgId, userId } = resolved.tenant;
         const sessionId = c.req.param('sessionId');
-        const match = await resolveSession(options.sourceControls, sessionId);
-        const session = match?.session;
-        if (!match || !session || !canViewSourceControlSession(session, resolved.tenant)) {
-          return c.json({ error: 'Session not found' }, 404);
-        }
+        const readable = await resolveReadableSession(options, sessionId, resolved.tenant);
+        if (!readable) return c.json({ error: 'Session not found' }, 404);
+        const { sourceControl, session } = readable;
         let body: unknown;
         try {
           body = await c.req.json();
@@ -689,7 +683,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             return c.json({ error: 'Wait for the session to finish its run before taking ownership' }, 409);
           }
         }
-        const transferred = await match.sourceControl.sessions.transferOwner({
+        const transferred = await sourceControl.sessions.transferOwner({
           sessionId,
           expectedUserId: expectedOwnerId,
           toUserId: userId,
@@ -817,7 +811,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         // Only sessions a person started in the UI can change. Factory runs and
         // Slack threads keep the visibility they were created with: runs and
         // channel threads stay with the team, Slack DMs stay private.
-        if (!(await isUserStartedSession(row, options.workItems))) {
+        if (row.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) || (await isRunBound(row, options.workItems))) {
           return c.json({ error: 'Only user sessions can change visibility' }, 409);
         }
         // Sharing puts the session on its Factory's memory; without a Factory there is nowhere to share it to.
