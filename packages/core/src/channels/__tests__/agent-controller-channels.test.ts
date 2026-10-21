@@ -1130,6 +1130,72 @@ describe('AgentControllerChannels', () => {
       expect(renderContext).not.toBeNull();
     }, 30_000);
   });
+
+  describe('reaction tools on a run with no inbound message', () => {
+    // A schedule, a Studio prompt or a woken run in a channel-backed thread has
+    // no `channel` on request context. The reaction tools must still find the
+    // chat thread through the run's memory thread, like the output processor.
+    async function mappedThread() {
+      const { adapter, mastra, channels } = await createSetup({});
+      const chatThread = createChatThread(adapter, 'discord:t-react');
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+      const memoryStore = await mastra.getStorage()!.getStore('memory');
+      const { threads } = await memoryStore!.listThreads({
+        filter: { metadata: { channel_externalThreadId: 'discord:t-react' } },
+        perPage: 1,
+      });
+      expect(threads[0], 'inbound dispatch mapped the chat thread to a Mastra thread').toBeDefined();
+      adapter.addReaction.mockClear();
+      const tools = channels.getTools() as Record<
+        string,
+        { execute: (input: unknown, ctx: unknown) => Promise<unknown> }
+      >;
+      return { adapter, tools, threadId: threads[0]!.id };
+    }
+
+    it('reacts through the agent thread id', async () => {
+      const { adapter, tools, threadId } = await mappedThread();
+
+      await tools.add_reaction!.execute(
+        { messageId: 'm-1', emoji: 'eyes' },
+        { requestContext: new RequestContext(), agent: { threadId } },
+      );
+      await tools.remove_reaction!.execute(
+        { messageId: 'm-1', emoji: 'eyes' },
+        { requestContext: new RequestContext(), agent: { threadId } },
+      );
+
+      expect(adapter.addReaction).toHaveBeenCalledWith('discord:t-react', 'm-1', 'eyes');
+      expect(adapter.removeReaction).toHaveBeenCalledWith('discord:t-react', 'm-1', 'eyes');
+    }, 30_000);
+
+    it('reacts through the memory thread on request context', async () => {
+      const { adapter, tools, threadId } = await mappedThread();
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', { thread: { id: threadId } });
+
+      await tools.add_reaction!.execute({ messageId: 'm-1', emoji: 'eyes' }, { requestContext });
+
+      expect(adapter.addReaction).toHaveBeenCalledWith('discord:t-react', 'm-1', 'eyes');
+    }, 30_000);
+
+    it('still fails clearly when the thread is not in a channel', async () => {
+      const { adapter, tools } = await mappedThread();
+
+      await expect(
+        tools.add_reaction!.execute(
+          { messageId: 'm-1', emoji: 'eyes' },
+          { requestContext: new RequestContext(), agent: { threadId: 'no-such-thread' } },
+        ),
+      ).rejects.toThrow('No channel context');
+      expect(adapter.addReaction).not.toHaveBeenCalled();
+    }, 30_000);
+  });
 });
 
 describe('AgentControllerChannels thread history', () => {
