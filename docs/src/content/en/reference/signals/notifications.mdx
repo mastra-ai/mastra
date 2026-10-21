@@ -7,7 +7,7 @@ packages:
 
 # Notifications
 
-A notification inbox record is durable state stored by `agent.sendNotificationSignal()`. It is not the same object as the notification signal delivered to a thread. The record tracks routing, priority, delivery state, deduplication, and retry history. The signal carries a summary and a snapshot of that record in its metadata.
+A notification inbox record is durable state stored by `agent.sendNotificationSignal()`. It's not the same object as the notification signal delivered to a thread. The record tracks routing, priority, delivery state, deduplication, and retry history. The signal carries a summary and a snapshot of that record in its metadata.
 
 Use [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) to create records and the [Notifications guide](/docs/signals/notifications) for the delivery flow.
 
@@ -57,7 +57,7 @@ Use [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotifications
     type: 'unknown',
     isOptional: true,
     description:
-      'Structured payload stored for tools or application code. It is not sent to the model as part of the signal.',
+      'Structured payload stored for tools or application code. The model never receives this field as part of the signal.',
   },
   {
     name: 'resourceId',
@@ -202,7 +202,7 @@ Use [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotifications
 
 `sendNotificationSignal()` can merge a new notification into an existing pending record instead of creating another one. Merging only considers records on the same thread, source, kind, agent, and resource.
 
-Two keys control merging:
+Each key serves a different purpose:
 
 - `dedupeKey` identifies the same event. Reuse it when a retry or duplicate webhook should update the existing record.
 - `coalesceKey` groups related events. Use it when several events should become one record, such as multiple failures from the same pipeline.
@@ -264,9 +264,9 @@ type NotificationDeliveryDecision = {
 
 `deliver` emits a full notification signal immediately. `queue` and `defer` leave the record pending for later dispatch. `summarize` emits or schedules a summary. `persist` stores the record without emitting a signal. `discard` marks the record discarded without delivering it.
 
-`streamOptions` are attached when delivery wakes an idle thread. They are resolved at delivery time, so a deferred or summarized notification can still carry the execution options the woken thread needs, such as model selection.
+`streamOptions` are attached when delivery wakes an idle thread. They're resolved at delivery time, so a deferred or summarized notification can still carry the execution options the woken thread needs, such as model selection.
 
-`hold` applies only at delivery time. It leaves the notification pending without counting an attempt, so another process's dispatcher can deliver it. Use it when a process shares the notification store but cannot run the target thread. `hold` is ignored when the notification is first sent.
+`hold` applies only at delivery time. It leaves the notification pending without counting an attempt, so another process's dispatcher can deliver it. Use it when a process shares the notification store but can't run the target thread. `hold` is ignored when the notification is first sent.
 
 ## Delivery policies
 
@@ -374,11 +374,11 @@ type NotificationSummarySignalMetadata = {
 }
 ```
 
-These metadata shapes describe the signals. The stored record is not the signal, and the signal does not include the record's `payload` or retry history.
+These metadata shapes describe the signals. The stored record isn't the signal, and the signal doesn't include the record's `payload` or retry history.
 
 ## Storage
 
-Notification records require a storage domain that supports `notifications`, such as libSQL, PostgreSQL, or MongoDB. Without it, `sendNotificationSignal()` cannot store records.
+Notification records require a storage domain that supports `notifications`, such as libSQL, PostgreSQL, or MongoDB. Without it, `sendNotificationSignal()` can't store records.
 
 `sendSignal({ type: 'notification' })` bypasses inbox storage and delivers notification-shaped context directly. Use [`createNotificationInboxTool()`](/reference/signals/create-notification-inbox-tool) to read and manage stored records from an agent.
 

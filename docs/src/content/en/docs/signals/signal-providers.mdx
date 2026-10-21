@@ -34,7 +34,7 @@ A provider combines three responsibilities:
 
 - **Subscription tracking:** the base class maps each `resourceId` and `threadId` pair to the external resources it watches.
 - **Ingestion:** you implement [`poll()`](/reference/signals/signal-provider#polling) for pull-based sources or [`handleWebhook()`](/reference/signals/signal-provider#webhooks) for push-based sources.
-- **Delivery:** when an event matches a subscription, call the protected [`notify()`](/reference/signals/signal-provider#notifications) helper. It forwards the event to [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options), so the record gets the same delivery policy, retries, and inbox behavior as any other notification.
+- **Delivery:** when an event matches a subscription, call the protected [`notify()`](/reference/signals/signal-provider#notifications) helper. It forwards the event to [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options). The record gets the same delivery policy, retries, and inbox behavior as any other notification.
 
 Pass the provider to an agent's `signals` array. The agent connects it, starts polling when `pollInterval` is set, and merges any processors or tools the provider returns.
 
@@ -160,7 +160,7 @@ The base class handles the timer:
 - It catches errors from `poll()`, logs them, and waits for the next cycle.
 - It calls `unref()` on the timer so polling alone doesn't keep the process alive.
 
-The base class does not retry a failed poll immediately. If a source is temporarily unavailable, let the next interval retry, or add your own backoff inside `poll()`.
+The base class doesn't retry a failed poll immediately. If a source is temporarily unavailable, let the next interval retry, or add your own backoff inside `poll()`.
 
 ### Webhooks
 
@@ -199,13 +199,13 @@ export class CiSignals extends SignalProvider<'ci-signals'> {
 
 ### Durable subscriptions
 
-The base registry is in-memory and belongs to one provider instance in one process. It does not survive a restart and is not shared across instances.
+The base registry is in-memory and belongs to one provider instance in one process. It doesn't survive a restart and isn't shared across instances.
 
 If subscriptions must survive a restart, persist them in your own storage and rehydrate them in [`start()`](/reference/signals/signal-provider#start). Call `subscribe()` for each persisted subscription before polling needs it. A second process has an empty registry until it rehydrates its own copy.
 
 ### Lifecycle hooks
 
-The agent calls `connect()` when it is constructed and starts polling immediately after. It also invokes `start()` without awaiting it, so keep `start()` independent of the first poll cycle and handle its errors.
+The agent calls `connect()` when it's constructed and starts polling immediately after. It also invokes `start()` without awaiting it, so keep `start()` independent of the first poll cycle and handle its errors.
 
 [`stop()`](/reference/signals/signal-provider#stop) is synchronous. The default implementation stops polling and clears every subscription index. Override it for cleanup, but call `super.stop()` so the registry is released:
 
@@ -231,7 +231,7 @@ The agent resolves these once, after `connect()`, and registers the processors w
 
 [`notify()`](/reference/signals/signal-provider#notifications) is a thin wrapper around the connected agent's `sendNotificationSignal()`. Accepts the same notification fields: `source`, `kind`, `summary`, optional `priority`, `payload`, `dedupeKey`, `coalesceKey`, and `attributes`.
 
-Use `dedupeKey` for one event that may arrive more than once, such as the same failing build detected on consecutive polls. Use `coalesceKey` when several related events should collapse into one pending record. The [Notifications guide](/docs/signals/notifications#create-and-coalesce-records) covers the merge rules.
+Use `dedupeKey` for one event that may arrive more than once, such as the same failing build detected on consecutive polls. Use `coalesceKey` when several related events should merge into one pending record. The [Notifications guide](/docs/signals/notifications#create-and-coalesce-records) covers the merge rules.
 
 `notify()` throws when the provider isn't connected to an agent. It also propagates storage errors from `sendNotificationSignal()`, so let those reach your poll or webhook error handling instead of swallowing them.
 
@@ -300,11 +300,11 @@ Without `extractResourceId`, the provider reads `resource` or `externalResourceI
 
 ## Production checklist
 
-Before shipping a provider:
+Before you deploy a provider:
 
 - **Deduplicate retries:** give every event a stable `dedupeKey` or `coalesceKey`. Webhook deliveries and poll cycles can repeat, and the provider doesn't deduplicate before calling `notify()`.
 - **Verify webhooks:** check signatures against the raw request body before parsing. Reject invalid requests at your HTTP endpoint, not inside `notify()`.
-- **Handle source outages:** polling retries on the next interval; add backoff inside `poll()` if the source needs it. Webhook sources usually retry from their side, so return a non-2xx status when you couldn't accept the event.
+- **Handle source outages:** Polling retries on the next interval. Add backoff inside `poll()` if the source needs it. Webhook sources usually retry from their side, so return a non-2xx status when you couldn't accept the event.
 - **Persist subscriptions if they matter:** the registry is in-memory. Rehydrate it in `start()` when a restart must preserve watches.
 - **Use shared storage:** notification records and delivery policy depend on the Mastra storage configured for the agent.
 - **Plan shutdown:** stop accepting webhooks, stop polling, close clients, and let in-flight notifications settle.

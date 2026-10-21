@@ -12,7 +12,7 @@ A thread stream is the ordered output and lifecycle of a [thread](/docs/memory/o
 
 ## Quickstart
 
-Subscribe before you send input. A run starts in response to a signal, so a subscription created afterward misses the beginning of the stream. If an existing subscription's connection drops, reconnect can resume output that is still retained; see [Reconnect](#reconnect). This example uses the JavaScript client SDK against a running Mastra server. If your code owns the `Agent` instance, see the [Agent example](/docs/signals/overview#use-an-agent).
+Subscribe before you send input. A run starts in response to a signal, so a subscription created afterward misses the beginning of the stream. If an existing subscription's connection drops, reconnect can resume output that's still retained. See [Reconnect](#reconnect). This example uses the JavaScript client SDK against a running Mastra server. If your code owns the `Agent` instance, see the [Agent example](/docs/signals/overview#use-an-agent).
 
 ```typescript title="src/app/chat.ts"
 import { MastraClient } from '@mastra/client-js'
@@ -39,7 +39,7 @@ await subscription.processDataStream({
 })
 ```
 
-The example creates a client with [`client.getAgent()`](/reference/client-js/mastra-client#methods), subscribes to the thread, sends a message, and reads the chunks with [`processDataStream()`](/reference/client-js/agents#subscribetothread). [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options) returns when Mastra accepts the input; the output arrives through `onChunk`.
+The example creates a client with [`client.getAgent()`](/reference/client-js/mastra-client#methods), subscribes to the thread, sends a message, and reads the chunks with [`processDataStream()`](/reference/client-js/agents#subscribetothread). [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options) returns when Mastra accepts the input. The output arrives through `onChunk`.
 
 ## Read the stream
 
@@ -63,13 +63,13 @@ Describe the chunk families a subscriber sees: model output, tool calls and resu
 
 When a subscribed run pauses for tool approval, approve or decline the tool call with the subscription-native methods. The resumed chunks arrive through the existing thread subscription. Visit [`client.getAgent().sendToolApproval()` reference](/reference/client-js/agents#sendtoolapproval) and [server agent routes](/reference/server/routes#subscription-tool-approval-routes) for request and response shapes.
 
-A suspended run holds the thread. Until it resumes or is aborted, a new idle wake resolves `accepted` to `blocked`. Pending approvals and suspensions are replayed when you subscribe again; completed runs are not. [When the agent sees your input](/docs/signals/sending-signals#when-the-agent-sees-your-input) covers the interrupt and wait rules for input that arrives during a run.
+A suspended run holds the thread. Until it resumes or is aborted, a new idle wake resolves `accepted` to `blocked`. Pending approvals and suspensions are replayed when you subscribe again. Completed runs aren't. [When the agent sees your input](/docs/signals/sending-signals#when-the-agent-sees-your-input) covers the interrupt and wait rules for input that arrives during a run.
 
 ### Filter signals in a subscription
 
 :::note[Outline]
 
-Explain `hideSignals`: it filters signals for one subscriber only, does not change stored messages, and does not affect other subscribers. Note that the option is supported by the in-process core API, not by HTTP or `client-js` subscription requests.
+Explain `hideSignals`: it filters signals for one subscriber only, doesn't change stored messages, and doesn't affect other subscribers. Note that the option is supported by the in-process core API, not by HTTP or `client-js` subscription requests.
 
 :::
 
@@ -109,11 +109,11 @@ request.signal.addEventListener('abort', () => {
 
 Use heartbeats together with client-side reconnect logic. Heartbeats reduce idle disconnects, while reconnects recover when the network or runtime still closes the stream.
 
-## What is replayed and what is not
+## What's replayed and what isn't
 
 :::note[Outline]
 
-State that completed stored runs are not replayed, while pending approvals and suspensions are. Explain that history is stored messages, not model deltas.
+State that completed stored runs aren't replayed, while pending approvals and suspensions are. Explain that history is stored messages, not model deltas.
 
 :::
 
@@ -123,6 +123,6 @@ State that completed stored runs are not replayed, while pending approvals and s
 
 List the public surfaces: `AgentChunkType` plus `ThreadHistoryChunk`. Link to the [ChunkType reference](/reference/streaming/ChunkType#thread-history) for chunk shapes and the [Thread events reference](/reference/signals/thread-events) for `subscribeThreadEvents()`.
 
-State that the internal runtime event union is not public and is not documented.
+State that the internal runtime event union isn't public and isn't documented.
 
 :::

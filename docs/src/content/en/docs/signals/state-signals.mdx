@@ -7,7 +7,7 @@ packages:
 
 # State signals
 
-State signals expose named, thread-scoped context lanes. Use them for durable context that changes over time, such as browser state, editor state, or a background watcher result. They are not chat messages; the model sees them as context alongside the conversation. State signals are one of the durable input paths covered in [Sending signals](/docs/signals/sending-signals).
+State signals expose named, thread-scoped context lanes. Use them for durable context that changes over time, such as browser state, editor state, or a background watcher result. They aren't chat messages. The model sees them as context alongside the conversation. State signals are one of the durable input paths covered in [Sending signals](/docs/signals/sending-signals).
 
 ## When to use state signals
 
@@ -26,7 +26,7 @@ Use a different input path when the data has a different lifecycle:
 - **User input:** use [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options), not a state lane.
 - **Prompt-only context for one call:** use a transient reactive signal with `transient: true`.
 - **Discrete external events:** use notifications so they get a durable inbox record and delivery policy.
-- **A high-frequency event stream:** batch or summarize changes before sending. Every accepted state signal becomes context, and snapshots are reinserted after older state messages leave the context window.
+- When updates arrive frequently, batch or summarize changes before sending. Every accepted state signal becomes context, and snapshots are reinserted after older state messages leave the context window.
 
 ## Snapshots and deltas
 
@@ -39,7 +39,7 @@ Send a snapshot when the producer first establishes a lane, when the model's con
 Mastra uses state signals for its own long-lived context, and the same patterns apply to your application:
 
 - The [browser](/docs/browser) context processor keeps the active page and tabs under the `browser` id.
-- [Goals](/docs/harness/goals) keep the current objective under the `goal` id so the model always knows what it is working toward.
+- [Goals](/docs/harness/goals) keep the current objective under the `goal` id so the model always knows what it's working toward.
 - [Task tracking](/docs/agents/tools#task-tracking) stores task state through [`TaskStateProcessor`](/reference/signals/task-signal-provider).
 - [Working memory](/docs/memory/working-memory#opt-in-to-state-signals-experimental) can move out of the system prompt and into a `working-memory` state signal with `useStateSignals: true`.
 
@@ -69,7 +69,7 @@ await agent.sendStateSignal(
 
 ## Compute state in a processor
 
-Use [`computeStateSignal()`](/reference/processors/processor-interface#computestatesignal) when a processor owns a state lane. Mastra calls it once per model input step after [`processInputStep()`](/reference/processors/processor-interface#processinputstep) and before the model request is finalized. The processor reads the active state through `activeStateSignals`, the last snapshot, and `deltasSinceSnapshot`; return `undefined` when nothing changed. The [Processors guide](/docs/agents/processors) covers where this hook sits in the execution order.
+Use [`computeStateSignal()`](/reference/processors/processor-interface#computestatesignal) when a processor owns a state lane. Mastra calls it once per model input step after [`processInputStep()`](/reference/processors/processor-interface#processinputstep) and before the model request is finalized. The processor reads the active state through `activeStateSignals`, the last snapshot, and `deltasSinceSnapshot`. Return `undefined` when nothing changed. The [Processors guide](/docs/agents/processors) covers where this hook sits in the execution order.
 
 ```typescript title="src/mastra/processors/browser-state.ts"
 import type { ComputeStateSignalArgs, Processor } from '@mastra/core/processors'

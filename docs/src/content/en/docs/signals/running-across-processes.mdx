@@ -16,11 +16,11 @@ Mastra uses the [PubSub](/docs/server/pubsub) backend to move signals between pr
 
 ## Why you need a shared backend
 
-The default [`EventEmitterPubSub`](/reference/pubsub/event-emitter) delivers events inside one process. That is enough for a single server, but it can't reach another instance.
+The default [`EventEmitterPubSub`](/reference/pubsub/event-emitter) delivers events inside one process. That's enough for a single server, but it can't reach another instance.
 
 Consider two API instances sharing the same database. A user starts a run on instance A. Their next message hits instance B. Without a shared backend, B can't publish to A's run, so B starts a second run on the same thread. Both processes call the model, both write messages, and the thread ends up with two competing runs.
 
-A shared backend fixes the delivery problem: B publishes the signal on the thread topic, and A consumes it. A lease fixes the ownership problem: only one process can claim the thread, so the other process routes to the owner instead of starting a competing run.
+A shared backend fixes the delivery problem: B publishes the signal on the thread topic, and A consumes it. A lease fixes the ownership problem: only one process can claim the thread. The other process routes to the owner instead of starting a competing run.
 
 Every instance that can handle the same thread needs the same PubSub backend and the same storage. Instances with different backends can't coordinate, even when they point at the same database.
 
@@ -37,13 +37,13 @@ Choose a backend based on where the processes run, not on how many agents you ha
 
 [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub) elects one process as the socket broker. If that process exits, the remaining processes elect a new broker. It doesn't work across machines.
 
-[`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub) delivers events across processes but doesn't implement leases. Mastra can't tell which instance owns a thread, so every instance that receives a signal can try to run it. Use it only when another layer already guarantees that one process handles a given thread at a time.
+[`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub) delivers events across processes but doesn't implement leases. Mastra can't tell which instance owns a thread, so every instance that receives a signal can try to run it. Use it only when another layer already guarantees that one process handles a thread at a time.
 
 For configuration examples and the complete backend comparison, see the [PubSub guide](/docs/server/pubsub).
 
 ## Thread ownership and leases
 
-Mastra acquires a lease on a thread before a process starts a run. The lease key is scoped to the thread, and the process that holds it is the only process allowed to run that thread. Other processes route signals to it.
+Mastra acquires a lease on a thread before a process starts a run. The lease key is scoped to the thread, and the process that holds it's the only process allowed to run that thread. Other processes route signals to it.
 
 The default lease lasts 15 seconds (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`). The owner renews it every third of that TTL, so every 5 seconds by default (`MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS`). The gap allows a missed renewal or two before another process can take over.
 
@@ -61,7 +61,7 @@ For an idle wake that must not start a run on an arbitrary instance, set `ifIdle
 
 ## Delivery guarantees and duplicates
 
-PubSub backends can redeliver an event after a timeout, a failed acknowledgement, or a crash. The runtime is built for at-least-once delivery: a redelivered signal doesn't start a second run for the same logical message while the owner still has its bookkeeping.
+PubSub backends can redeliver an event after a timeout, a failed acknowledgement, or a crash. The runtime assumes at-least-once delivery. A redelivered signal doesn't start a second run for the same logical message while the owner still has its bookkeeping.
 
 That protection doesn't make every event exactly-once. If you consume PubSub events directly, or build your own side effects around signals, make those handlers idempotent. Don't assume a backend delivers each event once.
 
@@ -73,10 +73,10 @@ What survives a crash depends on where the data lives:
 - Signals sent with `persist` behavior are written to memory storage. They survive a restart when that storage is shared.
 - [State signals](/docs/signals/state-signals) and their tracking are stored on the thread. They survive a restart when storage is shared.
 - [Notifications](/docs/signals/notifications) are durable records in notification storage. Their dispatcher can retry delivery after a restart.
-- A shared PubSub backend is transport, not a durable input queue. Retained events can help a subscriber reconnect, but they don't replace storage.
+- A shared PubSub backend transports events. It doesn't store a durable input queue. Retained events can help a subscriber reconnect, but they don't replace storage.
 - Durable-agent recovery restores a run from its checkpoints. It doesn't restore the signal queue that the crashed process held in memory.
 
-If a signal must survive the process that accepted it, persist it or store the fact that it happened in your own system. Don't rely on PubSub retention as the system of record.
+If a signal must survive the process that accepted it, persist it or store a record that it happened in your own system. Don't rely on PubSub retention as the system of record.
 
 ## Serverless
 
@@ -130,4 +130,4 @@ The lease settings are environment variables:
 - `MASTRA_AGENT_THREAD_LEASE_TTL_MS` sets the lease lifetime. The default is `15000` milliseconds.
 - `MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS` sets the renewal interval. The default is one third of the TTL, and a value that isn't shorter than the TTL falls back to that default.
 
-Keep both values consistent across instances. A shorter TTL frees a crashed owner's thread sooner, but leaves less room for a slow renewal; a longer TTL does the opposite. Leave the defaults unless your deployment has a specific reason to change them. For backend options beyond Redis Streams, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).
+Keep both values consistent across instances. A shorter TTL frees a crashed owner's thread sooner, but leaves less room for a slow renewal. A longer TTL does the opposite. Leave the defaults unless your deployment has a specific reason to change them. For backend options beyond Redis Streams, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).

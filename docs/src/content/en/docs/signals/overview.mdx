@@ -21,7 +21,7 @@ Watch [Mastra signals overview](https://www.youtube.com/watch?v=7It2y89TVP4) to 
 
 ## When to use signals
 
-Reach for signals when input arrives after the original `agent.stream()` call:
+Use signals when input arrives after the original `agent.stream()` call:
 
 - A user replies while the agent is still working.
 - A background job adds context to an active thread.
@@ -40,7 +40,7 @@ A **signal** is typed input attached to a thread: a user message, system context
 
 A **thread stream** is the ordered output and lifecycle events for that thread: model text, tool calls, approvals, errors, and run events.
 
-Signals are input; thread streams are output. Sending a signal changes what the agent knows. Subscribing to the thread stream shows what the agent does about it.
+Signals are input. Thread streams are output. Sending a signal changes what the agent knows. Subscribing to the thread stream shows what the agent does about it.
 
 ### How input joins a thread
 
@@ -104,7 +104,7 @@ Show the same subscribe-first flow through [`client.getAgent()`](/reference/clie
 | HTTP or the JavaScript client SDK | Applications that call a running Mastra server | [Server agent routes](/reference/server/routes#agent-message-routes), [`client.getAgent()`](/reference/client-js/agents) |
 | AgentController `Session` | Long-running assistants and coding agents built on AgentController | [Agent Controller](/docs/harness/agent-controller) |
 
-The `Agent` methods are the canonical Signals API. `Session` is a higher-level convenience surface built on AgentController that manages a thread and subscription for you. It is not the recommended starting point for most applications; see [Agent Controller](/docs/harness/agent-controller) for how it manages threads.
+The `Agent` methods are the canonical Signals API. `Session` is a higher-level convenience surface built on AgentController that manages a thread and subscription for you. It's not the recommended starting point for most applications. See [Agent Controller](/docs/harness/agent-controller) for how it manages threads.
 
 ## Next steps
 

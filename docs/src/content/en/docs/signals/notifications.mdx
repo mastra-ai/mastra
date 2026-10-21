@@ -97,7 +97,7 @@ On an idle thread, a high-priority notification delivers immediately and starts 
 
 Ingress and dispatch are separate phases. During ingress, `sendNotificationSignal()` creates or coalesces a record and resolves the agent's delivery policy. During dispatch, Mastra consumes due records and emits full notifications or summaries.
 
-The record and the signal are different objects. The record stores routing, priority, status, delivery attempts, and the original payload. The signal is what the model sees: an XML element built from the record's `summary` and attributes. The record's `payload` is not included in the model context.
+The record and the signal are different objects. The record stores routing, priority, status, delivery attempts, and the original payload. The model sees the signal as an XML element built from the record's `summary` and attributes. The record's `payload` isn't included in the model context.
 
 Records move through these statuses:
 
@@ -114,7 +114,7 @@ A summarized record stays `pending`, because a summary tells the model that reco
 
 `sendNotificationSignal()` accepts one notification or an array. Each item is created independently, then the storage layer decides whether it can merge into an existing pending record.
 
-Two keys control merging: `dedupeKey` identifies the same event, while `coalesceKey` groups related events. They use the same matching rules; the difference is intent, so a dedupe key represents one event that may arrive twice, and a coalesce key represents a set of related events.
+The `dedupeKey` identifies the same event, while `coalesceKey` groups related events. They use the same matching rules. In practice, a dedupe key represents one event that may arrive twice, and a coalesce key represents a set of related events.
 
 Merging only considers records on the same thread, source, kind, agent, and resource that are still pending. The [Notifications reference](/reference/signals/notifications#coalescing-pending-records) documents the fields that merge and their precedence.
 
@@ -144,7 +144,7 @@ The defaults are `enabled: true`, `cron: '*/1 * * * *'` (once per minute), and `
 
 ## Delivery policy
 
-Every record gets a decision when it is received, and possibly again when it is dispatched. The built-in policy uses priority and whether the thread is active or idle:
+Every record gets a decision when it's received, and possibly again when it's dispatched. The built-in policy uses priority and whether the thread is active or idle:
 
 | Priority | Idle thread | Active thread |
 | - | - | - |
@@ -188,7 +188,7 @@ Mastra evaluates the policy in this order:
 1. `default`.
 1. The built-in priority policy.
 
-A custom `decide()` function runs at receipt time and again at delivery time for records whose first decision deferred them or scheduled a summary. At delivery time, the record's stored schedule already fixes when and how it delivers, so only `streamOptions` and `hold` from the new decision are honored. Keep `decide()` side-effect free.
+A custom `decide()` function runs at receipt time and again at delivery time for records whose first decision deferred them or scheduled a summary. The record's stored schedule already fixes when and how it delivers. Delivery honors only `streamOptions` and `hold` from the new decision. Keep `decide()` side-effect free.
 
 ## Dispatch
 
@@ -212,7 +212,7 @@ A full notification delivers the record's summary as its contents:
 
 When Mastra emits a summary, it clears `summaryAt` and sets `summarySignalId` on each summarized record. The records stay `pending` and readable. When a full notification is emitted, Mastra sets `deliveredSignalId` and marks the record `delivered`.
 
-Summaries do not mark records delivered. If the agent needs the full content behind a summary, it reads those records through the inbox. Reading can inject the full notification signal and mark the record `seen`, which prevents a duplicate delivery later.
+Summaries don't mark records delivered. If the agent needs the full content behind a summary, it reads those records through the inbox. Reading can inject the full notification signal and mark the record `seen`, which prevents a duplicate delivery later.
 
 ### Retries and failures
 
@@ -240,7 +240,7 @@ export const ciAgent = new Agent({
 })
 ```
 
-The tool supports `list`, `read`, `search`, `markSeen`, `dismiss`, and `archive`. Listing, reading, and searching mark the returned unread records as `seen`, including `failed` records so the agent can learn that delivery gave up. `list` defaults to pending, delivered, and failed records; `search` spans all statuses.
+The tool supports `list`, `read`, `search`, `markSeen`, `dismiss`, and `archive`. Listing, reading, and searching mark the returned unread records as `seen`, including `failed` records so the agent can learn that delivery gave up. `list` defaults to pending, delivered, and failed records. `search` spans all statuses.
 
 `read` is the important action after a summary. It loads the selected records and delivers their full contents as notification signals, not as ordinary tool output. The agent therefore sees the notification context on the thread even though the tool call produced only a short status message.
 
