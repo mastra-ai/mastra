@@ -8,9 +8,7 @@ packages:
 
 # Sending signals
 
-Most agent conversations start with one request. Signals handle what arrives after it: a user replies while the agent is still working, a background job finishes, or an external system reports an event. The input belongs on the same thread, and the agent should see it at the right moment instead of starting over.
-
-The common path is short. Send a message when a person is talking to the agent. Queue a follow-up when the current answer must finish first. Send a typed signal when the input comes from your system rather than a person. Notifications and state signals cover input that needs to outlive the conversation.
+Start with `sendMessage()`. It covers most user input, and the rest of this page adds the cases where it isn't enough. The examples call methods on an `Agent`; if your app talks to a running Mastra server, use the same methods through the [client SDK](/reference/client-js/agents) or the [server routes](/reference/server/routes#agent-message-routes). The [Agent reference](/reference/agents/agent#thread-signals) is canonical for signatures.
 
 ## Send a message
 
@@ -51,6 +49,8 @@ await agent.queueMessage('Also check whether the tests need updates.', {
 ```
 
 Queued input always waits for the active run to finish, then starts a new run on the same thread. On an idle thread, it starts immediately. If you change your mind before the queued input runs, [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) removes it without stopping the active run. Cancellation is best-effort across processes and doesn't revoke an input that has already been accepted for execution.
+
+If the input is system context rather than a user message, use [`queueSignal()`](/reference/agents/agent#queuesignalsignal-options). It takes the same queue and cancellation behavior, but keeps the signal's own `type`, `tagName`, and attributes.
 
 ## Send context from a system
 
@@ -136,10 +136,4 @@ Mastra creates or coalesces a durable inbox record and applies the agent's deliv
 
 Use [`sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options) when the thread needs a named, durable lane of structured context, such as browser state or a background watcher result. State signals are not chat messages; they are snapshots or deltas that the model sees as context. The [State signals guide](/docs/signals/state-signals) covers when to send a snapshot versus a delta and how to compute state in a processor.
 
-## Where these methods live
-
-These methods live on `Agent`. That is the canonical API, and it works anywhere your code owns the agent instance.
-
-When your application calls a running Mastra server, use the same methods through `client.getAgent()`. The [client SDK reference](/reference/client-js/agents) documents [`sendMessage()`](/reference/client-js/agents#sendmessage), [`queueMessage()`](/reference/client-js/agents#queuemessage), [`queueSignal()`](/reference/client-js/agents#queuesignal), and [`sendSignal()`](/reference/client-js/agents#sendsignal), and the [server routes reference](/reference/server/routes#agent-message-routes) covers the HTTP request and response shapes.
-
-AgentController's `Session` wraps these calls for long-running assistants that want the controller to manage their thread and subscription. It exposes messages, typed signals, and notifications, but not state signals; call `agent.sendStateSignal()` directly for those. Use `Agent` unless you are already building on AgentController. The [Agent reference](/reference/agents/agent#thread-signals) is canonical for signatures.
+If you are building on AgentController, its `Session` wraps messages, typed signals, and notifications, but it does not expose state signals. Call `Agent.sendStateSignal()` directly for those.
