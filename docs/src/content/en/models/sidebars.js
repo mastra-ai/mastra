@@ -356,11 +356,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/crof',
-          label: 'CrofAI',
-        },
-        {
-          type: 'doc',
           id: 'providers/crossmodel',
           label: 'CrossModel',
         },
@@ -598,6 +593,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/lilac',
           label: 'Lilac',
+        },
+        {
+          type: 'doc',
+          id: 'providers/liquid',
+          label: 'Liquid Inference',
         },
         {
           type: 'doc',

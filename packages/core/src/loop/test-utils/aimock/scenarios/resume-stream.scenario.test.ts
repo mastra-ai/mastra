@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory';
 import { createTool } from '../../../../tools';
-import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import {
+  createSharedAgent,
+  runLoopScenario,
+  useLoopScenarioAimock,
+  describeForAllEngines,
+  isDurableEngineVariant,
+} from '../aimock-scenario';
 
 /**
  * Manual tool resumption with `resumeStream()`.
@@ -94,9 +100,15 @@ describeForAllEngines(
       // Resume: call agent.resumeStream with the runId and resume data
       const resumeOutput = await shared.agent.resumeStream({ name: 'Dero Israel' }, { runId: output.runId });
 
-      // Consume the resume stream
-      for await (const _chunk of resumeOutput.fullStream) {
-        // drain
+      // A durable resume continues the existing message, rather than opening another.
+      const resumedTypes: string[] = [];
+      for await (const chunk of resumeOutput.fullStream) {
+        resumedTypes.push(chunk.type);
+      }
+      if (isDurableEngineVariant(engine)) {
+        expect(chunks![0]?.type).toBe('start');
+        expect(chunks!.filter(c => c.type === 'start')).toHaveLength(1);
+        expect(resumedTypes).not.toContain('start');
       }
 
       // Assert: tool received the resume data

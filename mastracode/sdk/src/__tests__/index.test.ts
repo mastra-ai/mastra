@@ -109,7 +109,7 @@ const controllerSetStateMock = vi.fn();
 const controllerSetThreadSettingMock = vi.fn();
 const controllerSetThreadSettingOnMock = vi.fn();
 const controllerEmitMock = vi.fn();
-const controllerGetSessionByResourceMock = vi.fn();
+const controllerGetSessionMock = vi.fn();
 let createdSessionMock: any;
 const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
@@ -259,8 +259,8 @@ vi.mock('@mastra/core/agent-controller', async importOriginal => ({
       };
       return createdSessionMock;
     }
-    async getSessionByResource(resourceId: string) {
-      return controllerGetSessionByResourceMock(resourceId);
+    async getSession(sessionId: string) {
+      return controllerGetSessionMock(sessionId);
     }
     getState() {
       return controllerStateMock;
@@ -536,8 +536,8 @@ describe('createMastraCode', () => {
     controllerSetThreadSettingOnMock.mockReset();
     controllerSetThreadSettingOnMock.mockResolvedValue(undefined);
     controllerEmitMock.mockReset();
-    controllerGetSessionByResourceMock.mockReset();
-    controllerGetSessionByResourceMock.mockImplementation(async () => createdSessionMock);
+    controllerGetSessionMock.mockReset();
+    controllerGetSessionMock.mockImplementation(async () => createdSessionMock);
     createdSessionMock = undefined;
     createMcpManagerMock.mockReset();
     hookManagerConstructorMock.mockReset();
@@ -2206,7 +2206,7 @@ describe('createMastraCode', () => {
     const prepareWakeRequestContext = vi.fn();
     const { createMastraCode } = await import('../index.js');
     await createMastraCode({ prepareWakeRequestContext });
-    controllerGetSessionByResourceMock.mockResolvedValue(undefined);
+    controllerGetSessionMock.mockResolvedValue(undefined);
     const decide = agentConstructorMock.mock.calls
       .map(call => call[0] as Record<string, any>)
       .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
@@ -2223,12 +2223,12 @@ describe('createMastraCode', () => {
   async function decideDelivery(options: Record<string, unknown>, { ownedHere }: { ownedHere: boolean }) {
     const { createMastraCode } = await import('../index.js');
     const mastraCode = await createMastraCode(options);
-    if (!ownedHere) controllerGetSessionByResourceMock.mockResolvedValue(undefined);
+    if (!ownedHere) controllerGetSessionMock.mockResolvedValue(undefined);
     const decide = agentConstructorMock.mock.calls
       .map(call => call[0] as Record<string, any>)
       .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
     const decision = await decide({
-      record: { priority: 'high', source: 'sentinel', resourceId: 'some-resource', threadId: 'some-thread' },
+      record: { priority: 'high', source: 'sentinel', resourceId: 'project-resource', threadId: 'some-thread' },
       threadState: 'idle',
       now: new Date('2026-10-01T00:00:00.000Z'),
     });
@@ -2252,12 +2252,18 @@ describe('createMastraCode', () => {
     expect(decision.streamOptions).toBeDefined();
   });
 
-  it('does not hold notifications when the embedder configured its own PubSub', async () => {
-    for (const ownedHere of [true, false]) {
-      expect(await decideDelivery({ pubsub: {} as any, crossProcessPubSub: true }, { ownedHere })).not.toHaveProperty(
-        'hold',
-      );
-    }
+  it("delivers this resource's notifications from the shared schedule when the embedder configured its own PubSub", async () => {
+    const decision = await decideDelivery({ pubsub: {} as any, crossProcessPubSub: true }, { ownedHere: true });
+
+    expect(decision).not.toHaveProperty('hold');
+    expect(decision.streamOptions).toBeDefined();
+  });
+
+  it('leaves a resource no session here serves for its own process when the embedder configured its own PubSub', async () => {
+    const decision = await decideDelivery({ pubsub: {} as any, crossProcessPubSub: true }, { ownedHere: false });
+
+    expect(decision).toMatchObject({ action: 'deliver', hold: true });
+    expect(decision.streamOptions).toBeUndefined();
   });
 
   it("holds another project's thread on a shared resource, and runs it as that project's session once one is live here", async () => {

@@ -178,7 +178,11 @@ for await (const chunk of output.fullStream) {
 }
 ```
 
-Calling `observe(runId)` without an offset is the supported general reconnect flow. It replays all available cached events before delivering live events. The optional `offset` is an inclusive, zero-based PubSub event index, not a chunk number, and the public stream doesn't expose it. If an offset skips earlier text deltas, aggregated text is partial and structured output may be invalid. On transports with numeric offset support, an offset beyond the highest retained index also skips live events with lower indexes. Events arrive only when the published index reaches the requested offset. If the index counter restarts below that offset and never reaches it, observation remains pending indefinitely. See [`observe(runId, options?)`](/reference/agents/durable-agent#observerunid-options) for the full offset and transport behavior.
+Calling `observe(runId)` without an offset is the supported general reconnect flow. It replays all available cached events before delivering live events. For a completed run, observation replays the retained events and closes. If the run is unknown or its history has been cleared and no live run remains, observation closes without events. The HTTP observe endpoint returns an empty, closed stream in this case rather than waiting for its idle timeout.
+
+The optional `offset` is an inclusive, zero-based PubSub event index, not a chunk number, and the public stream doesn't expose it. If an offset skips earlier text deltas, aggregated text is partial and structured output may be invalid. On transports with numeric offset support, an offset beyond the highest retained index also skips live events with lower indexes. A live run waits for the published index to reach the requested offset. A completed run with a retained terminal event closes even when the offset skips every event. See [`observe(runId, options?)`](/reference/agents/durable-agent#observerunid-options) for the full offset and transport behavior.
+
+Replay isn't a permanent execution archive. Events remain available only until [cleanup](#cleanup) clears them or the cache removes them. A workflow snapshot can't reconstruct cleared stream events, and disabling caching prevents historical replay.
 
 Observing doesn't own the run. When the loop ends, or you leave it early with `break`, `return`, or an error, the observer unsubscribes and the run keeps going for anyone else watching it. To stop observing from outside the loop, for example when the client disconnects, call `detach()`:
 
@@ -196,7 +200,7 @@ for await (const chunk of output.fullStream) {
 
 If you pass `idleTimeoutMs` and no chunks arrive for that long, Mastra checks `isAlive` when you provide it. If `isAlive` returns `true` or throws, the timer restarts and the stream stays open. Otherwise the stream ends with an error chunk and detaches the observer. The run itself is only cleaned up when `isAlive` returns `false`.
 
-`createDurableAgent()` and `createEventedAgent()` use an in-memory cache by default, which means resumable streams work within a single process. For production, provide a persistent cache backend (e.g., Redis) so cached events survive process restarts:
+`createDurableAgent()` and `createEventedAgent()` use an in-memory cache by default, which means resumable streams work within a single process. For reconnects across processes or replicas, share the replay cache, PubSub transport, and run storage between the producer and observer. A shared transport delivers live events but can't recover events held only in another process's cache. Configure a persistent cache backend (for example, Redis) so retained events survive process restarts:
 
 ```typescript title="src/mastra/agents/durable-with-cache.ts" {2,3,5,9}
 import { createDurableAgent } from '@mastra/core/agent/durable'
@@ -257,7 +261,7 @@ Visit [Background tasks](/docs/harness/background-tasks) for the full background
 
 Every `stream()` and `observe()` call returns a `cleanup` function that tears the run down: it unsubscribes from PubSub, removes the run from the internal registry, and deletes the run's cached events so nobody can replay it afterward.
 
-When you don't call `cleanup()` yourself, Mastra calls it `cleanupTimeoutMs` after the run finishes, errors, or is aborted. Detaching an observer or reaching a plain `idleTimeoutMs` doesn't start this timer. Set `cleanupTimeoutMs: 0` to turn the timer off.
+When you don't call `cleanup()` yourself, Mastra calls it `cleanupTimeoutMs` after the run finishes, errors, or is aborted. The default is 30 seconds, so completed-run replay is limited to that window unless you configure a different value or call `cleanup()` sooner. Detaching an observer or reaching a plain `idleTimeoutMs` doesn't start this timer. Set `cleanupTimeoutMs: 0` to turn the timer off.
 
 Call `cleanup()` from the process that started the run. To stop watching a run from `observe()`, use `detach()` or leave the loop instead.
 
@@ -332,7 +336,9 @@ export const mastra = new Mastra({
 
 On startup, this discovers every registered durable agent with runs stuck in `running` status and re-drives them from the last persisted snapshot.
 
-Recovery attempts runs serially, waiting up to 30 seconds per run for both `recover()` setup and settlement of the whole recovered workflow. If that wait expires, the attempt continues in the background while recovery moves to later runs and agents. Discovery and overridden custom recovery methods aren't bounded by this budget.
+Recovery processes up to five agents concurrently, with up to five run waits per agent. Each wait covers both `recover()` setup and settlement of the whole recovered workflow and lasts at most 30 seconds. If it expires, the attempt continues in the background and frees a slot for another run. These limits bound waiting, not the number of live executions. Discovery and overridden custom recovery methods aren't bounded by this budget.
+
+Timed-out runs carry `retryAt` and are checked again automatically. Re-checks defer until the original attempt settles, so they don't start duplicate executions. After it settles, recovery checks the persisted snapshot and ownership before retrying. Finished or suspended runs aren't restarted.
 
 When shutdown begins, recovery stops dispatching new runs and agents and cancels pending re-checks. Original attempts, including those whose wait timed out, remain tracked for Mastra's shared shutdown drain. A recovery timeout doesn't cancel execution or add a separate drain window.
 
@@ -369,11 +375,11 @@ To take over a run that's still live, such as one held by a hung execution, call
 const { output } = await durableAgent.recover('run-abc-123', { force: true })
 ```
 
-The execution that held the run loses it and stops, and streams for the run drop the events it still publishes. Without `force`, `recover()` throws `DURABLE_AGENT_RUN_ACTIVE` for a live run. Even with `force`, `recover()` refuses a run that the same process is executing.
+The execution that held the run loses its claim. Mastra requests cancellation when that execution detects the loss. Work that ignores cancellation can continue. With storage-backed claims, streams drop events from older claim generations. See [stop work after ownership loss](#stop-work-after-ownership-loss) for cancellation limits. Without `force`, `recover()` throws `DURABLE_AGENT_RUN_ACTIVE` for a live run. Even with `force`, `recover()` refuses a run that the same process is executing.
 
 ### Run ownership
 
-Every `stream()`, `generate()`, `resume()`, and `recover()` call claims the run before it executes and renews the claim every 10 seconds. A claim lapses 30 seconds after its last renewal, so a run whose process crashed becomes recoverable within 30 seconds. Until then, recovery treats the run as live, and a `stream()` or `resume()` call for that run waits up to 5 seconds for the claim, then throws `DURABLE_AGENT_EXECUTION_CONFLICT`. `mastra.shutdown()` stops the runs still executing after its drain window without further writes and releases their claims. The next boot then recovers them without waiting for the claims to lapse.
+Every `stream()`, `generate()`, `resume()`, and `recover()` call claims the run before it executes and renews the claim every 5 seconds. A claim lapses 15 seconds after its last renewal, so a run whose process crashed becomes recoverable within 15 seconds. Until then, recovery treats the run as live, and a `stream()` or `resume()` call for that run waits up to 5 seconds for the claim, then throws `DURABLE_AGENT_EXECUTION_CONFLICT`. `mastra.shutdown()` stops the runs still executing after its drain window without further writes and releases their claims. The next boot then recovers them without waiting for the claims to lapse. Set `MASTRA_AGENT_THREAD_LEASE_TTL_MS` to change the lapse time. Renewal happens every third of it unless `MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS` sets an interval shorter than the TTL.
 
 Enforcement of the claim depends on the workflows store. When the store supports run fencing, the claim is a record in that store, and each write is checked against the claim in the same operation. Once another execution claims the run, writes from the execution that lost it are rejected. That execution's message, thread, and working memory writes are rejected only if the memory store supports run fencing too, so they still land when the agent's `Memory` uses a storage adapter without it. These storage adapters support run fencing:
 
@@ -401,6 +407,14 @@ Stores that support run fencing keep one claim record per run, plus one memory f
 With any other workflows store, the claim is a lease on the [PubSub](/docs/server/pubsub) backend. The lease keeps two executions from claiming the run at once, but writes from an execution that lost the run aren't rejected. A run taken over while its previous execution was still live can end with that execution's output. When an execution loses its lease and no other execution has taken the run, the run stays held for up to 15 more seconds. Until then, `recover()` without `force` throws `DURABLE_AGENT_RUN_ACTIVE` with `retryAt` set to when the hold is sure to have ended. Mastra logs a warning when it recovers runs against a workflows or memory store without run fencing.
 
 A lease only coordinates the processes that share it. `EventEmitterPubSub`, the default, covers one process. `UnixSocketPubSub` covers the processes on one host. `RedisStreamsPubSub` and `ValkeyStreamsPubSub` cover every instance connected to the same server. `GoogleCloudPubSub` doesn't provide leases, so with a store that lacks run fencing every claim succeeds, and recovery can take over a run that's still live.
+
+### Stop work after ownership loss
+
+Durable and evented agents request cancellation of in-flight tool and model calls when their step detects that it no longer owns the run. Evented workers in another process check ownership at the claim renewal interval without renewing the original execution's claim. By default that's every 5 seconds, a third of `MASTRA_AGENT_THREAD_LEASE_TTL_MS`. Detection depends on backend response time. If ownership checks keep failing or stop responding, the step stops trusting its claim after one lease TTL, 15 seconds by default.
+
+Cancellation is cooperative. Use the tool execution context's `abortSignal` for cancellable operations, and check it before starting another side effect. A tool that ignores the signal can keep running. Work already completed outside Mastra isn't rolled back.
+
+Recovery can start the same tool call before the old invocation detects ownership loss. Keep tools idempotent or deduplicate external effects even when they handle cancellation. Cancellation reduces overlapping work. It doesn't guarantee exactly-once execution.
 
 ### Multi-instance deployments
 

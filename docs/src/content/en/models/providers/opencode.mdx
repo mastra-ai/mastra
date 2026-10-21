@@ -7,7 +7,7 @@ description: "Browse OpenCode model IDs, capabilities, context windows, and pric
 
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode
 
-Access 127 OpenCode models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 129 OpenCode models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode documentation](https://opencode.ai/v2/docs/console/models/).
 
@@ -922,6 +922,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
+    "model": "opencode/minimax-m3.1-flash-free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 512000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "opencode/mistral-large-4",
     "imageInput": true,
     "audioInput": false,
@@ -956,6 +968,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 1.25,
     "outputCost": 4.25
+  },
+  {
+    "model": "opencode/muse-wonder-1.0",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 4,
+    "outputCost": 20
   },
   {
     "model": "opencode/nemotron-3-ultra-free",
@@ -1040,18 +1064,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 2,
     "outputCost": 6
-  },
-  {
-    "model": "opencode/space-bunny-free",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 524288,
-    "inputCost": null,
-    "outputCost": null
   }
 ]}
 />

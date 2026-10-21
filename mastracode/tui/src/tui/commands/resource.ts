@@ -1,5 +1,6 @@
 import { disposeAssistantRenderState } from '../assistant-render-registry.js';
 import { requireLocal } from '../runtime.js';
+import { clearPendingTools } from '../state.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleResourceCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
@@ -44,8 +45,7 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
     await session.thread.switch({ threadId: latest.id, emitEvent: false });
     disposeAssistantRenderState(state);
     state.chatContainer.clear();
-    state.pendingTools.clear();
-    state.pendingTaskToolIds?.clear();
+    clearPendingTools(state);
     state.allToolComponents = [];
     state.allSystemReminderComponents = [];
     state.messageComponentsById.clear();
@@ -60,8 +60,7 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
   } else {
     disposeAssistantRenderState(state);
     state.chatContainer.clear();
-    state.pendingTools.clear();
-    state.pendingTaskToolIds?.clear();
+    clearPendingTools(state);
     state.allToolComponents = [];
     state.allSystemReminderComponents = [];
     state.messageComponentsById.clear();

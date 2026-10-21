@@ -21,14 +21,16 @@ import {
   SandboxNotReadyError,
   SandboxProcessManager,
 } from '@mastra/core/workspace';
+import { AuthenticationError } from 'e2b';
 import type { PlatformClientOptions, PlatformRequestOptions } from './client.js';
 import { PlatformApiError, PlatformClient } from './client.js';
 import type { DirectExecWebSocketFactory, ExecLease } from './direct-exec.js';
 import { execViaLease } from './direct-exec.js';
-import type { E2BExecRunner } from './e2b-exec.js';
-import { execViaE2BLease } from './e2b-exec.js';
+import type { E2BExecRunner, E2BFiles, E2BFilesFactory } from './e2b-exec.js';
+import { e2bFilesForLease, execViaE2BLease } from './e2b-exec.js';
 import type { PrivateNetExecOptions, PrivateNetExecResult, PrivateNetFetch } from './private-net-exec.js';
 import { execViaPrivateNetwork, PrivateNetExecHttpError } from './private-net-exec.js';
+import { isBrokenSandboxError, PlatformSandboxFilesystem } from './sandbox-filesystem.js';
 import type { SandboxTemplateBuilder, SerializedSandboxTemplate } from './template.js';
 import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './template.js';
 
@@ -106,6 +108,8 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   webSocketFactory?: DirectExecWebSocketFactory;
   /** Injected E2B direct-exec implementation used by tests. */
   e2bExecRunner?: E2BExecRunner;
+  /** Injected E2B files-API handle used by {@link PlatformSandbox.filesystem} in tests. */
+  e2bFilesFactory?: E2BFilesFactory;
   /**
    * Injected fetch implementation used by the private-network exec code path
    * to dial the in-sandbox sidecar. Defaults to `globalThis.fetch` and only
@@ -315,6 +319,9 @@ export class SandboxDestroyedError extends Error {
   }
 }
 
+/** Cap on one file command (a recursive copy can be large) when the sandbox sets no timeout. */
+const FILE_COMMAND_TIMEOUT_MS = 10 * 60_000;
+
 /**
  * Compose a shell command line from a `command` string and optional `args`.
  *
@@ -454,6 +461,10 @@ export class PlatformSandbox extends MastraSandbox {
   private _createdAt: Date | null = null;
   private readonly _webSocketFactory?: DirectExecWebSocketFactory;
   private readonly _e2bExecRunner: E2BExecRunner;
+  private readonly _e2bFilesFactory: E2BFilesFactory;
+  /** Files handle for the current lease, rebuilt whenever the lease changes. */
+  private _e2bFiles: { lease: CachedExecLease; files: E2BFiles } | null = null;
+  private _filesystem?: PlatformSandboxFilesystem;
   private readonly _privateNetFetch?: PrivateNetFetch;
   /**
    * Registry that maps `sandboxId → instanceUrl` for the private-network
@@ -540,6 +551,7 @@ export class PlatformSandbox extends MastraSandbox {
     this._instructionsOverride = options.instructions;
     this._webSocketFactory = options.webSocketFactory;
     this._e2bExecRunner = options.e2bExecRunner ?? execViaE2BLease;
+    this._e2bFilesFactory = options.e2bFilesFactory ?? e2bFilesForLease;
     this._privateNetFetch = options.privateNetFetch;
     this._addressRegistry = options.addressRegistry;
   }
@@ -1196,6 +1208,21 @@ export class PlatformSandbox extends MastraSandbox {
    * execution on the remote sandbox.
    */
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
+    return this._executeCommand(command, args, options, { once: false });
+  }
+
+  /**
+   * `executeCommand`, optionally sent at most once. With `once`, a transport
+   * failure after the command may have started is thrown instead of retried
+   * (on the lease or over the private network), so a script that changes files
+   * never runs twice.
+   */
+  private async _executeCommand(
+    command: string,
+    args: string[] | undefined,
+    options: ExecuteCommandOptions | undefined,
+    { once }: { once: boolean },
+  ): Promise<CommandResult> {
     await this.ensureRunning();
     if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
 
@@ -1231,7 +1258,7 @@ export class PlatformSandbox extends MastraSandbox {
     // path — application-level failures (sidecar returns 5xx) still fall
     // back for this call but do NOT invalidate the entry. See
     // `.scratch/factory-deploy/issue-platform-sandbox-exec-via-private-network.md`.
-    const instanceUrl = this._addressRegistry?.get(this._sandboxId);
+    const instanceUrl = once ? undefined : this._addressRegistry?.get(this._sandboxId);
     if (instanceUrl) {
       const privateNet = await this._tryExecViaPrivateNetwork(
         instanceUrl,
@@ -1263,7 +1290,7 @@ export class PlatformSandbox extends MastraSandbox {
     // `PlatformApiError` for other `/exec-lease` errors (404/500/501).
     // See ./direct-exec.ts and `docs/factory/direct-sandbox-connection.md`
     // in the Platform repo.
-    const result = await this._runDirectExec(fullCommand, effectiveTimeout, execCallOptions);
+    const result = await this._runDirectExec(fullCommand, effectiveTimeout, execCallOptions, once ? 1 : 2);
     // `_runDirectExec` throws on transport failure (see its jsdoc), so a
     // `null` exitCode here can only mean `timedOut: true` — the sandbox
     // never got to send an exit frame because we cut the command short.
@@ -1321,19 +1348,20 @@ export class PlatformSandbox extends MastraSandbox {
     fullCommand: string,
     effectiveTimeout: number | undefined,
     options: ExecuteCommandOptions | undefined,
+    attempts = 2,
   ): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }> {
     const filteredEnv = this._execEnv(options);
 
     let lastResult: Awaited<ReturnType<typeof execViaLease>> | undefined;
     let lastLease: CachedExecLease | undefined;
     let attemptsMade = 0;
-    // Two attempts: initial + one retry. On the second attempt we drop the
+    // Two attempts by default: initial + one retry. On the second attempt we drop the
     // cached lease so we don't reuse a JWT that may itself be the cause of
     // the transport failure — but only if the cache still holds the same
     // lease we just failed against. A concurrent exec sharing this instance
     // may have already cached a fresh, unrelated lease in between, and we
     // must not discard that.
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < attempts; attempt++) {
       if (attempt > 0 && lastLease && this._lease === lastLease) this._lease = null;
       let lease: CachedExecLease;
       try {
@@ -1544,6 +1572,106 @@ export class PlatformSandbox extends MastraSandbox {
       // Clear on both success and failure so a failed mint doesn't wedge
       // future callers into awaiting the same rejected promise forever.
       if (this._leaseInFlight === inFlight) this._leaseInFlight = null;
+    }
+  }
+
+  /**
+   * The sandbox's disk through E2B's files API, called directly on the VM with
+   * the same lease `executeCommand` uses. Paths are absolute inside the
+   * sandbox and are not confined to any root. Absent on non-E2B sandboxes, so
+   * callers fall back to `executeCommand`.
+   */
+  get filesystem(): PlatformSandboxFilesystem | undefined {
+    if (this._client.sandboxProvider !== 'e2b') return undefined;
+    this._filesystem ??= new PlatformSandboxFilesystem({
+      id: this.id,
+      withFiles: (operation, fn) => this._withE2BFiles(operation, fn),
+      // Sent once: a replayed append or no-clobber move would change files twice.
+      // A sandbox without a configured timeout would let a hung `cp` block forever.
+      runCommand: script =>
+        this._executeCommand(
+          'sh',
+          ['-c', script],
+          this._timeout === undefined ? { timeout: FILE_COMMAND_TIMEOUT_MS } : {},
+          { once: true },
+        ),
+    });
+    return this._filesystem;
+  }
+
+  /**
+   * Run a filesystem operation against the VM through the files API. Each
+   * files call that envd rejects for its token is retried once with a fresh
+   * lease: the rejection proves that call did nothing, and the calls before it
+   * already succeeded, so nothing is replayed. Any other failure is thrown
+   * unchanged. A dead sandbox or a broken transport also drops the cached
+   * lease, so the next operation re-mints it and learns about a destroyed
+   * sandbox (410) the same way `executeCommand` does.
+   */
+  private async _withE2BFiles<T>(operation: string, fn: (files: E2BFiles) => Promise<T>): Promise<T> {
+    await this.ensureRunning();
+    if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
+    let current = await this._filesHandle(operation, 1);
+    const call = async <R>(invoke: (files: E2BFiles) => Promise<R>): Promise<R> => {
+      try {
+        return await invoke(current.files);
+      } catch (error) {
+        if (error instanceof AuthenticationError) {
+          if (this._lease === current.lease) this._lease = null;
+          current = await this._filesHandle(operation, 2);
+          try {
+            return await invoke(current.files);
+          } catch (retryError) {
+            if (isBrokenSandboxError(retryError) && this._lease === current.lease) this._lease = null;
+            throw retryError;
+          }
+        }
+        if (isBrokenSandboxError(error) && this._lease === current.lease) this._lease = null;
+        throw error;
+      }
+    };
+    return fn({
+      read: (path, opts) => call(files => files.read(path, opts)),
+      write: (path, data) => call(files => files.write(path, data)),
+      list: (path, opts) => call(files => files.list(path, opts)),
+      makeDir: path => call(files => files.makeDir(path)),
+      rename: (oldPath, newPath) => call(files => files.rename(oldPath, newPath)),
+      remove: path => call(files => files.remove(path)),
+      getInfo: path => call(files => files.getInfo(path)),
+    });
+  }
+
+  /** The files handle for the current lease, rebuilt only when the lease changes. */
+  private async _filesHandle(
+    operation: string,
+    attempts: number,
+  ): Promise<{ lease: CachedExecLease; files: E2BFiles }> {
+    const lease = await this._fileLease(operation, attempts);
+    if (lease.provider !== 'e2b') {
+      throw new Error(
+        `PlatformSandbox.filesystem requires an E2B-backed sandbox; this sandbox's provider is "${lease.provider}"`,
+      );
+    }
+    if (this._e2bFiles?.lease !== lease) this._e2bFiles = { lease, files: this._e2bFilesFactory(lease) };
+    return this._e2bFiles;
+  }
+
+  /** `_ensureLease`, with a 410 handled the same way `_runDirectExec` handles it. */
+  private async _fileLease(operation: string, attempts: number): Promise<CachedExecLease> {
+    try {
+      return await this._ensureLease();
+    } catch (error) {
+      if (error instanceof PlatformApiError && error.status === 410) {
+        this._lease = null;
+        const priorSandboxId = this._sandboxId;
+        this._sandboxId = undefined;
+        this.status = 'stopped';
+        throw new SandboxDestroyedError(
+          `Sandbox ${priorSandboxId ?? '(unknown)'} was destroyed; /exec-lease returned 410`,
+          { ...(priorSandboxId && { sandboxId: priorSandboxId }), command: `filesystem.${operation}`, attempts },
+        );
+      }
+      throw error;
     }
   }
 

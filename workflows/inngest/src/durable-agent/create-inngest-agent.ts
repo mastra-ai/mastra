@@ -42,6 +42,7 @@ import {
   agentThreadStreamRuntime,
   prepareForDurableExecution,
   createDurableAgentStream,
+  emitChunkEvent,
   emitErrorEvent,
   runDurableStreamUntilIdle,
   runResumeDurableStreamUntilIdle,
@@ -61,6 +62,7 @@ import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
+import { ChunkFrom } from '@mastra/core/stream';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
 import { deepMerge } from '@mastra/core/utils';
 import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
@@ -1061,6 +1063,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const {
         output,
         cleanup: streamCleanup,
+        fail: failStream,
         ready,
       } = createDurableAgentStream<TOutput>({
         pubsub: getPubsub(),
@@ -1119,9 +1122,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Track the trigger promise on the registry so generate() can await suspend
       // snapshot persistence before returning.
       const workflowExecution = ready
-        .then(() => triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor))
-        .catch(error => {
-          void emitError(runId, error);
+        .then(async () => {
+          // Only initial runs open a message; resume continues the existing stream.
+          await emitChunkEvent(getPubsub(), runId, {
+            type: 'start',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: { id: workflowInput.agentId, messageId },
+          });
+          return triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
+        })
+        .catch(async error => {
+          await emitError(runId, error);
+          await failStream(error);
         });
       const trackedEntry = getRunRegistryEntry(runId, mastra);
       if (trackedEntry) {
@@ -1174,6 +1187,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     },
 
     async resume(runId, resumeData, resumeOptions): Promise<InngestAgentStreamResult<TOutput>> {
+      if (agentThreadStreamRuntime.isResumeFenced(runId, agent.getPubSub())) {
+        throw new MastraError({
+          id: 'AGENT_RESUME_ABORTED_RUN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `InngestAgent "${agent.name}" resume() cannot resume aborted run "${runId}".`,
+          details: { agentName: agent.name, runId },
+        });
+      }
       // Delegate to the resume idle-loop wrapper when `untilIdle` is set.
       // After the resumed segment completes, the wrapper runs
       // `agent.stream([], ...)` continuations against the same thread until
@@ -1954,7 +1976,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const aborted = agent.abortThreadStream(abortOptions);
       if (!aborted || !runId) return aborted;
 
-      abortDurableRun(runId);
+      if (!abortOptions.localOnly) abortDurableRun(runId);
       return true;
     },
 

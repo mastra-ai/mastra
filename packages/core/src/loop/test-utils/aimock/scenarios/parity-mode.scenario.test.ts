@@ -578,7 +578,7 @@ describeParity('parity mode', target => {
     const difference: EngineDifference = {
       reason:
         'COR-1390: taskId is a per-engine stubbed UUID, and wrapped engines strip the LLM-only _background override.',
-      ignore: ['chunkPayloads', 'requests'],
+      ignore: ['chunkPayloads', 'finishChunk', 'requests'],
     };
     const results = await expectParity(
       target,
@@ -607,7 +607,7 @@ describeParity('parity mode', target => {
     const difference: EngineDifference = {
       reason:
         'COR-1390: taskId is a per-engine stubbed UUID, and wrapped engines strip the LLM-only _background override.',
-      ignore: ['chunkPayloads', 'requests'],
+      ignore: ['chunkPayloads', 'finishChunk', 'requests'],
     };
     const executions: Partial<Record<ParityEngine, number>> = {};
     const results = await expectParity(
@@ -891,8 +891,9 @@ describe('expectEngineParity', () => {
           durable: {
             reason: 'self-test: durable uses other instructions',
             // The answer text reaches the caller through the stream, the chunk
-            // payloads and `getFullOutput`, so all of them are declared.
-            ignore: ['text', 'streamedText', 'fullOutput', 'chunkPayloads', 'requests'],
+            // payloads, the finish chunk's messages and `getFullOutput`, so all
+            // of them are declared.
+            ignore: ['text', 'streamedText', 'fullOutput', 'chunkPayloads', 'finishChunk', 'requests'],
           },
         },
       }),
@@ -905,7 +906,7 @@ describe('expectEngineParity', () => {
         differences: {
           durable: {
             reason: 'self-test: durable uses other instructions',
-            ignore: ['chunkPayloads', 'requests'],
+            ignore: ['chunkPayloads', 'finishChunk', 'requests'],
             expect: plain => ({
               ...plain,
               turns: plain.turns.map(t => ({

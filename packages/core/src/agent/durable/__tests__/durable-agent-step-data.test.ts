@@ -278,6 +278,11 @@ describe('DurableAgent step data (#26780)', () => {
     expect(finish.steps).toHaveLength(3);
     expect(finish.toolCalls.map((c: any) => c.payload?.toolName ?? c.toolName)).toEqual(['free', 'gated']);
     expect(finish.toolResults).toHaveLength(2);
+    // The first step finished before the approval, so its content comes from the run's stored steps.
+    expect(finish.steps[0].content.find((part: any) => part.type === 'tool-result')).toMatchObject({
+      toolCallId: 'call-free',
+      output: { type: 'json', value: { ok: true } },
+    });
     expect(finish.steps.at(-1).response?.modelId).toBe('resume-model');
     expect(finish.steps.at(-1).response?.messages?.length).toBeGreaterThan(0);
   }, 30000);
@@ -440,8 +445,9 @@ describe('DurableAgent step-finish payload size (#27475)', () => {
     await pubsub.close();
   });
 
-  async function runShots(toolSteps: number) {
+  async function runShots(toolSteps: number, withMemory = false) {
     const payloads = captureStepFinishPayloads(pubsub);
+    const storage = new InMemoryStore();
     const durableAgent = createDurableAgent({
       agent: new Agent({
         id: 'step-finish-size',
@@ -449,19 +455,22 @@ describe('DurableAgent step-finish payload size (#27475)', () => {
         instructions: 'Test',
         model: shotsThenTextModel(toolSteps) as LanguageModelV2,
         tools: { shot },
+        ...(withMemory ? { memory: new MockMemory({ storage }) } : {}),
       }),
       pubsub,
     });
+    if (withMemory) new Mastra({ agents: { durableAgent }, storage, logger: false });
     const stepEvents: any[] = [];
     const { output, cleanup } = await durableAgent.stream('go', {
       maxSteps: toolSteps + 2,
+      ...(withMemory ? { memory: { thread: 'shot-thread', resource: 'shot-resource' } } : {}),
       onStepFinish: (e: any) => void stepEvents.push(e),
     });
     await output.consumeStream();
     const steps = await output.steps;
     const response: any = await output.response;
     cleanup();
-    return { payloads, stepEvents, steps, response };
+    return { payloads, stepEvents, steps, response, storage };
   }
 
   it('sends each tool output once instead of on every later step', async () => {
@@ -474,6 +483,25 @@ describe('DurableAgent step-finish payload size (#27475)', () => {
     }
     const sent = payloads.reduce((n, p) => n + JSON.stringify(p._durableResponseMessages).length, 0);
     expect(sent).toBeLessThan(15 * SHOT_BYTES);
+  }, 30000);
+
+  it('keeps memory-backed turns linear on the wire and persists every result', async () => {
+    const { payloads, stepEvents, response, storage } = await runShots(10, true);
+    const sent = payloads.reduce((n, p) => n + JSON.stringify(p._durableResponseMessages).length, 0);
+    expect(sent).toBeLessThan(15 * SHOT_BYTES);
+    expect(toolResultIds(stepEvents.at(-1)!.response.messages)).toEqual(
+      Array.from({ length: 10 }, (_, i) => `call-${i + 1}`),
+    );
+    expect(toolResultIds(response.messages)).toEqual(toolResultIds(stepEvents.at(-1)!.response.messages));
+    const stored = await (await storage.getStore('memory'))!.listMessages({ threadId: 'shot-thread', perPage: false });
+    const storedToolIds = stored.messages.flatMap(message =>
+      message.content.parts.flatMap(part =>
+        part.type === 'tool-invocation' && part.toolInvocation.state === 'result'
+          ? [part.toolInvocation.toolCallId]
+          : [],
+      ),
+    );
+    expect(storedToolIds).toEqual(Array.from({ length: 10 }, (_, i) => `call-${i + 1}`));
   }, 30000);
 
   it('still reports the cumulative response messages on every step', async () => {
@@ -616,4 +644,47 @@ describe('DurableAgent step-finish payload size (#27475)', () => {
     expect(JSON.stringify(steps.at(-1)!.response.messages)).toContain('done');
     expect(response.messages).toEqual(steps.at(-1)!.response.messages);
   }, 30000);
+});
+
+describe('DurableAgent final step text', () => {
+  it('reports the text an output processor rewrote in the finish steps', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const { model } = toolThenTextModel('rewrite-model');
+    const durableAgent = createDurableAgent({
+      agent: new Agent({
+        id: 'rewrite-agent',
+        name: 'Rewrite Agent',
+        instructions: 'Test',
+        model: model as LanguageModelV2,
+        tools: { probe: probe() },
+        outputProcessors: [
+          {
+            id: 'redact',
+            processOutputResult: async ({ messages }: { messages: any[] }) => {
+              for (const message of messages) {
+                if (message.role !== 'assistant') continue;
+                for (const part of message.content.parts) {
+                  if (part.type === 'text') part.text = part.text.replace('done', 'rewritten');
+                }
+              }
+              return messages;
+            },
+          },
+        ],
+      }),
+      pubsub,
+    });
+
+    let finish: any;
+    const { output, cleanup } = await durableAgent.stream('go', {
+      maxSteps: 5,
+      onFinish: (e: any) => void (finish = e),
+    });
+    await output.consumeStream();
+    cleanup();
+    await pubsub.close();
+
+    expect(finish.text).toBe('rewritten');
+    expect(finish.steps.at(-1).text).toBe('rewritten');
+  });
 });

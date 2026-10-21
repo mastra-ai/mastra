@@ -1601,10 +1601,30 @@ export class MessageList {
   }
 
   public drainUnsavedMessages(): MastraDBMessage[] {
+    return this.drainUnsavedMessagesForSave().messages;
+  }
+
+  /**
+   * Same as {@link drainUnsavedMessages}, plus `restore`, which marks the drained
+   * messages unsaved again so a later save writes them after this one failed.
+   */
+  public drainUnsavedMessagesForSave(): { messages: MastraDBMessage[]; restore: () => void } {
+    const userMessages = [...this.newUserMessages];
+    const responseMessages = [...this.newResponseMessages];
     const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
     this.newUserMessages.clear();
     this.newResponseMessages.clear();
-    return messages.map(message => this.transformMessageForTranscript(message));
+    return {
+      messages: messages.map(message => this.transformMessageForTranscript(message)),
+      restore: () => {
+        for (const message of userMessages) {
+          if (this.messages.includes(message)) this.newUserMessages.add(message);
+        }
+        for (const message of responseMessages) {
+          if (this.messages.includes(message)) this.newResponseMessages.add(message);
+        }
+      },
+    };
   }
 
   /**

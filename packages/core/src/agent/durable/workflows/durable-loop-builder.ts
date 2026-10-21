@@ -21,7 +21,7 @@ import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, DurableAgentDefaults } from '../constants';
 import { isExecutionFenceError, isForeignExecutionContext, withExecutionFence } from '../execution-fence';
-import { getRunRegistryEntry, globalRunRegistry } from '../run-registry';
+import { getRunRegistryEntry, globalRunRegistry, takeRunScorerInstances } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -50,6 +50,7 @@ import {
   seedMessageListState,
   storeMessageListState,
   buildDeferredStepFinishChunk,
+  expandDurableSteps,
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
@@ -181,6 +182,7 @@ const durableAgenticInputSchema = z.object({
   // JSON-safe snapshot of requestContext.entries() so durable steps can read
   // it (e.g. is-task-complete scorers pass it as customContext).
   requestContextEntries: z.record(z.string(), z.any()).optional(),
+  inputTripwire: baseIterationStateSchema.shape.inputTripwire,
 });
 
 /**
@@ -547,6 +549,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               state: state.state,
               messageId: state.messageId,
               requestContextEntries: state.requestContextEntries,
+              inputTripwire: state.inputTripwire,
               stepIndex: state.iterationCount,
               signalPreempted: state.lastStepResult?.signalPreempted,
               // Processor hooks receive the running step list (#24293) — the
@@ -606,7 +609,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               toolResults,
               runId: initData.runId,
               agentId: initData.agentId,
-              messageId: initData.messageId,
+              messageId: llmOutput?.stepResult?.messageId ?? initData.messageId,
               state: llmOutput?.state ?? initData.state,
             };
           },
@@ -856,7 +859,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         // Processor retry steps re-run the same step, so only real LLM steps count against maxSteps.
         // Retries stay bounded by maxProcessorRetries.
         underMaxSteps: state.accumulatedSteps.filter(s => s.finishReason !== 'retry').length < runMaxSteps,
-        steps: state.accumulatedSteps,
+        steps: expandDurableSteps(state.accumulatedSteps),
         stopWhen,
         consumeDelegationBail: () => {
           if (state.delegationBailed) {
@@ -981,6 +984,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // policy may exclude `running`, in which case resume claims cannot
           // be de-duplicated.
           allowUnclaimedResumes: true,
+          // listSuspendedRuns() reads this row's status, so a resume must flip it
+          // off `suspended` even when `running` checkpoints are skipped (#27619).
+          persistResumeClaim: true,
           isOwnershipLostError: isExecutionFenceError,
           isForeignExecution: isForeignExecutionContext,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
@@ -1051,11 +1057,22 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
             const logger = mastra?.getLogger?.();
 
+            const steps = expandDurableSteps(state.accumulatedSteps);
+
             // Extract final text from last step
             const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
             let finalText = lastStep?.text;
 
             const messageListState = await readMessageListState(params, state);
+
+            // Read before the finish side effects: saving moves messages out of the input/response
+            // sets, and plain builds its finish envelope before saving too.
+            const finalMessageList = createRunMessageList({}).deserialize(messageListState);
+            const finishMessages = {
+              all: finalMessageList.get.all.aiV5.model(),
+              user: finalMessageList.get.input.aiV5.model(),
+              nonUser: finalMessageList.get.response.aiV5.model(),
+            };
 
             const finishResult = await runDurableFinishSideEffects({
               runId: state.runId,
@@ -1069,11 +1086,12 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 text: finalText ?? '',
                 usage: state.accumulatedUsage,
                 finishReason: state.lastStepResult?.reason ?? 'unknown',
-                steps: state.accumulatedSteps,
+                steps,
               },
             });
             if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
               lastStep.text = finishResult.outputText;
+              steps[steps.length - 1] = { ...steps[steps.length - 1]!, text: finishResult.outputText };
               finalText = finishResult.outputText;
             }
 
@@ -1093,6 +1111,19 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               }
             }
 
+            // generateTitle.emitEvent: hold FINISH until the title is saved, then stream it as a
+            // transient chunk so consumers see it before the stream closes (as the in-process loop does).
+            if (pubsub && !tripwire && finishResult.titleForStream) {
+              const title = await finishResult.titleForStream;
+              if (title && initData.state?.threadId) {
+                await emitChunkEvent(pubsub, state.runId, {
+                  type: 'data-thread-title',
+                  data: { threadId: initData.state.threadId, title },
+                  transient: true,
+                });
+              }
+            }
+
             const finalOutput = {
               messageListState: finishResult.messageListState,
               messageId: state.messageId,
@@ -1106,6 +1137,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               output: {
                 text: finalText,
                 usage: state.accumulatedUsage,
+                // Saved with the run, so keep tool outputs compacted; the stream adapter expands them.
                 steps: state.accumulatedSteps,
               },
               state: state.state,
@@ -1115,6 +1147,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               await emitFinishEvent(pubsub, state.runId, {
                 output: finalOutput.output,
                 stepResult: finalOutput.stepResult,
+                messages: finishMessages,
               });
             }
 
@@ -1196,6 +1229,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   requestContext,
                   tracingContext,
                   loadStoredMessages: loadRunStoredMessages(params),
+                  scorerInstances: takeRunScorerInstances(initData.runId, mastra as Mastra | undefined),
                 }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));
               } catch (error) {
                 mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`);

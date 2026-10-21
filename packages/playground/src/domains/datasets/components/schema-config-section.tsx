@@ -73,8 +73,8 @@ export function SchemaConfigSection({
       case 'workflow':
         if (!workflowSchema) return { inputSchema: null, outputSchema: null };
         return {
-          inputSchema: (workflowSchema.inputSchema as JSONSchema7) ?? null,
-          outputSchema: (workflowSchema.outputSchema as JSONSchema7) ?? null,
+          inputSchema: workflowSchema.inputSchema ?? null,
+          outputSchema: workflowSchema.outputSchema ?? null,
         };
       case 'scorer':
         return {
@@ -201,7 +201,7 @@ export function SchemaConfigSection({
           <div className="flex flex-wrap items-end gap-2">
             <Field className="w-40">
               <FieldLabel size="bigger">Import From</FieldLabel>
-              <Select value={sourceType} onValueChange={v => handleSourceChange(v as SourceType)} disabled={disabled}>
+              <Select value={sourceType} onValueChange={v => handleSourceChange(v)} disabled={disabled}>
                 <SelectTrigger size="sm" className="w-40">
                   <SelectValue />
                 </SelectTrigger>
@@ -246,11 +246,7 @@ export function SchemaConfigSection({
             )}
 
             {sourceType === 'scorer' && (
-              <Select
-                value={scorerTargetType}
-                onValueChange={v => setScorerTargetType(v as ScorerTargetType)}
-                disabled={disabled}
-              >
+              <Select value={scorerTargetType} onValueChange={v => setScorerTargetType(v)} disabled={disabled}>
                 <SelectTrigger aria-label="Scorer target type" size="sm" className="w-32">
                   <SelectValue />
                 </SelectTrigger>

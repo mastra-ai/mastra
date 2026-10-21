@@ -36,6 +36,7 @@ import {
   workItemNumber,
   workItemStage,
 } from './read-tools.js';
+import { requirePerson } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
 
 export interface FactoryWorkItemToolDependencies {
@@ -85,8 +86,9 @@ export function createFactoryWorkItemTools(
   const audit: FactoryAuditEmit = async input => {
     await deps.auditRecorder.record({
       orgId: scope.orgId,
-      actorId: scope.userId,
-      actorType: 'human',
+      // Turns nobody signed in started are recorded as this session's agent, as their moves are.
+      actorId: scope.interactive ? scope.userId : `agent:session:${scope.sessionId}`,
+      actorType: scope.interactive ? 'human' : 'agent',
       ...(scope.actorProfile ? { actorProfile: scope.actorProfile } : {}),
       ...input,
     });
@@ -221,9 +223,21 @@ export function createFactoryWorkItemTools(
           ...parsed.data,
           ...project,
           workItemId: item.id,
-          actor: { type: 'human', id: scope.userId },
-          ...(scope.actorProfile ? { actorProfile: scope.actorProfile } : {}),
-          ingress: { ...parsed.data.ingress, identity: `human:${scope.userId}:${parsed.data.ingress.identity}` },
+          ...(scope.interactive
+            ? {
+                actor: { type: 'human' as const, id: scope.userId },
+                ...(scope.actorProfile ? { actorProfile: scope.actorProfile } : {}),
+                ingress: { ...parsed.data.ingress, identity: `human:${scope.userId}:${parsed.data.ingress.identity}` },
+              }
+            : {
+                // Nobody signed in started this turn: move as this session's agent, so the
+                // plan gate and the agent's done gates apply and the move arms no runs.
+                actor: { type: 'agent' as const, bindingId: `session:${scope.sessionId}`, role: 'session' },
+                ingress: {
+                  type: 'agent' as const,
+                  identity: `session:${scope.sessionId}:${parsed.data.ingress.identity}`,
+                },
+              }),
         });
         if (result.status === 'rejected') throw new Error(`The move was refused (${result.code}): ${result.reason}`);
         return { workItemId: item.id, stage: result.stage, revision: result.revision };
@@ -253,6 +267,8 @@ export function createFactoryWorkItemTools(
         .strict()
         .refine(input => Object.keys(input).some(key => key !== 'workItem'), 'Pass at least one field to change.'),
       execute: async ({ workItem, title, repository, parentWorkItem, plansPreapproved }) => {
+        // Pre-approval drops the plan-approval gate for good, so it is the person's call.
+        if (plansPreapproved) requirePerson(scope, 'pre-approve plans');
         const item = await requireItem(workItem);
         if (repository) await requireRepository(repository, item.metadata);
         let parentWorkItemId: string | null | undefined;
@@ -308,8 +324,9 @@ export function createFactoryWorkItemTools(
       id: 'factory_dismiss_decision',
       description: 'Dismiss one proposed Factory run that is no longer wanted.',
       inputSchema: z.object({ decisionId }).strict(),
-      execute: async ({ decisionId }) =>
-        settled(
+      execute: async ({ decisionId }) => {
+        requirePerson(scope, 'dismiss a proposed run');
+        return settled(
           await dismissFactoryDecision({
             workItems: deps.workItems,
             audit,
@@ -317,7 +334,8 @@ export function createFactoryWorkItemTools(
             userId: scope.userId,
             decisionId,
           }),
-        ),
+        );
+      },
     }),
 
     factory_resolve_proposal: createTool({
@@ -325,8 +343,9 @@ export function createFactoryWorkItemTools(
       description:
         "Approve or dismiss one proposed Factory run. Approving starts the run and lets the item's later runs start without asking.",
       inputSchema: z.object({ decisionId, action: z.enum(['approve', 'dismiss']) }).strict(),
-      execute: async ({ decisionId, action }) =>
-        settled(
+      execute: async ({ decisionId, action }) => {
+        requirePerson(scope, 'approve or dismiss a proposed run');
+        return settled(
           await resolveFactoryProposal({
             workItems: deps.workItems,
             audit,
@@ -335,7 +354,8 @@ export function createFactoryWorkItemTools(
             decisionId,
             action,
           }),
-        ),
+        );
+      },
     }),
 
     factory_subscribe_work_item: createTool({

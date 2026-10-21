@@ -321,6 +321,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     threadId,
     resourceId,
     memoryOptions,
+    onTitleGenerated,
     workspace,
     agents,
     workflows,
@@ -428,6 +429,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
             thread: threadId,
             ...(resourceId ? { resource: resourceId } : {}),
             ...(memoryOptions ? { options: memoryOptions } : {}),
+            ...(onTitleGenerated ? { onTitleGenerated } : {}),
           },
         }
       : {};

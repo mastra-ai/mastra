@@ -68,6 +68,12 @@ const COLUMNS = [
   'entityVersionId',
   'parentEntityVersionId',
   'rootEntityVersionId',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
   'userId',
   'organizationId',
   'resourceId',
@@ -145,6 +151,12 @@ const SPAN_RECONSTRUCT_SELECT = `
     ${argMaxNonNull('entityVersionId')},
     ${argMaxNonNull('parentEntityVersionId')},
     ${argMaxNonNull('rootEntityVersionId')},
+    ${argMaxNonNull('parentEntityType')},
+    ${argMaxNonNull('parentEntityId')},
+    ${argMaxNonNull('parentEntityName')},
+    ${argMaxNonNull('rootEntityType')},
+    ${argMaxNonNull('rootEntityId')},
+    ${argMaxNonNull('rootEntityName')},
     ${argMaxNonNull('userId')},
     ${argMaxNonNull('organizationId')},
     ${argMaxNonNull('resourceId')},
@@ -407,6 +419,12 @@ function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
     entityVersionId: (row.entityVersionId as string) ?? null,
     parentEntityVersionId: (row.parentEntityVersionId as string) ?? null,
     rootEntityVersionId: (row.rootEntityVersionId as string) ?? null,
+    parentEntityType: (row.parentEntityType as SpanRecord['parentEntityType']) ?? null,
+    parentEntityId: (row.parentEntityId as SpanRecord['parentEntityId']) ?? null,
+    parentEntityName: (row.parentEntityName as SpanRecord['parentEntityName']) ?? null,
+    rootEntityType: (row.rootEntityType as SpanRecord['rootEntityType']) ?? null,
+    rootEntityId: (row.rootEntityId as SpanRecord['rootEntityId']) ?? null,
+    rootEntityName: (row.rootEntityName as SpanRecord['rootEntityName']) ?? null,
     userId: (row.userId as string) ?? null,
     organizationId: (row.organizationId as string) ?? null,
     resourceId: (row.resourceId as string) ?? null,
@@ -623,6 +641,12 @@ interface SpanEventRow {
   entityVersionId: string | null;
   parentEntityVersionId: string | null;
   rootEntityVersionId: string | null;
+  parentEntityType: string | null;
+  parentEntityId: string | null;
+  parentEntityName: string | null;
+  rootEntityType: string | null;
+  rootEntityId: string | null;
+  rootEntityName: string | null;
   userId: string | null;
   organizationId: string | null;
   resourceId: string | null;
@@ -699,6 +723,12 @@ function toValuesTuple(row: SpanEventRow): string {
     v(row.entityVersionId),
     v(row.parentEntityVersionId),
     v(row.rootEntityVersionId),
+    v(row.parentEntityType),
+    v(row.parentEntityId),
+    v(row.parentEntityName),
+    v(row.rootEntityType),
+    v(row.rootEntityId),
+    v(row.rootEntityName),
     v(row.userId),
     v(row.organizationId),
     v(row.resourceId),
@@ -762,6 +792,12 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     entityVersionId: s.entityVersionId ?? null,
     parentEntityVersionId: s.parentEntityVersionId ?? null,
     rootEntityVersionId: s.rootEntityVersionId ?? null,
+    parentEntityType: s.parentEntityType ?? null,
+    parentEntityId: s.parentEntityId ?? null,
+    parentEntityName: s.parentEntityName ?? null,
+    rootEntityType: s.rootEntityType ?? null,
+    rootEntityId: s.rootEntityId ?? null,
+    rootEntityName: s.rootEntityName ?? null,
     userId: s.userId ?? null,
     organizationId: s.organizationId ?? null,
     resourceId: s.resourceId ?? null,
@@ -812,6 +848,12 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     entityVersionId: s.entityVersionId ?? null,
     parentEntityVersionId: s.parentEntityVersionId ?? null,
     rootEntityVersionId: s.rootEntityVersionId ?? null,
+    parentEntityType: s.parentEntityType ?? null,
+    parentEntityId: s.parentEntityId ?? null,
+    parentEntityName: s.parentEntityName ?? null,
+    rootEntityType: s.rootEntityType ?? null,
+    rootEntityId: s.rootEntityId ?? null,
+    rootEntityName: s.rootEntityName ?? null,
     userId: s.userId ?? null,
     organizationId: s.organizationId ?? null,
     resourceId: s.resourceId ?? null,

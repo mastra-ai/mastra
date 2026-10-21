@@ -19,7 +19,7 @@ describe('getTokenUsageView', () => {
   });
 
   it('returns null when usage is an empty object', () => {
-    expect(getTokenUsageView({} as UsageStats)).toBeNull();
+    expect(getTokenUsageView({})).toBeNull();
   });
 
   it('returns null when only details are present (no top-level token counts)', () => {
@@ -31,7 +31,7 @@ describe('getTokenUsageView', () => {
   });
 
   it('renders both columns when only the input side is present, with output defaulting to 0', () => {
-    const view = getRequiredTokenUsageView({ inputTokens: 100 } as UsageStats);
+    const view = getRequiredTokenUsageView({ inputTokens: 100 });
     expect(view.inputValue).toBe(100);
     expect(view.outputValue).toBe(0);
     expect(view.total).toBe(100);
@@ -46,7 +46,7 @@ describe('getTokenUsageView', () => {
     const view = getRequiredTokenUsageView({
       inputTokens: 100,
       outputDetails: { text: 50 },
-    } as UsageStats);
+    });
     expect(view.outputValue).toBe(0);
     expect(view.outputDetails).toBeUndefined();
   });
@@ -56,7 +56,7 @@ describe('getTokenUsageView', () => {
       inputTokens: 100,
       inputDetails: { text: 80, cacheRead: 20 },
       outputTokens: 25,
-    } as UsageStats);
+    });
     expect(view.inputDetails).toEqual({ text: 80, cacheRead: 20 });
     expect(view.outputDetails).toBeUndefined();
   });
@@ -66,28 +66,28 @@ describe('getTokenUsageView', () => {
       inputTokens: 100,
       outputTokens: 25,
       outputDetails: { text: 20, reasoning: 5 },
-    } as UsageStats);
+    });
     expect(view.outputDetails).toEqual({ text: 20, reasoning: 5 });
   });
 
   it('keeps a details object that mixes numeric and non-numeric entries', () => {
     const view = getRequiredTokenUsageView({
       inputTokens: 100,
-      inputDetails: { text: 80, cacheRead: undefined } as unknown as UsageStats['inputDetails'],
-    } as UsageStats);
+      inputDetails: { text: 80, cacheRead: undefined },
+    });
     expect(view.inputDetails).toEqual({ text: 80, cacheRead: undefined });
   });
 
   it('treats a details object with no numeric values as absent', () => {
     const view = getRequiredTokenUsageView({
       inputTokens: 100,
-      inputDetails: { text: undefined } as unknown as UsageStats['inputDetails'],
-    } as UsageStats);
+      inputDetails: { text: undefined },
+    });
     expect(view.inputDetails).toBeUndefined();
   });
 
   it('renders both columns at 0 with no split bar when both totals are 0', () => {
-    const view = getRequiredTokenUsageView({ inputTokens: 0, outputTokens: 0 } as UsageStats);
+    const view = getRequiredTokenUsageView({ inputTokens: 0, outputTokens: 0 });
     expect(view.inputValue).toBe(0);
     expect(view.outputValue).toBe(0);
     expect(view.total).toBe(0);
@@ -97,14 +97,14 @@ describe('getTokenUsageView', () => {
   });
 
   it('splits 50/50 when input and output are equal', () => {
-    const view = getRequiredTokenUsageView({ inputTokens: 100, outputTokens: 100 } as UsageStats);
+    const view = getRequiredTokenUsageView({ inputTokens: 100, outputTokens: 100 });
     expect(view.total).toBe(200);
     expect(view.inputPct).toBe(50);
     expect(view.outputPct).toBe(50);
   });
 
   it('produces percentages that always sum to 100 for asymmetric inputs', () => {
-    const view = getRequiredTokenUsageView({ inputTokens: 1000, outputTokens: 250 } as UsageStats);
+    const view = getRequiredTokenUsageView({ inputTokens: 1000, outputTokens: 250 });
     expect(view.total).toBe(1250);
     expect(view.inputPct).toBe(80);
     expect(view.outputPct).toBe(20);
@@ -112,7 +112,7 @@ describe('getTokenUsageView', () => {
   });
 
   it('handles one side at 0 with the other positive (100/0 split)', () => {
-    const view = getRequiredTokenUsageView({ inputTokens: 100, outputTokens: 0 } as UsageStats);
+    const view = getRequiredTokenUsageView({ inputTokens: 100, outputTokens: 0 });
     expect(view.showSplit).toBe(true);
     expect(view.inputPct).toBe(100);
     expect(view.outputPct).toBe(0);
