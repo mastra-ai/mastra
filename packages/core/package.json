@@ -998,7 +998,7 @@
     "valibot": "^1.4.1",
     "vitest": "catalog:",
     "vscode-jsonrpc": "^8.2.1",
-    "vscode-languageserver-protocol": "^3.17.5",
+    "vscode-languageserver-protocol": "^3.18.4",
     "zod": "catalog:"
   },
   "engines": {
