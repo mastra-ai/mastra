@@ -14,8 +14,8 @@
  *
  * Output: opaque org/project hashes, statuses, timings, counts. No ids, tokens or row values.
  */
-import { createHash } from 'node:crypto';
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -40,6 +40,7 @@ const OUT = {
   contract: join(RESULTS_DIR, 'mobs-span-endpoints-contract.jsonl'),
   check: join(RESULTS_DIR, 'mobs-span-endpoints-check.jsonl'),
   perf: join(RESULTS_DIR, 'mobs-span-endpoints-perf.jsonl'),
+  p99: join(RESULTS_DIR, 'mobs-span-endpoints-p99.jsonl'),
 };
 const ALL_LOG = `clusterAllReplicas('all_groups.default', system.query_log)`;
 const DAY = 86_400_000;
@@ -899,6 +900,31 @@ async function perf(platform: string, reps: number, only?: string[]) {
 
   // query_log flushes every ~7.5 s.
   await sleep(15_000);
+  await matchStats(raw, calls, run);
+  await raw.close();
+}
+
+/**
+ * mobs-query starts its statement 0.4–0.7 s after a request arrives, and a fast-failing request's statement can
+ * start just before the next request, so a statement belongs to a call only if it starts after the call
+ * started (allowing a little clock skew) and ends by the call's response.
+ */
+const MATCH_SKEW_MS = 50;
+
+/** Re-match every logged perf call to its statements with the current matcher (query_log only). */
+async function rematch(platform: string) {
+  const { raw } = await connect(platform);
+  const lines = readFileSync(OUT.perf, 'utf8')
+    .trim()
+    .split('\n')
+    .map(l => JSON.parse(l) as PerfCall & { kind: string });
+  const byRun = new Map<string, PerfCall[]>();
+  for (const c of lines.filter(l => l.kind === 'call')) byRun.set(c.run, [...(byRun.get(c.run) ?? []), c]);
+  for (const [run, calls] of byRun) await matchStats(raw, calls, run, true);
+  await raw.close();
+}
+
+async function matchStats(raw: ClickHouseClient, calls: PerfCall[], run: string, rematched = false) {
   const first = Math.floor(calls[0]!.startedAt / 1000) - 5;
   const last = Math.ceil(calls.at(-1)!.endedAt / 1000) + 5;
   const statements = await rows<{
@@ -937,12 +963,13 @@ async function perf(platform: string, reps: number, only?: string[]) {
   for (const c of calls) {
     const kind: ShapeKind = perfShapes.find(x => x.id === c.shape)!.kind;
     const mine = statements.filter(
-      st => st.kind === kind && Number(st.start) >= c.startedAt - 300 && Number(st.end) <= c.endedAt + 300,
+      st => st.kind === kind && Number(st.start) >= c.startedAt - MATCH_SKEW_MS && Number(st.end) <= c.endedAt + 300,
     );
     for (const st of mine) hosts.set(st.host, hash(st.host));
     log(OUT.perf, {
       kind: 'stats',
       run,
+      ...(rematched ? { matcher: 2 } : {}),
       shape: c.shape,
       scope: c.scope,
       window: c.window,
@@ -962,11 +989,198 @@ async function perf(platform: string, reps: number, only?: string[]) {
       hosts: [...new Set(mine.map(st => hash(st.host)))],
     });
   }
-  console.log(`matched ${statements.length} statements on ${hosts.size} host(s)`);
-  await raw.close();
+  console.log(`${run}: matched ${statements.length} statements on ${hosts.size} host(s)`);
 }
 
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+// ── p99 replay (addendum) ───────────────────────────────────────────────
+
+/** mobs-query's per-read settings, copied from each logged statement (memory/time get the measure ceiling). */
+const REPLAY_SETTING_KEYS = [
+  'filesystem_prefetches_limit',
+  'max_result_bytes',
+  'result_overflow_mode',
+  'max_bytes_to_read',
+  'read_overflow_mode',
+  'max_threads',
+  'timeout_overflow_mode',
+  'date_time_input_format',
+  'date_time_output_format',
+  'use_client_time_zone',
+  'output_format_json_quote_64bit_integers',
+];
+const GiB = 1024 ** 3;
+
+/**
+ * The p99 org isn't reachable through the routes, so replay the exact statements mobs-query issued for the
+ * L-org cells with the org id swapped, on the replica. Measured at a 4 GiB / 30 s ceiling so peaks past the
+ * 1 GiB / 9 s caps show; cold ×1 (filesystem cache off) + warm ×reps, one statement at a time. The SQL
+ * (which carries ids) stays in memory; results keep stats only.
+ */
+async function p99(platform: string, reps: number, only?: string[]) {
+  const { raw } = await connect(platform);
+  const s = await scopes(raw);
+  const shapeOf = (id: string) => perfShapes.find(x => x.id === id)!;
+  const calls = readFileSync(OUT.perf, 'utf8')
+    .trim()
+    .split('\n')
+    .map(l => JSON.parse(l) as PerfCall & { kind: string })
+    .filter(x => x.kind === 'call' && x.scope === 'L-org' && (!only || only.includes(x.shape)));
+
+  // One logged statement per (shape, window, page): warm rep 1 if it ran, else the first call (cold or failed).
+  const targets = new Map<string, PerfCall>();
+  for (const c of calls) {
+    const key = `${c.shape}|${c.window}|${c.page}`;
+    const best = targets.get(key);
+    if (!best || (c.rep === 1 && best.rep !== 1)) targets.set(key, c);
+  }
+  const run = new Date().toISOString();
+  // Resume: skip statements that already have every rep logged.
+  const prior = existsSync(OUT.p99)
+    ? readFileSync(OUT.p99, 'utf8')
+        .trim()
+        .split('\n')
+        .map(l => JSON.parse(l) as { shape: string; window: string; page: number; rep?: number })
+    : [];
+  for (const k of [...targets.keys()])
+    if (prior.filter(p => `${p.shape}|${p.window}|${p.page}` === k && p.rep !== undefined).length > reps)
+      targets.delete(k);
+  console.log(`${targets.size} statements to replay`);
+  for (const c of [...targets.values()].sort((a, b) => a.startedAt - b.startedAt)) {
+    const kind = shapeOf(c.shape).kind;
+    const label = `${c.shape} ${c.window}${shapeOf(c.shape).pages ? ` p${c.page}` : ''}`;
+    const [logged] = await rows<{ query: string; settings: Record<string, string> }>(
+      raw,
+      `SELECT query, Settings AS settings FROM ${ALL_LOG}
+       WHERE event_time >= toDateTime({a:UInt32}) - 2 AND event_time <= toDateTime({b:UInt32}) + 2
+         AND type != 'QueryStart' AND Settings['max_memory_usage'] = '1073741824'
+         AND position(log_comment, 'aqa-bench') = 0
+         AND toUnixTimestamp64Milli(query_start_time_microseconds) >= {s:Int64} - {skew:Int64}
+         AND toUnixTimestamp64Milli(event_time_microseconds) <= {t:Int64} + 300
+         AND ${
+           kind === 'aggregate'
+             ? `position(query, 'members AS (') > 0`
+             : `position(query, 'WITH candidates AS (') > 0 AND position(query, 'mastra_span_events') > 0`
+         }
+       ORDER BY abs(toUnixTimestamp64Milli(event_time_microseconds) - {t:Int64}) LIMIT 1`,
+      {
+        a: Math.floor(c.startedAt / 1000),
+        b: Math.ceil(c.endedAt / 1000),
+        s: c.startedAt,
+        t: c.endedAt,
+        skew: MATCH_SKEW_MS,
+      },
+    );
+    if (!logged) {
+      console.log(`${label}: no logged statement (route returned ${c.status} ${c.code ?? ''} before querying)`);
+      log(OUT.p99, {
+        kind: 'replay',
+        run,
+        shape: c.shape,
+        window: c.window,
+        page: c.page,
+        skipped: c.code ?? c.status,
+      });
+      continue;
+    }
+    if (!logged.query.includes(s.L.org) || logged.query.includes(s.X.org))
+      throw new Error(`${label}: unexpected ids in the logged statement`);
+    const query = logged.query
+      .split(s.L.org)
+      .join(s.X.org)
+      .replace(/\s+FORMAT\s+\w+\s*$/, '');
+    const settings = Object.fromEntries(
+      REPLAY_SETTING_KEYS.filter(k => k in logged.settings).map(k => [k, logged.settings[k]]),
+    );
+    assertReadOnlyStatement(query);
+
+    const ran: Array<{ id: string; rep: number; error?: string }> = [];
+    for (let rep = 0; rep <= reps; rep++) {
+      const id = randomUUID();
+      let error: string | undefined;
+      try {
+        const res = await raw.query({
+          query,
+          query_id: id,
+          format: 'JSONEachRow',
+          clickhouse_settings: {
+            ...settings,
+            use_query_cache: 0,
+            max_memory_usage: String(4 * GiB),
+            max_execution_time: 30,
+            log_comment: 'aqa-bench:mobs-span-endpoints:p99',
+            ...(rep === 0 ? { enable_filesystem_cache: 0 } : {}),
+          },
+        });
+        await res.json();
+      } catch (e) {
+        error = String((e as { code?: string }).code ?? 'error');
+      }
+      ran.push({ id, rep, error });
+    }
+    // One query_log flush wait per statement rather than per rep.
+    const stats = await statsOf(
+      raw,
+      ran.map(r => r.id),
+    );
+    for (const { id, rep, error } of ran) {
+      const st = stats.get(id);
+      const mem = st ? Number(st.mem) : null;
+      const ms = st ? Number(st.ms) : null;
+      const record = {
+        kind: 'replay',
+        run,
+        shape: c.shape,
+        window: c.window,
+        page: c.page,
+        rep,
+        phase: rep === 0 ? 'cold' : 'warm',
+        error,
+        ms,
+        mib: mem === null ? null : Math.round(mem / 1048576),
+        readRows: st ? Number(st.readRows) : null,
+        readMiB: st ? Math.round(Number(st.readBytes) / 1048576) : null,
+        resultRows: st ? Number(st.resultRows) : null,
+        host: st ? hash(st.host) : null,
+        lOrgStatus: c.status,
+        fits: !error && mem !== null && ms !== null && mem <= GiB && ms <= 9000,
+      };
+      log(OUT.p99, record);
+      console.log(
+        `${label} ${record.phase}${rep}: ${error ?? 'ok'} ${ms}ms ${record.mib}MiB read ${record.readMiB}MiB rows ${record.resultRows}${record.fits ? '' : ' OVER'}`,
+      );
+    }
+  }
+  await raw.close();
+}
+
+async function statsOf(raw: ClickHouseClient, ids: string[]) {
+  const found = new Map<
+    string,
+    { ms: string; mem: string; readRows: string; readBytes: string; resultRows: string; host: string }
+  >();
+  for (let attempt = 0; attempt < 20 && found.size < ids.length; attempt++) {
+    await sleep(attempt ? 2000 : 1000);
+    const r = await rows<{
+      id: string;
+      ms: string;
+      mem: string;
+      readRows: string;
+      readBytes: string;
+      resultRows: string;
+      host: string;
+    }>(
+      raw,
+      `SELECT query_id AS id, query_duration_ms AS ms, memory_usage AS mem, read_rows AS readRows, read_bytes AS readBytes,
+              result_rows AS resultRows, hostName() AS host
+       FROM ${ALL_LOG} WHERE event_date >= yesterday() AND type != 'QueryStart' AND query_id IN {ids:Array(String)}`,
+      { ids },
+    );
+    for (const { id, ...st } of r) found.set(id, st);
+  }
+  return found;
+}
 
 interface Stats {
   run: string;
@@ -985,11 +1199,14 @@ interface Stats {
 
 /** Per cell, the latest run of each shape: cold (rep 0) and warm median / worst. */
 function report() {
-  const all = readFileSync(OUT.perf, 'utf8')
+  let all = readFileSync(OUT.perf, 'utf8')
     .trim()
     .split('\n')
-    .map(l => JSON.parse(l) as Stats & { kind: string })
+    .map(l => JSON.parse(l) as Stats & { kind: string; matcher?: number })
     .filter(x => x.kind === 'stats');
+  // Prefer stats from the current matcher (`rematch`) when they exist.
+  const v2 = all.some(x => x.matcher === 2);
+  all = all.filter(x => (x.matcher === 2) === v2);
   // Per shape, the run with the most calls (the full cold + warm grid).
   const counts = new Map<string, number>();
   for (const x of all) counts.set(`${x.shape}\t${x.run}`, (counts.get(`${x.shape}\t${x.run}`) ?? 0) + 1);
@@ -1053,6 +1270,10 @@ async function main() {
       return check(platform, values['parity-only']);
     case 'perf':
       return perf(platform, Number(values.reps), values.shapes?.split(','));
+    case 'rematch':
+      return rematch(platform);
+    case 'p99':
+      return p99(platform, Number(values.reps), values.shapes?.split(','));
     case 'report':
       return report();
     default:
