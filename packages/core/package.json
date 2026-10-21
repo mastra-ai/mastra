@@ -924,7 +924,7 @@
     "p-map": "^7.0.4",
     "p-retry": "^7.1.1",
     "picomatch": "^4.0.3",
-    "posthog-node": "^5.46.1",
+    "posthog-node": "^5.56.2",
     "re2js": "^2.8.6",
     "ws": "^8.21.3",
     "xxhash-wasm": "^1.1.0",
