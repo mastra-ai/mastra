@@ -78,6 +78,7 @@ import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import { StudioSettingsPage } from './pages/settings';
 import { SignUp } from './pages/signup';
+import Spans from './pages/spans';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import Traces from './pages/traces';
@@ -313,6 +314,7 @@ export const routes: RouteObject[] = [
         element: <SignalsEntityDetailPage />,
       },
       { path: '/traces', element: <Traces /> },
+      { path: '/spans', element: <Spans /> },
       {
         path: '/traces/:traceId',
         loader: ({ params, request }: LoaderFunctionArgs) => {
