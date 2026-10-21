@@ -1637,7 +1637,6 @@ export class DurableAgent<
       // Restore the run-level execution budget from the persisted snapshot so
       // a recovered session is bounded like the original one (#21724).
       timeoutTotalMs: workflowInput.options?.modelSettings?.timeout?.totalMs,
-      actor: workflowInput.options?.actor,
       // Rebuild the live structured output config from the persisted JSON Schema
       // so the recovered stream still emits `object-result` chunks.
       structuredOutput: workflowInput.options?.structuredOutput?.schema
@@ -2664,51 +2663,8 @@ export class DurableAgent<
     let wrote = false;
     const writeTerminalState = async () => {
       wrote = true;
-      // Publishing the error can let generate() remove the registry entry.
-      const entry = totalTimeout ? getRunRegistryEntry(runId, this.#mastra) : undefined;
-      // The observable deadline must not wait for memory or snapshot I/O.
+      // The observable deadline must not wait for snapshot I/O.
       if (error) await reportError(error);
-      try {
-        if (totalTimeout) {
-          const memoryContext = entry?.requestContext?.get('MastraMemory') as
-            | { thread?: { id: string }; resourceId?: string; memoryConfig?: MemoryConfig }
-            | undefined;
-          if (
-            entry?.saveQueueManager &&
-            entry.memory &&
-            entry.messageList &&
-            memoryContext?.thread?.id &&
-            memoryContext.resourceId &&
-            !memoryContext.memoryConfig?.readOnly &&
-            !memoryContext.memoryConfig?.observationalMemory &&
-            !entry.tripwire
-          ) {
-            // A resumed workflow can have cached permission checks for its previous actor.
-            await authorizeDurableMemory(new Map(), {
-              mastra: this.#mastra,
-              user: entry.requestContext?.get('user'),
-              threadId: memoryContext.thread.id,
-              resourceId: memoryContext.resourceId,
-              agentId: this.id,
-              requestContext: entry.requestContext,
-              permission: MastraFGAPermissions.MEMORY_WRITE,
-              actor: entry.actor,
-            });
-            // The interrupted workflow cannot run its finish-time memory flush.
-            // Preserve materialized messages, not the in-flight processor's chunks.
-            await entry.saveQueueManager.flushMessages(
-              entry.messageList.clone(),
-              memoryContext.thread.id,
-              memoryContext.memoryConfig,
-            );
-          }
-        }
-      } catch (memoryError) {
-        this.logger.warn(`Failed to preserve messages at the total deadline for run ${runId}`, {
-          runId,
-          error: memoryError,
-        });
-      }
       if (finished) await this.deleteRunSnapshots(runId);
     };
 
@@ -3721,7 +3677,6 @@ export class DurableAgent<
       if (!reg) continue;
       reg.executionFence = executionFence;
       reg.resumeToolCallId = resolvedOptions.toolCallId;
-      reg.actor = resolvedOptions.actor;
     }
 
     // Install a fresh abort controller for the resumed segment. The original

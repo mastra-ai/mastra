@@ -975,7 +975,6 @@ export interface RunRegistryEntry {
    * `createTimeoutAbortSignal` at install time.
    */
   timeoutTotalMs?: number;
-  actor?: ActorSignal;
   /**
    * Whether this process has already subscribed to cross-process abort
    * requests for the run. Set by `ensureRemoteAbortListener`, which every

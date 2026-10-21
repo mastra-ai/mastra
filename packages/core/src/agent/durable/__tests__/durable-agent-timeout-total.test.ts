@@ -20,11 +20,9 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
-import type { IFGAProvider } from '../../../auth/ee';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
-import { RequestContext } from '../../../request-context';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
@@ -324,103 +322,15 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     result.cleanup();
   });
 
-  it.each([false, true])('uses the resumed actor for memory writes (trusted: %s)', async trusted => {
-    const storage = new InMemoryStore();
-    const memory = new MockMemory({ storage });
-    let deniedWrites = 0;
-    let toolExecuted = false;
-    const firstStep = toolCallingModel('lookup');
-    let calls = 0;
-    const model = new MockLanguageModelV2({
-      doStream: async options => {
-        if (++calls === 1) return firstStep.doStream(options);
-        return new Promise<never>(() => {});
-      },
-    });
-    const fga: IFGAProvider = {
-      check: async (_user, input) => input.permission !== 'memory:write',
-      filterAccessible: async () => [],
-      require: async (_user, input) => {
-        if (input.permission === 'memory:write') {
-          deniedWrites++;
-          throw new Error('Only trusted actors may write memory');
-        }
-      },
-    };
-    const agent = createDurableAgent({
-      agent: new Agent({
-        id: 'resume-actor-timeout',
-        name: 'Resume actor timeout',
-        instructions: 'Look up the city.',
-        memory,
-        model,
-        tools: {
-          lookup: createTool({
-            id: 'lookup',
-            description: 'Looks up the city',
-            inputSchema: z.object({ city: z.string() }),
-            execute: async () => {
-              toolExecuted = true;
-              return 'Found NYC';
-            },
-          }),
-        },
-      }),
-      pubsub,
-    });
-    new Mastra({ agents: { agent }, storage, pubsub, server: { fga }, logger: false });
-    const requestContext = new RequestContext();
-    requestContext.set('organizationId', 'timeout-tenant');
-    requestContext.set('user', { id: 'timeout-user' });
-    const actor = { actorKind: 'system' as const, sourceWorkflow: 'timeout-workflow' };
-    const started = await agent.stream('hello', {
-      actor,
-      requestContext,
-      memory: { thread: 'resume-actor-thread', resource: 'timeout-resource' },
-      requireToolApproval: true,
-      closeOnSuspend: true,
-      savePerStep: false,
-    });
-    await drain(started.fullStream);
-    await globalRunRegistry.get(started.runId)?.workflowExecution;
-    const resumed = await agent.resume(
-      started.runId,
-      { approved: true },
-      {
-        actor: trusted ? actor : undefined,
-        modelSettings: { timeout: { totalMs: 500 } },
-      },
-    );
-    try {
-      const chunks = await drain(resumed.fullStream);
-      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
-      expect(toolExecuted).toBe(true);
-      if (trusted) {
-        await vi.waitFor(async () => {
-          const { messages } = await memory.recall({ threadId: 'resume-actor-thread' });
-          expect(JSON.stringify(messages)).toContain('Found NYC');
-        });
-        expect(deniedWrites).toBe(0);
-      } else {
-        await vi.waitFor(() => expect(deniedWrites).toBeGreaterThan(0));
-        const { messages } = await memory.recall({ threadId: 'resume-actor-thread' });
-        expect(JSON.stringify(messages)).not.toContain('Found NYC');
-      }
-    } finally {
-      resumed.cleanup();
-      started.cleanup();
-    }
-  });
-
-  it('preserves accepted messages when generate cleans up before timeout publication returns', async () => {
+  it.each([true, false])('persists completed steps only when savePerStep is enabled (%s)', async savePerStep => {
     const storage = new InMemoryStore();
     const memory = new MockMemory({ storage });
     const firstStep = toolCallingModel('lookup');
     let calls = 0;
     const agent = createDurableAgent({
       agent: new Agent({
-        id: 'generate-timeout-memory',
-        name: 'Generate timeout memory',
+        id: 'timeout-memory-parity',
+        name: 'Timeout memory parity',
         instructions: 'Look up the city.',
         memory,
         model: new MockLanguageModelV2({
@@ -441,58 +351,30 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
       pubsub,
     });
     new Mastra({ agents: { agent }, storage, pubsub, logger: false });
-    let releasePublication!: () => void;
-    const callerSettled = new Promise<void>(resolve => (releasePublication = resolve));
-    const publish = agent.pubsub.publish.bind(agent.pubsub);
-    const publishSpy = vi.spyOn(agent.pubsub, 'publish').mockImplementation(async (...args) => {
-      const result = await publish(...args);
-      // Real delivery completes before its publisher's acknowledgement, as on a remote bus.
-      if (args[1].type === AgentStreamEventTypes.ERROR) await callerSettled;
-      return result;
+    const result = await agent.stream('hello', {
+      memory: { thread: 'timeout-memory-parity-thread', resource: 'timeout-resource' },
+      savePerStep,
+      modelSettings: { timeout: { totalMs: 1000 } },
     });
     try {
-      try {
-        await expect(
-          agent.generate('hello', {
-            memory: { thread: 'generate-timeout-thread', resource: 'timeout-resource' },
-            savePerStep: false,
-            modelSettings: { timeout: { totalMs: 500 } },
-          }),
-        ).rejects.toMatchObject({ name: 'MastraTimeoutError' });
-      } finally {
-        releasePublication();
-      }
+      const chunks = await drain(result.fullStream);
+      expect(chunks.some(chunk => chunk.type === 'tool-result')).toBe(true);
+      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
       await vi.waitFor(async () => {
-        const { messages } = await memory.recall({ threadId: 'generate-timeout-thread' });
-        expect(messages.some(message => message.role === 'assistant' && JSON.stringify(message).includes('tc-1'))).toBe(
-          true,
-        );
+        const { messages } = await memory.recall({ threadId: 'timeout-memory-parity-thread' });
+        expect(JSON.stringify(messages).includes('Found NYC')).toBe(savePerStep);
       });
     } finally {
-      releasePublication();
-      publishSpy.mockRestore();
+      result.cleanup();
     }
   });
 
-  it.each(['no-memory', 'trusted', 'untrusted'] as const)(
-    're-arms the persisted run-level budget after a cold restart (actor: %s)',
-    async actor => {
-      const withMemory = actor !== 'no-memory';
+  it.each([false, true])(
+    're-arms the persisted run-level budget after a cold restart (memory: %s)',
+    async withMemory => {
       const storage = new InMemoryStore();
       const memory = new MockMemory({ storage });
       let secondStepEntered = false;
-      let denyWrites = false;
-      let deniedWrites = 0;
-      const fga: IFGAProvider = {
-        check: async (_user, input) => !denyWrites || input.permission !== 'memory:write',
-        filterAccessible: async () => [],
-        require: async (_user, input) => {
-          if (denyWrites && input.permission === 'memory:write') {
-            deniedWrites++;
-            throw new Error('Only trusted actors may write memory');
-          }
-        },
-      };
       const build = () => {
         const firstStepModel = toolCallingModel('hold');
         let calls = 0;
@@ -529,20 +411,14 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
           storage,
           pubsub,
           recovery: { durableAgents: 'auto' },
-          server: withMemory ? { fga } : undefined,
         });
         return durableAgent;
       };
 
       // ---- Process 1: start a budgeted run against a hanging model. ----
       const firstDurable = build();
-      const requestContext = new RequestContext();
-      requestContext.set('organizationId', 'timeout-tenant');
-      requestContext.set('user', { id: 'timeout-user' });
       const started = await firstDurable.stream('hello', {
         modelSettings: { timeout: { totalMs: 2000 } },
-        actor: actor === 'trusted' ? { actorKind: 'system', sourceWorkflow: 'timeout-workflow' } : undefined,
-        requestContext,
         savePerStep: false,
         memory: withMemory ? { thread: 'timeout-thread', resource: 'timeout-resource' } : undefined,
       });
@@ -559,7 +435,6 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
       });
 
       if (withMemory) await vi.waitFor(() => expect(secondStepEntered).toBe(true));
-      denyWrites = true;
 
       // ---- The restart: nothing of process 1 survives but its storage.
       // clear() runs each entry's cleanup, which also disarms process 1's
@@ -587,14 +462,12 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
       expect(errorChunk, JSON.stringify(chunks)).toBeDefined();
       expect(errorChunk.payload.error.message).toContain('totalMs');
       if (withMemory) {
-        if (actor === 'untrusted') await vi.waitFor(() => expect(deniedWrites).toBeGreaterThan(0));
         await vi.waitFor(async () => {
           const { messages } = await memory.recall({ threadId: 'timeout-thread', resourceId: 'timeout-resource' });
           expect(
             messages.some(message => message.role === 'assistant' && JSON.stringify(message).includes('tc-1')),
-          ).toBe(actor === 'trusted');
+          ).toBe(false);
         });
-        if (actor === 'trusted') expect(deniedWrites).toBe(0);
       }
       recovered.cleanup();
       await vi.waitFor(async () => {

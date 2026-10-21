@@ -89,7 +89,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
   const getMock = useLoopScenarioAimock();
 
   it.each([false, true])(
-    'closes a stuck tool run without waiting for memory (save blocked: %s)',
+    'closes a stuck tool run without flushing unfinished-step memory (save blocked: %s)',
     async blockSave => {
       const onError = vi.fn();
       let toolStarted = false;
@@ -151,7 +151,8 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         expect(result.chunks!.some(chunk => chunk.type === 'finish')).toBe(false);
         expect(result.requests).toHaveLength(1);
         if (blockSave && (engine === 'durable' || engine === 'evented')) {
-          await vi.waitFor(() => expect(saveBlocked).toBe(true));
+          await new Promise(resolve => setTimeout(resolve, 50));
+          expect(saveBlocked).toBe(false);
         }
       } finally {
         releaseSave();
