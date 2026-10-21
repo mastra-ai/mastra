@@ -530,6 +530,15 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
         );
         expect(runIds.size).toBe(1);
         if (attachment === 'late-history') {
+          const memoryStore = await storage.getStore('memory');
+          const { messages } = await memoryStore!.listMessages({ threadId, perPage: 100 });
+          const historyRows = messages.filter(row => row.id === `thread-history:${threadId}:prior-1`);
+          expect(historyRows).toHaveLength(1);
+          expect(historyRows[0]?.content.metadata?.signal?.attributes).toMatchObject({
+            source: 'thread-history',
+            messageId: 'prior-1',
+          });
+          expect(JSON.stringify(historyRows[0]?.content)).toContain('Earlier question from the platform thread');
           expect(
             memoryCallStacks.some(stack => stack.includes('persistThreadHistorySignals')),
             'first-mention history must read memory through the execution owner',
