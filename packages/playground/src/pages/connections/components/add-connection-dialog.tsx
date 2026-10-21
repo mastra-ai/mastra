@@ -21,16 +21,16 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
+import type { UserConnectProvider } from '@mastra/playground-ui/domains/connect';
 import {
+  ProviderLogo,
   headlessAuthFieldKey,
   headlessAuthFields,
   headlessAuthRequiresForm,
   supportsHeadlessAuth,
   usePendingConnect,
 } from '@mastra/playground-ui/domains/connect';
-import type { UserConnectProvider } from '@mastra/playground-ui/domains/connect';
 import { useEffect, useState } from 'react';
-import { ProviderLogo } from './provider-logo';
 
 export interface AddConnectionDialogProps {
   providers: UserConnectProvider[];
@@ -119,7 +119,7 @@ export function AddConnectionDialog({ providers, open, onOpenChange }: AddConnec
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent size="md">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Add connection</DialogTitle>
           <DialogDescription>
@@ -133,9 +133,14 @@ export function AddConnectionDialog({ providers, open, onOpenChange }: AddConnec
 
         {!attempt ? (
           <DialogBody layout="fill" flush>
-            <Command className="bg-transparent">
-              <CommandInput placeholder="Search providers" />
-              <CommandList scrollArea className="max-h-72">
+            <Command className="bg-transparent" loop label="Search providers">
+              <CommandInput aria-label="Search providers" placeholder="Search providers" />
+              <CommandList
+                scrollArea
+                scrollAreaMask
+                scrollAreaClassName="h-[min(26rem,calc(100dvh-16rem))]"
+                className="px-2 py-2"
+              >
                 <CommandEmpty>No providers match your search.</CommandEmpty>
                 {providers.map(provider => (
                   <CommandItem
@@ -144,7 +149,9 @@ export function AddConnectionDialog({ providers, open, onOpenChange }: AddConnec
                     onSelect={() => startConnect(provider)}
                   >
                     <ProviderLogo logoUrl={provider.logoUrl} />
-                    {provider.displayName ?? provider.id}
+                    <Txt as="span" variant="body-sm" tone="ink" className="min-w-0 truncate">
+                      {provider.displayName ?? provider.id}
+                    </Txt>
                   </CommandItem>
                 ))}
               </CommandList>
@@ -174,7 +181,7 @@ export function AddConnectionDialog({ providers, open, onOpenChange }: AddConnec
               <Button variant="ghost" onClick={resetAttempt}>
                 Back
               </Button>
-              <Button variant="default" disabled={missingRequired} onClick={submitForm}>
+              <Button variant="primary" disabled={missingRequired} onClick={submitForm}>
                 Connect
               </Button>
             </DialogFooter>
@@ -190,7 +197,7 @@ export function AddConnectionDialog({ providers, open, onOpenChange }: AddConnec
               <Button variant="ghost" onClick={resetAttempt}>
                 Back
               </Button>
-              <Button variant="default" onClick={retry}>
+              <Button variant="primary" onClick={retry}>
                 Try again
               </Button>
             </DialogFooter>

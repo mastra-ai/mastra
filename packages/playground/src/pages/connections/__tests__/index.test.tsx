@@ -99,7 +99,7 @@ describe('ConnectionsPage', () => {
   });
 
   describe('when the connections request fails', () => {
-    it('shows the error in both sections instead of fake empty states', async () => {
+    it('shows the error instead of a misleading empty grouped list', async () => {
       server.use(
         http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
         http.get(`${BASE_URL}/connect/connections`, () =>
@@ -109,10 +109,7 @@ describe('ConnectionsPage', () => {
 
       renderPage();
 
-      const userSection = await screen.findByRole('region', { name: 'Your connections' });
-      expect(await within(userSection).findByRole('alert')).not.toBeNull();
-      const globalSection = screen.getByRole('region', { name: 'Global connections' });
-      expect(await within(globalSection).findByRole('alert')).not.toBeNull();
+      expect(await screen.findByRole('alert')).not.toBeNull();
       // The server never answered, so neither section may claim emptiness.
       expect(screen.queryByText("You haven't connected any accounts yet.")).toBeNull();
       expect(screen.queryByText('No global connections are linked to this project.')).toBeNull();
@@ -129,17 +126,15 @@ describe('ConnectionsPage', () => {
 
       renderPage();
 
-      const userTable = await screen.findByRole('table', { name: 'Your connections' });
-      expect(userTable.getAttribute('aria-busy')).toBe('true');
-      const globalTable = await screen.findByRole('table', { name: 'Global connections' });
-      expect(globalTable.getAttribute('aria-busy')).toBe('true');
+      const table = await screen.findByRole('table', { name: 'Connections' });
+      expect(table.getAttribute('aria-busy')).toBe('true');
       expect(screen.queryByText("You haven't connected any accounts yet.")).toBeNull();
       expect(screen.queryByText('No global connections are linked to this project.')).toBeNull();
     });
   });
 
   describe('when the surface is ready with global and user connections', () => {
-    it('splits the connections into tables with catalog names and row actions only on yours', async () => {
+    it('groups global and user connections under shared columns with actions only on yours', async () => {
       server.use(
         http.get(`${BASE_URL}/connect/providers`, () => HttpResponse.json(providersResponse)),
         http.get(`${BASE_URL}/connect/connections`, () => HttpResponse.json(mixedConnectionsResponse)),
@@ -147,13 +142,15 @@ describe('ConnectionsPage', () => {
 
       renderPage();
 
-      const userSection = await screen.findByRole('region', { name: 'Your connections' });
+      expect(await screen.findByRole('table', { name: 'Connections' })).not.toBeNull();
+      expect(screen.getAllByRole('columnheader', { name: 'Integration' })).toHaveLength(1);
+      const userSection = await screen.findByRole('rowgroup', { name: 'Your connections' });
       // The catalog resolves 'linear' to its display name.
       expect(await within(userSection).findByText('Linear')).not.toBeNull();
       expect(within(userSection).getByText('you@example.com')).not.toBeNull();
       expect(within(userSection).getByRole('button', { name: 'Actions for Linear' })).not.toBeNull();
 
-      const globalSection = await screen.findByRole('region', { name: 'Global connections' });
+      const globalSection = await screen.findByRole('rowgroup', { name: 'Global connections' });
       // 'notion' is outside the policy-filtered provider list, but the row
       // carries its own display metadata (resolved server-side from the full
       // catalog), so the proper name still renders.
@@ -206,7 +203,7 @@ describe('ConnectionsPage', () => {
 
       // The route's error message (not a generic fallback) reaches the toast.
       await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Disconnect already in progress; retry shortly'));
-      const userSection = screen.getByRole('region', { name: 'Your connections' });
+      const userSection = screen.getByRole('rowgroup', { name: 'Your connections' });
       expect(within(userSection).getByText('Linear')).not.toBeNull();
     });
   });
@@ -294,7 +291,7 @@ describe('ConnectionsPage', () => {
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add connection' })).toBeNull(), {
         timeout: 10_000,
       });
-      const userSection = await screen.findByRole('region', { name: 'Your connections' });
+      const userSection = await screen.findByRole('rowgroup', { name: 'Your connections' });
       await waitFor(() => expect(within(userSection).getByText('Slack')).not.toBeNull(), { timeout: 10_000 });
     }, 20_000);
 

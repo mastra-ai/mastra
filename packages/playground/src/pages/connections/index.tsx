@@ -1,9 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   useConnectSurface,
   useDisconnectUserConnection,
@@ -109,48 +109,19 @@ export default function ConnectionsPage() {
     );
   } else if (surface.data?.status === 'ready') {
     content = (
-      <div className="max-w-4xl space-y-8">
-        <section aria-label="Your connections" className="space-y-3">
-          <div className="flex items-center justify-between gap-4">
-            <Txt as="h2" variant="subheading">
-              Your connections
-            </Txt>
-            <Button variant="default" size="sm" onClick={() => setAddOpen(true)}>
-              <PlusIcon /> Add connection
-            </Button>
-          </div>
-          {connectionsQuery.isError ? (
-            fetchErrorNotice(connectionsQuery.error.message)
-          ) : (
-            <ConnectionsTable
-              label="Your connections"
-              connections={userConnections}
-              providersById={providersById}
-              emptyMessage="You haven't connected any accounts yet."
-              loading={connectionsQuery.isLoading}
-              onDisconnect={handleDisconnect}
-              disconnectPendingId={disconnect.isPending ? (disconnect.variables?.connectionId ?? null) : null}
-            />
-          )}
-        </section>
-
-        <section aria-label="Global connections" className="space-y-3">
-          <Txt as="h2" variant="subheading">
-            Global connections
-          </Txt>
-          {connectionsQuery.isError ? (
-            // A failed fetch must not masquerade as "no global connections".
-            fetchErrorNotice(connectionsQuery.error.message)
-          ) : (
-            <ConnectionsTable
-              label="Global connections"
-              connections={globalConnections}
-              providersById={providersById}
-              emptyMessage="No global connections are linked to this project."
-              loading={connectionsQuery.isLoading}
-            />
-          )}
-        </section>
+      <div className="mt-6 flex flex-col gap-6 pb-16">
+        {connectionsQuery.isError ? (
+          fetchErrorNotice(connectionsQuery.error.message)
+        ) : (
+          <ConnectionsTable
+            globalConnections={globalConnections}
+            userConnections={userConnections}
+            providersById={providersById}
+            loading={connectionsQuery.isLoading}
+            onDisconnect={handleDisconnect}
+            disconnectPendingId={disconnect.isPending ? (disconnect.variables?.connectionId ?? null) : null}
+          />
+        )}
 
         <AddConnectionDialog providers={providers} open={addOpen} onOpenChange={setAddOpen} />
       </div>
@@ -158,8 +129,22 @@ export default function ConnectionsPage() {
   }
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-      <h1 className="sr-only">Connections</h1>
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      variant="narrow"
+      header={
+        <PageHeader>
+          <PageHeader.Title>Connections</PageHeader.Title>
+          {surface.data?.status === 'ready' ? (
+            <PageHeader.Action>
+              <Button variant="primary" size="sm" onClick={() => setAddOpen(true)}>
+                <PlusIcon aria-hidden /> Add connection
+              </Button>
+            </PageHeader.Action>
+          ) : null}
+        </PageHeader>
+      }
+    >
       {content}
     </PageLayout>
   );
