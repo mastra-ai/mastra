@@ -845,7 +845,7 @@ Subscribes to raw stream chunks for a memory thread. Use this before calling `se
             isOptional: true,
             defaultValue: 'false',
             description:
-              "Emit the stored thread messages as one `thread-history` chunk first, then only retained parts newer than that history, then live parts. Completed runs already in storage aren't replayed; pending tool approvals are still emitted. `perPage` limits how many recent messages are loaded (default 40). Requires agent memory; without it the subscription is live-only.",
+              "Emit the stored thread messages as one `thread-history` chunk first, then only retained parts newer than that history, then live parts. Completed runs already in storage aren't replayed; pending tool approvals are still emitted. `perPage` limits how many recent messages are loaded (default 40). Without agent memory, or when the thread has no stored messages yet, the history chunk is emitted with an empty `messages` array.",
           },
         ],
       },

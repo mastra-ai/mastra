@@ -2015,7 +2015,7 @@ Emitted when the stream is forcibly terminated due to content being blocked by a
 
 The stored history of a thread, emitted at the start of a thread subscription.
 
-`thread-history` arrives only when you call [`agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions) with `withInitialHistory: true`. It is the first chunk, followed by retained parts newer than the history and then live parts. The subscription requires agent memory; without it the subscription is live-only and no history chunk is emitted.
+`thread-history` arrives only when you call [`agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions) with `withInitialHistory: true`. It is the first chunk, followed by retained parts newer than the history and then live parts. Without agent memory, or when the thread has no stored messages yet, the chunk is still emitted first with an empty `messages` array and `hasMore: false`.
 
 <PropertiesTable
   content={[
