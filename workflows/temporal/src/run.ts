@@ -18,6 +18,23 @@ type TemporalRunStartArgs<TState, TInput, TRequestContext> = {
   requestContext?: RequestContext<TRequestContext>;
 } & WorkflowRunStartOptions;
 
+// Temporal's error classes use these global markers to make instanceof checks work across duplicated SDK modules.
+function isTemporalWorkflowCancellation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  const workflowErrorMarker = Symbol.for('__temporal_isWorkflowFailedError');
+  const cancellationMarker = Symbol.for('__temporal_isCancelledFailure');
+  const cause = 'cause' in error ? error.cause : undefined;
+  return (
+    (error as Record<symbol, unknown>)[workflowErrorMarker] === true &&
+    typeof cause === 'object' &&
+    cause !== null &&
+    (cause as Record<symbol, unknown>)[cancellationMarker] === true
+  );
+}
+
 export class TemporalRun<
   TSteps extends Step<string, any, any, any, any, any, TemporalEngineType, any>[] = Step<
     string,
@@ -86,12 +103,13 @@ export class TemporalRun<
 
       return result;
     } catch (error) {
+      const canceled = isTemporalWorkflowCancellation(error);
       const workflowError = error instanceof Error ? error : new Error(String(error));
       await this.persistSnapshot({
-        status: 'failed',
+        status: canceled ? 'canceled' : 'failed',
         input,
         state: initialState,
-        error: workflowError,
+        error: canceled ? undefined : workflowError,
         requestContext,
       });
 
@@ -252,19 +270,22 @@ export class TemporalRun<
       try {
         workflowResult = (await handle.result()) as WorkflowResult<TState, TInput, TOutput, TSteps>;
       } catch (error) {
+        const canceled = isTemporalWorkflowCancellation(error);
         const workflowError = error instanceof Error ? error : new Error(String(error));
         await this.persistSnapshot({
-          status: 'failed',
+          status: canceled ? 'canceled' : 'failed',
           input,
           state: initialState,
-          error: workflowError,
+          error: canceled ? undefined : workflowError,
           requestContext,
         });
-        this.mastra?.getLogger()?.error('Background Temporal workflow execution failed', {
-          error: workflowError,
-          runId: this.runId,
-          workflowId: this.workflowId,
-        });
+        if (!canceled) {
+          this.mastra?.getLogger()?.error('Background Temporal workflow execution failed', {
+            error: workflowError,
+            runId: this.runId,
+            workflowId: this.workflowId,
+          });
+        }
         return;
       }
 

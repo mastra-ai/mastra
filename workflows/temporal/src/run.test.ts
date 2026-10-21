@@ -7,6 +7,20 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createWorkflow } from './workflow';
 
+function createTemporalCancellationError() {
+  const cause = {
+    name: 'CancelledFailure',
+    message: 'Workflow canceled',
+    [Symbol.for('__temporal_isCancelledFailure')]: true,
+  };
+  return {
+    name: 'WorkflowFailedError',
+    message: 'Workflow execution cancelled',
+    cause,
+    [Symbol.for('__temporal_isWorkflowFailedError')]: true,
+  };
+}
+
 describe('TemporalRun', () => {
   it('persists a pending snapshot when creating a Temporal run', async () => {
     const storage = new MockStore();
@@ -178,6 +192,64 @@ describe('TemporalRun', () => {
         },
       });
     });
+  });
+
+  it('preserves a canceled snapshot when start is canceled while waiting for its result', async () => {
+    const storage = new MockStore();
+    let rejectResult!: (error: unknown) => void;
+    const resultPromise = new Promise((_, reject) => {
+      rejectResult = reject;
+    });
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const start = vi.fn().mockResolvedValue({ result: vi.fn(() => resultPromise) });
+    const schema = z.object({ value: z.number() });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
+      {
+        client: { workflow: { start, getHandle: vi.fn().mockReturnValue({ cancel }) } } as unknown as Client,
+        taskQueue: 'test-queue',
+      },
+    ).commit();
+    new Mastra({ workflows: { workflow }, storage, logger: false });
+    const run = await workflow.createRun({ runId: 'test-run', resourceId: 'resource-1' });
+
+    const startPromise = run.start({ inputData: { value: 1 } });
+    await vi.waitFor(() => expect(start).toHaveBeenCalledOnce());
+    await run.cancel();
+    rejectResult(createTemporalCancellationError());
+    await startPromise;
+
+    await expect(workflow.getWorkflowRunById('test-run')).resolves.toMatchObject({ status: 'canceled' });
+  });
+
+  it('preserves a canceled snapshot without logging an eventual startAsync cancellation as a failure', async () => {
+    const storage = new MockStore();
+    let rejectResult!: (error: unknown) => void;
+    const resultPromise = new Promise((_, reject) => {
+      rejectResult = reject;
+    });
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const start = vi.fn().mockResolvedValue({ result: vi.fn(() => resultPromise) });
+    const schema = z.object({ value: z.number() });
+    const workflow = createWorkflow(
+      { id: 'test-workflow', inputSchema: schema, outputSchema: schema },
+      {
+        client: { workflow: { start, getHandle: vi.fn().mockReturnValue({ cancel }) } } as unknown as Client,
+        taskQueue: 'test-queue',
+      },
+    ).commit();
+    const mastra = new Mastra({ workflows: { workflow }, storage, logger: false });
+    const logError = vi.fn();
+    vi.spyOn(mastra, 'getLogger').mockReturnValue({ error: logError } as any);
+    const run = await workflow.createRun({ runId: 'test-run', resourceId: 'resource-1' });
+
+    await run.startAsync({ inputData: { value: 1 } });
+    await run.cancel();
+    rejectResult(createTemporalCancellationError());
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    await expect(workflow.getWorkflowRunById('test-run')).resolves.toMatchObject({ status: 'canceled' });
+    expect(logError).not.toHaveBeenCalledWith('Background Temporal workflow execution failed', expect.anything());
   });
 
   it('persists and logs eventual startAsync failures', async () => {
