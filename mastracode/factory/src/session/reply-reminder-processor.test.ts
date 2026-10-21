@@ -13,16 +13,23 @@ function run({ tools = { [REPLY_TOOL_NAME]: {} } as Record<string, unknown> } = 
   const processor = new FactoryReplyReminderProcessor({ afterMs: 5 * MINUTE, now: () => now });
   const messageList = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
   const state: Record<string, unknown> = {};
+  const signals: Array<{ type: string; contents: unknown }> = [];
+  const sendSignal = async (signal: { type: string; contents: unknown }) => {
+    signals.push(signal);
+    return signal as never;
+  };
   let calls = 0;
   return {
     messageList,
+    signals,
     advance(ms: number) {
       now += ms;
     },
-    step(): string | undefined {
-      processor.processInputStep({ messageList, tools, state } as unknown as ProcessInputStepArgs);
-      const reminder = messageList.getSystemMessages('factory-reply-reminder');
-      return reminder.length ? String(reminder[0]!.content) : undefined;
+    /** Runs one step and returns the nudge it sent, if any. */
+    async step(): Promise<string | undefined> {
+      const before = signals.length;
+      await processor.processInputStep({ messageList, tools, state, sendSignal } as unknown as ProcessInputStepArgs);
+      return signals.length > before ? String(signals.at(-1)!.contents) : undefined;
     },
     callTool(toolName: string, state: 'call' | 'result' = 'result') {
       calls += 1;
@@ -54,57 +61,64 @@ function run({ tools = { [REPLY_TOOL_NAME]: {} } as Record<string, unknown> } = 
 }
 
 describe('FactoryReplyReminderProcessor', () => {
-  it('stays out of runs without the reply tool', () => {
+  it('stays out of runs without the reply tool', async () => {
     const r = run({ tools: {} });
-    r.step();
+    await r.step();
     r.advance(60 * MINUTE);
-    expect(r.step()).toBeUndefined();
+    expect(await r.step()).toBeUndefined();
   });
 
-  it('reminds a run that has worked five minutes without posting, with a way to stay silent', () => {
+  it('nudges a run that has worked five minutes without posting, as a reactive signal', async () => {
     const r = run();
-    expect(r.step()).toBeUndefined();
+    expect(await r.step()).toBeUndefined();
     r.advance(4 * MINUTE);
     r.callTool('execute_command');
-    expect(r.step()).toBeUndefined();
+    expect(await r.step()).toBeUndefined();
 
     r.advance(2 * MINUTE);
-    const reminder = r.step();
-    expect(reminder).toContain('It has been 6 minutes since you last posted in this thread.');
-    expect(reminder).toContain('`staySilent: true`');
+    expect(await r.step()).toBe(
+      'It has been 6 minutes since you last posted in this thread. If the people there would want to know where things stand, post a short status with `reply_in_thread`. Otherwise keep working.',
+    );
+    expect(r.signals.at(-1)!.type).toBe('reactive');
   });
 
-  it('clears the reminder once the agent posts, and starts the clock again', () => {
+  it('leaves the system prompt alone, so the cached prompt prefix holds', async () => {
     const r = run();
-    r.step();
+    await r.step();
     r.advance(6 * MINUTE);
-    expect(r.step()).toBeDefined();
+    expect(await r.step()).toBeDefined();
+    expect(r.messageList.getAllSystemMessages()).toHaveLength(0);
+  });
 
-    r.callTool(REPLY_TOOL_NAME);
-    expect(r.step()).toBeUndefined();
-    expect(r.messageList.getSystemMessages('factory-reply-reminder')).toHaveLength(0);
-
+  it('nudges once, then waits another five minutes before nudging again', async () => {
+    const r = run();
+    await r.step();
+    r.advance(6 * MINUTE);
+    expect(await r.step()).toBeDefined();
+    r.advance(MINUTE);
+    expect(await r.step()).toBeUndefined();
     r.advance(4 * MINUTE);
-    expect(r.step()).toBeUndefined();
-    r.advance(MINUTE);
-    expect(r.step()).toContain('It has been 5 minutes');
+    expect(await r.step()).toContain('It has been 5 minutes');
+    expect(r.signals).toHaveLength(2);
   });
 
-  it('keeps a single reminder in the prompt however many steps it stays overdue', () => {
+  it('starts the clock again once the agent posts', async () => {
     const r = run();
-    r.step();
-    r.advance(6 * MINUTE);
-    r.step();
+    await r.step();
+    r.advance(4 * MINUTE);
+    r.callTool(REPLY_TOOL_NAME);
+    expect(await r.step()).toBeUndefined();
+    r.advance(4 * MINUTE);
+    expect(await r.step()).toBeUndefined();
     r.advance(MINUTE);
-    expect(r.step()).toContain('It has been 7 minutes');
-    expect(r.messageList.getSystemMessages('factory-reply-reminder')).toHaveLength(1);
+    expect(await r.step()).toContain('It has been 5 minutes');
   });
 
-  it('does not count a reply call that has not finished', () => {
+  it('does not count a reply call that has not finished', async () => {
     const r = run();
-    r.step();
+    await r.step();
     r.advance(6 * MINUTE);
     r.callTool(REPLY_TOOL_NAME, 'call');
-    expect(r.step()).toBeDefined();
+    expect(await r.step()).toBeDefined();
   });
 });

@@ -17,16 +17,9 @@ const LINKED_KEY = 'factory__replyLinked';
 
 const replyInput = z
   .object({
-    text: z.string().trim().min(1).max(12_000).optional().describe('The message to post, in markdown.'),
-    staySilent: z
-      .literal(true)
-      .optional()
-      .describe('Set instead of `text` when nothing you could say would help the people in the thread.'),
+    text: z.string().trim().min(1).max(12_000).describe('The message to post, in markdown.'),
   })
-  .strict()
-  .refine(input => (input.text === undefined) !== (input.staySilent === undefined), {
-    message: 'Pass either `text` or `staySilent: true`, not both.',
-  });
+  .strict();
 
 /**
  * The only way a channel run speaks when the adapter hides reply text
@@ -45,13 +38,12 @@ export async function createReplyTool(
     [REPLY_TOOL_NAME]: createTool({
       id: REPLY_TOOL_NAME,
       description:
-        'Post a message in this chat thread. Nothing you write outside this tool reaches the thread, so use it for anything the people there should see: a short note that you are starting a longer job, a question you need answered, and the outcome when you finish. Post when you have something new; do not repeat yourself or post that nothing changed. If a message needs no answer from you, call it with `staySilent: true` instead.',
+        'Post a message in this chat thread. Nothing you write outside this tool reaches the thread, so use it for anything the people there should see: a short note that you are starting a longer job, a question you need answered, and the outcome when you finish. Post when you have something new; do not repeat yourself or post that nothing changed. To stay quiet, do not call it.',
       inputSchema: replyInput,
       execute: async input => {
-        if (input.staySilent) return { posted: false };
         const link = firstReplyLink(requestContext);
         await render.chatThread.post({
-          markdown: link ? `${input.text}\n\n[${SESSION_LINK_LABEL}](${link})` : input.text!,
+          markdown: link ? `${input.text}\n\n[${SESSION_LINK_LABEL}](${link})` : input.text,
         });
         // Marked only once posted, so a failed first post still gets the link on the retry.
         if (link) requestContext.set(LINKED_KEY, true);

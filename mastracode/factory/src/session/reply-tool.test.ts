@@ -7,7 +7,7 @@ import { createReplyTool, REPLY_TOOL_NAME } from './reply-tool.js';
 
 type ReplyTool = {
   inputSchema: { safeParse: (input: unknown) => { success: boolean } };
-  execute: (input: { text?: string; staySilent?: true }, ctx: Record<string, unknown>) => Promise<unknown>;
+  execute: (input: { text: string }, ctx: Record<string, unknown>) => Promise<unknown>;
 };
 
 function channelRun({ textDisplay = 'hidden' as 'hidden' | 'show' | null, post = vi.fn(async () => ({})) } = {}) {
@@ -58,20 +58,10 @@ describe('reply_in_thread', () => {
     expect(post).toHaveBeenCalledWith({ markdown: 'On it — running the tests.' });
   });
 
-  it('stays silent on purpose without posting', async () => {
-    const { requestContext, post } = channelRun();
-    const tool = await replyTool(requestContext);
-
-    await expect(tool.execute({ staySilent: true }, {})).resolves.toEqual({ posted: false });
-
-    expect(post).not.toHaveBeenCalled();
-  });
-
-  it('takes exactly one of text or staySilent', async () => {
+  it('takes only non-blank text', async () => {
     const tool = await replyTool(channelRun().requestContext);
 
     expect(tool.inputSchema.safeParse({ text: 'hi' }).success).toBe(true);
-    expect(tool.inputSchema.safeParse({ staySilent: true }).success).toBe(true);
     expect(tool.inputSchema.safeParse({}).success).toBe(false);
     expect(tool.inputSchema.safeParse({ text: '   ' }).success).toBe(false);
     expect(tool.inputSchema.safeParse({ text: 'hi', staySilent: true }).success).toBe(false);

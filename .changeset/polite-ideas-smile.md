@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Improved long Slack jobs: after five minutes without posting, a session's agent is reminded to post a short status or choose to stay silent.
+Improved long Slack jobs: after five minutes without posting, a session's agent gets a reminder to post a short status if it would help. It gets at most one reminder per five minutes.

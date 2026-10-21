@@ -11,7 +11,7 @@ const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 /** A model that plays a fixed script of tool calls and records each prompt it was sent. */
 function scriptedModel(script: Array<{ tool: string; input: Record<string, unknown> } | { text: string }>) {
-  const prompts: string[] = [];
+  const prompts: Array<{ system: string; conversation: string }> = [];
   let step = 0;
   const model = {
     specificationVersion: 'v2' as const,
@@ -22,12 +22,13 @@ function scriptedModel(script: Array<{ tool: string; input: Record<string, unkno
       throw new Error('stream only');
     },
     async doStream(options: { prompt: Array<{ role: string; content: unknown }> }) {
-      prompts.push(
-        options.prompt
+      prompts.push({
+        system: options.prompt
           .filter(message => message.role === 'system')
           .map(message => String(message.content))
           .join('\n'),
-      );
+        conversation: JSON.stringify(options.prompt.filter(message => message.role !== 'system')),
+      });
       const next = script[step++] ?? { text: 'done' };
       const parts =
         'tool' in next
@@ -91,11 +92,19 @@ describe('reply reminder in a real agent run', () => {
     const stream = await agent.stream('go', { maxSteps: 5 });
     await stream.consumeStream();
 
+    const nudges = (text: string) => text.split('since you last posted').length - 1;
     expect(prompts).toHaveLength(3);
-    expect(prompts[0]).not.toContain('since you last posted');
-    // Six minutes of silent work later, the next step carries the reminder…
-    expect(prompts[1]).toContain('It has been 6 minutes since you last posted in this thread.');
-    // …and the step after the agent posted no longer does.
-    expect(prompts[2]).not.toContain('since you last posted');
+    expect(nudges(prompts[0]!.conversation)).toBe(0);
+    // Six minutes of silent work later, the next step's prompt carries one nudge,
+    // after the work result at the end of the conversation…
+    const second = prompts[1]!.conversation;
+    expect(nudges(second)).toBe(1);
+    expect(second.indexOf('It has been 6 minutes since you last posted in this thread.')).toBeGreaterThan(
+      second.indexOf('"ok":true'),
+    );
+    // …the system prompt never changes, so the cached prefix holds…
+    expect(prompts.map(prompt => prompt.system)).toEqual(Array(3).fill(prompts[0]!.system));
+    // …and once the agent posted, no second nudge follows.
+    expect(nudges(prompts[2]!.conversation)).toBe(1);
   });
 });

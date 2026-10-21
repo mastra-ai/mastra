@@ -40,10 +40,10 @@ describe('FactoryChannelReplyProcessor', () => {
     expect(text).not.toMatch(/link/i);
   });
 
-  it('points a run with the reply tool at the tool, with a way to stay silent', () => {
+  it('points a run with the reply tool at the tool, and says staying quiet means not calling it', () => {
     const text = instruction(channelContext(), { reply_in_thread: {} });
     expect(text).toContain('Only messages you send with `reply_in_thread` reach this thread');
-    expect(text).toContain('`staySilent: true`');
+    expect(text).toContain("When a message needs nothing from you, don't call it.");
     expect(text).not.toMatch(/reply first with one short line/);
   });
 
