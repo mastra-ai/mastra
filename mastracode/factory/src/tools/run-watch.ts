@@ -1,4 +1,5 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
+import { providerErrorReason } from '@mastra/core/error';
 
 import { FACTORY_OPEN_RUN_STALE_MS, heartbeatSessionOpenRun } from '../session/run-audit.js';
 import type { RunEndCaptureSession } from '../session/run-audit.js';
@@ -25,60 +26,6 @@ export type SessionApprovalReport = (request: { toolName: string; toolCallId: st
 
 /** How much of a run's error message a `failed` report quotes. */
 const ERROR_MESSAGE_LENGTH = 400;
-
-/**
- * A usage or quota rejection, not a rate limit or a request-size limit. The
- * wording is the same set account rotation uses, so a provider that reports
- * the cap as a plain 400 still counts.
- */
-const USAGE_LIMIT_MESSAGE_PATTERN =
-  /usage limit|usage cap|insufficient_quota|quota exceeded|quota exhausted|quota reached|exceeded your current quota|insufficient balance|insufficient credits|credits exhausted|rate limit exceeded|rate limit reached|weekly limit|monthly limit/i;
-
-const ERROR_CHAIN_DEPTH = 5;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-/** The provider's own usage-limit text, when the error chain carries one. Status text alone is not enough. */
-export function usageLimitReason(error: unknown): string | undefined {
-  const visited = new Set<object>();
-  const found: string[] = [];
-  const add = (value: unknown) => {
-    if (typeof value !== 'string') return;
-    const text = value.trim();
-    if (text && USAGE_LIMIT_MESSAGE_PATTERN.test(text)) found.push(text);
-  };
-
-  function walk(value: unknown, depth: number) {
-    if (depth > ERROR_CHAIN_DEPTH || !isRecord(value) || visited.has(value)) return;
-    visited.add(value);
-    add(value.message);
-    if (typeof value.responseBody === 'string') {
-      try {
-        const body: unknown = JSON.parse(value.responseBody);
-        if (isRecord(body)) {
-          add(body.message);
-          add(body.detail);
-          if (isRecord(body.error)) add(body.error.message);
-          else add(body.error);
-        }
-      } catch {
-        // A non-JSON body can echo the request. Leave it out.
-      }
-    }
-    if (value.cause !== undefined) walk(value.cause, depth + 1);
-    if (value.error !== undefined) walk(value.error, depth + 1);
-  }
-
-  try {
-    walk(error, 0);
-  } catch {
-    // A malformed error object still reports whatever was already found.
-  }
-  const reason = found.find(text => text !== 'Bad Request') ?? found[0];
-  return reason?.slice(0, ERROR_MESSAGE_LENGTH);
-}
 
 /**
  * Report every run end of a session, however the run started: the board, a
@@ -113,8 +60,7 @@ export function observeSessionRunReports(
       return;
     }
     if (event.type === 'error') {
-      const quota = usageLimitReason(event.error);
-      lastError = quota ?? event.error?.message;
+      lastError = providerErrorReason(event.error) ?? event.error?.message;
       return;
     }
     if (event.type === 'tool_suspension_cancelled' && parked?.toolCallId === event.toolCallId) {
