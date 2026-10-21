@@ -625,6 +625,10 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: 'Session not found' }, 404);
         }
         if (session.visibility === 'private') return c.json({ session });
+        // Shared sessions live on their Factory's memory, which an owner change keeps; without one the threads sit on the owner's.
+        if (!session.factoryProjectId) {
+          return c.json({ error: "This session isn't linked to a Factory, so it can't change owner." }, 409);
+        }
 
         const transferred = await match.sourceControl.sessions.transferOwner({
           sessionId,
@@ -646,19 +650,8 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         let liveSession = await options.controller?.getSession(sessionId);
         try {
           if (!liveSession && options.controller) {
-            const threads = await options.controller.queryThreads({ resourceId: sessionId });
-            const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
-            if (thread) {
-              const requestContext = new RequestContext();
-              requestContext.set('user', { workosId: userId, organizationId: orgId });
-              liveSession = await options.controller.createSession({
-                id: sessionId,
-                resourceId: sessionId,
-                ownerId: userId,
-                threadId: thread.id,
-                requestContext,
-              });
-            }
+            const resourceId = await sessionMemoryResourceId(options.controller, session, options.workItems);
+            liveSession = await startUserSessionConversation(options.controller, transferred.session, resourceId);
           }
           if (liveSession) {
             await liveSession.thread.transferOwnership({ toOwnerId: userId });

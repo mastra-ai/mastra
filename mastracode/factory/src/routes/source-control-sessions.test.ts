@@ -488,6 +488,55 @@ describe('source-control session routes', () => {
     });
   });
 
+  it('starts the session as its new owner when nobody is live, stamps the thread, and recycles it', async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const sessionId = 'factory-cold-transfer';
+    await sourceControl.sessions.create({
+      sessionId,
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/cold-transfer',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const controller = new AgentController<MastraCodeState>({
+      id: 'code-cold-transfer',
+      stateSchema,
+      storage: new InMemoryStore({ id: 'factory-cold-transfer' }),
+      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          default: true,
+          agent: new Agent({
+            id: 'test-agent',
+            name: 'Test agent',
+            instructions: 'Test cold Factory session ownership.',
+            model: { id: 'openai/gpt-5.5' },
+          }),
+        },
+      ],
+    });
+    await controller.init();
+    const app = buildApp([sourceControl], seed, controller, undefined, { workosId: 'user-2', organizationId: 'org-1' });
+
+    const response = await app.request(`/web/user-sessions/${sessionId}/owner`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedOwnerId: 'user-1' }),
+    });
+    expect(response.status).toBe(200);
+    await expect(controller.queryThreadById({ threadId: sessionId })).resolves.toMatchObject({
+      resourceId: project.id,
+      metadata: expect.objectContaining({ ownerId: 'user-2' }),
+    });
+    await vi.waitFor(async () => {
+      expect(await controller.getSession(sessionId)).toBeUndefined();
+    });
+  });
+
   it('rejects takeover of an org-visible session from another organization', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     const session = await sourceControl.sessions.create({
