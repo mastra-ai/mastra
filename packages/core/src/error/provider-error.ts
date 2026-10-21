@@ -55,7 +55,7 @@ const UNAVAILABLE =
   /internal server error|server_error|internal_error|service[_ ]?unavailable|temporarily[_ ]?unavailable|bad gateway|overloaded/i;
 // What an HTTP client reports when the body said nothing; not a reason a person can act on.
 const HTTP_REASON_PHRASE =
-  /^(?:bad request|unauthorized|payment required|forbidden|not found|method not allowed|request timeout|conflict|unprocessable (?:entity|content)|too many requests|internal server error|bad gateway|service unavailable|gateway timeout)\.?$/i;
+  /^(?:bad request|unauthorized|payment required|forbidden|not found|method not allowed|not acceptable|proxy authentication required|request timeout|conflict|gone|length required|precondition failed|(?:payload|content|request entity) too large|(?:request-)?uri too long|unsupported media type|(?:requested )?range not satisfiable|expectation failed|i'm a teapot|misdirected request|unprocessable (?:entity|content)|locked|failed dependency|too early|upgrade required|precondition required|too many requests|request header fields too large|unavailable for legal reasons|internal server error|not implemented|bad gateway|service unavailable|gateway timeout|http version not supported|variant also negotiates|insufficient storage|loop detected|not extended|network authentication required)\.?$/i;
 
 interface CollectedFacts {
   statusCode?: number;
@@ -173,7 +173,8 @@ export function providerErrorFacts(error: unknown): ProviderErrorFacts {
   const facts = collectFacts(error);
   const result: ProviderErrorFacts = {};
   if (facts.statusCode !== undefined) result.statusCode = facts.statusCode;
-  if (facts.codes[0]) result.code = facts.codes[0];
+  const code = decisiveCode(facts.codes);
+  if (code) result.code = code;
   const message = typeof error === 'object' && error !== null ? readField(error, 'message') : error;
   const reason = innermostReason(error, 0);
   if (reason !== undefined && reason !== (typeof message === 'string' ? message.trim() : undefined))
@@ -191,27 +192,53 @@ function innermostReason(error: unknown, depth: number): string | undefined {
   if (typeof error === 'string') {
     const trimmed = error.trim();
     const parsed = parseJsonObject(trimmed);
-    if (parsed !== undefined) return innermostReason(parsed, depth) ?? trimmed;
+    if (parsed !== undefined) return innermostReason(parsed, depth);
     return !trimmed || HTTP_REASON_PHRASE.test(trimmed) ? undefined : trimmed;
   }
   if (typeof error !== 'object') return undefined;
-  for (const key of ['reason', 'error', 'response', 'data']) {
-    const reason = innermostReason(readField(error, key), depth + 1);
-    if (reason) return reason;
+  const own = innermostReason(readField(error, 'reason'), depth);
+  if (own) return own;
+  for (const key of ['error', 'response', 'data']) {
+    const nested = innermostReason(readField(error, key), depth + 1);
+    if (nested) return nested;
   }
   const body = readField(error, 'responseBody');
-  const bodyReason = typeof body === 'string' ? innermostReason(parseJsonObject(body), depth + 1) : undefined;
+  const bodyReason = typeof body === 'string' ? innermostReason(parseJsonObject(body), depth) : undefined;
   if (bodyReason) return bodyReason;
-  const cause = readField(error, 'cause');
-  const causeReason = carriesProviderResponse(cause) ? innermostReason(cause, depth + 1) : undefined;
+  const causeReason = reasonBehindCause(readField(error, 'cause'), depth + 1);
   if (causeReason) return causeReason;
   const message = readField(error, 'message');
   return typeof message === 'string' ? innermostReason(message, depth) : undefined;
 }
 
-// Only a cause that holds a provider's HTTP response; any other cause stays out of history.
-function carriesProviderResponse(value: unknown): boolean {
-  if (typeof value !== 'object' || value === null) return false;
+// Walks wrapping causes to the first that holds a provider's HTTP response; any other cause stays out of history.
+function reasonBehindCause(cause: unknown, depth: number): string | undefined {
+  if (depth > MAX_OBJECT_DEPTH || typeof cause !== 'object' || cause === null) return undefined;
+  if (carriesProviderResponse(cause)) return innermostReason(cause, depth);
+  return reasonBehindCause(readField(cause, 'cause'), depth + 1);
+}
+
+function carriesProviderResponse(value: object): boolean {
   const status = readField(value, 'statusCode') ?? readField(value, 'status');
   return typeof status === 'number' || typeof readField(value, 'responseBody') === 'string';
+}
+
+// Same precedence as providerVerdict and the narrowing, so the one code kept decides like the live error.
+const CODE_PRECEDENCE = [
+  ACCESS_DENIED_CODE,
+  BILLING_EXHAUSTED,
+  RATE_LIMITED,
+  TIMED_OUT,
+  UNAVAILABLE,
+  INVALID_REQUEST_CODE,
+  MODEL_REJECTED,
+  ...CONTEXT_OVERFLOW,
+];
+
+function decisiveCode(codes: string[]): string | undefined {
+  for (const pattern of CODE_PRECEDENCE) {
+    const code = codes.find(candidate => pattern.test(candidate));
+    if (code) return code;
+  }
+  return codes[0];
 }

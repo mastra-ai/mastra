@@ -316,6 +316,27 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     { type: 'error', error: { code: 'invalid_prompt', message: 'Invalid timeout parameter' } },
     'invalid_request',
   ],
+  [
+    'generic code before the decisive type',
+    { code: 'bad_request', type: 'invalid_request_error', message: 'Invalid timeout parameter' },
+    'invalid_request',
+  ],
+  [
+    'outage behind an outer failure code',
+    Object.assign(new Error('Upstream call failed'), { code: 'upstream_failure', cause: responsesServerErrorFrame }),
+    'unavailable',
+  ],
+  [
+    'overflow in the body behind three wrapping causes',
+    new Error('a', {
+      cause: new Error('b', {
+        cause: new Error('c', {
+          cause: apiError(400, 'Bad Request', '{"error":{"message":"prompt is too long: 1 > 0 maximum"}}'),
+        }),
+      }),
+    }),
+    'context_overflow',
+  ],
   ['400 without a reason', apiError(400, 'Bad Request'), 'invalid_request'],
   ['persisted "Bad Request" without a status', { name: 'AI_APICallError', message: 'Bad Request' }, 'invalid_request'],
   ['plain error', new Error('Network connection lost'), 'unknown'],
@@ -383,6 +404,17 @@ describe('providerErrorFacts', () => {
         response: { status: 'failed', error: { code: 'server_error', message: 'An internal error occurred.' } },
       }),
     ).toEqual({ code: 'server_error', reason: 'An internal error occurred.' });
+    expect(
+      providerErrorFacts({ code: 'bad_request', type: 'invalid_request_error', message: 'Invalid timeout' }),
+    ).toEqual({ code: 'invalid_request_error' });
+    expect(
+      providerErrorFacts(
+        Object.assign(new Error('Upstream call failed'), {
+          code: 'upstream_failure',
+          cause: responsesServerErrorFrame,
+        }),
+      ),
+    ).toEqual({ code: 'internal_error' });
   });
 
   it('keeps the body sentence as the reason when the message is only an HTTP phrase', () => {
@@ -400,7 +432,7 @@ describe('providerErrorFacts', () => {
   });
 
   it('never persists a bare HTTP phrase as the reason, wherever it sits', () => {
-    for (const phrase of ['Internal Server Error', 'Unauthorized', 'Service Unavailable', 'Gateway Timeout']) {
+    for (const phrase of ['Internal Server Error', 'Unauthorized', 'Not Implemented', 'HTTP Version Not Supported']) {
       expect(providerErrorFacts({ name: 'AI_APICallError', message: 'Request failed', data: phrase })).toEqual({});
       expect(providerErrorFacts(Object.assign(new Error('Request failed'), { cause: new Error(phrase) }))).toEqual({});
     }
@@ -426,5 +458,11 @@ describe('providerErrorReason', () => {
     ).toBe('Unsupported value: temperature');
     expect(providerErrorReason({ name: 'Error', message: '  Something broke  ' })).toBe('Something broke');
     expect(providerErrorReason({ name: 'Error', message: '' })).toBeUndefined();
+    expect(
+      providerErrorReason({
+        name: 'Error',
+        message: '{"error":{"type":"invalid_request_error","message":"Bad Request"}}',
+      }),
+    ).toBeUndefined();
   });
 });
