@@ -7,7 +7,7 @@ description: "Browse Cortecs model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/cortecs.svg" alt="Cortecs logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cortecs
 
-Access 107 Cortecs models through Mastra's model router. Authentication is handled automatically using the `CORTECS_API_KEY` environment variable.
+Access 105 Cortecs models through Mastra's model router. Authentication is handled automatically using the `CORTECS_API_KEY` environment variable.
 
 Learn more in the [Cortecs documentation](https://cortecs.ai).
 
@@ -51,7 +51,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 65536,
     "maxOutput": 16384,
     "inputCost": 1.393,
@@ -178,18 +178,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 27.186
   },
   {
-    "model": "cortecs/claude-sonnet-4",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 65000,
-    "inputCost": 2.989,
-    "outputCost": 14.945
-  },
-  {
     "model": "cortecs/claude-sonnet-5",
     "imageInput": true,
     "audioInput": false,
@@ -246,8 +234,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 1048576,
-    "inputCost": 0.09,
-    "outputCost": 0.17
+    "inputCost": 0.082,
+    "outputCost": 0.413
   },
   {
     "model": "cortecs/deepseek-v4-pro",
@@ -281,9 +269,21 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 1048576,
+    "maxOutput": 393216,
     "inputCost": 0.201,
     "outputCost": 0.6
+  },
+  {
+    "model": "cortecs/deepseek-v4.1-flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.511,
+    "outputCost": 1.534
   },
   {
     "model": "cortecs/devstral-2512",
@@ -486,8 +486,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 1048576,
-    "inputCost": 0.873,
-    "outputCost": 3.306
+    "inputCost": 0.511,
+    "outputCost": 2.045
   },
   {
     "model": "cortecs/glm-5.3-flash",
@@ -658,6 +658,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 13.199
   },
   {
+    "model": "cortecs/gpt-6-astra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 12.272,
+    "outputCost": 61.359
+  },
+  {
     "model": "cortecs/gpt-6-luna",
     "imageInput": true,
     "audioInput": false,
@@ -778,18 +790,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 14.999
   },
   {
-    "model": "cortecs/llama-3.1-8b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 128000,
-    "inputCost": 0.167,
-    "outputCost": 0.167
-  },
-  {
     "model": "cortecs/llama-3.3-70b-instruct",
     "imageInput": false,
     "audioInput": false,
@@ -908,18 +908,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.159,
     "outputCost": 0.219
-  },
-  {
-    "model": "cortecs/mistral-7b-instruct-v0.3",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 127000,
-    "maxOutput": 127000,
-    "inputCost": 0.111,
-    "outputCost": 0.111
   },
   {
     "model": "cortecs/mistral-large-2402",
@@ -1059,7 +1047,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 300000,
     "maxOutput": 10000,
     "inputCost": 0.069,
@@ -1071,7 +1059,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 10000,
     "inputCost": 0.04,
@@ -1083,7 +1071,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 300000,
     "maxOutput": 10000,
     "inputCost": 0.918,
@@ -1100,18 +1088,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 256000,
     "inputCost": 0.06,
     "outputCost": 0.24
-  },
-  {
-    "model": "cortecs/pixtral-12b-2409",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": 0.223,
-    "outputCost": 0.223
   },
   {
     "model": "cortecs/pixtral-large-2502",
@@ -1131,7 +1107,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 32000,
     "maxOutput": 32000,
     "inputCost": 1.014,
@@ -1203,7 +1179,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
+    "reasoning": false,
     "contextWindow": 256000,
     "maxOutput": 256000,
     "inputCost": 0.617,

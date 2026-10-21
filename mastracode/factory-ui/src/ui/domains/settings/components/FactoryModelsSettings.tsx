@@ -1,4 +1,3 @@
-import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
@@ -7,17 +6,9 @@ import { CustomProvidersSection } from './CustomProvidersSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
 import { FactoryModelScopeSection } from './FactoryModelScopeSection';
 import { SettingsSubsection } from './SettingsSubsection';
-import { BaseThinkingSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
-import { ModelSettings } from './SettingsPanel.parts';
 
-interface FactoryModelsSettingsProps {
-  models: AvailableModelOption[];
-  settings: AgentControllerSessionSettings | null;
-  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => Promise<unknown>;
-}
-
-export function FactoryModelsSettings({ models, settings, onBehaviorChange }: FactoryModelsSettingsProps) {
+export function FactoryModelsSettings({ models }: { models: AvailableModelOption[] }) {
   const { anyConnected, providersKnown } = useProviderConnectionState();
 
   const providerSubsections = (
@@ -39,7 +30,7 @@ export function FactoryModelsSettings({ models, settings, onBehaviorChange }: Fa
     <SettingsSubsection
       scope="factory"
       title="Factory defaults"
-      description="Where this Factory's sessions and work-item runs get their model and credentials."
+      description="Where this Factory's sessions and work-item runs get their model, credentials, and thinking level."
     >
       <SettingsContainer>
         <FactoryModelScopeSection />
@@ -60,24 +51,6 @@ export function FactoryModelsSettings({ models, settings, onBehaviorChange }: Fa
   return (
     <div className="flex flex-col gap-8">
       {factoryDefaultsSubsection}
-      <SettingsSubsection
-        scope="deployment"
-        title="Thinking defaults"
-        description="Fallback for every run without its own level. One settings file, shared by every Factory on this server."
-      >
-        <SettingsContainer>
-          <BaseThinkingSection />
-        </SettingsContainer>
-      </SettingsSubsection>
-      <SettingsSubsection
-        scope="factory"
-        title="Chat defaults"
-        description="Applied to chats opened from this Factory, and shared with everyone working in it."
-      >
-        <SettingsContainer>
-          <ModelSettings settings={settings} onBehaviorChange={onBehaviorChange} />
-        </SettingsContainer>
-      </SettingsSubsection>
       {providerSubsections}
     </div>
   );

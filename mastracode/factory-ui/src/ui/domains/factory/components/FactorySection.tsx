@@ -1,5 +1,5 @@
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Brain, GitPullRequest, House, Logs, ShieldCheck, SquareKanban, Timeline } from 'lucide-react';
+import { Brain, GitPullRequest, SquareKanban } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
 
@@ -18,17 +18,8 @@ export function FactorySection() {
 
   return (
     <nav className="flex flex-col gap-2" aria-label="Factory">
-      <Sidebar.NavList>
-        <FactoryLink to={`/factories/${factoryId}/overview`} icon={House} label="Overview" />
-        <FactoryLink to={`/factories/${factoryId}/supervisor`} icon={ShieldCheck} label="Supervisor" />
-        <FactoryLink to={`/factories/${factoryId}/activity`} icon={Timeline} label="Activity" />
-        <FactoryLink to={`/factories/${factoryId}/audit`} icon={Logs} label="Audit log" />
-        {features.data?.knowledge ? (
-          <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label="Knowledge" />
-        ) : null}
-      </Sidebar.NavList>
       <section className="flex flex-col gap-1" aria-label="Boards">
-        <Sidebar.NavHeader icon={<SquareKanban />}>Boards</Sidebar.NavHeader>
+        <Sidebar.NavHeader className="mt-0">Boards</Sidebar.NavHeader>
         <Sidebar.NavList>
           {catalog.isPending ? (
             <li role="status">Loading boards…</li>
@@ -48,6 +39,11 @@ export function FactorySection() {
           )}
         </Sidebar.NavList>
       </section>
+      {features.data?.knowledge ? (
+        <Sidebar.NavList>
+          <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label="Knowledge" />
+        </Sidebar.NavList>
+      ) : null}
     </nav>
   );
 }

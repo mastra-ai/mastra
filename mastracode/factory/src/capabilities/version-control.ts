@@ -237,6 +237,33 @@ export interface UpdateReviewersInput extends PullRequestRef {
   teams?: string[];
 }
 
+export type CommitCheckStatus = 'in-progress' | 'success' | 'failure' | 'neutral' | 'cancelled' | 'skipped';
+
+export interface PublishCommitCheckInput {
+  connection: IntegrationConnection;
+  sourceId: string;
+  /** Full commit SHA the check is attached to. */
+  headSha: string;
+  /** Source branch of the change request; GitLab needs it to show the status on the merge request. */
+  ref?: string;
+  /** Stable check name; publishing again with the same name updates the existing check. */
+  name: string;
+  status: CommitCheckStatus;
+  title: string;
+  summary: string;
+  /** Optional long-form details (Markdown) such as per-command results. */
+  details?: string;
+  actingUserId?: string;
+}
+
+export interface CommitCheck {
+  id: string;
+  name: string;
+  headSha: string;
+  status: CommitCheckStatus;
+  url: string | null;
+}
+
 /** Fixed repository, pull-request lifecycle, review, comment, and reviewer contract. */
 export interface VersionControl {
   initialize(input: { storage: SourceControlStorageHandle }): void;
@@ -287,4 +314,6 @@ export interface VersionControl {
   listRequestedReviewers(input: PullRequestRef): Promise<RequestedReviewers>;
   requestReviewers(input: UpdateReviewersInput): Promise<RequestedReviewers>;
   removeRequestedReviewers(input: UpdateReviewersInput): Promise<RequestedReviewers>;
+  /** Optional because not every provider (or connection type) can publish commit checks. */
+  publishCommitCheck?(input: PublishCommitCheckInput): Promise<CommitCheck>;
 }

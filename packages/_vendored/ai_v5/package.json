@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-sdk-v5",
-  "version": "0.0.90",
+  "version": "0.0.92",
   "description": "",
   "type": "module",
   "private": true,
@@ -31,16 +31,16 @@
   "scripts": {
     "build": "tsdown --silent --config tsdown.config.ts",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@ai-sdk/gateway": "2.0.120",
-    "@ai-sdk/provider": "2.0.3",
-    "@ai-sdk/provider-utils": "3.0.30",
+    "@ai-sdk/gateway": "2.0.168",
+    "@ai-sdk/provider": "2.0.5",
+    "@ai-sdk/provider-utils": "3.0.41",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@microsoft/api-extractor": "^7.58.12",
@@ -48,8 +48,7 @@
     "@types/json-schema": "^7.0.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai": "^5.0.221",
-    "eslint": "^10.7.0",
+    "ai": "^5.0.277",
     "json-schema": "^0.4.0",
     "msw": "^2.12.11",
     "resolve.exports": "^2.0.3",

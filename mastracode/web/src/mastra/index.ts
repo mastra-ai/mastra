@@ -58,9 +58,21 @@ function decodeCredentialEncryptionKey(name: string, encodedKey: string): Buffer
   return key;
 }
 
+// Outside development and tests, missing security configuration stops the boot
+// instead of falling back. Each fallback has its own explicit opt-in.
+const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+
 function credentialEncryption() {
   const encodedKey = process.env.FACTORY_CREDENTIAL_ENCRYPTION_KEY?.trim();
   if (!encodedKey) {
+    const plaintextOptIn = process.env.FACTORY_CREDENTIAL_ENCRYPTION?.trim() === 'plaintext';
+    if (!localDevelopmentMode && !plaintextOptIn) {
+      throw new Error(
+        'FACTORY_CREDENTIAL_ENCRYPTION_KEY is required outside local development and tests. Generate a key with ' +
+          '`openssl rand -base64 32`, or set FACTORY_CREDENTIAL_ENCRYPTION=plaintext to store model-provider keys, ' +
+          'custom-provider API keys, and integration secrets unencrypted.',
+      );
+    }
     console.warn(
       '[factory] FACTORY_CREDENTIAL_ENCRYPTION_KEY is not set. Stored model-provider keys, custom-provider ' +
         'API keys, and integration secrets will be persisted as plaintext. Generate a key with ' +
@@ -299,7 +311,6 @@ if (process.env.APP_DATABASE_URL?.trim() && !process.env.DATABASE_URL?.trim()) {
       'The old name is honored as a fallback for now, but new deploys should use DATABASE_URL.',
   );
 }
-const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
 if (!databaseUrl && !localDevelopmentMode) {
   throw new Error('DATABASE_URL is required outside local development and tests.');
 }
@@ -363,10 +374,19 @@ const hasPlatformSandboxEnv =
   ['MASTRA_ENVIRONMENT_ID', 'MASTRA_PROJECT_ID'].every(key => Boolean(process.env[key]?.trim()));
 const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
 const e2bApiKey = process.env.E2B_API_KEY?.trim();
+if (!useLocalSandbox && !hasPlatformSandboxEnv && !e2bApiKey && !localDevelopmentMode) {
+  throw new Error(
+    'A sandbox provider is required outside local development and tests. Set MASTRA_PLATFORM_ACCESS_TOKEN or ' +
+      'MASTRA_PLATFORM_SECRET_KEY with MASTRA_PROJECT_ID and MASTRA_ENVIRONMENT_ID for Mastra platform sandboxes, ' +
+      'or E2B_API_KEY for E2B. To run agent commands directly on this machine as the server user, set ' +
+      'FACTORY_SANDBOX_PROVIDER=local.',
+  );
+}
 
 /**
  * The host sandbox, chosen once at boot: local when forced, else the platform
- * (its client reads the MASTRA_PLATFORM_* env itself), else E2B, else local.
+ * (its client reads the MASTRA_PLATFORM_* env itself), else E2B, else local
+ * (development and tests only; see the guard above).
  */
 const sandbox =
   !useLocalSandbox && hasPlatformSandboxEnv

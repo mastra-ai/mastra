@@ -31,7 +31,8 @@
         "entityId": "workflow-agent",
         "attributes": {
           "instructions": "You can execute workflows that exist in your config",
-          "availableTools": ["workflow-simpleWorkflow"]
+          "availableTools": ["workflow-simpleWorkflow"],
+          "completionStartTime": "<date>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -99,10 +100,10 @@
                   }
                 }
               ],
+              "completionStartTime": "<date>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
-              "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 30,
                 "outputTokens": 35,
@@ -170,6 +171,7 @@
                 "attributes": {
                   "stepIndex": 0,
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 10,
@@ -386,6 +388,16 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You can execute workflows that exist in your config"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Execute the simpleWorkflow with test input"
+                      }
+                    ],
                     "output": {
                       "text": "",
                       "toolCalls": [
@@ -569,6 +581,7 @@
                 "attributes": {
                   "stepIndex": 1,
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -861,6 +874,24 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You can execute workflows that exist in your config"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Execute the simpleWorkflow with test input"
+                      },
+                      {
+                        "role": "assistant",
+                        "content": "[tool: workflow-simpleWorkflow]"
+                      },
+                      {
+                        "role": "tool",
+                        "content": "[tool-result: workflow-simpleWorkflow]"
+                      }
+                    ],
                     "output": {
                       "text": "Mock V2 stream response",
                       "toolCalls": []

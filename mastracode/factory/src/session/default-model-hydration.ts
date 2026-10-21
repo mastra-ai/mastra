@@ -1,4 +1,4 @@
-import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
+import { primeTenantCredentialsForTenant, resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -11,8 +11,8 @@ export interface DefaultModelApplicableSession {
 }
 
 export interface DefaultModelHydrationSession extends DefaultModelApplicableSession {
-  readonly identity: { getResourceId(): string };
-  model: DefaultModelApplicableSession['model'] & { setDefault(args: { modelId: string }): void };
+  readonly identity: { getId(): string; getResourceId(): string };
+  model: DefaultModelApplicableSession['model'] & { get(): string; setDefault(args: { modelId: string }): void };
   state: {
     get(): Record<string, unknown> | undefined;
     set(updates: Record<string, unknown>): Promise<unknown>;
@@ -43,6 +43,7 @@ export async function hydrateSessionDefaultModel(
   session: DefaultModelHydrationSession,
   { sourceControl, projects, workItems, modelDefaults }: DefaultModelHydrationDependencies,
 ): Promise<void> {
+  const sessionId = session.identity.getId();
   const resourceId = session.identity.getResourceId();
   const initialState = session.state.get() ?? {};
   if (initialState.factoryProjectId || typeof session.thread.firstUserMessage !== 'function') return;
@@ -53,7 +54,7 @@ export async function hydrateSessionDefaultModel(
     session.state.set({ factoryModelScope: 'user', factoryOwnerUserId: undefined });
   let identityResolved = false;
   try {
-    const sourceSession = await sourceControl.getBySessionId(resourceId);
+    const sourceSession = await sourceControl.getBySessionId(sessionId);
     if (!sourceSession) {
       await clearFactoryIdentity();
       return;
@@ -69,7 +70,7 @@ export async function hydrateSessionDefaultModel(
           orgId: sourceSession.orgId,
           threadId,
           resourceId,
-          sessionId: resourceId,
+          sessionId,
           rejectAmbiguous: true,
         })
       : null;
@@ -95,9 +96,17 @@ export async function hydrateSessionDefaultModel(
     if (threadId && (await session.thread.firstUserMessage({ threadId }))) return;
 
     const scopedModelId =
-      modelScope === 'factory'
+      (modelScope === 'factory'
         ? project.defaultModelId
-        : (await modelDefaults.get({ orgId: sourceSession.orgId, userId: sourceSession.userId }))?.modelId;
+        : (await modelDefaults.get({ orgId: sourceSession.orgId, userId: sourceSession.userId }))?.modelId) ??
+      // No chosen default: a connected provider's default, unless the current model is usable.
+      (await resolveTenantProviderDefaultModel(
+        { orgId: sourceSession.orgId, userId: sourceSession.userId, credentialScope: modelScope },
+        session.model.get() || undefined,
+      ).catch(error => {
+        console.warn('[Factory default-model hydration] Unable to resolve a provider default model.', error);
+        return undefined;
+      }));
     if (!scopedModelId) return;
     // A thread the session creates later (the UI binding its conventional
     // thread after a thread-agnostic request opened the session) starts from

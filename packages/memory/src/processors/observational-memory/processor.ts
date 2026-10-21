@@ -17,13 +17,14 @@ import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { isContextOverflowError } from './context-overflow';
 import { omDebug } from './debug';
-import { getObservableMessages } from './message-utils';
+import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
 import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import { insertTemporalGapMarkers } from './temporal-markers';
 import type { TokenCounterModelContext } from './token-counter';
+import type { ObservationModelContext } from './types';
 
 /**
  * Coerce a shared `state.__omTurn` value to a usable live turn.
@@ -296,6 +297,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         state.__omTurn = undefined;
       }
 
+      let responseMessageId = messageId;
       if (!this.turn || !state.__omTurn) {
         // End previous turn if state was reset mid-flow
         if (this.turn && !state.__omTurn) {
@@ -318,6 +320,32 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         this.turn.agent = args.agent;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory, runState);
+        // A run recovered by another worker can continue a response message that the dead
+        // worker already observed. That worker rotated the id in memory, but the rotation was
+        // lost with it. Seal and rotate again so the rest of the turn isn't merged into the observed message.
+        // observedMessageIds alone misses responses observed before an activation or a reflection,
+        // neither of which keeps their ids. What survives is on the message itself: buffering
+        // persists OM's seal before the Observer runs, and sync observation persists its end
+        // marker on the observed message before it may reflect.
+        // When only the ids say so, persist the seal too: a later reflection drops the ids, and
+        // the message would otherwise look unobserved if this worker also dies.
+        const observedIds = this.turn.record.observedMessageIds;
+        const response = messageId ? messageList.get.all.db().find(message => message.id === messageId) : undefined;
+        const responseSealed =
+          (response?.content?.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed === true;
+        const responseObserved =
+          responseSealed ||
+          (!!response && findLastCompletedObservationBoundary(response) >= 0) ||
+          (!!messageId && Array.isArray(observedIds) && observedIds.includes(messageId));
+        if (messageId && responseObserved) {
+          if (response && !responseSealed) {
+            // Persist first, and fail the step rather than continue: without the stored seal, a later
+            // reflection erases the only evidence, and the next recovery would merge into this message.
+            await this.engine.persistMessageSeal(response);
+            this.engine.sealMessagesForBuffering([response]);
+          }
+          responseMessageId = rotateResponseMessageId?.() ?? messageId;
+        }
         if (stepNumber === 0 && this.temporalMarkers) {
           await insertTemporalGapMarkers({ messageList, sendSignal: args.sendSignal });
         }
@@ -333,7 +361,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       state.__omObservabilityContext = observabilityContext;
       this.turn.observabilityContext = observabilityContext;
       this.turn.actorModelContext = actorModelContext;
-      this.turn.responseMessageId = messageId;
+      this.turn.responseMessageId = responseMessageId;
 
       // ── Run step preparation (activation, threshold, observation, filtering) ──
       {
@@ -441,6 +469,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         const memoryContext = parseMemoryRequestContext(requestContext);
         if (memoryContext?.memoryConfig?.readOnly) return messageList;
 
+        const persistenceMessageList = messageList.cloneForPersistence();
+
         // Retrieve the turn from shared processor state — in production, the input
         // and output processors are separate instances (see comment in processInputStep).
         const turn = asLiveTurn(state.__omTurn) ?? this.turn;
@@ -455,7 +485,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         if (liveTurn) {
           // Use the pipeline's accepted terminal list as the persistence authority,
           // rather than relying on the list captured when the turn began.
-          await liveTurn.end(messageList);
+          await liveTurn.end(persistenceMessageList);
         }
         this.turn = undefined;
         state.__omTurn = undefined;
@@ -465,8 +495,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           // were skipped (isResume=true), so processInputStep never created a turn, or when the
           // turn was already sealed before finalization. Directly persist any new response
           // messages so the final assistant text from the resumed turn is not lost.
-          const newOutput = messageList.get.response.db();
-          const newInput = messageList.get.input.db();
+          const newOutput = persistenceMessageList.get.response.db();
+          const newInput = persistenceMessageList.get.input.db();
           const messagesToSave = [...newInput, ...newOutput];
           if (messagesToSave.length > 0 && context.threadId) {
             await this.engine.persistMessages(messagesToSave, context.threadId, context.resourceId);
@@ -519,6 +549,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           sendSignal: args.sendSignal,
           sendStateSignal: args.sendStateSignal,
           requestContext,
+          currentModel: state.__omActorModelContext as ObservationModelContext | undefined,
           writer: args.writer,
           observabilityContext: getOmObservabilityContext(args),
         }),

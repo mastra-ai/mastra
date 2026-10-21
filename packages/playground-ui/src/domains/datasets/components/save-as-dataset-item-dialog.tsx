@@ -2,20 +2,27 @@
 
 import type { DatasetItemToolMock, AddDatasetItemParams } from '@mastra/client-js';
 import { useDatasetMutations, useDatasets } from '@mastra/react/hooks/datasets';
-import { DatabaseIcon, Check, X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { DataPanel } from '@/ds/components/DataPanel';
+import type { DataPanelProps } from '@/ds/components/DataPanel';
 import { Field, FieldLabel } from '@/ds/components/Field';
 import { Form } from '@/ds/components/Form';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
-import { SideDialog } from '@/ds/components/SideDialog';
-import type { SideDialogRootProps } from '@/ds/components/SideDialog';
-import { TextAndIcon } from '@/ds/components/Text';
 import { Txt } from '@/ds/components/Txt';
 import { useLinkComponent } from '@/lib/framework';
 import { toast } from '@/utils/toast';
+
+const CREATE_DATASET_VALUE = '__create-dataset__';
+
+export type CreateDatasetDialogRenderProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: (datasetId: string) => void;
+};
 
 export type SaveAsDatasetItemDialogProps = {
   initialInput: string;
@@ -29,11 +36,17 @@ export type SaveAsDatasetItemDialogProps = {
   breadcrumb: ReactNode;
   isOpen: boolean;
   onClose: () => void;
-  level?: SideDialogRootProps['level'];
+  /** Sibling-drawer elevation (see `DataPanel`); render after the panel it covers. */
+  depth?: DataPanelProps['depth'];
   source?: {
     type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
     referenceId?: string;
   };
+  /**
+   * Renders a create-dataset dialog. When set, the Dataset select offers "Create dataset" as its
+   * first option and selects the new dataset once created.
+   */
+  renderCreateDatasetDialog?: (props: CreateDatasetDialogRenderProps) => ReactNode;
 };
 
 export function SaveAsDatasetItemDialog({
@@ -45,10 +58,12 @@ export function SaveAsDatasetItemDialog({
   breadcrumb,
   isOpen,
   onClose,
-  level = 2,
+  depth = 2,
   source,
+  renderCreateDatasetDialog,
 }: SaveAsDatasetItemDialogProps) {
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
+  const [isCreateDatasetOpen, setIsCreateDatasetOpen] = useState(false);
   const [input, setInput] = useState('');
   const [groundTruth, setGroundTruth] = useState('');
   const [expectedTrajectory, setExpectedTrajectory] = useState('');
@@ -60,6 +75,17 @@ export function SaveAsDatasetItemDialog({
   const { navigate, paths } = useLinkComponent();
 
   const datasets = data?.datasets ?? [];
+  // A just-created dataset is selected before the list refetch returns it; treat that gap as loading.
+  const isSelectedDatasetListed = datasets.some(dataset => dataset.id === selectedDatasetId);
+  const isSelectionLoading = isDatasetsLoading || (!!selectedDatasetId && !isSelectedDatasetListed);
+
+  const handleDatasetChange = (value: string) => {
+    if (value === CREATE_DATASET_VALUE) {
+      setIsCreateDatasetOpen(true);
+      return;
+    }
+    setSelectedDatasetId(value);
+  };
 
   const prevOpenRef = useRef(false);
   const trajectorySeededRef = useRef(false);
@@ -212,50 +238,50 @@ export function SaveAsDatasetItemDialog({
   };
 
   return (
-    <SideDialog
-      dialogTitle="Save as Dataset Item"
-      dialogDescription="Save data as a dataset item"
-      isOpen={isOpen}
-      onClose={onClose}
-      level={level}
+    <DataPanel
+      open={isOpen}
+      onClose={handleCancel}
+      title="Save as Dataset Item"
+      description="Save data as a dataset item"
+      depth={depth}
     >
-      <SideDialog.Top>
-        {breadcrumb}›
-        <TextAndIcon>
-          <DatabaseIcon /> Save as Dataset Item
-        </TextAndIcon>
-      </SideDialog.Top>
+      <DataPanel.Header>
+        <DataPanel.Heading>
+          Save as Dataset Item
+          <b className="whitespace-nowrap">{breadcrumb}</b>
+        </DataPanel.Heading>
+        <DataPanel.HeaderActions>
+          <DataPanel.CloseButton icon="x" onClick={handleCancel} label="Close save as dataset item" tooltip="Close" />
+        </DataPanel.HeaderActions>
+      </DataPanel.Header>
 
-      <SideDialog.Content>
-        <SideDialog.Header>
-          <SideDialog.Heading>
-            <DatabaseIcon /> Save as Dataset Item
-          </SideDialog.Heading>
-        </SideDialog.Header>
-
+      <DataPanel.Content>
         <Form onSubmit={handleSubmit}>
           <Field>
             <FieldLabel required>Dataset</FieldLabel>
             <Select
-              value={selectedDatasetId}
-              onValueChange={setSelectedDatasetId}
-              disabled={addItem.isPending || isDatasetsLoading}
+              // Base UI resets an unmatched non-null value to null when items change, which would wipe a
+              // just-created dataset before the refetch lists it; null means "no selection" and is left alone.
+              value={isSelectedDatasetListed ? selectedDatasetId : null}
+              onValueChange={handleDatasetChange}
+              disabled={addItem.isPending || isSelectionLoading}
             >
               <SelectTrigger>
-                <SelectValue placeholder={isDatasetsLoading ? 'Loading datasets...' : 'Select a dataset'} />
+                <SelectValue placeholder={isSelectionLoading ? 'Loading datasets...' : 'Select a dataset'} />
               </SelectTrigger>
               <SelectContent>
-                {datasets.length === 0 ? (
-                  <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
-                    No datasets available
-                  </Txt>
-                ) : (
-                  datasets.map(dataset => (
-                    <SelectItem key={dataset.id} value={dataset.id}>
-                      {dataset.name}
-                    </SelectItem>
-                  ))
-                )}
+                {renderCreateDatasetDialog && <SelectItem value={CREATE_DATASET_VALUE}>Create dataset</SelectItem>}
+                {datasets.length === 0
+                  ? !renderCreateDatasetDialog && (
+                      <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
+                        No datasets available
+                      </Txt>
+                    )
+                  : datasets.map(dataset => (
+                      <SelectItem key={dataset.id} value={dataset.id}>
+                        {dataset.name}
+                      </SelectItem>
+                    ))}
               </SelectContent>
             </Select>
           </Field>
@@ -303,13 +329,20 @@ export function SaveAsDatasetItemDialog({
               icon={<Check />}
               type="submit"
               variant="default"
-              disabled={addItem.isPending || trajectoryLoading || !selectedDatasetId || datasets.length === 0}
+              disabled={addItem.isPending || trajectoryLoading || !isSelectedDatasetListed}
             >
               {addItem.isPending ? 'Saving...' : trajectoryLoading ? 'Loading...' : 'Save Item'}
             </Button>
           </div>
         </Form>
-      </SideDialog.Content>
-    </SideDialog>
+      </DataPanel.Content>
+
+      {/* Rendered inside the drawer so the dialog nests in its focus scope instead of dismissing it. */}
+      {renderCreateDatasetDialog?.({
+        open: isCreateDatasetOpen,
+        onOpenChange: setIsCreateDatasetOpen,
+        onSuccess: setSelectedDatasetId,
+      })}
+    </DataPanel>
   );
 }

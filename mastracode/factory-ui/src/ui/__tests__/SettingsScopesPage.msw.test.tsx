@@ -13,7 +13,6 @@ import {
   settingsMemory,
   settingsProviders,
   settingsSession,
-  settingsThinking,
 } from './fixtures/settingsScopes';
 
 const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
@@ -44,7 +43,6 @@ beforeEach(() => {
     http.get(PROVIDERS_URL, () => HttpResponse.json(settingsProviders)),
     http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () => HttpResponse.json({ providers: [] })),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json(settingsDefaultModel)),
-    http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(settingsThinking)),
     http.get(OM_URL, () => HttpResponse.json({ config: settingsMemory })),
   );
 });
@@ -71,7 +69,8 @@ describe('Settings ownership', () => {
     expect(screen.queryByText('Custom providers')).not.toBeInTheDocument();
     expect(screen.getByText('The model new chats start on.')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
-    expect(await screen.findByText('Covered by org')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Add API key for OpenAI' })).toBeInTheDocument();
+    expect(screen.queryByText('Covered by org')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Add API key for OpenAI' }));
     await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-personal');
     await user.click(screen.getByRole('button', { name: 'Save' }));
@@ -90,8 +89,9 @@ describe('Settings ownership', () => {
     renderSettings('models');
 
     expect(await screen.findByText('Factory defaults')).toBeInTheDocument();
-    expect(screen.getByText('Chat defaults')).toBeInTheDocument();
-    expect(screen.getByText('Thinking defaults')).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: 'Model and thinking' })).toBeInTheDocument();
+    expect(screen.queryByText('Chat defaults')).not.toBeInTheDocument();
+    expect(screen.queryByText('Thinking defaults')).not.toBeInTheDocument();
     expect(screen.queryByText('Your defaults')).not.toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
     await user.click(await screen.findByRole('button', { name: 'Update key for OpenAI' }));
@@ -132,7 +132,7 @@ describe('Settings ownership', () => {
     await user.clear(input);
     await user.type(input, '3000');
     await user.tab();
-    await waitFor(() => expect(body).toEqual({ resourceId: 'fp-1', observationThreshold: 3000 }));
+    await waitFor(() => expect(body).toEqual({ sessionId: 'fp-1', observationThreshold: 3000 }));
   });
 
   it('preserves the Factory memory scope when navigating from Your memory', async () => {

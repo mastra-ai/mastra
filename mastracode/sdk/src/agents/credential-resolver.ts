@@ -41,6 +41,15 @@ let credentialStoreProvider: CredentialStoreProvider | undefined;
 let credentialTenantResolver: CredentialTenantResolver | undefined;
 let trustedTenants = new WeakMap<object, { tenant?: CredentialTenant; sourceContext: RequestContext }>();
 
+type CredentialLogger = { error(message: string, meta?: Record<string, unknown>): void };
+const consoleLogger: CredentialLogger = { error: (message, meta) => console.error(message, meta) };
+let logger: CredentialLogger = consoleLogger;
+
+/** Route credential failures to the host's logger (e.g. Mastra's), so they reach deployed log sinks. */
+export function setCredentialLogger(next: CredentialLogger | undefined): void {
+  logger = next ?? consoleLogger;
+}
+
 const unavailableTenantCredentialStore: CredentialStore = {
   allowEnvironmentFallback: false,
   reload() {},
@@ -81,11 +90,42 @@ export async function prepareCredentialTenant(requestContext?: RequestContext): 
   requestContext.set(CREDENTIAL_POLICY_KEY, token);
   trustedTenants.set(token, { sourceContext });
   const tenant = await credentialTenantResolver(sourceContext);
-  if (!tenant) throw new Error('Tenant model credential policy could not be resolved.');
+  if (!tenant) throw unresolvedTenantError(sourceContext, Boolean(inheritedPolicy));
   trustedTenants.set(token, { tenant, sourceContext });
 }
 
-export function withCredentialTenantPreparation<T>(resolve: (ctx: { requestContext: RequestContext }) => T) {
+/**
+ * Explain a failed tenant resolution. The message is safe to show the end user
+ * (channels post it into the chat); the warning carries non-secret diagnostics
+ * and the stack, which is what locates a caller that dropped the request context.
+ */
+function unresolvedTenantError(sourceContext: RequestContext, inherited: boolean): Error {
+  const authenticated = resolveAuthenticatedCredentialTenant(sourceContext) !== undefined;
+  const error = new Error(
+    authenticated
+      ? 'Tenant model credential policy could not be resolved: no credential policy applies to this request.'
+      : 'Tenant model credential policy could not be resolved: the request has no authenticated user.',
+  );
+  const controller = sourceContext.get('controller') as { resourceId?: unknown; threadId?: unknown } | undefined;
+  logger.error('[MastraCode] Tenant model credential policy could not be resolved', {
+    reason: authenticated ? 'no-policy-for-principal' : 'missing-user-context',
+    hasUser: sourceContext.get('user') !== undefined,
+    inheritedPolicy: inherited,
+    hasControllerResource: typeof controller?.resourceId === 'string',
+    hasControllerThread: typeof controller?.threadId === 'string',
+    // Ids and key names only: the stack loses the caller across async hops, so
+    // these identify which session and which kind of start built the context.
+    resourceId: typeof controller?.resourceId === 'string' ? controller.resourceId : undefined,
+    threadId: typeof controller?.threadId === 'string' ? controller.threadId : undefined,
+    contextKeys: Array.from(sourceContext.keys()).map(String),
+    stack: error.stack,
+  });
+  return error;
+}
+
+export function withCredentialTenantPreparation<T>(
+  resolve: (ctx: { requestContext: RequestContext }) => T | Promise<T>,
+) {
   return async (ctx: { requestContext: RequestContext }): Promise<T> => {
     await prepareCredentialTenant(ctx.requestContext);
     return resolve(ctx);
@@ -166,7 +206,7 @@ export function resolveCredentialStore(requestContext?: RequestContext): Credent
   const tenant = resolveTenantFromRequestContext(requestContext);
   if (!tenant) {
     const rawUser = requestContext?.get('user');
-    console.warn('[MastraCode] Tenant credential resolution failed closed', {
+    logger.error('[MastraCode] Tenant credential resolution failed closed', {
       reason: rawUser === undefined ? 'missing-user-context' : 'credential-policy-unavailable',
       hasRequestContext: requestContext !== undefined,
     });
@@ -174,7 +214,7 @@ export function resolveCredentialStore(requestContext?: RequestContext): Credent
   }
   const store = credentialStoreProvider(tenant);
   if (!store) {
-    console.warn('[MastraCode] Tenant credential resolution failed closed', {
+    logger.error('[MastraCode] Tenant credential resolution failed closed', {
       reason: 'credential-store-unavailable',
       hasOrganization: tenant.orgId !== undefined,
       credentialScope: tenant.credentialScope,

@@ -86,6 +86,14 @@ export function ModelPicker() {
     modelsQuery.data?.some(model => model.id === defaultModelId);
 
   const noModelsToOffer = !modelsQuery.isPending && !modelsQuery.data?.length;
+  if (modelsQuery.isError && noModelsToOffer) {
+    const unavailableLabel = `${label} · model list unavailable`;
+    return (
+      <span className="text-destructive-foreground" aria-label={unavailableLabel} title={modelsQuery.error.message}>
+        {unavailableLabel}
+      </span>
+    );
+  }
   if (!switchable || noModelsToOffer) {
     if (notConfigured && organizationScoped && factoryId) {
       return (

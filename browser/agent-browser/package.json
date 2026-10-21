@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agent-browser",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "Browser automation for Mastra agents using agent-browser",
   "type": "module",
   "files": [
@@ -25,12 +25,12 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "agent-browser": "0.19.0"
+    "agent-browser": "0.39.1"
   },
   "devDependencies": {
     "@internal/browser-test-utils": "workspace:*",
@@ -40,7 +40,6 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
     "playwright-core": "^1.61.1",
     "tsdown": "0.22.9",
     "typescript": "catalog:",

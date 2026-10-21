@@ -7,7 +7,6 @@ import {
 } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { useLocation, useNavigate, useParams } from 'react-router';
-import type { ThinkingConfigInfo } from '../../../../api/types';
 
 import {
   useClearAgentControllerGoalMutation,
@@ -20,7 +19,7 @@ import {
   useFollowUpAgentControllerMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
-import { useThinkingConfigQuery } from '../../../../hooks/use-thinking';
+import { useFactoryThinkingDefaultQuery } from '../../../../hooks/use-thinking';
 import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
@@ -28,7 +27,7 @@ import { settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { GLOBAL_THINKING_SOURCE_LABEL, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
+import { FACTORY_THINKING_SOURCE_LABEL, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
 import { useChatModels } from './useChatModels';
 import { useChatModelScope } from './useChatModelScope';
 import { useChatPermissions } from './useChatPermissions';
@@ -38,8 +37,8 @@ import { useChatTranscript } from './useChatTranscript';
 
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 
-function describeGlobalDefault(level: string): string {
-  return `${level} (${GLOBAL_THINKING_SOURCE_LABEL})`;
+function describeFactoryDefault(level: string): string {
+  return `${level} (${FACTORY_THINKING_SOURCE_LABEL})`;
 }
 
 export function useChatCommandRegistry(prefillComposer: (draft: string) => void) {
@@ -47,7 +46,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const factoryQuery = useFactoryQuery(factoryId);
   const navigate = useNavigate();
   const location = useLocation();
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
   const { activeModelId, setModel } = useChatModels();
@@ -57,8 +56,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
 
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -69,7 +67,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
   const followUpMutation = useFollowUpAgentControllerMutation(hookArgs);
   const settingsQuery = useAgentControllerSettings(hookArgs);
-  const thinkingConfigQuery = useThinkingConfigQuery({ enabled: false });
+  const factoryThinkingQuery = useFactoryThinkingDefaultQuery(factoryId, { enabled: false });
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const { permissions, permissionsLoading, setPermissionForCategory } = useChatPermissions();
 
@@ -80,7 +78,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     {
       value: 'default',
       label: 'Default',
-      description: 'Global default',
+      description: 'Factory default',
       active: settingsQuery.data !== undefined && currentThinkingLevel === undefined,
     },
     ...availableThinkingLevels.map(level => ({
@@ -96,10 +94,10 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     if (!result.data) throw new Error('Session settings are unavailable');
     return result.data;
   };
-  const ensureThinkingConfig = async (): Promise<ThinkingConfigInfo> => {
-    if (thinkingConfigQuery.data) return thinkingConfigQuery.data;
-    const result = await thinkingConfigQuery.refetch();
-    if (!result.data) throw new Error('Thinking defaults are unavailable');
+  const ensureFactoryThinkingDefault = async (): Promise<ThinkingLevelSetting> => {
+    if (factoryThinkingQuery.data) return factoryThinkingQuery.data;
+    const result = await factoryThinkingQuery.refetch();
+    if (!result.data) throw new Error('The Factory thinking level is unavailable');
     return result.data;
   };
 
@@ -212,15 +210,15 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
             await ensureSettings();
             await updateSettingsMutation.mutateAsync({ thinkingLevel: null });
             try {
-              const { globalDefault } = await ensureThinkingConfig();
-              pushNotice(`Thinking level set to default: ${describeGlobalDefault(globalDefault)}.`);
+              const factoryDefault = await ensureFactoryThinkingDefault();
+              pushNotice(`Thinking level set to default: ${describeFactoryDefault(factoryDefault)}.`);
             } catch {
               pushNotice('Thinking level set to default. Current default is unavailable.');
             }
             return;
           }
-          const [settings, { globalDefault }] = await Promise.all([ensureSettings(), ensureThinkingConfig()]);
-          const defaultLevel = describeGlobalDefault(globalDefault);
+          const [settings, factoryDefault] = await Promise.all([ensureSettings(), ensureFactoryThinkingDefault()]);
+          const defaultLevel = describeFactoryDefault(factoryDefault);
           pushNotice(
             settings.thinkingLevel
               ? `Thinking level: ${settings.thinkingLevel} (session override). Default: ${defaultLevel}.`
@@ -246,7 +244,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
         pushNotice(
           [
             `Factory: ${factoryQuery.data?.name ?? '(none)'}`,
-            `Path: ${projectPath ?? '(no workspace selected)'}`,
+            `Session: ${sessionId || '—'}`,
             `Model: ${activeModelId ?? '—'}`,
             `Thread: ${transcript.threadId ?? '—'}`,
             `Running: ${busy}`,

@@ -253,6 +253,10 @@ type ScrollAreaViewportContextValue = {
 const ScrollAreaViewportContext = React.createContext<ScrollAreaViewportContextValue | null>(null);
 
 export type ScrollAreaViewportProps = {
+  /**
+   * Viewport layout and scroll chaining overrides. Chaining stays native by default;
+   * use `overscroll-y-contain` to isolate vertical scrolling while allowing browser history swipes.
+   */
   className?: string;
   contentClassName?: string;
   children?: React.ReactNode;

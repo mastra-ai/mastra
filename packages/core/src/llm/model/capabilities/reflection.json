@@ -1,0 +1,12 @@
+{
+  "temperature": ["Beam-1.0-501B-A23B"],
+  "structuredOutput": ["Beam-1.0-501B-A23B"],
+  "reasoning": {
+    "Beam-1.0-501B-A23B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ]
+  }
+}

@@ -27,6 +27,7 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
   create(ctx: FactorySandboxContext): LocalSandbox {
     return new LocalSandbox({
       id: ctx.sessionId,
+      timeout: 30_000,
       workingDirectory: join(this.#options.root, ctx.sessionId),
       ...(this.#options.env ? { env: this.#options.env } : {}),
     });

@@ -1,7 +1,9 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
+import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { MouseEvent } from 'react';
 import { useRef, useState } from 'react';
 import { useParams } from 'react-router';
@@ -12,8 +14,8 @@ import {
   useFactoryProjectQuery,
   useSetFactoryDefaultModelMutation,
 } from '../../../../hooks/useFactoryDefaultModel';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
 
+import { FactoryThinkingControl } from './FactoryThinkingControl';
 import { ModelCombobox } from './ModelCombobox';
 import { SharedCredentialNotice } from './SharedCredentialNotice';
 
@@ -34,7 +36,7 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
   if (!factoryId) return null;
 
   const defaultModelId = projectQuery.data?.defaultModelId ?? '';
-  const error = applyToSessions.error ?? setDefaultModel.error ?? projectQuery.error;
+  const errorText = (applyToSessions.error ?? setDefaultModel.error ?? projectQuery.error)?.message;
   const applyResult = applyToSessions.data;
 
   const saveDefaultModel = (value: string) => {
@@ -61,7 +63,7 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
   return (
     <>
       <SettingsRow
-        label="Factory default model"
+        label="Model and thinking"
         description={
           <>
             <span>
@@ -69,9 +71,9 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
                 ? "Work items (triage, board runs) start on this model and run on organization credentials. Interactive sessions start on each owner's personal default instead."
                 : "Factory runs (triage, board work items) start on this model and use the Factory memory settings. Your personal defaults don't apply to them."}
             </span>
-            {error && (
+            {errorText && (
               <Txt as="span" variant="meta" className="text-destructive-foreground">
-                {error instanceof Error ? error.message : String(error)}
+                {errorText}
               </Txt>
             )}
             <SharedCredentialNotice modelId={defaultModelId || undefined} />
@@ -83,15 +85,19 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
             {setDefaultModel.isPending && (
               <Spinner size="sm" aria-label="Saving default model" className="text-muted-foreground shrink-0" />
             )}
-            <div className="flex min-w-0">
+            <ButtonsGroup size="sm" aria-label="Model and thinking">
               <ModelCombobox
                 models={models}
                 value={defaultModelId}
-                placeholder="Select a model"
-                disabled={projectQuery.isPending || setDefaultModel.isPending}
                 onValueChange={saveDefaultModel}
+                placeholder="Select a model"
+                aria-label="Factory default model"
+                variant="ghost"
+                size="sm"
+                disabled={projectQuery.isPending || setDefaultModel.isPending}
               />
-            </div>
+              <FactoryThinkingControl factoryId={factoryId} />
+            </ButtonsGroup>
           </div>
           {applyResult && (
             <Txt variant="meta">

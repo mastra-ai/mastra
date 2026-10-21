@@ -101,3 +101,11 @@ export const Empty: Story = { args: { rows: [], emptyState: 'No runs in this ran
 
 /** Skeleton rows in the list's own markup, so the card keeps its height when data lands. */
 export const Loading: Story = { args: { isLoading: true } };
+
+/**
+ * `headerPlacement="below-strip"`: the column headers sit right above the values they label, and
+ * the rows pack under the strip. For compact summary cards.
+ */
+export const HeaderBelowStrip: Story = {
+  args: { headerPlacement: 'below-strip', overflow: 'more', pageSize: 5 },
+};

@@ -300,18 +300,17 @@ function ExperimentResultPanelBody({
   return (
     <>
       <DataPanel.Header>
-        <DataPanel.Heading>Experiment result</DataPanel.Heading>
+        {canFlag && (
+          <Button size="sm" variant="primary" onClick={() => onFlagForReview(result.id)} icon={<ClipboardPlus />}>
+            Request review
+          </Button>
+        )}
+        {onComplete && result.status === 'needs-review' && (
+          <Button size="sm" variant="primary" onClick={onComplete} icon={<CheckCircle />}>
+            Mark as reviewed
+          </Button>
+        )}
         <DataPanel.HeaderActions>
-          {canFlag && (
-            <Button size="sm" variant="primary" onClick={() => onFlagForReview!(result.id)} icon={<ClipboardPlus />}>
-              Request review
-            </Button>
-          )}
-          {onComplete && result.status === 'needs-review' && (
-            <Button size="sm" variant="primary" onClick={onComplete} icon={<CheckCircle />}>
-              Mark as reviewed
-            </Button>
-          )}
           {experimentLink && (
             <Button
               size="sm"

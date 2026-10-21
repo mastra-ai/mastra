@@ -1,23 +1,24 @@
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
-import { createSourceControlTools } from './source-control-tools.js';
+import { createSourceControlTools, FACTORY_TEST_CHECK_NAME } from './source-control-tools.js';
 
 function requestContext({ orgId = 'org-1', userId = 'user-1' } = {}) {
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: userId, organizationId: orgId });
   requestContext.set('controller', {
-    resourceId: 'session-1',
+    // The session runs under its Factory, so only its session id names the source-control session.
+    sessionId: 'session-1',
+    resourceId: 'project-1',
     threadId: 'thread-1',
-    scope: 'scope-1',
     session: { id: 'session-1', ownerId: userId },
     getState: () => ({ factoryProjectId: 'project-1', projectRepositoryId: 'repo-link-1' }),
   } as unknown as AgentControllerRequestContext);
@@ -136,7 +137,9 @@ async function fixture(integrationId = 'gitlab') {
   const listReviews = vi.fn(async () => ({ reviews: [], nextCursor: null }));
   const getPullRequest = vi.fn(async () => ({ id: '17', headSha: 'cd1e5903851234567890abcdef1234567890abcd' }));
   const createReview = vi.fn(async () => ({ id: 'review-1' }));
+  const closePullRequest = vi.fn(async () => ({ id: '17', state: 'closed' }));
   const versionControl = {
+    closePullRequest,
     getRepositoryTarget,
     getRepositoryAccess,
     getPullRequest,
@@ -152,6 +155,7 @@ async function fixture(integrationId = 'gitlab') {
     storage,
     versionControl,
     createPullRequest,
+    closePullRequest,
     createReviewComment,
     resolveReviewThread,
     listReviews,
@@ -216,6 +220,44 @@ describe('createSourceControlTools', () => {
         input: expect.objectContaining({ action: 'factory.agent.pr_opened' }),
       }),
     );
+  });
+
+  describe('self-review gate', () => {
+    const approved = 'a'.repeat(40);
+    const gated = async (approvedHead: string | null, pushedHead = approved) => {
+      const setup = await fixture();
+      const original = setup.createPullRequest.getMockImplementation()!;
+      setup.createPullRequest.mockImplementation(async (input: any) => ({
+        ...(await original(input)),
+        headSha: pushedHead,
+      }));
+      const tools = await createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+        selfReviewApprovedHead: async () => approvedHead,
+      });
+      const run = () => (tools.source_control_create_change_request!.execute as any)({ title: 'Ship it' });
+      return { setup, run };
+    };
+
+    it('refuses to open a change request before self-review approves', async () => {
+      const { setup, run } = await gated(null);
+      await expect(run()).rejects.toThrow('Self-review has not approved');
+      expect(setup.createPullRequest).not.toHaveBeenCalled();
+    });
+
+    it('closes the change request when the pushed head differs from the approved head', async () => {
+      const { setup, run } = await gated(approved, 'b'.repeat(40));
+      await expect(run()).rejects.toThrow('the change request was closed');
+      expect(setup.closePullRequest).toHaveBeenCalledWith(expect.objectContaining({ pullRequestId: '17' }));
+    });
+
+    it('opens the change request when the pushed head matches the approved head', async () => {
+      const { setup, run } = await gated(approved, approved.toUpperCase());
+      await expect(run()).resolves.toMatchObject({ id: '17' });
+      expect(setup.closePullRequest).not.toHaveBeenCalled();
+    });
   });
 
   it('creates brokered diff discussions and replies without accepting repository credentials', async () => {
@@ -549,77 +591,6 @@ describe('createSourceControlTools', () => {
       ]);
     });
 
-    it('pushes a commit made after the first push in a sibling that never had the session branch', async () => {
-      const root = mkdtempSync(path.join(os.tmpdir(), 'factory-push-'));
-      const git = (cwd: string, ...args: string[]) =>
-        execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', ...args], {
-          cwd,
-          encoding: 'utf8',
-        }).trim();
-      const remote = path.join(root, 'remote.git');
-      const checkout = path.join(root, 'other');
-      git(root, 'init', '--bare', remote);
-      git(root, 'clone', remote, checkout);
-      git(checkout, 'commit', '--allow-empty', '-m', 'base');
-      git(checkout, 'push', 'origin', 'main');
-
-      const setup = await fixture();
-      const built = await tools(setup);
-      // Real git against a local bare remote; only `origin` is redirected, since
-      // the fixture's clone URL is not reachable.
-      const sandbox = {
-        id: 'sandbox-1',
-        provider: 'custom',
-        workingDirectory: root,
-        executeCommand: vi.fn(async (command: string, args: string[]) => {
-          if (args.includes('get-url'))
-            return { exitCode: 0, stdout: 'https://gitlab.com/acme/other.git\n', stderr: '' };
-          const real = args.map(arg => (args.includes('push') && arg === 'origin' ? remote : arg));
-          try {
-            return {
-              exitCode: 0,
-              stdout: execFileSync(command, real, { encoding: 'utf8', stdio: 'pipe' }),
-              stderr: '',
-            };
-          } catch (error: any) {
-            return {
-              exitCode: error.status ?? 1,
-              stdout: String(error.stdout ?? ''),
-              stderr: String(error.stderr ?? ''),
-            };
-          }
-        }),
-      };
-      const push = () =>
-        (built.source_control_push_branch!.execute as any)({ repository: 'acme/other' }, { workspace: { sandbox } });
-
-      await push();
-      git(checkout, 'commit', '--allow-empty', '-m', 'second');
-      await push();
-
-      expect(git(checkout, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe('factory/issue-1');
-      expect(git(remote, 'rev-parse', 'refs/heads/factory/issue-1')).toBe(git(checkout, 'rev-parse', 'HEAD'));
-    });
-
-    it('pushes the local session branch whatever is checked out, in its own or another repository', async () => {
-      const setup = await fixture();
-      const built = await tools(setup);
-      // The agent sits on a scratch branch (own) or switched back to main
-      // (sibling); the session branch exists locally in both checkouts.
-      const { sandbox, pushes } = fakeSandbox();
-
-      await (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } });
-      await (built.source_control_push_branch!.execute as any)(
-        { repository: 'acme/other' },
-        { workspace: { sandbox } },
-      );
-
-      expect(pushes().map(push => push.args)).toEqual([
-        ['-C', '/home/user/repo', 'push', '-u', 'origin', 'factory/issue-1'],
-        ['-C', '/home/user/other', 'push', '-u', 'origin', 'factory/issue-1'],
-      ]);
-    });
-
     it('refuses to push another repository whose directory holds a different checkout', async () => {
       const setup = await fixture();
       const built = await tools(setup);
@@ -860,6 +831,380 @@ describe('createSourceControlTools', () => {
       const { setup, run } = await submit({ event: 'approve', body: `Verdict: approve\nReviewed head: ${head}\n` });
       await expect(run).resolves.toEqual({ id: 'review-1' });
       expect(setup.createReview).toHaveBeenCalledWith(expect.objectContaining({ commitId: head }));
+    });
+  });
+
+  describe('publishing the review test check', () => {
+    const head = 'cd1e5903851234567890abcdef1234567890abcd';
+
+    async function publish(
+      input: Record<string, unknown>,
+      overrides: {
+        publishCommitCheck?: unknown;
+        pullRequest?: unknown;
+        testChecksEnabled?: (input: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
+        boundChangeRequestId?: () => Promise<string | undefined>;
+      } = {},
+    ) {
+      const setup = await fixture();
+      const publishCommitCheck =
+        'publishCommitCheck' in overrides
+          ? overrides.publishCommitCheck
+          : vi.fn(async () => ({
+              id: '9',
+              name: FACTORY_TEST_CHECK_NAME,
+              headSha: head,
+              status: 'success',
+              url: null,
+            }));
+      setup.getPullRequest.mockResolvedValue(
+        ('pullRequest' in overrides
+          ? overrides.pullRequest
+          : { id: '17', state: 'open', headSha: head, headBranch: 'factory/issue-1' }) as any,
+      );
+      const versionControl = { ...setup.versionControl, publishCommitCheck } as VersionControl;
+      const tools = await createSourceControlTools({
+        requestContext: requestContext(),
+        providers: [{ id: 'gitlab', storage: setup.storage, versionControl }],
+        audit: setup.audit,
+        ...(overrides.testChecksEnabled ? { testChecksEnabled: overrides.testChecksEnabled } : {}),
+        ...('boundChangeRequestId' in overrides
+          ? overrides.boundChangeRequestId
+            ? { boundChangeRequestId: overrides.boundChangeRequestId }
+            : {}
+          : { boundChangeRequestId: async () => '17' }),
+      });
+      const tool = tools.source_control_publish_test_check!;
+      return {
+        publishCommitCheck: publishCommitCheck as ReturnType<typeof vi.fn>,
+        parse: (value: Record<string, unknown>) => (tool.inputSchema as any).safeParse(value),
+        run: () =>
+          (tool.execute as any)({
+            changeRequestId: 17,
+            headSha: head,
+            status: 'success',
+            title: 'All planned tests passed',
+            summary: '3 commands passed',
+            ...input,
+          }),
+      };
+    }
+
+    it('refuses to publish when the project turned test checks off', async () => {
+      const testChecksEnabled = vi.fn(async () => false);
+      const { run, publishCommitCheck } = await publish({}, { testChecksEnabled });
+      await expect(run()).rejects.toThrow(/turned off for this Factory project/);
+      expect(testChecksEnabled).toHaveBeenCalledWith({ orgId: expect.any(String), factoryProjectId: 'project-1' });
+      expect(publishCommitCheck).not.toHaveBeenCalled();
+    });
+
+    it('refuses to publish on a change request other than the one the session reviews', async () => {
+      const { run, publishCommitCheck } = await publish({}, { boundChangeRequestId: async () => '18' });
+      await expect(run()).rejects.toThrow(/reviews change request 18, not 17/);
+      expect(publishCommitCheck).not.toHaveBeenCalled();
+    });
+
+    it('refuses to publish from a session that is not Review-bound, such as a builder', async () => {
+      const { run, publishCommitCheck } = await publish({}, { boundChangeRequestId: async () => undefined });
+      await expect(run()).rejects.toThrow(/Only a Review session bound to this change request/);
+      expect(publishCommitCheck).not.toHaveBeenCalled();
+    });
+
+    it('refuses to publish when the host cannot say which change request the session reviews', async () => {
+      const { run, publishCommitCheck } = await publish({}, { boundChangeRequestId: undefined });
+      await expect(run()).rejects.toThrow(/Only a Review session bound to this change request/);
+      expect(publishCommitCheck).not.toHaveBeenCalled();
+    });
+
+    it('publishes on the change request the session reviews', async () => {
+      const { run } = await publish({}, { boundChangeRequestId: async () => '17' });
+      await expect(run()).resolves.toMatchObject({ id: '9' });
+    });
+
+    it('publishes when the project keeps test checks on', async () => {
+      const { run, publishCommitCheck } = await publish({}, { testChecksEnabled: async () => true });
+      await expect(run()).resolves.toMatchObject({ id: '9' });
+      expect(publishCommitCheck).toHaveBeenCalledOnce();
+    });
+
+    it('publishes under the fixed Factory check name on the current head', async () => {
+      const { run, publishCommitCheck } = await publish({ headSha: head.toUpperCase(), details: '| cmd | ok |' });
+      await expect(run()).resolves.toMatchObject({ id: '9', name: FACTORY_TEST_CHECK_NAME });
+      expect(publishCommitCheck).toHaveBeenCalledWith({
+        connection: { type: 'oauth', accessToken: 'server-opaque-connection' },
+        sourceId: 'acme/repo',
+        actingUserId: 'user-1',
+        headSha: head,
+        ref: 'factory/issue-1',
+        name: FACTORY_TEST_CHECK_NAME,
+        status: 'success',
+        title: 'All planned tests passed',
+        summary: '3 commands passed',
+        details: '| cmd | ok |',
+      });
+    });
+
+    it('does not let the agent choose the check name', async () => {
+      const { parse } = await publish({});
+      const parsed = parse({
+        changeRequestId: 17,
+        headSha: head,
+        status: 'success',
+        title: 't',
+        summary: 's',
+        name: 'CI',
+      });
+      expect(parsed.success).toBe(true);
+      expect(parsed.data).not.toHaveProperty('name');
+    });
+
+    it('rejects an abbreviated head SHA in the schema', async () => {
+      const { parse } = await publish({});
+      expect(
+        parse({ changeRequestId: 17, headSha: 'cd1e590', status: 'success', title: 't', summary: 's' }).success,
+      ).toBe(false);
+    });
+
+    it('refuses to publish for a head that is no longer current', async () => {
+      const { run, publishCommitCheck } = await publish(
+        {},
+        { pullRequest: { id: '17', state: 'open', headSha: 'f'.repeat(40) } },
+      );
+      await expect(run()).rejects.toThrow(/not the current change-request head/);
+      expect(publishCommitCheck).not.toHaveBeenCalled();
+    });
+
+    it('refuses to publish on a closed change request', async () => {
+      const { run, publishCommitCheck } = await publish(
+        {},
+        { pullRequest: { id: '17', state: 'closed', headSha: head } },
+      );
+      await expect(run()).rejects.toThrow(/is not open/);
+      expect(publishCommitCheck).not.toHaveBeenCalled();
+    });
+
+    it('reports providers that cannot publish commit checks', async () => {
+      const { run } = await publish({}, { publishCommitCheck: undefined });
+      await expect(run()).rejects.toThrow('gitlab does not support publishing commit checks; nothing was published.');
+    });
+  });
+});
+
+// Each test spawns dozens of Git processes, which can exceed the default 5s
+// timeout while the rest of the suite saturates the CPU.
+describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%s)', { timeout: 10_000 }, provider => {
+  const roots: string[] = [];
+  const templates = new Map<string, { root: string; base: string }>();
+  const branch = 'factory/issue-1';
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  // Spawning bare `git` makes libuv try every PATH entry, which costs tens of
+  // milliseconds per call with a long PATH and pushes these tests past their timeout.
+  const gitBinary = path.join(execFileSync('git', ['--exec-path'], { encoding: 'utf8' }).trim(), 'git');
+  const gitIn =
+    (checkout: string) =>
+    (...args: string[]) =>
+      execFileSync(gitBinary, ['-C', checkout, ...args], {
+        encoding: 'utf8',
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim();
+  const commitIn = (checkout: string) => (text: string) => {
+    const git = gitIn(checkout);
+    writeFileSync(path.join(checkout, 'tracked.txt'), text);
+    git('add', 'tracked.txt');
+    git('commit', '-m', text);
+    return git('rev-parse', 'HEAD');
+  };
+
+  afterEach(() => {
+    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  });
+
+  afterAll(() => {
+    for (const { root } of templates.values()) rmSync(root, { recursive: true, force: true });
+    templates.clear();
+  });
+
+  // Every test starts from the same seeded origin and checkout, so build it once
+  // per repository and copy it instead of spawning the same Git setup per test.
+  function seedTemplate(repository: string) {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'factory-push-template-'));
+    const origin = path.join(root, 'origin.git');
+    const checkout = path.join(root, repository.split('/')[1]!);
+    const git = gitIn(checkout);
+    execFileSync(gitBinary, ['init', '--bare', '--initial-branch=main', origin], { env, stdio: 'pipe' });
+    execFileSync(gitBinary, ['init', '--initial-branch=main', checkout], { env, stdio: 'pipe' });
+    // Commits and receive-pack otherwise spawn `git maintenance run --auto`.
+    git('--git-dir', origin, 'config', 'maintenance.auto', 'false');
+    git('config', 'maintenance.auto', 'false');
+    git('config', 'user.name', 'Test');
+    git('config', 'user.email', 'test@example.com');
+    git('remote', 'add', 'origin', `https://${provider}.com/${repository}.git`);
+    // Keep provider checkout validation real, but push to a hermetic local remote.
+    git('remote', 'set-url', '--push', 'origin', origin);
+    const base = commitIn(checkout)('base');
+    git('push', 'origin', 'main');
+    templates.set(repository, { root, base });
+  }
+
+  async function checkoutFixture(repository: string) {
+    const setup = await fixture(provider);
+    const template = templates.get(repository)!;
+    const root = mkdtempSync(path.join(os.tmpdir(), 'factory-push-'));
+    roots.push(root);
+    cpSync(template.root, root, { recursive: true });
+    const origin = path.join(root, 'origin.git');
+    const checkout = path.join(root, repository.split('/')[1]!);
+    const config = path.join(checkout, '.git', 'config');
+    writeFileSync(config, readFileSync(config, 'utf8').replaceAll(template.root, root));
+    const cloneUrl = `https://${provider}.com/${repository}.git`;
+    const git = gitIn(checkout);
+    const commit = commitIn(checkout);
+    const base = template.base;
+    setup.getRepositoryAccess.mockResolvedValue({
+      cloneUrl,
+      authorization: { scheme: 'bearer', token: 'test-token', username: 'test' },
+    });
+    const built = await createSourceControlTools({
+      requestContext: requestContext(),
+      providers: [{ id: provider, storage: setup.storage, versionControl: setup.versionControl }],
+      audit: setup.audit,
+    });
+    const hooks: { afterCommand?: (args: string[]) => void } = {};
+    const sandbox = {
+      id: 'real-git',
+      provider: 'custom',
+      workingDirectory: root,
+      async executeCommand(command: string, args: string[] = [], options?: { env?: Record<string, string> }) {
+        const result = spawnSync(command === 'git' ? gitBinary : command, args, {
+          encoding: 'utf8',
+          env: { ...env, ...options?.env },
+          timeout: 10_000,
+        });
+        if (result.error) throw result.error;
+        hooks.afterCommand?.(args);
+        return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
+      },
+    };
+    const push = () =>
+      (built.source_control_push_branch!.execute as any)(repository === 'acme/repo' ? {} : { repository }, {
+        workspace: { sandbox },
+      });
+    const remote = (...args: string[]) => git('--git-dir', origin, ...args);
+    return { ...setup, root, checkout, git, commit, base, push, remote, hooks };
+  }
+
+  describe.each(['acme/repo', 'acme/other'])('%s', repository => {
+    beforeAll(() => seedTemplate(repository));
+
+    // A session ref left at the base used to push no agent commits. (#27667)
+    it('pushes the active commit from an existing stale session branch without losing dirty work', async () => {
+      const { checkout, git, commit, base, push, remote } = await checkoutFixture(repository);
+      git('branch', branch);
+      git('switch', '-c', 'agent-work');
+      const head = commit('agent change');
+      writeFileSync(path.join(checkout, 'staged.txt'), 'staged work');
+      git('add', 'staged.txt');
+      writeFileSync(path.join(checkout, 'tracked.txt'), 'unstaged work');
+      writeFileSync(path.join(checkout, 'untracked.txt'), 'untracked work');
+      const status = git('status', '--porcelain');
+      const diff = git('diff');
+      const staged = git('diff', '--cached');
+
+      await push();
+
+      expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(head);
+      expect(remote('show', `${branch}:tracked.txt`)).toBe('agent change');
+      expect(git('symbolic-ref', '--short', 'HEAD')).toBe(branch);
+      expect(git('rev-parse', 'main')).toBe(base);
+      expect(git('rev-parse', 'agent-work')).toBe(head);
+      expect(git('status', '--porcelain')).toBe(status);
+      expect(git('diff')).toBe(diff);
+      expect(git('diff', '--cached')).toBe(staged);
+    });
+
+    it.each(['missing', 'same-tip', 'detached'])('keeps subsequent commits on the session branch (%s)', async state => {
+      const { git, commit, push, remote } = await checkoutFixture(repository);
+      if (state !== 'missing') git('branch', branch);
+      if (state === 'detached') git('switch', '--detach');
+      await push();
+      expect(git('symbolic-ref', '--short', 'HEAD')).toBe(branch);
+      const next = commit('next change');
+      await push();
+      expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(next);
+    });
+
+    it('pushes an ahead session branch without moving the active checkout', async () => {
+      const { checkout, git, commit, base, push, remote, storage } = await checkoutFixture(repository);
+      git('switch', '-c', branch);
+      const sessionHead = commit('session work');
+      git('switch', 'main');
+      writeFileSync(path.join(checkout, 'tracked.txt'), 'uncommitted main work');
+      const dirty = git('status', '--porcelain');
+
+      await expect(push()).resolves.toEqual({ pushed: true, branch, repository });
+
+      expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(sessionHead);
+      expect(remote('show', `${branch}:tracked.txt`)).toBe('session work');
+      expect(git('rev-parse', branch)).toBe(sessionHead);
+      expect(git('rev-parse', 'HEAD')).toBe(base);
+      expect(git('symbolic-ref', '--short', 'HEAD')).toBe('main');
+      expect(git('status', '--porcelain')).toBe(dirty);
+      expect(git('diff')).toContain('+uncommitted main work');
+      expect(await storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).toMatchObject([{ branch }]);
+    });
+
+    it('refuses to discard divergent session commits or publish a stale ref', async () => {
+      const { git, commit, push, remote, storage } = await checkoutFixture(repository);
+      git('switch', '-c', branch);
+      const sessionHead = commit('session work');
+      git('switch', 'main');
+      const activeHead = commit('other work');
+
+      await expect(push()).rejects.toMatchObject({ code: 'push-failed' });
+
+      expect(git('rev-parse', branch)).toBe(sessionHead);
+      expect(git('rev-parse', 'HEAD')).toBe(activeHead);
+      expect(git('symbolic-ref', '--short', 'HEAD')).toBe('main');
+      expect(remote('for-each-ref', '--format=%(refname)', `refs/heads/${branch}`)).toBe('');
+      expect(await storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).toEqual([]);
+    });
+
+    it.each(['--is-ancestor', '--porcelain'])(
+      'preserves concurrent session commits and refuses to publish after %s',
+      async checkpoint => {
+        const { git, commit, base, push, remote, storage, hooks } = await checkoutFixture(repository);
+        git('branch', branch);
+        const activeHead = commit('active work');
+        const concurrentHead = git('commit-tree', 'HEAD^{tree}', '-p', base, '-m', 'concurrent session work');
+        // Schedule a real ref update between validation and materialization. (#27667)
+        hooks.afterCommand = args => {
+          if (args.includes(checkpoint)) {
+            git('update-ref', `refs/heads/${branch}`, concurrentHead, base);
+            hooks.afterCommand = undefined;
+          }
+        };
+
+        const outcome = await push().catch((error: unknown) => error);
+
+        expect(git('rev-parse', branch)).toBe(concurrentHead);
+        expect(outcome).toMatchObject({ code: 'push-failed' });
+        expect(git('rev-parse', 'HEAD')).toBe(activeHead);
+        expect(git('symbolic-ref', '--short', 'HEAD')).toBe('main');
+        expect(remote('for-each-ref', '--format=%(refname)', `refs/heads/${branch}`)).toBe('');
+        expect(await storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).toEqual([]);
+      },
+    );
+
+    it('refuses to reset a session branch checked out in another worktree', async () => {
+      const { root, git, commit, base, push, remote } = await checkoutFixture(repository);
+      git('branch', branch);
+      git('worktree', 'add', path.join(root, 'other-worktree'), branch);
+      const head = commit('active work');
+      await expect(push()).rejects.toMatchObject({ code: 'push-failed' });
+      expect(git('rev-parse', branch)).toBe(base);
+      expect(git('rev-parse', 'HEAD')).toBe(head);
+      expect(remote('for-each-ref', '--format=%(refname)', `refs/heads/${branch}`)).toBe('');
     });
   });
 });

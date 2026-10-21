@@ -7,6 +7,7 @@ import { ConsoleLogger } from '../logger';
 import { createObservabilityContext } from '../observability';
 import type { ProcessorState } from '../processors';
 import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
+import type { LanguageModelUsage } from '../stream/types';
 import { findSuspendedStreamState } from './suspended-stream-state';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflows/stream';
@@ -102,8 +103,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   };
 
   let modelOutput: MastraModelOutput<OUTPUT> | undefined;
-  const serializeStreamState = () => {
-    return modelOutput?.serializeState();
+  const serializeStreamState = (pendingSuspension?: { usage?: LanguageModelUsage }) => {
+    return modelOutput?.serializeState(pendingSuspension);
   };
   const deserializeStreamState = (state: any) => {
     modelOutput?.deserializeState(state);
@@ -129,6 +130,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     rotateResponseMessageId,
     agentId,
     requireToolApproval,
+    returnScorerData,
     toolCallConcurrency,
     streamState: {
       serialize: serializeStreamState,

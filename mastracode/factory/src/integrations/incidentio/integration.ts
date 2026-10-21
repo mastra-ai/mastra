@@ -51,6 +51,9 @@ export class IncidentioIntegration implements FactoryIntegration {
     const api = new IncidentioApiClient({
       baseUrl,
       accessToken: apiKey,
+      // Direct incident.io access: never leak the Mastra project id header
+      // to incident.io itself.
+      projectId: null,
       ...(config.fetchImpl ? { fetchImpl: config.fetchImpl } : {}),
     });
     this.intake = createIncidentioIntake({

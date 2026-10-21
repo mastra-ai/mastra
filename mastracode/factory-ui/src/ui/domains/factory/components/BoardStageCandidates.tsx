@@ -3,7 +3,7 @@ import type { BoardCandidate } from '../boardCandidates';
 import type { BoardLayout } from '../boardLayout';
 import type { CardMove } from '../cardPrimaryAction';
 import { CandidateCard } from './CandidateCard';
-import { ColumnReveal } from './ColumnReveal';
+import { VirtualBoardItems } from './VirtualBoardItems';
 
 export function BoardStageCandidates({
   candidates,
@@ -33,11 +33,12 @@ export function BoardStageCandidates({
           <span aria-hidden className="bg-border h-px flex-1" />
         </div>
       )}
-      <ColumnReveal
+      <VirtualBoardItems
         items={candidates}
+        itemKey={candidate => candidate.sourceKey}
+        layout={layout}
         renderItem={candidate => (
           <CandidateCard
-            key={candidate.sourceKey}
             layout={layout}
             candidate={candidate}
             projectRepositoryId={projectRepositoryId(candidate)}

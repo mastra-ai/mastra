@@ -54,13 +54,13 @@ describe('provider method and scope are independent choices', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
     const dialog = within(screen.getByRole('dialog'));
     expect(dialog.getByText(/Everyone in your organization can use this key\./)).toBeInTheDocument();
     await user.type(dialog.getByLabelText('API key for Anthropic'), 'test-key');
     await user.click(dialog.getByRole('button', { name: 'Save' }));
-    expect(await screen.findByRole('combobox')).toHaveTextContent('Claude Fable 5');
+    expect(await screen.findByRole('combobox')).toHaveValue('Claude Fable 5');
     expect(writes).toEqual([{ key: 'test-key', envVar: 'ANTHROPIC_API_KEY', scope: 'org' }]);
   });
 
@@ -68,9 +68,9 @@ describe('provider method and scope are independent choices', () => {
     server.use(http.get(`${TEST_BASE_URL}/auth/me`, () => new HttpResponse(null, { status: 404 })));
     registerProvider(() => ({ ...anthropic, source: 'oauth' }));
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
-    expect(await screen.findByRole('combobox')).toHaveTextContent('Claude Fable 5');
+    expect(await screen.findByRole('combobox')).toHaveValue('Claude Fable 5');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
@@ -90,7 +90,7 @@ describe('provider method and scope are independent choices', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
     await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
     await user.click(screen.getByRole('button', { name: 'Continue with Anthropic' }));
     const dialog = within(await screen.findByRole('dialog'));
@@ -135,7 +135,7 @@ describe('provider method and scope are independent choices', () => {
     expect(starts).toEqual([{ mode: 'paste-code', scope: 'user' }]);
     await user.type(dialog.getByLabelText('Authorization code'), 'demo-code');
     await user.click(dialog.getByRole('button', { name: 'Complete sign in' }));
-    expect(await screen.findByText('Provider sign-in · only you.')).toBeInTheDocument();
+    expect(await screen.findByRole('combobox')).toHaveValue('Claude Fable 5');
   });
 
   it('warns that a personal API key replaces personal sign-in and saves only at user scope', async () => {
@@ -163,6 +163,6 @@ describe('provider method and scope are independent choices', () => {
     await user.click(dialog.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(writes).toEqual([{ key: 'test-key', envVar: 'ANTHROPIC_API_KEY', scope: 'user' }]);
-    expect(screen.getByText('API key · only you.')).toBeInTheDocument();
+    expect(await screen.findByRole('combobox')).toHaveValue('Claude Fable 5');
   });
 });

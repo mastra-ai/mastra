@@ -1,6 +1,8 @@
-import { useContext, type ComponentProps } from 'react';
+import { useContext } from 'react';
+import type { ComponentProps } from 'react';
 
-import { AvatarSizeContext, type AvatarSize } from './avatar-size';
+import { AvatarSizeContext } from './avatar-size';
+import type { AvatarSize } from './avatar-size';
 import { cn } from '@/lib/utils';
 
 export type AvatarBadgeTone = 'neutral' | 'success' | 'warning' | 'destructive' | 'info';
@@ -19,6 +21,7 @@ const toneClasses: Record<AvatarBadgeTone, string> = {
 
 const badgeSizeClasses: Record<AvatarSize, string> = {
   xs: 'min-h-1.5 min-w-1.5 [&>svg]:hidden',
+  inline: 'min-h-1.5 min-w-1.5 [&>svg]:hidden',
   sm: 'min-h-2 min-w-2 [&>svg]:hidden',
   md: 'min-h-2.5 min-w-2.5 [&>svg]:size-icon-xs',
   lg: 'min-h-3 min-w-3 [&>svg]:size-icon-xs',

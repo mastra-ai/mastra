@@ -11,6 +11,7 @@ const GROUP_ICONS: Record<SessionGroupIcon, ReactNode> = {
   board: <SquareKanban />,
   review: <GitPullRequest />,
   user: <MessageSquare />,
+  slack: <MessageSquare />,
   status: <CircleDashed />,
   owner: <UserRound />,
   all: null,
@@ -30,7 +31,11 @@ export function SessionGroupList({
 
   return (
     <section className="flex flex-col gap-1" aria-label={`${group.label} sessions`}>
-      {showHeader && <Sidebar.NavHeader icon={GROUP_ICONS[group.icon]}>{group.label}</Sidebar.NavHeader>}
+      {showHeader && (
+        <Sidebar.NavHeader className="mt-0" icon={GROUP_ICONS[group.icon]}>
+          {group.label}
+        </Sidebar.NavHeader>
+      )}
       <Sidebar.NavList>
         {(expanded ? group.rows : collapsedRows).map(row => (
           <Fragment key={row.session.sessionId}>{renderRow(row)}</Fragment>

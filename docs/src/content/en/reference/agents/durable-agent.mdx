@@ -313,6 +313,10 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
 
 Reconnects to an existing run. Use this after a network disconnection. For the supported general reconnect flow, omit `offset` to replay all available cached events before receiving live events.
 
+The observing agent must have the same effective `id` as the agent that started the run, both for live observations in the same process and for persisted observations from another process. The effective ID is the DurableAgent's `id`, including any ID override, rather than the wrapped agent's original ID. Different DurableAgent instances with the same effective ID can observe the same run.
+
+If the live or persisted run identifies a different owner agent ID, `observe()` throws `DURABLE_AGENT_OBSERVE_AGENT_MISMATCH`. Legacy live entries without owner metadata retain their existing behavior.
+
 For runs configured with `structuredOutput`, an observer in another process reconstructs `output.object` from the persisted schema and replayed text.
 
 ```typescript
@@ -495,6 +499,12 @@ interface DurableAgentListActiveRunsResult {
 
 Discovers runs stuck in `running` status for this agent and re-drives them from the last persisted snapshot. Accepts the same filters and pagination as `listActiveRuns()`, plus `runId`. Returns the outcome for each run.
 
+Up to five run waits proceed concurrently, with results returned in discovery order. Each attempt has a single 30-second wait budget covering both `recover()` setup and settlement of the whole recovered workflow. When the budget expires, another run can use the slot. The outcome is `status: 'skipped'` with `reason: 'recovery-timeout'` and `retryAt` set 30 seconds ahead. The timeout doesn't cancel setup or execution, release a live claim, or count as success or failure. The attempt continues in the background, and its eventual outcome doesn't change the returned results. The concurrency limit bounds waiting, not live executions.
+
+[`mastra.recoverAllDurableAgents()`](/reference/core/mastra-class#recoveralldurableagents) schedules timeout re-checks automatically. Direct callers of `recoverActiveRuns()` must schedule their own calls after `retryAt`. While the original bulk attempt remains pending, re-checks defer with another `recovery-timeout` and a future `retryAt`, without invoking `recover()` again. Once it settles, recovery checks the persisted snapshot and ownership before retrying. Finished or suspended runs aren't restarted.
+
+The budget applies only to each run attempt in `recoverActiveRuns()`, not to discovery, a direct `recover()` call, or overridden custom recovery methods. When shutdown begins, recovery stops dispatching new runs. The original attempt remains tracked for Mastra's shared shutdown drain even after the wait times out.
+
 ```typescript
 const result = await durableAgent.recoverActiveRuns()
 // {
@@ -520,6 +530,7 @@ A run that another execution still drives isn't taken over. Its entry has `statu
 | `run-active` | Another execution, possibly in another process, holds the run. Sets `retryAt`. |
 | `run-active-locally` | This process is executing the run. |
 | `already-in-progress` | This process is already recovering the run. |
+| `recovery-timeout` | The wait expired or an earlier bulk recovery attempt is still pending. Sets `retryAt`; re-checks don't duplicate the pending attempt. |
 
 Returns:
 
@@ -529,7 +540,7 @@ interface DurableAgentRecoverActiveRunsResult {
     runId: string
     status: 'success' | 'failed' | 'skipped'
     error?: Error
-    reason?: 'run-active' | 'run-active-locally' | 'already-in-progress'
+    reason?: 'run-active' | 'run-active-locally' | 'already-in-progress' | 'recovery-timeout'
     // Epoch milliseconds
     retryAt?: number
   }>
@@ -669,7 +680,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
     type: "AgentExecutionOptions['stopWhen']",
     isOptional: true,
     description:
-      'Predicate or composition that ends the agentic loop early. The closure rides on the in-process run registry; cross-process resumes degrade to `maxSteps` only.',
+      'Predicate or composition that ends the agentic loop early. If it throws, `fullStream` rejects without emitting a `step-finish` or `error` chunk. Durable transports preserve the error name and message, but not its stack, cause, or subclass identity. The closure rides on the in-process run registry; cross-process resumes degrade to `maxSteps` only.',
   },
   {
     name: 'system',

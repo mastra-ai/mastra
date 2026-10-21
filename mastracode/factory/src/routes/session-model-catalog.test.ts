@@ -120,15 +120,18 @@ describe('session-owner model catalog', () => {
   it.each(['user', 'hybrid'] as const)(
     'uses the owner catalog and default for a collaborator in %s scope',
     async scope => {
-      const { app } = await setup(scope);
+      const { app, project } = await setup(scope);
+      // The session runs under its Factory's resource; it is found by its session id.
       const response = await app.request(
-        '/web/config/models?resourceId=session-1&threadId=chat-thread&scope=user&userId=viewer',
+        `/web/config/models?sessionId=session-1&resourceId=${project.id}&threadId=chat-thread&scope=org&userId=viewer`,
       );
       expect(response.status).toBe(200);
       const body = await response.json();
       expect(body.modelScope).toBe('user');
       expect(body.defaultModelId).toBe('anthropic/claude-opus-4-6');
-      expect(body.models.map((m: { id: string }) => m.id)).toEqual(['anthropic/claude-opus-4-6']);
+      expect(body.models).toEqual([
+        expect.objectContaining({ id: 'anthropic/claude-opus-4-6', credentialLabel: 'Anthropic API key' }),
+      ]);
       expect(JSON.stringify(body)).not.toContain('secret');
     },
   );
@@ -155,7 +158,9 @@ describe('session-owner model catalog', () => {
       const body = await response.json();
       expect(body.modelScope).toBe('factory');
       expect(body.defaultModelId).toBe('deepseek/deepseek-flash');
-      expect(body.models.map((m: { id: string }) => m.id)).toEqual(['deepseek/deepseek-flash']);
+      expect(body.models).toEqual([
+        expect.objectContaining({ id: 'deepseek/deepseek-flash', credentialLabel: 'Deepseek API key' }),
+      ]);
     },
   );
 

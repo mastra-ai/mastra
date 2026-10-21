@@ -938,7 +938,7 @@ const stream = await agent.stream('message for agent')
                     isOptional: true,
                     defaultValue: '300000',
                     description:
-                      'Closes the outer stream after this many ms of idleness between turns. The timer only runs while the wrapper is between turns. Default: 5 minutes.',
+                      'Closes the outer stream after this many ms of idleness between turns. The timer only runs while the wrapper is between turns. Default: `backgroundTasks.untilIdleMaxIdleMs` from the Mastra config, or 5 minutes.',
                   },
                 ],
               },
@@ -976,6 +976,24 @@ const stream = await agent.stream('message for agent')
   },
 ]}
 />
+
+## `stopWhen` errors
+
+If a `stopWhen` predicate throws, `fullStream` rejects with that error. The stream does not emit a `step-finish`, `finish`, or `error` chunk for the failure. Catch the rejection around stream consumption:
+
+```ts
+async function consumeStream() {
+  try {
+    for await (const chunk of stream.fullStream) {
+      console.log(chunk)
+    }
+  } catch (error) {
+    console.error('stopWhen failed', error)
+  }
+}
+```
+
+Durable transports reconstruct cross-process errors from their serialized name and message. The original stack, cause, and subclass identity are not available to the stream consumer.
 
 ## Signal visibility
 

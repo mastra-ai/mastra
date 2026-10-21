@@ -258,6 +258,26 @@ describe('DevBundler', () => {
       }
     });
 
+    it('analyzes tool files so workspace packages keep exports only tools import', async () => {
+      const devBundler = new DevBundler();
+      const { getWatcherInputOptions } = await import('@mastra/deployer/build');
+      vi.spyOn(devBundler, 'listToolsInputOptions').mockResolvedValue({
+        'tools/abc': '/project/src/mastra/tools/weather.ts',
+      });
+
+      const tmpDir = '.test-tmp';
+      try {
+        await devBundler.watch('test-entry.js', tmpDir, ['/project/src/mastra/tools/**']);
+
+        const options = vi.mocked(getWatcherInputOptions).mock.lastCall?.[3];
+        expect(options?.analysisEntries).toEqual(
+          expect.arrayContaining(['test-entry.js', '/project/src/mastra/tools/weather.ts']),
+        );
+      } finally {
+        await remove(tmpDir);
+      }
+    });
+
     it('watches file-based agent instructions and regenerates the wrapper when source changes before rebuilds', async () => {
       const devBundler = new DevBundler();
       const { createWatcher, discoverFsAgents, prepareFsAgentsEntry, writeFsAgentsEntry } =

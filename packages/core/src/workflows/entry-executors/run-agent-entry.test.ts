@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
-import { runAgentEntry } from './run-agent-entry';
+import { resolveRegisteredAgent, runAgentEntry } from './run-agent-entry';
 import type { EntryExecuteContext } from './types';
 
 /**
@@ -275,5 +275,39 @@ describe('runAgentEntry structured output guard', () => {
     const result = await runAgentEntry({ type: 'agent', id: 'step-1', agentId: 'v2-agent', agent }, makeDefaultCtx());
 
     expect(result).toEqual({ text: '' });
+  });
+});
+
+describe('resolveRegisteredAgent', () => {
+  function makeMastra(agents: Record<string, unknown> = {}) {
+    const warn = vi.fn();
+    return { mastra: { listAgents: () => agents, getLogger: () => ({ warn }) } as any, warn };
+  }
+
+  it('does not warn or swap for a wrapper that forwards durable to its inner agent', () => {
+    const { mastra: owner } = makeMastra();
+    const { mastra, warn } = makeMastra();
+    const inner = { id: 'inner', name: 'inner', durable: true };
+    const proxyWrapper = {
+      id: 'inner',
+      name: 'inner',
+      durable: true,
+      agent: inner,
+      getMastraInstance: () => owner,
+      stream: vi.fn(),
+      recover: vi.fn(),
+      recoverActiveRuns: vi.fn(),
+    };
+
+    expect(resolveRegisteredAgent(proxyWrapper, mastra)).toBe(proxyWrapper);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('warns when a durable agent is attached to the same Mastra without a registered wrapper', () => {
+    const { mastra, warn } = makeMastra();
+    const subAgent = { id: 'sub', name: 'sub', durable: true, getMastraInstance: () => mastra };
+
+    expect(resolveRegisteredAgent(subAgent, mastra)).toBe(subAgent);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('no durable wrapper for it is registered'));
   });
 });

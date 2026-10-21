@@ -220,7 +220,7 @@ const memory = new Memory({
 
 ### Retries and failure policy
 
-Observer and Reflector model calls are retried on transient provider errors, and a turn aborts if they still fail. Each stage is controlled independently by:
+Observer and Reflector model calls are retried on transient provider errors. By default, a synchronous observation or reflection that still fails aborts the turn. Each stage is controlled independently by:
 
 - `maxRetries`: retries after the initial model call (default `8`).
 - `failurePolicy`: what happens once retries are exhausted, either `'abort'` (default) or `'continue'`.
@@ -248,7 +248,9 @@ With `failurePolicy: 'continue'`, Mastra retries as configured, reports the fail
 
 A provider outage usually takes out both stages, so set the policy on both if you want the turn to survive one.
 
-This policy applies only to Observer and Reflector model and provider failures in synchronous, resource-scoped, and buffered observation. Persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal. It doesn't prevent the underlying provider or network error, change `blockAfter`, or change attachment handling.
+This policy applies only to Observer and Reflector model and provider failures when observation or reflection runs synchronously: at `blockAfter`, when async buffering is disabled, and in resource-scoped observation. In those paths, persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal. It doesn't prevent the underlying provider or network error, change `blockAfter`, or change attachment handling.
+
+Background (async buffered) observation and reflection failures never stop the turn, whatever the policy. They're reported as `om_buffering_failed`, and the failed input stays pending. If it keeps growing, it reaches `blockAfter`, where synchronous observation applies `failurePolicy`.
 
 <Callout type="warning">
   `'continue'` has no backstop for a sustained outage. Unobserved messages stay pending and keep accruing in the main

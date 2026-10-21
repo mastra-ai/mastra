@@ -48,6 +48,7 @@ export type TraceTimeRangeChipProps = Pick<
   | 'onDateRangeChange'
   | 'disabled'
   | 'maxRangeMs'
+  | 'minDate'
   | 'presets'
 >;
 

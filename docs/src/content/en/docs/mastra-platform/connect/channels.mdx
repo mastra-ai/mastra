@@ -1,13 +1,13 @@
 ---
 title: 'Channels | Connect'
-description: 'Use Slack, Telegram, and Discord accounts connected to a Mastra platform project as agent channels with channels() from @mastra/connect.'
+description: 'Use Slack, Telegram, Discord, and Microsoft Teams accounts connected to a Mastra platform project as agent channels with channels() from @mastra/connect.'
 packages:
   - '@mastra/connect'
 ---
 
 # Channels
 
-[Channels](/docs/channels) let people talk to your agents from services such as Slack, Telegram, and Discord. Connect stores provider credentials on the platform and uses [`channels()`](/reference/connect/channels) to make those channels available in your Mastra application. It uses the same channel packages with platform-managed credentials, while vendor-side setup depends on the provider.
+[Channels](/docs/channels) let people talk to your agents from services such as Slack, Telegram, Discord, and Microsoft Teams. Connect stores provider credentials on the platform and uses [`channels()`](/reference/connect/channels) to make those channels available in your Mastra application. It uses the same channel packages with platform-managed credentials, while vendor-side setup depends on the provider.
 
 Before you start, follow the [Connect setup](/docs/mastra-platform/connect/overview#get-started) to install the package and configure your platform project.
 
@@ -32,7 +32,7 @@ The channels available to your app are configured at startup, while their creden
 
 ## Connect a provider
 
-The following steps cover Slack, Discord, and Telegram. Start your Mastra application before completing the agent connection in Studio.
+The following steps cover Slack, Discord, Telegram, and Microsoft Teams. Start your Mastra application before completing the agent connection in Studio.
 
 For webhook delivery and OAuth callbacks, your server needs a public URL reachable by the provider. Mastra platform supplies this URL. When hosting elsewhere, set `MASTRA_SERVER_URL` to your public server URL. Use a public HTTPS tunnel for local webhook development.
 
@@ -74,6 +74,18 @@ Telegram uses a bot token from BotFather. Before connecting an agent, set `MASTR
 1. Connect the channel to an agent in Studio. Mastra verifies the bot, creates a webhook secret, and registers the agent's public webhook URL with Telegram.
 
 For local development without a public webhook URL, the [Telegram provider reference](/reference/channels/telegram-provider) describes polling mode.
+
+### Microsoft Teams
+
+Teams uses a Microsoft work or school account authorized with OAuth. The same `microsoft-teams` connection provides both the channel and Teams [tools](/docs/mastra-platform/connect/tools). When an agent connects, Mastra registers a bot for it in the Teams Developer Portal, so no Azure app registration is needed on your side.
+
+The bot credential is stored encrypted at rest. Set `MASTRA_ENCRYPTION_KEY` to use a dedicated key; without it, `channels()` derives a key from the platform access token and logs a warning. Rotating the platform access token then makes stored bot credentials unreadable, disconnect and reconnect the channel to re-provision.
+
+1. Run `mastra connect add microsoft-teams` and sign in with a Microsoft work or school account. Some of the requested permissions require admin consent, so the first connection in a tenant needs a Microsoft Entra administrator.
+1. Connect the channel to an agent in Studio. Mastra creates a single-tenant bot registration for the agent and returns a link to the [Teams Developer Portal](https://dev.teams.microsoft.com/bots).
+1. Open the link, package the bot into a Teams app in the Developer Portal, and add the app to Teams.
+
+Disconnecting the agent deletes the bot registration and its Entra application.
 
 ## Configure available channels
 

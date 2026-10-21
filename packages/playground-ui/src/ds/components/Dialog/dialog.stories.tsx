@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
+import { expect, waitFor, within } from 'storybook/test';
 import {
   Dialog,
   DialogAction,
@@ -13,12 +15,18 @@ import {
   DialogTrigger,
 } from './dialog';
 import type { DialogSize } from './dialog';
+import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Form } from '@/ds/components/Form';
 import { Input } from '@/ds/components/Input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/ds/components/InputGroup';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { SearchInput } from '@/ds/components/SearchInput';
+import { Switch } from '@/ds/components/Switch';
+import { Txt } from '@/ds/components/Txt';
+import { SettingsContainer, SettingsFieldsetRow, SettingsRow } from '@/ds/new/settings';
+import { formatCost } from '@/lib/cost';
 
 const SIZES: DialogSize[] = ['sm', 'md', 'lg', 'xl', 'full'];
 
@@ -324,5 +332,284 @@ export const WithoutFooter: Story = {
         story: 'Read-only dialogs close with the built-in Close button or Escape; the body keeps its bottom spacing.',
       },
     },
+  },
+};
+
+function PlanColumn({
+  name,
+  price,
+  cadence,
+  summary,
+  allowances,
+  current = false,
+  children,
+}: {
+  name: string;
+  price: string;
+  cadence?: string;
+  summary: string;
+  allowances: string[];
+  current?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      aria-label={name}
+      className="flex min-w-0 flex-col gap-5 p-4 data-[current=true]:rounded-xl data-[current=true]:bg-fill-subtle"
+      data-current={current}
+    >
+      <div className="flex flex-col gap-2.5">
+        <div className="flex items-center gap-2">
+          <Txt as="h3" variant="subheading" tone="ink">
+            {name}
+          </Txt>
+          {current && (
+            <Badge variant="success" emphasis="subtle" size="sm">
+              Current
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          <Txt as="p" variant="title" tone="ink">
+            {price}
+          </Txt>
+          {cadence && (
+            <Txt as="span" variant="body-sm" tone="muted">
+              {cadence}
+            </Txt>
+          )}
+        </div>
+        <Txt as="p" variant="body-sm" tone="muted" className="min-h-10">
+          {summary}
+        </Txt>
+      </div>
+      <ul className="flex flex-1 flex-col">
+        {allowances.map(allowance => (
+          <li key={allowance} className="border-t border-border py-2">
+            <Txt as="span" variant="body-sm" tone="ink">
+              {allowance}
+            </Txt>
+          </li>
+        ))}
+      </ul>
+      {children}
+    </section>
+  );
+}
+
+export const FullPage: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          '`size="full"` is the inset, rounded, near-viewport surface: the title sits left with the built-in Close button right, the default scrolling body holds side-by-side columns that stack below `md`, and the footnote closes the body.',
+      },
+    },
+  },
+  render: () => (
+    <Dialog>
+      <DialogTrigger render={<Button>Compare plans</Button>} />
+      <DialogContent size="full">
+        <DialogHeader>
+          <DialogTitle>Plans</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <div className="grid divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-4">
+            <PlanColumn
+              name="Free"
+              price="$0"
+              summary="Build and test your first agents."
+              allowances={[
+                'Unlimited deploys',
+                '100 GB-hours memory',
+                '40 vCPU-hours',
+                '1 GB egress',
+                'Storage by project size',
+                '100,000 events',
+                '15-day trace retention',
+                'Up to 3 projects',
+              ]}
+            >
+              <Button>Downgrade to Free</Button>
+            </PlanColumn>
+            <PlanColumn
+              name="Starter"
+              price="$25"
+              cadence="/ month"
+              summary="Higher allowances and 1× Small."
+              allowances={[
+                'Unlimited deploys',
+                '360 GB-hours memory',
+                '100 vCPU-hours',
+                '10 GB egress',
+                'Storage by project size',
+                '250,000 events',
+                '60-day trace retention',
+                '1× Small included',
+              ]}
+              current
+            >
+              <Button disabled>Current plan</Button>
+            </PlanColumn>
+            <PlanColumn
+              name="Teams"
+              price="$250"
+              cadence="/ month"
+              summary="Two Medium projects and SOC 2."
+              allowances={[
+                'Unlimited deploys',
+                '3,600 GB-hours memory',
+                '400 vCPU-hours',
+                '100 GB egress',
+                'Storage by project size',
+                '10,000,000 events',
+                '180-day trace retention',
+                '2× Medium included',
+              ]}
+            >
+              <Button variant="primary">Upgrade to Teams</Button>
+            </PlanColumn>
+            <PlanColumn
+              name="Enterprise"
+              price="Custom"
+              summary="RBAC, SSO, audit logs and custom allowances."
+              allowances={[
+                'Unlimited deploys',
+                'Custom memory',
+                'Custom vCPU',
+                'Custom egress',
+                'Custom storage',
+                'Custom events',
+                'Custom trace retention',
+                'Custom projects',
+              ]}
+            >
+              <Button>Book a call</Button>
+            </PlanColumn>
+          </div>
+          <div className="flex flex-col gap-0.5 px-4">
+            <Txt as="p" variant="caption" tone="muted">
+              Prices per workspace, each month. Compute allowances are shared by Serverless projects and sandboxes.
+            </Txt>
+            <Txt as="p" variant="caption" tone="muted">
+              Beyond allowances: memory $0.05 / GB-hour, vCPU $0.10 / vCPU-hour, egress $0.10 / GB, events $10 / 100K,
+              storage $10 / GB per project.
+            </Txt>
+          </div>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  ),
+};
+
+function AmountField({ label, value, className }: { label: string; value: string; className?: string }) {
+  return (
+    <InputGroup size="sm" className={className}>
+      <InputGroupAddon>$</InputGroupAddon>
+      <InputGroupInput aria-label={label} inputMode="numeric" defaultValue={value} />
+    </InputGroup>
+  );
+}
+
+const BALANCE_BEFORE = 3.8;
+
+function AddCreditsDialog() {
+  const [amount, setAmount] = useState('25');
+  const [autoTopUp, setAutoTopUp] = useState(true);
+  const balanceAfter = BALANCE_BEFORE + (Number(amount) || 0);
+  return (
+    <Dialog>
+      <DialogTrigger render={<Button>Add credits</Button>} />
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle>Add credits</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <SettingsContainer variant="inset">
+            <SettingsRow label="Credits to purchase" description="$1.20 went to vCPU beyond your allowance this month.">
+              <InputGroup size="sm" className="w-30">
+                <InputGroupAddon>$</InputGroupAddon>
+                <InputGroupInput
+                  aria-label="Credits to purchase"
+                  inputMode="numeric"
+                  value={amount}
+                  onChange={event => setAmount(event.target.value)}
+                />
+              </InputGroup>
+            </SettingsRow>
+            <SettingsRow
+              label="Automatically top up"
+              description="Keeps workloads funded before the balance reaches zero."
+            >
+              <div className="flex items-center gap-2">
+                <Badge variant="success" emphasis="subtle" size="sm">
+                  Recommended
+                </Badge>
+                <Switch checked={autoTopUp} onCheckedChange={setAutoTopUp} aria-label="Automatically top up" />
+              </div>
+            </SettingsRow>
+            <SettingsFieldsetRow label="Top up to">
+              <div className="flex items-center gap-2">
+                <AmountField label="Top up to" value="25" className="w-20" />
+                <Txt as="span" variant="body-sm" tone="muted">
+                  when my balance reaches
+                </Txt>
+                <AmountField label="When my balance reaches" value="5" className="w-18" />
+              </div>
+            </SettingsFieldsetRow>
+          </SettingsContainer>
+        </DialogBody>
+        <DialogFooter>
+          <Txt as="p" variant="body-sm" tone="muted" className="mr-auto" aria-live="polite">
+            Balance after{' '}
+            <Txt as="span" variant="label" tone="ink" className="tabular-nums">
+              {formatCost(balanceAfter)}
+            </Txt>
+          </Txt>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction onConfirm={() => {}}>Continue</DialogAction>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export const AddCredits: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A short form dialog, and the one place the inset `SettingsContainer` is meant for: title and Close in the header, stacked settings rows on an inset panel in the body (an amount field, a switch with a badge, and a sentence of two small fields), and a footer whose status sits left of Cancel and the primary action.',
+      },
+    },
+  },
+  render: () => <AddCreditsDialog />,
+};
+
+export const ResizeWhileOpen: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Open either dialog at 1440 × 1000, resize to 390 × 844, then back. It stays open and usable across 640px. The form keeps its draft in the caller while the popup changes from dialog to drawer.',
+      },
+    },
+  },
+  render: args => (
+    <div className="flex flex-wrap items-start gap-4">
+      <PlaygroundDialog {...args} size="full" />
+      <RenameForm />
+    </div>
+  ),
+  play: async ({ canvas, userEvent, canvasElement }) => {
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(canvas.getByRole('button', { name: 'Open dialog' }));
+    await waitFor(() => expect(page.getByRole('dialog', { name: 'Edit agent instructions' })).toBeVisible());
+    await userEvent.click(page.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Rename team' }));
+    await userEvent.clear(page.getByRole('textbox', { name: /Team name/ }));
+    await userEvent.type(page.getByRole('textbox', { name: /Team name/ }), 'Billing team');
+    await userEvent.click(page.getByRole('button', { name: 'Save name' }));
+    await expect(canvas.getByRole('status')).toHaveTextContent('Team renamed to Billing team.');
   },
 };

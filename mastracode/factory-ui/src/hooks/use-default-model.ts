@@ -4,9 +4,10 @@ import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type { DefaultModelResponse } from '../api/types';
 
-export function useDefaultModelQuery() {
+export function useDefaultModelQuery({ enabled = true }: { enabled?: boolean } = {}) {
   const { client } = useApiConfig();
   return useQuery({
+    enabled,
     queryKey: queryKeys.defaultModel(),
     queryFn: () => client.get<DefaultModelResponse>('/web/config/default-model'),
   });
@@ -23,6 +24,19 @@ export function useSetDefaultModel() {
         queryClient.invalidateQueries({ queryKey: queryKeys.defaultModel() }),
         queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
       ]),
+  });
+}
+
+export interface ApplyDefaultModelResponse {
+  modelId: string;
+  applied: string[];
+  skipped: Array<{ sessionId: string; reason: 'not-running' | 'thread-missing' | 'apply-failed' }>;
+}
+
+export function useApplyDefaultModel() {
+  const { client } = useApiConfig();
+  return useMutation({
+    mutationFn: () => client.post<ApplyDefaultModelResponse>('/web/config/default-model/apply', {}),
   });
 }
 

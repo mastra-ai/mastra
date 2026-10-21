@@ -67,6 +67,26 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.values).toContain(5000);
   });
 
+  it('compiles time-to-first-chunk predicates from the stored root and span columns', () => {
+    const compiled = compilePostgresTraceQuery(
+      'custom',
+      plan({
+        where: {
+          op: 'and',
+          args: [
+            { op: 'gt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 500 } },
+            { spans: { some: { op: 'lt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 100 } } } },
+          ],
+        },
+      }),
+    );
+
+    expect(compiled.text).toContain(`r."timeToFirstChunkMs" AS "timeToFirstChunkMs"`);
+    expect(compiled.text).toContain(`r."timeToFirstChunkMs" IS NOT NULL AND r."timeToFirstChunkMs" > $`);
+    expect(compiled.text).toContain(`s."timeToFirstChunkMs" IS NOT NULL AND s."timeToFirstChunkMs" < $`);
+    expect(compiled.values).toEqual(expect.arrayContaining([500, 100]));
+  });
+
   it('parameterizes literals and compiles one correlated existence check per collection clause', () => {
     const compiled = compilePostgresTraceQuery(
       'custom',
@@ -116,11 +136,11 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.text).toContain('SELECT 1 FROM "custom"."mastra_score_events" newer');
     expect(compiled.text).toContain('newer."scoreId" = s."scoreId"');
     expect(compiled.text).toContain('newer."cursorId" > s."cursorId"');
-    expect(compiled.text).toContain('s."scorerVersion" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."scorerVersion" IS NOT NULL AND s."scorerVersion" =');
     expect(compiled.text).toContain('s."scoreSource" IS NOT NULL');
     expect(compiled.text).toContain('s."timestamp" IS NOT NULL AND s."timestamp" >=');
     expect(compiled.text).toContain('s."spanId" IS NOT NULL');
-    expect(compiled.text).toContain('s."entityVersionId" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."entityVersionId" IS NOT NULL AND s."entityVersionId" =');
     expect(compiled.text).toContain('s."parentEntityVersionId" IS NOT NULL');
     expect(compiled.text).toContain('s."rootEntityVersionId" IS NULL OR s."rootEntityVersionId" NOT IN');
     expect(compiled.values).toContain('2026-01-01T12:00:00.000Z');
@@ -158,10 +178,10 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.text).toContain(`jsonb_typeof(s."attributes" -> 'provider') = 'string'`);
     expect(compiled.text).toContain(`EXTRACT(EPOCH FROM (s."endedAt" - s."startedAt"))::numeric * 1000`);
     expect(compiled.text).toContain(`CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status"`);
-    expect(compiled.text).toContain('s."name" IS NOT DISTINCT FROM');
-    expect(compiled.text).toContain('s."model" IS NOT DISTINCT FROM');
-    expect(compiled.text).toContain('s."provider" IS NOT DISTINCT FROM');
-    expect(compiled.text).toContain('s."status" IS NOT DISTINCT FROM');
+    expect(compiled.text).toContain('s."name" IS NOT NULL AND s."name" =');
+    expect(compiled.text).toContain('s."model" IS NOT NULL AND s."model" =');
+    expect(compiled.text).toContain('s."provider" IS NOT NULL AND s."provider" =');
+    expect(compiled.text).toContain('s."status" IS NOT NULL AND s."status" =');
     expect(compiled.text).toContain('s."startedAt" IS NOT NULL AND s."startedAt" >=');
     expect(compiled.text).toContain('s."durationMs" IS NOT NULL AND s."durationMs" >');
     expect(compiled.text).toContain('s."entityVersionId" IS NOT NULL');
@@ -200,7 +220,7 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.text).toContain(`r."metadataSearch" ->> $3`);
     expect(compiled.text).toContain(`jsonb_typeof(r."metadataRaw" -> $3) = 'string'`);
     expect(compiled.text).toContain(`NULLIF(btrim(r."metadataRaw" ->> $3), '')`);
-    expect(compiled.text).toContain('IS NOT DISTINCT FROM $4');
+    expect(compiled.text).toMatch(/ IS NOT NULL AND [\s\S]+ = \$4/);
     expect(compiled.text).toContain('IS NULL OR');
     expect(compiled.values).toEqual([
       TIME_RANGE.from,
@@ -301,7 +321,7 @@ describe('Postgres advanced trace query', () => {
     );
     expect(scores).toContain('AND s."organizationId" = $3');
     expect(scores).toContain('AND s."resourceId" = $4');
-    expect(compiled.text).toContain('s."scorerId" IS NOT DISTINCT FROM $5');
+    expect(compiled.text).toContain('s."scorerId" IS NOT NULL AND s."scorerId" = $5');
 
     const orgOnly = compilePostgresTraceQuery(
       'public',
@@ -321,7 +341,7 @@ describe('Postgres advanced trace query', () => {
     expect(compiled.values.slice(0, 2)).toEqual([TIME_RANGE.from, TIME_RANGE.to]);
     expect(compiled.text).not.toContain('"organizationId" =');
     expect(compiled.text).not.toContain('"resourceId" =');
-    expect(compiled.text).toContain('s."spanType" IS NOT DISTINCT FROM $3');
+    expect(compiled.text).toContain('s."spanType" IS NOT NULL AND s."spanType" = $3');
   });
 
   it('filters null-ended roots before projection and pagination', () => {
@@ -391,7 +411,7 @@ describe('Postgres advanced trace query', () => {
       plan({ where: { op: 'ne', left: { path: 'threadId' }, right: { literal: 'excluded' } } }),
     );
 
-    expect(compiled.text).toContain('r."threadId" IS DISTINCT FROM $3');
+    expect(compiled.text).toContain('r."threadId" IS NULL OR r."threadId" <> $3');
   });
 
   it('matches the requested keyset order and always ties on traceId ascending', () => {
@@ -407,7 +427,7 @@ describe('Postgres advanced trace query', () => {
 
     expect(compiled.text).toContain('"endedAt" < $3');
     expect(compiled.text).toContain('"traceId" > $4');
-    expect(compiled.text).toContain('ORDER BY "endedAt" DESC, "traceId" ASC');
+    expect(compiled.text).toContain('ORDER BY "endedAt" DESC NULLS LAST, "traceId" ASC');
     expect(compiled.values.at(-1)).toBe(3);
   });
 
@@ -429,7 +449,7 @@ describe('Postgres advanced trace query', () => {
     const data = compilePostgresTraceQuery('public', pagePlan);
 
     expect(count.text).toContain('SELECT COUNT(*)::text AS count\nFROM candidates');
-    expect(data.text).toContain('ORDER BY "endedAt" ASC, "traceId" ASC');
+    expect(data.text).toContain('ORDER BY "endedAt" ASC NULLS LAST, "traceId" ASC');
     expect(data.text).toContain('LIMIT $3 OFFSET $4');
     expect(data.values).toEqual([TIME_RANGE.from, TIME_RANGE.to, 25, 50]);
     expect(count.text.split('candidates AS')[0]).toBe(data.text.split('candidates AS')[0]);
@@ -607,9 +627,10 @@ describe('Postgres advanced trace query', () => {
       ],
       page: { next: expect.any(String) },
     });
-    expect(Object.keys(response.traces[0]!)).toHaveLength(18);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(19);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
+      timeToFirstChunkMs: null,
       entityId: 'agent-1',
       parentSpanId: null,
       createdAt: '2026-01-01T12:00:00.000Z',

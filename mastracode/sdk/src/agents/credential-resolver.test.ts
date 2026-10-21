@@ -7,6 +7,7 @@ import {
   withCredentialTenantPreparation,
   resolveCredentialStore,
   resolveTenantFromRequestContext,
+  setCredentialLogger,
   setCredentialStoreProvider,
 } from './credential-resolver.js';
 import { MastraCodeGateway } from './mastracode-gateway.js';
@@ -54,7 +55,7 @@ describe('credential store provider registry', () => {
   });
 
   it('fails closed without an authenticated tenant on the request context', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
     setCredentialStoreProvider(() => fakeStore({}));
     const withoutContext = resolveCredentialStore(undefined);
     const emptyContext = resolveCredentialStore(new RequestContext());
@@ -73,8 +74,23 @@ describe('credential store provider registry', () => {
     warn.mockRestore();
   });
 
+  it('logs failures through a registered logger', () => {
+    const error = vi.fn();
+    setCredentialLogger({ error });
+    try {
+      setCredentialStoreProvider(() => fakeStore({}));
+      resolveCredentialStore(new RequestContext());
+      expect(error).toHaveBeenCalledWith('[MastraCode] Tenant credential resolution failed closed', {
+        reason: 'missing-user-context',
+        hasRequestContext: true,
+      });
+    } finally {
+      setCredentialLogger(undefined);
+    }
+  });
+
   it('fails closed when the tenant store provider cannot resolve a store', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
     setCredentialStoreProvider(() => undefined);
     const ctx = new RequestContext();
     ctx.set('user', { workosId: 'user_1', organizationId: 'org_1' });
@@ -233,12 +249,53 @@ describe('credential store provider registry', () => {
     await expect(prepareCredentialTenant()).rejects.toThrow('requires a request context');
   });
 
+  it('says why tenant resolution failed and logs non-secret diagnostics', async () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      setCredentialStoreProvider(
+        () => fakeStore({}),
+        async () => undefined,
+      );
+      const anonymous = new RequestContext();
+      anonymous.set('controller', { resourceId: 'session-1', threadId: 'thread-1' });
+      await expect(prepareCredentialTenant(anonymous)).rejects.toThrow(
+        'could not be resolved: the request has no authenticated user.',
+      );
+      expect(warn).toHaveBeenLastCalledWith(
+        expect.stringContaining('could not be resolved'),
+        expect.objectContaining({
+          reason: 'missing-user-context',
+          hasUser: false,
+          hasControllerResource: true,
+          hasControllerThread: true,
+          resourceId: 'session-1',
+          threadId: 'thread-1',
+          contextKeys: expect.arrayContaining(['controller']),
+          stack: expect.stringContaining('prepareCredentialTenant'),
+        }),
+      );
+
+      const authenticated = new RequestContext();
+      authenticated.set('user', { id: 'sender', organizationId: 'org_1' });
+      await expect(prepareCredentialTenant(authenticated)).rejects.toThrow(
+        'could not be resolved: no credential policy applies to this request.',
+      );
+      expect(warn).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ reason: 'no-policy-for-principal', hasUser: true }),
+      );
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('org_1');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('ignores the removed principal precedence flag', () => {
     const ctx = new RequestContext();
     ctx.set('user', {
       workosId: 'user_1',
       organizationId: 'org_1',
-      ['org' + 'FirstCredentials']: true,
+      ['orgFirstCredentials']: true,
     });
     expect(resolveTenantFromRequestContext(ctx)).toEqual({
       orgId: 'org_1',

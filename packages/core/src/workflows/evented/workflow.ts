@@ -38,7 +38,12 @@ import {
   ProcessorStepSchema,
   createProcessorSendSignal,
 } from '../../processors';
-import { OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX } from '../../processors/runner';
+import {
+  OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX,
+  endOutputStreamSpanAtStepEnd,
+  endOutputStreamSpanOutsideStep,
+  findOwnModelStepSpan,
+} from '../../processors/runner';
 import {
   resolveProcessorSpanAttributes,
   resolveProcessorSpanName,
@@ -83,6 +88,7 @@ import type {
   InferWorkflowRequestContext,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { resolveLegacyAgent, resolveRegisteredAgent } from '../entry-executors';
 import type { ClassifierStepOutput } from '../entry-executors';
 import { createStepFromClassifier } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
@@ -305,7 +311,15 @@ export function createStep<const QUESTIONS extends ClassifierQuestions, TStepInp
  * Creates a step from a Processor - wraps a Processor as a workflow step
  * Note: We require at least one processor method to distinguish from StepParams
  */
-export function createStep<TProcessorId extends string>(
+export function createStep<
+  TProcessorId extends string,
+  // Inferred from the previous step when chained, so a processor step accepts another processor step's output.
+  TInput extends
+    | InferStandardSchemaOutput<typeof ProcessorStepSchema>
+    | InferStandardSchemaOutput<typeof ProcessorStepOutputSchema> = InferStandardSchemaOutput<
+    typeof ProcessorStepSchema
+  >,
+>(
   processor:
     | (Processor<TProcessorId> & { processInput: Function })
     | (Processor<TProcessorId> & { processInputStream: Function })
@@ -318,7 +332,7 @@ export function createStep<TProcessorId extends string>(
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
-  InferStandardSchemaOutput<typeof ProcessorStepSchema>,
+  TInput,
   InferStandardSchemaOutput<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
@@ -576,13 +590,14 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
       const logger = mastra?.getLogger();
+      const agent = resolveRegisteredAgent(params, mastra);
       const toolData = {
         name: params.name ?? params.id,
         args: inputData,
       } as const;
 
       // Detect model version to choose streaming method
-      const isV2Model = isSupportedLanguageModel(await params.getModel({ requestContext }));
+      const isV2Model = isSupportedLanguageModel(await agent.getModel({ requestContext }));
 
       // Track structured output result
       let structuredResult: any = null;
@@ -602,7 +617,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
 
       try {
         if (isV2Model) {
-          const streamResult = await params.stream((inputData as { prompt: string }).prompt, {
+          const streamResult = await agent.stream((inputData as { prompt: string }).prompt, {
             ...(agentOptions ?? {}),
             ...observabilityContext,
             requestContext,
@@ -631,11 +646,12 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
             resolveText = resolve;
           });
 
-          if (typeof params.streamLegacy !== 'function') {
+          const legacyAgent = resolveLegacyAgent(agent, mastra);
+          if (typeof legacyAgent.streamLegacy !== 'function') {
             throw new Error(`Agent step "${params.id}" uses a legacy v1 model but does not implement streamLegacy().`);
           }
 
-          const legacyResult = await params.streamLegacy((inputData as { prompt: string }).prompt, {
+          const legacyResult = await legacyAgent.streamLegacy((inputData as { prompt: string }).prompt, {
             ...(agentOptions ?? {}),
             ...observabilityContext,
             requestContext,
@@ -1060,6 +1076,9 @@ function createStepFromProcessor<TProcessorId extends string>(
       // Find appropriate parent span:
       // - For input/outputResult: find AGENT_RUN (processor runs once at start/end)
       // - For inputStep/outputStep/toolResult: find MODEL_STEP (processor runs per LLM call / tool round-trip)
+      // - For outputStream: the MODEL_STEP whose stream is processed, else AGENT_RUN. Durable agents stay
+      //   on AGENT_RUN because their stream runs with the agent run's context; their tool-result chunks
+      //   do carry a step, but they reuse the span that is already open
       // When workflow is executed, currentSpan is WORKFLOW_STEP, so we walk up the parent chain
       // Fall back to currentSpan only when its tree can reach exporters — otherwise
       // the public processor span would export as an orphan trace root.
@@ -1067,7 +1086,9 @@ function createStepFromProcessor<TProcessorId extends string>(
       const parentSpan =
         phase === 'inputStep' || phase === 'outputStep' || phase === 'toolResult'
           ? currentSpan?.findParent(SpanType.MODEL_STEP) || fallbackSpan
-          : currentSpan?.findParent(SpanType.AGENT_RUN) || fallbackSpan;
+          : (phase === 'outputStream' && findOwnModelStepSpan(currentSpan)) ||
+            currentSpan?.findParent(SpanType.AGENT_RUN) ||
+            fallbackSpan;
 
       const processorSpan =
         phase !== 'outputStream'
@@ -1379,6 +1400,13 @@ function createStepFromProcessor<TProcessorId extends string>(
               // Use processorState (from the shared processorStates Map) so state persists
               // across processOutputStream and processOutputResult calls
               const mutableState = processorState;
+              endOutputStreamSpanOutsideStep(
+                mutableState,
+                processor.id,
+                part as ChunkType,
+                parentSpan,
+                (streamParts ?? []).length,
+              );
               let processorSpan = mutableState[spanKey] as
                 | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
                 | undefined;
@@ -1435,6 +1463,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   delete mutableState[spanKey];
                   delete mutableState[hookDurationKey];
                 }
+                endOutputStreamSpanAtStepEnd(mutableState, processor.id, part as ChunkType, (streamParts ?? []).length);
               } catch (error) {
                 // End span with error and clean up state
                 if (error instanceof TripWire) {
@@ -2476,9 +2505,7 @@ export class EventedRun<
     // Validate label exists if provided
     if (params.label && !snapshotResumeLabel) {
       const availableLabels = Object.keys(snapshot?.resumeLabels ?? {});
-      throw new Error(
-        `Resume label "${params.label}" not found. ` + `Available labels: [${availableLabels.join(', ')}]`,
-      );
+      throw new Error(`Resume label "${params.label}" not found. Available labels: [${availableLabels.join(', ')}]`);
     }
 
     // Label takes precedence over step param

@@ -6,7 +6,8 @@ import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
-import { CommittedInput, type SaveEnvironment } from './CommittedInput';
+import { CommittedInput } from './CommittedInput';
+import type { SaveEnvironment } from './CommittedInput';
 
 /** The JSON Schema subset the settings renderer reads; anything else renders as unsupported. */
 interface SettingSchema {

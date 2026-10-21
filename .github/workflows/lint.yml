@@ -119,6 +119,9 @@ jobs:
         with:
           # The check diffs against the PR base branch.
           fetch-depth: 0
+          # Partial clone: the check runs `git diff --name-only`, which reads
+          # trees only, so historical file versions are never needed.
+          filter: blob:none
           persist-credentials: false
 
       - name: Setup pnpm and Node.js
@@ -370,7 +373,7 @@ jobs:
       - name: Setup Node.js 22.x
         uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24.18.0
+          node-version: 24.22.0
           package-manager-cache: false
 
       - name: Run package.json validator
