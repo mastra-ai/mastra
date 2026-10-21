@@ -3,11 +3,8 @@
  * worker is SIGKILLed while the final model call is in flight, and a fresh
  * process recovers the run from the shared LibSQL file.
  *
- * Recovery finishes the turn without a second observation and stores the same
- * messages as a single-process run. But OM's per-turn state (`inputMessageIds`,
- * `drainedPartKeys`) lives only in the dead worker's memory, so the resumed
- * prompt drops the already-observed user request. Those cases are `it.fails`
- * until the turn state is persisted and rehydrated on recovery.
+ * Recovery finishes the turn without a second observation, retains the current
+ * request and unread tool result, and stores the same messages as a single-process run.
  */
 import { fork } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
@@ -153,9 +150,11 @@ describe.each(['durable', 'evented'] as const)('OM in-flight turn recovered by a
     expect(new Set(resumed.state.messages.map(m => m.id)).size).toBe(resumed.state.messages.length);
   });
 
-  // #27614: flip to `it` once OM turn state is rehydrated on cross-worker recovery.
-  it.fails('keeps the user request in the resumed prompt', () => {
+  it('keeps the user request and unread tool result in the resumed prompt', () => {
     expect(resumed.actor.length).toBeGreaterThanOrEqual(1);
-    for (const call of resumed.actor) expect(call.hasUserRequest).toBe(true);
+    for (const call of resumed.actor) {
+      expect(call.hasUserRequest).toBe(true);
+      expect(call.toolResults).toContain('call_1');
+    }
   });
 });

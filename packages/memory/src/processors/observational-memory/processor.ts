@@ -320,6 +320,12 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         this.turn.agent = args.agent;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory, runState);
+        if (stepNumber > 0) {
+          // The previous worker's turn is gone, but the durable MessageList snapshot still
+          // tracks which input messages belong to this run, even after they were drained
+          // into memory. Keep those messages in the live prompt during mid-turn cleanup.
+          this.turn.inputMessageIds = messageList.serialize().newUserMessagesPersisted;
+        }
         // A run recovered by another worker can continue a response message that the dead
         // worker already observed. That worker rotated the id in memory, but the rotation was
         // lost with it. Seal and rotate again so the rest of the turn isn't merged into the observed message.
