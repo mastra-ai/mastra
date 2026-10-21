@@ -55,11 +55,17 @@ import type {
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 
+import { DEFAULT_EVENTS_HEARTBEAT_INTERVAL_MS, EVENTS_EXTENSION_ID } from '../shared/events';
 import { JSON_SCHEMA_2020_12, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { withServerTraceContext, withoutTraceContext } from '../shared/trace-context';
 import type { CallerTraceContext } from '../shared/trace-context';
 import { ServerPromptActions, ServerResourceActions, ServerToolActions } from './actions';
+import { ServerEventActions } from './events/actions';
+import { registerEventHandlers } from './events/handlers';
+import { ServerEventRegistry, toDescriptor } from './events/registry';
+import type { MCPServerEventDefinition, MCPServerEventsOptions } from './events/types';
+import { WebhookDispatcher } from './events/webhook-dispatcher';
 import {
   INPUT_KEY,
   callerTrace,
@@ -91,6 +97,19 @@ export interface MCPServerConfig extends CoreMCPServerConfig {
   cacheHints?: MCPServerCacheHints;
   /** Integrity protection for `input_required` continuation state. */
   requestState?: MCPServerRequestStateOptions;
+  /**
+   * Event types served over the MCP Events extension (`events/list`, `events/poll`,
+   * `events/stream`), keyed by event name. Declare each with `defineEvent()`.
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  events?: Record<string, MCPServerEventDefinition>;
+  /**
+   * Server-wide settings for `events`.
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  eventsOptions?: MCPServerEventsOptions;
 }
 
 export interface MCPServerHTTPOptions {
@@ -161,6 +180,13 @@ export class MCPServer extends MCPServerBase {
   readonly resources: ServerResourceActions;
   readonly prompts: ServerPromptActions;
   readonly toolActions: ServerToolActions;
+  /**
+   * Publishes occurrences of the configured `events` to poll, push and (when
+   * `eventsOptions.webhook` is set) webhook subscribers.
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  readonly events: ServerEventActions;
 
   private readonly resourceOptions?: MCPServerResources;
   private readonly promptOptions?: MCPServerPrompts;
@@ -171,6 +197,9 @@ export class MCPServer extends MCPServerBase {
   private readonly mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
   private readonly fga?: MCPServerFGAConfig;
   private readonly requestStateCodec: RequestStateCodec<ContinuationEnvelope>;
+  private readonly eventRegistry: ServerEventRegistry;
+  private readonly eventsOptions: MCPServerEventsOptions;
+  private readonly webhooks?: WebhookDispatcher;
 
   private httpHandler?: McpHttpHandler;
   private nodeHandler?: NodeMcpRequestHandler;
@@ -187,6 +216,16 @@ export class MCPServer extends MCPServerBase {
     this.resourceOptions = config.resources;
     this.loadAppResources(config.appResources);
     this.requestStateCodec = this.createRequestStateCodec(config.requestState);
+    this.eventsOptions = config.eventsOptions ?? {};
+    const webhook = this.eventsOptions.webhook;
+    this.eventRegistry = new ServerEventRegistry(config.events, { webhook: webhook !== undefined });
+    if (webhook && this.eventRegistry.size > 0) {
+      this.webhooks = new WebhookDispatcher({
+        registry: this.eventRegistry,
+        options: webhook,
+        getLogger: () => this.logger,
+      });
+    }
     if (config.resources?.resumeSchema) this.assertFormRepresentable('resources', config.resources.resumeSchema);
     if (config.prompts?.resumeSchema) this.assertFormRepresentable('prompts', config.prompts.resumeSchema);
 
@@ -198,6 +237,11 @@ export class MCPServer extends MCPServerBase {
     });
     this.resources = new ServerResourceActions(deps);
     this.prompts = new ServerPromptActions(deps);
+    this.events = new ServerEventActions(this.eventRegistry, () =>
+      this.eventRegistry
+        .list()
+        .map(event => toDescriptor(event, (schema, options) => this.jsonSchema(schema, options))),
+    );
   }
 
   private createRequestStateCodec(options: MCPServerRequestStateOptions | undefined) {
@@ -489,7 +533,19 @@ export class MCPServer extends MCPServerBase {
     if (this.appResourceList.length > 0 || this.hasUiMetadata()) {
       capabilities.extensions = { 'io.modelcontextprotocol/ui': {} };
     }
+    if (this.eventRegistry.size > 0) {
+      capabilities.extensions = { ...capabilities.extensions, [EVENTS_EXTENSION_ID]: this.eventsCapability() };
+    }
     return capabilities;
+  }
+
+  /**
+   * Settings advertised under `extensions["io.modelcontextprotocol/events"]`. `listChanged` is not
+   * advertised: the SDK's `subscriptions/listen` drops the `eventsListChanged` filter, so
+   * `notifications/events/list_changed` cannot be delivered.
+   */
+  private eventsCapability(): Record<string, never> {
+    return {};
   }
 
   private createServerInstance(): Server {
@@ -517,7 +573,43 @@ export class MCPServer extends MCPServerBase {
     this.registerToolHandlers(server);
     this.registerResourceHandlers(server);
     this.registerPromptHandlers(server);
+    if (this.eventRegistry.size > 0) {
+      registerEventHandlers(server, {
+        registry: this.eventRegistry,
+        heartbeatIntervalMs: this.eventsOptions.heartbeatIntervalMs ?? DEFAULT_EVENTS_HEARTBEAT_INTERVAL_MS,
+        listPageSize: this.eventsOptions.listPageSize,
+        maxStreams: this.eventsOptions.maxStreams,
+        webhooks: this.webhooks,
+        getLogger: () => this.logger,
+        jsonSchema: (schema, options) => this.jsonSchema(schema, options),
+        trace: (instance, method, params, ctx, fn) => this.traceCustomRequest(instance, method, params, ctx, fn),
+      });
+    }
     return server;
+  }
+
+  /**
+   * {@link setTracedHandler} for methods outside the spec's request map (the events
+   * extension): the request runs under an `MCP_SERVER_REQUEST` span with its resolved
+   * request context. A push stream's span lasts as long as the stream.
+   */
+  private async traceCustomRequest<T>(
+    server: Server,
+    method: string,
+    params: Record<string, unknown>,
+    ctx: ServerContext,
+    fn: (requestContext: RequestContext) => Promise<T>,
+  ): Promise<T> {
+    const caller = callerTrace(ctx);
+    let requestContext: RequestContext;
+    try {
+      requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
+    } catch (error) {
+      this.startRequestSpan(method, params, { server, ctx, caller })?.error({ error: error as Error });
+      throw error;
+    }
+    const requestSpan = this.startRequestSpan(method, params, { server, ctx, caller, requestContext });
+    return this.traceRequest(requestSpan, () => fn(requestContext));
   }
 
   /**
@@ -1166,6 +1258,13 @@ export class MCPServer extends MCPServerBase {
   }
 
   async close(): Promise<void> {
+    this.webhooks?.close();
+    // Ends open event streams first, then yields a macrotask so the protocol writes their final
+    // results before the transports are torn down.
+    if (this.eventRegistry.openStreams.size > 0) {
+      this.eventRegistry.closeStreams();
+      await new Promise(resolve => setImmediate(resolve));
+    }
     if (this.stdioHandle) {
       await this.stdioHandle.close();
       this.stdioHandle = undefined;

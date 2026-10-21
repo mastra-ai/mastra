@@ -312,9 +312,9 @@ describeParity('default-loop-contracts parity', target => {
       expect(results[engine]!.requests).toHaveLength(2);
       expect(JSON.stringify(results[engine]!.requests[0]!.prompt)).not.toContain(FEEDBACK);
       expect(JSON.stringify(results[engine]!.requests[1]!.prompt)).toContain(FEEDBACK);
-      expect(turn.streamedText).toMatch(/MORE$/);
-      // Harness check: 'feedback triggers one more iteration that sees it' (`modelCalls === 2 &&
-      // /MORE$/.test(finalText)`); the two requests and the streamed text above are that check.
+      // Unprocessed feedback text must agree on the wire and in the final output.
+      expect(turn.streamedText).toBe('firstMORE');
+      expect(turn.fullOutput.text).toBe('firstMORE');
       // The feedback itself is the hook's return value, and `context.text` carries the iteration's
       // own text rather than the feedback message, so the second call reads `MORE`.
       expect(hookCalls.get(engine), `${engine}: the iteration hook was consulted twice`).toHaveLength(2);

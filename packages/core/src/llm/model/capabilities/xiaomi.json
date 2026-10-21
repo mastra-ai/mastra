@@ -12,7 +12,12 @@
     "mimo-v2.6-pro-ultraspeed"
   ],
   "reasoning": {
-    "mimo-v2.5": [
+    "mimo-v2-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2.6-flash": [
       {
         "type": "toggle"
       }
@@ -27,7 +32,12 @@
         "type": "toggle"
       }
     ],
-    "mimo-v2-pro": [
+    "mimo-v2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2-omni": [
       {
         "type": "toggle"
       }
@@ -38,16 +48,6 @@
       }
     ],
     "mimo-v2.5-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mimo-v2-omni": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mimo-v2.6-flash": [
       {
         "type": "toggle"
       }

@@ -11,7 +11,12 @@ import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { seedSessionOrg } from '../session/org-seed.js';
-import { sessionMemoryResourceId, listFactorySessionThreads } from '../session/session-threads.js';
+import {
+  sessionMemoryResourceId,
+  listFactorySessionThreads,
+  sessionThreadsToMove,
+  userSessionResourceFor,
+} from '../session/session-threads.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
@@ -23,6 +28,7 @@ import type {
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteAuth } from './route.js';
+import { canReadSessionResource, canViewSourceControlSession } from './session-access.js';
 
 type RouteContext = Context;
 
@@ -31,6 +37,8 @@ function loose(c: unknown): RouteContext {
 }
 
 export const USER_SESSION_BRANCH_PREFIX = 'user/session-';
+// Slack thread sessions live on `slack/<thread>` branches (integrations/slack/slack.ts threadBranch).
+const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const MAX_SESSION_OWNER_PROFILES = 100;
 const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
@@ -59,6 +67,8 @@ export interface SourceControlSessionRoutesOptions {
   /** How long recreate waits for an aborted run to settle before destroying. */
   abortSettleTimeoutMs?: number;
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'>;
+  /** Moves a thread, with everything keyed by its resource, when a session's visibility changes. */
+  moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
 }
 
 const ABORT_SETTLE_TIMEOUT_MS = 5_000;
@@ -194,8 +204,8 @@ async function resolveSession(
 }
 
 /**
- * Start the live conversation for a user session on its own thread (thread id === session id), under its owner's
- * resource. Agent-controller
+ * Start the live conversation for a user session on its own thread (thread id === session id), under the resource
+ * its visibility gives it. Agent-controller
  * routes only act on started sessions, so the first prompt the page sends right after creation always lands on the
  * thread the page reads, with the org and Factory address already in state. Get-or-create, so retried or repeated
  * creates are safe.
@@ -203,13 +213,15 @@ async function resolveSession(
 async function startUserSessionConversation(
   controller: SourceControlSessionRoutesOptions['controller'],
   session: SourceControlSession,
-): Promise<void> {
-  if (!controller) return;
+  // Its owner's resource while private, its Factory's when created shared (a run from a board card).
+  resourceId: string = userSessionResourceFor(session, session.visibility === 'org' ? 'org' : 'private'),
+) {
+  if (!controller) return undefined;
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: session.userId, organizationId: session.orgId });
   const live = await controller.createSession({
     id: session.sessionId,
-    resourceId: session.userId,
+    resourceId,
     threadId: session.sessionId,
     ownerId: session.userId,
     requestContext,
@@ -223,6 +235,7 @@ async function startUserSessionConversation(
       ...(session.projectRepositoryId ? { projectRepositoryId: session.projectRepositoryId } : {}),
     });
   }
+  return live;
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
@@ -375,6 +388,12 @@ function projectSessionRoutes(
           return c.json({ error: 'Invalid title' }, 400);
         }
         const normalizedTitle = body.title === undefined ? null : normalizeSessionTitle(body.title);
+        // Sessions start shared on the Factory. Only a session someone opens for themselves (New session) asks for
+        // `private`.
+        if (body.visibility !== undefined && body.visibility !== 'private' && body.visibility !== 'org') {
+          return c.json({ error: "visibility must be 'private' or 'org'" }, 400);
+        }
+        const visibility = body.visibility ?? 'org';
         let branch: string;
         if (body.branch === undefined) branch = `${USER_SESSION_BRANCH_PREFIX}${sessionId}`;
         else if (isValidGitRef(body.branch)) branch = body.branch;
@@ -406,7 +425,7 @@ function projectSessionRoutes(
             branch,
             baseBranch,
             title: normalizedTitle,
-            visibility: 'org',
+            visibility,
           })
           .catch(async error => {
             if (!(error instanceof UniqueViolationError) || !requestedSessionId) throw error;
@@ -469,22 +488,59 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if ('response' in resolved) return resolved.response;
         const match = await resolveSession(options.sourceControls, c.req.param('sessionId'));
         const session = match?.session;
-        if (
-          !session ||
-          session.orgId !== resolved.tenant.orgId ||
-          (session.visibility === 'private' && session.userId !== resolved.tenant.userId)
-        ) {
+        if (!session || !canViewSourceControlSession(session, resolved.tenant)) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        // The client opens the session by its id and creates it under this resource.
+        const resourceId = await sessionMemoryResourceId(options.controller, session, options.workItems);
+        if (!canReadSessionResource(session, resourceId, resolved.tenant)) {
           return c.json({ error: 'Session not found' }, 404);
         }
         const owners = await resolveOwnerProfiles([session.userId]);
         const recreateSandbox =
           canRecreateSandbox(options) &&
           (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
-        // The client opens the session by its id and creates it under this resource.
-        const resourceId = await sessionMemoryResourceId(options.controller, session, options.workItems);
         return c.json({
           session: { ...withCapabilities(withOwnerProfile(session, owners), recreateSandbox), resourceId },
         });
+      },
+    }),
+    // Start a session's sandbox without sending it a message, for the Files tab.
+    // Brings the controller session online as the row's owner, as a delivered
+    // message would, then starts its sandbox; a running sandbox returns at once.
+    registerApiRoute('/web/user-sessions/:sessionId/sandbox/start', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const match = await resolveSession(options.sourceControls, c.req.param('sessionId'));
+        const session = match?.session;
+        if (!session) return c.json({ error: 'Session not found' }, 404);
+        const permission = await sessionManagePermission(loose(c), options.auth, resolved.tenant, session);
+        if (permission === 'not-found') return c.json({ error: 'Session not found' }, 404);
+        if (permission === 'forbidden') {
+          return c.json({ error: "Only the session's owner or an organization admin can start its sandbox." }, 403);
+        }
+        const controller = options.controller;
+        if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
+
+        try {
+          const live =
+            (await controller.getSession(session.sessionId)) ??
+            (await startUserSessionConversation(
+              controller,
+              session,
+              await sessionMemoryResourceId(controller, session, options.workItems),
+            ));
+          const sandbox = live?.getWorkspace()?.sandbox;
+          if (!sandbox?.start) return c.json({ error: 'This session has no sandbox to start.' }, 409);
+          await sandbox.start();
+          return c.json({ started: true });
+        } catch (error) {
+          console.error('[Factory Sessions] Failed to start session sandbox', { sessionId: session.sessionId, error });
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId/sandbox/recreate', {
@@ -593,6 +649,85 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           });
         }
         return c.json({ removed: true });
+      },
+    }),
+    registerApiRoute('/web/user-sessions/:sessionId/visibility', {
+      method: 'PUT',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), options.auth);
+        if ('response' in resolved) return resolved.response;
+        const body = (await c.req.json().catch(() => undefined)) as { visibility?: unknown } | undefined;
+        const visibility = body?.visibility;
+        if (visibility !== 'private' && visibility !== 'org') {
+          return c.json({ error: "visibility must be 'private' or 'org'" }, 400);
+        }
+        const sessionId = c.req.param('sessionId');
+        const match = await resolveSession(options.sourceControls, sessionId);
+        const row = match?.session;
+        // Only the owner may share or unshare; everyone else gets the same 404
+        // as a missing session so org-visible ids are not confirmed either.
+        if (!match || !row || row.orgId !== resolved.tenant.orgId || row.userId !== resolved.tenant.userId) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        // Without work-item storage there's no telling whether this is a Factory
+        // run, so refuse rather than let a run be made private.
+        if (!options.workItems) {
+          return c.json(
+            {
+              error:
+                "Session visibility can't be changed yet: Factory storage is still starting up. Try again in a moment.",
+            },
+            503,
+          );
+        }
+        // Only sessions a person started in the UI can change. Factory runs and
+        // Slack threads keep the visibility they were created with: runs and
+        // channel threads stay with the team, Slack DMs stay private.
+        if (
+          row.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) ||
+          (row.factoryProjectId !== null &&
+            (await options.workItems.hasRunBindingForSession({
+              orgId: row.orgId,
+              factoryProjectId: row.factoryProjectId,
+              sessionId,
+            })))
+        ) {
+          return c.json({ error: 'Only user sessions can change visibility' }, 409);
+        }
+        // Sharing puts the session on its Factory's memory; without a Factory there is nowhere to share it to.
+        if (visibility === 'org' && !row.factoryProjectId) {
+          return c.json({ error: "This session isn't linked to a Factory, so it can't be shared." }, 409);
+        }
+        const resourceId = userSessionResourceFor(row, visibility);
+        const controller = options.controller;
+        // The resource says who may read a session, so its threads move with it.
+        const threadIds = controller ? await sessionThreadsToMove(controller, row, resourceId) : [];
+        if (threadIds.length > 0 && !options.moveThread) {
+          return c.json({ error: 'Changing session visibility is not available on this server.' }, 503);
+        }
+        if (controller?.listActiveThreadRuns().some(run => threadIds.includes(run.threadId))) {
+          return c.json({ error: 'Wait for the session to finish its run before changing visibility' }, 409);
+        }
+        // Write in the order that fails closed: threads leave the Factory before the
+        // row says private, and the row says shared before threads reach the Factory.
+        // A failed move then leaves the session less visible, never more, and a retry
+        // moves what is left.
+        const moveThreads = async () => {
+          for (const threadId of threadIds) await options.moveThread!({ threadId, resourceId });
+        };
+        if (visibility === 'private') await moveThreads();
+        const updated = await match.sourceControl.sessions.setVisibility({ sessionId, visibility });
+        if (!updated) return c.json({ error: 'Session not found' }, 404);
+        if (visibility === 'org') await moveThreads();
+        // A live session keeps the resource it started on. Drop it so the next
+        // request resumes on its moved thread, or point it at the new resource
+        // when it has no thread to resume from yet.
+        const live = await controller?.getSession(sessionId);
+        if (live && threadIds.length > 0) await controller!.deleteSession({ sessionId });
+        else if (live) await controller!.setResourceId(live, { resourceId });
+        const owners = await resolveOwnerProfiles([updated.userId]);
+        return c.json({ session: withOwnerProfile(updated, owners) });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId/title', {

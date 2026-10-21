@@ -213,6 +213,46 @@ export async function migrateSessionResources(
   return report;
 }
 
+export interface SessionVisibilityBackfillDeps {
+  sessions: {
+    listSessionsAwaitingVisibilityCheck(): Promise<SourceControlSession[]>;
+    markVisibilityChecked(sessionId: string, options: { makePrivate: boolean }): Promise<void>;
+  };
+  workItems: Pick<SessionResourceMigrationDeps['workItems'], 'listRunBoundItems'>;
+  memory: Pick<MemoryStorage, 'getThreadById'>;
+}
+
+/**
+ * Mark shared user sessions private when their conversation lives on their owner's resource.
+ * The resource already keeps teammates out of such a session; this makes lists agree, so they
+ * stop seeing a session they can't open. Sessions shared onto their Factory, runs, Slack threads
+ * and side sessions are left alone. Each session is checked once: new sessions start checked,
+ * and a session that throws stays unchecked so the next start retries it.
+ */
+export async function privatizeOwnerResourceSessions(deps: SessionVisibilityBackfillDeps): Promise<number> {
+  let privatized = 0;
+  for (const session of await deps.sessions.listSessionsAwaitingVisibilityCheck()) {
+    try {
+      let makePrivate = false;
+      if (session.visibility !== 'private') {
+        const { owner } = sessionMemoryResource(session, await deps.workItems.listRunBoundItems(session.sessionId));
+        const thread = owner === 'user' ? await deps.memory.getThreadById({ threadId: session.sessionId }) : null;
+        makePrivate = thread?.resourceId === session.userId;
+      }
+      await deps.sessions.markVisibilityChecked(session.sessionId, { makePrivate });
+      if (makePrivate) privatized += 1;
+    } catch (error) {
+      console.warn(
+        `[factory] session visibility check: session ${session.sessionId} not checked: ${error instanceof Error ? error.message : error}`,
+      );
+    }
+  }
+  if (privatized > 0) {
+    console.info(`[factory] session visibility check: ${privatized} sessions on their owner's memory made private`);
+  }
+  return privatized;
+}
+
 async function moveThread(
   deps: SessionResourceMigrationDeps,
   thread: StorageThreadType,

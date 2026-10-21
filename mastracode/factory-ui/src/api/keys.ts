@@ -147,12 +147,12 @@ export const queryKeys = {
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
   workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>
     ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
-  workspaceFiles: (workspacePath: string | undefined, threadId: string | undefined) =>
-    ['workspace-files', workspacePath ?? null, threadId ?? null] as const,
-  workspaceFilesScope: (workspacePath: string | undefined) => ['workspace-files', workspacePath ?? null] as const,
+  workspaceTreeScope: (workspacePath: string | undefined) => ['workspace-tree', workspacePath ?? null] as const,
+  workspaceTree: (workspacePath: string | undefined, path: string) =>
+    ['workspace-tree', workspacePath ?? null, path] as const,
   workspaceFileScope: (workspacePath: string | undefined) => ['workspace-file', workspacePath ?? null] as const,
-  workspaceFile: (workspacePath: string | undefined, filePath: string | undefined, threadId?: string) =>
-    ['workspace-file', workspacePath ?? null, filePath ?? null, threadId ?? null] as const,
+  workspaceFile: (workspacePath: string | undefined, filePath: string | undefined) =>
+    ['workspace-file', workspacePath ?? null, filePath ?? null] as const,
   // Keyed by toolCallId so each plan (re)submission fetches the file fresh
   // instead of reusing the previous submission's cached content.
   planFile: (workspacePath: string | undefined, filePath: string | undefined, toolCallId: string | undefined) =>

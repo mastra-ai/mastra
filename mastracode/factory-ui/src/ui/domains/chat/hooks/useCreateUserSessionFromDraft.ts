@@ -38,6 +38,8 @@ export function useCreateUserSessionFromDraft() {
         const session = await createUserSession(baseUrl, projectRepositoryId, {
           sessionId: draftSessionId,
           title: prompt,
+          // A session someone opens for themselves stays theirs until they share it.
+          visibility: 'private',
         });
         return { session, prompt, files, factoryId, handoffModelId, thinkingLevelOverride };
       } catch (error) {
