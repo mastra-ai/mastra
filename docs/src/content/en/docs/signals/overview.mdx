@@ -9,9 +9,9 @@ packages:
 
 **Added in:** `@mastra/core@1.39.0`
 
-Signals are typed input you send into an agent thread instead of packing everything into a single `agent.stream()` call. A signal can be a user follow-up, an event from another system, a policy reminder, or state that a processor computed. Because the thread stores the conversation, Mastra can wake an idle agent with the signal, deliver it into a run that is already active, or hold it for the next turn. A thread subscription streams the output and lifecycle back to your app, so the UI stays current while the agent keeps working.
+Signals are typed input you send into an existing agent thread instead of passing everything into a single `agent.stream()` call. A signal can be a message, extra context, or a state update, and Mastra decides how it joins the thread based on what the agent is doing.
 
-The value is one durable thread that accepts input from many sources. Users can steer a run, background jobs can attach context, and external systems can wake or notify the agent without restarting the conversation. Subscribers see a single ordered stream regardless of where that input came from. For the method-by-method choice, see [Choose a method](/docs/signals/sending-signals#choose-a-method).
+For long-running agents, that removes the need to restart a request whenever something changes. The thread keeps its history, the active run keeps its context, and your UI keeps one stream open instead of reconnecting for every update.
 
 :::tip[📹 Watch]
 
@@ -50,7 +50,7 @@ Add a timeline diagram with three cases:
 
 Use signals when an agent thread needs new input or context outside the original `stream()` call. Signals are useful when users send follow-up messages while a run is active, when background systems need to add context to a thread, or when external events should wake, update, or notify the agent.
 
-Use `sendMessage()` and `queueMessage()` for user-authored input. Use `sendSignal()` for lower-level system context. Use `sendStateSignal()` for durable state lanes, and use `sendNotificationSignal()` when an external event should create a durable notification inbox record.
+Use `sendMessage()` and `queueMessage()` for user-authored input. Use `sendSignal()` for lower-level system context. Use `sendStateSignal()` for durable state lanes, and use `sendNotificationSignal()` when an external event should create a durable notification inbox record. For help picking between these methods, see [Choose a method](/docs/signals/sending-signals#choose-a-method).
 
 ## Quickstart
 
