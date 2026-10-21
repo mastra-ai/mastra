@@ -1,5 +1,11 @@
 # @mastra/auth-better-auth
 
+## 1.1.8
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 1.1.8-alpha.0
 
 ### Patch Changes
