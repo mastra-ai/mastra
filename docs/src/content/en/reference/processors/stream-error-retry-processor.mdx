@@ -115,7 +115,7 @@ export const agent = new Agent({
 
 ## Default OpenAI Responses matcher
 
-`isRetryableOpenAIResponsesStreamError` matches OpenAI Responses stream error chunks with `type: 'error'` or `type: 'response.failed'`. It retries known transient OpenAI error codes. As a fallback, it retries errors with explicit retry guidance such as `You can retry your request`.
+`isRetryableOpenAIResponsesStreamError` matches OpenAI Responses stream error chunks with `type: 'error'` or `type: 'response.failed'`. It retries chunks whose error reads as a rate limit, a provider outage, or a timeout, and never a chunk the provider marked `invalid_request_error`. As a fallback, it retries errors with explicit retry guidance such as `You can retry your request`.
 
 `StreamErrorRetryProcessor` includes this matcher by default. You can also import it and reuse it in custom retry logic.
 
