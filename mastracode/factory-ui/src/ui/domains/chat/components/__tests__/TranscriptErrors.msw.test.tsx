@@ -21,18 +21,25 @@ import { failedReply, modelsWithCredentialHolder, nextUserMessage, runErrorModel
 // cmdk scrolls the highlighted model into view; jsdom has no scrolling implementation.
 Element.prototype.scrollIntoView ??= () => {};
 
+type LiveEvent = Extract<Parameters<typeof transcriptReducer>[1], { type: 'event' }>['event'];
+
 function ErrorSession({
   messages,
+  liveEvent,
   busy = false,
   connectionStatus = 'ready',
   owner,
 }: {
   messages: MastraDBMessage[];
+  liveEvent?: LiveEvent;
   busy?: boolean;
   connectionStatus?: ConnectionStatus;
   owner?: ThreadOwner;
 }) {
   const api = useAgentControllerTranscript({ initialMessages: messages, initialThreadId: 'thread-1' });
+  const entries = liveEvent
+    ? transcriptReducer(initialTranscript, { type: 'event', event: liveEvent }).entries
+    : api.transcript.entries;
   return (
     <MemoryRouter initialEntries={['/factories/factory-1/sessions/session-1']}>
       <ChatSessionContext.Provider
@@ -67,7 +74,7 @@ function ErrorSession({
                 loadMore: { hasMore: false, isLoading: false },
               }}
             >
-              <TranscriptEntries entries={api.transcript.entries} onApprove={() => {}} onRespond={() => {}} />
+              <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />
             </ChatTranscriptContext.Provider>
           </ChatModelsProvider>
         </ChatConnectionContext.Provider>
@@ -389,5 +396,16 @@ describe('chat run errors', () => {
     renderWithProviders(<TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />);
 
     expect(screen.getByText('Model request rejected')).toBeVisible();
+  });
+
+  it('classifies a live error by the status the server kept, not by its message alone', () => {
+    renderWithProviders(
+      <ErrorSession
+        messages={[]}
+        liveEvent={{ type: 'error', error: { name: 'AI_APICallError', message: 'Bad Request', statusCode: 403 } }}
+      />,
+    );
+
+    expect(screen.getByText('Provider access failed')).toBeVisible();
   });
 });

@@ -43,6 +43,14 @@ describe('toPersistedErrorIdentity', () => {
       code: 'insufficient_quota',
     });
     expect(Object.keys(toPersistedErrorIdentity(new Error('boom')))).toEqual(['name', 'message']);
+    expect(
+      toPersistedErrorIdentity(
+        Object.assign(new Error('Bad Request'), {
+          statusCode: 400,
+          responseBody: '{"error":{"message":"prompt is too long"}}',
+        }),
+      ),
+    ).toEqual({ name: 'Error', message: 'Bad Request', statusCode: 400, reason: 'prompt is too long' });
   });
 
   it('does not mutate the supplied error or invoke toJSON', () => {

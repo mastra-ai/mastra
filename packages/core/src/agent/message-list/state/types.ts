@@ -1,5 +1,6 @@
 import type { UIMessage as UIMessageV4, CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type * as AIV5 from '@internal/ai-sdk-v5';
+import type { ProviderErrorFacts } from '../../../error/provider-error';
 import type { AIV5Type } from '../types';
 
 export type MessageSource =
@@ -35,18 +36,13 @@ export type MastraStepStartPart = {
 
 // Persisted record of a terminal agent failure (retries, error processors and
 // fallback models all exhausted). Deliberately stores only JSON-safe identity
-// fields plus the provider's HTTP status and error code when it sent them:
-// stack traces, causes and other custom enumerable properties stay on the
-// runtime error surfaces (stream chunk, onError, result.error) and are never
-// written to thread history.
+// fields plus the provider facts a reload classifies by (status, code, the
+// body's reason): stack traces, causes and other custom enumerable properties
+// stay on the runtime error surfaces (stream chunk, onError, result.error) and
+// are never written to thread history.
 export type MastraErrorPart = {
   type: 'error';
-  error: {
-    name: string;
-    message: string;
-    statusCode?: number;
-    code?: string;
-  };
+  error: { name: string; message: string } & ProviderErrorFacts;
 } & MastraPartExtensions;
 
 // Approval payload stored alongside tool invocations so v6 approval flows can

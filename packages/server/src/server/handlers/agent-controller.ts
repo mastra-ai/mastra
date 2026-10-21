@@ -10,6 +10,7 @@ import type {
   TokenUsage,
   WireDisplayState,
 } from '@mastra/core/agent-controller';
+import { providerErrorFacts } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
@@ -611,15 +612,19 @@ function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentC
 
 /**
  * An `Error`'s `message`/`name` are non-enumerable, so flatten it before JSON
- * serialization. Compact message updates and ends are already JSON-safe and
- * pass through unchanged; only `message_start` carries a message snapshot.
+ * serialization, keeping the provider facts a client classifies by. Compact
+ * message updates and ends are already JSON-safe and pass through unchanged;
+ * only `message_start` carries a message snapshot.
  */
 function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent {
   if ('displayState' in event) {
     return { ...event, displayState: toWireDisplayState(event.displayState) };
   }
   if (carriesError(event)) {
-    return { ...event, error: { name: event.error.name, message: event.error.message } };
+    return {
+      ...event,
+      error: { name: event.error.name, message: event.error.message, ...providerErrorFacts(event.error) },
+    };
   }
   return event;
 }

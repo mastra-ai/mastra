@@ -156,6 +156,53 @@ describe('classifyProviderError', () => {
       'unknown',
     ],
     [
+      'Google per-minute quota on 429',
+      {
+        error: {
+          code: 429,
+          status: 'RESOURCE_EXHAUSTED',
+          message:
+            "Quota exceeded for quota metric 'Generate Content API requests per minute' and limit 'GenerateContent request limit per minute per region'.",
+        },
+      },
+      'rate_limited',
+    ],
+    [
+      'Responses rate_limit_exceeded frame worded as a quota',
+      {
+        type: 'error',
+        error: {
+          type: 'rate_limit_error',
+          code: 'rate_limit_exceeded',
+          message: 'Quota exceeded for requests per minute. Please try again in 20s.',
+        },
+      },
+      'rate_limited',
+    ],
+    [
+      'Responses insufficient_quota frame',
+      {
+        type: 'error',
+        error: {
+          type: 'insufficient_quota',
+          code: 'insufficient_quota',
+          message: 'You exceeded your current quota, please check your plan and billing details.',
+        },
+      },
+      'quota',
+    ],
+    [
+      'persisted identity whose reason came from the body',
+      {
+        name: 'AI_APICallError',
+        message: 'Bad Request',
+        statusCode: 400,
+        code: 'invalid_request_error',
+        reason: 'prompt is too long: 210345 tokens > 200000 maximum',
+      },
+      'context_overflow',
+    ],
+    [
       'Anthropic not_found_error envelope',
       {
         name: 'AI_APICallError',
@@ -250,11 +297,26 @@ describe('providerErrorFacts', () => {
     expect(providerErrorFacts(error)).toEqual({ statusCode: 429, code: 'insufficient_quota' });
     expect(providerErrorFacts({ type: 'error', error: { type: 'rate_limit_error', message: 'slow down' } })).toEqual({
       code: 'rate_limit_error',
+      reason: 'slow down',
     });
     expect(providerErrorFacts({ error: { code: 429, status: 'RESOURCE_EXHAUSTED' } })).toEqual({
       statusCode: 429,
       code: 'RESOURCE_EXHAUSTED',
     });
+  });
+
+  it('keeps the body sentence as the reason when the message is only an HTTP phrase', () => {
+    const bodyOnly = apiError(
+      400,
+      'Bad Request',
+      JSON.stringify({ error: { type: 'invalid_request_error', message: 'prompt is too long: 1 > 0 maximum' } }),
+    );
+    expect(providerErrorFacts(bodyOnly)).toEqual({
+      statusCode: 400,
+      code: 'invalid_request_error',
+      reason: 'prompt is too long: 1 > 0 maximum',
+    });
+    expect(providerErrorFacts(apiError(400, 'prompt is too long: 1 > 0 maximum'))).toEqual({ statusCode: 400 });
   });
 
   it('returns no keys for an error without provider facts', () => {

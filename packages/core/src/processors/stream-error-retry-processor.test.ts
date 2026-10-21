@@ -114,6 +114,17 @@ describe('StreamErrorRetryProcessor', () => {
     expect(isRetryableOpenAIResponsesStreamError(error)).toBe(true);
   });
 
+  it('retries a rate-limit frame worded as a per-minute quota and never an exhausted billing quota', () => {
+    const frame = (code: string, message: string) => ({ type: 'error', sequence_number: 1, error: { code, message } });
+
+    expect(
+      isRetryableOpenAIResponsesStreamError(frame('rate_limit_exceeded', 'Quota exceeded for requests per minute.')),
+    ).toBe(true);
+    expect(isRetryableOpenAIResponsesStreamError(frame('insufficient_quota', 'You exceeded your current quota.'))).toBe(
+      false,
+    );
+  });
+
   it('retries OpenAI Responses stream error chunks by default', async () => {
     const processor = new StreamErrorRetryProcessor();
     const error = {

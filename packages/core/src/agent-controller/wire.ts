@@ -1,3 +1,4 @@
+import type { ProviderErrorFacts } from '../error/provider-error';
 import type { AgentControllerDisplayState, AgentControllerEvent } from './types';
 
 /** `Error` is structurally `{ name, message, stack? }`; the `stack` key tells an instance from a flattened {@link WireError}. */
@@ -16,8 +17,8 @@ export type Jsonify<T> = T extends { toJSON(): infer R }
           ? { [K in keyof T]: Jsonify<T[K]> }
           : T;
 
-/** An `Error` as the server flattens it; JSON would drop a real `Error` to `{}`. */
-export interface WireError {
+/** An `Error` as the server flattens it, with the provider facts a client classifies by; JSON would drop a real `Error` to `{}`. */
+export interface WireError extends ProviderErrorFacts {
   name: string;
   message: string;
 }

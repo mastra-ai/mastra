@@ -16,13 +16,19 @@ export type ProviderFailureKind =
 export interface ProviderErrorFacts {
   statusCode?: number;
   code?: string;
+  /** The body's sentence when the message is only an HTTP phrase or an envelope around it. */
+  reason?: string;
 }
 
 const MAX_OBJECT_DEPTH = 4;
 const ENVELOPE_TYPES = new Set(['error', 'response.failed']);
 
-const QUOTA_EXHAUSTED =
-  /usage (?:limit|cap)|insufficient[_ ]quota|quota (?:exceeded|exhausted|reached)|exceeded (?:your )?current quota|insufficient (?:balance|credits?)|credits? exhausted|credit balance|weekly limit|monthly limit|payment required/i;
+const BILLING_EXHAUSTED =
+  /insufficient[_ ]quota|insufficient (?:balance|credits?)|credits? exhausted|credit balance|payment required/i;
+const USAGE_CAPPED =
+  /usage (?:limit|cap)|quota (?:exceeded|exhausted|reached)|exceeded (?:your )?current quota|weekly limit|monthly limit/i;
+// A cap that refills within the hour is a rate limit, whatever the provider calls it.
+const RENEWS_WITHIN_THE_HOUR = /per[_ -]?(?:second|minute|hour|min|sec)\b|\b[rt]pm\b/i;
 const ACCESS_DENIED =
   /invalid[_ ]api[_ ]key|incorrect api key|api key not valid|unauthorized|authentication|forbidden|permission[_ ]?(?:denied|error)|access[_ ]?denied/i;
 const CONTEXT_OVERFLOW = [
@@ -94,7 +100,7 @@ function collect(value: unknown, facts: CollectedFacts, depth: number): void {
   }
   const name = readField(value, 'name');
   if (typeof name === 'string') facts.texts.push(name);
-  for (const key of ['message', 'responseBody']) collect(readField(value, key), facts, depth);
+  for (const key of ['message', 'reason', 'responseBody']) collect(readField(value, key), facts, depth);
   for (const key of ['error', 'data', 'response', 'cause']) collect(readField(value, key), facts, depth + 1);
 }
 
@@ -109,7 +115,8 @@ export function classifyProviderError(error: unknown): ProviderFailureKind {
   const status = facts.statusCode;
   const evidence = [...facts.codes, ...facts.texts].join('\n');
   if (status === 401 || status === 403) return 'auth';
-  if (status === 402 || QUOTA_EXHAUSTED.test(evidence)) return 'quota';
+  if (status === 402 || BILLING_EXHAUSTED.test(evidence)) return 'quota';
+  if (USAGE_CAPPED.test(evidence)) return RENEWS_WITHIN_THE_HOUR.test(evidence) ? 'rate_limited' : 'quota';
   // Token-per-minute limits are 429s whose message asks to shorten the request; waiting is the fix.
   if (status === 429) return 'rate_limited';
   if (ACCESS_DENIED.test(evidence)) return 'auth';
@@ -126,12 +133,16 @@ export function classifyProviderError(error: unknown): ProviderFailureKind {
   return 'unknown';
 }
 
-/** The JSON-safe facts worth persisting next to a failure's name and message. */
+/** The JSON-safe facts worth carrying next to a failure's name and message, on the wire and in history. */
 export function providerErrorFacts(error: unknown): ProviderErrorFacts {
   const facts = collectFacts(error);
   const result: ProviderErrorFacts = {};
   if (facts.statusCode !== undefined) result.statusCode = facts.statusCode;
   if (facts.codes[0]) result.code = facts.codes[0];
+  const message = typeof error === 'object' && error !== null ? readField(error, 'message') : error;
+  const reason = innermostReason(error, 0);
+  if (reason !== undefined && reason !== (typeof message === 'string' ? message.trim() : undefined))
+    result.reason = reason;
   return result;
 }
 
@@ -149,7 +160,7 @@ function innermostReason(error: unknown, depth: number): string | undefined {
     return !trimmed || HTTP_REASON_PHRASE.test(trimmed) ? undefined : trimmed;
   }
   if (typeof error !== 'object') return undefined;
-  for (const key of ['error', 'response', 'data']) {
+  for (const key of ['reason', 'error', 'response', 'data']) {
     const reason = innermostReason(readField(error, key), depth + 1);
     if (reason) return reason;
   }
