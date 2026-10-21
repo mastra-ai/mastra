@@ -1464,11 +1464,7 @@ export class BackgroundTaskManager {
       this.#mastra?.getLogger?.()?.error(`background-task workflow ${action} failed for ${taskId}:`, err);
       const failedTask = await storage.getTask(taskId);
       if (failedTask?.status === 'failed') {
-        try {
-          await this.runLocalCompletionHooks(failedTask, 'failed', { error: failedTask.error ?? errorInfo });
-        } catch (hookError) {
-          this.#mastra?.getLogger?.()?.warn(`background-task failure hooks threw for ${taskId}:`, hookError);
-        }
+        await this.runLocalCompletionHooks(failedTask, 'failed', { error: failedTask.error ?? errorInfo });
         await this.publishLifecycleEvent('task.failed', failedTask);
       }
     } catch (settleError) {
@@ -1576,6 +1572,10 @@ export class BackgroundTaskManager {
         // handleResult so they fire once per subscribing process.
         await ctx.onFailed?.(task);
       }
+    } catch (hookError) {
+      // Callers publish the terminal lifecycle event right after this; a
+      // throwing per-task hook must not suppress it.
+      this.#mastra?.getLogger?.()?.warn(`background-task ${status} hooks threw for ${task.id}:`, hookError);
     } finally {
       this.deregisterTaskContext(task.id);
     }
