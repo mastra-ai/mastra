@@ -429,10 +429,28 @@ export const microsoftPowerpointScenario: Scenario = {
     if (!tools['microsoft_powerpoint_create_sharing_link']) {
       steps.push(
         makeStep(
-          'create organization sharing link',
+          'create sharing link',
           'microsoft_powerpoint_create_sharing_link',
           'skip',
           'tool not in project toolset',
+        ),
+      );
+    } else if (isPersonalAccount) {
+      // Personal accounts cannot create organization-scoped links. Probe with
+      // a synthetic item so the smoke test never publishes an anonymous link.
+      steps.push(
+        await probeTool(
+          call,
+          tools,
+          'create sharing link',
+          'microsoft_powerpoint_create_sharing_link',
+          {
+            driveId,
+            itemId: 'mastra-smoke-missing',
+            type: 'view',
+            scope: 'organization',
+          },
+          /status=(400|401|403|404)|personal|msa account|work or school|not supported/i,
         ),
       );
     } else {
@@ -441,17 +459,12 @@ export const microsoftPowerpointScenario: Scenario = {
           driveId,
           itemId: originalId,
           type: 'view',
-          scope: isPersonalAccount ? 'anonymous' : 'organization',
+          scope: 'organization',
         });
         steps.push(makeStep('create sharing link', 'microsoft_powerpoint_create_sharing_link', 'pass'));
       } catch (error) {
         steps.push(
-          makeStep(
-            'create organization sharing link',
-            'microsoft_powerpoint_create_sharing_link',
-            'fail',
-            errorMessage(error),
-          ),
+          makeStep('create sharing link', 'microsoft_powerpoint_create_sharing_link', 'fail', errorMessage(error)),
         );
       }
     }
@@ -461,13 +474,18 @@ export const microsoftPowerpointScenario: Scenario = {
         makeStep('move presentation', 'microsoft_powerpoint_move_presentation', 'skip', 'tool not in project toolset'),
       );
     } else if (parentId) {
-      steps.push(
-        await probeTool(call, tools, 'move presentation', 'microsoft_powerpoint_move_presentation', {
+      try {
+        await call('microsoft_powerpoint_move_presentation', {
           driveId,
           itemId: originalId,
           destinationFolderId: parentId,
-        }),
-      );
+        });
+        steps.push(makeStep('move presentation', 'microsoft_powerpoint_move_presentation', 'pass'));
+      } catch (error) {
+        steps.push(
+          makeStep('move presentation', 'microsoft_powerpoint_move_presentation', 'fail', errorMessage(error)),
+        );
+      }
     } else {
       // The toolset can't create a destination folder. If metadata didn't
       // expose the current parent, use a synthetic folder id so Graph rejects
