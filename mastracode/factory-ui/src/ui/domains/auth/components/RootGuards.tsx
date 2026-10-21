@@ -86,7 +86,7 @@ function FactoriesUnavailableScreen({ retrying, onRetry }: { retrying: boolean; 
           Unable to load your factories
         </Txt>
         <Txt as="p" variant="body" tone="muted">
-          Your Factories are still there. Try again in a moment.
+          Try again in a moment.
         </Txt>
         <Button onClick={onRetry} disabled={retrying}>
           Retry
