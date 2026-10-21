@@ -12,9 +12,8 @@
  * - a caller abort with an armed budget follows the normal abort path and is
  *   not misreported as a timeout.
  *
- * Deliberate divergence from main: durable's fatal path emits both an error
- * chunk and a step-finish/finish with reason 'error' (main emits no finish),
- * because the durable finalization block owns stream closure.
+ * Like the main loop, a total deadline emits an error and closes the stream
+ * independently of the workflow's finalization, without a synthetic finish.
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -26,7 +25,7 @@ import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import { DurableStepIds } from '../constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { __resetExecutionFencesForTests } from '../execution-fence';
 import { globalRunRegistry } from '../run-registry';
@@ -114,7 +113,11 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     await pubsub.close();
   });
 
-  function setup(model: LanguageModelV2 | Array<{ model: LanguageModelV2; maxRetries: number }>, tools?: any) {
+  function setup(
+    model: LanguageModelV2 | Array<{ model: LanguageModelV2; maxRetries: number }>,
+    tools?: any,
+    storage = new InMemoryStore(),
+  ) {
     const baseAgent = new Agent({
       id: 'timeout-agent',
       name: 'Timeout Agent',
@@ -126,7 +129,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     new Mastra({
       agents: { 'timeout-agent': durableAgent as any },
       logger: false,
-      storage: new InMemoryStore(),
+      storage,
       pubsub,
     });
     return durableAgent;
@@ -145,9 +148,83 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     expect(errorChunk.payload.error.message).toContain('totalMs');
     // Fails through the error path — not a clean stop, and not masked as a
     // caller abort.
-    const finish = chunks.find((c: any) => c.type === 'finish');
-    expect(finish?.payload?.stepResult?.reason).toBe('error');
+    expect(chunks.some((c: any) => c.type === 'finish')).toBe(false);
     result.cleanup();
+  });
+
+  it('delivers an expired deadline once the pubsub subscription becomes ready', async () => {
+    const durableAgent = setup(hangingModel());
+    const runId = crypto.randomUUID();
+    const subscribing = Promise.withResolvers<void>();
+    const releaseSubscription = Promise.withResolvers<void>();
+    const originalSubscribe = pubsub.subscribe.bind(pubsub);
+    const subscribeSpy = vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, callback, options) => {
+      if (topic === AGENT_STREAM_TOPIC(runId)) {
+        subscribing.resolve();
+        await releaseSubscription.promise;
+      }
+      return originalSubscribe(topic, callback, options);
+    });
+    const onError = vi.fn();
+    const pending = durableAgent.stream('hello', { runId, modelSettings: { timeout: { totalMs: 150 } }, onError });
+    try {
+      await subscribing.promise;
+      const signal = globalRunRegistry.get(runId)?.abortSignal;
+      if (!signal) throw new Error('Missing timeout signal');
+      if (!signal.aborted) {
+        await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      }
+      releaseSubscription.resolve();
+      const result = await pending;
+      const chunks = await drain(result.fullStream);
+      expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(1);
+      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+      await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+      result.cleanup();
+    } finally {
+      releaseSubscription.resolve();
+      subscribeSpy.mockRestore();
+    }
+  });
+
+  it('does not publish a timeout after successful settlement has already started', async () => {
+    const storage = new InMemoryStore();
+    const durableAgent = setup(textModel('done'), undefined, storage);
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) throw new Error('Missing workflows store');
+    const deleting = Promise.withResolvers<void>();
+    const releaseDeletion = Promise.withResolvers<void>();
+    const originalDelete = workflowsStore.deleteWorkflowRunById.bind(workflowsStore);
+    const deleteSpy = vi.spyOn(workflowsStore, 'deleteWorkflowRunById').mockImplementation(async input => {
+      deleting.resolve();
+      await releaseDeletion.promise;
+      return originalDelete(input);
+    });
+    const published = vi.spyOn(pubsub, 'publish');
+    const result = await durableAgent.stream('hello', { modelSettings: { timeout: { totalMs: 500 } } });
+    const entry = globalRunRegistry.get(result.runId);
+    if (!entry?.abortSignal) throw new Error('Missing timeout signal');
+    const signal = entry.abortSignal;
+    const deadline = signal.aborted
+      ? Promise.resolve()
+      : new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+    try {
+      const chunks = await drain(result.fullStream);
+      await deleting.promise;
+      // Keep successful terminal writes in flight until the deadline contends
+      // for the same settlement. The loser must not emit a second terminal event.
+      await deadline;
+      releaseDeletion.resolve();
+      await entry.workflowExecution;
+      await pubsub.flush();
+      expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+      expect(published.mock.calls.filter(([, event]) => event.type === AgentStreamEventTypes.ERROR)).toHaveLength(0);
+    } finally {
+      releaseDeletion.resolve();
+      deleteSpy.mockRestore();
+      published.mockRestore();
+      result.cleanup();
+    }
   });
 
   it('does not fall back to the next model when the total budget is exhausted', async () => {

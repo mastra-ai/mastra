@@ -1,14 +1,11 @@
 /**
- * Ported from validation harness case T37 (error-surfaces), green variants only.
+ * Ported from validation harness case T37 (error-surfaces).
  *
- * The harness case has three variants; two are green on main:
+ * The harness case has three variants:
  *   - model-4xx: the model fails before producing any output (an up-front,
  *     non-retryable provider error).
  *   - stream-cut: the model streams one text delta, then the stream errors.
- *
- * The third variant, `tool-timeout` (a tool that never returns, with
- * `modelSettings.timeout.totalMs`), is red on main and moves with COR-1376. It is
- * not ported here.
+ *   - tool-timeout: the total budget closes a run even if its tool never returns.
  *
  * Harness exclusions: error message wording, and retry timing (T27).
  *
@@ -22,9 +19,12 @@
  * unrelated COR-1390 finish declaration fail before comparison.
  */
 
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { MockMemory } from '../../../../memory/mock';
+import { createTool } from '../../../../tools';
+import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import {
   type EngineParityScenario,
   type EngineParityResults,
@@ -84,6 +84,156 @@ function scenario(target: ParityTarget, model: ModelScript): Omit<EngineParitySc
 function turnsByEngine(target: ParityTarget, results: EngineParityResults) {
   return (['plain', target] as const).map(engine => ({ engine, turn: results[engine]!.turns[0]! }));
 }
+
+describeForAllEngines('error-surfaces: tool-timeout', engine => {
+  const getMock = useLoopScenarioAimock();
+
+  it.each([false, true])(
+    'closes a stuck tool run without waiting for memory (save blocked: %s)',
+    async blockSave => {
+      const onError = vi.fn();
+      let toolStarted = false;
+      const memory = new MockMemory();
+      let releaseSave!: () => void;
+      const saveGate = new Promise<void>(resolve => {
+        releaseSave = resolve;
+      });
+      let saveBlocked = false;
+      const saveMessages = memory.saveMessages.bind(memory);
+      const saveSpy = vi.spyOn(memory, 'saveMessages').mockImplementation(async args => {
+        if (blockSave && toolStarted && args.messages.some(message => message.role === 'assistant')) {
+          saveBlocked = true;
+          await saveGate;
+        }
+        return saveMessages(args);
+      });
+      try {
+        const result = await runLoopScenario({
+          engine,
+          memory,
+          threadId: THREAD,
+          resourceId: RESOURCE,
+          llm: getMock(),
+          prompt: 'Call the hanging tool.',
+          tools: {
+            hanging: createTool({
+              id: 'hanging',
+              description: 'A tool that ignores cancellation and never returns.',
+              inputSchema: z.object({}),
+              execute: async () => {
+                toolStarted = true;
+                return new Promise<never>(() => {});
+              },
+            }),
+          },
+          modelSettings: { timeout: { totalMs: 500 } },
+          onError,
+          collectChunks: true,
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', hasToolResult: false },
+              {
+                toolCalls: [{ id: 'call_hanging', name: 'hanging', arguments: {} }],
+              },
+            );
+            llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Must not reach the model again.' });
+          },
+        });
+
+        expect(toolStarted).toBe(true);
+        const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+        expect(errors).toHaveLength(1);
+        expect(errors[0]!.payload.error).toMatchObject({
+          name: 'MastraTimeoutError',
+          message: 'Agent execution timed out after 500ms (modelSettings.timeout.totalMs)',
+        });
+        await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+        expect(result.chunks!.some(chunk => chunk.type === 'finish')).toBe(false);
+        expect(result.requests).toHaveLength(1);
+        if (blockSave && (engine === 'durable' || engine === 'evented')) {
+          await vi.waitFor(() => expect(saveBlocked).toBe(true));
+        }
+      } finally {
+        releaseSave();
+        saveSpy.mockRestore();
+      }
+    },
+    5_000,
+  );
+
+  it.each(['generate', 'resumeStream', 'resumeGenerate'] as const)(
+    '%s settles at the deadline without waiting for the tool',
+    async method => {
+      const onError = vi.fn();
+      let toolStarted = false;
+      let releaseTool!: () => void;
+      const toolGate = new Promise<void>(resolve => {
+        releaseTool = resolve;
+      });
+      const llm = getMock();
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        {
+          toolCalls: [{ id: 'call_hanging', name: 'hanging', arguments: {} }],
+        },
+      );
+      llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Must not reach the model again.' });
+      const shared = await createSharedAgent(llm, {
+        engine,
+        memory: new MockMemory(),
+        tools: {
+          hanging: createTool({
+            id: 'hanging',
+            description: 'Waits forever after optional suspension.',
+            inputSchema: z.object({}),
+            resumeSchema: z.object({ proceed: z.boolean() }),
+            suspendSchema: z.object({}),
+            execute: async (_input, context) => {
+              if (method !== 'generate' && !context?.agent?.resumeData) {
+                return context?.agent?.suspend({});
+              }
+              toolStarted = true;
+              await toolGate;
+              return { completed: true };
+            },
+          }),
+        },
+      });
+      const options = { modelSettings: { timeout: { totalMs: 500 } }, onError };
+      try {
+        if (method === 'generate') {
+          await expect(shared.agent.generate('Call the hanging tool.', options)).rejects.toMatchObject({
+            name: 'MastraTimeoutError',
+          });
+        } else {
+          const suspended = await shared.agent.generate('Call the hanging tool.');
+          expect(suspended.finishReason).toBe('suspended');
+          const resumeOptions = { ...options, runId: suspended.runId };
+          if (method === 'resumeGenerate') {
+            await expect(shared.agent.resumeGenerate({ proceed: true }, resumeOptions)).rejects.toMatchObject({
+              name: 'MastraTimeoutError',
+            });
+          } else {
+            const resumed = await shared.agent.resumeStream({ proceed: true }, resumeOptions);
+            const errors = [];
+            for await (const chunk of resumed.fullStream) {
+              if (chunk.type === 'error') errors.push(chunk.payload.error);
+              expect(chunk.type).not.toBe('finish');
+            }
+            expect(errors).toHaveLength(1);
+            expect(errors[0]).toMatchObject({ name: 'MastraTimeoutError' });
+          }
+        }
+        expect(toolStarted).toBe(true);
+        await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+        expect(llm.getRequests()).toHaveLength(1);
+      } finally {
+        releaseTool();
+      }
+    },
+    5_000,
+  );
+});
 
 describeParity('error-surfaces parity', target => {
   it('model-4xx: an up-front model failure surfaces the same way on every engine', async () => {

@@ -9,9 +9,10 @@ import type { PubSub } from '../../events/pubsub';
 import { isRunLocalTopic } from '../../events/topics';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
-import { createTimeoutAbortSignal } from '../../loop/timeout';
+import { createTimeoutAbortSignal, isMastraTimeoutError } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../../mastra/run-with-concurrency';
+import type { MemoryConfig } from '../../memory';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
@@ -835,6 +836,8 @@ export class DurableAgent<
   #activeStreamUntilIdle = new Map<string, () => void>();
   /** The stream segment (stream() or resume()) that currently owns each run id's shared state. */
   #segmentOwner = new Map<string, symbol>();
+  #timedOutExecutions = new WeakSet<ExecutionFence>();
+  #deadlineReaderReady = new WeakMap<ExecutionFence, (ready: Promise<void>) => void>();
 
   /** Timeout for auto-cleanup after stream finishes (0 = disabled) */
   readonly #cleanupTimeoutMs: number;
@@ -1274,6 +1277,7 @@ export class DurableAgent<
         requestContext: registryEntry.requestContext,
         returnScorerData: workflowInput.options?.returnScorerData,
       });
+      this.#deadlineReaderReady.get(executionFence)?.(stream.ready);
       streamCleanup = stream.cleanup;
       streamOutput = stream.output;
       await this.#raceFenceLoss(stream.ready, executionFence);
@@ -1652,7 +1656,7 @@ export class DurableAgent<
       subscribePendingSignals: (listener: () => void) => wrapped.__getSubscribePendingSignals()(runId, listener),
       cleanup: () => {},
     };
-    this.#installAbortWithTotalTimeout(registryEntry as unknown as RunRegistryEntry, abortController);
+    this.#installAbortWithTotalTimeout(registryEntry as unknown as RunRegistryEntry, abortController, executionFence);
 
     return {
       requestContext,
@@ -2641,6 +2645,9 @@ export class DurableAgent<
     outcome: { status?: string; error?: Error },
   ): Promise<void> {
     const { status, error } = outcome;
+    if (fence && this.#timedOutExecutions.has(fence)) return;
+    const totalTimeout = isMastraTimeoutError(error) && error.timeoutType === 'total';
+    if (fence && totalTimeout) this.#timedOutExecutions.add(fence);
     const reportError = async (reported: Error) => {
       try {
         await this.emitError(runId, reported, fence?.generation);
@@ -2652,20 +2659,68 @@ export class DurableAgent<
     // persisted snapshot rows will never be resumed. Suspended runs keep their
     // snapshots (and owner records) so `resume()` / `recoverActiveRuns()` can
     // find them.
-    const finished = status !== undefined && status !== 'suspended';
+    const finished = totalTimeout || (status !== undefined && status !== 'suspended');
     let wrote = false;
     const writeTerminalState = async () => {
       wrote = true;
+      // The observable deadline must not wait for memory or snapshot I/O.
       if (error) await reportError(error);
+      try {
+        if (totalTimeout) {
+          const entry = getRunRegistryEntry(runId, this.#mastra);
+          const memoryContext = entry?.requestContext?.get('MastraMemory') as
+            | { thread?: { id: string }; resourceId?: string; memoryConfig?: MemoryConfig }
+            | undefined;
+          if (
+            entry?.saveQueueManager &&
+            entry.memory &&
+            entry.messageList &&
+            memoryContext?.thread?.id &&
+            memoryContext.resourceId &&
+            !memoryContext.memoryConfig?.readOnly &&
+            !memoryContext.memoryConfig?.observationalMemory &&
+            !entry.tripwire
+          ) {
+            await authorizeDurableMemory(getDurableMemoryAuthorizationChecks(entry), {
+              mastra: this.#mastra,
+              user: entry.requestContext?.get('user'),
+              threadId: memoryContext.thread.id,
+              resourceId: memoryContext.resourceId,
+              agentId: this.id,
+              requestContext: entry.requestContext,
+              permission: MastraFGAPermissions.MEMORY_WRITE,
+            });
+            // The interrupted workflow cannot run its finish-time memory flush.
+            // Preserve materialized messages, not the in-flight processor's chunks.
+            await entry.saveQueueManager.flushMessages(
+              entry.messageList.clone(),
+              memoryContext.thread.id,
+              memoryContext.memoryConfig,
+            );
+          }
+        }
+      } catch (memoryError) {
+        this.logger.warn(`Failed to preserve messages at the total deadline for run ${runId}`, {
+          runId,
+          error: memoryError,
+        });
+      }
       if (finished) await this.deleteRunSnapshots(runId);
     };
 
     if (!fence) return writeTerminalState();
-    const settlement = await fence.settle(writeTerminalState);
-    // `wrote` is false when the fence could not verify ownership, or when it
-    // was already settled by this segment's normal completion and a later step
-    // (for example goal bookkeeping) failed.
-    if (!wrote && error && settlement !== 'superseded') await reportError(error);
+    let settlement;
+    try {
+      settlement = await fence.settle(writeTerminalState, totalTimeout);
+    } catch (settlementError) {
+      if (totalTimeout && !wrote && error) await reportError(error);
+      throw settlementError;
+    }
+    // A deadline losing to normal completion or suspension must not publish a
+    // second terminal event. Non-timeout bookkeeping failures still surface.
+    if (!wrote && error && (settlement === 'orphaned' || (!totalTimeout && settlement === 'owned'))) {
+      await reportError(error);
+    }
   }
 
   /**
@@ -2816,7 +2871,11 @@ export class DurableAgent<
    * each session gets a fresh timer. The timer is torn down via the entry's
    * `cleanup` slot, which every settle path invokes through the run registry.
    */
-  #installAbortWithTotalTimeout(entry: RunRegistryEntry, abortController: AbortController): void {
+  #installAbortWithTotalTimeout(
+    entry: RunRegistryEntry,
+    abortController: AbortController,
+    executionFence: ExecutionFence,
+  ): void {
     entry.abortController = abortController;
     const totalTimeout = createTimeoutAbortSignal({
       parentSignal: abortController.signal,
@@ -2828,6 +2887,28 @@ export class DurableAgent<
       detachParentOnCleanup: false,
     });
     entry.abortSignal = totalTimeout.signal;
+    if (totalTimeout.timeoutPromise) {
+      let resolveReaderReady!: (ready?: void | PromiseLike<void>) => void;
+      const readerReady = new Promise<void>(resolve => {
+        resolveReaderReady = resolve;
+      });
+      this.#deadlineReaderReady.set(executionFence, resolveReaderReady);
+      void readerReady.catch(() => {});
+      // A deadline may expire before an asynchronous pubsub subscription opens.
+      // Arm it now, but do not publish the terminal error before its reader exists.
+      void totalTimeout.timeoutPromise
+        .catch(async error => {
+          if (!isMastraTimeoutError(error) || error.timeoutType !== 'total' || totalTimeout.signal?.reason !== error)
+            return;
+          await readerReady;
+          await this.settleExecution(executionFence.runId, executionFence, { status: 'failed', error });
+        })
+        .catch(error => {
+          this.logger.warn('Failed to settle durable agent at its total deadline', { error });
+        });
+      void executionFence.whenSettled.then(() => resolveReaderReady());
+    }
+    void executionFence.whenSettled.then(() => totalTimeout.cleanup());
     const previousCleanup = entry.cleanup;
     entry.cleanup = () => {
       totalTimeout.cleanup();
@@ -2970,7 +3051,7 @@ export class DurableAgent<
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       abortController.abort();
     }
-    this.#installAbortWithTotalTimeout(registryEntry, abortController);
+    this.#installAbortWithTotalTimeout(registryEntry, abortController, executionFence);
 
     // 2. Register non-serializable state (both local and global registries)
     registryEntry.agentId = this.id;
@@ -3085,6 +3166,7 @@ export class DurableAgent<
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
     });
+    this.#deadlineReaderReady.get(executionFence)?.(ready);
     streamCleanup = createdStreamCleanup;
 
     // 4. Wait for subscription to be ready, then execute workflow
@@ -3159,7 +3241,7 @@ export class DurableAgent<
     // output unsettled and the thread busy forever (#25974).
     const cleanup = () => {
       if (cleanedUp || output.status !== 'running') return performCleanup();
-      void workflowExecution
+      void Promise.race([workflowExecution, executionFence.whenSettled])
         .then(() => this.pubsub.flush())
         .then(() => waitForEventDelivery())
         .catch(() => {})
@@ -3665,7 +3747,7 @@ export class DurableAgent<
     if (resumeTotalMs !== undefined) {
       entry.timeoutTotalMs = resumeTotalMs;
     }
-    this.#installAbortWithTotalTimeout(entry, abortController);
+    this.#installAbortWithTotalTimeout(entry, abortController, executionFence);
     const globalEntryForAbort = getRunRegistryEntry(runId, this.#mastra);
     if (globalEntryForAbort) {
       globalEntryForAbort.abortController = abortController;
@@ -3840,6 +3922,7 @@ export class DurableAgent<
       tracingContext: resumeSegmentSpan ? { currentSpan: resumeSegmentSpan } : undefined,
       messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
+    this.#deadlineReaderReady.get(executionFence)?.(ready);
     streamCleanup = createdStreamCleanup;
 
     // Wait for subscription to be ready, then resume workflow
@@ -4561,7 +4644,7 @@ export class DurableAgent<
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
       abortController.abort();
     }
-    this.#installAbortWithTotalTimeout(registryEntry, abortController);
+    this.#installAbortWithTotalTimeout(registryEntry, abortController, executionFence);
 
     // 2. Register non-serializable state (both local and global registries)
     registryEntry.agentId = this.id;
@@ -4645,6 +4728,7 @@ export class DurableAgent<
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
     });
+    this.#deadlineReaderReady.get(executionFence)?.(ready);
 
     // 4. Wait for subscription to be ready, then execute workflow
     // This prevents race conditions where events are published before subscription
