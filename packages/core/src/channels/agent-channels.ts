@@ -195,13 +195,13 @@ export class AgentChannels {
 
   /**
    * Bind the owning agent used for webhook paths and stored-thread ownership.
-   * Called by Agent construction and setChannels; resets dispatch to that owner.
+   * Called by Agent construction and setChannels; changing the owner resets dispatch.
    * Durable wrappers set a separate dispatch target without changing ownership.
    * @internal
    */
   __setAgent(agent: ChannelAgent): void {
+    if (this.agent !== agent) this.dispatchAgent = undefined;
     this.agent = agent;
-    this.dispatchAgent = undefined;
   }
 
   /** Set the execution target without changing channel ownership. @internal */

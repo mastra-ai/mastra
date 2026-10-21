@@ -226,6 +226,8 @@ describe('Mastra Channel Integration', () => {
   });
 });
 
+const seenRunIds = new Set<string>();
+
 // Exercise the Chat SDK ingress, not wrapper.stream(): binding the inner Agent
 // still renders a reply but silently loses durable snapshots and observation.
 describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel execution', engine => {
@@ -244,6 +246,7 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
           { attachment: 'fork', decision: undefined },
           { attachment: 'fork', decision: 'approve' },
           { attachment: 'fork', decision: 'deny' },
+          { attachment: 'rebind', decision: undefined },
           { attachment: 'id-config', decision: undefined },
           { attachment: 'id-fork', decision: undefined },
           { attachment: 'id-late', decision: undefined },
@@ -253,6 +256,10 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
   ] as const)(
     'keeps the execution owner with $attachment channels ($decision)',
     async ({ attachment, decision }) => {
+      // Durable run IDs bypass Mastra.generateId; don't reuse the global UUID
+      // fixture's sequence while previous cases may still hold resume claims.
+      const realCrypto = await vi.importActual<typeof import('node:crypto')>('node:crypto');
+      vi.spyOn(globalThis.crypto, 'randomUUID').mockImplementation(realCrypto.randomUUID);
       const llm = getLLM();
       if (decision) {
         llm.on(
@@ -335,15 +342,14 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
             : overriddenId
               ? new EventedAgent(wrapperOptions)
               : createEventedAgent({ agent: inner });
-      if (attachment === 'late' || attachment === 'replacement' || attachment === 'id-late')
+      if (attachment === 'late' || attachment === 'replacement' || attachment === 'id-late' || attachment === 'rebind')
         agent.setChannels(channels);
       else channels = agent.getChannels()!;
-      // The global UUID fixture resets per test, but resume claims are process-wide.
+      if (attachment === 'rebind') inner.setChannels(channels);
       const mastra = new Mastra({
         logger: false,
         storage,
         agents: { agent },
-        generateId: () => `${testId}-${randomUUID()}`,
       });
       const workflowEvents: string[] = [];
       let detach: (() => void) | undefined;
@@ -415,6 +421,8 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
         delivery = sdk.processMessage(adapter, message.threadId, message);
         await vi.waitFor(() => expect(subscription.activeRunId()).toBeTruthy(), { timeout: 5000 });
         const runId = subscription.activeRunId()!;
+        expect(seenRunIds.has(runId), 'channel cases must not share durable run identities').toBe(false);
+        seenRunIds.add(runId);
         runIds.add(runId);
         let observed: Promise<string> | undefined;
         if (engine !== 'plain' && 'observe' in agent) {
