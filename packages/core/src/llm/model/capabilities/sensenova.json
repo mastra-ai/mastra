@@ -16,6 +16,18 @@
         "values": ["none", "high"]
       }
     ],
+    "sensenova-6.8-flash-lite": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "kimi-k3": [
       {
         "type": "effort",
@@ -35,18 +47,6 @@
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "sensenova-6.8-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ]
   }

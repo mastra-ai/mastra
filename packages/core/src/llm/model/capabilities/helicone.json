@@ -77,23 +77,13 @@
     "sonar-reasoning-pro"
   ],
   "reasoning": {
-    "gemini-2.5-flash-lite": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 512,
-        "max": 24576
-      }
-    ],
-    "gemini-3-pro-preview": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "claude-4.5-sonnet": [
+    "claude-4.5-opus": [
       {
         "type": "toggle"
       },
@@ -113,26 +103,20 @@
         "max": 31999
       }
     ],
-    "gpt-oss-120b": [
+    "sonar-reasoning-pro": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "claude-opus-4": [
+    "gemini-2.5-flash-lite": [
       {
         "type": "toggle"
       },
       {
         "type": "budget_tokens",
-        "min": 1024,
-        "max": 31999
-      }
-    ],
-    "sonar-reasoning-pro": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "min": 512,
+        "max": 24576
       }
     ],
     "claude-sonnet-4-5-20250929": [
@@ -143,23 +127,6 @@
         "type": "budget_tokens",
         "min": 1024,
         "max": 63999
-      }
-    ],
-    "claude-4.5-opus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
-      }
-    ],
-    "gemini-2.5-pro": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
       }
     ],
     "gemini-2.5-flash": [
@@ -178,10 +145,24 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "sonar-deep-research": [
+    "claude-opus-4": [
       {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 31999
+      }
+    ],
+    "claude-4.5-sonnet": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
       }
     ],
     "claude-opus-4-1": [
@@ -202,6 +183,25 @@
         "type": "budget_tokens",
         "min": 1024,
         "max": 63999
+      }
+    ],
+    "gemini-2.5-pro": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "gemini-3-pro-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
+    "sonar-deep-research": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
       }
     ]
   }
