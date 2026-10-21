@@ -145,12 +145,29 @@ describe('MemoryMessageRefs', () => {
 
     const counted = structuredClone(state);
     (counted.messages[0]!.content.parts[0] as any).providerMetadata.mastra.tokenEstimate = {
-      client,
+      client: { ...client },
       framework: { v: 8, key: 'framework', tokens: 9, source: 'v8:tokenx' },
     };
     expect(isMemoryMessageRef(refs.dehydrate(counted).messages[0])).toBe(true);
     (counted.messages[0]!.content.parts[0] as any).providerMetadata.mastra.tokenEstimate.client.tokens = 8;
     expect(isMemoryMessageRef(refs.dehydrate(counted).messages[0])).toBe(false);
+
+    (rows[0]!.content.parts[0] as any).providerMetadata.mastra.tokenEstimate = { client: { ...client, tokens: 7 } };
+    const mappedList = new MessageList({ threadId: 't', resourceId: 'r' });
+    mappedList.add(rows, 'memory');
+    const mappedState = mappedList.serialize();
+    const mappedRefs = new MemoryMessageRefs();
+    mappedRefs.recordSaved(rows, mappedState.memoryInfo);
+    const mappedCounted = structuredClone(mappedState);
+    (mappedCounted.messages[0]!.content.parts[0] as any).providerMetadata.mastra.tokenEstimate.framework = {
+      v: 8,
+      key: 'framework',
+      tokens: 9,
+      source: 'v8:tokenx',
+    };
+    expect(isMemoryMessageRef(mappedRefs.dehydrate(mappedCounted).messages[0])).toBe(true);
+    (mappedCounted.messages[0]!.content.parts[0] as any).providerMetadata.mastra.tokenEstimate.client.tokens = 8;
+    expect(isMemoryMessageRef(mappedRefs.dehydrate(mappedCounted).messages[0])).toBe(false);
   });
 
   it('restores refs from storage in a process that never verified them', async () => {

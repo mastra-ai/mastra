@@ -203,8 +203,15 @@ function withoutEstimate(metadata: Record<string, any> | undefined): Record<stri
     remaining = undefined;
   } else if (estimate && typeof estimate === 'object' && !Object.hasOwn(estimate, 'source')) {
     const entries = Object.entries(estimate).filter(([, value]) => !isFrameworkEstimate(value));
-    if (entries.length === Object.keys(estimate).length) return metadata;
-    remaining = entries.length === 1 ? entries[0]![1] : entries.length ? Object.fromEntries(entries) : undefined;
+    const soleEntry = entries[0]?.[1];
+    const soleClient =
+      entries.length === 1 &&
+      soleEntry !== null &&
+      typeof soleEntry === 'object' &&
+      'source' in soleEntry &&
+      soleEntry.source === 'client';
+    if (entries.length === Object.keys(estimate).length && !soleClient) return metadata;
+    remaining = soleClient ? entries[0]![1] : entries.length ? Object.fromEntries(entries) : undefined;
   } else {
     return metadata;
   }
