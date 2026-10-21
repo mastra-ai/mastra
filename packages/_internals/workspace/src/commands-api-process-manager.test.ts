@@ -38,7 +38,7 @@ class HostCommands implements CommandsApi {
    * way the SDK does when output arrives with the start event: its handle
    * reads events from construction, before `run()` returns.
    */
-  outputBeforeStart: false | 'stdout' | 'both' = false;
+  outputBeforeStart = false;
 
   async run(command: string, opts: Listener & { stdin?: boolean; cwd?: string; envs?: Record<string, string> }) {
     this.calls.push('run');
@@ -62,7 +62,7 @@ class HostCommands implements CommandsApi {
       child.on('close', (code, signal) => resolve(code ?? (signal ? 137 : 1))),
     );
     this.children.set(child.pid!, { child, cmd: command, listeners, done });
-    if (this.outputBeforeStart) await this.firstOutput(child, this.outputBeforeStart);
+    if (this.outputBeforeStart) await this.firstOutput(child);
     return this.handle(child.pid!, done, () => ({ stdout, stderr }));
   }
 
@@ -72,7 +72,7 @@ class HostCommands implements CommandsApi {
     const entry = this.children.get(pid);
     if (!entry || entry.child.exitCode !== null) throw new Error(`process ${pid} not found`);
     entry.listeners.push(opts);
-    if (this.outputBeforeStart) await this.firstOutput(entry.child, this.outputBeforeStart);
+    if (this.outputBeforeStart) await this.firstOutput(entry.child);
     return this.handle(pid, entry.done, () => ({ stdout: '', stderr: '' }));
   }
 
@@ -93,15 +93,15 @@ class HostCommands implements CommandsApi {
     this.children.get(pid)!.child.stdin!.write(data);
   }
 
-  private firstOutput(child: ChildProcess, streams: 'stdout' | 'both'): Promise<void> {
+  private firstOutput(child: ChildProcess): Promise<void> {
     return new Promise(resolve => {
-      let remaining = streams === 'both' ? 2 : 1;
+      let remaining = 2;
       // Registered after the streaming listeners, so they have run by now.
       const arrived = () => {
         if (--remaining === 0) resolve();
       };
       child.stdout!.once('data', arrived);
-      if (streams === 'both') child.stderr!.once('data', arrived);
+      child.stderr!.once('data', arrived);
     });
   }
 
@@ -229,7 +229,7 @@ describe('CommandsApiProcessManager', () => {
 
   it('keeps output that arrives before the start resolves', async () => {
     const processes = setup();
-    commands.outputBeforeStart = 'both';
+    commands.outputBeforeStart = true;
     const handle = await processes.spawn('echo early; echo warn >&2; sleep 0.2; echo late');
     const result = await handle.wait();
     expect(result).toMatchObject({ success: true, exitCode: 0 });
@@ -239,12 +239,13 @@ describe('CommandsApiProcessManager', () => {
 
   it('keeps output that arrives before an attach resolves', async () => {
     const processes = setup();
-    const other = await commands.run('sleep 0.2; echo attached; sleep 0.2', {});
-    commands.outputBeforeStart = 'stdout';
+    const other = await commands.run('sleep 0.2; echo attached; echo warn >&2; sleep 0.2', {});
+    commands.outputBeforeStart = true;
     const handle = await processes.get(String(other.pid));
     expect(handle).toBeDefined();
     await handle!.wait();
     expect(handle!.stdout).toBe('attached\n');
+    expect(handle!.stderr).toBe('warn\n');
   });
 
   it('lists exited processes it still holds until they are released', async () => {
