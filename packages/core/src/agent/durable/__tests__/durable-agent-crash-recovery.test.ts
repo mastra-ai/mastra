@@ -12,10 +12,12 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { createScorer } from '../../../evals';
 import type { SerializedWorkflowRow } from '../../../storage/domains/workflows/serializing-store.test-utils';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { MAP_FINAL_OUTPUT_STEP_ID } from '../workflows/durable-loop-builder';
+import { consumeText, createRestartScenario, findRow } from './restart-harness';
 
 const RECOVERY_TIMEOUT_MS = 5_000;
 
@@ -168,9 +170,10 @@ const finish = (finishReason: string, usage: TestUsage) => ({ type: 'finish', fi
 
 // Decides from the transcript, so a recovered process makes the same call the
 // original process made for the same history: two tool rounds, then text.
-function createModel(usages: TestUsage[] = [completeUsage, completeUsage, completeUsage]) {
+function createModel(usages: TestUsage[] = [completeUsage, completeUsage, completeUsage], onCall?: () => void) {
   return new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
+      onCall?.();
       const answered = prompt.filter(m => m.role === 'tool').flatMap(m => m.content).length;
       const parts =
         answered < 2
@@ -436,6 +439,104 @@ async function recoverFrom(
 }
 
 describe('DurableAgent crash recovery', () => {
+  it.each(['before-finish', 'after-finish', 'after-scorers'] as const)(
+    'finishes genuine evented recovery %s without repeating saved effects (COR-1354)',
+    async boundary => {
+      const runId = `evented-finish-${boundary}`;
+      const effects: Array<{ generation: number; effect: 'model' | 'tool' | 'scorer' }> = [];
+      const matchesBoundary = (snapshot: WorkflowRunState) => {
+        if (snapshot.status !== 'running') return false;
+        const results = snapshot.context;
+        if (boundary === 'before-finish') {
+          return (
+            results?.[DurableStepIds.AGENTIC_EXECUTION]?.status === 'success' && !results?.[MAP_FINAL_OUTPUT_STEP_ID]
+          );
+        }
+        if (boundary === 'after-finish') {
+          return results?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success' && !results?.['execute-scorers'];
+        }
+        return results?.['execute-scorers']?.status === 'success';
+      };
+      const scenario = createRestartScenario({
+        kind: 'evented',
+        runId,
+        timeoutMs: RECOVERY_TIMEOUT_MS,
+        hold: { workflowName: DurableStepIds.AGENTIC_LOOP, when: matchesBoundary },
+        build: ({ core, generation }) => {
+          const record = (effect: 'model' | 'tool' | 'scorer') => effects.push({ generation, effect });
+          const scorer = createScorer({ id: 'recovery-scorer', name: 'Recovery scorer' }).generateScore(() => {
+            record('scorer');
+            return 1;
+          });
+          return new core.Agent({
+            id: 'evented-finish-agent',
+            name: 'Evented finish agent',
+            instructions: 'Use your tools.',
+            model: createModel(undefined, () => void record('model')),
+            tools: {
+              lookup: core.createTool({
+                id: 'lookup',
+                description: 'Look something up',
+                inputSchema: z.object({ index: z.number() }),
+                execute: async () => {
+                  record('tool');
+                  return { ok: true };
+                },
+              }),
+            },
+            scorers: { recovery: { scorer, sampling: { type: 'ratio', rate: 1 } } },
+          });
+        },
+      });
+      const original = await scenario.start(async ({ agent }) =>
+        consumeText(await agent.stream('Look two things up', { runId })),
+      );
+      try {
+        expect(original.graph.agent.getWorkflow().engineType).toBe('evented');
+        let held = false;
+        void original.held.then(() => (held = true));
+        await vi.waitFor(() => expect(held).toBe(true), { timeout: RECOVERY_TIMEOUT_MS });
+        const checkpoint = await original.checkpoint();
+        const snapshot = findRow(checkpoint, DurableStepIds.AGENTIC_LOOP, runId)?.snapshot;
+        expect(snapshot && matchesBoundary(snapshot)).toBe(true);
+        expect(effects.filter(e => e.generation === 1 && e.effect === 'model')).toHaveLength(3);
+        expect(effects.filter(e => e.generation === 1 && e.effect === 'tool')).toHaveLength(2);
+        if (boundary === 'after-scorers') {
+          await vi.waitFor(
+            () => expect(effects.filter(e => e.generation === 1 && e.effect === 'scorer')).toHaveLength(1),
+            { timeout: RECOVERY_TIMEOUT_MS },
+          );
+        }
+        const recovered = await scenario.restart(checkpoint);
+        expect(recovered.graph.agent.getWorkflow().engineType).toBe('evented');
+        expect(recovered.executionError).toBeUndefined();
+        expect(recovered.streamErrors).toEqual([]);
+        expect(recovered.text).toBe('done');
+        expect(recovered.usage).toMatchObject({ inputTokens: 30, outputTokens: 60, totalTokens: 90 });
+        expect(recovered.chunkTypes.filter(type => type === 'finish')).toHaveLength(1);
+        expect(recovered.finishEvents).toBe(1);
+        expect(recovered.onFinishCalls).toBe(1);
+        if (boundary !== 'after-scorers') {
+          await vi.waitFor(
+            () => expect(effects.filter(e => e.generation === 2 && e.effect === 'scorer')).toHaveLength(1),
+            { timeout: RECOVERY_TIMEOUT_MS },
+          );
+        }
+        expect(effects.filter(e => e.generation === 2)).toEqual(
+          boundary === 'after-scorers' ? [] : [{ generation: 2, effect: 'scorer' }],
+        );
+        original.releaseHold();
+        await original.settled;
+        expect(recovered.finishEvents).toBe(1);
+        expect(recovered.onFinishCalls).toBe(1);
+      } finally {
+        original.releaseHold();
+        await scenario.stop();
+      }
+    },
+    30_000,
+  );
+
   it.each<StorageMode>(['in-memory', 'serializing'])(
     'recovers from every checkpoint of a tool-calling run (%s)',
     async storageMode => {

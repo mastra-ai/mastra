@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "1.12.0-alpha.11",
+  "version": "1.12.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -112,7 +112,7 @@
     "tailwindcss": "^4.3.3",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
-    "vite": "^7.3.1",
+    "vite": "^8.0.0",
     "vitest": "catalog:",
     "zod": "^3.25.76"
   },

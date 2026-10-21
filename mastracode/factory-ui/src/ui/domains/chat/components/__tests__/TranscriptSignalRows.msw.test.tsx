@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import { SESSION_OWNER_SIGNAL_TAG } from '@mastra/factory/session-owner-signal';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
@@ -193,6 +194,13 @@ describe('TranscriptEntries signal rows', () => {
     expect(gap).toHaveTextContent('1 hour 58 minutes later');
     expect(gap).not.toHaveTextContent('5:21 PM');
     expect(screen.queryByRole('group', { name: 'Signal: System reminder' })).not.toBeInTheDocument();
+  });
+
+  it('draws a takeover as a divider naming the new owner', () => {
+    renderEntries([reactiveSignalEntry('sig-owner', SESSION_OWNER_SIGNAL_TAG, 'Damien took ownership')]);
+
+    expect(screen.getByRole('separator', { name: 'Damien took ownership' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: `Signal: ${SESSION_OWNER_SIGNAL_TAG}` })).not.toBeInTheDocument();
   });
 
   it('keeps rendering persisted notification signals as notification rows', () => {

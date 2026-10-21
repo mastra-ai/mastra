@@ -448,6 +448,8 @@ export interface ToolCallAttributes extends AIBaseAttributes {
   toolDescription?: string;
   toolCallId?: string;
   success?: boolean;
+  /** True when a dataset experiment tool mock intercepted the call (served, mismatched, exhausted or denied) and the tool never ran */
+  mocked?: boolean;
 }
 
 /**

@@ -23,6 +23,21 @@ type TraceAsItemDialogProps = {
   renderCreateDatasetDialog?: AddDatasetItemDialogProps['renderCreateDatasetDialog'];
 };
 
+const readsAsJson = (text: string) => {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Strings show as plain text, unless the text reads as JSON: those stay quoted so they are saved back as strings. */
+function toEditorText(value: unknown): string {
+  if (typeof value === 'string' && !readsAsJson(value)) return value;
+  return safeStringify(value, 2);
+}
+
 function getInitialInput(traceDetails?: SpanRecord): string {
   if (traceDetails?.input == null) return '{}';
 
@@ -36,7 +51,7 @@ function getInitialInput(traceDetails?: SpanRecord): string {
     'messages' in spanInput;
   const rawInput = isWrappedAgentInput ? (spanInput.messages ?? traceDetails.input) : traceDetails.input;
 
-  return safeStringify(rawInput, 2);
+  return toEditorText(rawInput);
 }
 
 /** A recorded step as an expectation: what it did, without how long it took or what ran inside it. */
@@ -87,7 +102,7 @@ export function TraceAsItemDialog({
         if (!open) onClose();
       }}
       initialInput={getInitialInput(traceDetails)}
-      initialGroundTruth={traceDetails?.output != null ? safeStringify(traceDetails.output, 2) : ''}
+      initialGroundTruth={traceDetails?.output != null ? toEditorText(traceDetails.output) : ''}
       initialToolMocks={toolMocks.length > 0 ? safeStringify(toolMocks, 2) : undefined}
       initialTrajectory={steps.length > 0 ? { steps: steps.map(toExpectedStep), ordering: 'relaxed' } : undefined}
       source={traceId ? { type: 'trace', referenceId: traceId } : undefined}
