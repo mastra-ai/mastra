@@ -3773,6 +3773,12 @@ type Shared_Type_67 = {
   spanQuery: boolean;
   /** Additional identity, context and parent/root entity predicates in span queries. Treat a missing value as unavailable. */
   spanQueryContextFields: boolean;
+  /** Parent entity type, ID and name predicates in span queries. Treat a missing value as unavailable. */
+  spanQueryParentEntityFields: boolean;
+  /** Root entity type, ID and name predicates in span queries. Treat a missing value as unavailable. */
+  spanQueryRootEntityFields: boolean;
+  /** Execution source predicates in span queries. Treat a missing value as unavailable. */
+  spanQueryExecutionSource: boolean;
   /** Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit. */
   traceRetentionDays?: number | undefined;
   /** Feedback endpoints (/observability/feedback and /observability/feedback/*). Unsupported feedback routes return 501. */

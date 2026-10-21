@@ -478,6 +478,9 @@ export type ObservabilityStorageCapabilities = {
   spanQuery: boolean;
   spanQueryContextFields: boolean;
   spanAggregate: boolean;
+  spanQueryParentEntityFields: boolean;
+  spanQueryRootEntityFields: boolean;
+  spanQueryExecutionSource: boolean;
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
   traceRetentionDays?: number;
   feedback: boolean;
@@ -510,6 +513,9 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   spanQuery: false,
   spanAggregate: false,
   spanQueryContextFields: false,
+  spanQueryParentEntityFields: false,
+  spanQueryRootEntityFields: false,
+  spanQueryExecutionSource: false,
   feedback: false,
 };
 
@@ -603,6 +609,12 @@ export function getObservabilityStorageCapabilities(
     spanQuery,
     spanQueryContextFields: spanQuery && declares('span-query-context-fields'),
     spanAggregate: newApiCore && supportsSpanAggregateCore() && declares(OBSERVABILITY_SPAN_AGGREGATE_STORAGE_FEATURE),
+    spanQueryParentEntityFields:
+      spanQuery && declares('span-query-context-fields') && declares('span-query-parent-entity-fields'),
+    spanQueryRootEntityFields:
+      spanQuery && declares('span-query-context-fields') && declares('span-query-root-entity-fields'),
+    spanQueryExecutionSource:
+      spanQuery && declares('span-query-context-fields') && declares('span-query-execution-source'),
     feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
   };
 }

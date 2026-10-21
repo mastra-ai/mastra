@@ -81,6 +81,18 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     .describe(
       'Additional identity, context and parent/root entity predicates in span queries. Treat a missing value as unavailable.',
     ),
+  spanQueryParentEntityFields: z
+    .boolean()
+    .default(false)
+    .describe('Parent entity type, ID and name predicates in span queries. Treat a missing value as unavailable.'),
+  spanQueryRootEntityFields: z
+    .boolean()
+    .default(false)
+    .describe('Root entity type, ID and name predicates in span queries. Treat a missing value as unavailable.'),
+  spanQueryExecutionSource: z
+    .boolean()
+    .default(false)
+    .describe('Execution source predicates in span queries. Treat a missing value as unavailable.'),
   traceRetentionDays: z
     .number()
     .int()

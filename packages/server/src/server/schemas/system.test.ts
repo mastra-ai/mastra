@@ -10,6 +10,18 @@ describe('observabilityStorageCapabilitiesSchema', () => {
     });
   });
 
+  it('treats omitted span filter capabilities from an older server as unavailable', () => {
+    const legacyCapabilities = { ...NO_OBSERVABILITY_STORAGE_CAPABILITIES };
+    for (const key of ['spanQueryParentEntityFields', 'spanQueryRootEntityFields', 'spanQueryExecutionSource']) {
+      delete (legacyCapabilities as Record<string, unknown>)[key];
+    }
+    expect(observabilityStorageCapabilitiesSchema.parse(legacyCapabilities)).toMatchObject({
+      spanQueryParentEntityFields: false,
+      spanQueryRootEntityFields: false,
+      spanQueryExecutionSource: false,
+    });
+  });
+
   it('keeps the trace retention a store reports', () => {
     const parsed = observabilityStorageCapabilitiesSchema.parse({
       ...NO_OBSERVABILITY_STORAGE_CAPABILITIES,

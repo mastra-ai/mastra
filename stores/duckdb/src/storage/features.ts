@@ -5,7 +5,13 @@ export const threadQueryFeatures =
 
 export const spanQueryFeatures =
   typeof coreStorage.planSpanQuery === 'function'
-    ? (['span-query', 'span-query-context-fields'] as const)
+    ? ([
+        'span-query',
+        'span-query-context-fields',
+        'span-query-parent-entity-fields',
+        'span-query-root-entity-fields',
+        'span-query-execution-source',
+      ] as const)
     : ([] as const);
 
 export const spanAggregateFeatures =

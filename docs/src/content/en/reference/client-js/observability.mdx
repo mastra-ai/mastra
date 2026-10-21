@@ -110,7 +110,17 @@ Each summary includes identity, context, entity lineage, status, timestamps, `du
 
 Check `capabilities.spanQueryContextFields` from `getObservabilityCapabilities()` before using the additional identity, context and parent/root entity filters. A missing or false value means these filters aren't available. With an older adapter, requests using these filters return a structured `422` error.
 
-DuckDB returns `null` for parent/root entity type, ID and name, and for `executionSource`. Equality filters on these fields match no spans. Parent/root entity version IDs remain available.
+Check these additional capabilities before showing filters for fields that aren't stored by every adapter:
+
+| Capability | Filter fields |
+| - | - |
+| `spanQueryParentEntityFields` | `parentEntityType`, `parentEntityId`, `parentEntityName` |
+| `spanQueryRootEntityFields` | `rootEntityType`, `rootEntityId`, `rootEntityName` |
+| `spanQueryExecutionSource` | `executionSource` |
+
+Each capability is `true` for the ClickHouse and PostgreSQL v-next stores and DuckDB. Treat missing values from older servers as unavailable. These capabilities also require `spanQuery` and `spanQueryContextFields`.
+
+DuckDB stores parent/root entity type, ID and name, and maps span `source` to `executionSource`. Parent/root entity version ID filters also remain available.
 
 ## Querying threads
 

@@ -325,6 +325,10 @@ export function createSpanQueryTests(
       await getStorage().batchCreateSpans({
         records: [span('context', { ...scope, ...context, ...lineage }), span('other')],
       });
+      // OBS-712: advertised filter capabilities must match actual query behavior.
+      const features = getStorage().getFeatures();
+      expect(features).toContain('span-query-parent-entity-fields');
+      expect(features).toContain('span-query-root-entity-fields');
       const expected = { ...context, ...lineage };
       for (const [field, value] of Object.entries(expected)) {
         const result = await query({ where: { op: 'eq', left: { path: field }, right: { literal: value } } });
@@ -351,6 +355,7 @@ export function createSpanQueryTests(
     });
 
     it('maps span source to executionSource', async () => {
+      expect(getStorage().getFeatures()).toContain('span-query-execution-source');
       await getStorage().batchCreateSpans({
         records: [span('agent', { source: 'agent' }), span('workflow', { source: 'workflow' }), span('absent')],
       });

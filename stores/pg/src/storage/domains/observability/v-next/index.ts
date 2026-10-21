@@ -161,7 +161,13 @@ import * as tracingOps from './tracing';
 
 const spanQueryFeatures =
   typeof coreStorage.planSpanQuery === 'function'
-    ? (['span-query', 'span-query-context-fields'] as const)
+    ? ([
+        'span-query',
+        'span-query-context-fields',
+        'span-query-parent-entity-fields',
+        'span-query-root-entity-fields',
+        'span-query-execution-source',
+      ] as const)
     : ([] as const);
 const spanAggregateFeatures =
   typeof coreStorage.planSpanAggregate === 'function' ? (['span-aggregate'] as const) : ([] as const);

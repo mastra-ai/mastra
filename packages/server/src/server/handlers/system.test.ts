@@ -32,6 +32,9 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   spanQuery: false,
   spanQueryContextFields: false,
   spanAggregate: false,
+  spanQueryParentEntityFields: false,
+  spanQueryRootEntityFields: false,
+  spanQueryExecutionSource: false,
   feedback: false,
 };
 
@@ -669,6 +672,32 @@ describe('System Handlers', () => {
         expect(await capabilitiesFor(new SpanQueryStore())).toMatchObject({
           spanQueryContextFields: supported,
         });
+      });
+
+      it.each([
+        ['span-query-parent-entity-fields', 'spanQueryParentEntityFields'],
+        ['span-query-root-entity-fields', 'spanQueryRootEntityFields'],
+        ['span-query-execution-source', 'spanQueryExecutionSource'],
+      ] as const)('reports %s only with span query and context-field support', async (feature, capability) => {
+        for (const queryFeatures of [
+          [],
+          ['span-query'],
+          ['span-query-context-fields'],
+          ['span-query', 'span-query-context-fields'],
+        ] as const) {
+          class SpanFilterStore extends BaseObservabilityStore {
+            override getFeatures() {
+              return [...queryFeatures, feature];
+            }
+          }
+          const capabilities = await capabilitiesFor(new SpanFilterStore());
+          expect(capabilities).toMatchObject({
+            spanQueryParentEntityFields: false,
+            spanQueryRootEntityFields: false,
+            spanQueryExecutionSource: false,
+            [capability]: queryFeatures.length === 2,
+          });
+        }
       });
 
       it('reports time to first chunk only when the store also serves a trace, thread or span query', async () => {

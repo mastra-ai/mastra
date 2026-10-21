@@ -1070,6 +1070,9 @@ LIMIT 1`,
         'trace-aggregate',
         'span-query',
         'span-query-context-fields',
+        'span-query-parent-entity-fields',
+        'span-query-root-entity-fields',
+        'span-query-execution-source',
         'thread-query-rows',
       ]);
     });
@@ -1101,6 +1104,9 @@ LIMIT 1`,
           'trace-aggregate',
           'span-query',
           'span-query-context-fields',
+          'span-query-parent-entity-fields',
+          'span-query-root-entity-fields',
+          'span-query-execution-source',
           'thread-query-rows',
         ]);
       } finally {

@@ -188,7 +188,13 @@ import * as tracingOps from './tracing';
 
 const spanQueryFeatures =
   typeof coreStorage.planSpanQuery === 'function'
-    ? (['span-query', 'span-query-context-fields'] as const)
+    ? ([
+        'span-query',
+        'span-query-context-fields',
+        'span-query-parent-entity-fields',
+        'span-query-root-entity-fields',
+        'span-query-execution-source',
+      ] as const)
     : ([] as const);
 const threadQueryFeatures =
   typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : ([] as const);
