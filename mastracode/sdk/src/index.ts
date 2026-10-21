@@ -455,8 +455,8 @@ export interface MastraCodeConfig {
    * Bring the session that owns `resourceId` online when a notification is
    * delivered and no session in this process owns it (a deferred delivery
    * after the session closed, a restart, another replica). Without it such a
-   * delivery wakes the thread with no request context: no owner identity, no
-   * model selection. Create the session as its owner, or throw when the owner
+   * notification stays pending until a process whose session runs the thread
+   * delivers it. Create the session as its owner, or throw when the owner
    * can't be resolved. When set, a delivery that still finds no owning session
    * fails with that error instead of running.
    */
