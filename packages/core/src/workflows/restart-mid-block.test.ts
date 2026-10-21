@@ -273,5 +273,42 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
       }
       expect(recorded.size).toBeGreaterThan(0);
     });
+
+    it('waits for every checkpoint write and clears the active path when one fails', async () => {
+      const { workflow } = await setup(2);
+      const errorChildSpan = vi.spyOn(DefaultExecutionEngine.prototype, 'errorChildSpan');
+
+      let pending = 0;
+      let foreachContext: { activeStepsPath: Record<string, number[]> } | undefined;
+      let itemEndWrites = 0;
+      const persistStepUpdate = DefaultExecutionEngine.prototype.persistStepUpdate;
+      vi.spyOn(DefaultExecutionEngine.prototype, 'persistStepUpdate').mockImplementation(async function (
+        this: DefaultExecutionEngine,
+        params,
+      ) {
+        if (!params.phase?.startsWith('foreach-item-end.')) return persistStepUpdate.call(this, params);
+        foreachContext = params.executionContext;
+        const n = itemEndWrites++;
+        pending++;
+        try {
+          // The first checkpoint fails at once while any later one is still being written.
+          await sleep(n === 0 ? 0 : 100);
+          if (n === 0) throw new Error('checkpoint write failed');
+          return await persistStepUpdate.call(this, params);
+        } finally {
+          pending--;
+        }
+      });
+
+      await expect((await workflow.createRun()).start({ inputData: [0, 1, 2, 3] })).rejects.toThrow(
+        'checkpoint write failed',
+      );
+
+      expect(pending, 'the foreach returned with a checkpoint write still in flight').toBe(0);
+      expect(foreachContext!.activeStepsPath).not.toHaveProperty('item');
+      expect(errorChildSpan).toHaveBeenCalledWith(
+        expect.objectContaining({ operationId: expect.stringContaining('.foreach.') }),
+      );
+    });
   });
 });
