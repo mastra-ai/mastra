@@ -19,36 +19,18 @@ Watch [Mastra signals overview](https://www.youtube.com/watch?v=7It2y89TVP4) to 
 
 :::
 
-## Signals and thread streams
-
-:::note[Outline]
-
-- **Durable thread:** the stored conversation that outlives a single request.
-- **Run:** one execution of the agent loop. One run owns a thread at a time.
-- **Signal:** typed input attached to a thread.
-- **Thread stream:** the ordered output and lifecycle events for a thread.
-
-State the spine: signals are input; thread streams are output.
-
-:::
-
-### How input joins a thread
-
-:::note[Outline]
-
-Add a timeline diagram with three cases:
-
-- An idle thread receives a signal and wakes a new run.
-- An active run receives a signal that joins the run.
-- An active run receives a follow-up that waits for the next run.
-
-:::
-
 ## When to use signals
 
-Use signals when an agent thread needs new input or context outside the original `stream()` call. Signals are useful when users send follow-up messages while a run is active, when background systems need to add context to a thread, or when external events should wake, update, or notify the agent.
+Reach for signals when input arrives after the original `agent.stream()` call:
 
-Use `sendMessage()` and `queueMessage()` for user-authored input. Use `sendSignal()` for lower-level system context. Use `sendStateSignal()` for durable state lanes, and use `sendNotificationSignal()` when an external event should create a durable notification inbox record. For help picking between these methods, see [Choose a method](/docs/signals/sending-signals#choose-a-method).
+- A user replies while the agent is still working.
+- A background job adds context to an active thread.
+- An external system needs to wake, update, or notify the agent.
+- An agent needs a durable lane of structured context across turns.
+
+Use [`sendMessage()` and `queueMessage()`](/docs/signals/sending-signals#send-a-message) for user-authored input, [`sendSignal()`](/docs/signals/sending-signals#send-context-from-a-system) for system context, [`sendStateSignal()`](/docs/signals/state-signals) for durable state lanes, and [`sendNotificationSignal()`](/docs/signals/notifications) when an external event should create a durable notification inbox record.
+
+The same mechanism connects to the rest of Mastra. [Memory](/docs/memory/overview) stores signal messages on the thread, while state signals and notifications keep their own durable lanes and records. [Processors](/docs/agents/processors) can send signals and compute state during a run. [Workflows](/docs/workflows/overview) can send signals as part of a larger process, and [schedules](/docs/harness/schedules) use signals to deliver input on a timer. A shared [PubSub](/docs/server/pubsub) backend coordinates signals across processes. AgentController's [`Session`](/docs/harness/agent-controller) wraps thread signals for long-running assistants that manage their own thread and subscription.
 
 ## Quickstart
 
@@ -90,6 +72,31 @@ Show the same subscribe-first flow through `client.getAgent()`. Keep this short 
 
 :::
 
+## Signals and thread streams
+
+:::note[Outline]
+
+- **Durable thread:** the stored conversation that outlives a single request.
+- **Run:** one execution of the agent loop. One run owns a thread at a time.
+- **Signal:** typed input attached to a thread.
+- **Thread stream:** the ordered output and lifecycle events for a thread.
+
+State the spine: signals are input; thread streams are output.
+
+:::
+
+### How input joins a thread
+
+:::note[Outline]
+
+Add a timeline diagram with three cases:
+
+- An idle thread receives a signal and wakes a new run.
+- An active run receives a signal that joins the run.
+- An active run receives a follow-up that waits for the next run.
+
+:::
+
 ## Choose an API surface
 
 | Surface | Use it for | Canonical reference |
@@ -98,16 +105,7 @@ Show the same subscribe-first flow through `client.getAgent()`. Keep this short 
 | HTTP or the JavaScript client SDK | Applications that call a running Mastra server | [Server agent routes](/reference/server/routes#agent-message-routes), [`client.getAgent()`](/reference/client-js/agents) |
 | AgentController `Session` | Long-running assistants and coding agents built on AgentController | [Agent Controller](/docs/harness/agent-controller) |
 
-The `Agent` methods are the canonical Signals API. `Session` is a higher-level convenience surface built on AgentController that manages a thread and subscription for you. It is not the recommended starting point for most applications; see [Agent and AgentController surfaces](/docs/signals/sending-signals#agent-and-agentcontroller-surfaces) for the method mapping.
-
-## How signals relate to other features
-
-- [Memory](/docs/memory/overview): signal input is stored as messages on a memory-backed thread; state signals and notifications keep their own durable lanes and records.
-- [Processors](/docs/agents/processors): processors can send signals and compute state during a run.
-- [Workflows](/docs/workflows/overview): workflows can send signals into a thread as part of a larger process.
-- [PubSub](/docs/server/pubsub): a shared PubSub backend coordinates signals across processes.
-- [Harness](/docs/harness/overview): harness features such as goals and schedules deliver input through signals.
-- [Agent Controller](/docs/harness/agent-controller): `Session` wraps thread signals for long-running assistants.
+The `Agent` methods are the canonical Signals API. `Session` is a higher-level convenience surface built on AgentController that manages a thread and subscription for you. It is not the recommended starting point for most applications; see [Where these methods live](/docs/signals/sending-signals#where-these-methods-live) for the method mapping.
 
 ## Next steps
 

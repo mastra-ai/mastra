@@ -406,9 +406,9 @@ Sends a signal to an active run or memory thread.
   content={[
   {
     name: 'signal',
-    type: "{ type: 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder'; tagName?: string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }",
+    type: "{ type: 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder'; tagName?: string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata; transient?: boolean }",
     description:
-      "Signal context to send to the thread. `type` is the semantic signal category. `tagName` controls the XML tag the model sees. For example, `{ type: 'notification', tagName: 'github-review' }` renders as `<github-review>...</github-review>`. Legacy `user-message` and `system-reminder` payloads are still accepted and normalized. Unknown `type` values are rejected; use `tagName` for custom XML tags.",
+      "Signal context to send to the thread. `type` is the semantic signal category. `tagName` controls the XML tag the model sees. For example, `{ type: 'notification', tagName: 'github-review' }` renders as `<github-review>...</github-review>`. `tagName` and attribute names must be XML-safe: letters, numbers, periods, hyphens, and underscores, starting with a letter or underscore. Set `transient: true` to deliver the signal to the current model request without storing it; transient signals are never stored, state signals cannot be transient, and combining `transient` with a `persist` behavior discards the signal. Legacy `user-message` and `system-reminder` payloads are still accepted and normalized. Unknown `type` values are rejected; use `tagName` for custom XML tags.",
   },
   {
     name: 'options',
