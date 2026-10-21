@@ -529,22 +529,26 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       expectedUserId: string;
       toUserId: string;
     }) => {
-      const session = this.sessionsRows.find(row => row.sessionId === sessionId) ?? null;
+      const index = this.sessionsRows.findIndex(row => row.sessionId === sessionId);
+      const session = this.sessionsRows[index] ?? null;
       if (!session || session.userId !== expectedUserId) {
         return { status: 'conflict' as const, reason: 'stale_owner' as const, session };
       }
       if (session.userId === toUserId) return { status: 'updated' as const, session };
+      // Mirrors base.ts: the branch is unique per repository link and per Factory.
       const branchOwned = this.sessionsRows.some(
         row =>
           row.id !== session.id &&
-          row.projectRepositoryId === session.projectRepositoryId &&
           row.userId === toUserId &&
-          row.branch === session.branch,
+          row.branch === session.branch &&
+          (row.projectRepositoryId === session.projectRepositoryId ||
+            (session.factoryProjectId !== null && row.factoryProjectId === session.factoryProjectId)),
       );
       if (branchOwned) return { status: 'conflict' as const, reason: 'branch_owned' as const, session };
-      session.userId = toUserId;
-      session.updatedAt = new Date();
-      return { status: 'updated' as const, session };
+      // A new row, so a caller holding the old one keeps its pre-transfer snapshot like base.ts.
+      const updated = { ...session, userId: toUserId, updatedAt: new Date() };
+      this.sessionsRows[index] = updated;
+      return { status: 'updated' as const, session: updated };
     },
     setSandbox: async ({
       id,

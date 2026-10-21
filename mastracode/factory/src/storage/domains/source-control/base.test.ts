@@ -1653,8 +1653,31 @@ describe('SourceControlStorageInMemory sessions', () => {
       branch: session.branch,
       baseBranch: 'main',
     });
+    const otherRepository = await store.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '3', slug: 'mastra-ai/docs', defaultBranch: 'main' },
+    });
+    const otherLink = await store.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: otherRepository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/docs',
+    });
+    await store.sessions.create({
+      sessionId: '00000000-0000-4000-8000-00000000aaad',
+      projectRepositoryId: otherLink.id,
+      orgId: 'org-1',
+      userId: 'user-4',
+      branch: session.branch,
+      baseBranch: 'main',
+    });
     await expect(
       store.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-3' }),
+    ).resolves.toMatchObject({ status: 'conflict', reason: 'branch_owned' });
+    await expect(
+      store.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-4' }),
     ).resolves.toMatchObject({ status: 'conflict', reason: 'branch_owned' });
     await expect(
       store.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-2' }),
@@ -1662,6 +1685,7 @@ describe('SourceControlStorageInMemory sessions', () => {
       status: 'updated',
       session: { userId: 'user-2', createdByUserId: 'user-1' },
     });
+    expect(session.userId).toBe('user-1');
     await expect(
       store.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-3' }),
     ).resolves.toMatchObject({ status: 'conflict', reason: 'stale_owner', session: { userId: 'user-2' } });
