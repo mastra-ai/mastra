@@ -101,6 +101,14 @@ describe('SlackIntegration.channels', () => {
     expect(config.adapters.slack.typingStatus).toBeTypeOf('function');
   });
 
+  it('keeps reply text out of Slack by default, so the agent posts through reply_in_thread', () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret' });
+    expect(integration.channels(ctxWith()).adapters.slack.textDisplay).toBe('hidden');
+
+    const shown = new SlackIntegration({ signingSecret: 'secret', adapterOptions: { textDisplay: 'show' } });
+    expect(shown.channels(ctxWith()).adapters.slack.textDisplay).toBe('show');
+  });
+
   it('lets a caller opt into the Thinking Steps widget', () => {
     const integration = new SlackIntegration({
       signingSecret: 'secret',

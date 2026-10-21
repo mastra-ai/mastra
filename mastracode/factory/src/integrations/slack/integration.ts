@@ -126,7 +126,7 @@ function adapterOverrides(options: SlackAdapterChannelConfig | undefined): Slack
  * who want Slack's "Thinking Steps" widget.
  */
 function factoryAdapterOptions(overrides: SlackAdapterChannelConfig): SlackAdapterChannelConfig {
-  return { typingStatus: factoryTypingStatus, toolDisplay: 'hidden', ...overrides };
+  return { typingStatus: factoryTypingStatus, toolDisplay: 'hidden', textDisplay: 'hidden', ...overrides };
 }
 
 export class SlackIntegration implements FactoryIntegration {

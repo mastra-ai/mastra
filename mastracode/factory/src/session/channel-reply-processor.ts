@@ -1,5 +1,8 @@
 import type { ProcessInputStepArgs, Processor } from '@mastra/core/processors';
 
+/** Mirrors `REPLY_TOOL_NAME` in `reply-tool.ts`, which imports this module. */
+const REPLY_TOOL = 'reply_in_thread';
+
 const ID = 'factory-channel-reply';
 
 export const SESSION_LINK_LABEL = 'Open session ↗';
@@ -19,18 +22,22 @@ export const SESSION_LINK_LABEL = 'Open session ↗';
 export class FactoryChannelReplyProcessor implements Processor {
   readonly id = ID;
 
-  processInputStep({ messageList, requestContext }: ProcessInputStepArgs) {
+  processInputStep({ messageList, requestContext, tools }: ProcessInputStepArgs) {
     if (!requestContext?.get('channel')) return undefined;
-    messageList.addSystem(
-      {
-        role: 'system',
-        content: [
-          'When a request will take tools or more than a moment to answer, reply first with one short line that says what you are about to do — "On it — <the task in a few words>." — then do the work; the opener posts as its own message before any progress is shown. Give direct answers and trivial replies without an opener.',
-          'Finish with the outcome, not a replay of the steps.',
-        ].join('\n'),
-      },
-      ID,
-    );
+    // With reply text hidden the thread only sees what the reply tool posts,
+    // so the opener advice becomes advice about when to call it.
+    const content =
+      tools && REPLY_TOOL in tools
+        ? [
+            `Only messages you send with \`${REPLY_TOOL}\` reach this thread; your other text stays in the session.`,
+            `When a request will take tools or more than a moment, post one short line first that says what you are about to do, then do the work and post the outcome when you finish — not a replay of the steps.`,
+            `Post again in between only when you need an answer or have news the people in the thread would want. When a message needs nothing from you, call \`${REPLY_TOOL}\` with \`staySilent: true\`.`,
+          ]
+        : [
+            'When a request will take tools or more than a moment to answer, reply first with one short line that says what you are about to do — "On it — <the task in a few words>." — then do the work; the opener posts as its own message before any progress is shown. Give direct answers and trivial replies without an opener.',
+            'Finish with the outcome, not a replay of the steps.',
+          ];
+    messageList.addSystem({ role: 'system', content: content.join('\n') }, ID);
     return { messageList };
   }
 }

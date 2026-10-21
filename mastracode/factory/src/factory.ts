@@ -121,6 +121,7 @@ import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
+import { createChannelReactionTools, createReplyTool } from './session/reply-tool.js';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
@@ -1485,12 +1486,10 @@ export class MastraFactory {
           // Channel runs get attach_file so a produced file can go to the sender
           // rather than a sandbox path. Signal-woken runs rebuild the thread from
           // the controller's channels.
-          mergeTools(
-            'factory-attach-file',
-            await createShareFileTool(requestContext, {
-              channels: () => this.#prepared?.base.controller.getChannels(),
-            }),
-          );
+          const channels = () => this.#prepared?.base.controller.getChannels();
+          mergeTools('factory-attach-file', await createShareFileTool(requestContext, { channels }));
+          mergeTools('factory-reply', await createReplyTool(requestContext, { channels }));
+          mergeTools('channel-reactions', createChannelReactionTools(requestContext, channels()));
           if (storage.isDomainReady('source-control')) {
             mergeTools(
               'source-control',

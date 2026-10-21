@@ -5,8 +5,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { FactoryChannelReplyProcessor, sessionLink } from './channel-reply-processor.js';
 
-function args(requestContext: RequestContext, messageList = new MessageList({})): ProcessInputStepArgs {
-  return { messageList, requestContext } as unknown as ProcessInputStepArgs;
+function args(
+  requestContext: RequestContext,
+  messageList = new MessageList({}),
+  tools: Record<string, unknown> = {},
+): ProcessInputStepArgs {
+  return { messageList, requestContext, tools } as unknown as ProcessInputStepArgs;
 }
 
 function channelContext() {
@@ -15,9 +19,9 @@ function channelContext() {
   return requestContext;
 }
 
-function instruction(requestContext: RequestContext): string {
+function instruction(requestContext: RequestContext, tools: Record<string, unknown> = {}): string {
   const messageList = new MessageList({});
-  new FactoryChannelReplyProcessor().processInputStep(args(requestContext, messageList));
+  new FactoryChannelReplyProcessor().processInputStep(args(requestContext, messageList, tools));
   const added = messageList.getSystemMessages('factory-channel-reply');
   expect(added).toHaveLength(1);
   return String(added[0]!.content);
@@ -34,6 +38,13 @@ describe('FactoryChannelReplyProcessor', () => {
     expect(text).toMatch(/reply first with one short line that says what you are about to do/);
     expect(text).not.toContain('↗');
     expect(text).not.toMatch(/link/i);
+  });
+
+  it('points a run with the reply tool at the tool, with a way to stay silent', () => {
+    const text = instruction(channelContext(), { reply_in_thread: {} });
+    expect(text).toContain('Only messages you send with `reply_in_thread` reach this thread');
+    expect(text).toContain('`staySilent: true`');
+    expect(text).not.toMatch(/reply first with one short line/);
   });
 
   it('adds the instruction once across steps', () => {
