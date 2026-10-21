@@ -4158,18 +4158,9 @@ export class DurableAgent<
       // from the pre-claim copy.
       const loaded = await this.#loadRecoverableSnapshot(workflowsStore, runId);
       workflowInput = loaded.workflowInput;
-      // map-final-output publishes FINISH before its result is saved, so a saved
-      // success means FINISH went out before the crash. The default engine
-      // continues after a finished step instead of re-running it, so FINISH is
-      // never published again, and the recovered stream (subscribed from the
-      // topic's current end) would wait for it forever. The evented engine
-      // re-runs the step, which publishes FINISH itself. Check the resolved
-      // engine: an EventedAgent can fall back to the default one. Once the
-      // evented engine also continues after a finished step (COR-1354), drop
-      // the engine check.
-      finishPublishedBeforeCrash =
-        this.resolveWorkflowEngine() === 'default' &&
-        loaded.snapshot.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
+      // map-final-output publishes FINISH before saving its result. Restart skips
+      // that saved success, so recovery must publish FINISH for the new subscriber.
+      finishPublishedBeforeCrash = loaded.snapshot.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
       // Before anything is registered, so a failed load leaves only the claim to release.
       await this.#loadRecalledMessages(runId, loaded.snapshot);
       executionFence.throwIfLost();
