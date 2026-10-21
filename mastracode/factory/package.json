@@ -71,7 +71,7 @@
     "chat": "^4.37.0",
     "fetch-to-node": "^2.1.0",
     "hono": "^4.13.7",
-    "posthog-node": "^5.46.1",
+    "posthog-node": "^5.56.2",
     "zod": "catalog:"
   },
   "devDependencies": {
