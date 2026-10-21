@@ -171,7 +171,8 @@ export function providerErrorFacts(error: unknown): ProviderErrorFacts {
   const facts = collectFacts(error);
   const result: ProviderErrorFacts = {};
   if (facts.statusCode !== undefined) result.statusCode = facts.statusCode;
-  if (facts.codes[0]) result.code = facts.codes[0];
+  const code = decisiveCode(facts.codes);
+  if (code) result.code = code;
   const message = typeof error === 'object' && error !== null ? readField(error, 'message') : error;
   const reason = innermostReason(error, 0);
   if (reason !== undefined && reason !== (typeof message === 'string' ? message.trim() : undefined))
@@ -189,17 +190,39 @@ function innermostReason(error: unknown, depth: number): string | undefined {
   if (typeof error === 'string') {
     const trimmed = error.trim();
     const parsed = parseJsonObject(trimmed);
-    if (parsed !== undefined) return innermostReason(parsed, depth) ?? trimmed;
+    if (parsed !== undefined) return innermostReason(parsed, depth);
     return !trimmed || HTTP_REASON_PHRASE.test(trimmed) ? undefined : trimmed;
   }
   if (typeof error !== 'object') return undefined;
-  for (const key of ['reason', 'error', 'response', 'data', 'cause']) {
-    const reason = innermostReason(readField(error, key), depth + 1);
-    if (reason) return reason;
+  const own = innermostReason(readField(error, 'reason'), depth);
+  if (own) return own;
+  for (const key of ['error', 'response', 'data', 'cause']) {
+    const nested = innermostReason(readField(error, key), depth + 1);
+    if (nested) return nested;
   }
   const body = readField(error, 'responseBody');
-  const bodyReason = typeof body === 'string' ? innermostReason(parseJsonObject(body), depth + 1) : undefined;
+  const bodyReason = typeof body === 'string' ? innermostReason(parseJsonObject(body), depth) : undefined;
   if (bodyReason) return bodyReason;
   const message = readField(error, 'message');
   return typeof message === 'string' ? innermostReason(message, depth) : undefined;
+}
+
+// Same precedence as providerVerdict and the narrowing, so the one code kept decides like the live error.
+const CODE_PRECEDENCE = [
+  ACCESS_DENIED,
+  BILLING_EXHAUSTED,
+  RATE_LIMITED,
+  TIMED_OUT,
+  UNAVAILABLE,
+  INVALID_REQUEST_CODE,
+  MODEL_REJECTED,
+  ...CONTEXT_OVERFLOW,
+];
+
+function decisiveCode(codes: string[]): string | undefined {
+  for (const pattern of CODE_PRECEDENCE) {
+    const code = codes.find(candidate => pattern.test(candidate));
+    if (code) return code;
+  }
+  return codes[0];
 }
