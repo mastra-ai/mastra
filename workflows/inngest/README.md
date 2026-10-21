@@ -18,7 +18,7 @@ const inngest = new Inngest({ id: 'my-app' });
 const { createWorkflow, createStep } = init(inngest);
 ```
 
-## Test agent-loop scenarios
+### Test agent-loop scenarios
 
 From the repository root, build the integration and its test dependencies, then install the local Inngest dev server:
 
