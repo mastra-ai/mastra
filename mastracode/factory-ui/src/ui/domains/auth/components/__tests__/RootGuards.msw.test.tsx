@@ -14,9 +14,11 @@ import { factory, signedIn, signedOut } from './fixtures/auth';
 const AUTH_ME_URL = `${TEST_BASE_URL}/auth/me`;
 const CURRENT_PATH = '/factories/factory-1/work?view=mine#item-1';
 
-function renderApp() {
+function renderApp({
+  projects = () => HttpResponse.json({ projects: [factory] }),
+}: { projects?: Parameters<typeof http.get>[1] } = {}) {
   server.use(
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [factory] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, projects),
     http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/source-control-connections`, () =>
       HttpResponse.json({ connections: [] }),
     ),
@@ -25,7 +27,10 @@ function renderApp() {
     [
       {
         element: <RootGuards />,
-        children: [{ path: '/factories/:factoryId/work', element: <textarea aria-label="Draft" /> }],
+        children: [
+          { path: '/factories/:factoryId/work', element: <textarea aria-label="Draft" /> },
+          { path: '/onboarding', element: <h1>Set up your factory.</h1> },
+        ],
       },
       { path: '/signin', element: <SignInPage /> },
     ],
@@ -124,5 +129,25 @@ describe('Factory session expiry', () => {
     expect(new URLSearchParams(router.state.location.search).get('returnTo')).toBe(CURRENT_PATH);
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Draft' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Factory list failures', () => {
+  it('shows a retry screen instead of onboarding when the factory list fails to load', async () => {
+    server.use(http.get(AUTH_ME_URL, () => HttpResponse.json(signedIn)));
+    let listAvailable = false;
+    const { router } = renderApp({
+      projects: () =>
+        listAvailable ? HttpResponse.json({ projects: [factory] }) : new HttpResponse(undefined, { status: 500 }),
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load your factories');
+    expect(router.state.location.pathname).toBe('/factories/factory-1/work');
+    expect(screen.queryByRole('heading', { name: 'Set up your factory.' })).not.toBeInTheDocument();
+
+    listAvailable = true;
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('textbox', { name: 'Draft' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
