@@ -16,7 +16,7 @@ export type ProviderFailureKind =
 export interface ProviderErrorFacts {
   statusCode?: number;
   code?: string;
-  /** The innermost sentence behind HTTP phrases, envelopes, stringified layers and causes, when it differs from the message. */
+  /** The innermost sentence behind HTTP phrases, envelopes, stringified layers and a wrapped provider response, when it differs from the message. */
   reason?: string;
 }
 
@@ -30,8 +30,10 @@ const USAGE_CAPPED =
   /usage (?:limit|cap)|quota (?:exceeded|exhausted|reached)|exceeded (?:your )?current quota|weekly limit|monthly limit/i;
 // A cap that refills within the hour is a rate limit, whatever the provider calls it.
 const RENEWS_WITHIN_THE_HOUR = /per[_ -]?(?:second|minute|hour|min|sec)\b|\b[rt]pm\b/i;
-const ACCESS_DENIED =
-  /invalid[_ ]api[_ ]key|incorrect api key|api key not valid|unauthorized|authentication|forbidden|permission[_ ]?(?:denied|error)|access[_ ]?denied/i;
+const ACCESS_DENIED_WORDING =
+  /invalid[_ ]api[_ ]key|incorrect api key|api key not valid|authentication[_ ]error|permission[_ ]?(?:denied|error)|access[_ ]?denied/i;
+// Bare "unauthorized" or "forbidden" in free text can come from any service a run touches, not only the model provider.
+const ACCESS_DENIED_CODE = new RegExp(`${ACCESS_DENIED_WORDING.source}|unauthorized|authentication|forbidden`, 'i');
 const CONTEXT_OVERFLOW = [
   /context[_ ]length[_ ]exceeded/i,
   /maximum context length/i,
@@ -127,7 +129,7 @@ export function classifyProviderError(error: unknown): ProviderFailureKind {
 }
 
 function providerVerdict(status: number | undefined, codes: string, evidence: string): ProviderFailureKind | undefined {
-  if (status === 401 || status === 403 || ACCESS_DENIED.test(codes)) return 'auth';
+  if (status === 401 || status === 403 || ACCESS_DENIED_CODE.test(codes)) return 'auth';
   if (status === 402 || BILLING_EXHAUSTED.test(codes)) return 'quota';
   // Token-per-minute limits are 429s whose message asks to shorten the request; waiting is the fix.
   if (status === 429 || RATE_LIMITED.test(codes)) return usageKind(evidence) ?? 'rate_limited';
@@ -151,7 +153,7 @@ function usageKind(evidence: string): 'quota' | 'rate_limited' | undefined {
 }
 
 function terminalKindFromWording(evidence: string): ProviderFailureKind | undefined {
-  if (ACCESS_DENIED.test(evidence)) return 'auth';
+  if (ACCESS_DENIED_WORDING.test(evidence)) return 'auth';
   if (CONTEXT_OVERFLOW.some(pattern => pattern.test(evidence))) return 'context_overflow';
   if (MODEL_REJECTED.test(evidence)) return 'model_rejected';
   if (TOOL_HISTORY_REJECTED.test(evidence)) return 'tool_history_rejected';
@@ -180,7 +182,7 @@ export function providerErrorFacts(error: unknown): ProviderErrorFacts {
   return result;
 }
 
-/** The innermost sentence a provider wrote for a person, unwrapped from envelopes, stringified layers and causes. */
+/** The innermost sentence a provider wrote for a person, unwrapped from envelopes, stringified layers and a wrapped provider response. */
 export function providerErrorReason(error: unknown): string | undefined {
   return innermostReason(error, 0);
 }
@@ -196,20 +198,34 @@ function innermostReason(error: unknown, depth: number): string | undefined {
   if (typeof error !== 'object') return undefined;
   const own = innermostReason(readField(error, 'reason'), depth);
   if (own) return own;
-  for (const key of ['error', 'response', 'data', 'cause']) {
+  for (const key of ['error', 'response', 'data']) {
     const nested = innermostReason(readField(error, key), depth + 1);
     if (nested) return nested;
   }
   const body = readField(error, 'responseBody');
   const bodyReason = typeof body === 'string' ? innermostReason(parseJsonObject(body), depth) : undefined;
   if (bodyReason) return bodyReason;
+  const causeReason = reasonBehindCause(readField(error, 'cause'), depth + 1);
+  if (causeReason) return causeReason;
   const message = readField(error, 'message');
   return typeof message === 'string' ? innermostReason(message, depth) : undefined;
 }
 
+// Walks wrapping causes to the first that holds a provider's HTTP response; any other cause stays out of history.
+function reasonBehindCause(cause: unknown, depth: number): string | undefined {
+  if (depth > MAX_OBJECT_DEPTH || typeof cause !== 'object' || cause === null) return undefined;
+  if (carriesProviderResponse(cause)) return innermostReason(cause, depth);
+  return reasonBehindCause(readField(cause, 'cause'), depth + 1);
+}
+
+function carriesProviderResponse(value: object): boolean {
+  const status = readField(value, 'statusCode') ?? readField(value, 'status');
+  return typeof status === 'number' || typeof readField(value, 'responseBody') === 'string';
+}
+
 // Same precedence as providerVerdict and the narrowing, so the one code kept decides like the live error.
 const CODE_PRECEDENCE = [
-  ACCESS_DENIED,
+  ACCESS_DENIED_CODE,
   BILLING_EXHAUSTED,
   RATE_LIMITED,
   TIMED_OUT,
