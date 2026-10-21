@@ -24,4 +24,18 @@ describe('DelayedPromise', () => {
     delayed.resolve(150);
     expect(await delayed.promise).toBe(150);
   });
+
+  it('keeps each resumed value for callers holding successive usage promises', async () => {
+    const delayed = new DelayedPromise<number>();
+    delayed.resolve(100);
+
+    const suspended = delayed.promise;
+    delayed.resolve(150);
+    const firstResume = delayed.promise;
+    delayed.resolve(200);
+
+    expect(await suspended).toBe(100);
+    expect(await firstResume).toBe(150);
+    expect(await delayed.promise).toBe(200);
+  });
 });

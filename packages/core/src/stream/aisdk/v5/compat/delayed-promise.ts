@@ -48,7 +48,7 @@ export class DelayedPromise<T> {
     // Already settled. A durable stream publishes usage at suspension, then the
     // resumed finish replaces it. Chain onto the promise itself so a later await
     // of the getter sees the latest value, not the provisional one.
-    this._promise = this._promise.then(() => (this.status.type === 'resolved' ? this.status.value : value));
+    this._promise = this._promise.then(() => value);
   }
 
   reject(error: unknown): void {
