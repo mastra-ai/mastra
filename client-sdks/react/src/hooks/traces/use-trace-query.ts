@@ -315,9 +315,13 @@ function omitOrderBy({ orderBy: _orderBy, ...rest }: TraceQueryArgs) {
   return rest;
 }
 
+/** Request timeouts and rate limits clear up on their own, unlike the other 4xx refusals. */
+const TRANSIENT_CLIENT_ERROR_STATUSES = new Set([408, 429]);
+
 /** The server refused the request or does not support delta polling; polling again cannot change that. */
 function isRejectedDeltaRequest(error: unknown): boolean {
-  return error instanceof MastraClientError && ((error.status >= 400 && error.status < 500) || error.status === 501);
+  if (!(error instanceof MastraClientError) || TRANSIENT_CLIENT_ERROR_STATUSES.has(error.status)) return false;
+  return (error.status >= 400 && error.status < 500) || error.status === 501;
 }
 
 const isCursorConflict = (error: unknown) => error instanceof MastraClientError && error.status === 409;

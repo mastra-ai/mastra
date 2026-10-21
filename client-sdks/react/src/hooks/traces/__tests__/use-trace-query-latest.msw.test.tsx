@@ -375,12 +375,16 @@ describe('useTraceQueryLatest', () => {
   });
 
   describe('when the server fails transiently', () => {
-    it('keeps polling from the last good cursor', async () => {
+    it.each([
+      { status: 503, reason: 'is unavailable' },
+      { status: 429, reason: 'rate limits the poll' },
+      { status: 408, reason: 'times out' },
+    ])('keeps polling from the last good cursor when it $reason', async ({ status }) => {
       const { deltaRequests } = serveTraceQuery({
         list: traceQueryFirstPage,
         deltas: [
           traceQueryDeltaBatch('delta-cursor-0'),
-          HttpResponse.json({ error: 'unavailable' }, { status: 503 }),
+          HttpResponse.json({ error: 'try again' }, { status }),
           traceQueryDeltaBatch('delta-cursor-1', [deltaTraceFresh]),
         ],
       });
