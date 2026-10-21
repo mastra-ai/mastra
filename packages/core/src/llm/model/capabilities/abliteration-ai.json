@@ -3,6 +3,12 @@
   "temperature": ["abliterated-model", "abliterated-model-large", "abliterated-model-large-v2"],
   "structuredOutput": ["abliterated-model-large", "abliterated-model-large-v2"],
   "reasoning": {
+    "abliterated-model-large-v2": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "abliterated-model": [
       {
         "type": "effort",
@@ -10,12 +16,6 @@
       },
       {
         "type": "toggle"
-      }
-    ],
-    "abliterated-model-large-v2": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "abliterated-model-large": [

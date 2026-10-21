@@ -1771,3 +1771,88 @@ describe('Traces page tags filter', () => {
     });
   });
 });
+
+describe('Traces page parity', () => {
+  const settle = async (queryClient: ReturnType<typeof renderPage>['queryClient']) => {
+    await waitFor(() => {
+      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+      expect(queryClient.isFetching()).toBe(0);
+    });
+  };
+
+  describe('when scoped and saved filters exist', () => {
+    it('restores the saved filters without dropping the scope', async () => {
+      window.localStorage.setItem('mastra:traces:saved-filters:agent:weather-agent', 'status=error');
+      setTracePageHandlers(metricsCapableCapabilities);
+
+      const { queryClient } = renderPage('/agents/weather-agent/traces', {
+        scopedEntityId: 'weather-agent',
+        scopedEntityType: EntityType.AGENT,
+      });
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('status=error'));
+      await settle(queryClient);
+      expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent');
+      expect(screen.getByTestId('location').textContent).toContain('rootEntityType=agent');
+    });
+  });
+
+  describe('when running on the Mastra platform and storage lacks metrics', () => {
+    afterEach(() => {
+      delete (window as Partial<Window>).MASTRA_CLOUD_API_ENDPOINT;
+    });
+
+    it('still renders the usage columns and requests usage', async () => {
+      window.MASTRA_CLOUD_API_ENDPOINT = 'https://api.mastra.cloud';
+      setTracePageHandlers(metricsUnavailableCapabilities);
+
+      const { queryClient } = renderPage();
+
+      await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalled());
+      await settle(queryClient);
+      expect(screen.getByText('Input tokens')).toBeTruthy();
+    });
+  });
+
+  describe('when the URL asks for branches mode with an anchor span', () => {
+    it('queries traces and never requests branches', async () => {
+      const onTraceQuery = vi.fn<() => void>();
+      const onBranchesRequest = vi.fn<() => void>();
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () => {
+          onTraceQuery();
+          return HttpResponse.json(traceQueryPage);
+        }),
+        http.get(`${TEST_BASE_URL}/api/observability/branches`, () => {
+          onBranchesRequest();
+          return HttpResponse.json(branchList);
+        }),
+      );
+
+      const { queryClient } = renderPage('/traces?listMode=branches&anchorSpanId=span-a');
+
+      await waitFor(() => expect(onTraceQuery).toHaveBeenCalled());
+      await settle(queryClient);
+      expect(onBranchesRequest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a filter is edited while a trace is open', () => {
+    it('writes the new filter and closes the trace in the URL', async () => {
+      setTracePageHandlers(metricsUnavailableCapabilities);
+      server.use(http.get(`${TEST_BASE_URL}/api/observability/feedback`, () => HttpResponse.json(emptyFeedback)));
+
+      const { queryClient } = renderPage('/traces?traceId=trace-a');
+      await settle(queryClient);
+
+      fireEvent.click(
+        within([...getFilterChips()][0]).getByRole('button', { name: 'Value: Last 7 days', hidden: true }),
+      );
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('datePreset=last-24h'));
+      expect(screen.getByTestId('location').textContent).not.toContain('traceId=');
+    });
+  });
+});

@@ -29,6 +29,8 @@ import {
   resolvePrimaryEnvironmentRepository,
 } from '../../session/factory-session.js';
 import { readRequestContextOrgId, seedSessionOrg } from '../../session/org-seed.js';
+import { isRunBound, memoryResourceOf, sessionStampCounts } from '../../session/session-threads.js';
+import type { SessionRunBindings } from '../../session/session-threads.js';
 import type {
   ChannelAccountLink,
   ChannelAccountLinkKey,
@@ -312,8 +314,20 @@ function threadBranch(threadId: string): string {
 }
 
 /**
+ * Session ids of repo-backed Slack threads, keyed by the message that started
+ * them. The resourceId resolver records the session it found or created; the
+ * thread-id resolver, which core runs next for the same message, names the new
+ * thread after it.
+ */
+export type SlackStartedSessions = WeakMap<object, string>;
+
+/**
  * Resolve the resourceId for a NEW Slack channel thread. A linked sender whose
- * factory has a repository gets a Factory user-session id — the controller
+ * factory has a repository gets a Factory session. A channel thread belongs to
+ * the Factory: its resourceId is the Factory id, so the thread shares the
+ * Factory's memory. A DM is private to the sender, so it runs under the
+ * sender's user id and shares memory with their own sessions. The session id is recorded in `startedSessions` for the
+ * thread-id resolver. The controller
  * session then materializes the repo sandbox via the factory's dynamic
  * workspace (clone + PAT), the session shows up in the web Sessions list, and
  * View Session deep-links land on the normal workspace route.
@@ -337,7 +351,10 @@ function threadBranch(threadId: string): string {
  * Pure lookups only — cards for unlinked/unrouted senders are the dispatch
  * gate's job; this hook must never post.
  */
-export function createChannelResourceIdResolver(deps: SlackChannelDeps): ResolveResourceId {
+export function createChannelResourceIdResolver(
+  deps: SlackChannelDeps,
+  startedSessions: SlackStartedSessions = new WeakMap(),
+): ResolveResourceId {
   const { accountLinks, projects } = deps;
   const sourceControls = configuredSourceControls(deps);
   return async ({ platform, thread, message }) => {
@@ -414,6 +431,7 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
       }
 
       const branch = threadBranch(thread.id);
+      const memoryResourceId = thread.isDM ? link.userId : factoryProjectId;
       // Attributed to the Slack sender, not to whoever connected the repository:
       // unlike an autonomous rule run, a Slack thread has a real interactive user.
       // Keyed by factory, not by link: the thread's session stays found when the
@@ -423,7 +441,10 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
         userId: link.userId,
         branch,
       });
-      if (existing) return existing.sessionId;
+      if (existing) {
+        startedSessions.set(message, existing.sessionId);
+        return memoryResourceId;
+      }
       const session = await sourceControl.sessions.create({
         sessionId: globalThis.crypto.randomUUID(),
         projectRepositoryId: repo.projectRepositoryId,
@@ -435,7 +456,8 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
         // DMs are the only private origin; channel threads are org-visible.
         visibility: thread.isDM ? 'private' : 'org',
       });
-      return session.sessionId;
+      startedSessions.set(message, session.sessionId);
+      return memoryResourceId;
     } catch (error) {
       if (error instanceof ChannelSessionRejectedError || error instanceof SlackSessionStartError) throw error;
       if (error instanceof FactorySourceControlConflictError) {
@@ -454,29 +476,91 @@ export function createChannelResourceIdResolver(deps: SlackChannelDeps): Resolve
 
 /**
  * Thread id for a NEW Slack channel thread. Repo-backed threads take the
- * user-session id AS their thread id, matching the web convention
+ * session id AS their thread id, matching the web convention
  * (FactoryStartCoordinator seeds threads with threadId = sessionId) so
  * `/workspaces/{sessionId}/threads/{sessionId}` resolves Slack-created
- * sessions exactly like web-created ones — no `?resourceId=` override needed.
+ * sessions exactly like web-created ones — no `?sessionId=` override needed.
  * Chat-only threads keep the default random id: their `channel:...`
  * resourceId is a memory key, not a unique thread id.
  */
-export const resolveChannelThreadId: ResolveThreadId = ({ resourceId, defaultThreadId }) =>
-  resourceId.startsWith('channel:') ? defaultThreadId : resourceId;
+export function createChannelThreadIdResolver(startedSessions: SlackStartedSessions): ResolveThreadId {
+  return ({ message, defaultThreadId }) => startedSessions.get(message) ?? defaultThreadId;
+}
+
+/**
+ * The Factory session a repo-backed Slack thread belongs to. A thread under
+ * the Factory resource is stamped with its session id (the startup migration
+ * stamps threads it moved there). An unmigrated thread runs under its session
+ * id as its resource, and a newer thread is named after its session. A stamp
+ * or thread id only counts under that session's memory resource; a thread
+ * named after a session it can't claim is refused. With no session row for
+ * either, the thread is addressed by its own id and fails authorization like
+ * any session without a row.
+ */
+const UNCLAIMED_SESSION = Symbol('unclaimed-session');
+
+async function slackThreadSessionId(
+  sessions: ReturnType<typeof createSourceControlSessionLookup>,
+  thread: { id: string; resourceId: string; metadata?: Record<string, unknown> },
+  loadThread: (threadId: string) => Promise<{ resourceId: string } | null | undefined>,
+  runs: SessionRunBindings | undefined,
+): Promise<string | null | typeof UNCLAIMED_SESSION> {
+  if (thread.resourceId.startsWith('channel:')) return null;
+  // Stamps and thread ids are client-writable: a session only claims a thread
+  // under its own memory resource.
+  const claims = async (sessionId: string) => {
+    const row = await sessions.getBySessionId(sessionId);
+    if (!row) return false;
+    // A stamp only counts where the session's stamps are trusted.
+    if (sessionId !== thread.id && !sessionStampCounts(row, thread.resourceId)) return false;
+    const own = sessionId === thread.id ? thread : await loadThread(sessionId);
+    return thread.resourceId === memoryResourceOf(row, own, await isRunBound(row, runs));
+  };
+  const stamped = thread.metadata?.factorySessionId;
+  if (typeof stamped === 'string' && stamped && (await claims(stamped))) return stamped;
+  if (await sessions.getSourceControlBySessionId(thread.resourceId)) return thread.resourceId;
+  if (await claims(thread.id)) return thread.id;
+  if (await sessions.getBySessionId(thread.id)) return UNCLAIMED_SESSION;
+  // With no session row the thread is its own session: falling back to the
+  // resource would put every such thread under the Factory (or a sender) into
+  // one shared session.
+  return thread.id;
+}
 
 /** Create channel sessions with their Factory ownership present in initial controller state. */
 export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSessionResolve {
   const sourceControlSessions = createSourceControlSessionLookup(configuredSourceControls(deps));
   return async ({ controller, thread, requestContext }) => {
-    const sourceControl = thread.resourceId.startsWith('channel:')
+    // A session-bound Slack thread is addressed by its Factory session id and
+    // runs under the thread's resource (the Factory). A chat-only thread is its
+    // own session, addressed by its `channel:` resource.
+    // Approval clicks pass the thread without its metadata; load the stored
+    // thread whenever the session stamp is missing so a migrated thread's
+    // stamp is read.
+    const stamped = (thread as { metadata?: Record<string, unknown> }).metadata?.factorySessionId;
+    const stored =
+      stamped || thread.resourceId.startsWith('channel:')
+        ? thread
+        : ((await controller.queryThreadById({ threadId: thread.id })) ?? thread);
+    const resolved = await slackThreadSessionId(
+      sourceControlSessions,
+      stored,
+      threadId => controller.queryThreadById({ threadId }),
+      deps.workItems,
+    );
+    if (resolved === UNCLAIMED_SESSION) {
+      throw new Error(`Slack thread ${thread.id} is named after a Factory session it doesn't belong to.`);
+    }
+    const sessionId = resolved ?? thread.resourceId;
+    const sourceControl = sessionId.startsWith('channel:')
       ? null
-      : await sourceControlSessions.getSourceControlBySessionId(thread.resourceId);
-    const session = sourceControl ? await sourceControl.sessions.getBySessionId(thread.resourceId) : null;
+      : await sourceControlSessions.getSourceControlBySessionId(sessionId);
+    const session = sourceControl ? await sourceControl.sessions.getBySessionId(sessionId) : null;
     return controller.createSession({
-      id: thread.resourceId,
+      id: sessionId,
       ownerId: controller.id,
       resourceId: thread.resourceId,
-      // Bind the Slack-created thread itself. Without it the scoped session
+      // Bind the Slack-created thread itself. Without it the session
       // auto-selects (or creates) another thread and is switched onto this one later.
       threadId: thread.id,
       requestContext,
@@ -523,17 +607,18 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
     if (!projects) return;
     if (thread.resourceId.startsWith('channel:')) return;
 
-    const sourceControl = await sourceControlSessions.getSourceControlBySessionId(thread.resourceId);
+    const sessionId = session.identity.getId();
+    const sourceControl = await sourceControlSessions.getSourceControlBySessionId(sessionId);
     if (!sourceControl) return;
-    const sourceSession = await sourceControl.sessions.getBySessionId(thread.resourceId);
+    const sourceSession = await sourceControl.sessions.getBySessionId(sessionId);
     if (!sourceSession?.factoryProjectId) return;
     const threadId = session.thread.getId();
     const binding =
       threadId && deps.workItems
         ? await deps.workItems.findRunBindingByThread({
             orgId: sourceSession.orgId,
-            resourceId: thread.resourceId,
-            sessionId: thread.resourceId,
+            resourceId: session.identity.getResourceId(),
+            sessionId,
             threadId,
             rejectAmbiguous: true,
           })
@@ -570,8 +655,12 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
       credentialScope: sessionModel.modelScope,
     });
 
-    const modeId = session.mode.get();
     const activeThreadId = session.thread.getId();
+    // Threads of one Factory share its resource; the stamp ties this thread to its session.
+    if (activeThreadId) {
+      await session.thread.setSettingOn({ threadId: activeThreadId, key: 'factorySessionId', value: sessionId });
+    }
+    const modeId = session.mode.get();
     const persistedModelId = await migratePersistedModelSelection({
       getMetadata: async () =>
         activeThreadId
@@ -674,7 +763,16 @@ async function prepareExistingSessionOwnerContext(
   }
   if (sourceControls.length === 0 || internalThread.resourceId.startsWith('channel:')) return 'ready';
   const sessions = createSourceControlSessionLookup(sourceControls);
-  const sessionRow = await sessions.getBySessionId(internalThread.resourceId);
+  const memory = await ctx.mastra?.getStorage()?.getStore('memory');
+  const resolved = await slackThreadSessionId(
+    sessions,
+    internalThread,
+    async threadId => memory?.getThreadById({ threadId }),
+    deps.workItems,
+  );
+  if (resolved === UNCLAIMED_SESSION) return 'access-denied';
+  const sessionId = resolved ?? internalThread.resourceId;
+  const sessionRow = await sessions.getBySessionId(sessionId);
   if (
     sessionRow &&
     sessionRow.orgId === options.expectedOrgId &&
@@ -685,13 +783,13 @@ async function prepareExistingSessionOwnerContext(
   }
   if (!options.expectedOrgId) {
     throw new Error(
-      `Could not authorize the owner of Slack Factory session ${internalThread.resourceId}: the sender's account link has no organization.`,
+      `Could not authorize the owner of Slack Factory session ${sessionId}: the sender's account link has no organization.`,
     );
   }
 
   const preparation = await prepareSessionRunContext(
     ctx.requestContext,
-    internalThread.resourceId,
+    sessionId,
     { sessions },
     { expectedOrgId: options.expectedOrgId },
   );
@@ -701,7 +799,7 @@ async function prepareExistingSessionOwnerContext(
       preparation === 'session-not-found'
         ? 'no source-control session row exists for it, or its project repository row is missing'
         : 'its source-control session row has no organization';
-    throw new Error(`Could not authorize the owner of Slack Factory session ${internalThread.resourceId}: ${reason}.`);
+    throw new Error(`Could not authorize the owner of Slack Factory session ${sessionId}: ${reason}.`);
   }
   return 'ready';
 }
@@ -990,13 +1088,14 @@ export function createSlackChannelsConfig(deps: SlackChannelDeps & { slack: Slac
       ? { adapter, ...deps.adapterOptions }
       : { adapter, ...deps.adapterOptions, streaming: deps.adapterOptions?.streaming ?? true };
 
+  const startedSessions: SlackStartedSessions = new WeakMap();
   return {
     adapters: { slack },
     handlers: createHandlers(deps),
-    // New linked+repo-backed threads own a Factory user-session id as their
-    // resourceId, which is what makes the controller session repo-backed.
-    resolveResourceId: createChannelResourceIdResolver(deps),
-    resolveThreadId: resolveChannelThreadId,
+    // New linked+repo-backed threads belong to the Factory and are named after
+    // the Factory session they start, which makes the controller session repo-backed.
+    resolveResourceId: createChannelResourceIdResolver(deps, startedSessions),
+    resolveThreadId: createChannelThreadIdResolver(startedSessions),
     resolveSession: createChannelSessionResolver(deps),
     // Those sessions are created by the channel machinery, not the web kickoff,
     // so this is where they pick up the factory's configuration.

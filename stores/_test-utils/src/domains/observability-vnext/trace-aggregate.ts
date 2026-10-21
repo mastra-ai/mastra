@@ -492,6 +492,7 @@ interface AggregateRootSpec {
   name?: string;
   /** Root span type; defaults to `agent_run`. */
   spanType?: string;
+  entityId?: string;
   startedAt: string;
   durationMs: number;
   error?: boolean;
@@ -508,6 +509,7 @@ function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
     name: spec.name ?? spec.traceId,
     spanType: spec.spanType ?? 'agent_run',
     entityName: spec.entityName,
+    entityId: spec.entityId ?? null,
     environment: spec.environment ?? 'production',
     organizationId,
     threadId: spec.threadId,
@@ -555,13 +557,17 @@ function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
  * | research-2  | 5   | 12000 | yes | t-10   | acme       | yes    | staging, org-b            |
  * | scheduler-1 | 1   | 1000  |     | t-11   |            |        | percentiles interpolate   |
  * | scheduler-2 | 3   | 3000  |     | t-11   |            |        |                           |
- * | unnamed-1   | 2   | 700   |     | t-12   |            |        | `entityName: null`        |
+ * | unnamed-1   | 2   | 700   |     | t-12   |            |        | `entityName: null`, `entityId: nightly-scorer` |
+ *
+ * `billing-2` also has a child `scorer_run` span with `entityId: nightly-scorer`, which only span-scope
+ * `entityId` predicates match.
  *
  * Whole-window groups by `entityName`: triage 6 (2 errors, p95 8000), billing 5 (1 error,
  * p95 2500), support 4 (1 error, p95 6000), research 2 (1 error, p95 12000), scheduler 2
  * (p95 2900), null 1. Total 20 traces, 5 errors.
  *
- * Excluded records: a superseded `triage-6` root (lower `cursorId`, error + 60 s duration), a
+ * Excluded records: a superseded `triage-6` root (lower `cursorId`, error, 4 s, ending before the
+ * current copy), a
  * pending `triage-pending` root, and a `triage-late` root starting exactly at `to`.
  *
  * Root spans are `agent_run` named after their `traceId`, except: triage roots share the name
@@ -634,7 +640,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       name: 'triage retry',
       spanType: 'workflow_run',
       startedAt: '2026-08-05T11:00:00.000Z',
-      durationMs: 60_000,
+      durationMs: 4000,
       error: true,
       threadId: 't-4',
     }),
@@ -665,6 +671,19 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       durationMs: 1500,
       threadId: 't-5',
       tenant: 'globex',
+    }),
+    // A child scorer span reusing a root entityId: trace-scope `entityId` must not match it.
+    span(211, 'billing-2', 'billing-2-scorer', {
+      parentSpanId: 'billing-2',
+      name: 'nightly-scorer',
+      spanType: 'scorer_run',
+      entityType: 'scorer',
+      entityId: 'nightly-scorer',
+      entityName: null,
+      organizationId: 'org-a',
+      threadId: 't-5',
+      startedAt: '2026-08-02T10:00:00.500Z',
+      endedAt: '2026-08-02T10:00:01.000Z',
     }),
     ...aggregateRoot({
       cursorId: 220,
@@ -779,6 +798,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 600,
       traceId: 'unnamed-1',
       entityName: null,
+      entityId: 'nightly-scorer',
       startedAt: '2026-08-02T10:00:00.000Z',
       durationMs: 700,
       threadId: 't-12',
@@ -1221,6 +1241,41 @@ export const TRACE_AGGREGATE_CONFORMANCE_CASES: TraceAggregateConformanceCase[] 
       ],
       truncated: false,
     },
+  },
+  {
+    name: 'entityId groups the traces that have no entityName',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'notExists', path: 'entityName' },
+      groupBy: ['entityId'],
+      measures: ['count'],
+    },
+    expected: {
+      rows: [{ dimensions: { entityId: 'nightly-scorer' }, measures: { count: 1 } }],
+      truncated: false,
+    },
+  },
+  {
+    name: 'drills into an entityId group by filtering on the root entityId only',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } },
+      groupBy: ['entityId'],
+      measures: ['count', 'countDistinct.traceId'],
+    },
+    expected: {
+      rows: [{ dimensions: { entityId: 'nightly-scorer' }, measures: { count: 1, 'countDistinct.traceId': 1 } }],
+      truncated: false,
+    },
+  },
+  {
+    name: 'span-scope entityId also matches child spans that share a root entityId',
+    request: {
+      timeRange: aggregateRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } } } },
+      measures: ['count'],
+    },
+    expected: { rows: [{ measures: { count: 2 } }], truncated: false },
   },
   {
     name: 'null in the second dimension sorts last within the first dimension tie-break',
@@ -2100,8 +2155,8 @@ function yearRoot(spec: YearRootSpec): RawTraceQuerySpan[] {
  * 9000×4, so p50 (rank 20) is 2000 and p95 (rank 38) is 9000 with no interpolation.
  *
  * Excluded records: `year-early` starts 1 ms before `from`, `year-late` starts exactly at
- * `to`, and `beta-07` has a superseded copy (lower `cursorId`) recorded as a failed `gamma`
- * run that must not surface.
+ * `to`, and `beta-07` has a superseded copy (lower `cursorId`, ending earlier on the same day)
+ * recorded as a failed `gamma` run that must not surface.
  */
 export const TRACE_AGGREGATE_YEAR_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [
@@ -2166,8 +2221,9 @@ export const TRACE_AGGREGATE_YEAR_FIXTURE_DATA: TraceQueryFixtureData = {
       durationMs: 2000,
     }),
     ...yearRoot({ cursorId: 3105, traceId: 'beta-06', entityName: 'beta', day: 150, durationMs: 2000 }),
-    // Superseded copy of `beta-07`; it precedes the current copy so completion-only writers keep the latter.
-    ...yearRoot({ cursorId: 3106, traceId: 'beta-07', entityName: 'gamma', day: 200, durationMs: 60_000, error: true }),
+    // Superseded copy of `beta-07`; it precedes the current copy so completion-only writers keep the latter,
+    // and ends before it, as a re-exported root does.
+    ...yearRoot({ cursorId: 3106, traceId: 'beta-07', entityName: 'gamma', day: 200, durationMs: 1000, error: true }),
     ...yearRoot({ cursorId: 3107, traceId: 'beta-07', entityName: 'beta', day: 200, durationMs: 2000 }),
     ...yearRoot({ cursorId: 3108, traceId: 'beta-08', entityName: 'beta', day: 250, durationMs: 2000 }),
     ...yearRoot({ cursorId: 3109, traceId: 'beta-09', entityName: 'beta', day: 300, durationMs: 2000 }),
@@ -2458,6 +2514,181 @@ export const TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES: TraceAggregateConformanceCa
         ...yearSeries({ ...gamma, environment: 'production' }, gammaPoints),
         ...yearSeries({ ...delta, environment: 'production' }, deltaPoints),
         ...yearSeries({ ...unnamedYear, environment: 'staging' }, unnamedPoints),
+      ],
+      truncated: false,
+    },
+  },
+];
+
+// ---------------------------------------------------------------------------------------------
+// Root versions: a root exported again (a resumed or completed run) replaces its earlier export.
+// ---------------------------------------------------------------------------------------------
+
+const versionRange = { from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' };
+
+/**
+ * Window `[2026-09-01, 2026-09-08)`, `production` / `org-a`. Each trace's later export (higher
+ * `cursorId`) ends after its earlier one, as a re-exported root does, and both share `startedAt`.
+ * Superseded versions differ in status, `entityName` and duration; two of them end the day before
+ * their current version, so they sit in another `endedAt` partition.
+ *
+ * | trace | current                       | superseded                    | partitions |
+ * |-------|-------------------------------|-------------------------------|------------|
+ * | v-1   | alpha, success, 2000 ms       | beta, error, 1000 ms          | same       |
+ * | v-2   | alpha, error, 3000 ms         | alpha, success, 500 ms        | same       |
+ * | v-3   | beta, success, 4000 ms        | alpha, error, 1000 ms         | different  |
+ * | v-4   | beta, success, 1000 ms        | —                             |            |
+ * | v-5   | gamma, error, 6000 ms         | beta, success, 2000 ms        | different  |
+ *
+ * Current population: 5 traces, 2 errors; alpha 2 (1 error, max 3000), beta 2 (0 errors,
+ * max 4000), gamma 1 (1 error, max 6000). A filter applied to every version instead of the current
+ * one counts alpha 3 and beta 4, and `status` 4 errors + 5 successes.
+ */
+export const TRACE_AGGREGATE_VERSION_FIXTURE_DATA: TraceAggregateFixtureData = {
+  spans: [
+    ...aggregateRoot({
+      cursorId: 10,
+      traceId: 'v-1',
+      entityName: 'beta',
+      startedAt: '2026-09-01T10:00:00.000Z',
+      durationMs: 1000,
+      error: true,
+      threadId: 'vt-1',
+    }),
+    ...aggregateRoot({
+      cursorId: 11,
+      traceId: 'v-1',
+      entityName: 'alpha',
+      startedAt: '2026-09-01T10:00:00.000Z',
+      durationMs: 2000,
+      threadId: 'vt-1',
+    }),
+    ...aggregateRoot({
+      cursorId: 20,
+      traceId: 'v-2',
+      entityName: 'alpha',
+      startedAt: '2026-09-02T10:00:00.000Z',
+      durationMs: 500,
+      threadId: 'vt-2',
+    }),
+    ...aggregateRoot({
+      cursorId: 21,
+      traceId: 'v-2',
+      entityName: 'alpha',
+      startedAt: '2026-09-02T10:00:00.000Z',
+      durationMs: 3000,
+      error: true,
+      threadId: 'vt-2',
+    }),
+    ...aggregateRoot({
+      cursorId: 30,
+      traceId: 'v-3',
+      entityName: 'alpha',
+      startedAt: '2026-09-02T23:59:58.000Z',
+      durationMs: 1000,
+      error: true,
+      threadId: 'vt-3',
+    }),
+    ...aggregateRoot({
+      cursorId: 31,
+      traceId: 'v-3',
+      entityName: 'beta',
+      startedAt: '2026-09-02T23:59:58.000Z',
+      durationMs: 4000,
+      threadId: 'vt-3',
+    }),
+    ...aggregateRoot({
+      cursorId: 40,
+      traceId: 'v-4',
+      entityName: 'beta',
+      startedAt: '2026-09-03T10:00:00.000Z',
+      durationMs: 1000,
+      threadId: 'vt-4',
+    }),
+    ...aggregateRoot({
+      cursorId: 50,
+      traceId: 'v-5',
+      entityName: 'beta',
+      startedAt: '2026-09-04T23:59:57.000Z',
+      durationMs: 2000,
+      threadId: 'vt-5',
+    }),
+    ...aggregateRoot({
+      cursorId: 51,
+      traceId: 'v-5',
+      entityName: 'gamma',
+      startedAt: '2026-09-04T23:59:57.000Z',
+      durationMs: 6000,
+      error: true,
+      threadId: 'vt-5',
+    }),
+  ],
+  scores: [],
+  feedback: [],
+};
+
+const statusIs = (status: string) => ({ op: 'eq', left: { path: 'status' }, right: { literal: status } }) as const;
+const entityIs = (entityName: string) =>
+  ({ op: 'eq', left: { path: 'entityName' }, right: { literal: entityName } }) as const;
+
+export const TRACE_AGGREGATE_VERSION_CONFORMANCE_CASES: TraceAggregateConformanceCase[] = [
+  {
+    name: 'versions: the unfiltered population counts each trace once',
+    request: { timeRange: versionRange, measures: ['count', 'errorCount', 'duration.max'] },
+    expected: { rows: [{ measures: { count: 5, errorCount: 2, 'duration.max': 6000 } }], truncated: false },
+  },
+  {
+    name: 'versions: status=error counts current versions that failed',
+    request: { timeRange: versionRange, where: statusIs('error'), measures: ['count'] },
+    expected: { rows: [{ measures: { count: 2 } }], truncated: false },
+  },
+  {
+    name: 'versions: status=success counts current versions that succeeded',
+    request: { timeRange: versionRange, where: statusIs('success'), measures: ['count'] },
+    expected: { rows: [{ measures: { count: 3 } }], truncated: false },
+  },
+  {
+    name: 'versions: entityName=alpha matches current versions only',
+    request: { timeRange: versionRange, where: entityIs('alpha'), measures: ['count', 'duration.max'] },
+    expected: { rows: [{ measures: { count: 2, 'duration.max': 3000 } }], truncated: false },
+  },
+  {
+    name: 'versions: entityName=beta matches current versions only',
+    request: { timeRange: versionRange, where: entityIs('beta'), measures: ['count', 'duration.max'] },
+    expected: { rows: [{ measures: { count: 2, 'duration.max': 4000 } }], truncated: false },
+  },
+  {
+    name: 'versions: groupBy status follows the current version',
+    request: { timeRange: versionRange, groupBy: ['status'], measures: ['count', 'duration.max'] },
+    expected: {
+      rows: [
+        { dimensions: { status: 'success' }, measures: { count: 3, 'duration.max': 4000 } },
+        { dimensions: { status: 'error' }, measures: { count: 2, 'duration.max': 6000 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'versions: groupBy entityName follows the current version',
+    request: { timeRange: versionRange, groupBy: ['entityName'], measures: ['count', 'errorCount', 'duration.max'] },
+    expected: {
+      rows: [
+        { dimensions: { entityName: 'alpha' }, measures: { count: 2, errorCount: 1, 'duration.max': 3000 } },
+        { dimensions: { entityName: 'beta' }, measures: { count: 2, errorCount: 0, 'duration.max': 4000 } },
+        { dimensions: { entityName: 'gamma' }, measures: { count: 1, errorCount: 1, 'duration.max': 6000 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'versions: daily buckets place each trace once, by its startedAt',
+    request: { timeRange: versionRange, interval: '1d', measures: ['count'] },
+    expected: {
+      rows: [
+        { bucket: '2026-09-01T00:00:00.000Z', measures: { count: 1 } },
+        { bucket: '2026-09-02T00:00:00.000Z', measures: { count: 2 } },
+        { bucket: '2026-09-03T00:00:00.000Z', measures: { count: 1 } },
+        { bucket: '2026-09-04T00:00:00.000Z', measures: { count: 1 } },
       ],
       truncated: false,
     },

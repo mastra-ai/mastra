@@ -118,10 +118,10 @@ describe('DatasetItemVersionsComparePage', () => {
       const [newerCard, olderCard] = Array.from(
         container.querySelector('.md\\:grid-cols-2')!.children,
       ) as HTMLElement[];
-      expect(within(newerCard!).getByText('Request Context')).toBeDefined();
-      expect(within(newerCard!).queryByText('Not set in this version')).toBeNull();
-      expect(within(olderCard!).getByText('Request Context')).toBeDefined();
-      expect(within(olderCard!).getAllByText('Not set in this version')).toHaveLength(2);
+      expect(within(newerCard).getByText('Request Context')).toBeDefined();
+      expect(within(newerCard).queryByText('Not set in this version')).toBeNull();
+      expect(within(olderCard).getByText('Request Context')).toBeDefined();
+      expect(within(olderCard).getAllByText('Not set in this version')).toHaveLength(2);
       expect(screen.queryByText('No version selected')).toBeNull();
     });
 

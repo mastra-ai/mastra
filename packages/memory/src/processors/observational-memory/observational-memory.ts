@@ -1072,16 +1072,21 @@ export class ObservationalMemory {
         requestContext: options.requestContext,
       })) as ResolvedInvocationModel;
     }
-    const mainModelId = getModelId(mainModel);
-    const pick =
-      resolveAutoModelId(mainModelId, this.autoModelOptions(options?.requestContext)) ??
-      (mainModel ? undefined : OBSERVATIONAL_MEMORY_DEFAULTS.observation.model);
+    const mainModelId = mainModel ? getModelId(mainModel) : getCurrentModel(options?.currentModel);
+    const pick = resolveAutoModelId(mainModelId, this.autoModelOptions(options?.requestContext));
 
     // No cheaper sibling is known: reuse the main model exactly as configured.
     if (mainModel && (!pick || pick === mainModelId)) {
       return mainModel;
     }
-    const modelId = pick!;
+    // Without a main model, the package default (Gemini) is only a safe guess when nothing
+    // says Google is unusable; with a credential check it would fail for lack of a key.
+    const modelId = pick ?? (this.canUseProvider ? undefined : OBSERVATIONAL_MEMORY_DEFAULTS.observation.model);
+    if (!modelId) {
+      throw new Error(
+        `Observational memory model 'auto' could not determine the main model, and ${OBSERVATIONAL_MEMORY_DEFAULTS.observation.model} has no usable credential. Pass the actor model or choose a concrete memory model.`,
+      );
+    }
     return this.resolveAutoModelHook
       ? ((await this.resolveAutoModelHook(modelId, {
           requestContext: options?.requestContext,
@@ -1738,6 +1743,26 @@ export class ObservationalMemory {
       }
       lastPart.metadata.mastra.sealedAt = sealedAt;
     }
+  }
+
+  /**
+   * @internal Persist the message-level seal flag on a stored message, so a later recovery
+   * still sees it was observed after a reflection drops its id.
+   */
+  async persistMessageSeal(message: MastraDBMessage): Promise<void> {
+    // Seal the stored copy, not the in-memory one, so parts the list hasn't loaded aren't overwritten.
+    const [stored] = (await this.storage.listMessagesById({ messageIds: [message.id] })).messages;
+    if (!stored) return;
+    const metadata = stored.content.metadata ?? {};
+    const mastra = (metadata as { mastra?: Record<string, unknown> }).mastra;
+    await this.storage.updateMessages({
+      messages: [
+        {
+          id: stored.id,
+          content: { ...stored.content, metadata: { ...metadata, mastra: { ...mastra, sealed: true } } },
+        },
+      ],
+    });
   }
 
   /**
@@ -4220,6 +4245,8 @@ ${formattedMessages}
     sendSignal?: ProcessorContext['sendSignal'];
     sendStateSignal?: ProcessorContext['sendStateSignal'];
     requestContext?: RequestContext;
+    /** The actor model of the step that triggered this cycle; `'auto'` picks the memory model from it. */
+    currentModel?: ObservationModelContext;
     writer?: ProcessorStreamWriter;
     observabilityContext?: ObservabilityContext;
   }): Promise<{
@@ -4283,6 +4310,7 @@ ${formattedMessages}
           sendSignal: opts.sendSignal,
           sendStateSignal: opts.sendStateSignal,
           requestContext,
+          currentModel: opts.currentModel,
           writer: opts.writer,
           observabilityContext: opts.observabilityContext,
         }).run();

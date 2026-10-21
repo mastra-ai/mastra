@@ -106,6 +106,27 @@ export const toReactiveSignalData = (message: MastraDBMessage): SignalData => {
   };
 };
 
+export type McpEventSignalInfo = {
+  kind: 'mcp-event' | 'mcp-event-subscription-ended';
+  server?: string;
+  event?: string;
+  /** The occurrence followed a gap: events may have been skipped. */
+  truncated: boolean;
+};
+
+/** Server, event and gap flag of an MCP event notification (`@mastra/mcp` event signals); undefined for any other signal. */
+export const getMcpEventSignalInfo = (signal: SignalData): McpEventSignalInfo | undefined => {
+  const kind = getNotificationMetadata(signal)?.kind ?? formatSignalValue(signal.attributes?.kind);
+  if (kind !== 'mcp-event' && kind !== 'mcp-event-subscription-ended') return undefined;
+  const attributes = signal.attributes ?? {};
+  return {
+    kind,
+    server: formatSignalValue(attributes.server) || undefined,
+    event: formatSignalValue(attributes.event) || undefined,
+    truncated: attributes.truncated === true || attributes.truncated === 'true',
+  };
+};
+
 export const getNotificationMetadata = (signal: SignalData): NotificationSignalMetadata | undefined => {
   const notification = isRecord(signal.metadata?.notification) ? signal.metadata.notification : undefined;
   if (!notification) return undefined;

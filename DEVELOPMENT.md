@@ -1,6 +1,6 @@
 # Mastra Development Guide
 
-This guide provides instructions for developers who want to contribute to or work with the Mastra codebase.
+This guide provides instructions for developers who want to work with the Mastra codebase.
 
 ## Prerequisites
 
@@ -174,37 +174,9 @@ Afterwards, start the development services:
 pnpm run dev:services:up
 ```
 
-## Contributing
-
-You can _best_ help by creating high-quality issues with good reproductions and descriptions. If you want to open a pull request, follow the steps below to ensure a smooth contribution process. **Important:** Always link your pull request to a relevant issue and provide a clear description of the changes.
-
-1. **Create a branch for your changes**:
-
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-2. **Make your changes and ensure tests pass**:
-
-   ```bash
-   pnpm test
-   ```
-
-3. **Create a changeset** (for version management):
-
-   ```bash
-   pnpm changeset
-   ```
-
-   Follow the prompts to describe your changes.
-
-4. **Open a pull request** with your changes. Link the related issue(s) in the PR description (e.g. with `Fixes #1234`) and provide a clear description of the problem and solution. PRs without linked issues will be closed.
-
-5. **Resolve all comments**. Coderabbit and Mastra Platform help maintainers review code. They will automatically comment on your pull request with feedback and suggestions. Please address all comments to ensure a smooth review process. If you disagree with a suggestion, respond with your reasoning so maintainers can review.
-
 ## Documentation
 
-The documentation site is built from the `docs/` directory. Follow its [documentation guide](./docs/CONTRIBUTING.md) for instructions on contributing to the docs.
+The documentation site is built from the `docs/` directory. Follow its [documentation guide](./docs/CONTRIBUTING.md) for instructions on running the docs locally.
 
 ## Need help?
 
