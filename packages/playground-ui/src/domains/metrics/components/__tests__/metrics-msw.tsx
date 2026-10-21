@@ -1,5 +1,5 @@
 import type { AggregateTracesResponse, GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
-import { traceAggregateRequestSchema } from '@mastra/core/storage';
+import { planTraceAggregate, traceAggregateRequestSchema } from '@mastra/core/storage';
 import type { NormalizedTraceAggregateRequest } from '@mastra/core/storage';
 import { http, HttpResponse, delay } from 'msw';
 import type { ReactNode } from 'react';
@@ -50,8 +50,9 @@ const olderServer = () => http.get(CAPABILITIES_API, () => HttpResponse.json(old
 export type TraceAggregateRequest = NormalizedTraceAggregateRequest;
 
 /**
- * Answers `aggregateTraces()` from the request body. The body is parsed with the server's own
- * schema, so a request the server would reject fails the test.
+ * Answers `aggregateTraces()` from the request body. The body goes through the server's own schema
+ * and planner (bucket and row caps, groupable dimensions), so a request the server would reject
+ * fails the test.
  */
 export function serveTraceAggregate(
   respond: (
@@ -62,6 +63,11 @@ export function serveTraceAggregate(
     http.post(TRACE_AGGREGATE_API, async ({ request }) => {
       const parsed = traceAggregateRequestSchema.safeParse(await request.json());
       if (!parsed.success) return HttpResponse.json({ error: parsed.error.message }, { status: 400 });
+      try {
+        planTraceAggregate(parsed.data);
+      } catch (error) {
+        return HttpResponse.json({ error: String(error) }, { status: 400 });
+      }
       const result = await respond(parsed.data);
       return result instanceof Response ? result : HttpResponse.json(result);
     }),
