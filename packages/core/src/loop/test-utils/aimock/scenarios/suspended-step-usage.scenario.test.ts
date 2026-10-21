@@ -2,7 +2,12 @@ import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { ChunkType } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
-import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
+import {
+  createSharedAgent,
+  describeForAllEngines,
+  isDurableEngineVariant,
+  useLoopScenarioAimock,
+} from '../aimock-scenario';
 
 /**
  * Token usage when a tool call suspends (#27232).
@@ -139,15 +144,31 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
       expect(tokens(await resumed.totalUsage)).toEqual(add(SUSPENDED, RESUMED));
     });
 
-    it(`[${kind}] steps before the suspension count in both suspended and resumed totals`, async () => {
+    it(`[${kind}] exposes prior and suspended usage before resume, then counts the step once`, async () => {
       const { agent, toolCallId } = await setup(kind, { withPriorStep: true });
       const first: RunHandle = await agent.stream('go');
-      const firstOutput = await drain(first);
-      expect(tokens(await settled(firstOutput.totalUsage))).toEqual(add(PRIOR, SUSPENDED));
+      const firstOutput = first.output ?? first;
+      const heldUsage = firstOutput.usage;
+      const heldTotalUsage = firstOutput.totalUsage;
+      const heldFinishReason = firstOutput.finishReason;
+      await drain(first);
+
+      expect(tokens(await settled(heldUsage))).toEqual(add(PRIOR, SUSPENDED));
+      expect(tokens(await settled(heldTotalUsage))).toEqual(add(PRIOR, SUSPENDED));
+      expect(await settled(heldFinishReason)).toBe('suspended');
 
       const resumed = await drain(await resume(agent, kind, first.runId, toolCallId));
       expect(await resumed.text).toBe('done');
       expect(tokens(await resumed.totalUsage)).toEqual(add(PRIOR, SUSPENDED, RESUMED));
+
+      if (isDurableEngineVariant(engine)) {
+        expect(tokens(await firstOutput.usage)).toEqual(add(PRIOR, SUSPENDED, RESUMED));
+        expect(tokens(await firstOutput.totalUsage)).toEqual(add(PRIOR, SUSPENDED, RESUMED));
+        expect(await firstOutput.finishReason).toBe('stop');
+        expect(tokens(await heldUsage)).toEqual(add(PRIOR, SUSPENDED));
+        expect(tokens(await heldTotalUsage)).toEqual(add(PRIOR, SUSPENDED));
+        expect(await heldFinishReason).toBe('suspended');
+      }
     });
   }
 
