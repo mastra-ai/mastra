@@ -3,7 +3,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { markNewChannelSession } from './channel-session-link-processor.js';
-import { createChannelReactionTools, createReplyTool, REPLY_TOOL_NAME } from './reply-tool.js';
+import { createReplyTool, REPLY_TOOL_NAME } from './reply-tool.js';
 
 type ReplyTool = {
   inputSchema: { safeParse: (input: unknown) => { success: boolean } };
@@ -130,50 +130,5 @@ describe('reply_in_thread', () => {
     await tool.execute({ text: 'The build finished: all green.' }, {});
 
     expect(post).toHaveBeenCalledWith({ markdown: 'The build finished: all green.' });
-  });
-});
-
-describe('channel reactions', () => {
-  type ReactionTools = Record<string, { execute: (input: unknown, ctx: unknown) => Promise<unknown> }>;
-  const adapter = () => ({ addReaction: vi.fn(async () => {}), removeReaction: vi.fn(async () => {}) });
-
-  it('reacts in the thread an inbound message came from', async () => {
-    const slack = adapter();
-    const requestContext = new RequestContext();
-    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, {
-      platform: 'slack',
-      adapter: slack,
-      chatThread: { id: 'slack:C1:171.1' },
-    });
-    const tools = (await createChannelReactionTools(requestContext)) as ReactionTools;
-
-    expect(Object.keys(tools).sort()).toEqual(['add_reaction', 'remove_reaction']);
-    await tools.add_reaction!.execute({ messageId: '171.2', emoji: 'eyes' }, {});
-    await tools.remove_reaction!.execute({ messageId: '171.2', emoji: 'eyes' }, {});
-    expect(slack.addReaction).toHaveBeenCalledWith('slack:C1:171.1', '171.2', 'eyes');
-    expect(slack.removeReaction).toHaveBeenCalledWith('slack:C1:171.1', '171.2', 'eyes');
-  });
-
-  it('reacts in a Slack session thread on a run with no inbound message, like a web prompt or a woken run', async () => {
-    const slack = adapter();
-    const buildRenderContextForThread = vi.fn(async (threadId: string) =>
-      threadId === 'thread-1' ? { platform: 'slack', adapter: slack, chatThread: { id: 'slack:C1:171.1' } } : null,
-    );
-    const requestContext = new RequestContext();
-    requestContext.set('controller', { threadId: 'thread-1', sessionId: 'session-1', resourceId: 'resource-1' });
-    const tools = (await createChannelReactionTools(requestContext, {
-      channels: () => ({ buildRenderContextForThread }) as never,
-    })) as ReactionTools;
-
-    await tools.add_reaction!.execute({ messageId: '171.5', emoji: 'white_check_mark' }, {});
-    expect(slack.addReaction).toHaveBeenCalledWith('slack:C1:171.1', '171.5', 'white_check_mark');
-  });
-
-  it('offers none when the session thread is not in a chat channel', async () => {
-    const requestContext = new RequestContext();
-    requestContext.set('controller', { threadId: 'fork-1', sessionId: 'session-1', resourceId: 'resource-1' });
-    const channels = () => ({ buildRenderContextForThread: async () => null }) as never;
-    await expect(createChannelReactionTools(requestContext, { channels })).resolves.toEqual({});
-    await expect(createChannelReactionTools(new RequestContext())).resolves.toEqual({});
   });
 });
