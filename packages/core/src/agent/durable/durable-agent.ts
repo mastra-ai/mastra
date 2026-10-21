@@ -1637,6 +1637,7 @@ export class DurableAgent<
       // Restore the run-level execution budget from the persisted snapshot so
       // a recovered session is bounded like the original one (#21724).
       timeoutTotalMs: workflowInput.options?.modelSettings?.timeout?.totalMs,
+      actor: workflowInput.options?.actor,
       // Rebuild the live structured output config from the persisted JSON Schema
       // so the recovered stream still emits `object-result` chunks.
       structuredOutput: workflowInput.options?.structuredOutput?.schema
@@ -2689,6 +2690,7 @@ export class DurableAgent<
               agentId: this.id,
               requestContext: entry.requestContext,
               permission: MastraFGAPermissions.MEMORY_WRITE,
+              actor: entry.actor,
             });
             // The interrupted workflow cannot run its finish-time memory flush.
             // Preserve materialized messages, not the in-flight processor's chunks.

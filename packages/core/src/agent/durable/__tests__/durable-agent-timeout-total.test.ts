@@ -20,8 +20,11 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
+import type { IFGAProvider } from '../../../auth/ee';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
+import { RequestContext } from '../../../request-context';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
@@ -321,75 +324,126 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     result.cleanup();
   });
 
-  it('re-arms the persisted run-level budget after a cold restart (recover)', async () => {
-    const storage = new InMemoryStore();
-    const build = () => {
-      const baseAgent = new Agent({
-        id: 'timeout-restart-agent',
-        name: 'Timeout Restart Agent',
-        instructions: 'You are a helpful agent.',
-        model: hangingModel() as LanguageModelV2,
+  it.each([false, true])(
+    're-arms the persisted run-level budget after a cold restart (trusted actor: %s)',
+    async trustedActor => {
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
+      let secondStepEntered = false;
+      const fga: IFGAProvider = {
+        check: async (_user, input) => input.permission !== 'memory:write',
+        filterAccessible: async () => [],
+        require: async (_user, input) => {
+          if (input.permission === 'memory:write') throw new Error('Only trusted actors may write memory');
+        },
+      };
+      const build = () => {
+        const firstStepModel = toolCallingModel('hold');
+        let calls = 0;
+        const model = new MockLanguageModelV2({
+          doStream: async options => {
+            if (++calls === 1) return firstStepModel.doStream(options);
+            secondStepEntered = true;
+            return new Promise<never>(() => {});
+          },
+        });
+        const baseAgent = new Agent({
+          id: 'timeout-restart-agent',
+          name: 'Timeout Restart Agent',
+          instructions: 'You are a helpful agent.',
+          model: trustedActor ? model : hangingModel(),
+          memory: trustedActor ? memory : undefined,
+          tools: trustedActor
+            ? {
+                hold: createTool({
+                  id: 'hold',
+                  description: 'Looks up the city',
+                  inputSchema: z.object({ city: z.string() }),
+                  execute: async () => 'Found NYC',
+                }),
+              }
+            : undefined,
+        });
+        const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+        // `running` checkpoints — the rows recover() reads — are only persisted
+        // under the auto-recovery policy (#23915).
+        new Mastra({
+          agents: { 'timeout-restart-agent': durableAgent as any },
+          logger: false,
+          storage,
+          pubsub,
+          recovery: { durableAgents: 'auto' },
+          server: trustedActor ? { fga } : undefined,
+        });
+        return durableAgent;
+      };
+
+      // ---- Process 1: start a budgeted run against a hanging model. ----
+      const firstDurable = build();
+      const requestContext = new RequestContext();
+      requestContext.set('organizationId', 'timeout-tenant');
+      requestContext.set('user', { id: 'timeout-user' });
+      const started = await firstDurable.stream('hello', {
+        modelSettings: { timeout: { totalMs: 2000 } },
+        actor: trustedActor ? { actorKind: 'system', sourceWorkflow: 'timeout-workflow' } : undefined,
+        requestContext,
+        savePerStep: false,
+        memory: trustedActor ? { thread: 'timeout-thread', resource: 'timeout-resource' } : undefined,
       });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-      // `running` checkpoints — the rows recover() reads — are only persisted
-      // under the auto-recovery policy (#23915).
-      new Mastra({
-        agents: { 'timeout-restart-agent': durableAgent as any },
-        logger: false,
-        storage,
-        pubsub,
-        recovery: { durableAgents: 'auto' },
+      const runId = (started as unknown as { runId: string }).runId;
+
+      // Write side of the regression: the run-level budget must survive
+      // serializeModelSettings into the persisted workflow input — this is the
+      // field cold recovery reads back.
+      const workflows = (await storage.getStore('workflows'))!;
+      await vi.waitFor(async () => {
+        const persisted = await workflows.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+        const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
+        expect(snapshot?.context?.input?.options?.modelSettings?.timeout?.totalMs).toBe(2000);
       });
-      return durableAgent;
-    };
 
-    // ---- Process 1: start a budgeted run against a hanging model. ----
-    const firstDurable = build();
-    const started = await firstDurable.stream('hello', {
-      modelSettings: { timeout: { totalMs: 2000 } },
-    });
-    const runId = (started as unknown as { runId: string }).runId;
+      if (trustedActor) await vi.waitFor(() => expect(secondStepEntered).toBe(true));
 
-    // Write side of the regression: the run-level budget must survive
-    // serializeModelSettings into the persisted workflow input — this is the
-    // field cold recovery reads back.
-    const workflows = (await storage.getStore('workflows'))!;
-    await vi.waitFor(async () => {
-      const persisted = await workflows.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
-      const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
-      expect(snapshot?.context?.input?.options?.modelSettings?.timeout?.totalMs).toBe(2000);
-    });
+      // ---- The restart: nothing of process 1 survives but its storage.
+      // clear() runs each entry's cleanup, which also disarms process 1's
+      // in-memory budget timer — exactly what a real crash does. Process 1's
+      // hanging execution is still running here, so its local execution
+      // fence must be forgotten too.
+      globalRunRegistry.clear();
+      __resetExecutionFencesForTests();
+      await pubsub.close();
+      pubsub = new EventEmitterPubSub();
 
-    // ---- The restart: nothing of process 1 survives but its storage.
-    // clear() runs each entry's cleanup, which also disarms process 1's
-    // in-memory budget timer — exactly what a real crash does. Process 1's
-    // hanging execution is still running here, so its local execution
-    // fence must be forgotten too.
-    globalRunRegistry.clear();
-    __resetExecutionFencesForTests();
-    await pubsub.close();
-    pubsub = new EventEmitterPubSub();
+      // ---- Process 2: recover the run; the model hangs again. Process 1's
+      // claim is still within its lease, so recovering right away takes it over.
+      const secondDurable = build();
+      const recovered = await secondDurable.recover(runId, { force: true });
 
-    // ---- Process 2: recover the run; the model hangs again. Process 1's
-    // claim is still within its lease, so recovering right away takes it over.
-    const secondDurable = build();
-    const recovered = await secondDurable.recover(runId, { force: true });
+      // Read side: the rebuilt registry entry restored the budget from the
+      // persisted snapshot.
+      expect(globalRunRegistry.get(runId)?.timeoutTotalMs).toBe(2000);
 
-    // Read side: the rebuilt registry entry restored the budget from the
-    // persisted snapshot.
-    expect(globalRunRegistry.get(runId)?.timeoutTotalMs).toBe(2000);
-
-    // Behavioral proof: the recovered session is bounded — the restored
-    // budget fails the hanging run instead of letting it run unbounded.
-    const chunks = await drain(recovered.fullStream);
-    const errorChunk = findTimeoutErrorChunk(chunks);
-    expect(errorChunk).toBeDefined();
-    expect(errorChunk.payload.error.message).toContain('totalMs');
-    recovered.cleanup();
-    await vi.waitFor(async () => {
-      expect(await secondDurable.pubsub.getHistory(AGENT_STREAM_TOPIC(runId))).toHaveLength(0);
-    });
-  }, 30000);
+      // Behavioral proof: the recovered session is bounded — the restored
+      // budget fails the hanging run instead of letting it run unbounded.
+      const chunks = await drain(recovered.fullStream);
+      const errorChunk = findTimeoutErrorChunk(chunks);
+      expect(errorChunk, JSON.stringify(chunks)).toBeDefined();
+      expect(errorChunk.payload.error.message).toContain('totalMs');
+      if (trustedActor) {
+        await vi.waitFor(async () => {
+          const { messages } = await memory.recall({ threadId: 'timeout-thread', resourceId: 'timeout-resource' });
+          expect(
+            messages.some(message => message.role === 'assistant' && JSON.stringify(message).includes('tc-1')),
+          ).toBe(true);
+        });
+      }
+      recovered.cleanup();
+      await vi.waitFor(async () => {
+        expect(await secondDurable.pubsub.getHistory(AGENT_STREAM_TOPIC(runId))).toHaveLength(0);
+      });
+    },
+    30000,
+  );
 
   it('keeps abort() reaching an in-flight tool after the run registry entry is evicted (#26126)', async () => {
     let toolSignal: AbortSignal | undefined;
