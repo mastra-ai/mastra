@@ -1,5 +1,19 @@
 # mastra
 
+## 1.35.0-alpha.13
+
+### Patch Changes
+
+- Fixed Slack sessions in the Factory sidebar: they show the Slack icon again, and an untitled Slack session shows its work item's title instead of the raw branch name. ([#27822](https://github.com/mastra-ai/mastra/pull/27822))
+
+- Fixed Factory list activity glows being clipped at row and group edges, and made the active row use a rounded ring. ([#27964](https://github.com/mastra-ai/mastra/pull/27964))
+
+- Improved Factory session sharing with a lock on private sessions and a sharing popover in the sidebar and session header. Shared sessions no longer show a sidebar badge. The session menu still offers sharing and making a session private. ([#27952](https://github.com/mastra-ai/mastra/pull/27952))
+
+- Moved the Studio sidebar toggle from the footer to the top of the sidebar, next to search, and removed the empty footer row it left behind. The search shortcut now shows in the search button's tooltip. ([#27688](https://github.com/mastra-ai/mastra/pull/27688))
+
+- Moved the Mastra version in the Studio sidebar into a regular row next to Settings and Resources. When packages are outdated or deprecated, the row shows an "Update" badge. Clicking it opens a popover instead of a dialog: it lists your installed packages with the versions they update to, and has a copy button for the update command (pnpm, npm, yarn or bun), a button to copy all versions for bug reports, and a link to the changelog. ([#27970](https://github.com/mastra-ai/mastra/pull/27970))
+
 ## 1.35.0-alpha.12
 
 ### Minor Changes
