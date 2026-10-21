@@ -1,23 +1,30 @@
 import type { GetObservabilityCapabilitiesResponse, QuerySpansInput, QuerySpansResult } from '@mastra/client-js';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SpansPage from '..';
 import {
+  emptyEntityNames,
+  emptyEnvironments,
   emptySpans,
   noSpanQueryCapabilities,
   spanQueryCapabilities,
+  spanQueryCoreOnlyCapabilities,
   spansFirstPage,
   spansLastPage,
   SPANS_PAGE_TWO_CURSOR,
 } from './fixtures/spans';
+import { useMockIntersectionObserver } from '@/test/intersection-observer';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const CAPABILITIES_URL = `${TEST_BASE_URL}/api/observability/capabilities`;
 const SPANS_QUERY_URL = `${TEST_BASE_URL}/api/observability/spans/query`;
+const ENTITY_NAMES_URL = `${TEST_BASE_URL}/api/observability/discovery/entity-names`;
+const ENVIRONMENTS_URL = `${TEST_BASE_URL}/api/observability/discovery/environments`;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const LocationProbe = () => {
   const location = useLocation();
@@ -33,20 +40,37 @@ const renderPage = () =>
     { router: { initialEntries: ['/spans'] } },
   );
 
+const getFilterInput = () => screen.getByRole('combobox', { name: 'Add filter' }) as HTMLInputElement;
+const typeFilter = (text: string) => fireEvent.change(getFilterInput(), { target: { value: text } });
+const pressFilterKey = (key: string) => fireEvent.keyDown(getFilterInput(), { key });
+
+/** Builds a `<field> is <value>` filter through the typeahead input: field, operator, then value. */
+const pickFilter = async (field: string, value: string) => {
+  getFilterInput().focus();
+  typeFilter(field);
+  await screen.findByRole('option', { name: field });
+  pressFilterKey('Enter');
+  await screen.findByRole('option', { name: 'is' });
+  pressFilterKey('Enter');
+  typeFilter(value);
+  await screen.findByRole('option', { name: value });
+  pressFilterKey('Enter');
+};
+
 /** Serves the capabilities and answers span queries by cursor, recording every request body. */
 function setSpansHandlers(
   capabilities: GetObservabilityCapabilitiesResponse,
   pages: { first: QuerySpansResult; byCursor?: Record<string, QuerySpansResult> },
-  options: { beforeCursorPage?: Promise<void> } = {},
 ) {
   const requests: QuerySpansInput[] = [];
   server.use(
     http.get(CAPABILITIES_URL, () => HttpResponse.json(capabilities)),
+    http.get(ENTITY_NAMES_URL, () => HttpResponse.json(emptyEntityNames)),
+    http.get(ENVIRONMENTS_URL, () => HttpResponse.json(emptyEnvironments)),
     http.post(SPANS_QUERY_URL, async ({ request }) => {
       const body = (await request.json()) as QuerySpansInput;
       requests.push(body);
       const after = body.page?.after;
-      if (after) await options.beforeCursorPage;
       return HttpResponse.json(after ? (pages.byCursor?.[after] ?? emptySpans) : pages.first);
     }),
   );
@@ -131,14 +155,22 @@ describe('Spans page', () => {
 
   describe('when the span query fails', () => {
     it('shows the error state', async () => {
-      server.use(
-        http.get(CAPABILITIES_URL, () => HttpResponse.json(spanQueryCapabilities)),
-        http.post(SPANS_QUERY_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })),
-      );
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+      server.use(http.post(SPANS_QUERY_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
 
       renderPage();
 
       expect(await screen.findByText('Failed to load spans')).toBeTruthy();
+    });
+
+    it('keeps the filter bar so the filters can be changed', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+      server.use(http.post(SPANS_QUERY_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
+
+      renderPage();
+
+      await screen.findByText('Failed to load spans');
+      expect(screen.getByRole('group', { name: 'Span filters' })).toBeTruthy();
     });
   });
 
@@ -152,110 +184,118 @@ describe('Spans page', () => {
     });
   });
 
-  describe('when the first page has a next cursor', () => {
-    it('loads only the next page after clicking Next', async () => {
+  describe('when the end of the list scrolls into view', () => {
+    const { intersect } = useMockIntersectionObserver();
+
+    it('appends the next page fetched with the first page cursor', async () => {
       const requests = setSpansHandlers(spanQueryCapabilities, {
         first: spansFirstPage,
         byCursor: { [SPANS_PAGE_TWO_CURSOR]: spansLastPage },
       });
 
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
+      await screen.findByText('agent run: weather');
+      act(() => intersect(true));
 
       expect(await screen.findByText('workflow run: onboarding')).toBeTruthy();
-      expect(screen.queryByText('agent run: weather')).toBeNull();
+      expect(screen.getByText('agent run: weather')).toBeTruthy();
       expect(requests.at(-1)?.page).toEqual({ limit: 25, after: SPANS_PAGE_TWO_CURSOR });
     });
 
-    it('hides Next on the last page', async () => {
-      setSpansHandlers(spanQueryCapabilities, {
-        first: spansFirstPage,
-        byCursor: { [SPANS_PAGE_TWO_CURSOR]: spansLastPage },
-      });
-
-      renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
-
-      await screen.findByText('workflow run: onboarding');
-      expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
-    });
-
-    it('returns to the first page after clicking Previous', async () => {
+    it('stops requesting once the last page is loaded', async () => {
       const requests = setSpansHandlers(spanQueryCapabilities, {
         first: spansFirstPage,
         byCursor: { [SPANS_PAGE_TWO_CURSOR]: spansLastPage },
       });
 
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
+      await screen.findByText('agent run: weather');
+      act(() => intersect(true));
       await screen.findByText('workflow run: onboarding');
-      const requestsBeforePrevious = requests.length;
-      fireEvent.click(screen.getByRole('button', { name: 'Previous' }));
+      const requestsAfterLastPage = requests.length;
+      act(() => intersect(false));
+      act(() => intersect(true));
 
-      expect(await screen.findByText('agent run: weather')).toBeTruthy();
-      expect(screen.queryByText('workflow run: onboarding')).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Previous' })).toBeNull();
-      await waitFor(() => expect(requests.length).toBeGreaterThan(requestsBeforePrevious));
-      expect(requests.at(-1)?.page).toEqual({ limit: 25 });
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(requests).toHaveLength(requestsAfterLastPage);
     });
+  });
 
-    describe('when the next page is still loading', () => {
-      /** Opens page 2 with its response held back; page 1's rows and cursor stay on screen meanwhile. */
-      async function openPendingPageTwo() {
-        let releasePageTwo = () => {};
-        const pageTwoGate = new Promise<void>(resolve => {
-          releasePageTwo = resolve;
-        });
-        const requests = setSpansHandlers(
-          spanQueryCapabilities,
-          { first: spansFirstPage, byCursor: { [SPANS_PAGE_TWO_CURSOR]: spansLastPage } },
-          { beforeCursorPage: pageTwoGate },
-        );
-        renderPage();
-        fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
-        await waitFor(() => expect(requests.at(-1)?.page).toEqual({ limit: 25, after: SPANS_PAGE_TWO_CURSOR }));
-        return { requests, releasePageTwo };
-      }
-      const pageLabel = (page: number) =>
-        screen.getByText((_, element) => element?.tagName === 'SPAN' && element.textContent === `Page ${page}`);
-
-      it('ignores Next instead of skipping ahead with the previous page cursor', async () => {
-        const { releasePageTwo } = await openPendingPageTwo();
-
-        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-        releasePageTwo();
-
-        expect(await screen.findByText('workflow run: onboarding')).toBeTruthy();
-        expect(pageLabel(2)).toBeTruthy();
-      });
-
-      it('ignores Previous until the requested page arrives', async () => {
-        const { releasePageTwo } = await openPendingPageTwo();
-
-        fireEvent.click(screen.getByRole('button', { name: 'Previous' }));
-        releasePageTwo();
-
-        expect(await screen.findByText('workflow run: onboarding')).toBeTruthy();
-        expect(pageLabel(2)).toBeTruthy();
-      });
-    });
-
-    it('restarts from the first page when the Start column sort changes', async () => {
-      const requests = setSpansHandlers(spanQueryCapabilities, {
-        first: spansFirstPage,
-        byCursor: { [SPANS_PAGE_TWO_CURSOR]: spansLastPage },
-      });
+  describe('when the Start column header is clicked', () => {
+    it('restarts the query from the first page in ascending order', async () => {
+      const requests = setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
 
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
-      await screen.findByText('workflow run: onboarding');
+      await screen.findByText('agent run: weather');
       fireEvent.click(screen.getByRole('button', { name: /^Start,/ }));
 
-      expect(await screen.findByText('agent run: weather')).toBeTruthy();
-      const last = requests.at(-1);
-      expect(last?.orderBy).toEqual([{ field: 'startedAt', direction: 'asc' }]);
-      expect(last?.page).toEqual({ limit: 25 });
-      expect(screen.queryByRole('button', { name: 'Previous' })).toBeNull();
+      await waitFor(() => expect(requests.at(-1)?.orderBy).toEqual([{ field: 'startedAt', direction: 'asc' }]));
+      expect(requests.at(-1)?.page).toEqual({ limit: 25 });
+    });
+  });
+
+  describe('when a Status is error filter is added', () => {
+    it('queries the spans whose status is error from the first page', async () => {
+      const requests = setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+      await screen.findByText('agent run: weather');
+      await pickFilter('Status', 'Error');
+
+      await waitFor(() =>
+        expect(requests.at(-1)?.where).toEqual({
+          op: 'and',
+          args: [{ op: 'eq', left: { path: 'status' }, right: { literal: 'error' } }],
+        }),
+      );
+      expect(requests.at(-1)?.page).toEqual({ limit: 25 });
+    });
+  });
+
+  describe('when the store does not support span context fields', () => {
+    it('offers core fields but not context fields', async () => {
+      setSpansHandlers(spanQueryCoreOnlyCapabilities, { first: spansFirstPage });
+
+      renderPage();
+      await screen.findByText('agent run: weather');
+      getFilterInput().focus();
+      typeFilter('Span');
+
+      expect(await screen.findByRole('option', { name: 'Span type' })).toBeTruthy();
+      typeFilter('Environment');
+      await waitFor(() => expect(screen.queryByRole('option', { name: 'Environment' })).toBeNull());
+    });
+  });
+
+  describe('when the store supports span context fields', () => {
+    it('offers context fields', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+      await screen.findByText('agent run: weather');
+      getFilterInput().focus();
+      typeFilter('Environment');
+
+      expect(await screen.findByRole('option', { name: 'Environment' })).toBeTruthy();
+    });
+  });
+
+  describe('when the time range changes to the last 7 days', () => {
+    it('restarts the query over the wider window', async () => {
+      const requests = setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+      await screen.findByText('agent run: weather');
+      fireEvent.click(screen.getByRole('button', { name: /Last 24 hours/ }));
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 7 days' }));
+
+      await waitFor(() => {
+        const timeRange = requests.at(-1)?.timeRange;
+        if (!timeRange) throw new Error('No span query');
+        const days = (Date.parse(timeRange.to) - Date.parse(timeRange.from)) / DAY_MS;
+        expect(Math.round(days)).toBe(7);
+      });
+      expect(requests.at(-1)?.page).toEqual({ limit: 25 });
     });
   });
 });

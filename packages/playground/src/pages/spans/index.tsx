@@ -3,7 +3,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useSpanQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
-import { SpansList } from './spans-list';
+import { SpansPageContent } from './spans-page-content';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 
@@ -11,6 +11,9 @@ const crumbs = [navCrumb('/spans')];
 
 export default function SpansPage() {
   const { enabled, isLoading } = useSpanQueryAvailable();
+
+  // The content owns its layout so it can put the filter bar in the action row.
+  if (enabled) return <SpansPageContent />;
 
   return (
     <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
@@ -22,8 +25,6 @@ export default function SpansPage() {
             Loading storage capabilities
           </Txt>
         </div>
-      ) : enabled ? (
-        <SpansList />
       ) : (
         <EmptyState
           variant="fill"

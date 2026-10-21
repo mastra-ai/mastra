@@ -1,7 +1,9 @@
 import type { QuerySpansInput, QuerySpansResult } from '@mastra/client-js';
-import { keepPreviousData, skipToken, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, skipToken, useInfiniteQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
-import type { MastraQueryOptions } from '../shared/query-options';
+import type { MastraInfiniteQueryOptions } from '../shared/query-options';
+import { useInView } from '../shared/use-in-view';
 
 export const SPAN_QUERY_PER_PAGE = 25;
 
@@ -11,49 +13,74 @@ export type SpanRow = QuerySpansResult['spans'][number];
 export interface UseQuerySpansArgs {
   query: SpanQueryArgs | undefined;
   limit?: number;
-  /** Cursor of the page to load (`page.next` of the previous page). Omit for the first page. */
-  after?: string;
   enabled?: boolean;
-  queryOptions?: MastraQueryOptions<QuerySpansResult>;
+  queryOptions?: MastraInfiniteQueryOptions<QuerySpansResult, SpanRow[], readonly unknown[], string | undefined>;
 }
 
 export interface UseQuerySpansReturn {
   spans: SpanRow[] | undefined;
-  /** Cursor of the page after the current one; `null` on the last page. */
-  nextCursor: string | null;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  fetchNextPage: () => void;
+  /** Attach to the end-of-list sentinel; the next page loads when it scrolls into view. */
+  setEndOfListElement: (node: HTMLDivElement | null) => void;
   isLoading: boolean;
   isFetching: boolean;
-  /** The rows belong to the previous page while the requested one loads. */
-  isPlaceholderData: boolean;
   isError: boolean;
   error: Error | null;
   refetch: () => void;
 }
 
-/** Queries one page of completed spans for the given cursor. */
+const selectSpans = (data: { pages: QuerySpansResult[] }): SpanRow[] => data.pages.flatMap(page => page.spans);
+
+/** Queries completed spans with cursor pagination and viewport-driven loading. */
 export function useQuerySpans({
   query,
   limit = SPAN_QUERY_PER_PAGE,
-  after,
   enabled = true,
   queryOptions,
 }: UseQuerySpansArgs): UseQuerySpansReturn {
   const client = useMastraClient();
-  const { data, isLoading, isFetching, isPlaceholderData, isError, error, refetch } = useQuery<QuerySpansResult>({
-    queryKey: ['span-query', query, limit, after ?? null],
-    queryFn: query ? () => client.querySpans({ ...query, page: after ? { limit, after } : { limit } }) : skipToken,
+  const { inView, setRef: setEndOfListElement } = useInView();
+  const {
+    data,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch,
+    isFetchNextPageError,
+  } = useInfiniteQuery<QuerySpansResult, Error, SpanRow[], readonly unknown[], string | undefined>({
+    queryKey: ['span-query', query, limit] as const,
+    queryFn: query
+      ? ({ pageParam }) => client.querySpans({ ...query, page: pageParam ? { limit, after: pageParam } : { limit } })
+      : skipToken,
+    initialPageParam: undefined,
+    getNextPageParam: lastPage => lastPage.page.next ?? undefined,
+    select: selectSpans,
     retry: false,
     placeholderData: keepPreviousData,
     enabled,
     ...queryOptions,
   });
 
+  useEffect(() => {
+    if (enabled && inView && hasNextPage && !isFetching && !isFetchNextPageError) {
+      void fetchNextPage();
+    }
+  }, [enabled, inView, hasNextPage, isFetching, isFetchNextPageError, fetchNextPage]);
+
   return {
-    spans: data?.spans,
-    nextCursor: data?.page.next ?? null,
+    spans: data,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage: () => void fetchNextPage(),
+    setEndOfListElement,
     isLoading,
     isFetching,
-    isPlaceholderData,
     isError,
     error,
     refetch: () => void refetch(),

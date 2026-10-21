@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import type { QuerySpansInput } from '@mastra/client-js';
+import type { QuerySpansInput, QuerySpansResult } from '@mastra/client-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MastraReactProvider } from '../../../mastra-react-provider';
+import { useMockIntersectionObserver } from '../../../test/intersection-observer';
 import { server } from '../../../test/msw-server';
 import { useQuerySpans } from '../use-query-spans';
 import type { SpanQueryArgs } from '../use-query-spans';
@@ -28,26 +29,14 @@ function makeWrapper() {
   );
 }
 
-function createGate() {
-  let release = () => {};
-  const promise = new Promise<void>(resolve => {
-    release = resolve;
-  });
-  return { promise, release };
-}
-
-/** Serves the first page without a cursor and the last page for SPAN_PAGE_ONE_CURSOR. */
-function serveSpanPages(options: { beforeLastPage?: Promise<void> } = {}) {
+/** Serves `firstPage` without a cursor and the last page for SPAN_PAGE_ONE_CURSOR, recording every request. */
+function serveSpanPages(firstPage: QuerySpansResult = spanQueryFirstPage) {
   const requests: QuerySpansInput[] = [];
   server.use(
     http.post(SPANS_QUERY_URL, async ({ request }) => {
       const body = (await request.json()) as QuerySpansInput;
       requests.push(body);
-      if (body.page?.after === SPAN_PAGE_ONE_CURSOR) {
-        await options.beforeLastPage;
-        return HttpResponse.json(spanQueryLastPage);
-      }
-      return HttpResponse.json(spanQueryFirstPage);
+      return HttpResponse.json(body.page?.after === SPAN_PAGE_ONE_CURSOR ? spanQueryLastPage : firstPage);
     }),
   );
   return requests;
@@ -58,55 +47,71 @@ afterEach(() => {
 });
 
 describe('useQuerySpans', () => {
-  describe('when no cursor is given', () => {
-    it('requests the first page without an after key and exposes its next cursor', async () => {
+  const { intersect } = useMockIntersectionObserver();
+
+  describe('when first rendered', () => {
+    it('requests the first page without an after key and reports a next page', async () => {
       const requests = serveSpanPages();
 
       const { result } = renderHook(() => useQuerySpans({ query }), { wrapper: makeWrapper() });
 
       await waitFor(() => expect(result.current.spans).toEqual(spanQueryFirstPage.spans));
       expect(requests).toEqual([{ ...query, page: { limit: 25 } }]);
-      expect(result.current.nextCursor).toBe(SPAN_PAGE_ONE_CURSOR);
+      expect(result.current.hasNextPage).toBe(true);
     });
   });
 
-  describe('when rerendered with a cursor', () => {
-    it('requests that page and replaces the previous rows', async () => {
+  describe('when the end of the list scrolls into view', () => {
+    it('requests the next page with the cursor and appends its rows', async () => {
       const requests = serveSpanPages();
-
-      const { result, rerender } = renderHook(({ after }: { after?: string }) => useQuerySpans({ query, after }), {
-        wrapper: makeWrapper(),
-        initialProps: {},
-      });
+      const { result } = renderHook(() => useQuerySpans({ query }), { wrapper: makeWrapper() });
       await waitFor(() => expect(result.current.spans).toEqual(spanQueryFirstPage.spans));
 
-      rerender({ after: SPAN_PAGE_ONE_CURSOR });
+      act(() => result.current.setEndOfListElement(document.createElement('div')));
+      act(() => intersect(true));
 
-      await waitFor(() => expect(result.current.spans).toEqual(spanQueryLastPage.spans));
+      await waitFor(() =>
+        expect(result.current.spans).toEqual([...spanQueryFirstPage.spans, ...spanQueryLastPage.spans]),
+      );
       expect(requests.at(-1)).toEqual({ ...query, page: { limit: 25, after: SPAN_PAGE_ONE_CURSOR } });
-      expect(result.current.nextCursor).toBeNull();
+      expect(result.current.hasNextPage).toBe(false);
     });
   });
 
-  describe('when the next page is still loading', () => {
-    it('keeps the current rows visible as placeholder data', async () => {
-      const gate = createGate();
-      serveSpanPages({ beforeLastPage: gate.promise });
+  describe('when the first page is the last one', () => {
+    it('does not request another page when the end of the list scrolls into view', async () => {
+      const requests = serveSpanPages(spanQueryLastPage);
+      const { result } = renderHook(() => useQuerySpans({ query }), { wrapper: makeWrapper() });
+      await waitFor(() => expect(result.current.spans).toEqual(spanQueryLastPage.spans));
+      expect(result.current.hasNextPage).toBe(false);
 
-      const { result, rerender } = renderHook(({ after }: { after?: string }) => useQuerySpans({ query, after }), {
+      act(() => result.current.setEndOfListElement(document.createElement('div')));
+      act(() => intersect(true));
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(requests).toHaveLength(1);
+    });
+  });
+
+  describe('when the query changes after loading more pages', () => {
+    it('restarts from the first page', async () => {
+      const requests = serveSpanPages();
+      const { result, rerender } = renderHook(({ q }: { q: SpanQueryArgs }) => useQuerySpans({ query: q }), {
         wrapper: makeWrapper(),
-        initialProps: {},
+        initialProps: { q: query },
       });
       await waitFor(() => expect(result.current.spans).toEqual(spanQueryFirstPage.spans));
+      act(() => result.current.setEndOfListElement(document.createElement('div')));
+      act(() => intersect(true));
+      await waitFor(() => expect(result.current.spans).toHaveLength(3));
+      act(() => intersect(false));
 
-      rerender({ after: SPAN_PAGE_ONE_CURSOR });
+      const ascending: SpanQueryArgs = { ...query, orderBy: [{ field: 'startedAt', direction: 'asc' }] };
+      rerender({ q: ascending });
 
-      await waitFor(() => expect(result.current.isPlaceholderData).toBe(true));
-      expect(result.current.spans).toEqual(spanQueryFirstPage.spans);
-
-      gate.release();
-      await waitFor(() => expect(result.current.isPlaceholderData).toBe(false));
-      expect(result.current.spans).toEqual(spanQueryLastPage.spans);
+      await waitFor(() => expect(requests).toHaveLength(3));
+      expect(requests[2]).toEqual({ ...ascending, page: { limit: 25 } });
+      await waitFor(() => expect(result.current.spans).toEqual(spanQueryFirstPage.spans));
     });
   });
 

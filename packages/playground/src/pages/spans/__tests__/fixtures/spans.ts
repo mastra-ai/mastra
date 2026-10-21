@@ -1,4 +1,4 @@
-import type { GetObservabilityCapabilitiesResponse, QuerySpansResult } from '@mastra/client-js';
+import type { GetObservabilityCapabilitiesResponse, MastraClient, QuerySpansResult } from '@mastra/client-js';
 
 type SpanRow = QuerySpansResult['spans'][number];
 
@@ -22,8 +22,15 @@ export const spanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryTenantScope: true,
     threadQuery: true,
     spanQuery: true,
+    spanQueryContextFields: true,
     feedback: true,
   },
+};
+
+/** Span queries without the identity/context fields (no `span-query-context-fields` feature). */
+export const spanQueryCoreOnlyCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...spanQueryCapabilities,
+  capabilities: { ...spanQueryCapabilities.capabilities, spanQueryContextFields: false },
 };
 
 export const noSpanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
@@ -36,6 +43,7 @@ export const noSpanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryTenantScope: false,
     threadQuery: false,
     spanQuery: false,
+    spanQueryContextFields: false,
   },
 };
 
@@ -119,3 +127,6 @@ export const spansLastPage: QuerySpansResult = {
 };
 
 export const emptySpans: QuerySpansResult = { spans: [], page: { next: null } };
+
+export const emptyEntityNames: Awaited<ReturnType<MastraClient['getEntityNames']>> = { entityNames: [] };
+export const emptyEnvironments: Awaited<ReturnType<MastraClient['getEnvironments']>> = { environments: [] };
