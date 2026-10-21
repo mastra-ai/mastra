@@ -1,4 +1,5 @@
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
+import { SESSION_OWNER_SIGNAL_TAG } from '@mastra/factory/session-owner-signal';
 
 import { parseSkillBody } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 import type { SkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
@@ -6,15 +7,11 @@ import type { SkillActivation } from '@mastra/playground-ui/domains/chat/message
 import type { MessageEntry, TimelineEntry } from '../services/transcript';
 import { isRecord } from './transcript-shared';
 
-import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcript-divider';
-
 export { SignalActivity as SignalRow } from '@mastra/playground-ui/components/ai/activity';
 
-export function TimeGap({ text }: { text: string }) {
-  const [phrase, timestamp] = text.split(' — ');
-  if (!phrase) return null;
-
-  return <TranscriptDivider label={phrase} title={timestamp} />;
+function timeGapDivider(text: string): SignalRowView {
+  const [label = '', title] = text.split(' — ');
+  return { kind: 'divider', label, title };
 }
 
 export function signalPartsText(entry: MessageEntry): string {
@@ -41,7 +38,7 @@ export const SUPPRESSED_STATE_SIGNAL_IDS = new Set(['tasks', 'goal']);
 
 type SignalRowView =
   | { kind: 'state'; stateId: string; mode: 'snapshot' | 'delta'; text: string }
-  | { kind: 'gap'; text: string }
+  | { kind: 'divider'; label: string; title?: string }
   | { kind: 'reminder'; text: string }
   | { kind: 'reactive'; tagName?: string; text: string };
 
@@ -53,7 +50,8 @@ export function signalRowView(entry: MessageEntry): SignalRowView | undefined {
   const tagName = typeof signal.tagName === 'string' ? signal.tagName : undefined;
   const text = signalPartsText(entry);
   const attributes = isRecord(signal.attributes) ? signal.attributes : {};
-  const reminderKind = attributes.type === 'temporal-gap' ? 'gap' : 'reminder';
+  const reminder: SignalRowView =
+    attributes.type === 'temporal-gap' ? timeGapDivider(text) : { kind: 'reminder', text };
 
   if (signal.type === 'state') {
     const metadata = isRecord(signal.metadata) ? signal.metadata : {};
@@ -67,12 +65,13 @@ export function signalRowView(entry: MessageEntry): SignalRowView | undefined {
   }
   // `normalizeSignal` maps `system-reminder` to `reactive` + `system-reminder`
   // tag before persistence, but live pre-normalized signals may carry the raw type.
-  if (signal.type === 'system-reminder') return { kind: reminderKind, text };
-  if (signal.type === 'reactive' && tagName === 'system-reminder') return { kind: reminderKind, text };
+  if (signal.type === 'system-reminder') return reminder;
+  if (signal.type === 'reactive' && tagName === 'system-reminder') return reminder;
+  if (signal.type === 'reactive' && tagName === SESSION_OWNER_SIGNAL_TAG) return { kind: 'divider', label: text };
   if (signal.type === 'reactive') return { kind: 'reactive', tagName, text };
   return undefined;
 }
 
-export function isTimeGap(entry: TimelineEntry | undefined): boolean {
-  return entry?.kind === 'message' && signalRowView(entry)?.kind === 'gap';
+export function isTurnDivider(entry: TimelineEntry | undefined): boolean {
+  return entry?.kind === 'message' && signalRowView(entry)?.kind === 'divider';
 }

@@ -5,23 +5,19 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
 import { listFactorySkills } from '../skills/catalog.js';
 import { formatSkillMessage, resolveSkillInvocation, SkillInvocationError } from '../skills/service.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
-const MAX_RESOURCE_ID_LENGTH = 512;
-const MAX_SCOPE_LENGTH = 2048;
+const MAX_SESSION_ID_LENGTH = 512;
 const MAX_ARGUMENTS_LENGTH = 16_384;
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 interface SkillInvocationBody {
-  resourceId: string;
-  projectRepositoryId?: string;
-  scope?: string;
+  sessionId: string;
   name: string;
   arguments?: string;
 }
@@ -35,13 +31,10 @@ interface SessionAuthorizationResult {
 
 export interface SkillRoutesDeps extends RouteDependencies {
   controllerId: string;
-  controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
+  controller: Pick<AgentController<MastraCodeState>, 'getSession'>;
   sourceControlStorage?: SourceControlStorageHandle;
   ensureSourceControlReady?: () => Promise<void>;
-  authorizeSessionAddress?: (
-    context: Context,
-    address: { resourceId: string; projectRepositoryId?: string; scope?: string },
-  ) => Promise<SessionAuthorizationResult>;
+  authorizeSessionAddress?: (context: Context, address: { sessionId: string }) => Promise<SessionAuthorizationResult>;
 }
 
 function loose(context: unknown): Context {
@@ -51,34 +44,30 @@ function loose(context: unknown): Context {
 function parseBody(value: unknown): SkillInvocationBody | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const input = value as Record<string, unknown>;
-  if (typeof input.resourceId !== 'string' || input.resourceId.length === 0) return undefined;
-  if (input.resourceId.length > MAX_RESOURCE_ID_LENGTH) return undefined;
-  if (
-    input.projectRepositoryId !== undefined &&
-    (typeof input.projectRepositoryId !== 'string' || !UUID_RE.test(input.projectRepositoryId))
-  ) {
-    return undefined;
-  }
-  if (input.scope !== undefined && (typeof input.scope !== 'string' || input.scope.length > MAX_SCOPE_LENGTH)) {
-    return undefined;
-  }
+  if (typeof input.sessionId !== 'string' || input.sessionId.length === 0) return undefined;
+  if (input.sessionId.length > MAX_SESSION_ID_LENGTH) return undefined;
   if (typeof input.name !== 'string' || input.name.length > 64 || !SKILL_NAME_RE.test(input.name)) return undefined;
   if (input.arguments !== undefined) {
     if (typeof input.arguments !== 'string' || input.arguments.length > MAX_ARGUMENTS_LENGTH) return undefined;
   }
   return {
-    resourceId: input.resourceId,
-    ...(input.projectRepositoryId ? { projectRepositoryId: input.projectRepositoryId } : {}),
-    ...(input.scope ? { scope: input.scope } : {}),
+    sessionId: input.sessionId,
     name: input.name,
     ...(input.arguments !== undefined ? { arguments: input.arguments } : {}),
   };
 }
 
+const SESSION_FORBIDDEN: SessionAuthorizationResult = {
+  allowed: false,
+  status: 403,
+  code: 'session_forbidden',
+  message: 'Session access denied.',
+};
+
 export class SkillRoutes extends Route<SkillRoutesDeps> {
   async #authorizeSessionAddress(
     context: Context,
-    address: { resourceId: string; projectRepositoryId?: string; scope?: string },
+    address: { sessionId: string },
   ): Promise<SessionAuthorizationResult> {
     const { auth, sourceControlStorage: storage, ensureSourceControlReady } = this.deps;
     if (!auth.enabled()) return { allowed: true };
@@ -89,66 +78,37 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
       return { allowed: false, status: 401, code: 'unauthorized', message: 'Authentication required.' };
     }
 
-    // Personal sessions are keyed by the authenticated WorkOS user id. Their
-    // scope is a client-managed local/user-session worktree and needs no app DB.
-    if (address.resourceId === tenant.userId) return { allowed: true };
+    // Personal sessions created without a session id are addressed by the
+    // authenticated WorkOS user id and need no app DB.
+    if (address.sessionId === tenant.userId) return { allowed: true };
 
-    // Factory sessions are keyed by factoryProjectId and explicitly identify the
-    // linked repository whose user-owned worktree supplies the session scope.
-    if (
-      !UUID_RE.test(address.resourceId) ||
-      !address.projectRepositoryId ||
-      !UUID_RE.test(address.projectRepositoryId)
-    ) {
+    // Factory sessions are addressed by their source-control session id.
+    if (!UUID_RE.test(address.sessionId)) {
       return { allowed: false, status: 400, code: 'invalid_request', message: 'Invalid skill invocation request.' };
     }
-    if (!tenant.orgId || !address.scope) {
-      return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
-    }
-    if (!storage) {
-      return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
-    }
+    if (!tenant.orgId || !storage) return SESSION_FORBIDDEN;
     if (ensureSourceControlReady) {
       try {
         await ensureSourceControlReady();
       } catch {
-        return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
+        return SESSION_FORBIDDEN;
       }
     }
-    const projectRepository = await storage.projectRepositories.get({
-      orgId: tenant.orgId,
-      id: address.projectRepositoryId,
-    });
-    if (!projectRepository) {
-      return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
-    }
-    const connection = await storage.connections.get({ orgId: tenant.orgId, id: projectRepository.connectionId });
-    if (!connection || connection.factoryProjectId !== address.resourceId) {
-      return { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
-    }
-    // The scope must be the live workdir of a session the viewer can see under
-    // this repository. The live memoized sandbox entry is the only truth for
-    // workdirs (persisted columns are observability); no running/memoized
-    // sandbox at that path means no grant (fail closed).
-    const sessions = await storage.sessions.list({
-      projectRepositoryId: address.projectRepositoryId,
+    const row = await storage.sessions.getBySessionId(address.sessionId);
+    if (!row || row.orgId !== tenant.orgId || !row.projectRepositoryId) return SESSION_FORBIDDEN;
+    // The session must be one the viewer can see under its repository.
+    const visible = await storage.sessions.list({
+      projectRepositoryId: row.projectRepositoryId,
       viewerUserId: tenant.userId,
     });
-    const scopeIsLiveSessionWorkdir = sessions.some(row => {
-      const liveWorkdir = peekSessionSandbox(row.id)?.workdir;
-      return liveWorkdir !== undefined && liveWorkdir === address.scope;
-    });
-    return scopeIsLiveSessionWorkdir
-      ? { allowed: true }
-      : { allowed: false, status: 403, code: 'session_forbidden', message: 'Session access denied.' };
+    return visible.some(session => session.sessionId === address.sessionId) ? { allowed: true } : SESSION_FORBIDDEN;
   }
 
   routes(): ApiRoute[] {
     const { controllerId, controller, authorizeSessionAddress: customAuthorize } = this.deps;
     const authorize =
       customAuthorize ??
-      ((context: Context, address: { resourceId: string; projectRepositoryId?: string; scope?: string }) =>
-        this.#authorizeSessionAddress(context, address));
+      ((context: Context, address: { sessionId: string }) => this.#authorizeSessionAddress(context, address));
     const handleSkillRequest = async (context: unknown, dispatch: boolean) => {
       const c = loose(context);
       if (c.req.param('controllerId') !== controllerId) {
@@ -166,11 +126,7 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
         return c.json({ error: 'invalid_request', message: 'Invalid skill invocation request.' }, 400);
       }
 
-      const authorization = await authorize(c, {
-        resourceId: body.resourceId,
-        projectRepositoryId: body.projectRepositoryId,
-        scope: body.scope,
-      });
+      const authorization = await authorize(c, { sessionId: body.sessionId });
       if (!authorization.allowed) {
         return c.json({ error: authorization.code, message: authorization.message }, authorization.status ?? 403);
       }

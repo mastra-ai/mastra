@@ -24,8 +24,10 @@ import {
   type TraceQueryScalarPredicate,
   type TraceQueryTrace,
   type TraceQueryTraceResponse,
+  type SpanAggregateDimension,
   type TrustedThreadPredicate,
   type TrustedThreadQueryPlan,
+  type TraceQuerySortValue,
   type TrustedTraceQueryKeysetTracesPlan,
   type TrustedTraceQueryPlan,
   type TrustedTraceQueryPredicate,
@@ -64,6 +66,13 @@ export interface RawTraceQuerySpan {
   sessionId?: string | null;
   experimentId?: string | null;
   timeToFirstChunkMs?: number | null;
+  requestId?: string | null;
+  parentEntityType?: string | null;
+  parentEntityId?: string | null;
+  parentEntityName?: string | null;
+  rootEntityType?: string | null;
+  rootEntityId?: string | null;
+  rootEntityName?: string | null;
 }
 
 export interface RawTraceQueryScore {
@@ -765,6 +774,7 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       endedAt: '2026-08-05T10:00:02.250Z',
     }),
     span(30, 'trace-c', 'root-c', {
+      spanType: 'workflow_run',
       threadId: 'thread-2',
       resourceId: null,
       startedAt: '2026-08-07T10:00:00.000Z',
@@ -2021,6 +2031,64 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [],
   },
   {
+    name: 'trace-scope entityId reads the root span, not child span entity ids',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'in', value: { path: 'entityId' }, set: ['medication_lookup', 'medication-index'] },
+    },
+    expected: [],
+  },
+  {
+    name: 'filters by the current root span name only',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'eq', left: { path: 'name' }, right: { literal: 'root-a' } },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'trace-scope name ignores superseded roots and child span names',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'in',
+        value: { path: 'name' },
+        set: ['root-a-old', 'medication_lookup', 'retrieve_medications'],
+      },
+    },
+    expected: [],
+  },
+  {
+    name: 'filters by the root span type without matching child span types',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'in', value: { path: 'spanType' }, set: ['workflow_run', 'tool_call', 'rag_action'] },
+    },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'excludes a root span type with ne',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'ne', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
+    },
+    expected: [{ traceId: 'trace-c' }],
+  },
+  {
+    name: 'combines a root span type with a related span type',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
+          { spans: { some: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } } } },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+  },
+  {
     name: 'eq excludes traces whose nullable field is null',
     request: {
       timeRange: fullRange,
@@ -2035,6 +2103,22 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
       where: { op: 'ne', left: { path: 'threadId' }, right: { literal: 'thread-1' } },
     },
     expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }],
+  },
+  {
+    name: 'not eq includes traces whose nullable field is null',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'not', arg: { op: 'eq', left: { path: 'threadId' }, right: { literal: 'thread-1' } } },
+    },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }],
+  },
+  {
+    name: 'not ne excludes traces whose nullable field is null',
+    request: {
+      timeRange: fullRange,
+      where: { op: 'not', arg: { op: 'ne', left: { path: 'threadId' }, right: { literal: 'thread-1' } } },
+    },
+    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
   },
   {
     name: 'in excludes traces whose nullable field is null',
@@ -2702,6 +2786,60 @@ export function selectTraceQueryRoots(
     .filter(root => !selection.where || evaluateTracePredicate(selection.where, root, spans, scores, feedback));
 }
 
+export interface SpanQuerySelection {
+  timeRange: { from: string; to: string };
+  where?: TrustedTraceQueryScalarPredicate;
+  scope?: TraceQueryTenantScope;
+}
+
+/**
+ * The span population `querySpans()` pages through: current, completed copies of each span inside
+ * the half-open `[from, to)` window that satisfy `where` (the `querySpans()` field policy) and
+ * `scope`.
+ */
+export function selectSpanQuerySpans(data: TraceQueryFixtureData, selection: SpanQuerySelection): RawTraceQuerySpan[] {
+  return currentSpans(data.spans)
+    .filter(span => matchesScope(span, selection.scope))
+    .filter(span => !span.isPending && span.endedAt !== null)
+    .filter(span => span.startedAt >= selection.timeRange.from && span.startedAt < selection.timeRange.to)
+    .filter(span => !selection.where || evaluateScalarPredicate(selection.where, spanQueryValues(span)));
+}
+
+/**
+ * Every value a direct span query or span aggregate can filter or group on. `model` and
+ * `provider` come through `spanValues` but are not yet filterable or groupable here
+ * (OBS-693); `queryTraces()` filters on them via `spans.some`.
+ */
+function spanQueryValues(span: RawTraceQuerySpan): Record<string, unknown> {
+  return {
+    ...spanValues(span),
+    traceId: span.traceId,
+    spanId: span.spanId,
+    parentSpanId: span.parentSpanId,
+    threadId: span.threadId,
+    resourceId: span.resourceId,
+    requestId: span.requestId ?? null,
+    serviceName: span.serviceName ?? null,
+    experimentId: span.experimentId ?? null,
+    environment: span.environment,
+    executionSource: span.executionSource ?? null,
+    userId: span.userId ?? null,
+    sessionId: span.sessionId ?? null,
+    parentEntityType: span.parentEntityType ?? null,
+    parentEntityId: span.parentEntityId ?? null,
+    parentEntityName: span.parentEntityName ?? null,
+    rootEntityType: span.rootEntityType ?? null,
+    rootEntityId: span.rootEntityId ?? null,
+    rootEntityName: span.rootEntityName ?? null,
+  };
+}
+
+/** The value a span exposes for one span-aggregate dimension; filtering and grouping share it. */
+export function spanQueryDimensionValue(span: RawTraceQuerySpan, dimension: SpanAggregateDimension): string | null {
+  const value = spanQueryValues(span)[dimension];
+  return typeof value === 'string' ? value : null;
+}
+
 export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTraceQueryPlan): TraceQueryResponse {
   const roots = selectTraceQueryRoots(data, plan);
 
@@ -2763,7 +2901,7 @@ export function evaluateTraceQuery(data: TraceQueryFixtureData, plan: TrustedTra
     hasNext && last
       ? encodeTraceQueryCursor(plan, {
           result: 'traces',
-          sortValue: last[plan.orderBy.field],
+          sortValue: last[plan.orderBy.field] ?? null,
           traceId: last.traceId,
         })
       : null;
@@ -3078,6 +3216,12 @@ export function traceQueryDimensionValue(root: RawTraceQuerySpan, dimension: Tra
       return root.entityType;
     case 'entityName':
       return root.entityName;
+    case 'name':
+      return root.name;
+    case 'spanType':
+      return root.spanType;
+    case 'entityId':
+      return root.entityId;
     case 'environment':
       return root.environment;
     case 'threadId':
@@ -3118,8 +3262,11 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     endedAt: root.endedAt,
     durationMs: durationMsBetween(root.startedAt, root.endedAt),
     timeToFirstChunkMs: root.timeToFirstChunkMs ?? null,
+    entityId: traceQueryDimensionValue(root, 'entityId'),
     entityName: traceQueryDimensionValue(root, 'entityName'),
     entityType: traceQueryDimensionValue(root, 'entityType'),
+    name: traceQueryDimensionValue(root, 'name'),
+    spanType: traceQueryDimensionValue(root, 'spanType'),
     environment: traceQueryDimensionValue(root, 'environment'),
     status: traceQueryDimensionValue(root, 'status'),
     tags: root.tags,
@@ -3151,19 +3298,38 @@ function toTraceQueryTrace(root: RawTraceQuerySpan): TraceQueryTrace {
   };
 }
 
+/** Orders sort values in the requested direction; empty values sort last in both directions. */
+export function compareTraceQuerySortValues(
+  left: TraceQuerySortValue | undefined,
+  right: TraceQuerySortValue | undefined,
+  direction: 'asc' | 'desc',
+): number {
+  if (left == null || right == null) return Number(left == null) - Number(right == null);
+  const values =
+    typeof left === 'number' && typeof right === 'number'
+      ? Math.sign(left - right)
+      : compareTraceQueryStrings(String(left), String(right));
+  return direction === 'asc' ? values : -values;
+}
+
 function compareTraces(
   left: TraceQueryTrace,
   right: TraceQueryTrace,
   plan: Extract<TrustedTraceQueryPlan, { result: 'traces' }>,
 ): number {
-  const values = compareTraceQueryStrings(left[plan.orderBy.field], right[plan.orderBy.field]);
-  if (values !== 0) return plan.orderBy.direction === 'asc' ? values : -values;
+  const field = plan.orderBy.field;
+  const values = compareTraceQuerySortValues(left[field], right[field], plan.orderBy.direction);
+  if (values !== 0) return values;
   return compareTraceQueryStrings(left.traceId, right.traceId);
 }
 
 function isTraceAfterCursor(trace: TraceQueryTrace, plan: TrustedTraceQueryKeysetTracesPlan): boolean {
   const cursor = plan.cursor!;
-  const sortComparison = compareTraceQueryStrings(trace[plan.orderBy.field], cursor.sortValue);
+  const sortComparison = compareTraceQuerySortValues(
+    trace[plan.orderBy.field],
+    cursor.sortValue,
+    plan.orderBy.direction,
+  );
   if (sortComparison === 0) return compareTraceQueryStrings(trace.traceId, cursor.traceId) > 0;
-  return plan.orderBy.direction === 'asc' ? sortComparison > 0 : sortComparison < 0;
+  return sortComparison > 0;
 }

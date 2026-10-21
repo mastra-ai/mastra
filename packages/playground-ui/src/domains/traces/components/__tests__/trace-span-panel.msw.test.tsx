@@ -6,7 +6,8 @@ import { useState } from 'react';
 import type { ComponentProps } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { TraceSpanPanel, type TraceSpanPanelProps } from '../trace-span-panel';
+import { TraceSpanPanel } from '../trace-span-panel';
+import type { TraceSpanPanelProps } from '../trace-span-panel';
 import { queryPageFromList } from './fixtures/thread-traces';
 import { TRACE_ID, panelTraceSpans, spanDetailById } from './fixtures/trace-span-panel';
 import { TestLinkProvider } from '@/test/link-provider';

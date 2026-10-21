@@ -5,7 +5,8 @@
  * tool can park at one step until the test releases a gate or the run's abort
  * signal fires, so tests coordinate on events, not on timing.
  */
-import { Agent, type AgentConfig } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
+import type { AgentConfig } from '@mastra/core/agent';
 import type { MastraMemory } from '@mastra/core/memory';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
@@ -37,6 +38,7 @@ export interface StepAgentOptions {
   finalText?: string;
   onToolEvent?: (event: StepToolEvent) => void;
   onModelCall?: (call: number) => void;
+  inputProcessors?: AgentConfig['inputProcessors'];
   outputProcessors?: AgentConfig['outputProcessors'];
 }
 
@@ -70,6 +72,7 @@ export function createStepAgent({
   memory,
   onToolEvent,
   onModelCall,
+  inputProcessors,
   outputProcessors,
 }: StepAgentOptions) {
   let calls = 0;
@@ -145,6 +148,7 @@ export function createStepAgent({
     model,
     tools: { step },
     ...(memory ? { memory } : {}),
+    ...(inputProcessors ? { inputProcessors } : {}),
     ...(outputProcessors ? { outputProcessors } : {}),
   });
   return { agent, model, modelCalls: () => calls };

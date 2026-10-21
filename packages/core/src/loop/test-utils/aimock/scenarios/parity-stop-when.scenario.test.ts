@@ -174,6 +174,7 @@ describeParity('stop-when parity', target => {
     },
   );
 
+  // #26921: durable transports must reject, not turn a thrown predicate into an error chunk.
   it('a throwing stopWhen rejects the stream identically on every engine', async () => {
     const { results, commits, calls } = await runT23(target, 'throws');
 

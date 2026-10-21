@@ -42,6 +42,9 @@ async function generateEmbeddings(values: string[], modelType: FastEmbedModelTyp
   }
 
   if (allResults.length === 0) throw new Error('No embeddings generated');
+  if (allResults.length !== values.length) {
+    throw new Error(`Expected ${values.length} embeddings but received ${allResults.length}`);
+  }
 
   return {
     embeddings: allResults,

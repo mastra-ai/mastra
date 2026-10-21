@@ -25,12 +25,12 @@ function makeController(options?: { skill?: unknown; session?: unknown }) {
           sendMessage: vi.fn(async () => {}),
         };
   return {
-    getSessionByResource: vi.fn(async () => session as never),
+    getSession: vi.fn(async () => session as never),
   };
 }
 
 describe('resolveSkillResumeInvocation', () => {
-  const input = { resourceId: 'card-1', name: 'factory-review', arguments: 'PR https://example/pull/7' };
+  const input = { sessionId: 'card-1', name: 'factory-review', arguments: 'PR https://example/pull/7' };
 
   it('references the skill by name and carries the arguments without the full body', async () => {
     const resolved = await resolveSkillResumeInvocation(makeController(), input);
@@ -46,7 +46,7 @@ describe('resolveSkillResumeInvocation', () => {
 
   it('omits the ARGUMENTS line when there are no fresh arguments', async () => {
     const resolved = await resolveSkillResumeInvocation(makeController(), {
-      resourceId: 'card-1',
+      sessionId: 'card-1',
       name: 'factory-review',
     });
     expect(resolved.contents).not.toContain('ARGUMENTS:');
@@ -92,7 +92,7 @@ describe('resolveSkillInvocation', () => {
     };
     const controller = makeController({ session: { getWorkspace: () => ({ skills }) } });
 
-    const resolved = await resolveSkillInvocation(controller, { resourceId: 'card-1', name: 'factory-review' });
+    const resolved = await resolveSkillInvocation(controller, { sessionId: 'card-1', name: 'factory-review' });
 
     expect(resolved.skillName).toBe('factory-review');
     expect(resolved.contents).toBe(SKILL_INSTRUCTIONS);
@@ -107,7 +107,7 @@ describe('resolveSkillInvocation', () => {
     };
     const controller = makeController({ session: { getWorkspace: () => ({ skills }) } });
 
-    await expect(resolveSkillInvocation(controller, { resourceId: 'card-1', name: 'missing' })).rejects.toMatchObject({
+    await expect(resolveSkillInvocation(controller, { sessionId: 'card-1', name: 'missing' })).rejects.toMatchObject({
       code: 'skill_not_found',
     });
     expect(skills.refresh).not.toHaveBeenCalled();

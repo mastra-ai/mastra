@@ -1,60 +1,116 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
+import { menuEmptyClass, menuSearchClasses } from '@mastra/playground-ui/primitives/menu-item';
+import { passwordManagerOptOutProps } from '@mastra/playground-ui/primitives/password-manager-autofill';
+import { SearchIcon } from 'lucide-react';
+import { useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 
-import type { BoardFilterField } from './boardFilterFields';
+import { boardFilterOptions, boardFilterSummary } from './boardFilterFields';
+import type { BoardFilterField, BoardFilterOption } from './boardFilterFields';
 
-function optionsKeepingPicked(field: BoardFilterField, selected: readonly string[]): FilterBarOption[] {
-  const offered = new Set(field.suggestions.map(option => option.value));
-  const orphaned = selected.filter(value => !offered.has(value)).map((value): FilterBarOption => ({ value }));
-  return [...field.suggestions, ...orphaned];
+const SEARCHABLE_OPTION_COUNT = 8;
+
+interface OptionListProps {
+  options: readonly BoardFilterOption[];
+  selected: readonly string[];
+  onChange: (values: string[]) => void;
 }
 
-function selectionHint(options: readonly FilterBarOption[], selected: readonly string[]): string | undefined {
-  if (selected.length > 1) return `${selected.length} selected`;
-  const only = options.find(option => option.value === selected[0]);
-  return only?.label ?? selected[0];
+function OptionItems({ options, selected, onChange }: OptionListProps) {
+  const picked = new Set(selected);
+  return options.map(option => (
+    <DropdownMenu.CheckboxItem
+      key={option.value}
+      checked={picked.has(option.value)}
+      onCheckedChange={checked =>
+        onChange(checked ? [...selected, option.value] : selected.filter(value => value !== option.value))
+      }
+    >
+      {option.start}
+      <span>{option.label ?? option.value}</span>
+    </DropdownMenu.CheckboxItem>
+  ));
 }
 
-function withValuePicked(selected: readonly string[], value: string, picked: boolean): string[] {
-  if (picked) return [...selected, value];
-  return selected.filter(entry => entry !== value);
+function SearchableOptionItems({ label, options, selected, onChange }: OptionListProps & { label: string }) {
+  const [query, setQuery] = useState('');
+  const [pickedOnOpen] = useState(() => new Set(selected));
+  const searchRef = useRef<HTMLInputElement>(null);
+  const needle = query.trim().toLowerCase();
+  const matching = options.filter(option =>
+    [option.label ?? option.value, option.alsoMatches].some(text => text?.toLowerCase().includes(needle)),
+  );
+  const ordered = [
+    ...matching.filter(option => pickedOnOpen.has(option.value)),
+    ...matching.filter(option => !pickedOnOpen.has(option.value)),
+  ];
+
+  // Base UI menu typeahead eats printable keys and keyboard-open focuses the first option, not the box.
+  const keepTypingInSearch = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target === searchRef.current) {
+      if (event.key === 'Escape' || event.key === 'Tab') return;
+      event.stopPropagation();
+      if (event.key !== 'ArrowDown') return;
+      event.preventDefault();
+      event.currentTarget.querySelector<HTMLElement>('[role=menuitemcheckbox]')?.focus();
+      return;
+    }
+    const typed = event.key.length === 1 && event.key !== ' ' && !event.metaKey && !event.ctrlKey && !event.altKey;
+    if (!typed) return;
+    event.stopPropagation();
+    searchRef.current?.focus();
+  };
+
+  return (
+    <div className="contents" onKeyDownCapture={keepTypingInSearch}>
+      <div className={`${menuSearchClasses.container} bg-card sticky -top-1 z-10`}>
+        <SearchIcon className={menuSearchClasses.icon} aria-hidden />
+        <input
+          ref={searchRef}
+          type="text"
+          value={query}
+          onChange={event => setQuery(event.target.value)}
+          placeholder="Search…"
+          aria-label={`Search ${label.toLowerCase()}`}
+          className={menuSearchClasses.input}
+          autoFocus
+          {...passwordManagerOptOutProps}
+        />
+      </div>
+      {ordered.length === 0 ? (
+        <div className={menuEmptyClass}>No matches</div>
+      ) : (
+        <OptionItems options={ordered} selected={selected} onChange={onChange} />
+      )}
+    </div>
+  );
 }
 
 export function BoardFilterSubmenu({
   field,
   selected,
-  narrowing,
   onChange,
 }: {
   field: BoardFilterField;
   selected: readonly string[];
-  narrowing: boolean;
   onChange: (values: string[]) => void;
 }) {
-  const options = optionsKeepingPicked(field, selected);
+  const options = boardFilterOptions(field, selected);
   if (options.length === 0) return null;
-  const picked = new Set(selected);
-  const lockedPick = field.keepsOnePicked && selected.length === 1 ? selected[0] : undefined;
   const Icon = field.icon;
 
   return (
     <DropdownMenu.Sub>
-      <DropdownMenu.SubTrigger hint={narrowing ? selectionHint(options, selected) : undefined}>
+      <DropdownMenu.SubTrigger hint={selected.length > 0 ? boardFilterSummary(field, selected) : undefined}>
         {Icon && <Icon aria-hidden />}
         <span>{field.label}</span>
       </DropdownMenu.SubTrigger>
       <DropdownMenu.SubContent>
-        {options.map(option => (
-          <DropdownMenu.CheckboxItem
-            key={option.value}
-            checked={picked.has(option.value)}
-            disabled={option.value === lockedPick}
-            onCheckedChange={checked => onChange(withValuePicked(selected, option.value, checked))}
-          >
-            {option.start}
-            <span>{option.label ?? option.value}</span>
-          </DropdownMenu.CheckboxItem>
-        ))}
+        {options.length > SEARCHABLE_OPTION_COUNT ? (
+          <SearchableOptionItems label={field.label} options={options} selected={selected} onChange={onChange} />
+        ) : (
+          <OptionItems options={options} selected={selected} onChange={onChange} />
+        )}
       </DropdownMenu.SubContent>
     </DropdownMenu.Sub>
   );

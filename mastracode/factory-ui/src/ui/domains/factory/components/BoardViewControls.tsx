@@ -6,7 +6,7 @@ import { Kanban, List } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { BoardLayout } from '../boardLayout';
-import type { BoardParticipant } from '../boardRelevance';
+import type { BoardParticipant } from '../boardPeople';
 import type { BoardViewSettings } from '../boardSavedViews';
 import { BOARD_SORT_LABELS } from '../boardSort';
 import type { BoardKind } from '../boardStages';
@@ -45,13 +45,12 @@ export function BoardViewControls({
   const { connectedSources, linearProjects } = useBoardFilterSources();
   const fields = boardFilterFields({
     kind,
+    filters: view.filters,
     participants,
     availableLabels,
     connectedSources,
-    selectedSources: view.filters.sources,
     linearProjects,
     currentUserId,
-    teammateSelected: view.filters.participantIds.size > 0,
   });
 
   return (
@@ -69,7 +68,6 @@ export function BoardViewControls({
             describeSettings={settings => <ViewSettingsSummary settings={settings} />}
           />
           <div className="flex shrink-0 items-center gap-2">
-            <BoardPropertiesMenu kind={kind} view={view} fields={fields} currentUserId={currentUserId} />
             <SegmentedControl aria-label="Layout" size="sm" iconOnly value={view.layout} onValueChange={view.setLayout}>
               <SegmentedControlItem value="list" aria-label={LAYOUT_LABELS.list} title={LAYOUT_LABELS.list}>
                 <List aria-hidden />
@@ -78,6 +76,7 @@ export function BoardViewControls({
                 <Kanban aria-hidden />
               </SegmentedControlItem>
             </SegmentedControl>
+            <BoardPropertiesMenu view={view} fields={fields} currentUserId={currentUserId} />
           </div>
         </>
       }

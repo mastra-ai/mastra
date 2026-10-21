@@ -395,11 +395,7 @@ describeForAllEngines('AIMock loop scenario: thread title generation', engine =>
     expect(thread?.metadata).toMatchObject({ keep: 'me' });
   });
 
-  // The durable finish step (finalize-run.ts generateDurableThreadTitle) saves the title but never
-  // writes the data-thread-title chunk, so durable/evented runs can't stream it. Deterministic; tracked in #27551.
-  const itFailsOnDurable = engine === 'durable' || engine === 'evented' ? it.fails : it;
-
-  itFailsOnDurable('generateTitle.emitEvent streams the title as a transient chunk before finish', async () => {
+  it('generateTitle.emitEvent streams the title as a transient chunk before finish', async () => {
     const llm = getMock();
     const memory = new MockMemory({
       options: { generateTitle: { instructions: TITLE_INSTRUCTIONS, emitEvent: true } },
@@ -424,5 +420,52 @@ describeForAllEngines('AIMock loop scenario: thread title generation', engine =>
     const titleChunk = chunks!.find((c: any) => c.type === 'data-thread-title') as any;
     expect(titleChunk).toMatchObject({ data: { threadId: 'title-emit', title: 'Quantum Basics' }, transient: true });
     expect(types.indexOf('finish')).toBeGreaterThan(types.indexOf('data-thread-title'));
+  });
+
+  it('calls memory.onTitleGenerated with the saved title', async () => {
+    const llm = getMock();
+    const memory = new MockMemory({ options: { generateTitle: { instructions: TITLE_INSTRUCTIONS } } });
+    const onTitleGenerated = vi.fn();
+
+    await runLoopScenario({
+      engine,
+      llm,
+      prompt: 'Recommend a book',
+      memory,
+      threadId: 'title-callback',
+      resourceId: 'user-1',
+      onTitleGenerated,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', predicate: isTitleRequest(TITLE_INSTRUCTIONS) }, { content: 'Book Picks' });
+        llm.on({ endpoint: 'chat' }, { content: 'Try Dune.' });
+      },
+    });
+
+    await vi.waitFor(() => expect(onTitleGenerated).toHaveBeenCalledWith('Book Picks'));
+    expect(onTitleGenerated).toHaveBeenCalledTimes(1);
+    expect((await memory.getThreadById({ threadId: 'title-callback' }))?.title).toBe('Book Picks');
+  });
+
+  it('does not stream a title chunk when emitEvent is unset, but still saves the title', async () => {
+    const llm = getMock();
+    const memory = new MockMemory({ options: { generateTitle: { instructions: TITLE_INSTRUCTIONS } } });
+
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm,
+      prompt: 'Summarize the news',
+      memory,
+      threadId: 'title-no-emit',
+      resourceId: 'user-1',
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', predicate: isTitleRequest(TITLE_INSTRUCTIONS) }, { content: 'News Summary' });
+        llm.on({ endpoint: 'chat' }, { content: 'Nothing new.' });
+      },
+    });
+
+    expect(chunks!.some((c: any) => c.type === 'finish')).toBe(true);
+    expect(await waitForTitle(memory, 'title-no-emit')).toBe('News Summary');
+    expect(chunks!.some((c: any) => c.type === 'data-thread-title')).toBe(false);
   });
 });

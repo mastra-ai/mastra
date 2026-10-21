@@ -1,6 +1,6 @@
 {
   "name": "@mastra/docker",
-  "version": "0.11.1-alpha.1",
+  "version": "0.12.0",
   "description": "Docker container sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",

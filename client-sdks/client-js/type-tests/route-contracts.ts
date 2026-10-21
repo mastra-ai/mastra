@@ -325,12 +325,12 @@ type _BuilderRegistryInstall = Expect<
   BuilderRegistryInstallBody extends Body<'POST /editor/builder/registries/:registryId/install'> ? true : false
 >;
 type _AgentControllerSession = Expect<
-  Equal<AgentControllerSessionState, RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId'>>
+  Equal<AgentControllerSessionState, RouteResponse<'GET /agent-controller/:controllerId/sessions/:sessionId'>>
 >;
 type _AgentControllerThread = Expect<
   Equal<
     AgentControllerThreadInfo,
-    RouteResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/threads'>['threads'][number]
+    RouteResponse<'GET /agent-controller/:controllerId/sessions/:sessionId/threads'>['threads'][number]
   >
 >;
 type _VoiceSpeakers = Expect<
