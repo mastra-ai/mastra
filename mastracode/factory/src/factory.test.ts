@@ -1881,6 +1881,33 @@ describe('MastraFactory.prepare', () => {
     expect(serverConfig.auth).toBeUndefined();
   });
 
+  it('lets browser MCP clients send the MCP headers and read the sign-in challenge', async () => {
+    // The deployer merges these into its default allow/expose lists, so
+    // Factory only adds what MCP 2026-07-28 clients need on top.
+    const mcpCors = {
+      allowHeaders: ['Mcp-Protocol-Version', 'Mcp-Method', 'Mcp-Name'],
+      exposeHeaders: ['WWW-Authenticate'],
+    };
+
+    const withOrigins = await prepareFactory({
+      storage: fakeStorage(),
+      auth: fakeProvider(),
+      allowedOrigins: ['https://app.acme.com/'],
+    });
+    expect((withOrigins.buildServerConfig as () => { cors?: unknown })().cors).toEqual({
+      origin: ['https://app.acme.com'],
+      credentials: true,
+      ...mcpCors,
+    });
+
+    prepareMock.mockClear();
+
+    // Without allowed origins Factory still sets no origin or credentials, so
+    // the deployer's own origin defaults keep applying.
+    const sameOrigin = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
+    expect((sameOrigin.buildServerConfig as () => { cors?: unknown })().cors).toEqual(mcpCors);
+  });
+
   it('registers the per-tenant credential resolver when auth is configured', async () => {
     registerTenantCredentialResolverMock.mockClear();
     await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });

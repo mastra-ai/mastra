@@ -1779,7 +1779,16 @@ export class MastraFactory {
             : []),
         ],
         buildServerConfig: () => {
-          const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};
+          // MCP 2026-07-28 clients send `Mcp-*` headers on every request and
+          // read the OAuth challenge from `WWW-Authenticate`; the deployer
+          // merges these into its default allow/expose lists.
+          const mcpCors = {
+            allowHeaders: ['Mcp-Protocol-Version', 'Mcp-Method', 'Mcp-Name'],
+            exposeHeaders: ['WWW-Authenticate'],
+          };
+          const cors = {
+            cors: allowedOrigins.length ? { origin: allowedOrigins, credentials: true, ...mcpCors } : mcpCors,
+          };
           // Log route errors with method/path/stack and answer with structured
           // JSON instead of an opaque `Internal Server Error`. Applied by the
           // deployer to both the top-level app and the custom-route sub-app.

@@ -300,6 +300,22 @@ describe('Factory MCP server', () => {
     expect(tools.has('factory_start_session')).toBe(false);
   });
 
+  it('Claude sees what the Factory is for', async () => {
+    const { url } = await setup();
+
+    const discover = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    const instructions: string = discover.body?.result.instructions;
+    expect(instructions).toMatch(/Mastra Factory/);
+    expect(instructions).toMatch(/signed-in user/);
+
+    // Every tool the instructions point Claude at must be one it can call.
+    const list = await claudeRequest(url, 'tools/list', {}, 'token-alice');
+    const listed = new Set(list.body!.result.tools.map((tool: { name: string }) => tool.name));
+    const named = [...instructions.matchAll(/`([a-z_]+)`/g)].map(match => match[1]);
+    expect(named).toEqual(['factory_list_attention', 'search', 'fetch']);
+    for (const name of named) expect(listed.has(name), name).toBe(true);
+  });
+
   it('Claude calls a tool and reads real Factory data', async () => {
     const { url, project, item } = await setup();
 
