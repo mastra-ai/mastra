@@ -83,6 +83,15 @@ export const noRootDurationCapabilities: GetObservabilityCapabilitiesResponse = 
   },
 };
 
+/** Store runs trace queries but does not declare `delta-polling` (or the feature flag is off). */
+export const noDeltaPollingCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    deltaPolling: false,
+  },
+};
+
 /** Store declares `trace-query` but not `trace-query-discovery` (or the core lacks the discovery planners). */
 export const traceQueryWithoutDiscoveryCapabilities: GetObservabilityCapabilitiesResponse = {
   observabilityStorageType: 'ObservabilityStorageDuckDB',

@@ -1,10 +1,14 @@
 import { MastraClientError } from '@mastra/client-js';
-import { useTraceQuery } from '@mastra/react/hooks/traces';
+import { useTraceQuery, useTraceQueryLatest } from '@mastra/react/hooks/traces';
 import type { TraceQueryArgs, UseTraceQueryArgs } from '@mastra/react/hooks/traces';
 import { useEffect, useMemo, useState } from 'react';
 import { toTracesListViewTraces } from '../components/traces-list-view-adapter';
 
 export const TRACES_LIST_REFETCH_INTERVAL_MS = 10_000;
+/** How far past the anchor a delta-polled rolling window reaches, so traces started after mount still match. */
+export const TRACES_LIST_DELTA_HORIZON_MS = 24 * 60 * 60 * 1000;
+/** Fixed clock for comparing selections: filter and date changes move the query, time passing does not. */
+const SELECTION_CLOCK = new Date(0);
 
 /** The server refused the request (e.g. a time range over its cap); retrying cannot change that. */
 export function isRejectedTraceListRequest(error: unknown): boolean {
@@ -21,6 +25,8 @@ export interface UseTracesListSourceArgs {
   rolling?: boolean;
   initialAutoRefetch?: boolean;
   withQueryTrace?: boolean;
+  /** The server supports delta polling: auto-refresh merges new traces instead of reloading the pages. */
+  withDeltaPolling?: boolean;
   legacyFilters?: UseTraceQueryArgs['legacyFilters'];
   /** Rows per page; defaults to `TRACE_QUERY_PER_PAGE`. */
   limit?: number;
@@ -33,37 +39,78 @@ export function useTracesListSource({
   rolling = true,
   initialAutoRefetch = true,
   withQueryTrace,
+  withDeltaPolling = false,
   legacyFilters,
   limit,
-  enabled,
+  enabled = true,
 }: UseTracesListSourceArgs) {
   const [now, setNow] = useState(() => new Date());
   const [autoRefetch, setAutoRefetch] = useState(initialAutoRefetch);
+  const delta = withDeltaPolling && withQueryTrace !== false;
   // A fixed window polls in place. Transient failures keep polling (a blip must not silence the
   // list), but a request the server refuses ends it: each retry would only clear the error, flash
   // the placeholder list, and fail again.
   const refetchInterval =
-    autoRefetch && !rolling
+    autoRefetch && !rolling && !delta
       ? (query: { state: { error: unknown } }) => fixedWindowRefetchInterval(query.state.error)
       : false;
+  const refetchOnWindowFocus = autoRefetch && !delta;
+
+  // With delta, `now` stays frozen between polls, so re-anchor it when the filters or dates change:
+  // the new list and the new cursor start from the current time. Done during render so no request
+  // goes out with the stale `now`. Sorting is not part of the selection and keeps the cursor.
+  const selection = JSON.stringify(buildQuery(SELECTION_CLOCK));
+  const [anchoredSelection, setAnchoredSelection] = useState(selection);
+  if (selection !== anchoredSelection) {
+    setAnchoredSelection(selection);
+    if (delta) setNow(new Date());
+  }
+
+  const built = buildQuery(now);
+  // Delta polls must keep the exact time range, so a rolling window reaches into the future
+  // instead of moving its end every tick.
+  const anchored =
+    delta && rolling && built.timeRange
+      ? {
+          ...built,
+          timeRange: { ...built.timeRange, to: new Date(now.getTime() + TRACES_LIST_DELTA_HORIZON_MS).toISOString() },
+        }
+      : built;
+  const query = orderBy ? { ...anchored, orderBy } : anchored;
+
   const result = useTraceQuery({
     queryOptions: {
-      traceQuery: { refetchInterval, refetchOnWindowFocus: autoRefetch },
-      legacy: { refetchInterval, refetchOnWindowFocus: autoRefetch },
+      traceQuery: { refetchInterval, refetchOnWindowFocus },
+      legacy: { refetchInterval, refetchOnWindowFocus },
     },
-    query: orderBy ? { ...buildQuery(now), orderBy } : buildQuery(now),
+    query,
     withQueryTrace,
     legacyFilters,
     limit,
     enabled,
   });
 
+  useTraceQueryLatest({
+    query,
+    limit,
+    enabled: enabled && delta && autoRefetch,
+    refetchInterval: TRACES_LIST_REFETCH_INTERVAL_MS,
+    queryOptions: { refetchOnWindowFocus: autoRefetch },
+  });
+
   // Moving the query key refreshes the cursor chain once, without a second polling request.
   useEffect(() => {
-    if (!autoRefetch || !rolling || result.error) return;
+    if (delta || !autoRefetch || !rolling || result.error) return;
     const timer = setInterval(() => setNow(new Date()), TRACES_LIST_REFETCH_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [autoRefetch, rolling, result.error]);
+  }, [delta, autoRefetch, rolling, result.error]);
+
+  // Once the clock reaches the horizon, re-anchor the window: the list reloads and delta re-bootstraps.
+  useEffect(() => {
+    if (!delta || !autoRefetch || !rolling) return;
+    const timer = setTimeout(() => setNow(new Date()), now.getTime() + TRACES_LIST_DELTA_HORIZON_MS - Date.now());
+    return () => clearTimeout(timer);
+  }, [delta, autoRefetch, rolling, now]);
 
   // A rolling tick moves the query key; keep the previous rows when the data is the same so
   // consumers keyed on `rows` don't re-render every tick.
