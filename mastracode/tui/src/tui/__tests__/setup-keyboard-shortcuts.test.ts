@@ -632,7 +632,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(component.setInterrupted).toHaveBeenCalledTimes(1);
     expect(state.session.abort).toHaveBeenCalledTimes(1);
     expect(state.goalManager.pause).toHaveBeenCalledWith('Judge evaluation was interrupted.');
-    expect(state.goalManager.saveToThread).toHaveBeenCalledWith(state);
+    expect(state.goalManager.saveToThread).toHaveBeenCalledWith(state.local);
     expect(state.activeGoalJudge).toBeUndefined();
     expect(state.userInitiatedAbort).toBe(true);
   });

@@ -1,3 +1,4 @@
+import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area';
 import type { CSSProperties, ReactNode, RefObject } from 'react';
 import { useId, useMemo } from 'react';
 import {
@@ -47,6 +48,8 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
   fit?: DataListFit;
   /** Surface treatment; defaults to `default` (rows on a raised card panel). */
   variant?: DataListVariant;
+  /** Disable the internal scroll area when a parent owns scrolling, allowing row effects to extend outside the list. */
+  scrollable?: boolean;
   /**
    * Edge fades from the underlying ScrollArea. DataList keeps the top fade off
    * by default so it does not fade the sticky top header.
@@ -220,9 +223,14 @@ function DataListBase({
   className,
   fit = 'content',
   variant = 'default',
+  scrollable = true,
   mask,
   scrollRef,
   reorder,
+  maxHeight,
+  autoScroll,
+  scrollButtons,
+  revealScrollbarOnHover,
   ...props
 }: DataListBaseProps) {
   const scopeId = useId();
@@ -242,7 +250,7 @@ function DataListBase({
 
   // One hover surface travels between rows (same primitive as menus/selects).
   // Subheaders, pagination and whitespace stay inert, so no gap-click routing.
-  const menu = useFluidMenu<HTMLDivElement>({ gapClick: false });
+  const menu = useFluidMenu({ gapClick: false });
   const grid = (
     <div
       // Lists scroll inside the ScrollArea viewport (below); the grid just lays out.
@@ -261,12 +269,28 @@ function DataListBase({
     </div>
   );
 
+  if (!scrollable) {
+    return (
+      // Preserve Base UI's render/style/ref contract without adding a clipping viewport.
+      <ScrollAreaPrimitive.Root
+        {...props}
+        className={cn('w-full rounded-xl p-1', dataListVariantClasses[variant], className)}
+      >
+        <DataListReorderContext.Provider value={reorder}>{grid}</DataListReorderContext.Provider>
+      </ScrollAreaPrimitive.Root>
+    );
+  }
+
   // DataList uses the DS ScrollArea: an overlay scrollbar, so the sticky header
   // spans the full width. Masks default to every overflowing edge except the
   // top — a top fade would fade the opaque sticky header.
   return (
     <ScrollArea
       {...props}
+      maxHeight={maxHeight}
+      autoScroll={autoScroll}
+      scrollButtons={scrollButtons}
+      revealScrollbarOnHover={revealScrollbarOnHover}
       orientation="both"
       mask={getDataListMask(mask)}
       // Outer radius = row radius (8px) + 4px inset so the corners stay concentric.

@@ -2,6 +2,11 @@ import { LoggerTransport } from '@mastra/core/logger';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 import { normalizePagination } from '../pagination';
 
+/** LTRIM failed after LPUSH succeeded: the records were written, so they are not put back in the buffer. */
+class UpstashTrimError extends Error {
+  name = 'UpstashTrimError';
+}
+
 export class UpstashTransport extends LoggerTransport {
   upstashUrl: string;
   upstashToken: string;
@@ -54,6 +59,18 @@ export class UpstashTransport extends LoggerTransport {
         console.error('Error flushing logs to Upstash:', err);
       });
     }, this.flushInterval);
+    this.updateIntervalRef();
+  }
+
+  // The interval only keeps the process alive while records are waiting to be sent, so an idle transport
+  // doesn't stop a script from exiting, but buffered records still get delivered (or retried) first.
+  // Web-standard runtimes return a numeric timer id without ref()/unref(), so those calls are optional.
+  private updateIntervalRef() {
+    if (this.logBuffer.length > 0 || this.flushPromise) {
+      this.flushIntervalId.ref?.();
+    } else {
+      this.flushIntervalId.unref?.();
+    }
   }
 
   private async executeUpstashCommands(commands: any[][]): Promise<any> {
@@ -84,30 +101,44 @@ export class UpstashTransport extends LoggerTransport {
 
     this.flushPromise = this.flushBatch().finally(() => {
       this.flushPromise = null;
+      this.updateIntervalRef();
     });
     return this.flushPromise;
   }
 
-  /** Pushes one batch to Upstash, returning the records to the front of the buffer if the request fails. */
+  /**
+   * Pushes one batch to Upstash. If the request or the LPUSH command fails, the records return to the
+   * front of the buffer. A failed LTRIM is reported without resending, since the records were already written.
+   */
   private async flushBatch() {
     const now = Date.now();
     const logs = this.logBuffer.splice(0, this.batchSize);
+    const commands: any[][] = [['LPUSH', this.listName, ...logs.map(log => JSON.stringify(log))]];
 
+    // Trim the list if it exceeds maxListLength (must be a separate pipeline command)
+    if (this.maxListLength > 0) {
+      commands.push(['LTRIM', this.listName, 0, this.maxListLength - 1]);
+    }
+
+    let results: any;
     try {
-      const commands: any[][] = [['LPUSH', this.listName, ...logs.map(log => JSON.stringify(log))]];
-
-      // Trim the list if it exceeds maxListLength (must be a separate pipeline command)
-      if (this.maxListLength > 0) {
-        commands.push(['LTRIM', this.listName, 0, this.maxListLength - 1]);
+      results = await this.executeUpstashCommands(commands);
+      // Upstash answers HTTP 200 even when a command fails, reporting { error } per command
+      const pushError = Array.isArray(results) ? results[0]?.error : undefined;
+      if (pushError) {
+        throw new Error(`Failed to push logs to Upstash: ${pushError}`);
       }
-
-      await this.executeUpstashCommands(commands);
-      this.lastFlush = now;
     } catch (error) {
       // On error, put logs back in the buffer
       this.logBuffer.unshift(...logs);
       this.enforceBufferLimit();
       throw error;
+    }
+
+    this.lastFlush = now;
+    const trimError = Array.isArray(results) ? results[1]?.error : undefined;
+    if (trimError) {
+      throw new UpstashTrimError(`Failed to trim Upstash log list: ${trimError}`);
     }
   }
 
@@ -142,6 +173,7 @@ export class UpstashTransport extends LoggerTransport {
 
       // Add to buffer
       this.logBuffer.push(log);
+      this.updateIntervalRef();
 
       // Flush once a batch is ready, or earlier if the buffer limit is smaller than a batch
       if (this.logBuffer.length >= Math.min(this.batchSize, this.maxBufferSize)) {
@@ -177,11 +209,21 @@ export class UpstashTransport extends LoggerTransport {
 
   // Wait out any in-flight request, ignoring its failure since its records are back in the buffer,
   // then keep sending until the buffer is empty. A failed request ends the drain instead of retrying forever.
+  // A trim failure leaves nothing to resend, so draining continues and the first one is reported at the end.
   private async drainBuffer(): Promise<void> {
-    await this.flushPromise?.catch(() => {});
+    let trimError: UpstashTrimError | undefined;
+    await this.flushPromise?.catch(error => {
+      if (error instanceof UpstashTrimError) trimError ??= error;
+    });
     while (this.logBuffer.length > 0 || this.flushPromise) {
-      await (this.flushPromise ?? this._flush());
+      try {
+        await (this.flushPromise ?? this._flush());
+      } catch (error) {
+        if (!(error instanceof UpstashTrimError)) throw error;
+        trimError ??= error;
+      }
     }
+    if (trimError) throw trimError;
   }
 
   private parseLogs(logs: unknown): BaseLogMessage[] {

@@ -128,7 +128,7 @@ describe('ExperimentResultsSection', () => {
 
     it('shows the cost of each traced item', async () => {
       renderSection([agentTracedResult], 'completed', { supportsMetrics: true });
-      await waitFor(() => expect(screen.getByTestId('result-cost-res-agent-traced').textContent).toBe('$0.0015'));
+      await waitFor(() => expect(screen.getByTestId('result-cost-res-agent-traced').textContent).toBe('$0.002'));
     });
 
     it('shows the input plus output tokens of each traced item', async () => {
@@ -138,7 +138,7 @@ describe('ExperimentResultsSection', () => {
 
     it('leaves usage empty for items without a trace', async () => {
       renderSection([agentTracedResult, workflowResult], 'completed', { supportsMetrics: true });
-      await waitFor(() => expect(screen.getByTestId('result-cost-res-agent-traced').textContent).toBe('$0.0015'));
+      await waitFor(() => expect(screen.getByTestId('result-cost-res-agent-traced').textContent).toBe('$0.002'));
       expect(screen.getByTestId('result-cost-res-workflow').textContent).toBe('-');
       expect(screen.getByTestId('result-tokens-res-workflow').textContent).toBe('-');
     });

@@ -104,7 +104,7 @@ function cancelCreate(): never {
   throw new CreateCancelledError();
 }
 
-async function runCreatePrompt<T>(prompt: (signal: AbortSignal) => Promise<T | symbol>): Promise<T> {
+async function runCreatePrompt<T>(prompt: (signal: AbortSignal) => Promise<T | typeof p.CANCEL_SYMBOL>): Promise<T> {
   const controller = new AbortController();
   let rejectCancellation: (error: CreateCancelledError) => void = () => {};
   let cancellationAnnounced = false;

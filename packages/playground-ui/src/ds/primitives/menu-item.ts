@@ -25,6 +25,8 @@ const MENU_ITEM_OVERRIDES = cn(
   'data-selected:text-foreground',
   'data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50',
   '[&>span]:truncate',
+  // A row is not a pill: a leading icon keeps the menu's own inset.
+  'has-[>svg]:pl-2',
 );
 
 export const menuItemClass = cn(buttonVariants({ variant: 'ghost', size: 'md' }), MENU_ITEM_OVERRIDES);
@@ -36,7 +38,7 @@ export const menuItemDestructiveClass = cn(
 );
 
 // Trailing indicator (check / submenu chevron) — applied to a wrapper element, not the
-// svg itself, because the Button recipe's `[&>svg]:mx-[-.3em]` would beat `ml-auto`.
+// svg itself, so the Button recipe's `[&>svg]` adornment padding never treats it as a leading icon.
 export const menuItemTrailingIconClass =
   'ml-auto flex size-[1.1em] shrink-0 items-center justify-center [&>svg]:size-full';
 

@@ -112,6 +112,13 @@ export class StepExecutor extends MastraBase {
       payload: (typeof params.foreachIdx === 'number' ? params.input : inputData) ?? {},
     };
 
+    // Keep the route in the running checkpoint until execution completes, but
+    // do not propagate recovery-only metadata into the completed step result.
+    if (stepInfo.metadata?.__restartConditional) {
+      const { __restartConditional, ...metadata } = stepInfo.metadata;
+      stepInfo.metadata = metadata;
+    }
+
     if (params.resumeData) {
       stepInfo.resumePayload = params.resumeData;
       stepInfo.resumedAt = Date.now();

@@ -15,3 +15,6 @@ export * from './llm-helpers';
 
 // LLM mocking
 export * from './llm-mock';
+
+// Scripted MockLanguageModelV2 factories
+export * from './mock-models';

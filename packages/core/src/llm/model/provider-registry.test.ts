@@ -411,6 +411,20 @@ describe('GatewayRegistry Auto-Refresh', () => {
     }
   });
 
+  it('should not sync the global cache on every registry read once loaded', () => {
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+    registry.getProviders();
+
+    const globalCachePath = path.join(os.homedir(), '.cache', 'mastra', 'provider-registry.json');
+    const existsSpy = vi.spyOn(fs, 'existsSync');
+
+    registry.getProviders();
+    registry.isProviderRegistered('openai');
+    registry.getModels();
+
+    expect(existsSpy.mock.calls.some(([p]) => p === globalCachePath)).toBe(false);
+  });
+
   it('should create cache file on first sync', async () => {
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 

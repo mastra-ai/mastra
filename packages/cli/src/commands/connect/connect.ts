@@ -485,7 +485,7 @@ async function promptAuthFields(
       console.info(pc.dim(`  ${field.label}: ${field.documentationUrl}`));
     }
 
-    let answer: string | symbol;
+    let answer: string | typeof p.CANCEL_SYMBOL;
     if (field.options && field.options.length > 0) {
       answer = await p.select({
         message: field.label,

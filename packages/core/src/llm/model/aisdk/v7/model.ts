@@ -10,6 +10,7 @@ import { aiV5PromptToAIV7Prompt } from '../../../../agent/message-list/conversio
 import { convertToDataContent } from '../../../../stream/aisdk/v5/compat/content';
 import type { MastraLanguageModelV4 } from '../../shared.types';
 import { createStreamFromGenerateResult } from '../generate-to-stream';
+import { toSingleSystemMessage } from '../single-system-message';
 
 type StreamResult = Awaited<ReturnType<LanguageModelV4['doStream']>>;
 type GenerateResult = Awaited<ReturnType<LanguageModelV4['doGenerate']>>;
@@ -237,7 +238,7 @@ export class AISDKV7LanguageModel implements MastraLanguageModelV4 {
   }
 
   async doGenerate(options: LanguageModelV4CallOptions) {
-    const result = await this.#model.doGenerate(remapCallOptionsToV4(options));
+    const result = await this.#model.doGenerate(remapCallOptionsToV4(this.#withSingleSystemMessage(options)));
     const content = untagResponseFileContent(result.content);
     const untaggedResult = content === result.content ? result : { ...result, content };
 
@@ -250,12 +251,17 @@ export class AISDKV7LanguageModel implements MastraLanguageModelV4 {
   }
 
   async doStream(options: LanguageModelV4CallOptions) {
-    const result = await this.#model.doStream(remapCallOptionsToV4(options));
+    const result = await this.#model.doStream(remapCallOptionsToV4(this.#withSingleSystemMessage(options)));
 
     return {
       ...result,
       stream: untagFileStreamParts(result.stream),
     };
+  }
+
+  #withSingleSystemMessage(options: LanguageModelV4CallOptions): LanguageModelV4CallOptions {
+    const prompt = toSingleSystemMessage(this.provider, options.prompt);
+    return prompt === options.prompt ? options : { ...options, prompt };
   }
 
   /**

@@ -9,6 +9,7 @@ import type { TrustedTraceAggregatePlan } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { aggregateTraces, compileClickHouseTraceAggregate } from './trace-aggregate';
+import { ROOT_VERSION_ORDER } from './trace-query';
 
 const TIME_RANGE = { from: '2026-01-01T00:00:00.000Z', to: '2026-01-02T00:00:00.000Z' };
 
@@ -29,10 +30,13 @@ describe('ClickHouse trace aggregate compiler', () => {
     );
 
     expect(compiled.query).toContain('candidates AS (');
-    expect(compiled.query).toMatch(
-      /trace_roots AS \(\s+SELECT \*\s+FROM candidates\s+ORDER BY traceId, dedupeKey\s+LIMIT 1 BY traceId\s+\)/,
+    // Roots collapse to the current version before the filter, so candidates hold one row per trace.
+    expect(compiled.query).toContain(
+      `ORDER BY startedAt, traceId, spanId, ${ROOT_VERSION_ORDER}\n    LIMIT 1 BY traceId`,
     );
-    expect(compiled.query).toContain('FROM trace_roots r');
+    expect(compiled.query.indexOf('LIMIT 1 BY traceId')).toBeLessThan(compiled.query.indexOf('candidates AS ('));
+    expect(compiled.query).toContain('FROM candidates r');
+    expect(compiled.query).not.toContain('trace_roots AS (');
     expect(compiled.query).not.toContain('FINAL');
     expect(Object.values(compiled.query_params)).toContain('prod');
   });
@@ -176,7 +180,9 @@ describe('ClickHouse trace aggregate compiler', () => {
 
     const usage = compiled.query.slice(compiled.query.indexOf('usage AS'), compiled.query.indexOf('facts AS'));
     expect(usage).toContain('FROM mastra_metric_events');
-    expect(usage).toContain('argMax(tuple(name, value, estimatedCost, costUnit, hasError), timestamp) AS latest');
+    expect(usage).toContain(
+      'argMax(tuple(name, value, estimatedCost, costUnit, hasError, partialCost), timestamp) AS latest',
+    );
     expect(usage).toContain('GROUP BY traceId, metricId');
     expect(usage).not.toContain('LIMIT 1 BY');
     expect(usage).not.toContain('FINAL');

@@ -37,6 +37,7 @@ import type {
 import type { RequestContext } from '../request-context';
 import type {
   ChunkType,
+  LanguageModelUsage,
   MastraOnFinishCallback,
   MastraOnStepFinishCallback,
   MastraStreamTransformOptions,
@@ -135,6 +136,8 @@ export type StreamInternal = {
   stepWorkspace?: Workspace;
   /** @deprecated Use `runScope.get(TOOL_APPROVAL_VERDICTS_KEY)` from `loop/run-scope-keys`. */
   toolApprovalVerdicts?: Map<string, boolean>;
+  /** @deprecated Use `runScope.get(STEP_USAGE_KEY)` from `loop/run-scope-keys`. */
+  stepUsage?: LanguageModelUsage;
   /** @deprecated Use `runScope.get(STEP_MODEL_MESSAGES_KEY)` from `loop/run-scope-keys`. */
   stepModelMessages?: ModelMessage[];
   /** @deprecated Use `runScope.get(EAGER_TOOL_EXECUTION_KEY)` from `loop/run-scope-keys`. */
@@ -345,7 +348,8 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopO
   _internal: StreamInternal;
   rotateResponseMessageId: (sealMessageId?: string) => string;
   streamState: {
-    serialize: () => any;
+    /** Pass a suspension chunk the step just emitted so the state reflects it. */
+    serialize: (pendingSuspension?: { usage?: LanguageModelUsage }) => any;
     deserialize: (state: any) => void;
   };
   methodType: ModelMethodType;

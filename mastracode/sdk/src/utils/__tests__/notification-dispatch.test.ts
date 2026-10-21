@@ -13,7 +13,7 @@ describe('createResourceNotificationDispatcher', () => {
             throw failure;
           },
         }) as never,
-      getResourceIds: () => ['resource-a'],
+      getSessionScopes: () => [{ resourceId: 'resource-a' }],
       owner: 'owner-a',
       onError,
     });

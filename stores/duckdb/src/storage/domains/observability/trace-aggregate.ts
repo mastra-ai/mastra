@@ -26,6 +26,9 @@ import type { CompiledDuckDBTraceQuery } from './trace-query';
 const DIMENSION_SQL: Record<string, string> = {
   entityType: 'r.entityType',
   entityName: 'r.entityName',
+  name: 'r.name',
+  spanType: 'r.spanType',
+  entityId: 'r.entityId',
   environment: 'r.environment',
   status: TRACE_STATUS_SQL,
   serviceName: 'r.serviceName',
@@ -341,7 +344,8 @@ function compileUsageCtes(
         CASE WHEN m.name IN (${list(costNames)})
           THEN COALESCE(json_type(m.costMetadata, '$.error'), 'NULL') <> 'NULL'
           ELSE FALSE
-        END AS hasError`
+        END AS hasError,
+        COALESCE(json_extract_string(m.costMetadata, '$.error') = 'partial_cost', FALSE) AS partialCost`
     : '';
   const rows = `usage_rows AS (
       SELECT ${dedupe ? 'DISTINCT ON (m.metricId) ' : ''}m.traceId, m.name, m.value${costSelect}
@@ -356,7 +360,7 @@ function compileUsageCtes(
     (sql, index) => `${sql} AS t${index}`,
   );
   if (hasCost) {
-    const priced = 'costRow AND estimatedCost IS NOT NULL AND costUnit IS NOT NULL AND NOT hasError';
+    const priced = 'costRow AND estimatedCost IS NOT NULL AND costUnit IS NOT NULL AND (NOT hasError OR partialCost)';
     columns.push(
       `sum(estimatedCost) FILTER (WHERE ${priced}) AS cost`,
       `bool_or(${priced}) AS priced`,

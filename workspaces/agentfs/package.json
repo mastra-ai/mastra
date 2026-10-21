@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agentfs",
-  "version": "0.2.2-alpha.0",
+  "version": "0.2.2",
   "description": "AgentFS (Turso/SQLite-backed) filesystem provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -26,8 +26,8 @@
     "test:cloud": "vitest run ./src/**/*.integration.test.ts",
     "test:watch": "vitest watch",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -42,7 +42,6 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.4.2",
-    "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:"

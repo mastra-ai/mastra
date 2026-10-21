@@ -367,6 +367,26 @@ await subscription.processDataStream({
 
 Pass `withInitialHistory: true` (or `{ perPage }`) to receive the stored messages as a first `thread-history` chunk instead of fetching history separately. Finished runs aren't replayed after it, so completed answers don't stream again on reconnect.
 
+In the React SDK, `useChat()` exposes the `hasMore` flag from that first page as `initialHistoryPagination`, so you can decide whether to offer loading older messages without another history request:
+
+```typescript
+import { useChat } from '@mastra/react'
+
+const { messages, initialHistoryPagination } = useChat({
+  agentId: 'support-agent',
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+  enableThreadSignals: true,
+  withInitialHistory: { perPage: 20 },
+})
+
+// { hasMore: true }: older messages exist
+// { hasMore: false }: the page reaches the start of the thread
+// undefined: history is disabled, still loading, or the subscription ended
+```
+
+`initialHistoryPagination` only describes the initial subscription page for the current agent, resource, thread, and `withInitialHistory` value. It isn't changed by live output or `setMessages()`. After you load older pages yourself, use the `hasMore` value from those responses.
+
 `subscribeToThread()` returns the underlying `Response` plus a `processDataStream()` helper. The helper reads the subscription stream until the connection closes or the request is aborted. Pass `reconnect: true` to resubscribe when the transport closes or a reconnect request fails, such as after a proxy idle timeout. If a reconnect request fails with a 4xx status (for example `401` or `403`) or `501`, `processDataStream()` stops reconnecting and rejects with the original `MastraClientError`. `408` and `429` are still retried.
 
 <PropertiesTable

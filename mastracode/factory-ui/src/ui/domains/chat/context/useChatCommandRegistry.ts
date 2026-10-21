@@ -46,7 +46,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const factoryQuery = useFactoryQuery(factoryId);
   const navigate = useNavigate();
   const location = useLocation();
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
   const { activeModelId, setModel } = useChatModels();
@@ -56,8 +56,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
 
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -245,7 +244,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
         pushNotice(
           [
             `Factory: ${factoryQuery.data?.name ?? '(none)'}`,
-            `Path: ${projectPath ?? '(no workspace selected)'}`,
+            `Session: ${sessionId || '—'}`,
             `Model: ${activeModelId ?? '—'}`,
             `Thread: ${transcript.threadId ?? '—'}`,
             `Running: ${busy}`,

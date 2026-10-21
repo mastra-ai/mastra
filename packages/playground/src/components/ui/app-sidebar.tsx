@@ -6,7 +6,7 @@ import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboa
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { useMCPServers } from '@mastra/react/hooks/mcps';
 import { useWorkspaces } from '@mastra/react/hooks/workspace';
-import { Search, Wrench } from 'lucide-react';
+import { Wrench } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
@@ -14,7 +14,7 @@ import { ImpersonationBanner } from '@/domains/auth/components/impersonation-ban
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-permissions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
-import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
+import { MastraVersionNavLink } from '@/domains/configuration/components/mastra-version-nav-link';
 import { useNavigationCommand } from '@/lib/command';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
@@ -109,19 +109,20 @@ export function AppSidebar() {
 
   return (
     <Sidebar aria-label="Sidebar">
-      <Sidebar.CommandHeader>
+      <Sidebar.Header
+        collapsedLogo={<LogoWithoutText className="size-6" />}
+        actions={isUserAuthenticated && <AuthStatus />}
+      >
         <Sidebar.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Studio" />
-        {isUserAuthenticated && <AuthStatus />}
         {!isMobile && (
           <Sidebar.SearchTrigger
             aria-label="Search and navigate"
             shortcut={commandShortcutLabel}
             onClick={openNavigationCommand}
-          >
-            <Search />
-          </Sidebar.SearchTrigger>
+          />
         )}
-      </Sidebar.CommandHeader>
+        <Sidebar.Trigger />
+      </Sidebar.Header>
 
       {isAgentBuilderVisible && (
         <Sidebar.NavList className="mb-1">
@@ -144,20 +145,17 @@ export function AppSidebar() {
       </Sidebar.Nav>
 
       <Sidebar.Footer>
-        {filteredBottom.length > 0 && (
-          <Sidebar.NavList>
-            {filteredBottom.map(item => (
-              <Sidebar.NavLink
-                key={item.name}
-                state={state}
-                link={toSidebarLink(item)}
-                isActive={getIsLinkActive(item, pathname)}
-              />
-            ))}
-          </Sidebar.NavList>
-        )}
-        <MastraVersionFooter collapsed={state === 'collapsed'} />
-        <Sidebar.FooterMeta action={<Sidebar.Trigger />} />
+        <Sidebar.NavList>
+          {filteredBottom.map(item => (
+            <Sidebar.NavLink
+              key={item.name}
+              state={state}
+              link={toSidebarLink(item)}
+              isActive={getIsLinkActive(item, pathname)}
+            />
+          ))}
+          <MastraVersionNavLink state={state} />
+        </Sidebar.NavList>
       </Sidebar.Footer>
     </Sidebar>
   );

@@ -27,6 +27,9 @@ import {
 const DIMENSION_SQL: Record<string, string> = {
   entityType: 'r.entityType',
   entityName: 'r.entityName',
+  name: 'r.name',
+  spanType: 'r.spanType',
+  entityId: 'r.entityId',
   environment: 'r.environment',
   status: TRACE_STATUS_SQL,
   serviceName: 'r.serviceName',
@@ -60,15 +63,8 @@ const COMPARISON_SQL = { eq: '=', ne: '!=', lt: '<', lte: '<=', gt: '>', gte: '>
  */
 export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
+  // Candidates hold each trace's current root once (ROOT_VERSION_ORDER), already filtered.
   const ctes = compileClickHouseTraceCandidates(plan, '*', parameters, { oneRootPerTrace: true });
-  // Candidates may hold unmerged copies of a trace's root; count each trace once, keeping the copy
-  // with the lowest dedupeKey.
-  ctes.push(`trace_roots AS (
-    SELECT *
-    FROM candidates
-    ORDER BY traceId, dedupeKey
-    LIMIT 1 BY traceId
-  )`);
 
   const dimensionSql = (field: TraceAggregateDimension): string => {
     if (field.startsWith('metadata.')) {
@@ -125,7 +121,7 @@ export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan)
   }
   ctes.push(`facts AS (
     SELECT ${factColumns.join(',\n      ')}
-    FROM trace_roots r${usageJoin}
+    FROM candidates r${usageJoin}
   )`);
 
   // More than one distinct priced unit in the group; NULL (treated as false) when nothing is priced.
@@ -289,7 +285,7 @@ function compileUsageCte(plan: TrustedTraceAggregatePlan, parameters: ParameterB
   const costRow = `name IN (${costNames.join(', ')})`;
   const from = parameters.add(plan.timeRange.from, "DateTime64(3, 'UTC')");
   const tenant = compileTenantScope(plan.scope, parameters);
-  const priced = `${costRow} AND isNotNull(estimatedCost) AND isNotNull(costUnit) AND NOT hasError`;
+  const priced = `${costRow} AND isNotNull(estimatedCost) AND isNotNull(costUnit) AND (NOT hasError OR partialCost)`;
   const failed = `${costRow} AND (hasError OR (isNotNull(estimatedCost) AND isNull(costUnit)))`;
   // Retried writes share a metricId, and copies with different timestamps never merge under the
   // (name, timestamp, metricId) sort key. Collapse them with a parallel, spillable aggregation
@@ -309,13 +305,15 @@ function compileUsageCte(plan: TrustedTraceAggregatePlan, parameters: ParameterB
         latest.2 AS value,
         latest.3 AS estimatedCost,
         latest.4 AS costUnit,
-        latest.5 AS hasError
+        latest.5 AS hasError,
+        latest.6 AS partialCost
       FROM (
         SELECT traceId,
-          argMax(tuple(name, value, estimatedCost, costUnit, hasError), timestamp) AS latest
+          argMax(tuple(name, value, estimatedCost, costUnit, hasError, partialCost), timestamp) AS latest
         FROM (
           SELECT traceId, metricId, timestamp, name, value, estimatedCost, costUnit,
-            if(${costRow}, ifNull(JSONHas(costMetadata, 'error') AND JSONType(costMetadata, 'error') != 'Null', 0), 0) AS hasError
+            if(${costRow}, ifNull(JSONHas(costMetadata, 'error') AND JSONType(costMetadata, 'error') != 'Null', 0), 0) AS hasError,
+            if(${costRow}, ifNull(JSONExtractString(costMetadata, 'error') = 'partial_cost', 0), 0) AS partialCost
           FROM ${TABLE_METRIC_EVENTS}
           WHERE traceId IN (SELECT traceId FROM candidates)
             AND name IN (${names.join(', ')})

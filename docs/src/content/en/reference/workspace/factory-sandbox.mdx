@@ -157,6 +157,8 @@ class MyFactorySandbox extends FactorySandbox<Settings> {
 }
 ```
 
+When a user recreates a stuck session's sandbox, Factory may call `create` with only `sessionId` and the persisted `sandboxId` (no repository access, empty settings) and then call the returned sandbox's `destroy()` without starting it. This happens when the server restarted or the session was opened on another replica. For recreate to work, `destroy()` must find and remove the session's VM from `sandboxId` or the session id alone. Factory doesn't offer recreate for `LocalFactorySandbox`, because its `destroy()` keeps the session directory.
+
 ## FactorySandboxContext
 
 Everything Factory knows about the session, passed to `create`, `template` and the build methods.

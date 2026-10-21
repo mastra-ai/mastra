@@ -1,4 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
+import { expandDurableSteps } from '@internal/core/durable';
 import { MastraError } from '../../error';
 import { withAck } from '../../events/acking-callback';
 import type { PubSub } from '../../events/pubsub';
@@ -25,7 +26,7 @@ import type {
 import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { StructuredOutputOptions } from '../types';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, shouldRejectStream } from './constants';
 import { currentRunFenceScope } from './run-fence-scope';
 import type {
   AgentStreamEvent,
@@ -104,6 +105,7 @@ async function withBufferedStepResponses(
 ): Promise<unknown[]> {
   const buffered = ((await output.steps.catch(() => undefined)) ?? []) as Record<string, unknown>[];
   if (!runSteps?.length) return buffered;
+  runSteps = expandDurableSteps(runSteps);
   // An aborted run ends with a step that never finished, so it was never buffered.
   const trailingAborted =
     (runSteps.at(-1) as { finishReason?: string } | undefined)?.finishReason === 'abort' &&
@@ -272,8 +274,16 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
    * unsubscribe. Idempotent. Does not affect the run itself.
    */
   detach: () => void;
+  /**
+   * End only this reader's stream with `error` (rejecting or as an error
+   * chunk, like a published ERROR event) and unsubscribe. Nothing is published,
+   * so other readers of the run are unaffected.
+   */
+  fail: (error: Error) => Promise<void>;
   /** Wait for pubsub events already delivered to this adapter to finish processing. */
   waitForEventDelivery: () => Promise<void>;
+  /** Accepted deliveries, including hidden ownership markers, for observation reconciliation. */
+  readonly activityVersion: number;
   /** Promise that resolves when subscription is established */
   ready: Promise<void>;
 }
@@ -473,7 +483,30 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   };
 
   const keepGeneration = createRunGenerationFilter({ minGeneration, rereadMinGeneration });
+
+  // Ends this reader's stream with an error, then fires onError once.
+  const deliverError = async (error: Error, delivery?: AgentErrorEventData['delivery']) => {
+    if (!controller || terminated) return;
+    if (delivery === 'reject') {
+      safeError(controller, error);
+    } else {
+      // Ordinary durable failures remain deferred error chunks so the stream
+      // closes normally even when no finish event follows.
+      safeEnqueue(controller, {
+        type: 'error',
+        payload: { error },
+      } as ChunkType<OUTPUT>);
+      safeClose(controller);
+    }
+    markTerminated();
+    try {
+      await onError?.({ error });
+    } catch (callbackError) {
+      logError(`[DurableAgentStream] onError callback error:`, callbackError);
+    }
+  };
   let onChunkDelivery = Promise.resolve();
+  let activityVersion = 0;
 
   const handleEvent = async (event: Event) => {
     // After a terminal event the stream is closed and its callbacks have fired.
@@ -492,6 +525,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       if (!controller || terminated) return;
     }
     if (!keep) return;
+    activityVersion++;
 
     // Any event proves the producer is alive — restart the idle countdown.
     armIdleTimer();
@@ -556,6 +590,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             payload: {
               output: data.output,
               stepResult: data.stepResult,
+              ...(data.messages ? { messages: data.messages } : {}),
             },
           } as ChunkType<OUTPUT>);
           safeClose(controller);
@@ -651,28 +686,16 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           if (data.error.stack) {
             error.stack = data.error.stack;
           }
-          if (data.delivery === 'reject') {
-            safeError(controller, error);
-          } else {
-            // Ordinary durable failures remain deferred error chunks so the stream
-            // closes normally even when no finish event follows.
-            safeEnqueue(controller, {
-              type: 'error',
-              payload: { error },
-            } as ChunkType<OUTPUT>);
-            safeClose(controller);
-          }
-          markTerminated();
-          try {
-            await onError?.({ error });
-          } catch (callbackError) {
-            logError(`[DurableAgentStream] onError callback error:`, callbackError);
-          }
+          await deliverError(error, data.delivery);
           break;
         }
 
         case AgentStreamEventTypes.SUSPENDED: {
           const data = streamEvent.data as AgentSuspendedEventData;
+          // Let earlier chunk callbacks finish first, as FINISH does, so onSuspended
+          // sees every chunk that preceded the suspension.
+          await onChunkDelivery;
+          if (!controller || terminated) return;
           // By default we leave the stream open on suspend so a later resume can
           // keep streaming chunks (the watchdog stays armed; a suspended-but-live
           // run reads as attachable via isAlive). `generate()`/`resumeGenerate()`
@@ -886,11 +909,23 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     },
   });
 
+  // Fail only this reader, without publishing to the run's topic, which other
+  // executions and their followers share. Waits for events already delivered.
+  const fail = async (error: Error) => {
+    await waitForEventDelivery();
+    await deliverError(error, shouldRejectStream(error) ? 'reject' : undefined);
+    cleanup();
+  };
+
   return {
     output,
     cleanup,
     detach,
+    fail,
     waitForEventDelivery,
+    get activityVersion() {
+      return activityVersion;
+    },
     ready,
   };
 }

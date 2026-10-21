@@ -224,9 +224,9 @@ describe('useAgentBuilderTool', () => {
     it('write name and instructions to the form on execute', async () => {
       const { record, form } = renderTools({ features: allOffFeatures });
 
-      await toolOf(record, SET_AGENT_NAME_TOOL_NAME).execute!({ name: 'New name' } as never, {} as never);
+      await toolOf(record, SET_AGENT_NAME_TOOL_NAME).execute!({ name: 'New name' }, {} as never);
       await toolOf(record, SET_AGENT_INSTRUCTIONS_TOOL_NAME).execute!(
-        { instructions: 'New instructions' } as never,
+        { instructions: 'New instructions' },
         {} as never,
       );
 
@@ -243,7 +243,7 @@ describe('useAgentBuilderTool', () => {
       });
 
       await toolOf(record, SET_AGENT_TOOLS_TOOL_NAME).execute!(
-        { tools: [{ id: 'web-search', name: 'Web Search' }] } as never,
+        { tools: [{ id: 'web-search', name: 'Web Search' }] },
         {} as never,
       );
 
@@ -263,7 +263,7 @@ describe('useAgentBuilderTool', () => {
             { id: 'some-agent', name: 'Some Agent' },
             { id: 'some-workflow', name: 'Some Workflow' },
           ],
-        } as never,
+        },
         {} as never,
       );
 
@@ -355,7 +355,7 @@ describe('useAgentBuilderTool', () => {
         availableWorkspaces: [{ id: 'ws-1', name: 'Primary' }],
       });
 
-      await record[SET_AGENT_WORKSPACE_ID_TOOL_NAME].execute!({ workspaceId: 'ws-1' } as never, {} as never);
+      await record[SET_AGENT_WORKSPACE_ID_TOOL_NAME].execute!({ workspaceId: 'ws-1' }, {} as never);
 
       expect(form().getValues('workspaceId')).toBe('ws-1');
     });
@@ -366,7 +366,7 @@ describe('useAgentBuilderTool', () => {
         availableWorkspaces: [{ id: 'ws-1', name: 'Primary' }],
       });
 
-      await record[SET_AGENT_WORKSPACE_ID_TOOL_NAME].execute!({} as never, {} as never);
+      await record[SET_AGENT_WORKSPACE_ID_TOOL_NAME].execute!({}, {} as never);
 
       expect(form().getValues('workspaceId')).toBeUndefined();
     });

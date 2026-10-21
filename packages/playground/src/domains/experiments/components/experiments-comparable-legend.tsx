@@ -1,12 +1,12 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export interface ExperimentsComparableLegendProps {
-  /** Dataset of the first selected experiment, whose experiments the list highlights. Omitted before any selection. */
-  datasetId?: string;
+  /** Dataset of the first selected experiment. Omitted before any selection. */
+  dataset?: { id: string; name: string };
 }
 
-/** Explains the highlighted rows of the experiments list: the ones that can be compared with the current selection. */
-export function ExperimentsComparableLegend({ datasetId }: ExperimentsComparableLegendProps) {
+/** Names the dataset the current selection locks the experiments list to. */
+export function ExperimentsComparableLegend({ dataset }: ExperimentsComparableLegendProps) {
   return (
     <Txt
       as="p"
@@ -16,15 +16,15 @@ export function ExperimentsComparableLegend({ datasetId }: ExperimentsComparable
       aria-label="Comparable experiments"
       className="min-w-0 truncate"
     >
-      {datasetId ? (
+      {dataset ? (
         <>
           Comparable experiments share dataset{' '}
-          <Txt as="span" variant="body-sm" font="mono" tone="ink" title={datasetId}>
-            {datasetId}
+          <Txt as="span" variant="body-sm" tone="ink" title={dataset.id}>
+            {dataset.name}
           </Txt>
         </>
       ) : (
-        'Select an experiment to highlight comparable ones'
+        'Select an experiment to pick the dataset to compare'
       )}
     </Txt>
   );

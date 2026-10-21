@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
 
 import { SettledContext, useArriving } from './use-watched';
 import { cn } from '@/lib/utils';

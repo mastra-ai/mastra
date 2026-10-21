@@ -153,7 +153,8 @@ const stream = await agent.stream('Clean up old records', {
       },
     })
 
-    return result.answers.requiresApproval.probability >= 0.7
+    // A refused question has no probability, so it falls back to requiring approval.
+    return (result.answers.requiresApproval.probability ?? 1) >= 0.7
   },
 })
 ```
