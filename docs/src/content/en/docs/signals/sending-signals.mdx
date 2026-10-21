@@ -1,0 +1,232 @@
+---
+title: 'Sending signals | Signals'
+description: 'Choose a Mastra agent method for messages, typed signals, state signals, or notifications, and control how each one is delivered.'
+packages:
+  - '@mastra/core'
+  - '@mastra/client-js'
+  - '@mastra/code-sdk'
+---
+
+# Sending signals
+
+## Choose a method
+
+| Method | Use it for |
+| - | - |
+| `sendMessage()` | User-authored input that the agent should see now. |
+| `queueMessage()` | A user follow-up that should wait for the active run to finish. |
+| `sendSignal()` | Typed system context that follows the active-or-idle delivery policy. |
+| `queueSignal()` | Typed system context that should wait for the next turn. |
+| `sendNotificationSignal()` | An external event that should create a durable notification record. |
+| `sendStateSignal()` | A named, durable state lane. |
+| Tool approval | Resuming a run that paused for approval. |
+
+## Signal payload
+
+### Types and legacy aliases
+
+Mastra still accepts legacy signal payloads such as `type: 'user-message'` and `type: 'system-reminder'`. It normalizes them internally to the new category and tag shape:
+
+- `type: 'user-message'`: Normalizes to `type: 'user'` and `tagName: 'user'`
+- `type: 'system-reminder'`: Normalizes to `type: 'reactive'` and `tagName: 'system-reminder'`
+
+Existing stored signal rows and older clients continue to load through the compatibility layer. New clients call the message routes when the server supports them. React's thread signal path falls back to the legacy `/signals` route when it detects an older server. Visit [Agent signals reference](/reference/agents/agent#thread-signals) for the full message, signal, and subscription types.
+
+### Tag names and XML
+
+Signals have a semantic `type` and an LLM-facing `tagName`. Use `type` to describe the signal category. Use `tagName` to control the XML tag the model sees.
+
+For external events, use `type: 'notification'`. Reactive signals are reserved for processor- or runtime-generated context, such as policy guidance, background task results, and auto-loaded instructions.
+
+Use XML-safe `tagName` and attribute names. They can contain letters, numbers, periods, hyphens, and the underscore character (`_`). They must start with a letter or underscore.
+
+### Contents, attributes, and metadata
+
+:::note[Outline]
+
+Describe `contents`, `attributes`, `metadata`, and `providerOptions`. Include an XML example that shows how attributes reach the model.
+
+:::
+
+### Transient signals
+
+:::note[Outline]
+
+Explain that a transient signal is delivered for the current request only and is not persisted. State that state signals cannot be transient, and that a transient signal combined with the `persist` behavior is discarded.
+
+:::
+
+## Send now or queue
+
+### Messages
+
+Use `sendMessage()` when the user expects the active agent to see the message immediately.
+
+```typescript title="src/mastra/signals.ts"
+agent.sendMessage(
+  {
+    contents: 'Use the latest customer note too.',
+    attributes: { name: 'Jane', sentFrom: 'slack' },
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+  },
+)
+```
+
+The model receives attributed messages as XML-wrapped user input:
+
+```xml
+<user name="Jane" sentFrom="slack">Use the latest customer note too.</user>
+```
+
+Messages without attributes are sent as plain user input.
+
+Use `queueMessage()` when a user sends a follow-up but the active model call should finish first. Mastra waits for the active run to complete, then starts a new run on the same thread.
+
+```typescript title="src/mastra/signals.ts"
+agent.queueMessage('Also check whether the tests need updates.', {
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+```
+
+When the thread is idle, `queueMessage()` starts a run immediately. When the thread is active, it preserves turn order by starting a new run after the active run completes.
+
+### Typed signals
+
+Use `queueSignal()` when system-generated input needs the same turn ordering as `queueMessage()` but should keep its own signal type, tag, and attributes. For example, a skill invocation can render as a `<skill>` element instead of a plain user message:
+
+```typescript title="src/mastra/signals.ts"
+agent.queueSignal(
+  {
+    type: 'reactive',
+    tagName: 'skill',
+    attributes: { name: 'triage' },
+    contents: 'Triage the new issue.',
+  },
+  { resourceId: 'user_123', threadId: 'thread_456' },
+)
+```
+
+The model receives `<skill name="triage">Triage the new issue.</skill>`. Queued signals share the `queueMessage()` queue, so they count toward queue-count events and you can cancel them with `cancelQueuedMessages()`.
+
+### Shared queue and cancellation
+
+Use [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) to remove selected pending input without stopping the active run. Cancellation is scoped to the memory thread, including input submitted by other Agents sharing the same runtime and PubSub instance.
+
+The thread must still have a pending message to cancel. This example assumes a run is active when you queue the message. An idle thread starts the message immediately instead.
+
+```typescript
+const queued = agent.queueMessage('Also check the tests.', thread)
+await queued.accepted
+
+const { cancelledSignalIds } = agent.cancelQueuedMessages({
+  ...thread,
+  signalIds: [queued.signal.id],
+})
+console.log(cancelledSignalIds)
+```
+
+Only IDs removed locally by this call appear in `cancelledSignalIds`. Mastra still publishes every requested ID through PubSub, even when none are pending locally, so other processes subscribed to the thread can cancel their matching pending input. Because that propagation is asynchronous, the result doesn't confirm remote cancellation, and input that has already been handed to execution is out of reach. Cancellation doesn't delete saved messages, notification records, or state updates, and it never revokes an earlier acceptance acknowledgement.
+
+## Delivery behavior
+
+Use `sendSignal()` when you need to send system-generated context instead of user-authored input. For external events, use `type: 'notification'`. By default, Mastra delivers signals to active runs and wakes idle threads. Use `ifActive.behavior` and `ifIdle.behavior` to change that behavior.
+
+```typescript title="src/mastra/signals.ts"
+const result = agent.sendSignal(
+  {
+    type: 'notification',
+    contents: 'GitHub CI failed on PR #123: 3 tests failed.',
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+    ifIdle: {
+      behavior: 'persist',
+    },
+  },
+)
+
+await result.persisted
+```
+
+Pass `ifIdle.streamOptions` when the idle wake-up stream needs options such as model settings, tools, or runtime context. Visit [`Agent.sendSignal()` reference](/reference/agents/agent#sendsignalsignal-options) for `ifActive`, `ifIdle`, branch attributes, and `streamOptions`.
+
+Use `ifActive.attributes` and `ifIdle.attributes` to tag input with context that depends on whether the agent is active or idle at delivery time. Top-level `attributes` always apply, and Mastra merges the selected branch's `attributes` into them when the input is accepted. Visit [`Agent.sendMessage()` reference](/reference/agents/agent#sendmessagemessage-options) and [`Agent.sendSignal()` reference](/reference/agents/agent#sendsignalsignal-options) for branch-specific attributes.
+
+### Active runs
+
+:::note[Outline]
+
+Document the `ifActive.behavior` values and their defaults.
+
+:::
+
+### Idle threads
+
+:::note[Outline]
+
+Document the `ifIdle.behavior` values and their defaults, including wake semantics.
+
+:::
+
+### Read the accepted result
+
+:::note[Outline]
+
+Explain the caller-facing meaning of `accepted`: it resolves at decision time to `wake`, `deliver`, `persist`, `discard`, or `blocked`. `persisted` resolves separately for `persist`. Link to [Signals in the agent loop](/docs/signals/signals-in-the-agent-loop) for wake and deliver mechanics instead of repeating them.
+
+:::
+
+### Persistence and failures
+
+:::note[Outline]
+
+Distinguish routing errors from run failures. Explain the difference between `accepted` and the output of a run that a `wake` started.
+
+:::
+
+## Stop or cancel
+
+By default, aborting a thread preserves its queued input. To clear pending signals before stopping the active run, pass `clearPendingSignals: true`:
+
+```typescript
+subscription.abort({ clearPendingSignals: true })
+```
+
+Without a subscription, use `agent.abortThreadStream({ ...thread, clearPendingSignals: true })`. Existing listeners stay subscribed after cancellation, and later messages can still start a new run.
+
+With a shared PubSub backend, the runtime receives remote signals, cancellation, and abort requests independently of `subscribeToThread()` observers. Clear-on-abort sends the clear flag to a remote active owner through PubSub, but it doesn't clear every process's local queues. Neither operation cancels continuations created by `continueWithMessages()`.
+
+## Agent and AgentController surfaces
+
+If you call Mastra over HTTP directly, use `POST /api/agents/:agentId/send-message` for immediate messages and `POST /api/agents/:agentId/queue-message` for next-turn messages. For subscription-native tool approval, use `POST /api/agents/:agentId/send-tool-approval`. See [Server routes reference](/reference/server/routes#agent-message-routes) for request and response schemas.
+
+`Agent` is the portable Signals API. `Session` is the higher-level AgentController and Mastra Code surface, not the recommended default. The [Agent reference](/reference/agents/agent#thread-signals) is canonical for method signatures.
+
+| Task | `Agent` | AgentController `Session` |
+| - | - | - |
+| Send a user message | `agent.sendMessage()` | `session.sendMessage()` |
+| Queue a user follow-up | `agent.queueMessage()` | `session.queueMessage()` |
+| Queue a typed signal | `agent.queueSignal()` | `session.queueSignal()` |
+| Send a typed signal | `agent.sendSignal()` | `session.sendSignal()` |
+| Send a notification signal | `agent.sendNotificationSignal()` | `session.sendNotificationSignal()` |
+| Write a state signal | `agent.sendStateSignal()` | Not exposed on `Session` |
+| Subscribe to a thread | `agent.subscribeToThread()` | Managed internally by `Session` and AgentController |
+
+## Related
+
+- [`Agent.sendMessage()`](/reference/agents/agent#sendmessagemessage-options)
+- [`Agent.queueMessage()`](/reference/agents/agent#queuemessagemessage-options)
+- [`Agent.queueSignal()`](/reference/agents/agent#queuesignalsignal-options)
+- [`Agent.sendSignal()`](/reference/agents/agent#sendsignalsignal-options)
+- [`Agent.sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options)
+- [`client.getAgent().sendMessage()`](/reference/client-js/agents#sendmessage)
+- [`client.getAgent().queueMessage()`](/reference/client-js/agents#queuemessage)
+- [`client.getAgent().queueSignal()`](/reference/client-js/agents#queuesignal)
+- [`client.getAgent().sendSignal()`](/reference/client-js/agents#sendsignal)
+- [Server agent routes](/reference/server/routes#agent-message-routes)
+- [Mastra signals workshop](https://www.youtube.com/watch?v=KLg6uFKz9aw\&t=3020s)

@@ -1,0 +1,113 @@
+---
+title: 'Running across processes | Signals'
+description: 'Coordinate Mastra agent threads across instances with shared PubSub, thread leases, and remote signal routing.'
+packages:
+  - '@mastra/core'
+  - '@mastra/redis-streams'
+---
+
+# Running across processes
+
+## The failure mode
+
+Signals coordinate runs through a pub/sub backend. When a signal arrives on a backend that implements `LeaseProvider`, Mastra acquires a lease on the target thread so a single process owns the conversation at a time, then either wakes the agent or routes the input into the running loop. Backends without leasing fall back to a no-op that always grants ownership, which is fine in a single process but not across instances.
+
+The default in-memory pub/sub can't cross instance boundaries. On serverless platforms like Vercel, or any multi-instance deployment, a follow-up signal can be routed to a different instance than the one running the agent.
+
+Without a shared pub/sub, that instance can't reach the active run and starts its own, leaving the original run untouched and the thread processed twice.
+
+## Choose a topology
+
+:::note[Outline]
+
+Compare the supported topologies:
+
+- Single process: in-memory PubSub.
+- Multiple processes on one host: `UnixSocketPubSub`.
+- Distributed hosts: Redis or Valkey Streams.
+- Google Cloud Pub/Sub: cross-process delivery without lease guarantees.
+
+Link to the [PubSub guide](/docs/server/pubsub) instead of repeating backend configuration.
+
+:::
+
+## Thread ownership and leases
+
+:::note[Outline]
+
+Cover one owner per thread, the 15-second TTL renewed every 5 seconds, lease loss aborting the run, and fencing generations on durable recovery. Link to the [`LeaseProvider` reference](/reference/pubsub/lease-provider).
+
+:::
+
+## Route signals to another process
+
+:::note[Outline]
+
+Explain remote owner routing and `requireClaimedOwner` for idle wakes.
+
+:::
+
+## Delivery guarantees and duplicates
+
+:::note[Outline]
+
+PubSub can redeliver. Stream parts carry run, stream, and source identity, so consumers must tolerate duplicates.
+
+:::
+
+## Signals and process crashes
+
+:::note[Outline]
+
+Runtime queues are in-process. Explicitly persisted signals, state signals, and notifications survive with shared storage. Shared PubSub is not a durable input queue. Durable-agent run recovery restores the run, not the in-memory signal queue.
+
+:::
+
+## Serverless
+
+:::note[Outline]
+
+Await `accepted`; pass `wake.output` to `waitUntil`; do not fire-and-forget.
+
+:::
+
+## Graceful shutdown
+
+:::note[Outline]
+
+Drain or stop polling and webhook handling, and stop dispatcher work cleanly.
+
+:::
+
+## Configuration
+
+Configure a shared pub/sub backed by Redis Streams on the `Mastra` instance so leases and signals coordinate across instances:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+
+export const mastra = new Mastra({
+  agents: { agent },
+  pubsub: new RedisStreamsPubSub({
+    url: process.env.REDIS_URL,
+    keyPrefix: 'mastra:my-app',
+  }),
+})
+```
+
+`RedisStreamsPubSub` implements both the event delivery contract and distributed leasing. A single backend handles cross-instance signal delivery and lease ownership. Vercel's managed Redis integration and Upstash Redis both work well. For more on when a distributed pub/sub is needed, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).
+
+:::note[Outline]
+
+Document `MASTRA_AGENT_THREAD_LEASE_TTL_MS` and `MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS`. Link to the PubSub guide and `LeaseProvider` reference instead of repeating backend tables.
+
+:::
+
+## Related
+
+- [PubSub guide](/docs/server/pubsub)
+- [`RedisStreamsPubSub`](/reference/pubsub/redis-streams)
+- [`LeaseProvider`](/reference/pubsub/lease-provider)
+- [Sending signals](/docs/signals/sending-signals)
+- [Signals in the agent loop](/docs/signals/signals-in-the-agent-loop)

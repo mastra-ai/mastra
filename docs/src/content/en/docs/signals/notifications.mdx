@@ -1,0 +1,151 @@
+---
+title: 'Notifications | Signals'
+description: 'Create durable Mastra notification records, resolve delivery policy, and deliver notifications or summaries to an agent thread.'
+packages:
+  - '@mastra/core'
+  - '@mastra/client-js'
+---
+
+# Notifications
+
+## Two kinds of notification input
+
+Notification signals represent external events such as GitHub activity, email, Slack mentions, CI status, incidents, recordings, or direct messages. Use `agent.sendNotificationSignal()` when the event should create a durable inbox record.
+
+`sendNotificationSignal()` requires a storage domain with `notifications` support. Use `sendSignal({ type: 'notification' })` only for lower-level notification-shaped context that should bypass inbox storage.
+
+## Notification records
+
+Notification delivery has two phases. During ingress, `agent.sendNotificationSignal()` stores a notification record and resolves the agent's delivery policy. During dispatch, Mastra consumes due records and emits full notification or summary signals.
+
+```typescript title="src/mastra/notifications.ts"
+await agent.sendNotificationSignal(
+  {
+    source: 'github',
+    kind: 'ci-status',
+    priority: 'high',
+    summary: 'CI failed on main: 3 tests failed.',
+    payload: {
+      repository: 'acme/app',
+      branch: 'main',
+    },
+    dedupeKey: 'github:acme/app:main:ci',
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+  },
+)
+```
+
+:::note[Outline]
+
+Explain the difference between a durable inbox record and a notification-shaped signal. List the statuses `pending`, `delivered`, `seen`, `dismissed`, `archived`, `discarded`, and `failed`. Link to the Notifications reference for the full record fields instead of listing every field here.
+
+:::
+
+## Ingress
+
+### Create and coalesce records
+
+:::note[Outline]
+
+Cover record creation and the difference between `dedupeKey` and `coalesceKey`, including multiple signals and batches.
+
+:::
+
+### Delivery policy
+
+The default delivery policy is priority-aware. Urgent notifications deliver immediately, while lower-priority notifications may be batched into summaries or wait until the thread is idle.
+
+Configure a delivery policy on the agent when some notifications should wait for a different dispatch window or summary rollup. Enable scheduled dispatch at the Mastra level when deferred notifications and summary rollups should be delivered automatically. Visit [`Agent` constructor reference](/reference/agents/agent#constructor-parameters) for `notifications.deliveryPolicy` and [`Mastra` class reference](/reference/core/mastra-class#constructor-parameters) for runtime notification dispatch configuration.
+
+## Dispatch
+
+### Priority and default delivery
+
+Visit [`Agent.sendNotificationSignal()` reference](/reference/agents/agent#sendnotificationsignalnotification-options) for notification fields, [`Agent` constructor reference](/reference/agents/agent#constructor-parameters) for `notifications.deliveryPolicy` configuration, and [`createNotificationInboxTool()` reference](/reference/signals/create-notification-inbox-tool) for inbox tool actions.
+
+:::note[Outline]
+
+Document the `urgent`, `high`, `medium`, and `low` priorities and their behavior on active versus idle threads.
+
+:::
+
+### Summaries
+
+The model receives full notifications as context:
+
+```xml
+<notification source="github" type="ci-status" priority="high" status="delivered">CI failed on main: 3 tests failed.</notification>
+```
+
+Notification summaries tell the model that inbox records are waiting:
+
+```xml
+<notification-summary pending="10">github: 3, email: 5, slack: 2</notification-summary>
+```
+
+When Mastra emits a summary, it clears `summaryAt` and sets `summarySignalId` on each summarized record. The records stay pending and readable. When Mastra emits a full notification, it sets `deliveredSignalId` and marks the record `delivered`. If the inbox tool reads a notification first, it can inject the full notification signal and mark the record `seen`, which prevents duplicate full delivery.
+
+### Retries and failures
+
+:::note[Outline]
+
+Cover delivery attempts, error tracking, the `failed` status, and how the dispatcher retries.
+
+:::
+
+## Work with the inbox
+
+Use `createNotificationInboxTool()` to give agents one tool for inbox actions instead of many CRUD tools. Use `read` after a `<notification-summary>` signal when the agent needs the full records behind the summary. The notification contents are delivered as signals, not as normal tool output. Visit [`createNotificationInboxTool()` reference](/reference/signals/create-notification-inbox-tool) for the setup example, input schema, and action behavior.
+
+## Storage and dispatcher setup
+
+Notification inbox storage is available in the storage adapters that support richer memory and signal workflows: [libSQL](/integrations/databases/libsql), [PostgreSQL](/integrations/databases/postgresql), and [MongoDB](/integrations/databases/mongodb). These adapters expose notification records through `getStore('notifications')`.
+
+:::note[Outline]
+
+Cover the notifications storage domain, the lazy schedule, the workflow interval, the default batch size of 100, and the disable switch.
+
+:::
+
+## Agent and client surfaces
+
+Use `sendSignal({ type: 'notification' })` for notification-shaped context that bypasses inbox storage.
+
+```typescript title="src/mastra/signals.ts"
+agent.sendSignal(
+  {
+    type: 'notification',
+    contents: 'PR #123 has a new review comment from User X about the API surface.',
+    attributes: {
+      source: 'github',
+      pr: '123',
+    },
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+  },
+)
+```
+
+The model receives the signal as context like this:
+
+```xml
+<notification source="github" pr="123">PR #123 has a new review comment from User X about the API surface.</notification>
+```
+
+:::note[Outline]
+
+Cover the Agent notification methods and the client SDK surface. Leave AgentController and `Session` composition to the Agent Controller docs.
+
+:::
+
+## Related
+
+- [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options)
+- [`createNotificationInboxTool()`](/reference/signals/create-notification-inbox-tool)
+- [Sending signals](/docs/signals/sending-signals)
+- [Running across processes](/docs/signals/running-across-processes)

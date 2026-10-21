@@ -1,0 +1,177 @@
+---
+title: 'Signals'
+description: 'Send real-time messages or contextual data into a Mastra agent thread immediately or queue them for the next turn with configurable signal behavior.'
+packages:
+  - '@mastra/core'
+  - '@mastra/client-js'
+  - '@mastra/code-sdk'
+---
+
+# Signals
+
+**Added in:** `@mastra/core@1.39.0`
+
+Signals let you interact with an agent through a thread. Instead of starting every interaction with `agent.stream()`, subscribe to a thread and send messages or signals. Mastra wakes an idle agent or delivers input to its running loop; alternatively, it queues the input for the next turn.
+
+Use message APIs for user-authored input. Use `sendSignal()` for lower-level system context, such as background task notifications, policy reminders, or processor-generated context.
+
+:::tip[📹 Watch]
+
+Watch [Mastra signals overview](https://www.youtube.com/watch?v=7It2y89TVP4) to see how signals wake and steer long-running agents.
+
+:::
+
+## What signals and thread streams are
+
+### Threads, runs, signals, and streams
+
+:::note[Outline]
+
+- **Durable thread:** the stored conversation that outlives a single request.
+- **Run:** one execution of the agent loop. One run owns a thread at a time.
+- **Signal:** typed input attached to a thread.
+- **Thread stream:** the ordered output and lifecycle events for a thread.
+
+State the spine: signals are input; thread streams are output.
+
+:::
+
+### How input joins a thread
+
+:::note[Outline]
+
+Add a timeline diagram with three cases:
+
+- An idle thread receives a signal and wakes a new run.
+- An active run receives a signal that joins the run.
+- An active run receives a follow-up that waits for the next run.
+
+:::
+
+## When to use signals
+
+Use signals when an agent thread needs new input or context outside the original `stream()` call. Signals are useful when users send follow-up messages while a run is active, when background systems need to add context to a thread, or when external events should wake, update, or notify the agent.
+
+Use `sendMessage()` and `queueMessage()` for user-authored input. Use `sendSignal()` for lower-level system context. Use `sendStateSignal()` for durable state lanes, and use `sendNotificationSignal()` when an external event should create a durable notification inbox record.
+
+For help picking between these methods, see [Choose a method](/docs/signals/sending-signals#choose-a-method).
+
+## Quickstart
+
+Create an agent, subscribe to a thread, then send a message to that thread. The subscription receives the active stream when the message wakes the agent or enters a running loop.
+
+### Use an Agent
+
+```typescript title="src/mastra/signals.ts"
+import { Agent } from '@mastra/core/agent'
+
+const agent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Help the user compare options.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+
+const thread = {
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+}
+
+const subscription = await agent.subscribeToThread(thread)
+
+await agent.sendMessage('Compare that with the previous option.', thread)
+
+for await (const chunk of subscription.stream) {
+  console.log(chunk)
+}
+```
+
+When the thread has a running agent stream, `sendMessage()` becomes new input inside that agent loop. When the thread is idle, Mastra starts a stream with the message as the first input.
+
+### Use the client SDK
+
+:::note[Outline]
+
+Show the same subscribe-first flow through `client.getAgent()`. Keep this short and link to [Thread streams](/docs/signals/thread-streams) for the full client example.
+
+:::
+
+## Choose an API surface
+
+| Surface | Use it for | Canonical reference |
+| - | - | - |
+| Direct `Agent` methods | Server-side code that owns the agent instance | [Agent reference](/reference/agents/agent#thread-signals) |
+| HTTP or the JavaScript client SDK | Applications that call a running Mastra server | [Server agent routes](/reference/server/routes#agent-message-routes), [`client.getAgent()`](/reference/client-js/agents) |
+| AgentController `Session` | Mastra Code and other AgentController surfaces | [Agent Controller](/docs/harness/agent-controller) |
+
+The `Agent` methods are the canonical Signals API. `Session` is a higher-level convenience surface that manages a thread and subscription for you. See [Agent and AgentController surfaces](/docs/signals/sending-signals#agent-and-agentcontroller-surfaces) for the method mapping.
+
+## How signals relate to other features
+
+- [Memory](/docs/memory/overview): signals are stored as messages on a memory-backed thread.
+- [Processors](/docs/agents/processors): processors can send signals and compute state during a run.
+- [Workflows](/docs/workflows/overview): workflows can send signals into a thread as part of a larger process.
+- [PubSub](/docs/server/pubsub): a shared PubSub backend coordinates signals across processes.
+- [Harness](/docs/harness/overview): harness features such as goals and schedules deliver input through signals.
+- [Agent Controller](/docs/harness/agent-controller): `Session` wraps thread signals for Mastra Code.
+
+## Next steps
+
+- [Thread streams](/docs/signals/thread-streams)
+- [Sending signals](/docs/signals/sending-signals)
+- [Notifications](/docs/signals/notifications)
+
+## Cross-agent connections in Mastra Code
+
+Cross-agent communication is experimental and off by default. Enable it in Mastra Code with the `/settings` toggle "Experimental cross-agent communication" and restart. Embedded clients can set `crossAgentSignals: true` when calling `createMastraCode()`. The setting enables thread ownership advertisements and peer discovery. It also makes the agent connection tools available, and lets peer discovery reach instances in other projects on the same machine (see [Discover agents in other projects](#discover-agents-in-other-projects)).
+
+```typescript
+import { createMastraCode } from 'mastracode'
+
+const mastraCode = await createMastraCode({
+  crossAgentSignals: true,
+})
+```
+
+Mastra Code can use notification signals to communicate between agent threads. A peer is an exact `{ agentId, resourceId, threadId }` endpoint. Discovery is a point-in-time advertisement that the exact endpoint is available now. It isn't a durable connection or a guarantee that delivery will succeed.
+
+`agent_connections_list` returns one `peers` collection. Each peer includes:
+
+- `relationship`: `none` or `saved`. This is the authoritative durable state for the current sender thread.
+- `presence`: `advertised` or `absent`. This reflects the current discovery pass.
+- `displayStatus`: A derived, presentational value: `discovered`, `connected`, or `saved`.
+- `canAttemptSend`: `true` only when the peer is both saved and currently advertised.
+
+The displayed statuses mean:
+
+| Status | Meaning | Can attempt a send? |
+| - | - | - |
+| `[discovered]` | Advertised now, but not saved by the current sender thread. | No |
+| `[connected]` | Saved by the current sender thread and advertised now. | Yes |
+| `[saved]` | Saved by the current sender thread, but not advertised now. | No |
+
+Use the connection tools for distinct operations:
+
+- `agent_connect` saves a freshly discovered exact peer in the current sender thread.
+- `agent_disconnect` removes a saved peer from the current sender thread. The peer doesn't need to be currently advertised, and repeated disconnects are safe.
+- `agent_signal_send` requires the exact peer to remain saved and freshly advertised at send time. A previously discovered or recently seen peer that's absent from the current discovery pass isn't sendable.
+
+Saved connections remain in the sender thread until explicitly disconnected. Every send independently refreshes discovery and verifies the exact endpoint before routing begins. A saved connection therefore records collaboration intent. It doesn't indicate current presence.
+
+After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy. A send that fails a direct delivery because no thread owner acknowledged it isn't lost: the signal stays pending in the target's notification inbox and the send reports `persist` instead of claiming delivery. The notification dispatcher retries that delivery on its own, so the sender doesn't need to resend it. The `messageId` isn't recorded in sent history and isn't rejected as a duplicate, although the pending notification still matches on it. A resend with the same `messageId` merges into that notification while it's pending, and delivers a second copy once the retry has succeeded. A send made with `expectsReply: true` returns an error there, because the reply obligation isn't established until the signal is delivered.
+
+When the delivery policy routes a signal to a notification summary rather than delivering it directly, the send records the `messageId`, so retrying with the same id reports a duplicate instead of routing again. A low-priority send always takes this route and reports `persist`. A high- or medium-priority send to an active thread takes it too, but there the summary signal is emitted immediately, so the send reports that signal's routing result (`wake`, `deliver`, or `persist`) and records the `messageId` the same way, including when `expectsReply: true`. Only when the policy schedules a summary without emitting a signal at send time does an `expectsReply: true` send fail to establish its reply obligation: it returns an error and doesn't record the send in sent history, so establishing the reply obligation takes a new signal at a priority that routes directly.
+
+### Discover agents in other projects
+
+With cross-agent communication on, `agent_connections_list` lists Mastra Code instances in every project on the same machine, including the current one. An instance can connect to and message an instance in another project, and receive its replies. This needs Unix socket pub/sub. The Mastra Code CLI turns it on by default. Embedded clients pass `unixSocketPubSub: true` alongside `crossAgentSignals: true` to `createMastraCode()`. It doesn't apply in these cases:
+
+- On Windows.
+- When you pass your own `pubsub`.
+- When the resource ID, set through `MASTRA_RESOURCE_ID` or `resourceId` in `.mastracode/database.json`, can't be used as a directory name. That covers IDs that are empty, are longer than 128 characters, contain `/`, `\` or control characters, or equal `.`, `..` or `_shared`. Mastra Code logs one warning at startup, and the instance only lists instances that share its resource ID.
+
+Mastra Code routes a thread's messages and run leases to the socket directory of the thread's project. Thread-owner lookup and peer discovery, which lists the threads you can connect to, both run in a shared `/tmp/mc/_shared` directory. Instances running versions before this change can't see or be seen by updated instances, so restart every instance after updating.
+
+Any local process running as your user can list the threads your instances advertise and message them, so only turn on cross-agent communication on machines and accounts you trust.
+
+To isolate an instance or a test from the shared `/tmp/mc` directory, set `MASTRACODE_SIGNALS_SOCKET_ROOT` to another absolute path. Relative paths are ignored. Keep the path short, because macOS limits Unix socket paths to 104 bytes. The root also holds every thread's run and ownership leases. An instance with a different root doesn't coordinate threads with instances that use the default root.

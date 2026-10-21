@@ -1,0 +1,130 @@
+---
+title: 'Thread streams | Signals'
+description: 'Subscribe to a Mastra agent thread to read stored history, live output, and lifecycle events as a single ordered stream.'
+packages:
+  - '@mastra/core'
+  - '@mastra/client-js'
+  - '@mastra/code-sdk'
+---
+
+# Thread streams
+
+## Subscribe before you send
+
+:::note[Outline]
+
+Explain why a subscription must exist before a signal wakes the agent: the run starts in response to the input, so a subscription created afterward misses the beginning of the stream.
+
+Add an `Agent` example that subscribes first, then sends a message. The client SDK example below shows the same order.
+
+:::
+
+The JavaScript client exposes thread signal APIs.
+
+Use `subscribeToThread()` before sending thread input so the client can render the stream that receives the input or wakes in response to it.
+
+```typescript title="src/app/chat.ts"
+const agent = client.getAgent('supportAgent')
+
+const subscription = await agent.subscribeToThread({
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+
+await agent.sendMessage({
+  message: 'Show the shorter version.',
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+})
+
+await subscription.processDataStream({
+  onChunk: chunk => {
+    console.log(chunk)
+  },
+  reconnect: true,
+})
+```
+
+## Read the stream
+
+### Stored history and live parts
+
+:::note[Outline]
+
+Cover `withInitialHistory` and `perPage` (default 40). Describe the order subscribers receive data in: `thread-history`, retained newer parts, then live parts.
+
+:::
+
+### Chunks and runs
+
+:::note[Outline]
+
+Describe the chunk families a subscriber sees: model output, tool calls and results, approvals, aborts, errors, and `thread-history`. Explain how to group chunks by `runId` and read the active run with `activeRunId()`.
+
+:::
+
+### Approve tool calls
+
+When a subscribed run pauses for tool approval, approve or decline the tool call with the subscription-native methods. The resumed chunks arrive through the existing thread subscription. Visit [`client.getAgent().sendToolApproval()` reference](/reference/client-js/agents#sendtoolapproval) and [server agent routes](/reference/server/routes#subscription-tool-approval-routes) for request and response shapes.
+
+### Filter signals in a subscription
+
+:::note[Outline]
+
+Explain `hideSignals`: it filters signals for one subscriber only, does not change stored messages, and does not affect other subscribers. Note that the option is supported by the in-process core API, not by HTTP or `client-js` subscription requests.
+
+:::
+
+## Stop a run or close a subscription
+
+:::note[Outline]
+
+Compare `abort()` with `unsubscribe()`. Explain that pending signals survive an abort unless `clearPendingSignals` is true.
+
+:::
+
+## Reconnect
+
+Use `reconnect: true` for long-lived subscriptions. Visit [`client.getAgent().subscribeToThread()` reference](/reference/client-js/agents#subscribetothread) for reconnect options.
+
+If you expose your own Server-Sent Events (SSE) endpoint for thread subscriptions, send periodic heartbeat frames while the stream is idle. This keeps browsers, proxies, and load balancers from closing the connection before the next signal or model chunk arrives.
+
+The following example sends an SSE comment every 25 seconds:
+
+```typescript title="src/api/subscribe.ts"
+const heartbeat = setInterval(() => {
+  controller.enqueue(encoder.encode(': keep-alive\n\n'))
+}, 25_000)
+
+request.signal.addEventListener('abort', () => {
+  clearInterval(heartbeat)
+})
+```
+
+Use heartbeats together with client-side reconnect logic. Heartbeats reduce idle disconnects, while reconnects recover when the network or runtime still closes the stream.
+
+## What is replayed and what is not
+
+:::note[Outline]
+
+State that completed stored runs are not replayed, while pending approvals and suspensions are. Explain that history is stored messages, not model deltas.
+
+:::
+
+## Public chunks and internal events
+
+:::note[Outline]
+
+List the public surfaces: `AgentChunkType` plus `ThreadHistoryChunk`. Link to the [ChunkType reference](/reference/streaming/ChunkType) for chunk shapes.
+
+State that the internal runtime event union is not public and is not documented.
+
+:::
+
+## Related
+
+- [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions)
+- [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread)
+- [`client.getAgent().sendToolApproval()`](/reference/client-js/agents#sendtoolapproval)
+- [ChunkType reference](/reference/streaming/ChunkType)
+- [Sending signals](/docs/signals/sending-signals)

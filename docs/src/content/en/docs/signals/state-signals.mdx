@@ -1,0 +1,120 @@
+---
+title: 'State signals | Signals'
+description: 'Keep durable, named state lanes on a Mastra thread and emit snapshots or deltas that the model sees as context.'
+packages:
+  - '@mastra/core'
+---
+
+# State signals
+
+## What a state signal is
+
+State signals expose named, thread-scoped context lanes. Use them for durable context that changes over time, such as browser state, editor state, or a background watcher result.
+
+## Snapshots and deltas
+
+:::note[Outline]
+
+Explain that the producer owns merge and diff logic, and when to send a snapshot versus a delta.
+
+:::
+
+## Send a state signal
+
+Use `sendStateSignal()` when an external producer detects a state change. Each state signal identifies a state lane, a producer-owned cache key, and whether the update is a snapshot or delta.
+
+```typescript title="src/mastra/browser-watcher.ts"
+await agent.sendStateSignal(
+  {
+    id: 'browser',
+    mode: 'snapshot',
+    cacheKey: 'browser:https://example.com:3-tabs',
+    contents: 'Browser is open. Active tab URL: https://example.com. 3 open tabs.',
+    value: {
+      activeUrl: 'https://example.com',
+      tabCount: 3,
+      open: true,
+    },
+  },
+  {
+    resourceId: 'user_123',
+    threadId: 'thread_456',
+  },
+)
+```
+
+## Compute state in a processor
+
+Use `computeStateSignal()` when a processor owns a state lane. Mastra calls it once per model input step after `processInputStep()`. Visit [`Agent.sendStateSignal()` reference](/reference/agents/agent#sendstatesignalstate-options) for state signal fields and return values.
+
+```typescript title="src/mastra/processors/browser-state.ts"
+import type { ComputeStateSignalArgs, Processor } from '@mastra/core/processors'
+
+export const browserStateProcessor: Processor = {
+  id: 'browser-state',
+  stateId: 'browser',
+  computeStateSignal(args: ComputeStateSignalArgs) {
+    const browser = readCurrentBrowserState()
+    const previous = readMostRecentBrowserState(args.activeStateSignals)
+    const changed = previous ? diffBrowserState(previous, browser) : browser
+    const shouldRefreshSnapshot = Boolean(args.lastSnapshot && !args.contextWindow.hasSnapshot)
+
+    if (previous && Object.keys(changed).length === 0 && !shouldRefreshSnapshot) {
+      return
+    }
+
+    const isDelta = Boolean(previous && !shouldRefreshSnapshot)
+
+    return {
+      mode: isDelta ? 'delta' : 'snapshot',
+      cacheKey: stableBrowserStateCacheKey(browser),
+      contents: isDelta ? describeBrowserDelta(changed) : describeBrowserSnapshot(browser),
+      value: browser,
+      ...(isDelta ? { delta: changed } : {}),
+    }
+  },
+}
+```
+
+Mastra passes `lastSnapshot` and `deltasSinceSnapshot` into `computeStateSignal()`. It resolves them from message history when the current message list doesn't contain the latest snapshot. The processor still owns merge and diff logic.
+
+## Deduplication and tracking
+
+When Mastra accepts a state signal, it stores compact tracking metadata on the thread. If a producer sends the same `cacheKey` and mode again while that state is still current, Mastra skips the duplicate.
+
+## State after context truncation
+
+`contextWindow.hasSnapshot` tells the processor whether the active message window already contains a snapshot for this state lane. If it's `false`, return a fresh `snapshot` so the model sees the current state even after older state messages are trimmed from the context window.
+
+## Persistence rules
+
+:::note[Outline]
+
+State signals cannot be transient. Explain that tracking is rebuilt from persisted history, and that state survives a restart when storage is shared.
+
+:::
+
+## Built-in uses
+
+The built-in browser context processor emits state under the `browser` id with snapshot and delta modes.
+
+:::note[Outline]
+
+Link to the owning guides for browser state, working memory, and task state.
+
+:::
+
+## When not to use state signals
+
+:::note[Outline]
+
+State signals are not user messages, not prompt-only ephemeral context (use a transient reactive signal), and not an inbox.
+
+:::
+
+## Related
+
+- [`Agent.sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options)
+- [Sending signals](/docs/signals/sending-signals)
+- [Signals in the agent loop](/docs/signals/signals-in-the-agent-loop)
+- [Processors](/docs/agents/processors)
