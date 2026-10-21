@@ -299,7 +299,10 @@ export async function* runAgent(options: RunAgentOptions): AsyncGenerator<Mastra
       }
       if (action.type === 'run-end') ended = true;
       // Yield in id order: a tool-started minted before this action goes first. Live readers (useChat,
-      // Studio) then see what a reload of the log shows.
+      // Studio) then see what a reload of the log shows. A queued tool-started may still be saving (the SDK
+      // can start one call's tool before the next call streams), so let it settle first: a failed save takes
+      // it back out of `extra`, and the stream never shows a row the log doesn't hold.
+      if (extra.length) await writes;
       yield* takeExtra(isPersistable(action) ? action.id : undefined);
       yield action;
       if (action.type === 'turn-end') await flush();
