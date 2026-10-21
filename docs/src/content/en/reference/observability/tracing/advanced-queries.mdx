@@ -1,6 +1,6 @@
 ---
 title: 'Reference: Advanced trace queries | Observability'
-description: 'Find, count, and measure completed traces with structured predicates. List matching traces, aggregate them into grouped measures, paginate, poll, and discover query fields.'
+description: 'Find, count, and measure completed traces and spans with structured predicates. List matching traces, aggregate traces or spans into grouped measures, paginate, poll, and discover query fields.'
 packages:
   - '@mastra/client-js'
   - '@mastra/server'
@@ -14,8 +14,9 @@ Advanced trace queries select completed traces with a structured time range and 
 | - | - | - | - |
 | Query traces | List matching traces, paginate through them, and poll for new ones. | `queryTraces()` | `POST /api/observability/traces/query` |
 | Aggregate traces | Count matching traces and compute measures, such as error rate, latency percentiles, tokens, and cost, optionally grouped by dimensions and time buckets. | `aggregateTraces()` | `POST /api/observability/traces/aggregate` |
+| Aggregate spans | Compute the same measures over individual spans, such as every agent run including nested ones, grouped by span dimensions. | `aggregateSpans()` | `POST /api/observability/spans/aggregate` |
 
-Both APIs accept the same [trace selection](#select-traces). The filters, operators, and limits on this page apply to each. Use the aggregate API to find the group that needs attention, such as an agent with a high error rate, then send the same predicate plus the group's dimensions to the query API to list the traces behind it. Each query result represents a trace. Use its `traceId` to [retrieve the full trace](/reference/client-js/observability#getting-a-specific-trace).
+The trace APIs accept the same [trace selection](#select-traces). The filters, operators, and limits on this page apply to each. Use the aggregate API to find the group that needs attention, such as an agent with a high error rate, then send the same predicate plus the group's dimensions to the query API to list the traces behind it. Each query result represents a trace. Use its `traceId` to [retrieve the full trace](/reference/client-js/observability#getting-a-specific-trace).
 
 The endpoints use the same authentication as other observability routes and require the `observability:read` permission. Every request requires a time range.
 
@@ -29,6 +30,7 @@ The configured observability store must support each API. Call `getObservability
 | - | - | - |
 | `traceQuery` | `trace-query` | `queryTraces()` |
 | `traceAggregate` | `trace-aggregate` | `aggregateTraces()` |
+| `spanAggregate` | `span-aggregate` | `aggregateSpans()` |
 | `traceQueryRootDuration` | `trace-query-root-duration` | Trace-scope `durationMs` predicates |
 | `traceQueryTimeToFirstChunk` | `trace-query-time-to-first-chunk` | `timeToFirstChunkMs` predicates and results |
 | `traceQueryTimeToFirstChunkSort` | `trace-query-time-to-first-chunk-sort` | `orderBy` on `timeToFirstChunkMs` |
@@ -38,7 +40,7 @@ The configured observability store must support each API. Call `getObservability
 | `traceQueryDiscovery` | `trace-query-discovery` | [Field and value discovery](#discover-fields-and-values) |
 | `traceQueryTenantScope` | `trace-query-tenant-scope` | [Trusted tenant scope](#trusted-tenant-scope) |
 
-A missing `traceAggregate` value means the server doesn't support aggregation. Servers without the aggregate route return `404`, and stores without the feature return `501 TRACE_AGGREGATE_UNSUPPORTED`. Against a store without a sub-feature, a request that uses a gated field returns `501` before storage runs. Root span `name`, `spanType`, and `entityId` are the exception and return `422` with a `field_not_allowed` issue.
+A missing `traceAggregate` value means the server doesn't support aggregation. Servers without the aggregate route return `404`, and stores without the feature return `501 TRACE_AGGREGATE_UNSUPPORTED`. A missing `spanAggregate` value means the same for span aggregation, and stores without the feature return `501 SPAN_AGGREGATE_UNSUPPORTED`. Against a store without a sub-feature, a request that uses a gated field returns `501` before storage runs. Root span `name`, `spanType`, and `entityId` are the exception and return `422` with a `field_not_allowed` issue.
 
 ## Select traces
 
@@ -704,13 +706,13 @@ Token and cost measures read the model usage metrics recorded for each trace, so
 
 A trace that recorded at least one usage metric is usage-bearing. `tokens.<kind>.sum` adds the tokens of a group's usage-bearing traces, and `tokens.<kind>.avg` divides that sum by the number of usage-bearing traces, not by `count`. Both are `null` when the group has no usage-bearing traces.
 
-Cost comes from estimated cost recorded on total input and total output token metrics. `cost.sum` adds the cost of traces with at least one priced metric, and `cost.avg` divides by the number of those traces. A metric whose pricing failed, including a partial cost, isn't priced.
+Cost comes from estimated cost recorded on total input and total output token metrics. `cost.sum` adds the cost of traces with at least one priced metric, and `cost.avg` divides by the number of those traces. A partly priced call, where Mastra could price some token types but not others, adds the cost of the priced token types. A metric with any other pricing failure adds no cost.
 
 When you request any `cost.*` measure, every row also includes a `cost` object:
 
 | Field | Description |
 | - | - |
-| `coverage` | Fraction of usage-bearing traces whose usage was fully priced, from 0 to 1. `null` when the group has no usage-bearing traces. |
+| `coverage` | Fraction of usage-bearing traces whose usage was fully priced, from 0 to 1. A trace with a partly priced call isn't fully priced, so it lowers coverage even though its known cost is in `cost.sum`. `null` when the group has no usage-bearing traces. |
 | `unit` | Cost unit of the priced metrics, such as `USD`. `'mixed'` when they use more than one unit, and `null` when none are priced. |
 
 `cost.sum` and `cost.avg` are `null` when the group has no priced traces or `unit` is `'mixed'`. A coverage below 1 means the cost understates the group's spend. The `cost` object isn't a measure, so `having` and `orderBy` can't reference it.
@@ -807,11 +809,90 @@ PostgreSQL and ClickHouse stop aggregations after the same `traceQueryTimeoutMs`
 | `501` | The installed Core or configured observability store doesn't support aggregation or a requested field. Returns `TRACE_AGGREGATE_UNSUPPORTED`. |
 | `504` | A PostgreSQL or ClickHouse aggregation exceeded its execution timeout. Returns `TRACE_QUERY_EXECUTION_TIMEOUT` without partial results. |
 
+## Aggregate spans
+
+Use `aggregateSpans()` or `POST /api/observability/spans/aggregate` to compute measures over individual spans instead of traces. Trace aggregation only sees each trace's root span, so an agent run nested inside a workflow isn't counted. Span aggregation counts every span that matches, at any depth.
+
+The request has the same shape as [`aggregateTraces()`](#aggregate-request-fields), with the same measures, `having`, `orderBy`, `interval`, limits, and errors. The differences are in which records are selected and which dimensions are available.
+
+### Aggregate spans with the client SDK
+
+This request counts agent runs by status per day, including nested runs:
+
+```typescript
+const { capabilities } = await mastraClient.getObservabilityCapabilities()
+
+if (capabilities.spanAggregate) {
+  const { rows } = await mastraClient.aggregateSpans({
+    timeRange: {
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-08T00:00:00.000Z',
+    },
+    where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
+    groupBy: ['status'],
+    interval: '1d',
+    measures: ['count', 'duration.p95'],
+  })
+}
+```
+
+Send the same body to `POST /api/observability/spans/aggregate` to use HTTP directly.
+
+### Span selection
+
+Aggregation selects the spans that [`querySpans()`](/reference/client-js/observability#querying-spans) would return for the same `timeRange` and `where`:
+
+- `timeRange` bounds each span's `startedAt`, and can span up to 365 days.
+- `where` accepts the `querySpans()` fields and operators, such as `spanType`, `name`, `status`, `durationMs`, entity and parent/root entity fields, and context identifiers.
+- Only completed spans count. When a span was exported more than once, only its latest copy counts.
+
+`count` equals the number of spans `querySpans()` pages through for the same request. Buckets use each span's `startedAt`. `duration.*` measures read the span's own duration, and `errorCount` and `errorRate` read whether the span itself recorded an error.
+
+On ClickHouse, a request whose `where` limits `spanType` to agent, workflow, processor, or scorer runs, RAG ingestion, or tool calls reads the smaller branch table instead of every span. That path can differ from `querySpans()`:
+
+- Spans written before an upgrade from `@mastra/clickhouse` 1.4, 1.5, or 1.6 aren't in the branch table, so older windows can count fewer spans.
+- After ClickHouse merges the copies of a span exported more than once, the branch table keeps the copy written last, not the one that ended last. Counts don't change, but the `status` and duration of a retried span can.
+
+### Span dimensions
+
+| Dimension | Notes |
+| - | - |
+| `name`, `spanType`, `status` | The span's own name, type, and status. `status` is `error` when the span recorded an error and `success` otherwise. |
+| `entityType`, `entityId`, `entityName` | The entity that produced the span. |
+| `parentEntityType`, `parentEntityName`, `rootEntityType`, `rootEntityName` | The calling entity and the trace's root entity, such as the agent that made a model call. |
+| `environment`, `serviceName`, `executionSource` | Deployment attributes recorded on the span. |
+| `threadId`, `resourceId`, `userId`, `sessionId`, `organizationId`, `experimentId` | Context identifiers recorded on the span. |
+
+`countDistinct.<field>` accepts these dimensions and `traceId`, so `countDistinct.traceId` counts the traces the selected spans belong to. Span aggregation can't group by `metadata.<key>`, identity fields such as `traceId`, `spanId`, or `runId`, or by model and provider.
+
+### Span tokens and cost
+
+Token and cost measures use the usage metrics recorded by each span, matched by `traceId` and `spanId`. The [trace token rules](#token-and-cost-measures) apply per span: metrics from `timeRange.from` on count, retried exports count once, and averages divide by usage-bearing spans.
+
+Usage isn't added up to parent spans. Model calls record usage on `model_generation` spans, so an `agent_run` span has no tokens of its own unless a model call under it wasn't exported. When a `model_generation` span isn't exported, its usage is recorded on the nearest exported ancestor instead. For token totals per agent, select `model_generation` spans and group by the calling agent:
+
+```typescript
+const tokensByAgent = await mastraClient.aggregateSpans({
+  timeRange: {
+    from: '2026-08-01T00:00:00.000Z',
+    to: '2026-08-08T00:00:00.000Z',
+  },
+  where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+  groupBy: ['parentEntityName'],
+  measures: ['tokens.total.sum', 'cost.sum'],
+  orderBy: { field: 'cost.sum', direction: 'desc' },
+})
+```
+
+### List the spans behind a group
+
+Aggregation never returns span records. To inspect a group, send the same `timeRange` and `where` to `querySpans()`, and add the group's dimension values as `eq` conditions. For example, add `{ op: 'eq', left: { path: 'status' }, right: { literal: 'error' } }` to list the failed agent runs from the first example.
+
 ## Trusted tenant scope
 
-Hosts that serve more than one tenant supply a trusted scope outside the query document. The server reads the reserved `organizationId` request-context key, which only server-side authentication can set, and passes `{ organizationId }` to the planner. The scope is carried on the trusted plan and ANDed into every scan: current roots, related spans, the usage metrics read by token and cost measures, and both discovery routes. A related record from another tenant that shares a `traceId` never qualifies a trace.
+Hosts that serve more than one tenant supply a trusted scope outside the query document. The server reads the reserved `organizationId` request-context key, which only server-side authentication can set, and passes `{ organizationId }` to the planner. The scope is carried on the trusted plan and ANDed into every scan: current roots, related spans, the usage metrics read by token and cost measures, span aggregation, and both discovery routes. A related record from another tenant that shares a `traceId` never qualifies a trace.
 
-Hosts that call storage directly can pass a fuller scope to `planTraceQuery()`, `planTraceAggregate()`, `planTraceQueryObservedFields()`, and `planTraceQueryValues()`:
+Hosts that call storage directly can pass a fuller scope to `planTraceQuery()`, `planTraceAggregate()`, `planSpanAggregate()`, `planTraceQueryObservedFields()`, and `planTraceQueryValues()`:
 
 ```typescript
 const plan = planTraceQuery(parseTraceQueryRequest(request), {
@@ -942,7 +1023,7 @@ Both routes require `observability:read` and use the configured observability st
 
 ## Limitations
 
-Both APIs consider completed traces only and don't include running traces. Trace queries can't return custom projections, embedded evidence, or summaries, and numbered trace pages include a total count. Aggregation can't group by span fields, `traceId`, or `attributes.*`, compute numeric measures over metadata, paginate groups, or zero-fill empty buckets. The CLI doesn't expose a trace aggregation command, so use the SDK or the HTTP endpoint.
+The query and aggregate APIs consider completed traces and spans only, not running ones. Trace queries can't return custom projections, embedded evidence, or summaries, and numbered trace pages include a total count. Trace aggregation can't group by span fields other than the root span's `name`, `spanType`, and `entityId`, or by `traceId` or `attributes.*`. Aggregation can't compute numeric measures over metadata, paginate groups, or zero-fill empty buckets. Span aggregation can't group by `model` or `provider`, and it attributes tokens only to the span that recorded them. The CLI's `mastra api trace aggregate` covers trace aggregation. Span aggregation has no CLI command, so use the SDK or the HTTP endpoint.
 
 ## Related
 

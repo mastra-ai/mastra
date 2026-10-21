@@ -629,6 +629,51 @@ describe('LangfuseExporter', () => {
       expect(attrs['langfuse.trace.output']).toBeUndefined();
     });
 
+    it('keeps the original user message as trace input after a tool-approval resume', async () => {
+      // A resumed AGENT_RUN rejoins the suspended run's trace with
+      // parentSpanId === metadata.resumedFromSpanId. Its input is the approval
+      // payload; writing it as langfuse.trace.input would replace the user's
+      // message (last writer wins in Langfuse). Trace output is the final reply
+      // and must still be written. (#23704)
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          isRootSpan: true,
+          type: SpanType.AGENT_RUN,
+          parentSpanId: 'suspended-run',
+          metadata: { runId: 'run-1', resumed: true, resumedFromSpanId: 'suspended-run' },
+          input: { approved: true, toolName: 'navigateTool', toolCallId: 'call-1' },
+          output: { text: 'Opening the dashboard.' },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBeUndefined();
+      expect(attrs['langfuse.trace.output']).toBe(JSON.stringify({ text: 'Opening the dashboard.' }));
+    });
+
+    it('writes trace input for a resume that starts a new trace', async () => {
+      // Caller passed a fresh traceId on resume: core leaves parentSpanId
+      // empty, so this run is a genuine root and owns its trace input.
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          isRootSpan: true,
+          type: SpanType.AGENT_RUN,
+          metadata: { runId: 'run-1', resumed: true, resumedFromSpanId: 'suspended-run' },
+          input: { approved: true, toolName: 'navigateTool', toolCallId: 'call-1' },
+          output: { text: 'Opening the dashboard.' },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBe(
+        JSON.stringify({ approved: true, toolName: 'navigateTool', toolCallId: 'call-1' }),
+      );
+    });
+
     it('does not write trace-level fields for a run nested under an existing span', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       await exportSpan(

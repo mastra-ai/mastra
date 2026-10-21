@@ -3436,6 +3436,12 @@ export class Agent<
     });
   }
 
+  /** @internal Validate context-independent timeout settings without invoking dynamic defaults. */
+  public __validateStaticModelTimeoutSettings(modelSettings?: AgentExecutionOptions<TOutput>['modelSettings']): void {
+    const defaults = typeof this.#defaultOptions === 'function' ? undefined : this.#defaultOptions.modelSettings;
+    validateModelTimeoutSettings(deepMerge(defaults ?? {}, modelSettings ?? {}).timeout);
+  }
+
   /**
    * Gets the default options for this agent, resolving function-based options if necessary.
    * These options are used as defaults when calling `stream()` or `generate()` without explicit options.
@@ -9592,6 +9598,7 @@ export class Agent<
       },
       { callScopes: options?.scopes, defaultScopes: defaultOptions?.scopes },
     );
+    validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
     delete loopOptions.actor;
@@ -10753,6 +10760,7 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    validateModelTimeoutSettings(mergedStreamOptions.modelSettings?.timeout);
     const loopStreamOptions = { ...mergedStreamOptions };
     const actor = mergedStreamOptions.actor;
     delete loopStreamOptions.actor;
@@ -10997,6 +11005,7 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
     delete loopOptions.actor;

@@ -43,6 +43,14 @@ describe('toolCardKind', () => {
       expect(toolCardKind(fields('ask_user', { output: { answer: 'yes' } }), {})).toBe('ask_user');
     });
 
+    it('detects a settled request_connection call as a connect prompt, and leaves a running one plain', () => {
+      const payload = { type: 'connect-prompt', providers: [] };
+      expect(toolCardKind(fields('request_connection', { output: payload }), {})).toBe('connect_prompt');
+      // No output yet (still running) or an unexpected shape: fall back to the plain badge.
+      expect(toolCardKind(fields('request_connection'), {})).toBe('plain');
+      expect(toolCardKind(fields('request_connection', { output: 'oops' }), {})).toBe('plain');
+    });
+
     it('detects submit_plan by tool name', () => {
       expect(toolCardKind(fields('submit_plan'), {})).toBe('submit_plan');
     });

@@ -31,8 +31,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@azure/core-auth": "^1.7.2",
-    "@azure/search-documents": "^12.0.0"
+    "@azure/core-auth": "^1.11.0",
+    "@azure/search-documents": "^12.2.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
