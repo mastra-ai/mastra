@@ -10,15 +10,14 @@ import {
 } from '../plan-approval-inline.js';
 
 describe('PlanApprovalInlineComponent', () => {
-  it('includes a goal option and calls onGoal when selected', () => {
-    const onGoal = vi.fn();
+  it('describes Approve as pursuing the plan as a goal and calls onApprove when selected', () => {
+    const onApprove = vi.fn();
     const component = new PlanApprovalInlineComponent(
       {
         toolCallId: 'tc-1',
         title: 'Ship it',
         plan: 'Build the feature',
-        onApprove: vi.fn(),
-        onGoal,
+        onApprove,
         onReject: vi.fn(),
       },
       {} as any,
@@ -27,13 +26,13 @@ describe('PlanApprovalInlineComponent', () => {
     const selectList = (component as any).selectList;
     expect(
       selectList.items.some(
-        (item: { value: string; label: string }) => item.value === 'goal' && item.label.includes('Use as /goal'),
+        (item: { value: string; label: string }) => item.value === 'approve' && item.label.includes('as a goal'),
       ),
     ).toBe(true);
 
-    (component as any).handleSelection('goal');
+    (component as any).handleSelection('approve');
 
-    expect(onGoal).toHaveBeenCalledTimes(1);
+    expect(onApprove).toHaveBeenCalledTimes(1);
   });
 
   it('renders the plan inside a plan-colored left bar, without a box', () => {
@@ -43,7 +42,6 @@ describe('PlanApprovalInlineComponent', () => {
         title: 'Ship it',
         plan: 'Build the feature',
         onApprove: vi.fn(),
-        onGoal: vi.fn(),
         onReject: vi.fn(),
       },
       {} as any,
@@ -65,7 +63,6 @@ describe('PlanApprovalInlineComponent', () => {
         title: 'Ship it',
         plan: 'Build the feature',
         onApprove: vi.fn(),
-        onGoal: vi.fn(),
         onReject,
       },
       {} as any,
@@ -83,7 +80,6 @@ describe('PlanApprovalInlineComponent', () => {
         title: 'Ship it',
         plan: 'Build the feature',
         onApprove: vi.fn(),
-        onGoal: vi.fn(),
         onReject: vi.fn(),
       },
       {} as any,
@@ -103,7 +99,6 @@ describe('PlanApprovalInlineComponent', () => {
         title: 'Ship it',
         plan: `Build ${'VeryLongPlanToken'.repeat(12)} safely`,
         onApprove: vi.fn(),
-        onGoal: vi.fn(),
         onReject: vi.fn(),
       },
       {} as any,
@@ -126,7 +121,6 @@ describe('PlanApprovalInlineComponent', () => {
         plan: 'Build the feature\nAdd tests\nUpdate docs',
         previousPlan: 'Build the feature\nRun tests\nUpdate docs',
         onApprove: vi.fn(),
-        onGoal: vi.fn(),
         onReject: vi.fn(),
       },
       {} as any,
@@ -147,7 +141,6 @@ describe('PlanApprovalInlineComponent', () => {
         title: 'Ship it',
         plan: 'Build the feature',
         onApprove: vi.fn(),
-        onGoal: vi.fn(),
         onReject: vi.fn(),
       },
       {} as any,
@@ -159,14 +152,13 @@ describe('PlanApprovalInlineComponent', () => {
     expect(rendered).toContain('Build the feature');
   });
 
-  it('has only 3 select options: approve, goal, changes', () => {
+  it('has only 2 select options: approve, changes', () => {
     const component = new PlanApprovalInlineComponent(
       {
         toolCallId: 'tc-1',
         title: 'Ship it',
         plan: 'Build the feature',
         onApprove: vi.fn(),
-        onGoal: vi.fn(),
         onReject: vi.fn(),
       },
       {} as any,
@@ -174,7 +166,7 @@ describe('PlanApprovalInlineComponent', () => {
 
     const selectList = (component as any).selectList;
     const values = selectList.items.map((item: { value: string }) => item.value);
-    expect(values).toEqual(['approve', 'goal', 'changes']);
+    expect(values).toEqual(['approve', 'changes']);
   });
 
   describe.each([

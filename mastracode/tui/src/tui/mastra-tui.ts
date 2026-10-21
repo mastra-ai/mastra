@@ -1484,7 +1484,8 @@ export class MastraTUI {
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
       fireMessage: (content, images) => this.fireMessage(content, images),
-      setGoal: (objective, cancelMessage) => setGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage),
+      setGoal: (objective, cancelMessage) =>
+        setGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage, { useSessionModelAsJudge: true }),
       sendGoalReminder: (goal, options) => sendGoalReminder(this.buildCommandContext(), goal, options),
       queueFollowUpMessage: content => this.queueFollowUpMessage(content),
       renderExistingMessages: isCurrent => this.renderExistingMessagesAndSeedIdleCounter(isCurrent),

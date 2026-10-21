@@ -7,7 +7,7 @@ const PLANNING_GOAL = 'Produce an approved plan for the active goal e2e.';
 
 export const planApprovalGoalReplacesActiveScenario: McE2eScenario = {
   name: 'plan-approval-goal-replaces-active',
-  description: 'Select Use as /goal while a goal is active and verify the plan goal judges the resumed run.',
+  description: 'Approve a plan while a goal is active and verify the plan goal judges the resumed run.',
   testName: 'replaces the active goal with the approved plan before the resumed run is judged',
   useOpenAIModel: true,
   aimockFixture: 'plan-approval-goal-replaces-active.json',
@@ -30,12 +30,11 @@ export const planApprovalGoalReplacesActiveScenario: McE2eScenario = {
 
     terminal.submit(`/goal ${PLANNING_GOAL}`);
     await runtime.waitForScreenText(/Plan: E2E Active Goal Plan/i, terminal, 10_000);
-    await runtime.waitForScreenText(/Use as \/goal\s+switch to Build mode and pursue this plan/i, terminal, 10_000);
+    await runtime.waitForScreenText(/Approve\s+switch to Build mode and pursue this plan as a goal/i, terminal, 10_000);
 
-    terminal.write('\x1b[B');
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/✓\s+Set as goal/i, terminal, 10_000);
+    await runtime.waitForScreenText(/✓\s+Approved/i, terminal, 10_000);
     await runtime.waitForScreenText(/Implemented the approved plan\./i, terminal, 10_000);
     await runtime.waitForScreenText(/The approved plan was implemented\./i, terminal, 15_000);
     // Give a stray second goal run time to surface before checking for one.

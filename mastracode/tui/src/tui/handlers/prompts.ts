@@ -284,7 +284,8 @@ export async function handleSandboxAccessRequest(
 
 /**
  * Handle a suspended submit_plan tool call.
- * Shows the plan inline with Approve/Use as Goal/Request Changes options.
+ * Shows the plan inline with Approve/Request Changes options. Approving starts
+ * the plan as the thread goal.
  *
  * On each submission the plan is saved to a `.md` file and the previous plan
  * content is snapshotted so that resubmissions can show a diff.
@@ -446,23 +447,6 @@ export async function handlePlanApproval(
       planFilename,
       previousPlan,
       onApprove: async () => {
-        releaseApprovalFocus();
-        try {
-          await switchModeWithPack(ctx, 'build');
-        } catch (error) {
-          restoreApprovalAfterError(error);
-          return;
-        }
-        await prepareApprovedPlan(ctx, resolvedTitle, plan, planPath);
-        firePermissionResult('approved');
-        const resumed = resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);
-        // The controller emits the resumed tool's terminal events while this
-        // handler owns its serialized event queue. Let those events reach their
-        // render boundaries immediately instead of waiting for the resume promise.
-        resolve();
-        await resumed;
-      },
-      onGoal: async () => {
         releaseApprovalFocus();
         try {
           await switchModeWithPack(ctx, 'build');

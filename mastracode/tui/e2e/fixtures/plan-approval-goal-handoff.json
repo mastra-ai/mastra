@@ -25,7 +25,7 @@
             "name": "write_file",
             "arguments": {
               "path": ".mastracode/plans/e2e-goal-plan.md",
-              "content": "# E2E Goal Plan\n\n## Overview\nUse this plan as a persistent goal from the real TUI.\n\n## Steps\n1. Render the submitted plan.\n2. Select Use as /goal.\n3. Start the goal handoff.\n\n## Verification\nConfirm the goal handoff starts the canonical goal run.\n",
+              "content": "# E2E Goal Plan\n\n## Overview\nUse this plan as a persistent goal from the real TUI.\n\n## Steps\n1. Render the submitted plan.\n2. Approve the plan.\n3. Start the goal handoff.\n\n## Verification\nConfirm the goal handoff starts the canonical goal run.\n",
               "overwrite": true
             }
           }

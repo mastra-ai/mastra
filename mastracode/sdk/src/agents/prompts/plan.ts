@@ -80,7 +80,7 @@ ${submitPlanAvailable ? submitPlanSection(plansDir, examplePath) : planFileOnlyS
 
 const GOAL_READY_SECTION = `## Goal-Ready Plans
 
-The submit_plan approval UI can let the user approve the plan normally or start it as a persistent goal. Write plans so they can be carried out as a goal if the user chooses that option:
+Approving a plan in the submit_plan approval UI starts it as a persistent goal. Write plans so they can be carried out as a goal:
 - Make the desired outcome explicit and verifiable.
 - Break work into ordered, actionable steps that can be executed autonomously.
 - Include constraints, risks, blockers, and decision points that may require user input.
@@ -104,8 +104,7 @@ submit_plan({
 \`\`\`
 
 The user will see the plan rendered inline and can:
-- **Approve** — automatically switches to Build mode for implementation
-- **Start as goal** — approves the plan and enters goal mode so the agent keeps working toward the plan until judged complete, paused, or waiting for user input
+- **Approve** — switches to Build mode and starts the plan as a goal, so the agent keeps working toward the plan until judged complete, paused, or waiting for user input
 - **Request changes** — rejects the plan; the agent stops immediately and the user provides revision feedback in their next chat message
 
 ## Revision Workflow

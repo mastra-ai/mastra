@@ -227,7 +227,7 @@ describe('handlePlanApproval goal mode', () => {
     const { state, ctx } = createPlanApprovalCtx(projectPath);
 
     const { promise, component } = await renderPlanApproval(ctx, state, '.mastracode/plans/ship-it.md');
-    await (component as any).onGoal();
+    await (component as any).onApprove();
     await promise;
 
     expect(ctx.setGoal).toHaveBeenCalledTimes(1);
@@ -264,7 +264,7 @@ describe('handlePlanApproval goal mode', () => {
     const releaseResume = deferredResume(state);
 
     const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
-    const approval = (component as any).onGoal();
+    const approval = (component as any).onApprove();
 
     await vi.waitFor(() => expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1));
     let handlerResolved = false;
@@ -300,7 +300,7 @@ describe('handlePlanApproval goal mode', () => {
     const releaseResume = deferredResume(state);
 
     const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
-    const approval = (component as any).onGoal();
+    const approval = (component as any).onApprove();
 
     await vi.waitFor(() => expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1));
     emitSessionEvent({ type: 'error', error: new Error('resume failed') });
@@ -317,7 +317,7 @@ describe('handlePlanApproval goal mode', () => {
     const { state, ctx, listeners } = createPlanApprovalCtx(projectPath);
 
     const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
-    await (component as any).onGoal();
+    await (component as any).onApprove();
     await promise;
 
     expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
@@ -330,7 +330,7 @@ describe('handlePlanApproval goal mode', () => {
     (ctx.setGoal as any).mockResolvedValue(null);
 
     const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
-    await (component as any).onGoal();
+    await (component as any).onApprove();
     await promise;
 
     expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1);
@@ -345,7 +345,7 @@ describe('handlePlanApproval goal mode', () => {
     (ctx.setGoal as any).mockRejectedValue(new Error('storage unavailable'));
 
     const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
-    await (component as any).onGoal();
+    await (component as any).onApprove();
     await promise;
 
     expect(ctx.showError).toHaveBeenCalledWith('Failed to set goal: storage unavailable');
@@ -361,7 +361,7 @@ describe('handlePlanApproval goal mode', () => {
     state.session.respondToToolSuspension = vi.fn().mockRejectedValue(new Error('resume failed'));
 
     const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
-    await expect((component as any).onGoal()).rejects.toThrow('resume failed');
+    await expect((component as any).onApprove()).rejects.toThrow('resume failed');
     await promise;
 
     expect(listeners.size).toBe(0);
@@ -370,7 +370,7 @@ describe('handlePlanApproval goal mode', () => {
 });
 
 describe('handlePlanApproval regular approval', () => {
-  it.each([['onApprove'], ['onGoal']] as const)(
+  it.each([['onApprove']] as const)(
     'restores the approval prompt when %s cannot switch to the build model',
     async method => {
       const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
@@ -421,7 +421,8 @@ describe('handlePlanApproval regular approval', () => {
     expect(state.activeInlinePlanApproval).toBe(streamedComponent);
     expect(state.ui.setFocus).toHaveBeenCalledWith(streamedComponent);
     expect(state.chatContainer.invalidate).not.toHaveBeenCalled();
-    expect(streamedComponent.render(80).join('\n')).toContain('Use as /goal');
+    expect(streamedComponent.render(80).join('\n')).toContain('as a goal');
+    expect(streamedComponent.render(80).join('\n')).not.toContain('Use as /goal');
     // #20398: the notification now fires at event receipt in the subscription
     // listener, not inside the queued handler.
     expect(ctx.notify).not.toHaveBeenCalled();
@@ -452,9 +453,10 @@ describe('handlePlanApproval regular approval', () => {
     await promise;
   });
 
-  it('approves the plan without sending a handoff signal', async () => {
+  it('approves the plan without sending a handoff signal when no goal could be set', async () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
     const { state, ctx, sendSignal } = createPlanApprovalCtx(projectPath);
+    (ctx.setGoal as any).mockResolvedValue(null);
     const runPermissionResult = vi.fn().mockResolvedValue(undefined);
     state.hookManager = { runPermissionResult };
 
@@ -479,8 +481,7 @@ describe('handlePlanApproval regular approval', () => {
     expect(ctx.addUserMessage).not.toHaveBeenCalled();
     expect(ctx.fireMessage).not.toHaveBeenCalled();
     expect(sendSignal).not.toHaveBeenCalled();
-    // Regular approval should not enter goal mode or set the return flag.
-    expect(ctx.setGoal).not.toHaveBeenCalled();
+    expect(ctx.setGoal).toHaveBeenCalledTimes(1);
     expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
   });
 
@@ -608,23 +609,20 @@ describe('handlePlanApproval with a command overlay open (#21139)', () => {
     expect(state.pendingFocus).toBe(component);
   });
 
-  it.each([['onApprove'], ['onGoal'], ['onReject']])(
-    'does not force editor focus on %s while an overlay is open',
-    async method => {
-      const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
-      const { state, ctx } = createPlanApprovalCtx(projectPath);
-      state.ui.hasOverlay.mockReturnValue(true);
+  it.each([['onApprove'], ['onReject']])('does not force editor focus on %s while an overlay is open', async method => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx } = createPlanApprovalCtx(projectPath);
+    state.ui.hasOverlay.mockReturnValue(true);
 
-      const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
-      state.ui.setFocus.mockClear();
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    state.ui.setFocus.mockClear();
 
-      await (component as any)[method]();
-      await promise;
+    await (component as any)[method]();
+    await promise;
 
-      expect(state.ui.setFocus).not.toHaveBeenCalled();
-      expect(state.pendingFocus).toBeUndefined();
-    },
-  );
+    expect(state.ui.setFocus).not.toHaveBeenCalled();
+    expect(state.pendingFocus).toBeUndefined();
+  });
 
   it('keeps the no-overlay behavior: arrival focuses the approval, approve focuses the editor', async () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
