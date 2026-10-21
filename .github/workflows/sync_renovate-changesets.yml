@@ -7,8 +7,6 @@ on:
       - 'examples/**/package.json'
       - 'e2e-tests/**/package.json'
       - 'packages/**/integration-tests/package.json'
-      - '**/docker-compose*.yaml'
-      - '**/docker-compose*.yml'
 
 jobs:
   changeset:
@@ -53,25 +51,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RENOVATE_PAT  }}
           SKIP_CREDENTIALS: '1'
-
-      # The action above only writes changesets for `dependencies` and
-      # `peerDependencies`. Updates that only touch devDependencies or test
-      # infrastructure (docker-compose files) publish nothing, but
-      # `changeset status` still fails on any change inside a package, so add
-      # an empty changeset for them.
-      - name: Add empty changeset when no release is needed
-        env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          changesets="npx --yes @changesets/cli@$(node -p "require('./package.json').devDependencies['@changesets/cli']")"
-          status=$($changesets status --since "origin/$BASE_REF" 2>&1) || true
-          if grep -q "no changesets were found" <<< "$status"; then
-            $changesets add --empty
-            git add .changeset
-            git commit -m "chore(changeset): add empty changeset for changes that need no release"
-            git push origin "HEAD:$HEAD_REF"
-          fi
 
       - name: Install dependencies
         if: steps.check-standalone-packages.outputs.standalone_changed == 'true'

@@ -93,6 +93,19 @@ jobs:
       - name: Reject unknown or ignored changeset packages
         run: node .github/scripts/check-changeset-packages.mjs
 
+      # A PR without changesets (e.g. a Renovate devDependency or docker-compose
+      # bump) asks for no release, so there is no release plan to validate.
+      - name: Check for changesets in this PR
+        id: pr-changesets
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if git diff --name-only --diff-filter=AM "origin/$BASE_REF...HEAD" -- '.changeset/*.md' | grep -qv '^\.changeset/README\.md$'; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # The automated Changesets release PR only rewrites package.json versions,
       # changelogs and .changeset/pre.json: the changesets it consumes are already
       # in the merge base, so `--since origin/main` never sees a new changeset and
@@ -103,7 +116,7 @@ jobs:
       #
       # actions/checkout fetches main as origin/main, not a local main branch.
       - name: Validate changeset release plan
-        if: ${{ github.event.pull_request.head.repo.full_name != github.repository || !startsWith(github.head_ref, 'changeset-release/') }}
+        if: ${{ steps.pr-changesets.outputs.found == 'true' && (github.event.pull_request.head.repo.full_name != github.repository || !startsWith(github.head_ref, 'changeset-release/')) }}
         run: pnpm changeset-cli status --since origin/main
 
   new-package-npm-check:
