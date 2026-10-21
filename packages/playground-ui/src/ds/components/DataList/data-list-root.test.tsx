@@ -39,7 +39,7 @@ describe('DataListRoot', () => {
       </DataList>,
     );
 
-    const root = screen.getByLabelText<HTMLElement>('Styled list');
+    const root = screen.getByLabelText('Styled list');
     expect(root.tagName).toBe('SECTION');
     expect(ref.current).toBe(root);
     expect(root.style.paddingTop).toBe('12px');
