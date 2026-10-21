@@ -432,7 +432,7 @@ describe('providerErrorFacts', () => {
   });
 
   it('never persists a bare HTTP phrase as the reason, wherever it sits', () => {
-    for (const phrase of ['Internal Server Error', 'Unauthorized', 'Service Unavailable', 'Gateway Timeout']) {
+    for (const phrase of ['Internal Server Error', 'Unauthorized', 'Not Implemented', 'HTTP Version Not Supported']) {
       expect(providerErrorFacts({ name: 'AI_APICallError', message: 'Request failed', data: phrase })).toEqual({});
       expect(providerErrorFacts(Object.assign(new Error('Request failed'), { cause: new Error(phrase) }))).toEqual({});
     }
