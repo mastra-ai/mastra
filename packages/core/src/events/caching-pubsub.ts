@@ -123,6 +123,17 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
+   * Log a warning using the configured logger or console.warn.
+   */
+  private logWarn(message: string): void {
+    if (this.logger) {
+      this.logger.warn(message);
+    } else {
+      console.warn(message);
+    }
+  }
+
+  /**
    * Get the cache key for a topic's event log.
    *
    * The braces are a cluster hash tag: Redis and Valkey place
@@ -205,6 +216,13 @@ export class CachingPubSub extends PubSub {
    *   log, so they are read back in order and delivered before this one. That
    *   holds even when the transport replays nothing at all.
    *
+   * One exception to the first rule: a frame numbered `0` whose counter shows
+   * the log restarted. That means the retained log expired or was cleared and
+   * a new run segment began numbering at 0; the cursor resyncs and the frame is
+   * delivered, instead of silently dropping the whole new segment. Nack
+   * redeliveries (`deliveryAttempt > 1`) also bypass reconciliation, since a
+   * retry of an already-cursor-advanced frame still has to reach the consumer.
+   *
    * When the log no longer holds the missing range (no shared cache, or the
    * TTL lapsed) there is nothing to replay; the cursor resynchronises to the
    * frame in hand so live delivery continues.
@@ -259,7 +277,34 @@ export class CachingPubSub extends PubSub {
       // Already delivered (a retained transport copy of a frame the log
       // provided). Acknowledge it so it does not stay pending on the backend.
       if (seq < next) {
-        return ack?.();
+        if (seq !== 0) return ack?.();
+
+        // Index 0 while the cursor has already advanced means the log this
+        // subscriber was reading is gone: it expired (or was cleared) and the
+        // run resumed, restarting numbering at 0. Dropping it would swallow
+        // every frame of the new segment, since all of their indices sit below
+        // the stale cursor. Confirm against the counter — it restarts with the
+        // log, so in a continuous log it can never be below our cursor.
+        deferred = true;
+        return (async () => {
+          // A cache read failure must not turn a duplicate into a nack loop;
+          // fall through to the drop path in that case.
+          const allocated = await this.cache.get(this.getCounterKey(topic)).catch(() => undefined);
+          if (closed) return ack?.();
+
+          if (typeof allocated === 'number' && allocated < next) {
+            this.logWarn(
+              `[CachingPubSub] Log for ${topic} restarted at 0 while the subscriber cursor was at ${next}; ` +
+                `the retained log expired or was cleared. Resyncing from the start of the new segment.`,
+            );
+            next = 0;
+            await emit(event, ack, nack);
+            return;
+          }
+
+          // A late copy of this log's real first frame: nothing to resync.
+          await ack?.();
+        })();
       }
 
       if (seq > next) {

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InMemoryServerCache } from '../cache/inmemory';
+import type { IMastraLogger } from '../logger';
 import { CachingPubSub, withCaching } from './caching-pubsub';
 import { EventEmitterPubSub } from './event-emitter';
 import { isLeaseProvider, PubSub } from './pubsub';
@@ -1352,6 +1353,63 @@ describe('CachingPubSub', () => {
       // 0 and 1 arrive from the transport replay; both are before the cursor.
       expect(received).toEqual([2]);
       expect(inner.acked.map(event => event.index)).toEqual([0, 1]);
+    });
+
+    it('resyncs when the log expired and a new run segment restarted numbering at 0', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 0, event => {
+        received.push(event.index!);
+      });
+
+      // First segment runs to index 2, advancing the subscriber's cursor.
+      const firstSegment = [await append(shared, 0), await append(shared, 1), await append(shared, 2)];
+      for (const frame of firstSegment) await inner.publish(topic, frame);
+      await flush();
+      expect(received).toEqual([0, 1, 2]);
+
+      // The log's TTL lapses, the run resumes, and numbering restarts at 0.
+      await shared.delete(`pubsub:{${topic}}`);
+      await shared.delete(`pubsub:{${topic}}:counter`);
+      const secondSegment = [await append(shared, 0), await append(shared, 1)];
+      for (const frame of secondSegment) await inner.publish(topic, frame);
+      await flush();
+
+      // Every new frame sits below the stale cursor, so dropping them as
+      // duplicates would swallow the whole segment.
+      expect(received).toEqual([0, 1, 2, 0, 1]);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toContain('restarted at 0');
+    });
+
+    it('still drops a late copy of frame 0 when the log did not restart', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 0, event => {
+        received.push(event.index!);
+      });
+
+      const frames = [await append(shared, 0), await append(shared, 1)];
+      for (const frame of frames) await inner.publish(topic, frame);
+      await flush();
+      expect(received).toEqual([0, 1]);
+
+      // The counter is still ahead of the cursor, so this is a duplicate of
+      // the log's real first frame, not a new segment.
+      await inner.publish(topic, frames[0]!);
+      await flush();
+
+      expect(received).toEqual([0, 1]);
+      expect(warn).not.toHaveBeenCalled();
+      expect(inner.acked.map(event => event.index)).toEqual([0]);
     });
 
     it('backfills a gap the transport skipped from the log', async () => {
