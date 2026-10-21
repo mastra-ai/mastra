@@ -10,15 +10,16 @@ describeForAllEngines('A stopped approval cannot restart a run (#27617)', engine
 
   for (const [start, resumeAfter] of [
     ['stream', 'abort'],
+    ['stream on a thread', 'abort'],
     ['stream', 'stream completion'],
     ['stream', 'stream completion with snapshot cleanup pending'],
     ['stream', 'stream completion with snapshot cleanup failed'],
     ['stream on a thread', 'abort during snapshot load with snapshot cleanup pending'],
     ['generate', 'abort'],
   ] as const) {
-    // Only normal/fs runs delete the suspended snapshot through the agent cleanup gated below,
-    // and only they load the suspended snapshot through the agent resume path gated below.
-    if (resumeAfter.includes('snapshot') && engine !== 'normal' && engine !== 'fs') {
+    // Only normal/fs approval-suspended streams close after abort here. Their agent path also
+    // deletes and loads the suspended snapshot through the gates below.
+    if (resumeAfter !== 'abort' && engine !== 'normal' && engine !== 'fs') {
       continue;
     }
     // Normal/fs generate runs are not registered for abortRunStream, which returns false.
