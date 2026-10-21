@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { toTracesListViewTraces } from '../components/traces-list-view-adapter';
 
 export const TRACES_LIST_REFETCH_INTERVAL_MS = 10_000;
+/** Delta polls only ask for what changed since the cursor, so they can run less often. */
+export const TRACES_LIST_DELTA_POLL_INTERVAL_MS = 30_000;
 /** How far past the anchor a delta-polled rolling window reaches, so traces started after mount still match. */
 export const TRACES_LIST_DELTA_HORIZON_MS = 24 * 60 * 60 * 1000;
 /** Fixed clock for comparing selections: filter and date changes move the query, time passing does not. */
@@ -92,7 +94,7 @@ export function useTracesListSource({
     query,
     limit,
     enabled: enabled && delta && autoRefetch,
-    refetchInterval: TRACES_LIST_REFETCH_INTERVAL_MS,
+    refetchInterval: TRACES_LIST_DELTA_POLL_INTERVAL_MS,
     queryOptions: { refetchOnWindowFocus: autoRefetch },
   });
 

@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   TRACES_LIST_DELTA_HORIZON_MS,
-  TRACES_LIST_REFETCH_INTERVAL_MS,
+  TRACES_LIST_DELTA_POLL_INTERVAL_MS,
   useTracesListSource,
 } from '../use-traces-list-source';
 import { freshTrace, lastTraceQueryPage, traceQueryDeltaBatch } from './fixtures/trace-query';
@@ -214,7 +214,7 @@ describe('useTracesListSource', () => {
 
     const nextTick = () =>
       act(async () => {
-        await vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS);
+        await vi.advanceTimersByTimeAsync(TRACES_LIST_DELTA_POLL_INTERVAL_MS);
       });
 
     const refocus = () =>
@@ -252,7 +252,7 @@ describe('useTracesListSource', () => {
       const ranges = [...requests.listRequests, ...requests.deltaRequests].map(body => body.timeRange);
       expect(new Set(ranges.map(range => JSON.stringify(range))).size).toBe(1);
       for (const range of ranges) {
-        expect(Date.parse(range.to)).toBeGreaterThan(mountedAt + TRACES_LIST_REFETCH_INTERVAL_MS * 2);
+        expect(Date.parse(range.to)).toBeGreaterThan(mountedAt + TRACES_LIST_DELTA_POLL_INTERVAL_MS * 2);
       }
     });
 

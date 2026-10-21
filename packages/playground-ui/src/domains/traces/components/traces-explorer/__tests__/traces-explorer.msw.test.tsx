@@ -5,7 +5,10 @@ import { http, HttpResponse } from 'msw';
 import { Profiler, useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TRACES_LIST_REFETCH_INTERVAL_MS } from '../../../hooks/use-traces-list-source';
+import {
+  TRACES_LIST_DELTA_POLL_INTERVAL_MS,
+  TRACES_LIST_REFETCH_INTERVAL_MS,
+} from '../../../hooks/use-traces-list-source';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../../trace-filters';
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
 import { TracesExplorer, useTracesFilterBar, useTracesFilterBarFields } from '../index';
@@ -869,9 +872,19 @@ describe('TracesExplorer', () => {
   });
 
   describe.each([
-    { server: 'polls deltas', capabilities: traceQueryCapabilities, tickRequests: onDeltaPoll },
-    { server: 'reloads the list', capabilities: noDeltaPollingCapabilities, tickRequests: onTraceQuery },
-  ])('when the auto-refresh tick fires and the explorer $server', ({ capabilities, tickRequests }) => {
+    {
+      server: 'polls deltas',
+      capabilities: traceQueryCapabilities,
+      tickRequests: onDeltaPoll,
+      interval: TRACES_LIST_DELTA_POLL_INTERVAL_MS,
+    },
+    {
+      server: 'reloads the list',
+      capabilities: noDeltaPollingCapabilities,
+      tickRequests: onTraceQuery,
+      interval: TRACES_LIST_REFETCH_INTERVAL_MS,
+    },
+  ])('when the auto-refresh tick fires and the explorer $server', ({ capabilities, tickRequests, interval }) => {
     it('does not re-render the filter bar or the columns menu', async () => {
       setExplorerHandlers(capabilities);
       // Only the poll interval is faked: MSW, React Query and waitFor keep real timeouts.
@@ -890,7 +903,7 @@ describe('TracesExplorer', () => {
         onToolbarRender.mockClear();
 
         act(() => {
-          vi.advanceTimersByTime(TRACES_LIST_REFETCH_INTERVAL_MS);
+          vi.advanceTimersByTime(interval);
         });
         vi.useRealTimers();
         await waitFor(() => expect(tickRequests.mock.calls.length).toBeGreaterThan(requestsBefore));
