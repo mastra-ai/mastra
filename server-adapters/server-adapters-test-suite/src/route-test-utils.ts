@@ -43,6 +43,10 @@ export function getRouteSpecificSchemaDefaults(route: ServerRoute): {
     return { body: { predicateScope: 'trace', path: 'entityName' } };
   }
 
+  if (route.path === '/agent-controller/:controllerId/sessions' && route.method === 'POST') {
+    return { body: { resourceId: 'test-resource' } };
+  }
+
   if (route.path === '/datasets/:datasetId/compare') {
     return { body: { experimentIds: ['test-experiment-a', 'test-experiment-b'], baselineId: 'test-experiment-a' } };
   }
@@ -407,6 +411,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':controllerId')) params.controllerId = 'test-controller';
   if (route.path.includes(':responseId')) params.responseId = 'test-response';
   if (route.path.includes(':resourceId')) params.resourceId = 'test-resource';
+  if (route.path.includes(':sessionId')) params.sessionId = 'test-session';
   if (route.path.includes(':modelConfigId')) params.modelConfigId = 'id1';
   // For stored scorer version routes, use the stored scorer ID to match test context
   if (route.path.includes(':scorerId') && route.path.includes('/stored/scorers/')) {

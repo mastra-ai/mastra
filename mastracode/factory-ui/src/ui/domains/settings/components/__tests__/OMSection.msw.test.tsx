@@ -86,8 +86,8 @@ describe('OMSection', () => {
     expect(screen.getByText(/model calls may fail until credentials are configured/)).toBeInTheDocument();
     expect(screen.queryByText('Enabled')).not.toBeInTheDocument();
     // A configured model that is no longer in the catalog still shows, by name.
-    expect(screen.getByRole('combobox', { name: 'Observer model' })).toHaveTextContent('Observer X');
-    expect(screen.getByRole('combobox', { name: 'Reflector model' })).toHaveTextContent('Gemini 3.5 Flash');
+    expect(screen.getByRole('combobox', { name: 'Observer model' })).toHaveValue('Observer X');
+    expect(screen.getByRole('combobox', { name: 'Reflector model' })).toHaveValue('Gemini 3.5 Flash');
   });
 
   it('displays auto intent with its effective model and resets one role independently', async () => {
@@ -128,14 +128,14 @@ describe('OMSection', () => {
     await screen.findByDisplayValue('1,000');
     const observerTrigger = screen.getByRole('combobox', { name: 'Observer model' });
     const reflectorTrigger = screen.getByRole('combobox', { name: 'Reflector model' });
-    expect(observerTrigger).toHaveTextContent('Auto · GPT-5.4 Mini');
-    expect(reflectorTrigger).toHaveTextContent('Reflector X');
+    expect(observerTrigger).toHaveValue('Auto · GPT-5.4 Mini');
+    expect(reflectorTrigger).toHaveValue('Reflector X');
 
     await pickOption(user, reflectorTrigger, /^Auto/);
 
     await waitFor(() => expect(requestBody).toEqual({ modelId: 'auto' }));
-    await waitFor(() => expect(reflectorTrigger).toHaveTextContent('Auto · GPT-5.4 Mini'));
-    expect(observerTrigger).toHaveTextContent('Auto · GPT-5.4 Mini');
+    await waitFor(() => expect(reflectorTrigger).toHaveValue('Auto · GPT-5.4 Mini'));
+    expect(observerTrigger).toHaveValue('Auto · GPT-5.4 Mini');
   });
 
   it('finds a model by its provider and raw id as well as its name', async () => {
@@ -151,9 +151,9 @@ describe('OMSection', () => {
       />,
     );
 
-    await user.click(await screen.findByRole('combobox', { name: 'Observer model' }));
-    const search = await screen.findByPlaceholderText('Search models…');
-
+    // The field itself is the search box: it holds the selected model's name until cleared.
+    const search = await screen.findByRole('combobox', { name: 'Observer model' });
+    await user.clear(search);
     await user.type(search, 'anthropic');
     // The custom-value row stays first; the only catalog match is the Anthropic model.
     await waitFor(() =>
@@ -318,7 +318,7 @@ describe('OMSection', () => {
     renderWithProviders(<OMSection models={models} />);
 
     const observerTrigger = await screen.findByRole('combobox', { name: 'Observer model' });
-    expect(observerTrigger).toHaveTextContent('Observer X');
+    expect(observerTrigger).toHaveValue('Observer X');
     await pickOption(user, observerTrigger, /openai\/reflector-x/);
 
     await waitFor(() => expect(requestBody).toEqual({ modelId: 'openai/reflector-x' }));

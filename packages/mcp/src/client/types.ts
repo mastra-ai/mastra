@@ -11,6 +11,7 @@ import type {
   jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
 import type { MCPTraceContext } from '../shared/trace-context';
+import type { EventsWebhookSetup } from './events/types';
 
 // FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
 export type { FetchLike } from '@modelcontextprotocol/client';
@@ -521,6 +522,8 @@ export type InternalMastraMCPClientOptions = {
   clientInfo?: MCPClientInfo;
   /** Optional timeout in milliseconds */
   timeout?: number;
+  /** Webhook settings and receiver shared by the owning `MCPClient`'s servers. */
+  webhook?: EventsWebhookSetup;
 };
 
 /**

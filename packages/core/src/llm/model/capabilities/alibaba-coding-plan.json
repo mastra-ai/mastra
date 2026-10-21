@@ -24,7 +24,7 @@
         "type": "toggle"
       }
     ],
-    "qwen3.7-plus": [
+    "kimi-k2.5": [
       {
         "type": "toggle"
       }
@@ -39,7 +39,7 @@
         "type": "toggle"
       }
     ],
-    "kimi-k2.5": [
+    "qwen3.7-plus": [
       {
         "type": "toggle"
       }

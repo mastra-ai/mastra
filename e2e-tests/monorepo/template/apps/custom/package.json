@@ -40,6 +40,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "mastra": "monorepo-test"
+    "mastra": "monorepo-test",
+    "typescript": "7.0.2"
   }
 }

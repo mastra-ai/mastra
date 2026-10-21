@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { createScorer } from '../../evals/base';
 import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
+import { TRAILING_ASSISTANT_GUARD_CONTINUATION_KEY } from '../../processors/trailing-assistant-guard';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
@@ -124,6 +125,35 @@ describe('createGoalScorer latest user message text extraction', () => {
 
     expect(prompt).toContain('actual human message');
     expect(prompt).not.toContain('<system-reminder>Please continue naturally</system-reminder>');
+  });
+
+  // The real-run path is covered by goal-judge-guard-continuation.scenario.test.ts.
+  // There the guard's turn is also removed from the list before the judge runs
+  // (#27568), so this filter is the backstop: it is proven here in isolation.
+  it('skips a marked TrailingAssistantGuard continuation when selecting the latest user content', async () => {
+    const prompt = await captureJudgePromptForMessages([
+      createUserMessage({ format: 2, parts: [{ type: 'text', text: 'Pick option B' }] }),
+      {
+        id: 'msg-assistant',
+        role: 'assistant',
+        createdAt: new Date('2026-01-01T00:00:01.000Z'),
+        content: { format: 2, parts: [{ type: 'text', text: 'Working on option B' }] },
+      },
+      {
+        id: 'msg-continue',
+        role: 'user',
+        createdAt: new Date('2026-01-01T00:00:02.000Z'),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Continue.' }],
+          metadata: { [TRAILING_ASSISTANT_GUARD_CONTINUATION_KEY]: true },
+        },
+      },
+    ]);
+
+    expect(prompt).toContain('Latest user message:\\nPick option B');
+    expect(prompt).toContain('Assistant steps since that user message: 1');
+    expect(prompt).not.toContain('Continue.');
   });
 
   it('skips empty user rows when selecting the latest user content', async () => {

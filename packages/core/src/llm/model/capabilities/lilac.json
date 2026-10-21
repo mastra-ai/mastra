@@ -8,11 +8,6 @@
         "type": "toggle"
       }
     ],
-    "minimaxai/minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
     "zai-org/glm-5.2": [
       {
         "type": "toggle"
@@ -23,6 +18,11 @@
       }
     ],
     "google/gemma-4-31b-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "minimaxai/minimax-m3": [
       {
         "type": "toggle"
       }

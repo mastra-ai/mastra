@@ -2,4 +2,4 @@
 '@mastra/libsql': patch
 ---
 
-Added persisted model fallback lists to agent versions, including automatic column creation for existing databases.
+LibSQL-backed agents now retain Editor changes to static model fallback lists across restarts, and existing databases upgrade automatically.

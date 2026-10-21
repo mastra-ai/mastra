@@ -42,7 +42,8 @@ const models: AvailableModelOption[] = [
 ];
 
 const baseSession: ChatSessionContextApi = {
-  resourceId: 'session-1',
+  sessionId: 'session-1',
+  resourceId: 'user-1',
   sessionEnabled: true,
   resourceReady: true,
   sandboxReady: true,
@@ -99,7 +100,8 @@ function renderPicker({
         if (catalogFails) {
           return HttpResponse.json({ error: 'session_model_policy_unavailable' }, { status: 503 });
         }
-        expect(params.get('resourceId')).toBe('session-1');
+        expect(params.get('sessionId')).toBe('session-1');
+        expect(params.get('resourceId')).toBe('user-1');
         expect(params.get('threadId')).toBe('session-1');
         const effectiveScope = sessionPolicy?.modelScope ?? (modelScope === 'hybrid' ? kind : modelScope);
         return HttpResponse.json({
@@ -181,7 +183,13 @@ function renderPicker({
       <ChatConnectionContext.Provider
         value={{
           status: 'ready',
-          state: { controllerId: AGENT_CONTROLLER_ID, resourceId: 'session-1', modeId: 'build', modelId },
+          state: {
+            controllerId: AGENT_CONTROLLER_ID,
+            sessionId: 'session-1',
+            resourceId: 'user-1',
+            modeId: 'build',
+            modelId,
+          },
         }}
       >
         <ChatModelsProvider>

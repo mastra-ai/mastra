@@ -43,8 +43,8 @@ export function availableModelsQueryOptions(baseUrl: string, target?: AvailableM
 export function useAvailableModelsQuery(target?: AvailableModelsTarget) {
   const { baseUrl, client } = useApiConfig();
   const session: SessionModelCatalogTarget | undefined =
-    target?.resourceId && target.threadId
-      ? { ...target, resourceId: target.resourceId, threadId: target.threadId }
+    target?.sessionId && target.resourceId && target.threadId
+      ? { ...target, sessionId: target.sessionId, resourceId: target.resourceId, threadId: target.threadId }
       : undefined;
   const queryKey = session
     ? sessionModelCatalogQueryOptions(client, session).queryKey

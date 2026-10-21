@@ -13,7 +13,8 @@ import { initialTranscript } from '../../../services/transcript';
 import { ConnectionActivity } from '../ConnectionActivity';
 
 const session: ChatSessionContextApi = {
-  resourceId: 'session-1',
+  sessionId: 'session-1',
+  resourceId: 'user-1',
   sessionEnabled: true,
   resourceReady: true,
   sandboxReady: true,

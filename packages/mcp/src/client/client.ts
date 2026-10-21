@@ -32,14 +32,48 @@ import type {
 } from '@modelcontextprotocol/client';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
-import { JSON_SCHEMA_2020_12, MAX_JSON_SCHEMA_DEPTH, MAX_JSON_SCHEMA_NODES, toJsonSchema2020 } from '../shared/json-schema-dialect';
+import { z } from 'zod/v4';
+import {
+  EVENTS_METHODS,
+  ListEventsResultSchema,
+  PollEventsResultSchema,
+  StreamEventsResultSchema,
+  SubscribeEventsResultSchema,
+  UnsubscribeEventsResultSchema,
+  getEventsCapability,
+} from '../shared/events';
+import type {
+  EventsCapability,
+  ListEventsResult,
+  PollEventsRequestParams,
+  PollEventsResult,
+  SubscribeEventsRequestParams,
+  SubscribeEventsResult,
+  UnsubscribeEventsRequestParams,
+} from '../shared/events';
+import {
+  JSON_SCHEMA_2020_12,
+  MAX_JSON_SCHEMA_DEPTH,
+  MAX_JSON_SCHEMA_NODES,
+  toJsonSchema2020,
+} from '../shared/json-schema-dialect';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
 import { takeServerTraceContext, traceContextFromSpan, traceContextToMeta } from '../shared/trace-context';
+import { EventClientActions } from './actions/events';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
 import { isReconnectableMCPError } from './error-utils';
+import type { DeliveryDriver } from './events/mode';
+import { EventStreamRouter } from './events/stream-router';
+import { EventSubscription } from './events/subscription';
+import type {
+  EventsPort,
+  EventsWebhookSetup,
+  MCPEventSubscribeOptions,
+  MCPEventSubscription,
+} from './events/types';
 import { getInputSchemaError, loadInputSchemaMetaValidator } from './input-schema-meta-schema';
 import { MCP_CLIENT_PROTOCOL_VERSION } from './types';
 import type {
@@ -190,19 +224,43 @@ type DatadogTracerLike = {
   };
 };
 
+const PERSISTENT_REQUEST_METHODS = ['subscriptions/listen', EVENTS_METHODS.stream];
+
 /**
- * 2026-07-28 Streamable HTTP has no standalone GET stream; the only long-lived request is
- * the `subscriptions/listen` POST, whose response stays open for the life of the
- * subscription and must not hold the caller's active Datadog span open with it.
+ * 2026-07-28 Streamable HTTP has no standalone GET stream; the long-lived requests are the
+ * `subscriptions/listen` POST and each MCP Events `events/stream` POST, whose responses stay
+ * open for the life of the subscription and must not hold the caller's active Datadog span
+ * open with them.
  */
 function shouldDetachPersistentTransportRequest(init?: RequestInit): boolean {
-  if (typeof init?.body !== 'string' || !init.body.includes('subscriptions/listen')) return false;
+  const body = init?.body;
+  if (typeof body !== 'string' || !PERSISTENT_REQUEST_METHODS.some(method => body.includes(method))) return false;
   try {
-    const message: unknown = JSON.parse(init.body);
-    return typeof message === 'object' && message !== null && 'method' in message && message.method === 'subscriptions/listen';
+    const message: unknown = JSON.parse(body);
+    return (
+      typeof message === 'object' &&
+      message !== null &&
+      'method' in message &&
+      typeof message.method === 'string' &&
+      PERSISTENT_REQUEST_METHODS.includes(message.method)
+    );
   } catch {
     return false;
   }
+}
+
+/**
+ * Reports the JSON-RPC id of each `events/stream` request as it goes out on `transport`. The
+ * server identifies a push stream by that id, and the SDK doesn't return it to the caller.
+ */
+function observeEventStreamRequests(transport: Transport, onSent: (id: string) => void): void {
+  const send = transport.send.bind(transport);
+  transport.send = (message, options) => {
+    if ('method' in message && message.method === EVENTS_METHODS.stream && 'id' in message) {
+      onSent(String(message.id));
+    }
+    return send(message, options);
+  };
 }
 
 /**
@@ -300,9 +358,9 @@ export function getMcpCallToolMeta(output: unknown): Record<string, unknown> | u
   return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_META] as Record<string, unknown> | undefined;
 }
 
-function createStructuredToolToModelOutput(): (output: unknown) =>
-  | { type: 'text'; value: string }
-  | { type: 'json'; value: unknown } {
+function createStructuredToolToModelOutput(): (
+  output: unknown,
+) => { type: 'text'; value: string } | { type: 'json'; value: unknown } {
   return output => {
     const modelText = extractModelTextFromToolContent(getMcpCallToolContent(output));
     if (modelText !== undefined) {
@@ -314,8 +372,7 @@ function createStructuredToolToModelOutput(): (output: unknown) =>
 
 function getDatadogScope(): DatadogScopeLike | null {
   const testTracer = (globalThis as Record<PropertyKey, unknown>)[DATADOG_TRACER_TEST_SYMBOL] as
-    | DatadogTracerLike
-    | undefined;
+    DatadogTracerLike | undefined;
   const tracer = testTracer ?? loadDatadogTracer();
 
   if (typeof tracer?.scope === 'function') {
@@ -445,6 +502,12 @@ export class InternalMastraMCPClient extends MastraBase {
   public readonly prompts: PromptClientActions;
   /** Provides access to progress operations (notifications) */
   public readonly progress: ProgressClientActions;
+  /**
+   * Provides access to MCP Events (list, subscribe, list-changed notifications).
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  public readonly events: EventClientActions;
 
   /**
    * @internal
@@ -455,8 +518,10 @@ export class InternalMastraMCPClient extends MastraBase {
     clientInfo,
     server,
     timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
+    webhook,
   }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
+    this.webhook = webhook;
     // Started early so the sync toolFromDefinition() normally has the input schema check ready.
     void loadInputSchemaMetaValidator();
     this.name = name;
@@ -512,6 +577,24 @@ export class InternalMastraMCPClient extends MastraBase {
     this.resources = new ResourceClientActions({ client: this, logger: this.logger });
     this.prompts = new PromptClientActions({ client: this, logger: this.logger });
     this.progress = new ProgressClientActions({ client: this, logger: this.logger });
+    this.events = new EventClientActions({ client: this, logger: this.logger });
+    this.eventStreamRouter = new EventStreamRouter(
+      {
+        request: (params, signal, onSent) => {
+          // The router serializes opens, so the next events/stream sent is this one.
+          this.onEventStreamSent = onSent;
+          return this.client.request(
+            { method: EVENTS_METHODS.stream, params: { ...params, _meta: this.requestMeta(params._meta) } },
+            StreamEventsResultSchema,
+            // The stream lives as long as the subscription; only cancel() or a failure ends it.
+            { timeout: 0x7fffffff, signal },
+          );
+        },
+        onNotification: (method, handler) =>
+          this.client.setNotificationHandler(method, { params: z.looseObject({}) }, params => handler(params)),
+      },
+      (level, message, details) => this.log(level, message, details),
+    );
   }
 
   /**
@@ -542,9 +625,7 @@ export class InternalMastraMCPClient extends MastraBase {
    * the trace fields; without one they name `span`, the span making the request.
    */
   private requestMeta(meta?: Record<string, unknown>, span?: AnySpan): Record<string, unknown> | undefined {
-    const traceContext = this.serverConfig.traceContext
-      ? this.serverConfig.traceContext()
-      : traceContextFromSpan(span);
+    const traceContext = this.serverConfig.traceContext ? this.serverConfig.traceContext() : traceContextFromSpan(span);
     const merged = {
       ...(this.serverLogLevel ? { [LOG_LEVEL_META_KEY]: this.serverLogLevel } : {}),
       ...(traceContext ? traceContextToMeta(traceContext) : {}),
@@ -582,6 +663,7 @@ export class InternalMastraMCPClient extends MastraBase {
       stderr: this.serverConfig.stderr,
       cwd: this.serverConfig.cwd,
     });
+    observeEventStreamRequests(transport, this.noteEventStreamSent);
     try {
       await this.client.connect(transport, {
         timeout: this.serverConfig.timeout ?? this.timeout,
@@ -639,6 +721,7 @@ export class InternalMastraMCPClient extends MastraBase {
     // Constructed outside the try so an UnauthorizedError can keep a handle on the
     // transport that started the authorization flow (finishAuth must run on it).
     const transport = new StreamableHTTPClientTransport(url, { requestInit, authProvider, fetch });
+    observeEventStreamRequests(transport, this.noteEventStreamSent);
     try {
       await this.client.connect(transport, {
         timeout: connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC,
@@ -782,6 +865,18 @@ export class InternalMastraMCPClient extends MastraBase {
   private subscriptionStream?: McpSubscription;
   private subscriptionUpdate: Promise<unknown> = Promise.resolve();
   private lifecycleGeneration = 0;
+  private readonly eventStreamRouter: EventStreamRouter;
+  private onEventStreamSent?: (id: string) => void;
+
+  private readonly noteEventStreamSent = (id: string): void => {
+    const onSent = this.onEventStreamSent;
+    this.onEventStreamSent = undefined;
+    onSent?.(id);
+  };
+  /** Live MCP Events subscriptions, restored after a reconnect and cancelled on disconnect. */
+  private readonly eventSubscriptions = new Set<EventSubscription>();
+  /** Webhook settings and receiver shared with the owning `MCPClient`, when configured. */
+  readonly webhook?: EventsWebhookSetup;
 
   /**
    * Connects to the MCP server using the configured transport.
@@ -812,6 +907,8 @@ export class InternalMastraMCPClient extends MastraBase {
         this.serverInstructions = this.client.getInstructions();
         this.serverImplementation = this.client.getServerVersion();
         this.rememberNegotiation();
+        // The new server may offer different event types.
+        this.events.invalidate();
 
         if (this.hasSubscriptionInterest()) {
           try {
@@ -825,6 +922,7 @@ export class InternalMastraMCPClient extends MastraBase {
         }
 
         resolve(true);
+        for (const subscription of this.eventSubscriptions) subscription.onReconnected();
 
         // Scope the reset to this connection so an older handler retained across
         // reconnects cannot clear the state of a replacement connection.
@@ -984,6 +1082,7 @@ export class InternalMastraMCPClient extends MastraBase {
     }
 
     this.closePendingAuthTransport();
+    await this.cancelEventSubscriptions();
     if (!this.transport) {
       await this.detachStaleClientTransport();
       // A client whose connect() failed still holds process hooks; there is simply no
@@ -1122,10 +1221,7 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   async getPrompt({ name, args }: { name: string; args?: Record<string, any> }): Promise<GetPromptResult> {
     this.log('debug', `Requesting prompt from MCP server: ${name}`);
-    return await this.client.getPrompt(
-      { name, arguments: args, _meta: this.requestMeta() },
-      { timeout: this.timeout },
-    );
+    return await this.client.getPrompt({ name, arguments: args, _meta: this.requestMeta() }, { timeout: this.timeout });
   }
 
   private hasSubscriptionInterest(): boolean {
@@ -1287,6 +1383,117 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
+  /**
+   * The server's MCP Events capability, or `undefined` when it does not advertise the extension.
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  getEventsCapability(): EventsCapability | undefined {
+    return getEventsCapability(this.client.getServerCapabilities());
+  }
+
+  /**
+   * Fetches one page of `events/list`.
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  async listEvents(cursor?: string): Promise<ListEventsResult> {
+    this.log('debug', 'Requesting events from MCP server');
+    return await this.client.request(
+      { method: EVENTS_METHODS.list, params: { ...(cursor ? { cursor } : {}), _meta: this.requestMeta() } },
+      ListEventsResultSchema,
+      { timeout: this.timeout },
+    );
+  }
+
+  /**
+   * Sends one `events/poll` request.
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  async pollEvents(params: PollEventsRequestParams, signal?: AbortSignal): Promise<PollEventsResult> {
+    return await this.client.request(
+      { method: EVENTS_METHODS.poll, params: { ...params, _meta: this.requestMeta(params._meta) } },
+      PollEventsResultSchema,
+      { timeout: this.timeout, signal },
+    );
+  }
+
+  /**
+   * Sends one `events/subscribe` request (webhook delivery).
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  async subscribeEvents(params: SubscribeEventsRequestParams, signal?: AbortSignal): Promise<SubscribeEventsResult> {
+    return await this.client.request(
+      { method: EVENTS_METHODS.subscribe, params: { ...params, _meta: this.requestMeta(params._meta) } },
+      SubscribeEventsResultSchema,
+      { timeout: this.timeout, signal },
+    );
+  }
+
+  /**
+   * Sends one `events/unsubscribe` request (webhook delivery).
+   *
+   * @experimental SEP-3415 is a draft; this API may change.
+   */
+  async unsubscribeEvents(params: UnsubscribeEventsRequestParams): Promise<void> {
+    await this.client.request(
+      { method: EVENTS_METHODS.unsubscribe, params: { ...params, _meta: this.requestMeta(params._meta) } },
+      UnsubscribeEventsResultSchema,
+      { timeout: this.timeout },
+    );
+  }
+
+  /**
+   * Starts a subscription driven by `driver` and tracks it so reconnects restore it.
+   *
+   * @internal
+   */
+  async startEventSubscription(config: {
+    name: string;
+    arguments?: Record<string, unknown>;
+    driver: DeliveryDriver;
+    options?: MCPEventSubscribeOptions;
+    notice?: MastraError;
+  }): Promise<MCPEventSubscription> {
+    return await EventSubscription.start({
+      port: this.eventsPort,
+      serverName: this.name,
+      name: config.name,
+      arguments: config.arguments,
+      driver: config.driver,
+      options: config.options,
+      notice: config.notice,
+      defaultStreamOpenTimeoutMs: this.timeout,
+      onOpen: opened => {
+        this.eventSubscriptions.add(opened);
+      },
+      onClose: closed => {
+        this.eventSubscriptions.delete(closed);
+      },
+    });
+  }
+
+  private async cancelEventSubscriptions(): Promise<void> {
+    const subscriptions = [...this.eventSubscriptions];
+    this.eventSubscriptions.clear();
+    await Promise.all(subscriptions.map(subscription => subscription.cancel()));
+  }
+
+  private readonly eventsPort: EventsPort = {
+    poll: (params, signal) => this.pollEvents(params, signal),
+    openStream: (params, sink, options) => this.eventStreamRouter.open(params, sink, options),
+    subscribe: (params, signal) => this.subscribeEvents(params, signal),
+    unsubscribe: params => this.unsubscribeEvents(params),
+    webhook: () => this.webhook,
+    ensureConnected: async () => {
+      await this.reconnectPromise?.catch(() => {});
+      await this.connect();
+    },
+    log: (level, message, details) => this.log(level, message, details),
+  };
+
   private async getJsonSchemaValidator(): Promise<jsonSchemaValidator> {
     if (this.jsonSchemaValidator) return this.jsonSchemaValidator;
 
@@ -1298,7 +1505,9 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private convertInputSchema(inputSchema: MCPToolListEntry['inputSchema']): StandardSchemaWithJSON {
-    const schema = withDefaultDialect(('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7);
+    const schema = withDefaultDialect(
+      ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7,
+    );
     return toStandardSchema(schema);
   }
 
@@ -1312,7 +1521,9 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   private convertOutputSchema(outputSchema: MCPToolListEntry['outputSchema']): StandardSchemaWithJSON | undefined {
     if (!outputSchema) return outputSchema;
-    const schema = withDefaultDialect(('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7);
+    const schema = withDefaultDialect(
+      ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7,
+    );
     const standardSchema = toStandardSchema(schema)['~standard'];
     return {
       '~standard': {
@@ -1487,7 +1698,9 @@ export class InternalMastraMCPClient extends MastraBase {
       // structuredContent success path should be validated, not envelope returns. It uses
       // the SDK validator so live and cache-hydrated tools enforce the same dialect.
       const outputSchema = tool.outputSchema
-        ? withDefaultDialect(('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7)
+        ? withDefaultDialect(
+            ('jsonSchema' in tool.outputSchema ? tool.outputSchema.jsonSchema : tool.outputSchema) as JSONSchema7,
+          )
         : undefined;
       const outputSchemaComplexityError = outputSchema ? getJsonSchemaComplexityError(outputSchema) : undefined;
       let outputValidationSchema: StandardSchemaWithJSON | undefined;

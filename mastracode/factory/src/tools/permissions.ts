@@ -30,7 +30,7 @@ export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
 ];
 
 export interface FactoryToolPermissionsSession {
-  readonly identity: { getResourceId(): string };
+  readonly identity: { getId(): string };
   readonly permissions: {
     getRules(): PermissionRules;
     setForTool(args: { toolName: string; policy: PermissionPolicy }): Promise<void>;
@@ -52,7 +52,7 @@ export async function applyFactoryToolPermissions(
   { sessions }: FactoryToolPermissionsDependencies,
   toolNames: readonly string[] = FACTORY_TOOLS_WITHOUT_APPROVAL,
 ): Promise<void> {
-  const row = await sessions.getBySessionId(session.identity.getResourceId());
+  const row = await sessions.getBySessionId(session.identity.getId());
   if (!row?.factoryProjectId) return;
   const rules = session.permissions.getRules();
   if (rules.categories.mcp !== undefined) return;

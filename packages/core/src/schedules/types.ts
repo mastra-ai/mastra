@@ -37,6 +37,12 @@ export type ScheduleIfIdle = {
   behavior?: AgentSignalIdleBehavior;
   attributes?: AgentSignalAttributes;
   streamOptions?: ScheduleStreamOptions;
+  /**
+   * Reject the wake unless an advertised thread owner acknowledges it, so the
+   * process that claimed the thread runs the turn with its claim options. When
+   * no owner answers, the fire fails. Same as `AgentSignalIfIdleOptions.requireClaimedOwner`.
+   */
+  requireClaimedOwner?: boolean;
 };
 
 /** Stable schedule id prefix for agent schedules. */
@@ -103,6 +109,7 @@ const ScheduleIfIdleSchema = z.object({
   behavior: z.enum(['wake', 'persist', 'discard']).optional(),
   attributes: ScheduleAttributesSchema.optional(),
   streamOptions: ScheduleStreamOptionsSchema.optional(),
+  requireClaimedOwner: z.boolean().optional(),
 });
 
 /**
