@@ -59,13 +59,13 @@ describe('formatCost', () => {
 describe('formatAggregateCost', () => {
   describe('when every trace with usage is priced', () => {
     it('shows the exact cost', () => {
-      expect(formatAggregateCost(12.5, { coverage: 1, unit: 'USD' })).toEqual({ text: '$12.50' });
+      expect(formatAggregateCost({ value: 12.5, coverage: 1, unit: 'USD' })).toEqual({ text: '$12.50' });
     });
   });
 
   describe('when only part of the usage is priced', () => {
     it('marks the cost approximate and says how much was priced', () => {
-      expect(formatAggregateCost(12.5, { coverage: 0.8, unit: 'USD' })).toEqual({
+      expect(formatAggregateCost({ value: 12.5, coverage: 0.8, unit: 'USD' })).toEqual({
         text: '~$12.50',
         tooltip: 'Priced for 80% of traces with usage',
       });
@@ -74,7 +74,7 @@ describe('formatAggregateCost', () => {
 
   describe('when the priced rows use more than one currency', () => {
     it('shows no total', () => {
-      expect(formatAggregateCost(null, { coverage: 1, unit: 'mixed' })).toEqual({
+      expect(formatAggregateCost({ coverage: 1, unit: 'mixed' })).toEqual({
         text: '—',
         tooltip: 'Costs use more than one currency',
       });
@@ -83,7 +83,7 @@ describe('formatAggregateCost', () => {
 
   describe('when nothing is priced', () => {
     it('shows no total', () => {
-      expect(formatAggregateCost(null, { coverage: null, unit: null })).toEqual({
+      expect(formatAggregateCost({})).toEqual({
         text: '—',
         tooltip: 'No priced usage for these traces',
       });
