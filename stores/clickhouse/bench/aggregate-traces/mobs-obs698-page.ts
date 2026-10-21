@@ -9,12 +9,14 @@
  *
  *   dry    plan and compile every aggregate request offline.
  *   page   cold ×1 then warm ×reps per role, window and variant.
- *          variants: obs698 (the new page), today (main's page, baseline), exec (the breakdown card's
- *          "Execution source" tab, which fires only when opened).
+ *          variants: obs698 (the new page), obs698-kpim (the new page with the Tokens KPI left on
+ *          `metrics`, X54), today (main's page, baseline), exec (the breakdown card's "Execution source"
+ *          tab, which fires only when opened).
  *   report tables from results/mobs-obs698-page.jsonl.
  *
  *   npx tsx mobs-obs698-page.ts dry --platform /tmp/platform-obs698/servers/mobs-query
  *   npx tsx mobs-obs698-page.ts page --platform ... --label x50 --windows 24h,7d,30d --variants obs698,today,exec
+ *   npx tsx mobs-obs698-page.ts page --platform ... --label x54 --windows 24h,7d,30d --variants obs698-kpim,today,exec
  */
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -181,10 +183,20 @@ async function page(options: {
                         scope,
                         obs698Bodies(to, window, 'executionSource').filter(([c]) => c.startsWith('a:breakdown')),
                       )
-                    : [
-                        ...aggCardsFor(mods, client, scope, obs698Bodies(to, window)),
-                        ...today.filter(c => !c.card.startsWith('m:kpi-tokens')),
-                      ];
+                    : variant === 'obs698-kpim'
+                      ? [
+                          ...aggCardsFor(
+                            mods,
+                            client,
+                            scope,
+                            obs698Bodies(to, window).filter(([c]) => !c.startsWith('a:kpi-tokens')),
+                          ),
+                          ...today,
+                        ]
+                      : [
+                          ...aggCardsFor(mods, client, scope, obs698Bodies(to, window)),
+                          ...today.filter(c => !c.card.startsWith('m:kpi-tokens')),
+                        ];
               const started = performance.now();
               const results = await Promise.all(cards.map(c => measured(phase === 'cold', PROD, c.fn)));
               const wallMs = Math.round(performance.now() - started);
@@ -294,6 +306,40 @@ function report(label: string) {
     const warm = list.filter(x => x.phase === 'warm');
     console.log(
       `${k} | ${median(warm.map(x => x.ms))} | ${Math.max(...list.map(x => x.ms))} | ${Math.max(...list.map(x => x.mem))} | ${Math.round(Math.max(...list.map(x => x.read)))}`,
+    );
+  }
+  console.log(
+    '\nper card, every source (warm worst / cold): role | variant | window | card | source | warm max stmt ms | warm max MiB | warm read MiB (max) | warm failed / n | cold max stmt ms | cold failed',
+  );
+  const all = new Map<string, Array<{ phase: string; ok: boolean; ms: number; mem: number; read: number }>>();
+  for (const r of records) {
+    for (const c of r.cards) {
+      const k = `${r.role} | ${r.variant} | ${r.window} | ${c.card} | ${c.source}`;
+      all.set(k, [
+        ...(all.get(k) ?? []),
+        {
+          phase: r.phase,
+          ok: c.ok,
+          ms: Math.max(0, ...c.queries.map(q => Number(q.durationMs))),
+          mem: Math.max(0, ...c.queries.map(q => Number(q.memMiB))),
+          read: c.queries.reduce((a, q) => a + Number(q.readMiB), 0),
+        },
+      ]);
+    }
+  }
+  for (const [k, list] of all) {
+    const warm = list.filter(x => x.phase === 'warm');
+    const cold = list.filter(x => x.phase === 'cold');
+    console.log(
+      [
+        k,
+        Math.max(0, ...warm.map(x => x.ms)),
+        Math.round(Math.max(0, ...warm.map(x => x.mem))),
+        Math.round(Math.max(0, ...warm.map(x => x.read))),
+        `${warm.filter(x => !x.ok).length}/${warm.length}`,
+        Math.max(0, ...cold.map(x => x.ms)),
+        cold.some(x => !x.ok) ? 'failed' : 'ok',
+      ].join(' | '),
     );
   }
 }

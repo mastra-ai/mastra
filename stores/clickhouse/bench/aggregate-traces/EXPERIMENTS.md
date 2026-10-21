@@ -95,6 +95,7 @@ Numbers are warm medians on the representative project per bucket, 30-day window
 | X51 | prod       | OBS-698 project Metrics page as shipped in mastra#27908–#27910 (`mobs-obs698-page.ts`): 9 `aggregateTraces()` requests through the page's 3-in-flight limiter + the 15 `metrics` requests that stay, p99/largest × 24 h/7 d/30 d, cold ×1 + warm ×3, vs today's page                                              | Memory fits (≤ 404 MiB/statement). 24 h and 7 d fit warm; 30 d does not (3 of 6 warm loads lose cards at 9 s, pages 8–21 s vs ~2 s today). Cold at 7 d it also fails 7 of today's cards. Cause: 6 of 9 requests read the token/cost fallback (~2 GiB each, largest project 30 d). PRs stay drafts                                                                                                                                                                                       |
 | X52 | prod       | OBS-392 review (platform#3633, mastra#27857): bound the per-span usage read of `aggregateSpans()` (`mobs-span-usage-bound.ts`): which spans carry usage, usage lag after span start, unbounded vs `to + 30 d` vs `traceId` semi-joins, largest project + org, 7 d now/14 d back/90 d back + org 180 d branch path | Usage lands on branch spans too (3.9% of rows on `processor_run`, 6 h sample). Longest usage lag 8.9 d, longest span 27.8 d. `to + 30 d` returns the same rows and reads 2–100× less 90 d back (largest project `model_generation` 3.7 → 1.4 GiB), nothing extra near now. Semi-joins help only small selections, read more for `model_generation`, fail 1 GiB at org 180 d. Branch path with tokens/cost at org 180 d: 3.7–4.0 s / ≤ 876 MiB bounded. Shipped as a Platform host limit | done   |
 | X53 | prod       | OBS-698 project Metrics page at 14 d, the range the page is now capped at (`mobs-obs698-page.ts`, X51's method), p99/largest, cold ×1 + warm ×3, vs today's page                                                                                                                                                  | Memory fits (≤ 211 MiB/statement). Warm #2/#3 fit (slowest statement ≤ 5.1 s, pages 4.6–5.3 s vs ~1.3 s today); both warm #1 loads (right after an all-failed cold load) lose the Tokens KPI's previous-window request at 9.0–9.5 s, which reads 5× the current window on the largest project. Cold, both pages fail every request. Does not fit by the gate; PRs stay drafts                                                                                                           |
+| X54 | prod       | OBS-698 project Metrics page with the Tokens KPI left on `metrics` and no 14-day cap (`mobs-obs698-page.ts`, X51's method), p99/largest × 24h/7d/30d, cold ×1 + warm ×3, per card                                                                                                                                 | Memory fits (≤ 419 MiB/statement). Every card fits at 24 h and 7 d. At 30 d on the largest project, Top entities and the environment Trace breakdown lose 2 of 3 warm loads at 9 s and Trace latency loses 1 (contention; it reads 111 MiB). Users and sessions and Cost coverage fit (≤ 4.7 s). The 4 `cost.sum` requests read ~2 GiB each there. No card dropped yet                                                                                                                  |
 
 ## Entries
 
@@ -1010,6 +1011,53 @@ Reproduce: `npx tsx mobs-span-usage-bound.ts facts --platform <mobs-query dir>`,
 3. Back-fill `mastra_model_usage` and turn the fallback off (X49 candidate 6).
 
 Reproduce: `npx tsx mobs-obs698-page.ts dry --windows 14d`, then `page --label x53 --windows 14d --variants obs698,today,exec --reps 3`, then `report --label x53` (results in `results/mobs-obs698-page.jsonl`).
+
+### X54: the project Metrics page with the Tokens KPI left on `metrics`, per card (prod replica, read-only, 2026-10-21)
+
+**Question.** After X53, the Tokens KPI stays on `metrics` (today's request, with its previous-period comparison) until OBS-709 back-fills per-call usage, and the 14-day cap is dropped: the page keeps every window Studio offers today, up to 30 d. Rule: only `aggregateTraces()` cards that fit at every window ship; the rest wait for OBS-709. Which cards fit mobs-query's 1 GiB / 9 s at 24 h, 7 d and 30 d on the p99 and largest project?
+
+**Method.** X51's harness and method: `mobs-obs698-page.ts page --label x54 --windows 24h,7d,30d --variants obs698-kpim,today,exec --reps 3`, against Platform `main` 6f62964d1 at `/tmp/platform-obs698`. The new `obs698-kpim` variant is the OBS-698 page as it now stands: the 7 card requests (`a:latency`, `a:top-entities`, `a:breakdown-environment`, `a:distinct-series`, `a:distinct-totals`, `a:cost-total`, `a:cost-series`) through the page's 3-in-flight limiter, plus all 17 of today's `metrics` requests including `m:kpi-tokens-in/out`. Same 10-socket pool, `max_threads=16`, 1 GiB / 9 s per statement, cold ×1 then warm ×3. All 60 bodies plan and compile offline first (`dry`). The run started once w73 had moved on to local test suites, with no other benchmark on the replica (checked with `herdr agent list` and `ps`). `report` gained a per-card table for every source, with warm and cold kept separate.
+
+**Page** (warm columns: median / max over 3 loads):
+
+| Project | Window | Warm page ms    | Warm slowest statement ms | Warm loads with a failed card                                         | Max MiB | Max concurrent MiB | Warm read per load | Today's page, warm ms |
+| ------- | ------ | --------------- | ------------------------- | --------------------------------------------------------------------- | ------- | ------------------ | ------------------ | --------------------- |
+| p99     | 24 h   | 703 / 1,205     | 340 / 886                 | 0                                                                     | 97      | 224                | 0.4 GiB            | 334 / 457             |
+| p99     | 7 d    | 2,004 / 2,945   | 1,110 / 2,378             | 0                                                                     | 129     | 401                | 1.8 GiB            | 949 / 1,952           |
+| p99     | 30 d   | 8,556 / 19,973  | 3,825 / 7,594             | 0                                                                     | 183     | 775                | 5.6 GiB            | 1,891 / 1,912         |
+| largest | 24 h   | 655 / 852       | 304 / 462                 | 0                                                                     | 95      | 215                | 0.3 GiB            | 670 / 898             |
+| largest | 7 d    | 2,591 / 3,630   | 1,435 / 1,534             | 0                                                                     | 112     | 433                | 1.4 GiB            | 1,132 / 1,340         |
+| largest | 30 d   | 13,811 / 15,548 | 9,001 / 9,530             | 2 (#1: latency, top entities, breakdown; #3: top entities, breakdown) | 419     | 1,299              | 10.9 GiB           | 2,371 / 2,878         |
+
+**Per card, warm** (worst over 3 loads: slowest statement ms / peak MiB; failed loads in brackets):
+
+| Card (request)                          | p99 24 h | p99 7 d     | p99 30 d    | largest 24 h | largest 7 d | largest 30 d        | Reads cost |
+| --------------------------------------- | -------- | ----------- | ----------- | ------------ | ----------- | ------------------- | ---------- |
+| Trace latency (`a:latency`)             | 568 / 52 | 734 / 53    | 3,737 / 89  | 197 / 44     | 398 / 53    | **9,530 / 242 [1]** | no         |
+| Top entities (`a:top-entities`)         | 886 / 50 | 2,378 / 124 | 7,594 / 180 | 462 / 47     | 1,534 / 86  | **9,443 / 340 [2]** | `cost.sum` |
+| Trace breakdown, environment            | 708 / 51 | 2,362 / 129 | 7,026 / 170 | 342 / 84     | 1,435 / 90  | **9,454 / 342 [2]** | `cost.sum` |
+| Trace breakdown, execution source (tab) | 209 / 96 | 408 / 129   | 1,238 / 170 | 152 / 94     | 627 / 113   | 4,653 / 326         | `cost.sum` |
+| Users and sessions, series              | 135 / 19 | 360 / 21    | 2,498 / 142 | 88 / 11      | 402 / 13    | 2,157 / 327         | no         |
+| Users and sessions, totals              | 72 / 18  | 177 / 19    | 408 / 141   | 27 / 50      | 238 / 48    | 2,467 / 323         | no         |
+| Cost coverage, total                    | 144 / 91 | 607 / 123   | 1,876 / 165 | 157 / 89     | 512 / 112   | 4,572 / 396         | `cost.sum` |
+| Cost coverage, series                   | 176 / 97 | 542 / 127   | 1,547 / 183 | 169 / 95     | 609 / 110   | 4,693 / 419         | `cost.sum` |
+
+The execution-source tab fires only when opened, so it runs alone (the `exec` variant). All 17 `metrics` requests, `m:kpi-tokens-in/out` included, keep their data on every warm load at every window; the slowest is `m:kpi-runs` at 3.9 s (p99, 30 d), and the Tokens KPI's `m:kpi-tokens-out` takes at most 3.6 s.
+
+- **Every failure is at 30 d on the largest project.** At 24 h and 7 d every card fits on both projects with ≥ 6.6 s to spare. At 30 d on the p99 project nothing fails, but top entities and the environment breakdown reach 7.6 s and 7.0 s.
+- **The four requests that ask for `cost.sum` read the token/cost fallback**, about 2 GiB each at the largest project over 30 d (top entities 2.0 GiB, breakdown 2.0 GiB, cost total and series 2.0 GiB each). Latency reads 111 MiB, users and sessions 121 MiB. Those four account for ~8 of the page's 10.9 GiB, against 2.8 GiB for today's whole page.
+- **Which card times out depends on the order it runs in, not only on its own cost.** Latency, top entities and breakdown take the limiter's first three slots, and they run alongside all 17 `metrics` requests. Latency reads little but still timed out once there. The cost coverage requests start only after a slot frees up, so they ran with less contention and stayed under 4.7 s. Alone, the 30 d breakdown takes 4.7 s on the largest project (the `exec` row).
+- **p99 30 d warm #3 took 20 s with no statement over 2.4 s**: the last cards waited 17–19 s for a statement that ran in under 1 s, so the time went to the client side (pool or connection), not to the server. Unexplained, as was the 88 s first cold load. A fresh-process recheck of that cold load (`x54-recheck`) took 18.6 s.
+- **Memory fits everywhere**: ≤ 419 MiB per statement. At most 1,299 MiB is held across all of the replica's statements at once; the 1 GiB limit is per statement.
+- **Cold** (not part of the gate): the new page loses 7 of 24 requests at p99 24 h, 5 at p99 7 d, 2 at largest 24 h and 7 at largest 7 d, all of them `aggregateTraces()` cards except one `metrics` card (`m:volume-agents`, largest 7 d). It loses every request at 30 d on both projects. Today's page alone also fails cold at 7 d (1 card on p99, 2 on largest) and at 30 d (all 17).
+
+**Verdict by card**, under the rule "fits at every window":
+
+- **Fit:** Users and sessions; Cost coverage (≤ 4.7 s and ≤ 419 MiB at 30 d, though each request reads 2 GiB and adds to the 30 d contention); Trace breakdown's execution-source tab when it runs alone.
+- **Don't fit:** Top entities and Trace breakdown (environment) each lose 2 of 3 warm loads at largest 30 d. Trace latency loses 1 of 3 there, but only as a contention casualty: its own read is 111 MiB.
+- Nothing has been dropped yet; the OBS-698 PRs stay drafts.
+
+Reproduce: `npx tsx mobs-obs698-page.ts dry`, then `page --label x54 --windows 24h,7d,30d --variants obs698-kpim,today,exec --reps 3`, then `report --label x54` (results in `results/mobs-obs698-page.jsonl`).
 
 ### X46: `aggregateSpans()` contract affordability (prod replica, read-only, 2026-10-19)
 
