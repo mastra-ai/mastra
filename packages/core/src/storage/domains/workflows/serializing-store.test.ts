@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { RunFenceConflictError } from '../../run-fencing';
 import { createEmptyWorkflowSnapshot } from '../../workflow-snapshot';
 import { createSerializingStore } from './serializing-store.test-utils';
 
@@ -155,7 +156,9 @@ describe('serializing workflow storage', () => {
     await workflows.persistWorkflowSnapshot({ ...target, snapshot, fence });
     await workflows.claimRunOwnership({ runId: target.runId, ownerId: 'new', leaseMs: 60_000, force: true });
     const before = inspect();
-    await expect(workflows.persistWorkflowSnapshot({ ...target, snapshot, fence })).rejects.toThrow();
+    await expect(workflows.persistWorkflowSnapshot({ ...target, snapshot, fence })).rejects.toThrow(
+      RunFenceConflictError,
+    );
     await expect(
       workflows.updateWorkflowResults({
         ...target,
@@ -164,9 +167,11 @@ describe('serializing workflow storage', () => {
         requestContext: {},
         fence,
       }),
-    ).rejects.toThrow();
-    await expect(workflows.updateWorkflowState({ ...target, opts: { status: 'completed' }, fence })).rejects.toThrow();
-    await expect(workflows.deleteWorkflowRunById({ ...target, fence })).rejects.toThrow();
+    ).rejects.toThrow(RunFenceConflictError);
+    await expect(workflows.updateWorkflowState({ ...target, opts: { status: 'completed' }, fence })).rejects.toThrow(
+      RunFenceConflictError,
+    );
+    await expect(workflows.deleteWorkflowRunById({ ...target, fence })).rejects.toThrow(RunFenceConflictError);
     expect(inspect()).toEqual(before);
     expect(writes).toBe(1);
   });
