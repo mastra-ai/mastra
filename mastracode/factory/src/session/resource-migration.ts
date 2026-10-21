@@ -124,12 +124,10 @@ export async function migrateSessionResources(
     resourceObservationsLeft: [],
   };
   const sessions = await deps.sessions.listSessionsAwaitingResourceMigration();
-  // Startup waits for this pass, which can take a long time against a remote database,
-  // so say what it's doing instead of leaving the server silently not listening.
+  // This pass can take minutes against a remote database, so say what it is doing and
+  // how far it got.
   if (sessions.length > 0) {
-    console.info(
-      `[factory] session resource migration: moving ${sessions.length} sessions; the server starts once it finishes`,
-    );
+    console.info(`[factory] session resource migration: moving ${sessions.length} sessions in the background`);
   }
   let lastProgressAt = Date.now();
 

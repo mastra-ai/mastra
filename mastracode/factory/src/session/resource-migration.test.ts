@@ -378,7 +378,7 @@ describe('migrateSessionResources', () => {
     });
   });
 
-  it('says how many sessions it moves and reports progress while a long migration holds up startup', async () => {
+  it('says how many sessions it moves and reports progress during a long migration', async () => {
     const { seed, migrate } = await seedLegacyFactory();
     const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     info.mockClear();
@@ -401,7 +401,7 @@ describe('migrateSessionResources', () => {
     const lines = info.mock.calls.map(([line]) => String(line));
     // Progress at most every 10s, never once the last session is done.
     expect(lines).toEqual([
-      '[factory] session resource migration: moving 7 sessions; the server starts once it finishes',
+      '[factory] session resource migration: moving 7 sessions in the background',
       expect.stringMatching(/^\[factory\] session resource migration: 2\/7 sessions checked, \d+ threads moved$/),
       expect.stringMatching(/^\[factory\] session resource migration: 4\/7 sessions checked, \d+ threads moved$/),
       expect.stringMatching(/^\[factory\] session resource migration: 6\/7 sessions checked, \d+ threads moved$/),

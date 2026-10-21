@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Factory startup now logs when it is moving existing sessions to their new memory owners, and reports progress every 10 seconds. On a large or remote database this one-time step can take minutes before the server starts listening; previously it printed nothing, so the dev server looked stuck.
+Factory servers now start listening right away instead of waiting for the one-time move of existing sessions to their new memory owners. On a large or remote database that step could take minutes to an hour, with no output, so `mastra factory dev` looked stuck. The move now runs in the background, logs how many sessions it is moving, and reports progress every 10 seconds. Sessions that haven't been moved yet keep working as before.
