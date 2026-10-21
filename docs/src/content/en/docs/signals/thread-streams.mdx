@@ -115,7 +115,7 @@ State that completed stored runs are not replayed, while pending approvals and s
 
 :::note[Outline]
 
-List the public surfaces: `AgentChunkType` plus `ThreadHistoryChunk`. Link to the [ChunkType reference](/reference/streaming/ChunkType) for chunk shapes.
+List the public surfaces: `AgentChunkType` plus `ThreadHistoryChunk`. Link to the [ChunkType reference](/reference/streaming/ChunkType#thread-history) for chunk shapes and the [Thread events reference](/reference/signals/thread-events) for `subscribeThreadEvents()`.
 
 State that the internal runtime event union is not public and is not documented.
 
@@ -126,5 +126,6 @@ State that the internal runtime event union is not public and is not documented.
 - [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions)
 - [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread)
 - [`client.getAgent().sendToolApproval()`](/reference/client-js/agents#sendtoolapproval)
-- [ChunkType reference](/reference/streaming/ChunkType)
+- [ChunkType reference](/reference/streaming/ChunkType#thread-history)
+- [Thread events reference](/reference/signals/thread-events)
 - [Sending signals](/docs/signals/sending-signals)
