@@ -7,73 +7,35 @@ packages:
 
 # Signals in the agent loop
 
-## Admission and thread ownership
+A signal is only input until the agent loop accepts it. At that point Mastra decides whether to start a run, hand the input to a run that is already active, store it, or reject it. The decision depends on the thread's state, who owns it, and how far the current model request has progressed. The output side of that same run reaches your app through [Thread streams](/docs/signals/thread-streams).
 
-:::note[Outline]
+## Idle threads and active runs
 
-Explain idle versus active threads, one owner per thread, and local versus remote owners.
+When a signal arrives, Mastra first checks whether the thread is running and whether this process owns it. An idle thread starts a new run, and `accepted` resolves to `wake` when this process owns that run. If another process owns the idle thread, the signal is routed to that owner and resolves to `deliver` once the owner acknowledges it.
 
-:::
+An active thread delivers the input to the run that is already executing, even when another process owns it. The input joins at the next safe point in the loop rather than starting a second run. Only one process owns a thread at a time; [Running across processes](/docs/signals/running-across-processes) explains the PubSub leases that keep it that way.
 
-## Accepted outcomes
-
-### Wake
-
-:::note[Outline]
-
-A new run starts locally and owns its output.
-
-:::
-
-### Deliver
-
-:::note[Outline]
-
-Input joins an existing run, including a run owned by another process.
-
-:::
-
-### Persist and discard
-
-:::note[Outline]
-
-Nothing runs. Persistence only writes storage.
-
-:::
-
-### Blocked
-
-:::note[Outline]
-
-Another owner or a suspended run holds the thread.
-
-:::
+Delivery policy can override the default. `persist` stores the signal without running anything, `discard` drops it, and `blocked` means a suspended thread can't accept a new idle wake. [Control when input arrives](/docs/signals/sending-signals#control-when-input-arrives) covers how to set those behaviors.
 
 ## When a signal can interrupt a model request
 
-In the default loop and experimental durable and evented agents, accepted pending messages and signals interrupt a model request that has produced only reasoning or metadata. This includes the wait for its first token. Mastra cancels that request, discards its response from model history and memory, and includes queued input in the next request within the same run. Earlier completed responses stay in history.
+New input does not always wait for the current step to finish. While a model request has produced only reasoning or metadata, Mastra can replace that request with one that includes the new input. This includes the wait for the first token, when nothing visible has been generated yet. Mastra cancels the request, discards its response from model history and memory, and retries within the same run and step. Earlier completed responses stay in history.
 
-Interrupted requests don't count toward `maxSteps` or advance `stepNumber`. The next request uses the same logical step, so `maxSteps: 1` still allows a replacement response. Mastra doesn't set a separate interruption limit. Repeated signals can keep restarting reasoning until a request completes, the run is cancelled, or its total timeout expires.
+Interrupted requests don't count toward `maxSteps` or advance `stepNumber`. The replacement uses the same logical step, so `maxSteps: 1` still allows a new response. Mastra doesn't set a separate interruption limit, so repeated signals can keep restarting reasoning until a request completes, the run is cancelled, or its total timeout expires.
 
-Already-streamed reasoning may remain visible until the client reloads history. When input arrives while per-step input processors (`processInputStep`) run, the processors finish and Mastra cancels the model request they prepared. Custom output processors also keep running after a cancellation, and the next request waits for their in-flight work to settle. Mastra discards framework-owned response buffers, but doesn't undo processor state, data that processors write while the cancelled request settles, or external side effects. Usage totals exclude interrupted requests, including any usage the provider reports for them. Providers may still bill for those requests.
+Reasoning that already streamed may remain visible until the client reloads history. When input arrives while per-step input processors run, those processors finish and Mastra cancels the request they prepared. Custom output processors also keep running after a cancellation, and the next request waits for their in-flight work to settle. Mastra discards framework-owned response buffers, but it doesn't undo processor state, data written while the cancelled request settles, or external side effects. Usage totals exclude interrupted requests, including usage the provider reports for them, though providers may still bill for those requests.
 
-## When a signal waits for the next boundary
+## When a signal waits
 
-Once text, tool calls, or other response content starts, signals wait for the next loop boundary. Running tools aren't cancelled or repeated. If the run reaches `maxSteps`, queued input may be saved without a response. `queueMessage()` still waits for the active run to finish. Signals that processors write directly to the message history don't interrupt their own request.
+The interrupt window closes as soon as the request produces text, a tool call, or other response content. From then on, new input waits for the next loop boundary. Running tools are neither cancelled nor repeated, and queued input never jumps ahead of the active run. If the run reaches `maxSteps` before that boundary, Mastra may save queued input without producing a response. Signals that a processor writes directly into the message history don't interrupt the request that wrote them.
 
-## Queued input
-
-:::note[Outline]
-
-Explain that queued input always waits for the active run to finish.
-
-:::
+`queueMessage()` and `queueSignal()` wait whenever a run is active. On an idle thread they start a run immediately. They are for input that must follow the current turn rather than change it.
 
 ## Processors and generated signals
 
-Processors can send reactive signals during a run. A processor should inspect the chat history and react to a specific trigger without sending the same context more than once.
+Processors run inside the loop, so the signals they send follow the same interrupt and wait rules. A processor should inspect the chat history and react to a specific trigger without sending the same context more than once. That matters across retries: if a request is replaced, a processor that sends on every pass can duplicate context.
 
-The following example demonstrates a processor that injects `AGENTS.md` instructions after a tool call reads an `AGENTS.md` file.
+The following example injects `AGENTS.md` instructions after a tool call reads an `AGENTS.md` file.
 
 ```typescript title="src/mastra/processors/agents-md-reminder.ts"
 import type { Processor, ProcessInputStepArgs } from '@mastra/core/processors'
@@ -119,43 +81,22 @@ Awaiting `sendSignal()` preserves stream echo ordering when a subscribed thread 
 
 :::note[Outline]
 
-Cover suspension and continuation runs, pending approvals, and resume behavior.
+Cover suspension and continuation runs, pending approvals, and resume behavior. State that a suspended thread reports `blocked` for a new idle wake, and link to the approval flow on Thread streams.
 
 :::
 
 ## Cancellation and stop
 
-:::note[Outline]
-
-Cover `abort` semantics, `clearPendingSignals`, and the `continueWithMessages()` exceptions.
-
-:::
+Aborting stops the active run. Queued input survives by default, and `clearPendingSignals: true` removes the local queue as well. Continuation runs created with `continueWithMessages()` are separate from the run that was aborted, so aborting the original run doesn't cancel them. [Stop a run or clear queued input](/docs/signals/sending-signals#stop-a-run-or-clear-queued-input) has the call shapes.
 
 ## Execution engines and process boundaries
 
-Reasoning interruption doesn't apply to the Inngest engine, or to durable and evented steps that run in a different process from the one that accepted the input.
-
-:::note[Outline]
-
-Compare the default loop with durable, evented, and Inngest execution. Link to the durable-agent mechanics instead of duplicating them.
-
-:::
+Reasoning interruption depends on the loop being able to cancel and replace the request in the process that accepted the input. The default loop can do that, and so can experimental durable and evented agents while their step runs in that same process. It doesn't apply to the Inngest engine, or to durable and evented steps that run in a different process from the one that accepted the input. [Durable agents](/docs/harness/durable-agents) covers how those runs are recovered and resumed.
 
 ## What the model sees
 
-:::note[Outline]
-
-Describe XML signal messages, state lanes, notification summaries, and history ordering.
-
-:::
+Signals reach the model as XML elements rather than a generic signal object. User messages render as `<user>`, reactive context as `<system-reminder>` by default, and external events as `<notification>`. State lanes and notification summaries have their own shapes, covered in [State signals](/docs/signals/state-signals) and [Notifications](/docs/signals/notifications). Accepted signals are written into thread history, so later requests see them alongside the messages they followed.
 
 ## Observability
 
 When a signal starts a run, the run's `AGENT_RUN` span records the signal's `id`, `type`, `tagName`, and `attributes` under `attributes.signal`.
-
-## Related
-
-- [Processors](/docs/agents/processors)
-- [Durable agents](/docs/harness/durable-agents)
-- [Thread streams](/docs/signals/thread-streams)
-- [Sending signals](/docs/signals/sending-signals)
