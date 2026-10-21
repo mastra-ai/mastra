@@ -111,6 +111,7 @@ describe('Sessions sidebar source icons', () => {
     expect(await iconFor('Fix flaky login')).toBe('github-issue');
     expect(await iconFor('Add audit log')).toBe('linear-issue');
     expect(await iconFor('Review PR 12')).toBe('github-pr');
-    expect(await iconFor('Answer deploy question')).toBe('slack-thread');
+    // Linked Slack conversations use the user-session presentation.
+    expect(await iconFor('Answer deploy question')).toBe('user');
   });
 });

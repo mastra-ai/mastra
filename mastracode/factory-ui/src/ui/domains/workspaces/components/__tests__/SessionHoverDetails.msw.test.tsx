@@ -45,6 +45,7 @@ function stubSessionDetails(updatedAt: string, { includeSessionTitles = true, sl
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
       HttpResponse.json(fixtures.activeRunsResponse),
     ),
+    http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
   );
 }
 
@@ -89,12 +90,12 @@ async function setupSessionRows() {
 }
 
 describe('Workspace session hover details', () => {
-  it('uses the work-item title when the session has no generated title', async () => {
+  it('uses the Slack branch for a user session that has no generated title', async () => {
     stubSessionDetails(new Date().toISOString(), { includeSessionTitles: false, slackWorkSession: true });
 
     renderSection();
 
-    expect(await screen.findByRole('button', { name: 'Authentication fails after token refresh' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'slack/1785354600-536029' })).toBeInTheDocument();
   });
 
   describe('when a work session is hovered', () => {
