@@ -39,6 +39,62 @@ function t17Agent({ model }: { model: LanguageModelV2 }) {
 const MEMORY = { thread: 't17-thread', resource: 't17-resource' };
 
 describeParity('model-settings-validation parity', target => {
+  it.each(['per-call', 'default'] as const)(
+    'generate rejects an invalid %s timeout before execution (COR-1426)',
+    async source => {
+      const results = await expectParity(target, {
+        model: { respond: () => textOnlyTape('ok') },
+        buildAgent: ({ model }) =>
+          new Agent({
+            id: 'generate-timeout',
+            name: 'generate-timeout',
+            instructions: 'Follow the script.',
+            model,
+            memory: new MockMemory(),
+            ...(source === 'default' ? { defaultOptions: { modelSettings: { timeout: INVALID_TIMEOUT } } } : {}),
+          }),
+        run: async handle => {
+          await handle.generate('Go.', {
+            maxSteps: 2,
+            memory: MEMORY,
+            ...(source === 'per-call' ? { modelSettings: { timeout: INVALID_TIMEOUT } } : {}),
+          });
+        },
+      });
+      for (const engine of ['plain', target] as const) {
+        expect(results[engine]!.turns[0]!.error).toStrictEqual({
+          name: 'TypeError',
+          message: '`modelSettings.timeout.stepMs` must be a positive, finite number of milliseconds.',
+        });
+        expect(results[engine]!.turns[0]!.chunks).toEqual([]);
+        expect(results[engine]!.requests).toHaveLength(0);
+      }
+    },
+  );
+
+  it('generate accepts a valid override of an invalid default timeout (COR-1426)', async () => {
+    const results = await expectParity(target, {
+      model: { respond: () => textOnlyTape('ok') },
+      buildAgent: ({ model }) =>
+        new Agent({
+          id: 'generate-timeout-override',
+          name: 'generate-timeout-override',
+          instructions: 'Follow the script.',
+          model,
+          memory: new MockMemory(),
+          defaultOptions: { modelSettings: { timeout: INVALID_TIMEOUT } },
+        }),
+      run: async handle => {
+        await handle.generate('Go.', { maxSteps: 2, memory: MEMORY, modelSettings: { timeout: VALID_TIMEOUT } });
+      },
+    });
+    for (const engine of ['plain', target] as const) {
+      expect(results[engine]!.turns[0]!.error).toBeUndefined();
+      expect(results[engine]!.turns[0]!.text).toBe('ok');
+      expect(results[engine]!.requests).toHaveLength(1);
+    }
+  });
+
   it('rejects an invalid timeout before calling the model on every engine', async () => {
     const scenario: Omit<EngineParityScenario, 'engines'> = {
       model: { respond: () => textOnlyTape('ok') },
