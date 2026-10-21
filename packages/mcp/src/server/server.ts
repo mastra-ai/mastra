@@ -113,6 +113,16 @@ export interface MCPServerConfig extends CoreMCPServerConfig {
    * @experimental SEP-3415 is a draft; this API may change.
    */
   eventsOptions?: MCPServerEventsOptions;
+  /**
+   * How requests from 2025-era clients (those that open with `initialize`) are served
+   * over HTTP.
+   *
+   * - `'reject'` (default): they get the unsupported-protocol-version error.
+   * - `'stateless'`: each one is answered by a fresh server instance without a session.
+   *   `GET` and `DELETE` session operations get `405`. Features that need 2026-07-28
+   *   (suspend/resume, `subscriptions/listen`, events) are not available to these clients.
+   */
+  legacy?: 'reject' | 'stateless';
 }
 
 export interface MCPServerHTTPOptions {
@@ -204,6 +214,7 @@ export class MCPServer extends MCPServerBase {
   private readonly eventsOptions: MCPServerEventsOptions;
   private eventsInspector: MCPServerEventsInspector | undefined;
   private readonly webhooks?: WebhookDispatcher;
+  private readonly legacy: 'reject' | 'stateless';
 
   private httpHandler?: McpHttpHandler;
   private nodeHandler?: NodeMcpRequestHandler;
@@ -221,6 +232,7 @@ export class MCPServer extends MCPServerBase {
     this.loadAppResources(config.appResources);
     this.requestStateCodec = this.createRequestStateCodec(config.requestState);
     this.eventsOptions = config.eventsOptions ?? {};
+    this.legacy = config.legacy ?? 'reject';
     const webhook = this.eventsOptions.webhook;
     this.eventRegistry = new ServerEventRegistry(config.events, { webhook: webhook !== undefined });
     if (webhook && this.eventRegistry.size > 0) {
@@ -1192,7 +1204,7 @@ export class MCPServer extends MCPServerBase {
   private getNodeHandler(): NodeMcpRequestHandler {
     if (!this.nodeHandler) {
       this.httpHandler = createMcpHandler(() => this.createServerInstance(), {
-        legacy: 'reject',
+        legacy: this.legacy,
         onerror: error => this.logger.error('MCP handler error', { error: error.toString() }),
       });
       this.nodeHandler = toNodeHandler(this.httpHandler, {
@@ -1219,7 +1231,8 @@ export class MCPServer extends MCPServerBase {
 
   /**
    * Handles one Streamable HTTP request at `httpPath`. Every request is
-   * self-contained; requests without a 2026-07-28 envelope are rejected.
+   * self-contained; requests without a 2026-07-28 envelope are rejected unless
+   * `legacy: 'stateless'` is configured.
    */
   async startHTTP({ url, httpPath, req, res, options }: MCPServerHTTPOptions): Promise<void> {
     if (url.pathname !== httpPath) {

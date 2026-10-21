@@ -207,7 +207,7 @@ Persisted credentials changed shape too: tokens are stored per authorization-ser
 
 ### Server `protocolVersion` option
 
-Servers accepted `protocolVersion` (`'2025-11-25'`, `'2026-07-28'` or `'auto'`). Only `2026-07-28` is served now, exposed as the `MCP_PROTOCOL_VERSION` constant. Remove the option; a client that doesn't offer `2026-07-28` fails with an explicit negotiation error instead of a downgrade.
+Servers accepted `protocolVersion` (`'2025-11-25'`, `'2026-07-28'` or `'auto'`). Only `2026-07-28` is served now, exposed as the `MCP_PROTOCOL_VERSION` constant. Remove the option; a client that doesn't offer `2026-07-28` fails with an explicit negotiation error instead of a downgrade. To keep serving clients that still open with `initialize` over HTTP, set `legacy: 'stateless'` on the server; each of their requests is answered without a session.
 
 ```diff
   const server = new MCPServer({
