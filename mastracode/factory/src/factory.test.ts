@@ -25,7 +25,7 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
 import { Hono } from 'hono';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
@@ -1116,6 +1116,9 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('tells the UI it serves MCP exactly when it mounts the MCP endpoint', async () => {
+    // A developer's own setting would turn on MCP for the provider without config.
+    vi.stubEnv('MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER', '');
+    onTestFinished(() => vi.unstubAllEnvs());
     const cases = [
       { auth: fakeProvider(), mcp: { authorizationServers: ['https://auth.example.com'] }, serves: true },
       // An auth provider with no authorization server for MCP clients to sign in through.

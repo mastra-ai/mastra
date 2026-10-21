@@ -492,6 +492,19 @@ describe('Factory activity over MCP events', () => {
     expect(again.body?.result.cursor).toBe(next.body!.result.cursor);
   });
 
+  it('a client with a cursor the Factory can’t read starts over from now and is told it may have missed events', async () => {
+    const { url, item } = await setup();
+
+    // Well-formed, but its id isn't an audit row id (Postgres would reject it in the query).
+    const restart = await poll(url, 'token-alice', '2026-10-21T00:00:00.000Z_row-7');
+    expect(restart.status).toBe(200);
+    expect(restart.body?.result).toMatchObject({ events: [], truncated: true, cursor: expect.any(String) });
+
+    await renameItem(url, item.id, 'Fix the sign-in page');
+    const next = await poll(url, 'token-alice', restart.body!.result.cursor);
+    expect(next.body?.result.events.map((event: any) => event.data.action)).toEqual(['factory.work_item.updated']);
+  });
+
   it('activity from another org’s Factory never shows up', async () => {
     const { url, base, item, projects } = await setup();
     const globex = await projects.create({ orgId: 'org-2', userId: 'mallory', input: { name: 'Globex' } });

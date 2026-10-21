@@ -746,7 +746,7 @@ To connect a client:
 - **Claude** (claude.ai and Claude Desktop): open **Settings → Connectors → Add custom connector**, paste the endpoint URL, then sign in when asked. Claude connects from Anthropic's servers, so the Factory must be reachable over public HTTPS.
 - **ChatGPT**: open **Settings → Connectors → Create**, paste the endpoint URL, and choose OAuth.
 
-The endpoint speaks MCP `2026-07-28` (clients open with `server/discover`). Older clients that open with a 2025-era `initialize` request get an unsupported-protocol-version error naming `2026-07-28`. CORS allows the `Mcp-Protocol-Version`, `Mcp-Method` and `Mcp-Name` request headers and exposes `WWW-Authenticate`, so browser-based clients on an allowed origin can connect too.
+The endpoint speaks MCP `2026-07-28` (clients open with `server/discover`). Older clients that open with a 2025-era `initialize` request get an unsupported-protocol-version error naming `2026-07-28`. CORS allows the `Mcp-Protocol-Version`, `Mcp-Method` and `Mcp-Name` request headers and exposes `WWW-Authenticate`, so browser-based clients can connect too, from any origin the server's CORS settings accept.
 
 Factories on Mastra Platform auth advertise Platform's AuthKit (`https://auth-kit.mastra.ai`) automatically. With other auth providers, set the authorization server the metadata advertises, or the endpoint isn't served:
 
@@ -772,8 +772,8 @@ The endpoint serves one MCP event type (SEP-3415, experimental in `@mastra/mcp`)
 
 - `arguments` are optional: `workItemId` narrows to one work item, `actions` to specific audit actions (for example `factory.work_item.updated`).
 - A `null` cursor starts from now and returns no events. Pass back the returned `cursor` on each poll. An unreadable cursor restarts from now and marks the result `truncated`.
-- Each event's `eventId` is its audit row id, and the payload has `action`, `occurredAt`, `actor`, `workItemId`, `sessionId` and a one-line `summary`.
-- Only activity on work items is served, the same history any Factory member sees on a work item. Activity that only touches a session (signals, pushes from private sessions) is left out.
+- Each event's `eventId` is its audit row id, and the payload has `action`, `occurredAt`, `actor`, `workItemId`, `sessionId` (when a session was involved) and a one-line `summary`.
+- Only activity on work items is served. Activity that only touches a session (signals, pushes from private sessions) is left out.
 
 ### Development
 

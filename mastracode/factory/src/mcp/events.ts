@@ -2,12 +2,15 @@ import { defineEvent } from '@mastra/mcp';
 import { z } from 'zod';
 
 import { parseAuditAction } from '../storage/domains/audit/actions.js';
+import { AUDIT_ACTOR_TYPES } from '../storage/domains/audit/actors.js';
 import type { AuditStorage, AuditEventRow } from '../storage/domains/audit/base.js';
-import { ACTOR_PROFILE_METADATA_KEY, decodeAuditCursor, encodeAuditCursor } from '../storage/domains/audit/base.js';
+import {
+  ACTOR_PROFILE_METADATA_KEY,
+  AUDIT_TRAIL_START,
+  decodeAuditAfterCursor,
+  encodeAuditCursor,
+} from '../storage/domains/audit/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-
-/** Sorts before every audit row, so polling from it misses nothing recorded later. */
-const START_OF_TRAIL = `${new Date(0).toISOString()}_0`;
 
 const activityArgs = z
   .object({
@@ -24,11 +27,11 @@ const activityPayload = z.object({
   action: z.string(),
   occurredAt: z.string(),
   actor: z.object({
-    type: z.enum(['human', 'agent', 'system']),
+    type: z.enum(AUDIT_ACTOR_TYPES),
     id: z.string(),
     name: z.string().optional(),
   }),
-  workItemId: z.string().optional(),
+  workItemId: z.string(),
   sessionId: z.string().optional(),
   summary: z.string(),
 });
@@ -46,8 +49,7 @@ function workItemTarget(event: AuditEventRow) {
   return event.targets.find(target => target.type === 'work_item');
 }
 
-function toActivity(event: AuditEventRow): FactoryActivity {
-  const workItem = workItemTarget(event);
+function toActivity(event: AuditEventRow, workItem: { id: string; name?: string }): FactoryActivity {
   const sessionId = event.targets.find(target => target.type === 'session')?.id;
   const profile = event.metadata[ACTOR_PROFILE_METADATA_KEY] as { name?: unknown } | undefined;
   const parsed = parseAuditAction(event.action);
@@ -62,9 +64,9 @@ function toActivity(event: AuditEventRow): FactoryActivity {
       id: event.actorId,
       ...(typeof profile?.name === 'string' ? { name: profile.name } : {}),
     },
-    ...(workItem ? { workItemId: workItem.id } : {}),
+    workItemId: workItem.id,
     ...(sessionId ? { sessionId } : {}),
-    summary: workItem ? `${verb}: ${workItem.name ?? workItem.id}` : verb,
+    summary: `${verb}: ${workItem.name ?? workItem.id}`,
   };
 }
 
@@ -90,13 +92,13 @@ export function factoryActivityEvent(deps: FactoryActivityEventDeps) {
       !args.workItemId ||
       (await deps.workItems.getForProject(deps.orgId, deps.factoryProjectId, args.workItemId)) !== null,
     poll: async ({ arguments: args, cursor, maxEvents }) => {
-      const start = cursor && decodeAuditCursor(cursor) ? cursor : undefined;
+      const start = cursor && decodeAuditAfterCursor(cursor) ? cursor : undefined;
       if (!start) {
         // No cursor means "from now". An unreadable one can't be resumed, so say events may have been missed.
         const newest = (await deps.audit.list({ ...project, limit: 1 })).events[0];
         return {
           events: [],
-          cursor: newest ? encodeAuditCursor(newest) : START_OF_TRAIL,
+          cursor: newest ? encodeAuditCursor(newest) : AUDIT_TRAIL_START,
           ...(cursor ? { truncated: true } : {}),
         };
       }
@@ -109,12 +111,11 @@ export function factoryActivityEvent(deps: FactoryActivityEventDeps) {
       });
       const last = page.events.at(-1);
       return {
-        events: page.events
-          .filter(event => {
-            const workItem = workItemTarget(event);
-            return workItem !== undefined && (!args.workItemId || workItem.id === args.workItemId);
-          })
-          .map(event => ({ eventId: event.id, timestamp: event.occurredAt, data: toActivity(event) })),
+        events: page.events.flatMap(event => {
+          const workItem = workItemTarget(event);
+          if (!workItem || (args.workItemId && workItem.id !== args.workItemId)) return [];
+          return [{ eventId: event.id, timestamp: event.occurredAt, data: toActivity(event, workItem) }];
+        }),
         // Skipped rows still advance the cursor, so a filtered-out page isn't read again.
         cursor: last ? encodeAuditCursor(last) : start,
         ...(page.nextCursor ? { hasMore: true } : {}),

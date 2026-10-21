@@ -159,6 +159,21 @@ export function decodeAuditCursor(cursor: string): { occurredAt: Date; id: strin
   return { occurredAt, id };
 }
 
+/** An `after` cursor that sorts before every audit row, so paging from it misses nothing. */
+export const AUDIT_TRAIL_START = `${new Date(0).toISOString()}_00000000-0000-0000-0000-000000000000`;
+
+const AUDIT_EVENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Decode an `after` cursor, or `undefined` when it can't be paged from. Its id
+ * must be a UUID like every audit row id: Postgres rejects any other id in the
+ * keyset comparison.
+ */
+export function decodeAuditAfterCursor(cursor: string): { occurredAt: Date; id: string } | undefined {
+  const decoded = decodeAuditCursor(cursor);
+  return decoded && AUDIT_EVENT_ID.test(decoded.id) ? decoded : undefined;
+}
+
 export const AUDIT_EVENTS_SCHEMA: CollectionSchema = {
   name: 'audit_events',
   columns: {
@@ -290,8 +305,12 @@ export class AuditStorage extends FactoryStorageDomain {
     if (input.actorId) where.actor_id = input.actorId;
 
     const forward = input.after !== undefined;
-    const raw = input.after ?? input.before;
-    const cursor = raw ? decodeAuditCursor(raw) : undefined;
+    const cursor =
+      input.after !== undefined
+        ? decodeAuditAfterCursor(input.after)
+        : input.before
+          ? decodeAuditCursor(input.before)
+          : undefined;
     // Paging forward from an unreadable cursor would replay the whole trail.
     if (forward && !cursor) throw new Error(`Invalid audit cursor '${input.after}'`);
     const direction = forward ? 'asc' : 'desc';
