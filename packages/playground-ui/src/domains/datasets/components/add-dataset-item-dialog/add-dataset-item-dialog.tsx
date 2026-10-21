@@ -41,9 +41,9 @@ export interface AddDatasetItemDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
-  /** Raw JSON prefilled in the input editor. */
+  /** JSON or plain text prefilled in the input editor. */
   initialInput?: string;
-  /** Raw JSON prefilled in the ground truth editor. */
+  /** JSON or plain text prefilled in the ground truth editor. */
   initialGroundTruth?: string;
   /** Raw JSON array prefilled in the tool mocks editor. */
   initialToolMocks?: string;
@@ -115,6 +115,16 @@ const GROUND_TRUTH_PLACEHOLDER = '{ "text": "The answer you expect" }';
 
 /** Copying an editor that holds nothing worth copying is noise. */
 const hasContent = (value: string) => !['', '{}'].includes(value.trim());
+
+/** Only JSON can be formatted; offering it on plain text would only fail. */
+const isJson = (value: string) => {
+  try {
+    JSON.parse(value);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 const STEP_COUNT = Object.keys(STEPS).length;
 
@@ -267,7 +277,7 @@ function AddDatasetItemForm({
   const apiErrorsOf = (field: AddItemField) => (apiErrors?.field === field ? apiErrors.errors : []);
   const isInvalid = (field: AddItemField) => Boolean(errorOf(field)) || apiErrorsOf(field).length > 0;
 
-  const editJson = (field: 'input' | 'groundTruth' | 'toolMocks' | 'requestContext') => (value: string) => {
+  const editField = (field: 'input' | 'groundTruth' | 'toolMocks' | 'requestContext') => (value: string) => {
     update(() => ({ [field]: value }));
     setApiErrors(undefined);
   };
@@ -293,13 +303,13 @@ function AddDatasetItemForm({
           <div className="grid items-start gap-5 sm:grid-cols-2">
             <Field invalid={isInvalid('input')}>
               <FieldLabel required>Input</FieldLabel>
-              <FieldDescription>What the target receives when this item runs.</FieldDescription>
+              <FieldDescription>What the target receives when this item runs. JSON or plain text.</FieldDescription>
               <CodeEditor
                 value={draft.input}
-                onChange={editJson('input')}
-                aria-label="Input JSON"
+                onChange={editField('input')}
+                aria-label="Input"
                 showCopyButton={hasContent(draft.input)}
-                showFormatButton={hasContent(draft.input)}
+                showFormatButton={hasContent(draft.input) && isJson(draft.input)}
                 className="h-[220px]"
               />
               <FieldError>{errorOf('input')}</FieldError>
@@ -307,14 +317,14 @@ function AddDatasetItemForm({
             </Field>
             <Field invalid={isInvalid('groundTruth')}>
               <FieldLabel>Ground truth</FieldLabel>
-              <FieldDescription>The expected answer scorers compare against.</FieldDescription>
+              <FieldDescription>The expected answer scorers compare against. JSON or plain text.</FieldDescription>
               <CodeEditor
                 value={draft.groundTruth}
-                onChange={editJson('groundTruth')}
-                aria-label="Ground truth JSON"
+                onChange={editField('groundTruth')}
+                aria-label="Ground truth"
                 placeholder={GROUND_TRUTH_PLACEHOLDER}
                 showCopyButton={hasContent(draft.groundTruth)}
-                showFormatButton={hasContent(draft.groundTruth)}
+                showFormatButton={hasContent(draft.groundTruth) && isJson(draft.groundTruth)}
                 className="h-[220px]"
               />
               <FieldError>{errorOf('groundTruth')}</FieldError>
@@ -327,7 +337,7 @@ function AddDatasetItemForm({
           <Field invalid={isInvalid('toolMocks')}>
             <CodeEditor
               value={draft.toolMocks}
-              onChange={editJson('toolMocks')}
+              onChange={editField('toolMocks')}
               aria-label="Tool mocks JSON"
               placeholder={TOOL_MOCKS_PLACEHOLDER}
               showCopyButton={hasContent(draft.toolMocks)}
@@ -350,7 +360,7 @@ function AddDatasetItemForm({
             >
               <CodeEditor
                 value={draft.requestContext}
-                onChange={editJson('requestContext')}
+                onChange={editField('requestContext')}
                 aria-label="Request context JSON"
                 placeholder={requestContextPlaceholder(targetDataset?.requestContextSchema)}
                 showCopyButton={hasContent(draft.requestContext)}
