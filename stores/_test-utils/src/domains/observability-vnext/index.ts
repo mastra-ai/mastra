@@ -160,7 +160,8 @@ function traceQueryFixtureForWriteModel(
         : rootVersions === 'current-first'
           ? [...current, ...superseded]
           : current,
-    relatedSpans: [...spans.values()],
+    // Completion-only writers never see a span before it ends.
+    relatedSpans: [...spans.values()].filter(span => !span.isPending),
     scores: data.scores,
     feedback: data.feedback,
   };
@@ -195,7 +196,8 @@ export async function writeTraceQueryFixture(
       environment: span.environment,
       organizationId: span.organizationId,
       serviceName: span.serviceName ?? null,
-      executionSource: span.executionSource ?? null,
+      // Spans carry execution provenance as `source`; stores expose it as `executionSource`.
+      source: span.executionSource ?? null,
       runId: span.runId ?? null,
       userId: span.userId ?? null,
       sessionId: span.sessionId ?? null,

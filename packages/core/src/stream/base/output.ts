@@ -594,7 +594,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     finishReason: undefined,
   };
   #bufferedText: LLMStepResult<OUTPUT>['text'][] = [];
-  /** Length of `#bufferedText` when the current step began; a retried step is cut back to it. */
+  /** Length of `#bufferedText` when the current step began; rejected or retried steps are cut back to it. */
   #bufferedTextAtStepStart = 0;
   #bufferedObject: OUTPUT | undefined;
   #usedFallbackValue = false;
@@ -1335,12 +1335,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               const currentPayloadStep = payloadSteps[payloadSteps.length - 1];
               const stepTripwire = currentPayloadStep?.tripwire;
 
-              // A retried attempt is thrown away (a processor rejected it, or an error processor
-              // answered its API error with a retry), so it contributes no text: neither to
-              // this step nor to the run's text, which would otherwise begin with the failed
-              // attempt's partial output (#26081).
+              // Rejected and retried attempts contribute no text to the step or run,
+              // including onFinish. Preserve text from earlier accepted steps (#26081, COR-1464).
               const isRetriedStep = (chunk.payload.stepResult.reason as string) === 'retry';
-              if (isRetriedStep) {
+              if (stepTripwire || isRetriedStep) {
                 self.#bufferedText.length = Math.min(self.#bufferedText.length, self.#bufferedTextAtStepStart);
               }
 

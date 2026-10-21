@@ -77,6 +77,11 @@ export interface ChannelLogContext {
   [key: string]: unknown;
 }
 
+type ChannelAgent = Pick<
+  Agent<any, any, any, any>,
+  'id' | 'getMastraInstance' | 'sendMessage' | 'approveToolCall' | 'declineToolCall' | 'getMemory'
+>;
+
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
 const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
 
@@ -93,7 +98,8 @@ export class AgentChannels {
   private chat: Chat | null = null;
   /** Stored initialization promise so webhook handlers can await readiness on serverless cold starts. */
   private initPromise: Promise<void> | null = null;
-  private agent!: Agent<any, any, any, any>;
+  private agent!: ChannelAgent;
+  private dispatchAgent?: ChannelAgent;
   private logger?: IMastraLogger;
   private customState: StateAdapter | undefined;
   private stateAdapter!: StateAdapter;
@@ -188,11 +194,23 @@ export class AgentChannels {
   }
 
   /**
-   * Bind this AgentChannels to its owning agent. Called by Agent constructor.
+   * Bind the owning agent used for webhook paths and stored-thread ownership.
+   * Called by Agent construction and setChannels; changing the owner resets dispatch.
+   * Durable wrappers set a separate dispatch target without changing ownership.
    * @internal
    */
-  __setAgent(agent: Agent<any, any, any, any>): void {
+  __setAgent(agent: ChannelAgent): void {
+    if (this.agent !== agent) this.dispatchAgent = undefined;
     this.agent = agent;
+  }
+
+  /** Set the execution target without changing channel ownership. @internal */
+  __setDispatchAgent(agent: ChannelAgent): void {
+    this.dispatchAgent = agent;
+  }
+
+  private getDispatchAgent(): ChannelAgent {
+    return this.dispatchAgent ?? this.agent;
   }
 
   /**
@@ -303,7 +321,7 @@ export class AgentChannels {
       autoResumeSuspendedTools,
     } = args;
 
-    const result = this.agent.sendMessage(
+    const result = this.getDispatchAgent().sendMessage(
       {
         contents: signalContents,
         attributes,
@@ -367,7 +385,7 @@ export class AgentChannels {
     requestContext: RequestContext;
     memory: { thread: string; resource: string };
   }): Promise<void> {
-    const resumed = await this.agent.approveToolCall({
+    const resumed = await this.getDispatchAgent().approveToolCall({
       runId: args.runId,
       toolCallId: args.toolCallId,
       requestContext: args.requestContext,
@@ -389,7 +407,7 @@ export class AgentChannels {
     requestContext: RequestContext;
     memory: { thread: string; resource: string };
   }): Promise<void> {
-    const resumed = await this.agent.declineToolCall({
+    const resumed = await this.getDispatchAgent().declineToolCall({
       runId: args.runId,
       toolCallId: args.toolCallId,
       requestContext: args.requestContext,
@@ -1750,7 +1768,7 @@ export class AgentChannels {
     /** Platform and message identifiers for log lines. */
     logContext: ThreadHistoryLogContext;
   }): Promise<boolean> {
-    const memory = await this.agent.getMemory({ requestContext: args.requestContext });
+    const memory = await this.getDispatchAgent().getMemory({ requestContext: args.requestContext });
     if (!memory) return false;
     return this.saveThreadHistorySignals({ ...args, memory, target: args.memory });
   }
