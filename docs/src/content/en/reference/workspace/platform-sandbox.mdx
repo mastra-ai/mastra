@@ -316,14 +316,14 @@ The `command` argument is a shell string and is concatenated verbatim into the r
 
 ### Background processes
 
-On an E2B-backed sandbox, `sandbox.processes` runs commands in the background through the same lease `executeCommand()` uses:
+`sandbox.processes` runs commands in the background. Output streams while they run, and you can list, attach to and stop them:
 
 ```typescript
 const handle = await sandbox.processes.spawn('pnpm dev', {
   onStdout: data => console.log(data),
 })
 
-// Everything running in the VM, plus exited processes not read yet
+// Everything running in the sandbox, plus exited processes not read yet
 const running = await sandbox.processes.list()
 
 await handle.kill()
@@ -331,7 +331,9 @@ await handle.kill()
 
 A process has no time limit unless you pass `timeout` to `spawn()` or the constructor. Call `get(pid)` to attach to a process this manager didn't start, for example after your app restarts. Output written before attaching isn't available.
 
-When the lease a process started with expires, the manager reattaches and the process keeps running. Output written between the lease expiring and the reattach is lost. If the process exits in that window, `wait()` reports exit code `1` instead of its real exit code.
+A long-running process's output stream reconnects periodically, and the process keeps running through it. Output written during a reconnect is lost, and a process that exits during one reports exit code `1` from `wait()` instead of its real exit code.
+
+On Railway sandboxes (`sandboxProvider: 'railway'`), a process's output arrives when it exits, and `kill()` isn't supported.
 
 ## Constructor parameters
 
@@ -478,7 +480,7 @@ When the lease a process started with expires, the manager reattaches and the pr
     name: 'processes',
     type: 'SandboxProcessManager',
     description:
-      "Background process manager. On an E2B-backed sandbox, `spawn()` streams output while the process runs, `kill()` stops it, `list()` shows what is running in the VM, and `get(pid)` attaches to a process this manager didn't start. A process keeps running when its lease expires, but output written while the manager reattaches is lost. On other providers, output arrives when the command exits and `kill()` isn't supported. See [Background processes](#background-processes) and the [SandboxProcessManager reference](/reference/workspace/process-manager).",
+      "Background process manager. `spawn()` streams output while the process runs, `kill()` stops it, `list()` shows what is running in the sandbox, and `get(pid)` attaches to a process this manager didn't start. On Railway sandboxes, output arrives when the command exits and `kill()` isn't supported. See [Background processes](#background-processes) and the [SandboxProcessManager reference](/reference/workspace/process-manager).",
   },
   {
     name: 'filesystem',
