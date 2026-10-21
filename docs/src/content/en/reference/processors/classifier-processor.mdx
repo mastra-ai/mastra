@@ -32,11 +32,13 @@ const safety = new Classifier({
 const processor = new ClassifierProcessor({
   classifier: safety,
   onResult: (answers, { abort }) => {
-    if (answers.unsafe.probability > 0.8) abort('Message rejected by safety policy')
+    if ((answers.unsafe.probability ?? 1) > 0.8) abort('Message rejected by safety policy')
   },
   lastMessageOnly: true,
 })
 ```
+
+A decision model can refuse a question. A refused answer is `{ type: 'refusal' }` and has no `choice`, `score`, or `probability`. The example treats a refusal as unsafe.
 
 Several conditions can share one `onResult`, or use separate processors when they need different classifiers. Give each processor a unique `id`. Processor instances with the same `id` share per-run state, including accumulated stream chunks.
 
@@ -46,14 +48,14 @@ inputProcessors: [
     id: 'safety-check',
     classifier: safety,
     onResult: (a, { abort }) => {
-      if (a.unsafe.probability > 0.8) abort('Rejected by safety policy')
+      if ((a.unsafe.probability ?? 1) > 0.8) abort('Rejected by safety policy')
     },
   }),
   new ClassifierProcessor({
     id: 'topic-check',
     classifier: topic,
     onResult: (a, { abort }) => {
-      if (a.topic.choice === 'other') abort('Support questions only')
+      if (a.topic.type === 'refusal' || a.topic.choice === 'other') abort('Support questions only')
     },
   }),
 ]
@@ -182,7 +184,7 @@ export const agent = new Agent({
       classifier: topic,
       lastMessageOnly: true,
       onResult: (answers, { abort }) => {
-        if (answers.topic.choice === 'other') {
+        if (answers.topic.type === 'refusal' || answers.topic.choice === 'other') {
           abort('This assistant only handles billing and account questions')
         }
       },
@@ -220,7 +222,7 @@ export const agent = new Agent({
     new ClassifierProcessor({
       classifier: quality,
       onResult: (answers, { filter }) => {
-        if (answers.quality.score < 1) filter()
+        if ((answers.quality.score ?? 0) < 1) filter()
       },
     }),
   ],
@@ -257,7 +259,7 @@ type SafetyQuestions = {
 const processor = new ClassifierProcessor<SafetyQuestions>({
   classifier: 'safety',
   onResult: (answers, { abort }) => {
-    if (answers.unsafe.probability > 0.8) abort('Message rejected by safety policy')
+    if ((answers.unsafe.probability ?? 1) > 0.8) abort('Message rejected by safety policy')
   },
 })
 ```

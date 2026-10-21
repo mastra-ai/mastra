@@ -151,6 +151,7 @@ import { deltaPollingFeatureEnabled } from './polling';
 import { prunePartitionedTable, pruneTimescaleTable, retentionCutoff } from './retention';
 import * as scoresOps from './scores';
 import * as spanQueryOps from './span-query';
+import * as threadQueryOps from './thread-query';
 import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as tracesOps from './traces';
@@ -385,12 +386,16 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
         'trace-query',
         'trace-aggregate',
         ...spanQueryFeatures,
+        ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        ...traceQueryOps.timeToFirstChunkFeatures,
+        'trace-query-root-span-fields',
+        'trace-query-root-entity-id',
       ] as const;
     }
     return [
@@ -406,12 +411,16 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       'trace-query',
       'trace-aggregate',
       ...spanQueryFeatures,
+      ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
       'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',
       'trace-query-tenant-scope',
       'feedback',
       'trace-query-context-ids',
+      ...traceQueryOps.timeToFirstChunkFeatures,
+      'trace-query-root-span-fields',
+      'trace-query-root-entity-id',
     ] as const;
   }
 
@@ -515,9 +524,18 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     );
   }
 
-  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult> {
+  override async queryThreads(plan: coreStorage.TrustedThreadRowsQueryPlan): Promise<coreStorage.ThreadQueryResponse>;
+  override async queryThreads(plan: TrustedThreadQueryPlan): Promise<QueryThreadsResult>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse>;
+  override async queryThreads(
+    plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
+  ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse> {
     return this.#run('QUERY_THREADS', () =>
-      traceQueryOps.queryThreads(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+      plan.result === 'threadRows'
+        ? threadQueryOps.queryThreadRows(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs)
+        : traceQueryOps.queryThreads(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
     );
   }
 

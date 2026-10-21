@@ -1,4 +1,5 @@
 import { TTLCache } from '@isaacs/ttlcache';
+import type { MastraScorer } from '../../evals/base';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Mastra } from '../../mastra';
 import { unwrapMastraTracingProxy } from '../../observability/context';
@@ -81,6 +82,45 @@ export function deleteRunRegistryEntry(runId: string, mastra: Mastra | undefined
   if (getRunRegistryEntry(runId, mastra)) globalRunRegistry.delete(runId);
 }
 
+/**
+ * Scorer instances a run was configured with, keyed like the serialized
+ * `scorers` workflow input. Workflow input only carries scorer names, so a
+ * scorer passed at call time or via `defaultOptions.scorers` that is not
+ * registered on Mastra can only run in-process through this store (#27579).
+ *
+ * Kept apart from the run registry entry: callers typically `cleanup()` as
+ * soon as the output resolves, which drops that entry before the trailing
+ * scorer step runs. Entries are consumed by the scorer step; the TTL only
+ * bounds runs that never reach it.
+ */
+const runScorerInstances = new TTLCache<string, { mastra?: Mastra; scorers: Record<string, MastraScorer> }>({
+  max: 1000,
+  ttl: RUN_REGISTRY_TTL_MS,
+});
+
+export function setRunScorerInstances(
+  runId: string,
+  scorers: Record<string, MastraScorer>,
+  mastra: Mastra | undefined,
+): void {
+  if (Object.keys(scorers).length === 0) return;
+  runScorerInstances.set(runId, { mastra, scorers });
+}
+
+/** Remove and return the run's scorer instances, unless another Mastra owns them. */
+export function takeRunScorerInstances(
+  runId: string,
+  mastra: Mastra | undefined,
+): Record<string, MastraScorer> | undefined {
+  const entry = runScorerInstances.get(runId);
+  if (!entry) return undefined;
+  if (entry.mastra && mastra && unwrapMastraTracingProxy(entry.mastra) !== unwrapMastraTracingProxy(mastra)) {
+    return undefined;
+  }
+  runScorerInstances.delete(runId);
+  return entry.scorers;
+}
+
 /** runId -> number of in-flight operations holding the entry alive. */
 const activeRuns = new Map<string, number>();
 let activityHeartbeat: ReturnType<typeof setInterval> | undefined;
@@ -90,6 +130,41 @@ function runActivityHeartbeat(): void {
   for (const runId of activeRuns.keys()) {
     globalRunRegistry.get(runId);
   }
+}
+
+const inFlightResumes = new Map<string, Map<string, symbol>>();
+
+/**
+ * Marks a resume of `toolCallId` on `runId` as in flight in this process,
+ * synchronously, so a concurrent resume of the same tool call can fail fast
+ * instead of queueing on the execution claim (#27365).
+ *
+ * @returns A release function, or `undefined` when that tool call already has
+ * a resume in flight. Release is idempotent and only clears its own marker.
+ */
+export function markResumeInFlight(runId: string, toolCallId: string): (() => void) | undefined {
+  let byToolCall = inFlightResumes.get(runId);
+  if (byToolCall?.has(toolCallId)) return undefined;
+  if (!byToolCall) inFlightResumes.set(runId, (byToolCall = new Map()));
+  const token = Symbol(toolCallId);
+  byToolCall.set(toolCallId, token);
+  return () => {
+    const current = inFlightResumes.get(runId);
+    if (current?.get(toolCallId) !== token) return;
+    current.delete(toolCallId);
+    if (current.size === 0) inFlightResumes.delete(runId);
+  };
+}
+
+/**
+ * Clears the in-flight marker for a tool call whose resumed segment is
+ * suspending again, so a later resume of it is not treated as a duplicate.
+ */
+export function clearResumeInFlight(runId: string, toolCallId: string): void {
+  const current = inFlightResumes.get(runId);
+  if (!current) return;
+  current.delete(toolCallId);
+  if (current.size === 0) inFlightResumes.delete(runId);
 }
 
 /**

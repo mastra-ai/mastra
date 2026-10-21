@@ -1346,6 +1346,20 @@ export type SharedMemoryConfig = {
   embedderOptions?: MastraEmbeddingOptions;
 
   /**
+   * Output dimension of the embedder, if known. When set, Memory uses it to name the semantic
+   * recall index instead of embedding a probe string on first use, which saves one embedding
+   * call per Memory instance and removes the startup dependency on the embedding provider.
+   * Must be a positive integer that matches the vectors the embedder returns.
+   *
+   * @example
+   * ```typescript
+   * embedder: 'openai/text-embedding-3-small',
+   * embeddingDimension: 1536
+   * ```
+   */
+  embeddingDimension?: number;
+
+  /**
    * @deprecated This option is deprecated and will throw an error if used.
    * Use the new Input/Output processor system instead.
    *

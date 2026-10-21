@@ -13,7 +13,7 @@ export interface VisibilitySelectProps {
 
 export function VisibilitySelect({ skillId }: VisibilitySelectProps) {
   const formMethods = useFormContext<SkillEditFormValues>();
-  const value = (useWatch({ control: formMethods.control, name: 'visibility' }) ?? 'private') as Visibility;
+  const value = useWatch({ control: formMethods.control, name: 'visibility' }) ?? 'private';
   const { requestChange, dialog } = useVisibilityChange(skillId);
 
   return (

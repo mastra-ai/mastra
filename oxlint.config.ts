@@ -1,7 +1,12 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'oxlint';
 
 export default defineConfig({
   plugins: ['import', 'unicorn', 'react', 'typescript', 'vitest'],
+  // Absolute specifier: package configs extend this one, and oxlint rejects relative ones there.
+  jsPlugins: [
+    { name: 'mastra', specifier: fileURLToPath(new URL('./packages/_config/src/oxlint-plugin.js', import.meta.url)) },
+  ],
   categories: {
     correctness: 'off',
   },
@@ -36,6 +41,8 @@ export default defineConfig({
     'ee/**',
   ],
   rules: {
+    'no-dupe-keys': 'error',
+    'no-unneeded-ternary': 'error',
     'no-restricted-globals': ['error', 'global'],
     'no-unexpected-multiline': 'error',
     'no-warning-comments': [
@@ -53,26 +60,40 @@ export default defineConfig({
     ],
     'unicorn/prefer-node-protocol': 'error',
     'react/jsx-key': 'warn',
+    'mastra/import-order': [
+      'error',
+      {
+        alphabetize: { order: 'asc', caseInsensitive: true },
+        pathGroups: [{ pattern: '#*/**', group: 'internal' }],
+        groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
+      },
+    ],
   },
   overrides: [
     {
-      files: ['**/*.ts?(x)', '**/*.js?(x)'],
+      // TODO: meant to be on; off since #20173 broke this override's glob (`?(x)` matched no file).
+      // ~1,155 violations to clean up in follow-up PRs, one rule family each.
+      files: ['**/*.{ts,tsx}', '**/*.{js,jsx}'],
       rules: {
         'no-console': [
-          'error',
+          'off',
           {
             allow: ['warn', 'error', 'info', 'table', 'time', 'timeEnd', 'dir'],
           },
         ],
-        'no-debugger': 'error',
+        'no-debugger': 'off',
       },
     },
     {
-      files: ['**/*.js?(x)'],
+      files: ['**/*.{js,jsx}'],
+      // Repeated here: a package config that extends this one doesn't inherit the top-level env.
+      env: { builtin: true, browser: true, node: true },
       rules: {
         'no-undef': 'error',
+        // TODO: meant to be on; off since #20173 broke this override's glob (`?(x)` matched no file).
+        // ~1,155 violations to clean up in follow-up PRs, one rule family each.
         'no-unused-vars': [
-          'error',
+          'off',
           {
             args: 'after-used',
             argsIgnorePattern: '^_',
@@ -85,11 +106,13 @@ export default defineConfig({
       },
     },
     {
-      files: ['**/*.ts?(x)'],
+      // TODO: the rules still 'off' here are meant to be on; off since #20173 broke this override's glob
+      // (`?(x)` matched no file). ~500 violations left to clean up in follow-up PRs, one rule family each.
+      files: ['**/*.{ts,tsx}'],
       rules: {
         'import/consistent-type-specifier-style': ['error', 'prefer-top-level'],
         'eslint/no-unused-vars': [
-          'error',
+          'off',
           {
             args: 'after-used',
             argsIgnorePattern: '^_',
@@ -103,13 +126,14 @@ export default defineConfig({
           'error',
           {
             prefer: 'type-imports',
-            disallowTypeAnnotations: true,
+            // `typeof import('x')` is already type-only; tests use it with vi.importActual.
+            disallowTypeAnnotations: false,
             fixStyle: 'separate-type-imports',
           },
         ],
-        'typescript/no-require-imports': 'error',
+        'typescript/no-require-imports': 'off',
         'typescript/ban-ts-comment': [
-          'error',
+          'off',
           {
             'ts-expect-error': 'allow-with-description',
             'ts-ignore': true,
@@ -121,24 +145,29 @@ export default defineConfig({
       },
       plugins: ['typescript'],
     },
+    // TODO: the ban on importing test files from source (`no-restricted-imports` with test-file patterns) is meant
+    // to be on; off since #20173 broke its override's glob. Don't re-add it here as a root override: oxlint applies an
+    // extended config's overrides after a package's own rules, so it would replace the packages' import bans.
+
+    // Type-aware (oxlint --type-aware, oxlint-tsgolint): enforced by ESLint's typescript-eslint until now.
     {
-      files: ['**/*.ts?(x)', '**/*.js?(x)'],
+      files: ['**/*.{ts,tsx}'],
       rules: {
-        'no-restricted-imports': [
-          'error',
-          {
-            patterns: [
-              {
-                group: ['**/tests/**', '**/#tests/**', '**/__tests__/**/*', '**/*.test.*', '**/*.spec.*'],
-                message: 'Do not import test files in source files',
-              },
-            ],
-          },
-        ],
+        'typescript/no-meaningless-void-operator': 'error',
+        'typescript/no-floating-promises': 'error',
+        'typescript/no-misused-promises': ['error', { checksVoidReturn: false }],
       },
     },
     {
-      files: ['**/tests/**', '**/#tests/**', '**/__tests__/**/*', '**/*.test.*', '**/*.spec.*', 'vitest.config.ts'],
+      files: [
+        '**/tests/**',
+        '**/#tests/**',
+        '**/__tests__/**/*',
+        '**/*.test.*',
+        '**/*.spec.*',
+        'vitest.config.ts',
+        '**/oxlint.config.ts',
+      ],
       rules: {
         'typescript/await-thenable': 'off',
         'typescript/consistent-return': 'off',
@@ -152,7 +181,6 @@ export default defineConfig({
         'typescript/no-floating-promises': 'off',
         'typescript/no-for-in-array': 'off',
         'typescript/no-implied-eval': 'off',
-        'typescript/no-meaningless-void-operator': 'off',
         'typescript/no-misused-promises': 'off',
         'typescript/no-misused-spread': 'off',
         'typescript/no-mixed-enums': 'off',
@@ -160,11 +188,7 @@ export default defineConfig({
         'typescript/no-unnecessary-boolean-literal-compare': 'off',
         'typescript/no-unnecessary-condition': 'off',
         'typescript/no-unnecessary-qualifier': 'off',
-        'typescript/no-unnecessary-template-expression': 'off',
-        'typescript/no-unnecessary-type-arguments': 'off',
-        'typescript/no-unnecessary-type-assertion': 'off',
         'typescript/no-unnecessary-type-conversion': 'off',
-        'typescript/no-unnecessary-type-parameters': 'off',
         'typescript/no-unsafe-argument': 'off',
         'typescript/no-unsafe-assignment': 'off',
         'typescript/no-unsafe-call': 'off',
@@ -212,6 +236,14 @@ export default defineConfig({
         'vitest/no-focused-tests': 'error',
       },
       plugins: ['vitest'],
+    },
+    {
+      // ESLint kept type-aware rules on test files inside e2e folders (they're excluded from its test-file override).
+      files: ['**/e2e/**/*.{ts,tsx}'],
+      rules: {
+        'typescript/no-floating-promises': 'error',
+        'typescript/no-misused-promises': ['error', { checksVoidReturn: false }],
+      },
     },
   ],
 });

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/brightdata",
-  "version": "0.3.2-alpha.0",
+  "version": "0.3.2",
   "description": "Bright Data web search and web fetch tools for Mastra agents",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,8 +24,8 @@
   "scripts": {
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "pnpm build:lib --watch",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
     "test": "vitest run"
   },
   "keywords": [

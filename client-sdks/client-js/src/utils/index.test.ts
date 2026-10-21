@@ -1,6 +1,12 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { parseClientRequestContext, base64RequestContext, toQueryParams, mergeAbortSignals } from './index';
+import {
+  parseClientRequestContext,
+  base64RequestContext,
+  toQueryParams,
+  mergeAbortSignals,
+  isTraceQueryTimeoutError,
+} from './index';
 
 describe('Request Context Utils', () => {
   describe('parseClientRequestContext', () => {
@@ -329,5 +335,20 @@ describe('mergeAbortSignals', () => {
       expect(merged.reason).toBe('pre');
       expect(addB).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('isTraceQueryTimeoutError', () => {
+  it('matches a 504 with the trace query execution timeout code', () => {
+    expect(isTraceQueryTimeoutError({ status: 504, body: { code: 'TRACE_QUERY_EXECUTION_TIMEOUT' } })).toBe(true);
+  });
+
+  it('does not match other 504s or other statuses', () => {
+    expect(isTraceQueryTimeoutError({ status: 504, body: 'Gateway Timeout' })).toBe(false);
+    expect(isTraceQueryTimeoutError({ status: 504, body: { code: 'OTHER' } })).toBe(false);
+    expect(isTraceQueryTimeoutError({ status: 504 })).toBe(false);
+    expect(isTraceQueryTimeoutError({ status: 503, body: { code: 'TRACE_QUERY_EXECUTION_TIMEOUT' } })).toBe(false);
+    expect(isTraceQueryTimeoutError(null)).toBe(false);
+    expect(isTraceQueryTimeoutError(new Error('network'))).toBe(false);
   });
 });

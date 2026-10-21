@@ -1,6 +1,6 @@
 {
   "name": "@mastra/azure",
-  "version": "0.3.2-alpha.0",
+  "version": "0.3.2",
   "description": "Azure provider for Mastra - includes Blob Storage workspace filesystem",
   "type": "module",
   "main": "dist/index.js",
@@ -38,12 +38,12 @@
     "test": "PORT=$(docker compose port azurite 10000 | cut -d: -f2) && AZURE_STORAGE_CONNECTION_STRING=\"DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:${PORT}/devstoreaccount1;\" TEST_AZURE_CONTAINER=test-container vitest run integration.test.ts",
     "posttest": "docker compose down -v",
     "test:cloud": "vitest run integration.test.ts",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@azure/storage-blob": "^12.31.0"
+    "@azure/storage-blob": "^12.34.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -54,7 +54,6 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.4.2",
-    "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:"

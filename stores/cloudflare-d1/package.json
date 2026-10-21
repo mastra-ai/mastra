@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloudflare-d1",
-  "version": "1.4.4-alpha.0",
+  "version": "1.4.4",
   "description": "D1 provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
@@ -26,8 +26,8 @@
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "dependencies": {
     "cloudflare": "^5.2.0"
@@ -42,7 +42,6 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.4.2",
-    "eslint": "^10.7.0",
     "miniflare": "^4.20260714.0",
     "tsdown": "0.22.9",
     "tsx": "catalog:",

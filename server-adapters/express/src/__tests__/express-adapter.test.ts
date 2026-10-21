@@ -1,4 +1,5 @@
-import { request as createHttpRequest, type Server } from 'node:http';
+import { request as createHttpRequest } from 'node:http';
+import type { Server } from 'node:http';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
 import { createRoute } from '@mastra/server/server-adapter';

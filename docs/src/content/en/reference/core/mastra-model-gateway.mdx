@@ -13,10 +13,19 @@ Use `MastraModelGatewayInterface` when you want to provide a plain object gatewa
 
 ## Class overview
 
+Install the OpenAI-compatible provider used in this example:
+
+```bash npm2yarn
+npm install @ai-sdk/openai-compatible
+```
+
 ```typescript
-import { MastraModelGateway, type ProviderConfig } from '@mastra/core/llm'
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5'
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5'
+import {
+  MastraModelGateway,
+  type GatewayLanguageModel,
+  type ProviderConfig,
+} from '@mastra/core/llm'
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 
 class MyCustomGateway extends MastraModelGateway {
   readonly id = 'custom'
@@ -51,7 +60,7 @@ class MyCustomGateway extends MastraModelGateway {
     modelId: string
     providerId: string
     apiKey: string
-  }): Promise<LanguageModelV2> {
+  }): Promise<GatewayLanguageModel> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`)
     return createOpenAICompatible({
       name: providerId,

@@ -6,11 +6,11 @@ import {
   ComposerActions,
   ComposerBox,
   ComposerInput,
-  type ComposerInputProps,
   ComposerRing,
   ComposerSuggestions,
   useComposerCommands,
 } from '@mastra/playground-ui/components/Composer';
+import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, ImagePlus, Square } from 'lucide-react';
@@ -43,7 +43,7 @@ import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 type ComposerProps = Pick<ComposerInputProps, 'variant'>;
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
-  const { resourceId, sessionEnabled, projectPath, baseUrl, factorySessionState } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl, factorySessionState } = useChatSessionContext();
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
@@ -64,8 +64,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -117,7 +116,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       },
     };
     queryClient.setQueryData(
-      queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId, INITIAL_THREAD_MESSAGE_LIMIT),
+      queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, sessionId, threadId, INITIAL_THREAD_MESSAGE_LIMIT),
       [message],
     );
   };
@@ -129,14 +128,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       const threadId = await createThread();
       localUser(text, false, outgoing);
       await sendMutation.mutateAsync({ text, files: outgoing });
-      clearPendingHandoff(resourceId);
+      clearPendingHandoff(sessionId);
       seedThreadMessageCache(threadId, text, files);
       void navigate(`/factories/${factoryId}/threads/${threadId}`, { replace: true });
       return;
     }
     localUser(text, false, outgoing);
     await sendMutation.mutateAsync({ text, files: outgoing });
-    clearPendingHandoff(resourceId);
+    clearPendingHandoff(sessionId);
   };
 
   // Images leave the composer while in flight and come back if the send fails.
@@ -157,7 +156,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     scroller?.scrollToEnd({ behavior: 'smooth' });
     try {
       await sendMutation.mutateAsync({ text });
-      clearPendingHandoff(resourceId);
+      clearPendingHandoff(sessionId);
     } catch (error) {
       failLocalUser(localId);
       throw error;

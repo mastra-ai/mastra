@@ -121,13 +121,15 @@ function createState() {
     },
   };
 
+  const controller = {
+    listModes: vi.fn(() => [{ id: 'build', name: 'build', metadata: { color: '#00ff00' } }]),
+    session,
+  };
   return {
     options: {},
     session,
-    controller: {
-      listModes: vi.fn(() => [{ id: 'build', name: 'build', metadata: { color: '#00ff00' } }]),
-      session,
-    },
+    controller,
+    local: { controller, session },
     statusLine: { setText },
     memoryStatusLine: { setText: memorySetText },
     editor: {},

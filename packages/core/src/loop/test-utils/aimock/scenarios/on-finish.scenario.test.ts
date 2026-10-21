@@ -46,11 +46,10 @@ describeForAllEngines(
         },
       });
 
-      // Finish callback should have been called
       expect(finishCalled).toBe(true);
-
-      // Should have received result
-      expect(finishResult).toBeDefined();
+      expect(finishResult.text).toBe('Done.');
+      expect(finishResult.finishReason).toBe('stop');
+      expect(finishResult.steps).toHaveLength(2);
     });
 
     it('onFinish receives text and steps', async () => {
@@ -71,15 +70,15 @@ describeForAllEngines(
         },
       });
 
-      // Should have received text
-      expect(resultText).toBeDefined();
-
-      // Should have received steps
-      expect(resultSteps).toBeDefined();
-      expect(Array.isArray(resultSteps)).toBe(true);
+      expect(resultText).toBe('Test response.');
+      expect(resultSteps).toHaveLength(1);
+      expect(resultSteps![0].text).toBe('Test response.');
     });
 
-    it('onFinish fires after tool execution', async () => {
+    // Durable and evented hand onFinish raw tool-result payloads instead of chunks (#27428).
+    const itFailsOnDurableToolResults = engine === 'durable' || engine === 'evented' ? it.fails : it;
+
+    itFailsOnDurableToolResults('onFinish fires after tool execution', async () => {
       const tickTool = createTool({
         id: 'tick',
         description: 'Advance a counter.',
@@ -108,10 +107,10 @@ describeForAllEngines(
         },
       });
 
-      // Should have received tool results
-      expect(toolResults).toBeDefined();
-      expect(Array.isArray(toolResults)).toBe(true);
-      expect(toolResults!.length).toBeGreaterThan(0);
+      expect(toolResults).toHaveLength(1);
+      expect(toolResults![0].type).toBe('tool-result');
+      expect(toolResults![0].payload.toolName).toBe('tick');
+      expect(toolResults![0].payload.result).toEqual({ count: 1 });
     });
   },
   {},

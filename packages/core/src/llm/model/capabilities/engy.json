@@ -1,8 +1,9 @@
 {
-  "attachment": ["deepseek-v4.1-flash", "glm-5.3-flash", "kimi-k3", "qwen3.8-27b"],
+  "attachment": ["deepseek-v4.1-flash", "deepseek-v4.1-flash-1017", "glm-5.3-flash", "kimi-k3", "qwen3.8-27b"],
   "temperature": [
     "deepseek-v4-flash-0731",
     "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
     "glm-5.2",
     "glm-5.3",
     "glm-5.3-flash",
@@ -13,6 +14,7 @@
   "structuredOutput": [
     "deepseek-v4-flash-0731",
     "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
     "glm-5.2",
     "glm-5.3",
     "glm-5.3-flash",
@@ -30,26 +32,6 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-v4-flash-0731": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "kimi-k3": [
-      {
-        "type": "toggle"
-      }
-    ],
     "deepseek-v4.1-flash": [
       {
         "type": "toggle"
@@ -64,6 +46,30 @@
         "type": "toggle"
       }
     ],
+    "deepseek-v4-flash-0731": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash-1017": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "glm-5.2": [
       {
         "type": "toggle"
@@ -71,6 +77,11 @@
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "toggle"
       }
     ],
     "glm-5.3": [

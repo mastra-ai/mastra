@@ -5,11 +5,8 @@ import { useProcessors } from '@mastra/react/hooks/processors';
 import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { BoxIcon, FingerprintIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import {
-  DATASET_TARGET_TYPES,
-  isDatasetTargetType,
-  type DatasetTargetType,
-} from '@/domains/datasets/components/target-type-options';
+import { DATASET_TARGET_TYPES, isDatasetTargetType } from '@/domains/datasets/components/target-type-options';
+import type { DatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 export const TARGET_TYPE_FIELD_ID = 'targetType';

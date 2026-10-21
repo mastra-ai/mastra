@@ -507,39 +507,56 @@ export class ObservationalMemory {
    * Tracked so callers can join them via `settled()` before closing a storage
    * connection they own — otherwise a background cycle's tail statements race the close.
    */
-  private pendingBackgroundWork = new Set<Promise<unknown>>();
+  private pendingBackgroundWork = new Map<Promise<unknown>, string>();
 
   /**
    * Register fire-and-forget background work so `settled()` can join it.
+   * `scope` is the conversation the work belongs to (thread/resource ids, or a lock key from
+   * `buffering.getLockKey`),
+   * so a scoped `settled()` can wait for one conversation without waiting for every other.
    * Returns the original promise so callers keep their own rejection handling.
    */
-  trackBackgroundWork<T>(work: Promise<T>): Promise<T> {
+  trackBackgroundWork<T>(
+    work: Promise<T>,
+    scope: string | { threadId?: string | null; resourceId?: string | null },
+  ): Promise<T> {
+    const lockKey = typeof scope === 'string' ? scope : this.buffering.getLockKey(scope.threadId, scope.resourceId);
     const tracked: Promise<unknown> = work
       .catch(() => {})
       .finally(() => {
         this.pendingBackgroundWork.delete(tracked);
       });
-    this.pendingBackgroundWork.add(tracked);
+    this.pendingBackgroundWork.set(tracked, lockKey);
     return work;
   }
 
   /**
-   * Resolve once all background observational-memory work started so far has finished.
+   * Resolve once background observational-memory work started so far has finished.
+   *
+   * Pass `threadId`/`resourceId` to wait only for that conversation's work. An engine shared by
+   * many busy threads may never be fully idle, so an unscoped wait can last indefinitely there.
+   * A scope without the id this engine keys work on (`resourceId` for resource scope, `threadId`
+   * for thread scope) can't be matched to its work, so it falls back to waiting for all work.
    *
    * Background cycles enqueue further background work (a buffered observation can
    * trigger a reflection, which runs nested agent streams), so this drains repeatedly
    * until nothing is left rather than joining a single snapshot.
    */
-  async settled(): Promise<void> {
+  async settled(scope?: { threadId?: string | null; resourceId?: string | null }): Promise<void> {
+    const keyedId = this.scope === 'resource' ? scope?.resourceId : scope?.threadId;
+    const lockKey = keyedId ? this.buffering.getLockKey(scope!.threadId, scope!.resourceId) : undefined;
+    const pending = () =>
+      [...this.pendingBackgroundWork].filter(([, key]) => lockKey === undefined || key === lockKey).map(([w]) => w);
     // Bounded so a pathologically self-retriggering cycle degrades to a warning
     // instead of hanging the caller's teardown.
     const maxDrainRounds = 100;
     for (let round = 0; round < maxDrainRounds; round++) {
-      if (this.pendingBackgroundWork.size === 0) return;
-      await Promise.allSettled([...this.pendingBackgroundWork]);
+      const work = pending();
+      if (work.length === 0) return;
+      await Promise.allSettled(work);
     }
     // Work that finished on the final round has drained; only warn if any is genuinely left.
-    if (this.pendingBackgroundWork.size === 0) return;
+    if (pending().length === 0) return;
     omError(`[OM:settled] background work still pending after ${maxDrainRounds} drain rounds; giving up waiting`);
   }
 
@@ -857,6 +874,7 @@ export class ObservationalMemory {
       memory: this.memory,
       onReflectionCommitted: config.onReflectionCommitted,
       hooks: this.hooks,
+      trackBackgroundWork: (work, lockKey) => this.trackBackgroundWork(work, lockKey),
     });
 
     // Validate buffer configuration
@@ -1054,16 +1072,21 @@ export class ObservationalMemory {
         requestContext: options.requestContext,
       })) as ResolvedInvocationModel;
     }
-    const mainModelId = getModelId(mainModel);
-    const pick =
-      resolveAutoModelId(mainModelId, this.autoModelOptions(options?.requestContext)) ??
-      (mainModel ? undefined : OBSERVATIONAL_MEMORY_DEFAULTS.observation.model);
+    const mainModelId = mainModel ? getModelId(mainModel) : getCurrentModel(options?.currentModel);
+    const pick = resolveAutoModelId(mainModelId, this.autoModelOptions(options?.requestContext));
 
     // No cheaper sibling is known: reuse the main model exactly as configured.
     if (mainModel && (!pick || pick === mainModelId)) {
       return mainModel;
     }
-    const modelId = pick!;
+    // Without a main model, the package default (Gemini) is only a safe guess when nothing
+    // says Google is unusable; with a credential check it would fail for lack of a key.
+    const modelId = pick ?? (this.canUseProvider ? undefined : OBSERVATIONAL_MEMORY_DEFAULTS.observation.model);
+    if (!modelId) {
+      throw new Error(
+        `Observational memory model 'auto' could not determine the main model, and ${OBSERVATIONAL_MEMORY_DEFAULTS.observation.model} has no usable credential. Pass the actor model or choose a concrete memory model.`,
+      );
+    }
     return this.resolveAutoModelHook
       ? ((await this.resolveAutoModelHook(modelId, {
           requestContext: options?.requestContext,
@@ -1720,6 +1743,26 @@ export class ObservationalMemory {
       }
       lastPart.metadata.mastra.sealedAt = sealedAt;
     }
+  }
+
+  /**
+   * @internal Persist the message-level seal flag on a stored message, so a later recovery
+   * still sees it was observed after a reflection drops its id.
+   */
+  async persistMessageSeal(message: MastraDBMessage): Promise<void> {
+    // Seal the stored copy, not the in-memory one, so parts the list hasn't loaded aren't overwritten.
+    const [stored] = (await this.storage.listMessagesById({ messageIds: [message.id] })).messages;
+    if (!stored) return;
+    const metadata = stored.content.metadata ?? {};
+    const mastra = (metadata as { mastra?: Record<string, unknown> }).mastra;
+    await this.storage.updateMessages({
+      messages: [
+        {
+          id: stored.id,
+          content: { ...stored.content, metadata: { ...metadata, mastra: { ...mastra, sealed: true } } },
+        },
+      ],
+    });
   }
 
   /**
@@ -2450,7 +2493,7 @@ ${formattedMessages}
     contextWindowTokens?: number,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
-  ): Promise<void> {
+  ): Promise<{ op: Promise<unknown> }> {
     const bufferKey = this.buffering.getObservationBufferKey(lockKey);
 
     // Update the last buffered boundary (in-memory for current instance).
@@ -2487,12 +2530,13 @@ ${formattedMessages}
         }
         // Clear persistent flag
         unregisterOp(record.id, 'bufferingObservation');
-        runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false)).catch(err => {
+        return runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false)).catch(err => {
           omError('[OM] Failed to clear buffering observation flag', err);
         });
       });
 
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, asyncOp);
+    return { op: asyncOp };
   }
 
   /**
@@ -2712,7 +2756,8 @@ ${formattedMessages}
           opts.unbufferedPendingTokens,
           opts.requestContext,
           opts.observabilityContext,
-        ),
+        ).then(({ op }) => op),
+        lockKey,
       );
     }
 
@@ -4200,6 +4245,8 @@ ${formattedMessages}
     sendSignal?: ProcessorContext['sendSignal'];
     sendStateSignal?: ProcessorContext['sendStateSignal'];
     requestContext?: RequestContext;
+    /** The actor model of the step that triggered this cycle; `'auto'` picks the memory model from it. */
+    currentModel?: ObservationModelContext;
     writer?: ProcessorStreamWriter;
     observabilityContext?: ObservabilityContext;
   }): Promise<{
@@ -4263,6 +4310,7 @@ ${formattedMessages}
           sendSignal: opts.sendSignal,
           sendStateSignal: opts.sendStateSignal,
           requestContext,
+          currentModel: opts.currentModel,
           writer: opts.writer,
           observabilityContext: opts.observabilityContext,
         }).run();

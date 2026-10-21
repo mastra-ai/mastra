@@ -3,6 +3,13 @@ import { NO_OBSERVABILITY_STORAGE_CAPABILITIES } from '../handlers/observability
 import { observabilityStorageCapabilitiesSchema } from './system';
 
 describe('observabilityStorageCapabilitiesSchema', () => {
+  it('treats an omitted span context capability from an older server as unavailable', () => {
+    const { spanQueryContextFields: _, ...legacyCapabilities } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
+    expect(observabilityStorageCapabilitiesSchema.parse(legacyCapabilities)).toMatchObject({
+      spanQueryContextFields: false,
+    });
+  });
+
   it('keeps the trace retention a store reports', () => {
     const parsed = observabilityStorageCapabilitiesSchema.parse({
       ...NO_OBSERVABILITY_STORAGE_CAPABILITIES,

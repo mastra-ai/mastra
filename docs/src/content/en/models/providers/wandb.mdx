@@ -7,7 +7,7 @@ description: "Browse CoreWeave model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/wandb.svg" alt="CoreWeave logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />CoreWeave
 
-Access 22 CoreWeave models through Mastra's model router. Authentication is handled automatically using the `WANDB_API_KEY` environment variable.
+Access 23 CoreWeave models through Mastra's model router. Authentication is handled automatically using the `WANDB_API_KEY` environment variable.
 
 Learn more in the [CoreWeave documentation](https://docs.wandb.ai).
 
@@ -223,7 +223,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 1048576,
     "maxOutput": 1048576,
     "inputCost": 0.15,
-    "outputCost": 0.75
+    "outputCost": 0.5
   },
   {
     "model": "wandb/openai/gpt-oss-120b",
@@ -272,6 +272,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262144,
     "inputCost": 0.4,
     "outputCost": 3
+  },
+  {
+    "model": "wandb/reflection/Beam-1.0-501B-A23B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.3,
+    "outputCost": 1
   },
   {
     "model": "wandb/zai-org/GLM-5.2",

@@ -13,6 +13,7 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
   SourceControlSession,
+  SourceControlSessionVisibility,
   SourceControlSessionRepository,
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
@@ -438,6 +439,28 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         row.updatedAt = new Date();
       }
     },
+    setOriginMuted: async ({ sessionId, muted }: { sessionId: string; muted: boolean }): Promise<void> => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row) {
+        row.originMutedAt = muted ? new Date() : null;
+        row.updatedAt = new Date();
+      }
+    },
+    setVisibility: async ({
+      sessionId,
+      visibility,
+      expectedUserId,
+    }: {
+      sessionId: string;
+      visibility: SourceControlSessionVisibility;
+      expectedUserId: string;
+    }): Promise<SourceControlSession | null> => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (!row || row.userId !== expectedUserId) return null;
+      row.visibility = visibility;
+      row.updatedAt = new Date();
+      return row;
+    },
     getForBranch: async (args: SessionBranchKey): Promise<SourceControlSession | null> =>
       this.sessionsRows.find(
         row =>
@@ -486,6 +509,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         visibility: input.visibility ?? 'org',
         originSessionId: origin?.sessionId ?? null,
         originThreadId: origin?.threadId ?? null,
+        originMutedAt: null,
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,
@@ -496,6 +520,36 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       };
       this.sessionsRows.push(session);
       return session;
+    },
+    transferOwner: async ({
+      sessionId,
+      expectedUserId,
+      toUserId,
+    }: {
+      sessionId: string;
+      expectedUserId: string;
+      toUserId: string;
+    }) => {
+      const index = this.sessionsRows.findIndex(row => row.sessionId === sessionId);
+      const session = this.sessionsRows[index] ?? null;
+      if (!session || session.userId !== expectedUserId || session.visibility === 'private') {
+        return { status: 'conflict' as const, reason: 'stale_owner' as const, session };
+      }
+      if (session.userId === toUserId) return { status: 'updated' as const, session };
+      // Mirrors base.ts: the branch is unique per repository link and per Factory.
+      const branchOwned = this.sessionsRows.some(
+        row =>
+          row.id !== session.id &&
+          row.userId === toUserId &&
+          row.branch === session.branch &&
+          (row.projectRepositoryId === session.projectRepositoryId ||
+            (session.factoryProjectId !== null && row.factoryProjectId === session.factoryProjectId)),
+      );
+      if (branchOwned) return { status: 'conflict' as const, reason: 'branch_owned' as const, session };
+      // A new row, so a caller holding the old one keeps its pre-transfer snapshot like base.ts.
+      const updated = { ...session, userId: toUserId, updatedAt: new Date() };
+      this.sessionsRows[index] = updated;
+      return { status: 'updated' as const, session: updated };
     },
     setSandbox: async ({
       id,

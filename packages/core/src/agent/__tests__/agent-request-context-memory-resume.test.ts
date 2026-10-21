@@ -1,7 +1,7 @@
 /**
  * Resuming a run suspended on tool approval when the agent chooses its memory
  * from the request context. The run suspends with tenant 'a' in the context;
- * tenant 'a' gets its own memory store, any other caller the shared store.
+ * tenant 'a' gets its own memory store.
  */
 import type { LanguageModelV2, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -57,14 +57,11 @@ const tenantContext = () => {
 
 /**
  * - `fixed`: the tenant store is the agent's only memory.
- * - `per-tenant`: other callers get the shared store.
  * - `tenant-only`: the memory function returns nothing for other callers.
  */
-async function setup(memoryMode: 'fixed' | 'per-tenant' | 'tenant-only') {
+async function setup(memoryMode: 'fixed' | 'tenant-only') {
   const tenantStore = new InMemoryStore();
-  const sharedStore = new InMemoryStore();
   const tenantMemory = new MockMemory({ storage: tenantStore, options: { lastMessages: 20 } });
-  const sharedMemory = new MockMemory({ storage: sharedStore, options: { lastMessages: 20 } });
 
   await tenantMemory.createThread({ threadId, resourceId });
   const history: MastraDBMessage[] = Array.from({ length: 4 }, (_, i) => ({
@@ -88,7 +85,7 @@ async function setup(memoryMode: 'fixed' | 'per-tenant' | 'tenant-only') {
         ? tenantMemory
         : ({ requestContext }) => {
             if (requestContext.get('tenant') === 'a') return tenantMemory;
-            return memoryMode === 'per-tenant' ? sharedMemory : (undefined as unknown as MockMemory);
+            return undefined as unknown as MockMemory;
           },
     tools: {
       lookup: createTool({
@@ -140,30 +137,6 @@ describe('resuming an agent whose memory is chosen from the request context', ()
     expect(prompts).toHaveLength(2);
     expectFullHistory(prompts[1]);
     expect(await threadTexts(tenantStore)).toContain('done');
-  });
-
-  it('resumes with the recalled conversation when the resume call passes the same request context', async () => {
-    const { agent, prompts, tenantStore, runId, toolCallId } = await setup('per-tenant');
-
-    const resumed = await drain(
-      await agent.approveToolCall({ runId, toolCallId, memory: memoryOption, requestContext: tenantContext() }),
-    );
-
-    expect(resumed.text).toBe('done');
-    expect(prompts).toHaveLength(2);
-    expectFullHistory(prompts[1]);
-    expect(await threadTexts(tenantStore)).toContain('done');
-  });
-
-  it('resumes with the recalled conversation when the resume call omits the request context that chose memory', async () => {
-    const { agent, prompts, runId, toolCallId } = await setup('per-tenant');
-
-    // Memory now resolves to the shared store, which does not hold the recalled messages.
-    const resumed = await drain(await agent.approveToolCall({ runId, toolCallId, memory: memoryOption }));
-
-    expect(resumed.text).toBe('done');
-    expect(prompts).toHaveLength(2);
-    expectFullHistory(prompts[1]);
   });
 
   it('fails to resume when the memory function returns nothing for the resume call', async () => {

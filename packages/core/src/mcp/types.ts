@@ -375,3 +375,96 @@ export interface ServerDetailInfo extends ServerInfo {
 export type MCPToolExecutionResultV2 =
   | { status: 'completed'; output: unknown }
   | { status: 'suspended'; suspendPayload: unknown; resumeSchema?: JSONSchema7 };
+
+/**
+ * How a client can receive an MCP server event type.
+ * @experimental
+ */
+export type MCPServerEventDeliveryMode = 'push' | 'poll' | 'webhook';
+
+/**
+ * An event type a server declares, as shown in Studio. Mirrors the `events/list`
+ * descriptor plus `emittable`.
+ * @experimental
+ */
+export interface MCPServerEventInfo {
+  name: string;
+  description?: string;
+  delivery: MCPServerEventDeliveryMode[];
+  inputSchema?: Record<string, unknown>;
+  payloadSchema?: Record<string, unknown>;
+  /** Fed by `server.events.emit()` rather than a `poll` source. */
+  emittable: boolean;
+}
+
+/** @experimental */
+export interface MCPServerEventOccurrenceInfo {
+  eventId: string;
+  name: string;
+  timestamp: string;
+  data: Record<string, unknown>;
+  cursor?: string | null;
+  _meta?: Record<string, unknown>;
+}
+
+/** @experimental */
+export interface MCPServerEventPollInfo {
+  events: MCPServerEventOccurrenceInfo[];
+  cursor: string | null;
+  hasMore?: boolean;
+  truncated?: boolean;
+  nextPollMs?: number;
+}
+
+/**
+ * A frame of a local event stream. `error` is recoverable and carries a generic message.
+ * @experimental
+ */
+export type MCPServerEventStreamFrame =
+  | { type: 'active'; cursor: string | null; truncated: boolean }
+  | { type: 'event'; occurrence: MCPServerEventOccurrenceInfo }
+  | { type: 'heartbeat'; cursor: string | null }
+  | { type: 'error'; message: string }
+  | { type: 'terminated' };
+
+/**
+ * Error ids an {@link MCPServerEventsInspector} throws as `MastraError`s.
+ * @experimental
+ */
+export const MCP_SERVER_EVENT_ERROR_IDS = {
+  unknownEvent: 'MCP_SERVER_UNKNOWN_EVENT',
+  unsupportedDelivery: 'MCP_SERVER_EVENT_UNSUPPORTED_DELIVERY',
+  invalidArguments: 'MCP_SERVER_EVENT_INVALID_ARGUMENTS',
+  forbidden: 'MCP_SERVER_EVENT_FORBIDDEN',
+  notEmittable: 'MCP_SERVER_EVENT_NOT_EMITTABLE',
+  invalidPayload: 'MCP_SERVER_EVENT_INVALID_PAYLOAD',
+  tooManyStreams: 'MCP_SERVER_EVENT_TOO_MANY_STREAMS',
+} as const;
+
+/**
+ * Runs `events/poll` and `events/stream` in-process, through the same code path as
+ * the MCP protocol handlers, and sends test events. Used by Studio.
+ * @experimental
+ */
+export interface MCPServerEventsInspector {
+  poll(
+    name: string,
+    params: { arguments?: Record<string, unknown>; cursor?: string | null; maxEvents?: number },
+    options?: { requestContext?: RequestContext; signal?: AbortSignal },
+  ): Promise<MCPServerEventPollInfo>;
+  /**
+   * Validates and opens a stream. Resolves once the `active` frame is queued; `closed`
+   * settles when the stream ends (terminated, server closed) or `signal` aborts.
+   */
+  stream(
+    name: string,
+    params: { arguments?: Record<string, unknown>; cursor?: string | null },
+    options: {
+      signal: AbortSignal;
+      onFrame: (frame: MCPServerEventStreamFrame) => void;
+      requestContext?: RequestContext;
+    },
+  ): Promise<{ closed: Promise<void> }>;
+  /** Emits a test occurrence; its `eventId` is prefixed with `mastra-test-`. */
+  emit(name: string, data: Record<string, unknown>): Promise<MCPServerEventOccurrenceInfo>;
+}

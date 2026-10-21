@@ -274,7 +274,10 @@ export function signalToXmlMarkup(
   assertXmlName(tagName, 'tag name');
   const attributesXml = signalAttributesToXml(signal.attributes);
   if (!signal.contents) return `<${tagName}${attributesXml} />`;
-  return `<${tagName}${attributesXml}>${escapeXml(signal.contents)}</${tagName}>`;
+  // Contents reach the model as written. Only the signal's own closing tag is escaped,
+  // so contents can't end the wrapper early.
+  const closingTag = new RegExp(`</${tagName.replaceAll('.', '\\.')}\\s*>`, 'gi');
+  return `<${tagName}${attributesXml}>${signal.contents.replace(closingTag, escapeXml)}</${tagName}>`;
 }
 
 // Recover legacy metadata.signal.contents shapes (pre-narrowing) into the current

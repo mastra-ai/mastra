@@ -446,7 +446,9 @@ describe('agent connection tools', () => {
     expect(result.content).toMatch(
       /^Queued for .+: direct delivery failed \(No claimed thread owner responded for thread thread-2 \(resource resource-1\) within 1000ms\)/,
     );
-    // A retry with the same messageId must still be able to deliver it.
+    expect(result.content).toContain('and is retried automatically. Do not resend it.');
+    // The messageId stays unconsumed: the retry is the dispatcher's job, and a
+    // resend would deliver a second copy.
     expect(getStored().sentSignals).toBeUndefined();
   });
 
@@ -468,6 +470,12 @@ describe('agent connection tools', () => {
 
     expect(result).toMatchObject({ isError: true, messageId: 'queued-reply', routingAction: 'persist' });
     expect(result.content).toMatch(/^Failed to establish a reply obligation: the signal was queued for /);
+    expect(result.content).toContain(
+      'It is retried automatically, so do not resend it; the reply obligation is established once that retry delivers the signal.',
+    );
+    // Telling the model to send again would deliver the same content twice: the
+    // dispatcher retries this record, and a new send has a new messageId.
+    expect(result.content).not.toContain('Send a new signal at a priority that routes directly');
     expect(getStored().sentSignals).toBeUndefined();
   });
 
