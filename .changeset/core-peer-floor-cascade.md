@@ -19,6 +19,6 @@
 '@mastra/temporal': patch
 ---
 
-Fixed compatibility by requiring @mastra/core 1.79.0 or newer. These packages build on @mastra/server or @mastra/memory, which now need core 1.79.0 for the shared provider-error classifier, but they still advertised support for older core versions. Installing one of those older pairings produced a broken setup instead of a clear version conflict.
+Fixed compatibility by requiring @mastra/core 1.80.0 or newer. These packages build on @mastra/server or @mastra/memory, which now need core 1.80.0 for the shared provider-error classifier, but they still advertised support for older core versions. Installing one of those older pairings produced a broken setup instead of a clear version conflict.
 
-If your package manager reports a peer conflict after this release, upgrade @mastra/core to 1.79.0 or newer.
+If your package manager reports a peer conflict after this release, upgrade @mastra/core to 1.80.0 or newer.
