@@ -1,5 +1,72 @@
 # @mastra/connect
 
+## 1.1.0-alpha.5
+
+### Patch Changes
+
+- `@mastra/mcp` and `@mastra/connect` now require `@mastra/core` 1.79.0 or later. Upgrade `@mastra/core` together with them: ([#27674](https://github.com/mastra-ai/mastra/pull/27674))
+
+  ```bash
+  # Before: @mastra/core 1.78.x with an older @mastra/mcp
+  npm install @mastra/mcp@latest # peer dependency error
+
+  # After
+  npm install @mastra/core@latest @mastra/mcp@latest @mastra/connect@latest
+  ```
+
+- Updated dependencies [[`a92384b`](https://github.com/mastra-ai/mastra/commit/a92384bf9093beb9071953292a936ca722370ce5), [`a8f9157`](https://github.com/mastra-ai/mastra/commit/a8f9157fafe38f5acf68e37c8874ebd192ef8e10), [`4471372`](https://github.com/mastra-ai/mastra/commit/4471372b0338523a2f57407a90b1d913e68f17cc), [`0e9a577`](https://github.com/mastra-ai/mastra/commit/0e9a5774151385c93524883e2b1bea40e2a644de), [`fa5a031`](https://github.com/mastra-ai/mastra/commit/fa5a0316dbd5f68316b48c426fd904d2d80d9045), [`b8fe2ae`](https://github.com/mastra-ai/mastra/commit/b8fe2aec651efeaad6d607d816565453a341cdef), [`f54f8b2`](https://github.com/mastra-ai/mastra/commit/f54f8b2df2aa24e1ef4d171c733576e7c62bb1b0), [`f54f8b2`](https://github.com/mastra-ai/mastra/commit/f54f8b2df2aa24e1ef4d171c733576e7c62bb1b0), [`f54f8b2`](https://github.com/mastra-ai/mastra/commit/f54f8b2df2aa24e1ef4d171c733576e7c62bb1b0), [`a0c031c`](https://github.com/mastra-ai/mastra/commit/a0c031ceb671721b6f8557726e216ee81d23612e), [`03868f8`](https://github.com/mastra-ai/mastra/commit/03868f840401865af433040ba7ff90f585dea2e1), [`e35e335`](https://github.com/mastra-ai/mastra/commit/e35e335f19ee0c7c1e03bf247aebd24c3e041459), [`f122808`](https://github.com/mastra-ai/mastra/commit/f1228088b6f60f6c7ef9db8b9aca70bc5cf9f00c), [`cc977b4`](https://github.com/mastra-ai/mastra/commit/cc977b4ce7def6727cdd63af3478d2b8b83daf07), [`d0251e3`](https://github.com/mastra-ai/mastra/commit/d0251e34973492c60e4dc7614116fcf912739875), [`16d8f44`](https://github.com/mastra-ai/mastra/commit/16d8f44e3a1486d7319c1baeca6115d37f6c4cea)]:
+  - @mastra/core@1.79.0-alpha.12
+  - @mastra/mcp@2.5.0-alpha.3
+
+## 1.1.0-alpha.4
+
+### Minor Changes
+
+- Added end-user (per-resource) connections to @mastra/connect. ([#26923](https://github.com/mastra-ai/mastra/pull/26923))
+
+  **Scope tools to an end user**
+
+  `tools()` accepts a new `resourceId` option — a static key or a callback derived per request — so an agent resolves the shared global connections plus that end user's own connections. Every platform call made under a resource scope asserts the key, so one user's connection can never serve another user's request.
+
+  ```ts
+  import { tools } from '@mastra/connect';
+
+  // Per-request scoping on an agent:
+  new Agent({ tools: ctx => tools({ resourceId: myUserIdFrom(ctx) }) });
+
+  // Static/global usage is unchanged:
+  new Agent({ tools: tools({ providers: ['linear'] }) });
+  ```
+
+  Calling `tools()` per request is cheap: identical options share one internal snapshot/MCP-client state, with per-resource caching and eviction. The returned resolver is also awaitable, so a dynamic `tools` argument can return it directly.
+
+  **Let end users connect their own accounts**
+
+  A new `userConnectRoutes()` export returns mountable API routes (provider catalog, the caller's connections, connect sessions, status polling, disconnect, and a hosted connect page) gated on the authenticated end user's resource key from `server.auth.mapUserToResourceId`.
+
+  ```ts
+  import { Mastra } from '@mastra/core';
+  import { userConnectRoutes } from '@mastra/connect';
+
+  export const mastra = new Mastra({
+    server: {
+      auth: {
+        authenticateToken: async token => verifyToken(token),
+        mapUserToResourceId: user => user.id,
+      },
+      apiRoutes: [...userConnectRoutes({ providers: ['linear', 'slack'] })],
+    },
+  });
+  ```
+
+  `credential()` also gains an optional `resourceId` option for asserting a resource-scoped connection's key.
+
+### Patch Changes
+
+- Updated dependencies [[`f1b596e`](https://github.com/mastra-ai/mastra/commit/f1b596e3219bd8721079611c62b92b8f0f6c12d9), [`4e6701a`](https://github.com/mastra-ai/mastra/commit/4e6701a8534e29fad29c7fe4c6787dc1ed56b419), [`f905746`](https://github.com/mastra-ai/mastra/commit/f905746159def2d386dca516657123f43ef90e24), [`72cb1e2`](https://github.com/mastra-ai/mastra/commit/72cb1e2b9453f7bb1bd08e4f9aa54da56fa20600), [`0e5d045`](https://github.com/mastra-ai/mastra/commit/0e5d045be4ab67d1fba5eeb8125bc2ec43aa9519), [`0e4fa4f`](https://github.com/mastra-ai/mastra/commit/0e4fa4f0604bb2e6e63e5d1d203b2dcadd646a81), [`d7c012f`](https://github.com/mastra-ai/mastra/commit/d7c012fcc98a18552e0aef55f9c0d19fccad57da), [`a7bfa1f`](https://github.com/mastra-ai/mastra/commit/a7bfa1ff7c592f368cf34be472c7d89e03b0098b)]:
+  - @mastra/core@1.79.0-alpha.11
+  - @mastra/mcp@2.5.0-alpha.2
+
 ## 1.1.0-alpha.3
 
 ### Patch Changes

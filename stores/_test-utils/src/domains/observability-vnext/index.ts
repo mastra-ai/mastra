@@ -1,3 +1,4 @@
+export * from './span-aggregate';
 export * from './trace-aggregate';
 export * from './trace-query';
 export * from './trace-query-discovery';
@@ -121,26 +122,44 @@ export interface CreateObservabilityVNextTestsOptions {
  * materialized views) so the assertion isn't racey. Adapters with synchronous
  * reads (InMemory, DuckDB) satisfy the predicate on the first call.
  */
+/**
+ * How a completion-only store receives root versions. By default each trace gets its current root
+ * once. `superseded-first` and `current-first` write every completed version of a root, in that
+ * order, as an exporter that re-exports a resumed run would (a store that never merges them must
+ * still read the current one).
+ */
+export type TraceRootVersionWrites = 'current-only' | 'superseded-first' | 'current-first';
+
 function traceQueryFixtureForWriteModel(
   data: TraceQueryFixtureData,
   writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
+  rootVersions: TraceRootVersionWrites,
 ) {
   if (writeModel !== 'completion-only') {
     return { spans: data.spans, relatedSpans: [], scores: data.scores, feedback: data.feedback };
   }
 
   const roots = new Map<string | null, TraceQueryFixtureData['spans'][number]>();
+  const superseded: TraceQueryFixtureData['spans'] = [];
   const spans = new Map<string, TraceQueryFixtureData['spans'][number]>();
   for (const span of data.spans) {
     if (span.parentSpanId === null) {
+      const previous = roots.get(span.traceId);
+      if (previous && !previous.isPending) superseded.push(previous);
       roots.set(span.traceId, span);
     } else {
       spans.set(`${span.traceId}\u0000${span.spanId}`, span);
     }
   }
 
+  const current = [...roots.values()].filter(root => !root.isPending);
   return {
-    spans: [...roots.values()].filter(root => !root.isPending),
+    spans:
+      rootVersions === 'superseded-first'
+        ? [...superseded, ...current]
+        : rootVersions === 'current-first'
+          ? [...current, ...superseded]
+          : current,
     relatedSpans: [...spans.values()],
     scores: data.scores,
     feedback: data.feedback,
@@ -151,8 +170,9 @@ export async function writeTraceQueryFixture(
   storage: ObservabilityStorage,
   data: TraceQueryFixtureData,
   writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
+  rootVersions: TraceRootVersionWrites = 'current-only',
 ) {
-  const fixture = traceQueryFixtureForWriteModel(data, writeModel);
+  const fixture = traceQueryFixtureForWriteModel(data, writeModel, rootVersions);
   const records: CreateSpanRecord[] = [...fixture.spans, ...fixture.relatedSpans]
     .filter(span => span.traceId !== null)
     .map(span => ({
@@ -180,6 +200,13 @@ export async function writeTraceQueryFixture(
       userId: span.userId ?? null,
       sessionId: span.sessionId ?? null,
       experimentId: span.experimentId ?? null,
+      requestId: span.requestId ?? null,
+      parentEntityType: (span.parentEntityType ?? null) as EntityType | null,
+      parentEntityId: span.parentEntityId ?? null,
+      parentEntityName: span.parentEntityName ?? null,
+      rootEntityType: (span.rootEntityType ?? null) as EntityType | null,
+      rootEntityId: span.rootEntityId ?? null,
+      rootEntityName: span.rootEntityName ?? null,
       tags: span.tags,
       attributes: span.attributes,
       metadata: span.metadata,
@@ -246,8 +273,9 @@ export async function writeTraceAggregateFixture(
   storage: ObservabilityStorage,
   data: TraceAggregateFixtureData,
   writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
+  rootVersions: TraceRootVersionWrites = 'current-only',
 ) {
-  await writeTraceQueryFixture(storage, data, writeModel);
+  await writeTraceQueryFixture(storage, data, writeModel, rootVersions);
 
   const batches: CreateMetricRecord[][] = [];
   const copies = new Map<string, number>();

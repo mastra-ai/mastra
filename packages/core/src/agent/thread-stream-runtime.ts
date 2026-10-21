@@ -17,6 +17,7 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
+import { clearRunLeaseFence, setRunLeaseFence } from './run-lease-fence';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
 import { resolveAgentScopes } from './scopes';
 import { createSignal, resolveDeliveryAttributes } from './signals';
@@ -368,6 +369,8 @@ type PreparedThreadRun = {
   threadKey?: string;
   abortController: AbortController;
   cleanup: () => void;
+  cleanupAbortedRun?: () => Promise<boolean>;
+  output?: WeakRef<{ status: string }>;
   finalizerToken?: object;
 };
 
@@ -519,6 +522,7 @@ type AgentThreadRuntimeState = {
   preparedRunsById: Map<string, PreparedThreadRun>;
   resumeTailsByRunId: Map<string, Promise<void>>;
   abortedRunIds: Set<string>;
+  resumeFencedRunIds: Set<string>;
   startingQueuedRunIds: Set<string>;
   /**
    * Active lease-renewal timers keyed by runId. Set when the owner
@@ -533,14 +537,22 @@ type AgentThreadRuntimeState = {
    * prove it still holds the lease, so it is aborted.
    */
   leaseDeadlines: Map<string, { timer: ReturnType<typeof setTimeout>; confirmedSentAt: number }>;
+  leaseFences: Map<string, () => Promise<void>>;
   threadEventListeners: Set<ThreadEventListenerRegistration>;
   threadControlSubscriptions: Map<string, ThreadControlSubscription>;
   /**
-   * Thread subscribers reading a run's stream, by run id. A parked run that
-   * continues across its suspension keeps its stream open; once the thread
-   * moves on without it, its readers stop and read the runs queued behind it.
+   * Thread subscribers reading a run's stream, by run id, with the stream each
+   * reads. A parked run that continues across its suspension keeps its stream
+   * open; once the thread moves on without it, its readers stop and read the
+   * runs queued behind it.
    */
-  runStreamReaders: Map<string, Set<() => void>>;
+  runStreamReaders: Map<string, Set<{ streamId: string; stop: () => void }>>;
+  /**
+   * Parked records the thread moved on without: swept, taken over, released or
+   * aborted. A subscriber that queued one before reading it skips it instead of
+   * waiting on its open stream, and ends an aborted one with an abort.
+   */
+  displacedRecords: WeakMap<AgentThreadRunRecord<any>, 'moved-on' | 'aborted'>;
 };
 
 export type AgentThreadState = 'active' | 'idle';
@@ -693,6 +705,8 @@ function createThreadPeerId(agentId: string, resourceId: string, threadId: strin
 }
 
 const MAX_LOCALLY_QUEUED_SIGNAL_IDS_PER_THREAD = 1000;
+// Resume fences outlive their stream segment until the suspended snapshot is gone, so cap them.
+const MAX_RESUME_FENCED_RUN_IDS = 1000;
 
 function createRuntimeState(): AgentThreadRuntimeState {
   return {
@@ -728,12 +742,15 @@ function createRuntimeState(): AgentThreadRuntimeState {
     preparedRunsById: new Map(),
     resumeTailsByRunId: new Map(),
     abortedRunIds: new Set(),
+    resumeFencedRunIds: new Set(),
     startingQueuedRunIds: new Set(),
     leaseRenewalTimers: new Map(),
     leaseDeadlines: new Map(),
+    leaseFences: new Map(),
     threadEventListeners: new Set(),
     threadControlSubscriptions: new Map(),
     runStreamReaders: new Map(),
+    displacedRecords: new WeakMap(),
   };
 }
 
@@ -873,6 +890,9 @@ export class AgentThreadStreamRuntime {
         .renewLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)
         .then(renewed => {
           if (!renewed) {
+            // A renewal that settles after the run ended or re-registered speaks for no live run, and must not
+            // leave a rejecting fence behind for a later run with this id.
+            if (state.leaseRenewalTimers.get(runId) !== timer) return;
             // Another process may already own the thread, so stop this run instead of letting it keep
             // calling the model and tools beside its successor.
             this.#stopLeaseRenewal(pubsub, runId, timer);
@@ -901,6 +921,48 @@ export class AgentThreadStreamRuntime {
     state.leaseRenewalTimers.set(runId, timer);
     // The lease was acquired or transferred just before this call.
     this.#armLeaseDeadline(pubsub, runId, Date.now());
+    // A pubsub that can't lease has no owner to check, so every tool call would look like a takeover.
+    if (!this.#resolveLeaseProvider(pubsub).isFallback) {
+      const fence = this.#leaseFence(pubsub, key, runId, timer);
+      state.leaseFences.set(runId, fence);
+      setRunLeaseFence(runId, fence);
+    }
+  }
+
+  /**
+   * Checked before each tool call. Renewals run every TTL/3, so a lease that was
+   * taken over is otherwise only noticed after the run may have called tools beside
+   * its successor. A backend that can't answer leaves the decision to the deadline.
+   */
+  #leaseFence(pubsub: PubSub, key: string, runId: string, timer: ReturnType<typeof setInterval>): () => Promise<void> {
+    const state = this.#getState(pubsub);
+    const leaseProvider = this.#getLeaseProvider(pubsub);
+    return async () => {
+      const deadline = state.leaseDeadlines.get(runId);
+      if (state.leaseRenewalTimers.get(runId) !== timer || !deadline) return;
+      let onExpired: (value: undefined) => void = () => {};
+      const expiredAt = new Promise<undefined>(resolve => (onExpired = resolve));
+      const expired = setTimeout(
+        () => onExpired(undefined),
+        Math.max(0, deadline.confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS - Date.now()),
+      );
+      const unreachable = Symbol('unreachable');
+      const owner = await Promise.race([leaseProvider.getLeaseOwner(key).catch(() => unreachable), expiredAt]).finally(
+        () => clearTimeout(expired),
+      );
+      if (owner === runId) return;
+      // A backend error only passes while the last confirmed renewal still covers this call.
+      if (owner === unreachable) {
+        const current = state.leaseDeadlines.get(runId);
+        if (current && Date.now() < current.confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS) return;
+      }
+      // Only the registration that owns this fence may stop the run.
+      if (state.leaseRenewalTimers.get(runId) === timer) {
+        this.#stopLeaseRenewal(pubsub, runId, timer);
+        this.#abortLeaseLostRun(state, runId);
+      }
+      throw new AgentThreadLeaseLostError(runId);
+    };
   }
 
   #armLeaseDeadline(pubsub: PubSub, runId: string, confirmedSentAt: number): void {
@@ -924,19 +986,32 @@ export class AgentThreadStreamRuntime {
   }
 
   #abortLeaseLostRun(state: AgentThreadRuntimeState, runId: string): void {
+    // Tool calls the step already queued check the fence after this, so they must keep failing until the
+    // run ends, not find no fence and run beside the successor.
+    const lost = async () => {
+      throw new AgentThreadLeaseLostError(runId);
+    };
+    state.leaseFences.set(runId, lost);
+    setRunLeaseFence(runId, lost);
     const preparedRun = state.preparedRunsById.get(runId);
     if (preparedRun) preparedRun.abortController.abort(new AgentThreadLeaseLostError(runId));
     // Durable runs own their controller outside the thread runtime.
     else state.threadRunsById.get(runId)?.agent.abortRunStream(runId);
   }
 
-  /** Pass `only` to stop that timer alone, never one a later registration of the run started. */
+  /**
+   * Pass `only` to stop that timer alone, never one a later registration of the run started.
+   * Without `only`, also clears the fence a lost lease left after its renewal had stopped.
+   */
   #stopLeaseRenewal(pubsub: PubSub, runId: string, only?: ReturnType<typeof setInterval>): void {
     const state = this.#getState(pubsub);
     const timer = state.leaseRenewalTimers.get(runId);
-    if (!timer || (only && timer !== only)) return;
-    clearInterval(timer);
+    if (only ? timer !== only : !timer && !state.leaseFences.has(runId)) return;
+    if (timer) clearInterval(timer);
     state.leaseRenewalTimers.delete(runId);
+    const fence = state.leaseFences.get(runId);
+    if (fence) clearRunLeaseFence(runId, fence);
+    state.leaseFences.delete(runId);
     const deadline = state.leaseDeadlines.get(runId);
     if (deadline) clearTimeout(deadline.timer);
     state.leaseDeadlines.delete(runId);
@@ -2664,7 +2739,11 @@ export class AgentThreadStreamRuntime {
     return { threadId, resourceId };
   }
 
-  prepareRunOptions<OUTPUT>(options: AgentExecutionOptions<OUTPUT>, pubsub?: PubSub): AgentExecutionOptions<OUTPUT> {
+  prepareRunOptions<OUTPUT>(
+    options: AgentExecutionOptions<OUTPUT>,
+    pubsub?: PubSub,
+    cleanupAbortedRun?: () => Promise<boolean>,
+  ): AgentExecutionOptions<OUTPUT> {
     if (!options.runId) return options;
     const { threadId, resourceId } = this.#getThreadTarget(options);
     const key = threadId ? this.#threadKey(resourceId, threadId) : undefined;
@@ -2683,6 +2762,7 @@ export class AgentThreadStreamRuntime {
       ...(key ? { threadKey: key } : {}),
       abortController,
       cleanup: () => upstreamAbortSignal?.removeEventListener('abort', abort),
+      cleanupAbortedRun,
     };
     state.preparedRunsById.set(options.runId, preparedRun);
     this.#preparedRunsByAbortSignal.set(abortController.signal, preparedRun);
@@ -2714,11 +2794,33 @@ export class AgentThreadStreamRuntime {
     return this.#getState(pubsub).abortedRunIds.has(runId);
   }
 
-  abortRun(runId: string, pubsub?: PubSub): boolean {
+  /**
+   * Whether an abort stopped `runId` while it was waiting on a tool approval or
+   * suspension, so that suspension must never be resumed.
+   */
+  isResumeFenced(runId: string, pubsub?: PubSub): boolean {
+    return this.#getState(pubsub).resumeFencedRunIds.has(runId);
+  }
+
+  #fenceResume(state: AgentThreadRuntimeState, runId: string): void {
+    state.resumeFencedRunIds.delete(runId);
+    state.resumeFencedRunIds.add(runId);
+    if (state.resumeFencedRunIds.size > MAX_RESUME_FENCED_RUN_IDS) {
+      state.resumeFencedRunIds.delete(state.resumeFencedRunIds.values().next().value!);
+    }
+  }
+
+  /**
+   * `fenceResume: false` is for lifecycle teardowns (detach, thread switch) that
+   * stop the local segment but leave its parked suspensions answerable.
+   */
+  abortRun(runId: string, pubsub?: PubSub, options: { fenceResume?: boolean } = {}): boolean {
+    const fenceResume = options.fenceResume ?? true;
     const state = this.#getState(pubsub);
     const preparedRun = state.preparedRunsById.get(runId);
     if (!preparedRun) {
       state.abortedRunIds.add(runId);
+      if (fenceResume) this.#fenceResume(state, runId);
       // A run parked on a tool suspension (a question to the user, a pending
       // generation) has no prepared run left to abort, and its completion
       // watcher returned when it suspended, so nothing else frees its thread.
@@ -2727,6 +2829,9 @@ export class AgentThreadStreamRuntime {
 
     preparedRun.abortController.abort();
     state.abortedRunIds.add(runId);
+    // Only a suspension that already existed is fenced. One that parks after the
+    // abort (the loop finishing its in-flight tools) stays answerable (#26871).
+    if (fenceResume && preparedRun.output?.deref()?.status === 'suspended') this.#fenceResume(state, runId);
 
     const key = state.threadKeysByRunId.get(runId);
     if (key) {
@@ -2768,6 +2873,7 @@ export class AgentThreadStreamRuntime {
     const key = state.threadKeysByRunId.get(runId) ?? this.#threadKey(record.resourceId, record.threadId);
     this.#clearSuspendedRun(state, runId);
     record.lifecycle = 'completed';
+    state.displacedRecords.set(record, 'aborted');
     state.threadRunsByStreamId.delete(record.streamId);
     if (state.threadRunsById.get(runId) === record) state.threadRunsById.delete(runId);
     state.threadKeysByRunId.delete(runId);
@@ -2819,11 +2925,17 @@ export class AgentThreadStreamRuntime {
 
   /**
    * A parked run no longer holds its thread, so its answer resumes it on a new
-   * stream. Subscribers still reading its open stream move on to the runs queued
-   * behind it.
+   * stream. Subscribers reading its open stream, or with it still queued, move on
+   * to the runs queued behind it.
    */
-  #stopReadingDisplacedRun(state: AgentThreadRuntimeState, runId: string): void {
-    for (const stop of [...(state.runStreamReaders.get(runId) ?? [])]) stop();
+  #stopReadingDisplacedRun(state: AgentThreadRuntimeState, runId: string, streamId?: string): void {
+    if (streamId === undefined) {
+      const record = state.threadRunsById.get(runId);
+      if (record) state.displacedRecords.set(record, 'moved-on');
+    }
+    for (const reader of [...(state.runStreamReaders.get(runId) ?? [])]) {
+      if (streamId === undefined || reader.streamId === streamId) reader.stop();
+    }
   }
 
   getActiveThreadRunId(options: AgentThreadIdentityOptions, pubsub?: PubSub): string | undefined {
@@ -2979,11 +3091,16 @@ export class AgentThreadStreamRuntime {
     if (options.clearPendingSignals) this.#cancelPendingSignals(state, key);
     try {
       if (!runId) return false;
-      if (state.preparedRunsById.has(runId)) return this.abortRun(runId, resolvedPubSub);
+      if (options.localOnly && this.#isParkedRun(state, runId) && !state.preparedRunsById.has(runId)) {
+        this.#releaseSupersededParkedRun(state, resolvedPubSub, key, runId);
+        return true;
+      }
+      const abortOptions = { fenceResume: !options.localOnly };
+      if (state.preparedRunsById.has(runId)) return this.abortRun(runId, resolvedPubSub, abortOptions);
       if (state.threadKeysByRunId.get(runId) === key) {
         // Reserved locally (a sendSignal wake that has not prepared its run yet):
         // record the abort intent so preparation aborts the run before it starts.
-        this.abortRun(runId, resolvedPubSub);
+        this.abortRun(runId, resolvedPubSub, abortOptions);
         return true;
       }
       if (state.remoteThreadKeysByRunId.get(runId) !== key) return false;
@@ -3029,6 +3146,8 @@ export class AgentThreadStreamRuntime {
     state.leaseRenewalTimers.clear();
     state.leaseDeadlines.forEach(({ timer }) => clearTimeout(timer));
     state.leaseDeadlines.clear();
+    state.leaseFences.forEach((fence, runId) => clearRunLeaseFence(runId, fence));
+    state.leaseFences.clear();
     state.threadRunsById.clear();
     state.threadRunsByStreamId.clear();
     state.threadKeysByRunId.clear();
@@ -3068,6 +3187,7 @@ export class AgentThreadStreamRuntime {
     state.preparedRunsById.clear();
     state.resumeTailsByRunId.clear();
     state.abortedRunIds.clear();
+    state.resumeFencedRunIds.clear();
   }
 
   #cleanupPreparedRun(state: AgentThreadRuntimeState, runId: string, expectedPreparedRun?: PreparedThreadRun) {
@@ -3084,6 +3204,16 @@ export class AgentThreadStreamRuntime {
     state.preparedRunsById.delete(runId);
     state.pendingSignalListenersByRunId.delete(runId);
     state.abortedRunIds.delete(runId);
+    if (state.resumeFencedRunIds.has(runId) && preparedRun?.cleanupAbortedRun) {
+      // The aborted segment persisted a suspended snapshot. Keep the fence until that
+      // snapshot is deleted; if deletion fails the fence stays (bounded by MAX_RESUME_FENCED_RUN_IDS).
+      void preparedRun.cleanupAbortedRun().then(
+        deleted => {
+          if (deleted) state.resumeFencedRunIds.delete(runId);
+        },
+        () => {},
+      );
+    }
   }
 
   async #persistSignal(
@@ -3272,6 +3402,11 @@ export class AgentThreadStreamRuntime {
       this.#clearSuspendedRun(state, record.runId);
       this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
       state.sweptLeasedRunIds.set(record.runId, now);
+      state.displacedRecords.set(record, 'moved-on');
+      // A run parked across its suspension keeps its stream open, so subscribers
+      // reading it would never reach the runs queued behind it. Only this record's
+      // stream: a subscriber may be reading another instance's resume of the run.
+      this.#stopReadingDisplacedRun(state, record.runId, streamId);
       if (
         state.activeThreadRunIds.get(staleKey) === record.runId &&
         state.activeThreadStreamIds.get(staleKey) === streamId
@@ -3360,14 +3495,16 @@ export class AgentThreadStreamRuntime {
     registrationOptions?: AgentThreadStrictRegistrationOptions | AgentThreadStreamRegistrationOptions,
   ): Promise<void | AgentThreadRunRegistration> | undefined {
     const { threadId, resourceId } = this.#getThreadTarget(streamOptions);
+    const preparedRun = streamOptions.abortSignal
+      ? this.#preparedRunsByAbortSignal.get(streamOptions.abortSignal)
+      : undefined;
+    // Weak, so the threadless finalizer below can still collect an abandoned output.
+    if (preparedRun) preparedRun.output = new WeakRef(output);
     if (!threadId) {
       if (registrationOptions?.strict) return;
       const state = this.#getState(pubsub);
       const runId = output.runId;
       const finalizerToken = {};
-      const preparedRun = streamOptions.abortSignal
-        ? this.#preparedRunsByAbortSignal.get(streamOptions.abortSignal)
-        : undefined;
       if (preparedRun) {
         preparedRun.finalizerToken = finalizerToken;
         this.#threadlessRunFinalizer?.register(output, { state, runId, token: finalizerToken }, finalizerToken);
@@ -4821,6 +4958,12 @@ export class AgentThreadStreamRuntime {
     let activeReaderStreamId: string | null = null;
     let currentRunRequestContext: RequestContext | undefined;
     let cancelledByAbort = false;
+    /** Runs whose suspension or approval prompt this subscriber yielded. */
+    const parkedPromptRunIds = new Set<string>();
+    /** Parked runs aborted after their stream ended here, awaiting a synthetic abort. */
+    const parkedAbortRunIds: string[] = [];
+    // Queued streams of a run aborted before this subscriber read them.
+    const abortedPendingStreamIds = new Set<string>();
 
     const markActiveIfLive = async (runId: string, streamId: string, local: boolean) => {
       if (!local && !(await this.#hasLiveThreadLease(resolvedPubSub, key, runId))) return;
@@ -5323,7 +5466,21 @@ export class AgentThreadStreamRuntime {
           try {
             void currentReader.cancel();
           } catch {}
+        } else if (data.type === 'run-aborted' && parkedPromptRunIds.has(data.runId)) {
+          const abortedPending = pendingRuns.filter(
+            pending =>
+              pending.runId === data.runId && (data.streamId === undefined || pending.streamId === data.streamId),
+          );
+          if (abortedPending.length > 0) {
+            // Not read yet: yield the abort once that stream ends without one.
+            for (const pending of abortedPending) abortedPendingStreamIds.add(pending.streamId);
+          } else if (activeReaderRunId !== data.runId) {
+            // A run whose prompt this subscriber surfaced, aborted while parked:
+            // its stream already ended here, so yield the abort without a reader.
+            parkedAbortRunIds.push(data.runId);
+          }
         }
+        if (data.type !== 'run-suspended') parkedPromptRunIds.delete(data.runId);
         // An abort is not completion: the owner still needs to finish and drain
         // pending signals before idle messages can start.
         if (data.type === 'run-completed') {
@@ -5492,12 +5649,24 @@ export class AgentThreadStreamRuntime {
         try {
           if (historyChunk) yield historyChunk;
           while (!done || pendingRuns.length > 0) {
+            const parkedAbortRunId = parkedAbortRunIds.shift();
+            if (parkedAbortRunId !== undefined) {
+              yield { type: 'abort', runId: parkedAbortRunId } as any;
+              continue;
+            }
             if (pendingRuns.length === 0) {
               await new Promise<void>(resolve => waiters.push(resolve));
               continue;
             }
             const run = pendingRuns.shift()!;
-            if (isSuperseded(run.runId, run.generation)) continue;
+            const displaced = state.displacedRecords.get(run);
+            if (isSuperseded(run.runId, run.generation) || displaced) {
+              abortedPendingStreamIds.delete(run.streamId);
+              if (displaced === 'aborted' && !isSuperseded(run.runId, run.generation)) {
+                yield { type: 'abort', runId: run.runId } as any;
+              }
+              continue;
+            }
             // A local run can be read before its `run-registered` event arrives.
             noteGeneration(run.runId, run.streamId, run.generation, run.supersedes);
             noteRunHalf(run.runId, { streamId: run.streamId, streamSeq: run.streamSeq });
@@ -5509,10 +5678,13 @@ export class AgentThreadStreamRuntime {
             currentReader = reader as ReadableStreamDefaultReader<any>;
             activeReaderRunId = run.runId;
             activeReaderStreamId = run.streamId;
-            const stopReading = () => {
-              try {
-                void reader.cancel();
-              } catch {}
+            const stopReading = {
+              streamId: run.streamId,
+              stop: () => {
+                try {
+                  void reader.cancel();
+                } catch {}
+              },
             };
             const readers = state.runStreamReaders.get(run.runId) ?? new Set();
             readers.add(stopReading);
@@ -5549,6 +5721,7 @@ export class AgentThreadStreamRuntime {
                     yield heldStart;
                   }
                   if (!isPrompt) heldStart = undefined;
+                  else parkedPromptRunIds.add(run.runId);
                   yield partWithRunId;
                 } else if (typedPart?.type === 'start' && historyFilter && !storedStreamIds.has(run.streamId)) {
                   heldStart = partWithRunId;
@@ -5560,6 +5733,9 @@ export class AgentThreadStreamRuntime {
                   typedPart.type === 'abort' ||
                   typedPart.type === 'tripwire' ||
                   (typedPart.type === 'finish' && finishReason !== 'tool-calls');
+                if (typedPart.type === 'error' || typedPart.type === 'abort' || typedPart.type === 'tripwire') {
+                  parkedPromptRunIds.delete(run.runId);
+                }
                 if (terminalBoundary) {
                   // After a final terminal chunk, drain any non-visible trailing
                   // data in the background to prevent upstream backpressure while
@@ -5580,7 +5756,8 @@ export class AgentThreadStreamRuntime {
               // If the stream closed because we cancelled the reader after a
               // run-aborted event, yield a synthetic abort so subscribers
               // finalize the run.
-              if (!readerReleased && !done && cancelledByAbort) {
+              const abortedWhilePending = abortedPendingStreamIds.delete(run.streamId);
+              if (!readerReleased && !done && (cancelledByAbort || abortedWhilePending)) {
                 yield { type: 'abort', runId: run.runId } as any;
                 cancelledByAbort = false;
               }

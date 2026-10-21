@@ -943,6 +943,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // policy may exclude `running`, in which case resume claims cannot
           // be de-duplicated.
           allowUnclaimedResumes: true,
+          // listSuspendedRuns() reads this row's status, so a resume must flip it
+          // off `suspended` even when `running` checkpoints are skipped (#27619).
+          persistResumeClaim: true,
           isOwnershipLostError: isExecutionFenceError,
           isForeignExecution: isForeignExecutionContext,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
@@ -1021,6 +1024,15 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
 
             const messageListState = await readMessageListState(params, state);
 
+            // Read before the finish side effects: saving moves messages out of the input/response
+            // sets, and plain builds its finish envelope before saving too.
+            const finalMessageList = createRunMessageList({}).deserialize(messageListState);
+            const finishMessages = {
+              all: finalMessageList.get.all.aiV5.model(),
+              user: finalMessageList.get.input.aiV5.model(),
+              nonUser: finalMessageList.get.response.aiV5.model(),
+            };
+
             const finishResult = await runDurableFinishSideEffects({
               runId: state.runId,
               initData,
@@ -1094,6 +1106,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               await emitFinishEvent(pubsub, state.runId, {
                 output: finalOutput.output,
                 stepResult: finalOutput.stepResult,
+                messages: finishMessages,
               });
             }
 

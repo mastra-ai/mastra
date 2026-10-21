@@ -9,13 +9,12 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 const CONTINUE_PROMPT = 'Continue from where you stopped.';
 
 export function RunErrorContinueButton() {
-  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
   const transcript = useChatTranscript();
   const { status } = useChatConnection();
   const sendMessage = useSendAgentControllerMessageMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   });

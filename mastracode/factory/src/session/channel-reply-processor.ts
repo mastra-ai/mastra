@@ -37,24 +37,30 @@ export class FactoryChannelReplyProcessor implements Processor {
 
 export interface SessionLinkTarget {
   threadId: string;
+  sessionId: string;
   resourceId: string;
   factoryProjectId?: string;
 }
 
 /**
  * The web URL for a session, or undefined without a public origin. Same
- * routes the Factory UI navigates to: a repo-backed thread's resourceId is the
- * Factory user-session id and doubles as the workspace segment; chat-only
- * threads keep the literal `channel` segment and name their resource in the
- * query; a session with no factory falls back to the factory-agnostic
- * /threads/ redirect, which forwards the query through.
+ * routes the Factory UI navigates to: a repo-backed thread's Factory session
+ * id is the workspace segment; chat-only threads keep the literal `channel`
+ * segment and name their session in the query; a session with no factory
+ * falls back to the factory-agnostic /threads/ redirect, which forwards the
+ * query through.
  */
-export function sessionLink({ threadId, resourceId, factoryProjectId }: SessionLinkTarget): string | undefined {
+export function sessionLink({
+  threadId,
+  sessionId,
+  resourceId,
+  factoryProjectId,
+}: SessionLinkTarget): string | undefined {
   const origin = process.env.MASTRACODE_PUBLIC_URL;
   if (!origin) return undefined;
   const isChatOnly = resourceId.startsWith('channel:');
-  const resourceParam = `?resourceId=${encodeURIComponent(resourceId)}`;
-  if (!factoryProjectId) return `${origin}/threads/${encodeURIComponent(threadId)}${resourceParam}`;
-  const workspaceSegment = isChatOnly ? 'channel' : encodeURIComponent(resourceId);
-  return `${origin}/factories/${encodeURIComponent(factoryProjectId)}/workspaces/${workspaceSegment}/threads/${encodeURIComponent(threadId)}${isChatOnly ? resourceParam : ''}`;
+  const sessionParam = `?sessionId=${encodeURIComponent(sessionId)}`;
+  if (!factoryProjectId) return `${origin}/threads/${encodeURIComponent(threadId)}${sessionParam}`;
+  const workspaceSegment = isChatOnly ? 'channel' : encodeURIComponent(sessionId);
+  return `${origin}/factories/${encodeURIComponent(factoryProjectId)}/workspaces/${workspaceSegment}/threads/${encodeURIComponent(threadId)}${isChatOnly ? sessionParam : ''}`;
 }

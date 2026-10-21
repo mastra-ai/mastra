@@ -27,15 +27,18 @@ export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['err
     undefined,
     2,
   );
-  const latestEntryId = transcript?.transcript.entries.at(-1)?.id;
-  const canContinue = Boolean(session?.sessionEnabled) && latestEntryId === entryId;
+  const isLatestEntry = transcript?.transcript.entries.at(-1)?.id === entryId;
   const recoveryActions = {
     credentials: <ProviderLoginAction label="Review credentials" />,
     models: <ModelPicker triggerLabel="Change model" showThinking={false} />,
-    continue: canContinue ? <RunErrorContinueButton /> : undefined,
+    continue: session?.sessionEnabled ? <RunErrorContinueButton /> : undefined,
   };
   return (
-    <Notice variant="destructive" title={title} action={recovery && recoveryActions[recovery]}>
+    <Notice
+      variant="destructive"
+      title={title}
+      action={isLatestEntry && recovery ? recoveryActions[recovery] : undefined}
+    >
       <Notice.Message>{message}</Notice.Message>
       <Collapsible>
         <CollapsibleTrigger render={<Notice.Button>Error details</Notice.Button>} />

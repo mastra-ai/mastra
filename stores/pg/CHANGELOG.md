@@ -1,5 +1,38 @@
 # @mastra/pg
 
+## 1.32.0-alpha.6
+
+### Patch Changes
+
+- Stop querying `information_schema.columns` on every `listWorkflowRuns({ resourceId })` call. Column existence checks outside `init()` are now cached per store instance and cleared when schema changes are made through the store, the same way column types already were. ([#27903](https://github.com/mastra-ai/mastra/pull/27903))
+
+- Fix column existence and type checks throwing "Multiple rows returned" when a table has two columns whose names differ only by case (for example `"resourceId"` and `resourceid`). The exact-case column is now preferred, with the lowercase name as a fallback. ([#27915](https://github.com/mastra-ai/mastra/pull/27915))
+
+- Updated dependencies [[`a92384b`](https://github.com/mastra-ai/mastra/commit/a92384bf9093beb9071953292a936ca722370ce5), [`a8f9157`](https://github.com/mastra-ai/mastra/commit/a8f9157fafe38f5acf68e37c8874ebd192ef8e10), [`4471372`](https://github.com/mastra-ai/mastra/commit/4471372b0338523a2f57407a90b1d913e68f17cc), [`0e9a577`](https://github.com/mastra-ai/mastra/commit/0e9a5774151385c93524883e2b1bea40e2a644de), [`b8fe2ae`](https://github.com/mastra-ai/mastra/commit/b8fe2aec651efeaad6d607d816565453a341cdef), [`f54f8b2`](https://github.com/mastra-ai/mastra/commit/f54f8b2df2aa24e1ef4d171c733576e7c62bb1b0), [`03868f8`](https://github.com/mastra-ai/mastra/commit/03868f840401865af433040ba7ff90f585dea2e1), [`e35e335`](https://github.com/mastra-ai/mastra/commit/e35e335f19ee0c7c1e03bf247aebd24c3e041459), [`cc977b4`](https://github.com/mastra-ai/mastra/commit/cc977b4ce7def6727cdd63af3478d2b8b83daf07), [`16d8f44`](https://github.com/mastra-ai/mastra/commit/16d8f44e3a1486d7319c1baeca6115d37f6c4cea)]:
+  - @mastra/core@1.79.0-alpha.12
+
+## 1.32.0-alpha.5
+
+### Minor Changes
+
+- `aggregateTraces()` can now group by the root span's `entityId`, and trace queries and aggregates accept `entityId` as a trace-scope `where` field. Use it to split traces that have no `entityName` (for example, scorer runs recorded before scorers set one) by the primitive that produced them, then drill into a group by filtering on the same `entityId`. ([#27684](https://github.com/mastra-ai/mastra/pull/27684))
+
+  ```ts
+  const { rows } = await client.aggregateTraces({
+    timeRange,
+    where: { op: 'notExists', path: 'entityName' },
+    groupBy: ['entityId'],
+    measures: ['count'],
+  });
+  ```
+
+  Trace-scope `entityId` reads the root span only. Inside `spans.some` and `spans.none`, `entityId` still matches any span in the trace. Stores that support the trace-scope field declare the new `trace-query-root-entity-id` storage feature.
+
+### Patch Changes
+
+- Updated dependencies [[`6362d32`](https://github.com/mastra-ai/mastra/commit/6362d32a905d32820dcab3b9a039ebc1cec4f444), [`e3678a5`](https://github.com/mastra-ai/mastra/commit/e3678a564cf3bb5922112b4dca65973c5fdc0a92), [`9c4d65f`](https://github.com/mastra-ai/mastra/commit/9c4d65f41ee21e407f0015b0e745881288f69d05), [`7425858`](https://github.com/mastra-ai/mastra/commit/74258589417e9e91114c64571a67702d2e352b3f), [`a97ba85`](https://github.com/mastra-ai/mastra/commit/a97ba8578a2dc91a16d945276ca8c7a4ad32e38a), [`750a4ed`](https://github.com/mastra-ai/mastra/commit/750a4edf7826da9ba7321682912504c60f29712d), [`c236d64`](https://github.com/mastra-ai/mastra/commit/c236d64974c68e6c0f9bf6e3d6442e0184c5f49e), [`22df9d7`](https://github.com/mastra-ai/mastra/commit/22df9d76651b3b4d513388a7eae8e51dbfb36a1b), [`0971298`](https://github.com/mastra-ai/mastra/commit/0971298317be971ae1c3f0c1d949a31df7d71c7f), [`98c7e10`](https://github.com/mastra-ai/mastra/commit/98c7e109fca4995d19d7eb132fdb8411c860b151), [`e3678a5`](https://github.com/mastra-ai/mastra/commit/e3678a564cf3bb5922112b4dca65973c5fdc0a92), [`5d5ea03`](https://github.com/mastra-ai/mastra/commit/5d5ea032a4c64cefe5bc217f4cc761a9364ccbf4)]:
+  - @mastra/core@1.79.0-alpha.9
+
 ## 1.32.0-alpha.4
 
 ### Minor Changes

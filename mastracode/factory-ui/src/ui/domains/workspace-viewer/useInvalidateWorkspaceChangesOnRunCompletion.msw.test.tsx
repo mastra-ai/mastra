@@ -6,19 +6,18 @@ import { renderHookWithProviders } from '../../../../e2e/ui/render';
 import { useInvalidateWorkspaceChangesOnRunCompletion } from './useInvalidateWorkspaceChangesOnRunCompletion';
 
 const WORKSPACE = 'session-1';
-const THREAD = 'thread-1';
 
 describe('useInvalidateWorkspaceChangesOnRunCompletion', () => {
-  it('invalidates workspace changes, file contents, and persisted files when the agent becomes idle', async () => {
+  it('invalidates workspace changes, file contents, and listed folders when the agent becomes idle', async () => {
     const { client, rerender } = renderHookWithProviders(
-      ({ busy }) => useInvalidateWorkspaceChangesOnRunCompletion(WORKSPACE, THREAD, busy),
+      ({ busy }) => useInvalidateWorkspaceChangesOnRunCompletion(WORKSPACE, busy),
       { initialProps: { busy: false } },
     );
     const changesKey = queryKeys.workspaceChanges(WORKSPACE);
-    const filesKey = queryKeys.workspaceFiles(WORKSPACE, THREAD);
-    const fileKey = queryKeys.workspaceFile(WORKSPACE, 'src/agent.ts', THREAD);
+    const treeKey = queryKeys.workspaceTree(WORKSPACE, 'src');
+    const fileKey = queryKeys.workspaceFile(WORKSPACE, 'src/agent.ts');
     client.setQueryData(changesKey, { workspacePath: WORKSPACE, available: true, changes: [] });
-    client.setQueryData(filesKey, { workspacePath: WORKSPACE, threadId: THREAD, files: [] });
+    client.setQueryData(treeKey, { workspacePath: WORKSPACE, path: 'src', available: true, entries: [] });
     client.setQueryData(fileKey, { workspacePath: WORKSPACE, path: 'src/agent.ts' });
 
     rerender({ busy: true });
@@ -26,7 +25,7 @@ describe('useInvalidateWorkspaceChangesOnRunCompletion', () => {
 
     await waitFor(() => {
       expect(client.getQueryState(changesKey)?.isInvalidated).toBe(true);
-      expect(client.getQueryState(filesKey)?.isInvalidated).toBe(true);
+      expect(client.getQueryState(treeKey)?.isInvalidated).toBe(true);
       expect(client.getQueryState(fileKey)?.isInvalidated).toBe(true);
     });
   });

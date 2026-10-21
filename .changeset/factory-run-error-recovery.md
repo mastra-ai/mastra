@@ -6,5 +6,6 @@ Failed chat runs now explain what went wrong and offer the matching next step, i
 
 - Credential and quota failures link to the personal or organization model settings that own the credential. When the session runs on a teammate's or the server's credentials, the notice says who has to repair them instead of linking to the viewer's own settings.
 - Context-limit and model-configuration rejections open the session model picker.
-- Rate limits, timeouts and provider outages offer a **Continue** button on the latest stopped run.
+- Rate limits, timeouts and provider outages offer a **Continue** button.
+- These actions appear on the latest failed run only. An earlier failure keeps its explanation, without actions that would act on the session's current state.
 - Every failure keeps copyable diagnostics with the session and thread ids under **Error details**. A generic 400 says plainly that the provider gave no specific reason.

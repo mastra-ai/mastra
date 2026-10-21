@@ -1,7 +1,6 @@
 export interface AgentControllerMutationArgs {
   agentControllerId: string;
-  resourceId: string;
-  scope?: string;
+  sessionId: string;
   baseUrl?: string;
   enabled?: boolean;
 }

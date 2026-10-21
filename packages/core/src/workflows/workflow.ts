@@ -1962,6 +1962,7 @@ export class Workflow<
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       evaluatePersistencePredicateBeforeDurableOperation: options.evaluatePersistencePredicateBeforeDurableOperation,
       allowUnclaimedResumes: options.allowUnclaimedResumes,
+      persistResumeClaim: options.persistResumeClaim,
       isOwnershipLostError: options.isOwnershipLostError,
       isForeignExecution: options.isForeignExecution,
       pruneSnapshot: options.pruneSnapshot,
@@ -4739,7 +4740,7 @@ export class Run<
           ...observabilityContext,
           tracingOptions,
           outputWriter: async chunk => {
-            void controller.enqueue(chunk);
+            controller.enqueue(chunk);
           },
           isVNext: true,
           forEachIndex,
@@ -5007,10 +5008,14 @@ export class Run<
     // The claim is a persisted state transition, so a workflow that opts out of persisting
     // `running` snapshots cannot be claimed: writing one anyway would leave the stored snapshot
     // in a state the caller explicitly asked us never to write.
-    const persistsRunningState = this.executionEngine.options.shouldPersistSnapshot({
-      workflowStatus: 'running',
-      stepResults: (snapshot.context ?? {}) as Record<string, StepResult<any, any, any, any>>,
-    });
+    // `persistResumeClaim` workflows write this one claim even so: their stored status must stop
+    // reading `suspended` once a resume takes the run.
+    const persistsRunningState =
+      (operation === 'resume' && this.executionEngine.options.persistResumeClaim) ||
+      this.executionEngine.options.shouldPersistSnapshot({
+        workflowStatus: 'running',
+        stepResults: (snapshot.context ?? {}) as Record<string, StepResult<any, any, any, any>>,
+      });
 
     const expectedStatus = operation === 'resume' ? 'suspended' : snapshot.status;
 
@@ -5033,11 +5038,13 @@ export class Run<
     // and throw. Claiming is an optimization over the pre-existing behaviour, so a store that
     // cannot claim keeps resuming exactly as it did before rather than failing the resume.
     if (!workflowsStore.supportsConcurrentUpdates()) {
-      this.#mastra
-        ?.getLogger()
-        ?.warn(
-          `[Workflow ${this.workflowId}] The configured workflow storage does not support concurrent updates, so concurrent ${operation}() calls for run ${this.runId} cannot be de-duplicated atomically. Concurrent calls may execute downstream steps more than once.`,
-        );
+      if (!this.executionEngine.options.allowUnclaimedResumes) {
+        this.#mastra
+          ?.getLogger()
+          ?.warn(
+            `[Workflow ${this.workflowId}] The configured workflow storage does not support concurrent updates, so concurrent ${operation}() calls for run ${this.runId} cannot be de-duplicated atomically. Concurrent calls may execute downstream steps more than once.`,
+          );
+      }
       return;
     }
 
@@ -5985,7 +5992,7 @@ export class Run<
           ...observabilityContext,
           tracingOptions,
           outputWriter: async chunk => {
-            void controller.enqueue(chunk);
+            controller.enqueue(chunk);
           },
           outputOptions,
           perStep,

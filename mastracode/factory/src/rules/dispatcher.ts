@@ -1,3 +1,4 @@
+import { readCredentialPolicyFailure } from '@mastra/code-sdk/auth/credential-policy-error';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
 import { classifyProviderError } from '@mastra/core/error';
@@ -93,15 +94,10 @@ class FactoryDecisionSuperseded extends Error {}
 /** A run that ran and ended in error; the session's own listener reports it to followers. */
 class RunEndedInError extends FactoryDispatchError {}
 
-// The Mastra Code credential resolver's own failure; free text that merely mentions credentials does not count.
-const CREDENTIAL_RESOLUTION_FAILURE = 'tenant model credential policy could not be resolved';
-// The resolver's reason when the request context has no user; it recurs on every retry of the same start.
-const NO_AUTHENTICATED_USER = 'the request has no authenticated user';
-
 function runErrorCode(error: unknown, message: string): FactoryDispatchFailureCode {
-  const lower = message.toLowerCase();
-  if (lower.includes(CREDENTIAL_RESOLUTION_FAILURE)) {
-    return lower.includes(NO_AUTHENTICATED_USER) ? 'run_user_unauthenticated' : 'run_credentials_unavailable';
+  const credentialFailure = readCredentialPolicyFailure(message);
+  if (credentialFailure) {
+    return credentialFailure === 'missing-user-context' ? 'run_user_unauthenticated' : 'run_credentials_unavailable';
   }
   return classifyProviderError(error) === 'auth' ? 'run_credentials_unavailable' : 'run_failed';
 }
@@ -321,7 +317,7 @@ interface DispatcherSession extends SkillSession {
   respondToToolSuspension(input: { resumeData: SubmitPlanResumeData; toolCallId?: string }): Promise<void>;
 }
 
-type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource' | 'listActiveThreadRuns'>;
+type FactoryController = Pick<AgentController<MastraCodeState>, 'getSession' | 'listActiveThreadRuns'>;
 type BoundDispatcherSession = Session<MastraCodeState>;
 
 function factoryRequestContext(input: {
@@ -738,7 +734,7 @@ export class FactoryDecisionDispatcher {
         // suspension and run state belong to that thread. Lookup failures revoke.
         keep: async binding => {
           try {
-            const session = await this.#controller.getSessionByResource(binding.resourceId);
+            const session = await this.#controller.getSession(binding.sessionId);
             if (session?.thread.getId() !== binding.threadId) return false;
             return session.suspensions.hasPending() || session.run.isRunning();
           } catch {
@@ -986,17 +982,17 @@ export class FactoryDecisionDispatcher {
           const resolved =
             decision.skillName === undefined
               ? await resolvePromptInvocation(this.#controller, {
-                  resourceId: binding.resourceId,
+                  sessionId: binding.sessionId,
                   prompt: decision.prompt,
                 })
               : decision.resume === true
                 ? await resolveSkillResumeInvocation(this.#controller, {
-                    resourceId: binding.resourceId,
+                    sessionId: binding.sessionId,
                     name: decision.skillName,
                     arguments: decision.arguments,
                   })
                 : await resolveSkillInvocation(this.#controller, {
-                    resourceId: binding.resourceId,
+                    sessionId: binding.sessionId,
                     name: decision.skillName,
                     arguments: decision.arguments,
                   });
@@ -1531,7 +1527,7 @@ export class FactoryDecisionDispatcher {
   ): Promise<FactoryRunBindingRecord> {
     const binding = await this.#findBinding(record, role);
     if (binding) {
-      const session = await this.#controller.getSessionByResource(binding.resourceId);
+      const session = await this.#controller.getSession(binding.sessionId);
       if (session) return binding;
     }
     if (!this.#prepareBinding) {
@@ -1546,7 +1542,7 @@ export class FactoryDecisionDispatcher {
   }
 
   async #findSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession | undefined> {
-    const session = await this.#controller.getSessionByResource(binding.resourceId);
+    const session = await this.#controller.getSession(binding.sessionId);
     if (!session) return undefined;
     await this.#switchThread(session, binding);
     return session;

@@ -27,7 +27,7 @@
     "@ai-sdk/provider-utils": "3.0.41",
     "adm-zip@<=0.6.0": "0.6.1",
     "image-size@<=2.0.2": "2.0.4",
-    "undici": "8.11.2",
+    "undici": "8.12.2",
     "@modelcontextprotocol/client": "2.2.0",
     "@modelcontextprotocol/sdk@<1.32.0": "1.32.1"
   },

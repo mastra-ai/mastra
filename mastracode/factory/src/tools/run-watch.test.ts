@@ -115,6 +115,54 @@ describe('observeSessionRunReports', () => {
     ]);
   });
 
+  function failedReason(error: Error) {
+    const session = fakeSession();
+    const report = vi.fn(async () => {});
+    observeSessionRunReports(session, report);
+    session.emit({ type: 'error', error } as AgentControllerEvent);
+    session.emit(end('error'));
+    return report.mock.calls.map(([outcome]) => outcome)[0];
+  }
+
+  function badRequest(body: unknown) {
+    return Object.assign(new Error('Bad Request'), { statusCode: 400, responseBody: JSON.stringify(body) });
+  }
+
+  it.each([
+    {
+      name: 'a quota sentence in the provider body behind Bad Request',
+      error: badRequest({ error: { message: 'You have exceeded your current quota, please check your plan.' } }),
+      reason: 'You have exceeded your current quota, please check your plan.',
+    },
+    {
+      name: 'a quota sentence behind a wrapping cause',
+      error: new Error('Agent stream failed', {
+        cause: badRequest({ error: { message: 'You have exceeded your current quota, please check your plan.' } }),
+      }),
+      reason: 'You have exceeded your current quota, please check your plan.',
+    },
+    {
+      name: 'any other provider sentence behind Bad Request',
+      error: badRequest({ error: { message: 'prompt is too long: 1 > 0 maximum' } }),
+      reason: 'prompt is too long: 1 > 0 maximum',
+    },
+    {
+      name: 'the plain message when there is no provider sentence',
+      error: new Error('Sandbox lease lost'),
+      reason: 'Sandbox lease lost',
+    },
+  ])('quotes $name in a failed report', ({ error, reason }) => {
+    expect(failedReason(error)).toEqual({ status: 'failed', reason: `the run ended in error: ${reason}` });
+  });
+
+  it('quotes at most 400 characters of the provider sentence', () => {
+    const sentence = `Your weekly usage limit is reached. ${'x'.repeat(500)}`;
+    expect(failedReason(badRequest({ error: { message: sentence } }))).toEqual({
+      status: 'failed',
+      reason: `the run ended in error: ${sentence.slice(0, 400)}`,
+    });
+  });
+
   it('keeps listening when a report fails', async () => {
     const session = fakeSession();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -159,6 +207,50 @@ describe('createSessionRunEndReporter', () => {
     await reporter({ sessionId: 'mine', threadId: 'thread', outcome: { status: 'done' }, since: new Date() });
 
     expect(reporting).not.toHaveBeenCalled();
+  });
+
+  it("reports a finished run kept on its own resource to its item's followers", async () => {
+    const since = new Date('2026-10-01T00:00:00.000Z');
+    // A run on untrusted content records its own session id as the binding's resource.
+    const findRunBindingBySession = vi.fn(async ({ resourceId }: { resourceId: string }) =>
+      resourceId === 'run'
+        ? {
+            orgId: 'org-1',
+            factoryProjectId: 'project-1',
+            workItemId: 'item-1',
+            role: 'reviewer',
+            threadId: 'run',
+            revokedAt: new Date('2026-10-01T00:05:00.000Z'),
+          }
+        : null,
+    );
+    const listWorkItemSubscribers = vi.fn(async () => []);
+    const reporter = createSessionRunEndReporter({
+      sessions: {
+        getBySessionId: async () =>
+          ({
+            sessionId: 'run',
+            orgId: 'org-1',
+            factoryProjectId: 'project-1',
+            userId: 'user-1',
+            originSessionId: null,
+            originThreadId: null,
+            title: null,
+          }) as never,
+      },
+      workItems: {
+        findActiveRunBindingForSession: async () => null,
+        findRunBindingBySession,
+        listWorkItemSubscribers,
+        getForProject: vi.fn(),
+      } as never,
+      reporting: async () => ({ deliver: vi.fn(), notifications: new InMemoryNotificationsStorage() }),
+    });
+
+    await reporter({ sessionId: 'run', threadId: 'run', outcome: { status: 'done' }, since });
+
+    expect(findRunBindingBySession).toHaveBeenCalledWith(expect.objectContaining({ resourceId: 'run' }));
+    expect(listWorkItemSubscribers).toHaveBeenCalledWith(expect.objectContaining({ workItemId: 'item-1' }));
   });
 
   function sideReporter(originMutedAt: Date | null) {

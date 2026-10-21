@@ -596,6 +596,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/liquid',
+          label: 'Liquid Inference',
+        },
+        {
+          type: 'doc',
           id: 'providers/llama',
           label: 'Llama',
         },
