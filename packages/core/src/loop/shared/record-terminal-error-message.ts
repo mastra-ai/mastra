@@ -14,7 +14,7 @@
  * Because that message is a real assistant record, the failed turn forms a
  * persistable pair with its user message through the ordinary memory path.
  *
- * Only `{ name, message }` plus the provider's `statusCode`, `code` and innermost
+ * Only `{ name, message }` plus the provider's `statusCode`, `codes` and innermost
  * `reason` is persisted. Stack traces, causes that hold no provider response, other custom enumerable fields
  * and custom `toJSON` output stay on the runtime error surfaces (stream chunk,
  * `onError`, `result.error`); thread history has to be deterministic,
