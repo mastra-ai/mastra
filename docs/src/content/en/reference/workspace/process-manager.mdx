@@ -143,7 +143,7 @@ for (const proc of procs) {
 
 Get a handle to a process by PID. Returns `undefined` if the process isn't found or has already been dismissed.
 
-Reading a process that has exited dismisses it: later calls return `undefined` and it leaves `list()`. Pass `{ release: false }` to read it and leave it available, for example when a UI shows a process's output that an agent will also read.
+Reading a process that has exited dismisses it: later calls return `undefined` and it leaves `list()`. Pass `{ release: false }` to read it and leave it available, so one reader can look at a finished process's output without taking it from another, such as the agent that started it.
 
 ```typescript
 const handle = await sandbox.processes.get('1234')
