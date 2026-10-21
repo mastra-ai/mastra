@@ -78,7 +78,7 @@ See [Connect](/docs/mastra-platform/connect/overview) to get started and [Tools]
             name: 'resourceId',
             type: 'string | ((ctx?) => string | undefined | Promise<string | undefined>)',
             description:
-              "End-user resource ID to resolve for: the agent gets global connections plus that user's own end-user connections, and every platform call asserts the ID. Pass a string (the per-request pattern tools: ctx => tools({ resourceId: ... }) stays cheap because identical options share one internal state) or a callback derived per resolution from the invocation context. A callback returning undefined resolves global-only. See End-user connections.",
+              "Project-scoped end-user resource ID to resolve for: the agent gets global connections plus that user's own end-user connections, and every platform call asserts the ID. The trimmed value must contain 1 to 256 characters. Pass a string (the per-request pattern tools: ctx => tools({ resourceId: ... }) stays cheap because identical options share one internal state) or a callback derived per resolution from the invocation context. A callback returning undefined resolves global-only. See End-user connections.",
             isOptional: true,
           },
           {
@@ -201,6 +201,8 @@ Every field falls back to an environment variable, so a fully env-configured app
 
 The returned `ToolsResolver` caches its tools. Within `ttlMs` of the last fetch, it returns the cache. The first call after expiry still returns the cache right away and starts a background fetch from the platform (stale-while-revalidate). Later calls use the updated snapshot once the fetch succeeds. The resolver doesn't poll while idle, and refresh failures preserve the cached snapshot. Use `await connected.refresh()` to wait for a fresh tool record.
 
+Resource-scoped resolvers keep separate snapshots and Model Context Protocol (MCP) clients per resource ID. One shared resolver state retains up to 50 resource scopes and evicts the least recently used scope when the limit is reached. The global scope is retained separately.
+
 Call the resolver directly when you need a plain tool record, for example for the `toolsets` option at generate time:
 
 ```typescript
@@ -225,6 +227,43 @@ Errors fall into four groups:
 - An enabled provider ID that the platform catalog confirms is unknown fails the resolution with `invalid_options`. An unknown tool key or zero-match glob in a per-provider filter does the same. If the catalog can't be reached, an unknown ID downgrades to a warning and is skipped.
 - If a background refresh fails while a snapshot is cached, the resolver keeps serving the cached toolsets and warns. It rejects only when nothing was ever cached.
 - A problem with one provider, such as a connection that needs reauthorization, logs a warning and skips that provider. The other providers' tools still load.
+
+## Built-in `request_connection` tool
+
+A resource-scoped resolution includes a `request_connection` tool unless `connectPrompt` is false. Global-only resolutions never include it. The key is reserved; if a provider also resolves a tool named `request_connection`, resolution fails until you disable the built-in prompt or exclude the conflict.
+
+The agent can pass an optional provider ID:
+
+```typescript
+{
+  provider: 'linear'
+}
+```
+
+A known, policy-allowed ID returns that provider. An omitted, unknown, or unavailable ID returns the full connectable set so the agent can recover instead of failing. Catalog and connection state are loaded again on each tool call, outside the normal tool snapshot TTL.
+
+The tool returns:
+
+```typescript
+const output = {
+  type: 'connect-prompt',
+  requestedProvider: 'linear',
+  providers: [
+    {
+      id: 'linear',
+      displayName: 'Linear',
+      logoUrl: 'https://...',
+      authType: 'OAUTH2',
+      connected: false,
+      scope: null,
+    },
+  ],
+}
+```
+
+`connected` is true when an active global or caller-owned connection can serve the provider. `scope` is `user` when the caller owns an active row, `global` when only a global row serves it, and null when no active connection exists. A caller-owned row takes precedence when both scopes are active.
+
+The output contains no session, token, or authorization URL. A compatible chat interface detects `type: 'connect-prompt'` and drives [`userConnectRoutes()`](/reference/connect/user-connect-routes). Studio provides this renderer. See [End-user connections](/docs/mastra-platform/connect/end-user-connections#let-agents-prompt-for-a-connection).
 
 ## Choosing providers
 

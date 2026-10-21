@@ -1,0 +1,73 @@
+---
+title: 'Reference: Provider policy | Connect'
+description: 'Configure which providers end users can connect with @mastra/connect.'
+packages:
+  - '@mastra/connect'
+---
+
+# Provider policy
+
+The provider policy controls which platform integrations end users can connect through [`userConnectRoutes()`](/reference/connect/user-connect-routes) and which providers the built-in `request_connection` tool can offer.
+
+Configure a project policy in Mastra Platform when project owners need to change the available providers without redeploying the Mastra server. Set the `providers` option in code when the application must enforce a fixed allowlist.
+
+## Resolution order
+
+Mastra resolves the effective provider policy in this order:
+
+1. A code-level `providers` allowlist passed to `userConnectRoutes()` or `tools()` takes priority.
+1. Without a code-level allowlist, Mastra loads the project's end-user provider list from Mastra Platform.
+1. Without a configured project list, Mastra exposes the full platform catalog.
+
+Code-level and project policies have different empty-list behavior:
+
+| Configuration | Result |
+| - | - |
+| `providers: ['linear', 'slack']` | Only the listed providers are available. |
+| `providers` omitted and project list contains provider IDs | Only the project's selected providers are available. |
+| `providers` omitted and project list is empty | New end-user connections are disabled. |
+| `providers` omitted and project list isn't configured | The full platform catalog is available. |
+| `providers: []` | `userConnectRoutes()` rejects the configuration. |
+
+Provider IDs are matched case-insensitively.
+
+The project policy and the `providers` option on `userConnectRoutes()` gate provider discovery, session creation, and the hosted connect page. Existing connections stay visible and disconnectable. Normal tool resolution follows the separate `providers` configuration passed to `tools()`. A project-policy change alone doesn't remove existing tools.
+
+## Use the project policy
+
+Omit `providers` to use the project setting from Mastra Platform:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { userConnectRoutes } from '@mastra/connect'
+
+export const mastra = new Mastra({
+  server: {
+    auth: {
+      authenticateToken: async token => verifyToken(token),
+      mapUserToResourceId: user => user.id,
+    },
+    apiRoutes: [...userConnectRoutes({})],
+  },
+})
+```
+
+In the project's **Settings** page, use **End-user connections** to allow the full catalog, select specific providers, or disable new end-user connections.
+
+Project settings are cached for 30 seconds. A change in Mastra Platform can take up to 30 seconds to affect a running Mastra server.
+
+## Override the project policy in code
+
+Pass `providers` to enforce an allowlist in the application:
+
+```typescript title="src/mastra/index.ts"
+apiRoutes: [
+  ...userConnectRoutes({
+    providers: ['linear', 'slack'],
+  }),
+]
+```
+
+When this option is present, `userConnectRoutes()` doesn't load the project provider setting. Providers outside the allowlist return 404 from provider discovery, session creation, and the hosted connect page. Existing connection rows remain available through listing, status, and disconnect routes.
+
+The same precedence applies to the built-in `request_connection` tool from [`tools()`](/reference/connect/tools). A `providers` array set on `tools()` takes priority over the project policy when the prompt tool builds its connectable provider list. The project policy doesn't filter normal tool resolution, but the `providers` option on `tools()` still does.

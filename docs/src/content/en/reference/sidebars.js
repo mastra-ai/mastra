@@ -204,6 +204,8 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'connect/channels', label: 'channels()' },
         { type: 'doc', id: 'connect/credential', label: 'credential()' },
+        { type: 'doc', id: 'connect/user-connection-ui', label: 'End-user connection UI' },
+        { type: 'doc', id: 'connect/provider-configuration', label: 'Provider policy' },
         { type: 'doc', id: 'connect/providers', label: 'Provider toolsets' },
         { type: 'doc', id: 'connect/tools', label: 'tools()' },
         { type: 'doc', id: 'connect/user-connect-routes', label: 'userConnectRoutes()' },
