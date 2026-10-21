@@ -1,3 +1,4 @@
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import userEvent from '@testing-library/user-event';
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -182,7 +183,12 @@ function stubThreadRoute({
 
 function renderRoute(path: string) {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [path] });
-  return renderWithProviders(<RouterProvider router={router} />);
+  return renderWithProviders(
+    <>
+      <RouterProvider router={router} />
+      <Toaster position="bottom-right" />
+    </>,
+  );
 }
 
 afterEach(() => {
@@ -229,6 +235,7 @@ describe('ThreadPage header', () => {
     await user.click(privacy);
     expect(await screen.findByRole('heading', { name: 'This session is private' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Share with organization' }));
+    expect(await screen.findByText('Session shared with your organization')).toBeInTheDocument();
     await waitFor(() =>
       expect(within(header).queryByRole('button', { name: 'Private session' })).not.toBeInTheDocument(),
     );
@@ -236,8 +243,32 @@ describe('ThreadPage header', () => {
 
     await user.click(screen.getByRole('button', { name: `Session actions for ${userSession.title}` }));
     await user.click(await screen.findByRole('menuitem', { name: 'Make private' }));
+    expect(await screen.findByText('Session is now private')).toBeInTheDocument();
     expect(await within(header).findByRole('button', { name: 'Private session' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: `Private session: ${userSession.title}` })).toBeInTheDocument();
+  });
+
+  it('shows the server reason when sharing from the header is refused and keeps the session private', async () => {
+    stubThreadRoute();
+    const reason = 'Wait for the session to finish its run before changing visibility';
+    server.use(
+      http.put(`${TEST_BASE_URL}/web/user-sessions/${USER_SESSION_ID}/visibility`, () =>
+        HttpResponse.json({ error: reason }, { status: 409 }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderRoute(`/factories/${FACTORY_ID}/user/threads/${USER_SESSION_ID}`);
+    await waitForMutationsIdle(client);
+
+    const header = await findPageHeader();
+    await user.click(await within(header).findByRole('button', { name: 'Private session' }));
+    await user.click(await screen.findByRole('button', { name: 'Share with organization' }));
+    await waitForMutationsIdle(client);
+
+    expect(await screen.findByText(reason)).toBeInTheDocument();
+    expect(within(header).getByRole('button', { name: 'Private session' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'This session is private' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share with organization' })).toBeEnabled();
   });
 
   it.each(['user-1', 'user-2'])('does not show a sharing control for a shared session owned by %s', async userId => {
