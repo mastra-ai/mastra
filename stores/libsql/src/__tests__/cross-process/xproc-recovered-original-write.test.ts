@@ -41,6 +41,7 @@ for (const engine of ['durable', 'evented'] as const) {
         runId: `run-${id}`,
         threadId: `thread-${id}`,
         resourceId: `resource-${id}`,
+        releaseTimeoutMs: CELL_TIMEOUT_MS,
       };
     });
 

@@ -14,6 +14,7 @@ export interface T81PeerArgs {
   runId: string;
   threadId: string;
   resourceId: string;
+  releaseTimeoutMs?: number;
 }
 
 export interface T81PeerResult {
@@ -29,7 +30,7 @@ runPeer<T81PeerArgs>(async peer => {
   const committed = gate();
   const toolEvents: StepToolEvent[] = [];
   // Install before reporting the gate: main may release immediately after the signal.
-  const released = peer.waitFor('release').then(() => release.resolve());
+  const released = peer.waitFor('release', { timeoutMs: peer.args.releaseTimeoutMs }).then(() => release.resolve());
   const memory = new MockMemory();
   memory.setStorage(storage);
   const { agent } = createStepAgent({
