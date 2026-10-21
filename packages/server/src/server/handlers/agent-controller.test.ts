@@ -1321,7 +1321,7 @@ describe('agent-controller routes', () => {
         name: 'AI_APICallError',
         message: 'Bad Request',
         statusCode: 403,
-        code: 'permission_error',
+        codes: ['permission_error'],
         reason: 'Your API key does not have permission.',
       });
     });

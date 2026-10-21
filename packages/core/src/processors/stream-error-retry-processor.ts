@@ -50,6 +50,12 @@ export type StreamErrorRetryProcessorOptions = {
 
 const DEFAULT_MAX_RETRIES = 1;
 const RETRYABLE_FAILURE_KINDS = new Set<ProviderFailureKind>(['rate_limited', 'unavailable', 'timeout']);
+const ACCOUNT_REFUSALS = new Set<ProviderFailureKind>(['auth', 'quota']);
+
+// A refusal waits on a person whatever the SDK flag says; the AI SDK marks every 429 retryable, an exhausted quota included.
+function isAccountRefusal(error: unknown): boolean {
+  return ACCOUNT_REFUSALS.has(classifyProviderError(error));
+}
 const OPENAI_RETRY_MESSAGE_PATTERN = /you can retry your request/i;
 const DEFAULT_MATCHERS = [isRetryableOpenAIResponsesStreamError];
 
@@ -110,12 +116,13 @@ export function isRetryableOpenAIResponsesStreamError(error: unknown): boolean {
  * Matcher for transient HTTP 400 (Bad Request) failures. Providers like OpenAI
  * occasionally return 400 during service degradation that succeeds on retry.
  * Recommended with `maxRetries: 1` since a 400 could also be genuinely invalid.
- * Authorization failures are never matched: OpenAI stream error frames such as
- * `invalid_api_key` can surface with a derived `statusCode: 400`.
+ * Credential and quota refusals are never matched: OpenAI stream error frames such as
+ * `invalid_api_key` can surface with a derived `statusCode: 400`, and Anthropic reports
+ * an exhausted credit balance or usage cap as a 400.
  */
 export function isBadRequestError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
-  if (classifyProviderError(error) === 'auth') return false;
+  if (isAccountRefusal(error)) return false;
 
   if ('statusCode' in error && (error as { statusCode?: unknown }).statusCode === 400) return true;
 
@@ -162,7 +169,7 @@ function findMatchingPolicy(error: unknown, entries: StreamErrorRetryMatcherConf
       }
     }
 
-    if (isRetryableProviderMetadata(candidate)) {
+    if (isRetryableProviderMetadata(candidate) && !isAccountRefusal(candidate)) {
       return {};
     }
 
@@ -196,8 +203,7 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
     const { error, retryCount, abortSignal } = args;
 
     const matchedPolicy = findMatchingPolicy(error, this.#entries);
-    const policy =
-      matchedPolicy ?? (this.#retryUnknownErrors && classifyProviderError(error) !== 'auth' ? {} : undefined);
+    const policy = matchedPolicy ?? (this.#retryUnknownErrors && !isAccountRefusal(error) ? {} : undefined);
     if (!policy) return;
 
     const effectiveMaxRetries = policy.maxRetries ?? this.#maxRetries;

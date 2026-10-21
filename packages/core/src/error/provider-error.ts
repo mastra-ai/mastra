@@ -15,7 +15,7 @@ export type ProviderFailureKind =
 
 export interface ProviderErrorFacts {
   statusCode?: number;
-  code?: string;
+  codes?: string[];
   /** The innermost sentence behind HTTP phrases, envelopes, stringified layers and a wrapped provider response, when it differs from the message. */
   reason?: string;
 }
@@ -100,13 +100,15 @@ function collect(value: unknown, facts: CollectedFacts, depth: number): void {
   if (typeof status === 'string' && SYMBOLIC_STATUS.test(status.trim())) facts.codes.push(status.trim());
   const code = readField(value, 'code');
   if (typeof code === 'number' && facts.statusCode === undefined && code >= 400 && code < 600) facts.statusCode = code;
-  for (const candidate of [code, readField(value, 'type')]) {
+  const saved = readField(value, 'codes');
+  const savedCodes = Array.isArray(saved) ? saved : [];
+  for (const candidate of [code, readField(value, 'type'), ...savedCodes]) {
     if (typeof candidate === 'string' && candidate.trim() && !ENVELOPE_TYPES.has(candidate))
       facts.codes.push(candidate);
   }
   const name = readField(value, 'name');
   if (typeof name === 'string') facts.texts.push(name);
-  for (const key of ['message', 'reason', 'responseBody']) collect(readField(value, key), facts, depth);
+  for (const key of ['message', 'reason', 'detail', 'responseBody']) collect(readField(value, key), facts, depth);
   for (const key of ['error', 'data', 'response', 'cause']) collect(readField(value, key), facts, depth + 1);
 }
 
@@ -178,8 +180,8 @@ export function providerErrorFacts(error: unknown): ProviderErrorFacts {
   const facts = collectFacts(error);
   const result: ProviderErrorFacts = {};
   if (facts.statusCode !== undefined) result.statusCode = facts.statusCode;
-  const code = decisiveCode(facts.codes);
-  if (code) result.code = code;
+  const codes = [...new Set(facts.codes)];
+  if (codes.length > 0) result.codes = codes;
   const message = typeof error === 'object' && error !== null ? readField(error, 'message') : error;
   const reason = innermostReason(error, 0);
   if (reason !== undefined && reason !== (typeof message === 'string' ? message.trim() : undefined))
@@ -201,9 +203,11 @@ function innermostReason(error: unknown, depth: number): string | undefined {
     return !trimmed || HTTP_REASON_PHRASE.test(trimmed) ? undefined : trimmed;
   }
   if (typeof error !== 'object') return undefined;
-  const own = readField(error, 'reason');
-  const ownReason = typeof own === 'string' ? innermostReason(own, depth) : undefined;
-  if (ownReason) return ownReason;
+  for (const key of ['reason', 'detail']) {
+    const own = readField(error, key);
+    const ownReason = typeof own === 'string' ? innermostReason(own, depth) : undefined;
+    if (ownReason) return ownReason;
+  }
   for (const key of ['error', 'response', 'data']) {
     const nested = innermostReason(readField(error, key), depth + 1);
     if (nested) return nested;
@@ -227,25 +231,4 @@ function reasonBehindCause(cause: unknown, depth: number): string | undefined {
 function carriesProviderResponse(value: object): boolean {
   const status = readField(value, 'statusCode') ?? readField(value, 'status');
   return typeof status === 'number' || typeof readField(value, 'responseBody') === 'string';
-}
-
-// Same precedence as providerVerdict and the narrowing, so the one code kept decides like the live error.
-const CODE_PRECEDENCE = [
-  ACCESS_DENIED_CODE,
-  BILLING_EXHAUSTED,
-  RATE_LIMITED,
-  TIMED_OUT,
-  UNAVAILABLE,
-  ...CONTEXT_OVERFLOW,
-  MODEL_REJECTED,
-  TOOL_HISTORY_REJECTED,
-  INVALID_REQUEST_CODE,
-];
-
-function decisiveCode(codes: string[]): string | undefined {
-  for (const pattern of CODE_PRECEDENCE) {
-    const code = codes.find(candidate => pattern.test(candidate));
-    if (code) return code;
-  }
-  return codes[0];
 }

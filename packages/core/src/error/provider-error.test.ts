@@ -307,6 +307,21 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     'invalid_request',
   ],
   ['plain 400 weekly limit', apiError(400, 'Your weekly limit has been reached, try again later'), 'quota'],
+  [
+    'Codex usage limit in a detail body',
+    apiError(400, 'Bad Request', '{"detail":"You have exceeded your usage limit for Codex"}'),
+    'quota',
+  ],
+  [
+    'saved facts that kept every code',
+    {
+      name: 'AI_APICallError',
+      message: 'Bad Request',
+      statusCode: 404,
+      codes: ['model_not_found', 'invalid_request_error'],
+    },
+    'model_rejected',
+  ],
   ['plain 400 Claude Max usage limit', apiError(400, 'You have exceeded your usage limit for Claude Max'), 'quota'],
   [
     'usage-limit wording on a 404',
@@ -455,31 +470,31 @@ describe('toPersistedErrorIdentity', () => {
 });
 
 describe('providerErrorFacts', () => {
-  it('keeps the status and the most specific provider code', () => {
+  it('keeps the status and every provider code, once each, in the order found', () => {
     const error = apiError(429, 'quota', undefined, {
       error: { type: 'insufficient_quota', code: 'insufficient_quota' },
     });
-    expect(providerErrorFacts(error)).toEqual({ statusCode: 429, code: 'insufficient_quota' });
+    expect(providerErrorFacts(error)).toEqual({ statusCode: 429, codes: ['insufficient_quota'] });
     expect(providerErrorFacts({ type: 'error', error: { type: 'rate_limit_error', message: 'slow down' } })).toEqual({
-      code: 'rate_limit_error',
+      codes: ['rate_limit_error'],
       reason: 'slow down',
     });
     expect(providerErrorFacts({ error: { code: 429, status: 'RESOURCE_EXHAUSTED' } })).toEqual({
       statusCode: 429,
-      code: 'RESOURCE_EXHAUSTED',
+      codes: ['RESOURCE_EXHAUSTED'],
     });
     expect(
       providerErrorFacts({
         type: 'response.failed',
         response: { status: 'failed', error: { code: 'server_error', message: 'An internal error occurred.' } },
       }),
-    ).toEqual({ code: 'server_error', reason: 'An internal error occurred.' });
+    ).toEqual({ codes: ['server_error'], reason: 'An internal error occurred.' });
     expect(
       providerErrorFacts({ code: 'bad_request', type: 'invalid_request_error', message: 'Invalid timeout' }),
-    ).toEqual({ code: 'invalid_request_error' });
+    ).toEqual({ codes: ['bad_request', 'invalid_request_error'] });
     expect(
       providerErrorFacts({ type: 'invalid_request_error', code: 'model_not_found', message: 'Request rejected.' }),
-    ).toEqual({ code: 'model_not_found' });
+    ).toEqual({ codes: ['model_not_found', 'invalid_request_error'] });
     expect(
       providerErrorFacts(
         Object.assign(new Error('Upstream call failed'), {
@@ -487,7 +502,7 @@ describe('providerErrorFacts', () => {
           cause: responsesServerErrorFrame,
         }),
       ),
-    ).toEqual({ code: 'internal_error' });
+    ).toEqual({ codes: ['upstream_failure', 'internal_error', 'server_error'] });
   });
 
   it('keeps the body sentence as the reason when the message is only an HTTP phrase', () => {
@@ -498,10 +513,19 @@ describe('providerErrorFacts', () => {
     );
     expect(providerErrorFacts(bodyOnly)).toEqual({
       statusCode: 400,
-      code: 'invalid_request_error',
+      codes: ['invalid_request_error'],
       reason: 'prompt is too long: 1 > 0 maximum',
     });
     expect(providerErrorFacts(apiError(400, 'prompt is too long: 1 > 0 maximum'))).toEqual({ statusCode: 400 });
+  });
+
+  it('keeps a detail sentence as the reason and a non-JSON body out of history', () => {
+    expect(
+      providerErrorFacts(apiError(400, 'Bad Request', '{"detail":"You have exceeded your usage limit for Codex"}')),
+    ).toEqual({ statusCode: 400, reason: 'You have exceeded your usage limit for Codex' });
+    expect(
+      providerErrorFacts(apiError(400, 'Bad Request', 'prompt is too long: 210345 tokens > 200000 maximum')),
+    ).toEqual({ statusCode: 400 });
   });
 
   it('never persists a bare HTTP phrase as the reason, wherever it sits', () => {

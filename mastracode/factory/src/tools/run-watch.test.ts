@@ -142,6 +142,11 @@ describe('observeSessionRunReports', () => {
       reason: 'You have exceeded your current quota, please check your plan.',
     },
     {
+      name: 'a Codex detail sentence behind Bad Request',
+      error: badRequest({ detail: 'You have exceeded your usage limit for Codex' }),
+      reason: 'You have exceeded your usage limit for Codex',
+    },
+    {
       name: 'any other provider sentence behind Bad Request',
       error: badRequest({ error: { message: 'prompt is too long: 1 > 0 maximum' } }),
       reason: 'prompt is too long: 1 > 0 maximum',

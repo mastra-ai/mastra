@@ -40,7 +40,7 @@ describe('toPersistedErrorIdentity', () => {
       name: 'TypeError',
       message: 'boom',
       statusCode: 429,
-      code: 'insufficient_quota',
+      codes: ['insufficient_quota'],
     });
     expect(Object.keys(toPersistedErrorIdentity(new Error('boom')))).toEqual(['name', 'message']);
     expect(

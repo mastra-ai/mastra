@@ -2,12 +2,23 @@
 '@mastra/core': minor
 ---
 
-Added `classifyProviderError`, `providerErrorFacts` and `providerErrorReason` to `@mastra/core/error`: one reader for model-provider failures (authentication, quota, rate limit, context overflow, rejected model or request, timeout, outage) that takes HTTP status and provider codes before wording. The stream error retry processor uses it, and persisted error parts keep the provider's `statusCode`, `code` and `reason` so a reloaded thread classifies like a live one. The `reason` comes from the provider's response, including one wrapped as another error's cause; any other cause stays out of thread history.
+Added `classifyProviderError`, `providerErrorFacts` and `providerErrorReason` to `@mastra/core/error`: one reader for model-provider failures (authentication, quota, rate limit, context overflow, rejected model or request, timeout, outage) that takes HTTP status and provider codes before wording. Persisted error parts keep the provider's `statusCode`, every provider code as `codes`, and the `reason` sentence, so a reloaded thread classifies like a live one. The `reason` comes from the provider's response, including a string `detail` field and a response wrapped as another error's cause; any other cause and any non-JSON body stay out of thread history.
+
+Each kind names a recovery action. New kinds can arrive in minor releases, and no kind is renamed or removed within 1.x, so keep a default branch when you switch on one:
 
 ```ts
 import { classifyProviderError } from '@mastra/core/error';
 
-if (classifyProviderError(error) === 'rate_limited') {
-  // wait, then retry
+switch (classifyProviderError(error)) {
+  case 'rate_limited':
+    // wait, then retry
+    break;
+  case 'quota':
+    // ask for more credit
+    break;
+  default:
+    // show the provider's reason
 }
 ```
+
+The stream error retry processor reads the same classifier and no longer retries a credential or quota refusal, even when the AI SDK marks it retryable, as it does every 429. `isBadRequestError` no longer matches a 400 that reports an exhausted credit balance or usage cap.
