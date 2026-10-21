@@ -1,4 +1,6 @@
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { promisify } from 'node:util';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
 import { Agent } from '@mastra/core/agent';
@@ -14,6 +16,7 @@ import { RedisStreamsPubSub } from './index';
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6381';
 const STEPS = 8;
 const RESULT_BYTES = 20_000;
+const execFileAsync = promisify(execFile);
 
 describe('evented agent Redis Streams step-finish transport', () => {
   let mock: LLMock;
@@ -90,6 +93,26 @@ describe('evented agent Redis Streams step-finish transport', () => {
       expect(Math.max(...frames.map(frame => Buffer.byteLength(frame)))).toBeLessThan(2.5 * RESULT_BYTES);
       // Each frame also carries the current step's tool output separately from the response delta.
       expect(frames.reduce((total, frame) => total + Buffer.byteLength(frame), 0)).toBeLessThan(20 * RESULT_BYTES);
+
+      const worker = new URL('../test-fixtures/response-observer.entry.ts', import.meta.url).pathname;
+      const runObserver = async (firstStep: number) => {
+        const { stdout } = await execFileAsync(
+          './node_modules/.bin/tsx',
+          [worker, REDIS_URL, keys[0]!, String(firstStep)],
+          {
+            cwd: new URL('..', import.meta.url).pathname,
+          },
+        );
+        return JSON.parse(stdout.trim().split('\n').at(-1)!) as { observed: string[][] };
+      };
+      const expectedIds = Array.from({ length: STEPS }, (_, index) => `call-${index + 1}`);
+      const full = await runObserver(0);
+      expect(full.observed).toEqual(
+        Array.from({ length: STEPS + 1 }, (_, index) => expectedIds.slice(0, Math.min(index + 1, STEPS))),
+      );
+      // A consumer that starts after the first step-finish cannot reconstruct older messages.
+      const late = await runObserver(2);
+      expect(late.observed.at(-1)).toEqual(expectedIds.slice(2));
     } finally {
       await pubsub.close();
       const keys = await redis.keys(`${prefix}:*`);
