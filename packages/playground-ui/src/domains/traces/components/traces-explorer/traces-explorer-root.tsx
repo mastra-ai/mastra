@@ -41,6 +41,7 @@ import { TracesListProvider } from './traces-explorer-list-provider';
 import {
   useFeedbackAvailable,
   useTraceQueryAvailable,
+  useTraceQueryDeltaPollingAvailable,
   useTraceQueryDiscoveryAvailable,
   useTraceQueryRootDurationAvailable,
 } from '@/domains/capabilities';
@@ -96,6 +97,7 @@ export function TracesExplorerRoot({
   const withQueryTrace = traceQuery.enabled && features?.traceQuery !== false;
   const withFeedback = useFeedbackAvailable().enabled && features?.feedback !== false;
   const { enabled: withRootDuration } = useTraceQueryRootDurationAvailable();
+  const { enabled: withDeltaPolling } = useTraceQueryDeltaPollingAvailable();
   const withDiscovery = useTraceQueryDiscoveryAvailable().enabled && withQueryTrace;
 
   // Entries the server can't query are ignored, never written back: the host keeps its raw value.
@@ -188,6 +190,7 @@ export function TracesExplorerRoot({
       withQueryTrace,
       withFeedback,
       withRootDuration,
+      withDeltaPolling,
       withDiscovery,
       isCapabilitiesLoading: traceQuery.isLoading,
       metricsSupport,
@@ -200,6 +203,7 @@ export function TracesExplorerRoot({
       withQueryTrace,
       withFeedback,
       withRootDuration,
+      withDeltaPolling,
       withDiscovery,
       traceQuery.isLoading,
       metricsSupport,
