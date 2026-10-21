@@ -19,7 +19,7 @@ const stringValue = (value: unknown): string => (Buffer.isBuffer(value) ? value.
  *
  * KEYS[1] = list key, KEYS[2] = counter key
  * ARGV[1] = JSON-serialized object WITHOUT an `index` property
- * ARGV[2] = TTL in seconds (0 = no expiry)
+ * ARGV[2] = TTL in seconds (0 = no expiry), applied to BOTH keys
  *
  * The index is spliced into the JSON text as the first property rather than
  * decoded/re-encoded with cjson, which would silently alter large integers
@@ -40,9 +40,6 @@ local ttl = tonumber(ARGV[2])
 if ttl > 0 then
   redis.call('EXPIRE', KEYS[1], ttl)
   redis.call('EXPIRE', KEYS[2], ttl)
-else
-  redis.call('PERSIST', KEYS[1])
-  redis.call('PERSIST', KEYS[2])
 end
 return i
 `.trim();
@@ -145,14 +142,8 @@ export class ValkeyServerCache extends MastraServerCache {
    * The list and counter keys share one TTL; see
    * {@link ValkeyServerCacheOptions.ttlSeconds}.
    */
-  async listPushIndexed(
-    listKey: string,
-    counterKey: string,
-    value: Record<string, unknown>,
-    ttlMs?: number,
-  ): Promise<number> {
+  async listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>): Promise<number> {
     const { index: _ignored, ...body } = value;
-    const ttlSeconds = ttlMs === undefined ? this.ttlSeconds : Math.max(1, Math.ceil(ttlMs / 1000));
     const result = await this.command([
       'EVAL',
       LIST_PUSH_INDEXED_SCRIPT,
@@ -160,7 +151,7 @@ export class ValkeyServerCache extends MastraServerCache {
       this.getKey(listKey),
       this.getKey(counterKey),
       JSON.stringify(body),
-      String(ttlSeconds),
+      String(this.ttlSeconds),
     ]);
     return Number(result);
   }

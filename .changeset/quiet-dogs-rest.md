@@ -2,10 +2,6 @@
 '@mastra/valkey': patch
 ---
 
-`ValkeyServerCache.listPushIndexed` accepts a per-call TTL so the topic log and its index counter can outlive the default `ttlSeconds` when a caller needs them to.
+`ValkeyServerCache` now reports `supportsAtomicAppend: true`.
 
-```ts
-await cache.listPushIndexed('pubsub:agent.stream.run-1', 'pubsub:agent.stream.run-1:counter', event, 86_400_000);
-```
-
-Both keys are always written with the same expiry, since a counter that outlives its list restarts at zero and an index that expires first gets reused. A TTL of `0` now persists both keys instead of leaving them to expire.
+Its `listPushIndexed` already allocated the index and appended the entry in one Lua script, but the new cache capability bit defaults to `false`, which would have silently downgraded Valkey-backed caches to publishing unnumbered frames. With the bit set, `CachingPubSub` numbers durable run frames and can replay them from an offset.

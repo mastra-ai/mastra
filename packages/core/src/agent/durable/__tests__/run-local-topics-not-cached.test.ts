@@ -42,9 +42,9 @@ describe('durable/evented agent — run-local topics are never written to the ca
     const writes: string[] = [];
     const cache = new InMemoryServerCache();
     const listPushIndexed = cache.listPushIndexed.bind(cache);
-    cache.listPushIndexed = async (listKey: string, counterKey: string, value: any, ttlMs?: number) => {
+    cache.listPushIndexed = async (listKey: string, counterKey: string, value: any) => {
       writes.push(listKey);
-      return listPushIndexed(listKey, counterKey, value, ttlMs);
+      return listPushIndexed(listKey, counterKey, value);
     };
 
     const agent = createEventedAgent({

@@ -71,7 +71,7 @@ describe('ConvexServerCache', () => {
     expect(cache.supportsAtomicAppend).toBe(true);
     client.rawResponses = [{ result: 7 }];
 
-    const index = await cache.listPushIndexed('events', 'events:counter', { index: 99, type: 'chunk' }, 86_400_000);
+    const index = await cache.listPushIndexed('events', 'events:counter', { index: 99, type: 'chunk' });
 
     expect(index).toBe(7);
     // A mutation is serializable, so no second round-trip can interleave and
@@ -83,7 +83,7 @@ describe('ConvexServerCache', () => {
         counterKey: 'mastra:cache:events:counter',
         keyPrefix: 'mastra:cache:',
         value: { type: 'chunk' },
-        expiresAt: Date.now() + 86_400_000,
+        expiresAt: Date.now() + 300_000,
       },
     ]);
   });

@@ -130,12 +130,7 @@ export class ConvexServerCache extends MastraServerCache {
     return true;
   }
 
-  async listPushIndexed(
-    listKey: string,
-    counterKey: string,
-    value: Record<string, unknown>,
-    ttlMs?: number,
-  ): Promise<number> {
+  async listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>): Promise<number> {
     const { index: _ignored, ...body } = value;
     return this.callUntilSettled(() => ({
       op: 'listPushIndexed',
@@ -143,7 +138,7 @@ export class ConvexServerCache extends MastraServerCache {
       counterKey: this.getKey(counterKey),
       keyPrefix: this.keyPrefix,
       value: body,
-      expiresAt: this.getExpiresAt(ttlMs),
+      expiresAt: this.getExpiresAt(),
     }));
   }
 }

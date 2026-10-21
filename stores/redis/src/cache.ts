@@ -27,9 +27,7 @@ export interface RedisServerCacheOptions {
    * A cache list and its index counter always share this TTL: if the counter
    * outlived the list, index allocation would restart at 0 while subscribers
    * still expect the previous numbering, and every new frame would be dropped
-   * as a duplicate. Streams that must survive a long pause (a durable run
-   * parked on a tool approval) pass a longer per-write TTL through
-   * `listPushIndexed`.
+   * as a duplicate.
    */
   ttlSeconds?: number;
   /**
@@ -109,9 +107,6 @@ local ttl = tonumber(ARGV[2])
 if ttl > 0 then
   redis.call('EXPIRE', KEYS[1], ttl)
   redis.call('EXPIRE', KEYS[2], ttl)
-else
-  redis.call('PERSIST', KEYS[1])
-  redis.call('PERSIST', KEYS[2])
 end
 return i
 `.trim();
@@ -254,12 +249,7 @@ export class RedisServerCache extends MastraServerCache {
    * Single round-trip index allocation + list append + TTL refresh via Lua.
    * This is the durable stream per-chunk hot path (issue #22477).
    */
-  async listPushIndexed(
-    listKey: string,
-    counterKey: string,
-    value: Record<string, unknown>,
-    ttlMs?: number,
-  ): Promise<number> {
+  async listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>): Promise<number> {
     if (this.scriptingDisabled) {
       // `supportsAtomicAppend` is false here, so a caller reaching this point is
       // bypassing the capability check. Failing loudly beats a non-atomic append
@@ -268,12 +258,11 @@ export class RedisServerCache extends MastraServerCache {
     }
 
     const { index: _ignored, ...body } = value;
-    const ttlSeconds = ttlMs === undefined ? this.ttlSeconds : Math.max(1, Math.ceil(ttlMs / 1000));
     const result = await this.evalScript(
       this.client,
       LIST_PUSH_INDEXED_SCRIPT,
       [this.getKey(listKey), this.getKey(counterKey)],
-      [this.serialize(body), String(ttlSeconds)],
+      [this.serialize(body), String(this.ttlSeconds)],
     );
     return Number(result);
   }

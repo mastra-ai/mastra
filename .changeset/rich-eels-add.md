@@ -8,7 +8,7 @@ A durable run's frames are now appended to one log (`MastraServerCache.listPushI
 
 Evented durable steps now publish run frames on the Mastra-level pubsub and cache rather than their own bus, so every worker that claims a step appends to the same run log. An agent constructed with its own `pubsub` keeps that bus for signals and aborts, and logs a warning that its run frames are observable only on the Mastra transport.
 
-The list and its index counter always share one TTL, and keys are hash-tagged (`pubsub:{topic}`) so the append script stays on a single Redis Cluster slot. `RedisServerCache.counterTtlSeconds` is gone; durable run topics pass a longer per-write TTL instead.
+The list and its index counter always share one TTL, and keys are hash-tagged (`pubsub:{topic}`) so the append script stays on a single Redis Cluster slot. `RedisServerCache.counterTtlSeconds` is gone, because a counter that expires separately from its list either restarts at zero or reuses indices.
 
 A cache that cannot allocate and append in one step (`supportsAtomicAppend === false`) publishes unnumbered frames: observers see the live tail but cannot resume from an offset. When no shared cache is configured the same applies, and `observe({ offset })` is documented as live-only.
 

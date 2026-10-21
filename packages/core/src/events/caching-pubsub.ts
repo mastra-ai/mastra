@@ -31,16 +31,6 @@ export interface CachingPubSubOptions {
    * the policy has to be supplied at construction time instead.
    */
   shouldCache?: (topic: string) => boolean;
-  /**
-   * Retention for cached frames on this instance, overriding the cache's own
-   * TTL. The list and its counter always share one TTL, so a stream's numbering
-   * survives exactly as long as its frames do.
-   *
-   * Durable run streams use this to outlive a suspended run (a tool-approval
-   * wait can exceed a cache's default five minutes) without raising retention
-   * for every other cached topic.
-   */
-  frameTtlMs?: number;
 }
 
 /**
@@ -94,7 +84,6 @@ export class CachingPubSub extends PubSub {
   private readonly keyPrefix: string;
   private readonly logger?: IMastraLogger;
   private readonly shouldCache?: (topic: string) => boolean;
-  private readonly frameTtlMs?: number;
   /** Maps original callbacks to their wrapped versions for proper unsubscribe */
   private callbackMap = new Map<EventCallback, EventCallback>();
 
@@ -107,7 +96,6 @@ export class CachingPubSub extends PubSub {
     this.keyPrefix = options.keyPrefix ?? 'pubsub:';
     this.logger = options.logger;
     this.shouldCache = options.shouldCache;
-    this.frameTtlMs = options.frameTtlMs;
   }
 
   /** Unwrap to the inner transport so capability checks see through this decorator. */
@@ -174,12 +162,7 @@ export class CachingPubSub extends PubSub {
     let index: number | undefined;
     if (this.cache.supportsAtomicAppend) {
       try {
-        index = await this.cache.listPushIndexed(
-          this.getCacheKey(topic),
-          this.getCounterKey(topic),
-          fullEvent,
-          this.frameTtlMs,
-        );
+        index = await this.cache.listPushIndexed(this.getCacheKey(topic), this.getCounterKey(topic), fullEvent);
       } catch (error) {
         this.logError(`[CachingPubSub] Failed to cache event for ${topic}`, error);
       }

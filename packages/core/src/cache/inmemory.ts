@@ -117,12 +117,7 @@ export class InMemoryServerCache extends MastraServerCache {
     return true;
   }
 
-  async listPushIndexed(
-    listKey: string,
-    counterKey: string,
-    value: Record<string, unknown>,
-    ttlMs?: number,
-  ): Promise<number> {
+  async listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>): Promise<number> {
     const existingCounter = this.cache.get(counterKey);
     if (existingCounter !== undefined && typeof existingCounter !== 'number') {
       throw new Error(`${counterKey} exists but is not a number`);
@@ -135,18 +130,10 @@ export class InMemoryServerCache extends MastraServerCache {
     }
     const list = Array.isArray(existingList) ? existingList : [];
 
-    const ttl = this.resolveTtl(ttlMs);
-    this.cache.set(counterKey, index + 1, { ttl });
+    this.cache.set(counterKey, index + 1);
     list.push({ ...value, index });
-    this.cache.set(listKey, list, { ttl });
+    this.cache.set(listKey, list);
 
     return index;
-  }
-
-  private resolveTtl(ttlMs?: number): number {
-    const effective = ttlMs ?? this.ttlMs;
-    // TTLCache requires a positive integer or Infinity; non-positive means
-    // "no expiry".
-    return effective > 0 ? effective : Infinity;
   }
 }

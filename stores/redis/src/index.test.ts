@@ -220,10 +220,11 @@ describe('RedisServerCache', () => {
       expect(mockClient.eval.mock.calls[0]!.slice(4)).toEqual(['{"type":"x"}', '0']);
     });
 
-    it('applies a per-write TTL to both keys', async () => {
+    it('applies the configured TTL to both keys', async () => {
+      const longTtlCache = new RedisServerCache({ client: mockClient }, { ttlSeconds: 86_400 });
       mockClient.eval.mockResolvedValue(1);
 
-      await cache.listPushIndexed('events', 'events:counter', { type: 'x' }, 86_400_000);
+      await longTtlCache.listPushIndexed('events', 'events:counter', { type: 'x' });
 
       // One TTL for the list and its counter, so they can never diverge.
       expect(mockClient.eval.mock.calls[0]!.slice(4)).toEqual(['{"type":"x"}', '86400']);
