@@ -81,9 +81,94 @@ The picker offers a pair for every bundled light/dark family: `catppuccin-latte/
 - `appearance` (required): `"dark"` or `"light"`. Selects the surface palette and the built-in theme used as a fallback for any color you don't set.
 - `bg` (optional): the terminal background the theme is designed for. Panel and overlay shades derive from it, and foreground colors contrast-adapt against it. Mastra Code does not paint the terminal background, so set it in your terminal for a theme whose `bg` differs from it. Background color keys you don't set explicitly (`overlayBg`, `selectedBg`, `userMessageBg`, `systemReminderBg`, `toolPendingBg`, `toolSuccessBg`, `toolErrorBg`, `errorBg`) are derived from `bg` so overlays and panels match instead of falling back to the built-in near-black/white values.
 - `vars` (optional): named palette. Values must be hex colors (`#rrggbb` or `#rgb`).
-- `colors` (optional): any subset of the color keys below. Values are a hex color or the name of a `var`. The loader ignores unknown keys, but the JSON schema (`theme-schema.json`, beside this page) is stricter and flags them so typos show up in your editor.
+- `colors` (optional): any subset of the color keys below. Values are a hex color or the name of a `var`. The loader ignores unknown keys, but the JSON schema is stricter and flags them so typos show up in your editor.
 
 Without a `bg`, foreground colors and panel shades contrast-adapt against the terminal's actual background (WCAG-based), so the theme stays readable whatever your terminal is set to.
+
+<details>
+
+<summary>JSON Schema</summary>
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Mastra Code custom theme",
+  "description": "Color theme for the Mastra Code TUI. Place in ~/.mastracode/themes/<name>.json and apply with /theme <name>.",
+  "type": "object",
+  "required": ["appearance"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": {
+      "type": "string",
+      "description": "Display name. Defaults to the file name."
+    },
+    "appearance": {
+      "enum": ["dark", "light"],
+      "description": "Selects the surface palette and the built-in theme used as fallback for unset colors."
+    },
+    "bg": {
+      "$ref": "#/definitions/colorValue",
+      "description": "Terminal background the theme is designed for. Panel shades and contrast adaptation derive from it; the terminal background is not painted. Omit to adapt to the terminal's own background."
+    },
+    "vars": {
+      "type": "object",
+      "description": "Named palette. Values must be hex colors.",
+      "additionalProperties": { "$ref": "#/definitions/hex" }
+    },
+    "colors": {
+      "type": "object",
+      "description": "Color overrides. Values are a hex color or the name of a var.",
+      "additionalProperties": false,
+      "properties": {
+        "accent": { "$ref": "#/definitions/colorValue" },
+        "border": { "$ref": "#/definitions/colorValue" },
+        "borderAccent": { "$ref": "#/definitions/colorValue" },
+        "borderMuted": { "$ref": "#/definitions/colorValue" },
+        "success": { "$ref": "#/definitions/colorValue" },
+        "error": { "$ref": "#/definitions/colorValue" },
+        "warning": { "$ref": "#/definitions/colorValue" },
+        "muted": { "$ref": "#/definitions/colorValue" },
+        "dim": { "$ref": "#/definitions/colorValue" },
+        "text": { "$ref": "#/definitions/colorValue" },
+        "secondary": { "$ref": "#/definitions/colorValue" },
+        "thinkingText": { "$ref": "#/definitions/colorValue" },
+        "userMessageBg": { "$ref": "#/definitions/colorValue" },
+        "userMessageText": { "$ref": "#/definitions/colorValue" },
+        "systemReminderBg": { "$ref": "#/definitions/colorValue" },
+        "toolPendingBg": { "$ref": "#/definitions/colorValue" },
+        "toolSuccessBg": { "$ref": "#/definitions/colorValue" },
+        "toolErrorBg": { "$ref": "#/definitions/colorValue" },
+        "toolBorderPending": { "$ref": "#/definitions/colorValue" },
+        "toolBorderSuccess": { "$ref": "#/definitions/colorValue" },
+        "toolBorderError": { "$ref": "#/definitions/colorValue" },
+        "toolTitle": { "$ref": "#/definitions/colorValue" },
+        "toolArgs": { "$ref": "#/definitions/colorValue" },
+        "toolOutput": { "$ref": "#/definitions/colorValue" },
+        "textHighlight": { "$ref": "#/definitions/colorValue" },
+        "selectedBg": { "$ref": "#/definitions/colorValue" },
+        "overlayBg": { "$ref": "#/definitions/colorValue" },
+        "errorBg": { "$ref": "#/definitions/colorValue" },
+        "path": { "$ref": "#/definitions/colorValue" },
+        "number": { "$ref": "#/definitions/colorValue" },
+        "function": { "$ref": "#/definitions/colorValue" }
+      }
+    }
+  },
+  "definitions": {
+    "hex": {
+      "type": "string",
+      "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+    },
+    "colorValue": {
+      "type": "string",
+      "description": "A hex color (#rgb or #rrggbb) or the name of an entry in vars."
+    }
+  }
+}
+```
+
+</details>
 
 ## Color keys
 
