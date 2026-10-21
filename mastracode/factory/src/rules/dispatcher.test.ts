@@ -6783,13 +6783,6 @@ describe('a skill run that ends in error (#27740)', () => {
     ['a 401 status', Object.assign(new Error('Request failed'), { statusCode: 401 })],
     ['a wrapped 403 status', Object.assign(new Error('Stream failed'), { cause: { statusCode: 403 } })],
     [
-      'an authentication failure named only in the body',
-      Object.assign(new Error('Request failed'), {
-        statusCode: 400,
-        responseBody: '{"error":{"code":"invalid_api_key","message":"Incorrect API key provided."}}',
-      }),
-    ],
-    [
       'a resolver error with no policy for the user',
       'Tenant model credential policy could not be resolved: no credential policy applies to this request.',
     ],

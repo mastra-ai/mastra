@@ -10,60 +10,30 @@ const responsesServerErrorFrame = JSON.stringify({
 
 describe('describeRunError', () => {
   it.each([
-    ['Error', responsesServerErrorFrame, 'Model provider temporarily unavailable', 'continue'],
-    ['Error', 'Incorrect API key provided.', 'Provider access failed', 'credentials'],
-    ['AI_APICallError', 'Request timed out.', 'Request timed out', 'continue'],
-    ['AI_APICallError', 'Request Timeout', 'Request timed out', 'continue'],
-    [
-      'AI_APICallError',
-      'prompt is too long: 210345 tokens > 200000 maximum',
-      'Conversation exceeds the model’s limit',
-      'models',
-    ],
-    [
-      'AI_APICallError',
-      'Your input exceeds the context window of this model.',
-      'Conversation exceeds the model’s limit',
-      'models',
-    ],
-    [
-      'AI_APICallError',
-      'The input token count (1100000) exceeds the maximum number of tokens allowed (1048576).',
-      'Conversation exceeds the model’s limit',
-      'models',
-    ],
-    ['AI_APICallError', 'Input is too long for requested model.', 'Conversation exceeds the model’s limit', 'models'],
-    ['AI_APICallError', 'API key not valid. Please pass a valid API key.', 'Provider access failed', 'credentials'],
-    ['AI_APICallError', 'AccessDeniedException', 'Provider access failed', 'credentials'],
-    [
-      'AI_APICallError',
-      JSON.stringify({ error: { type: 'permission_error', message: 'Your API key does not have permission.' } }),
-      'Provider access failed',
-      'credentials',
-    ],
+    ['Error', responsesServerErrorFrame, 'Model provider temporarily unavailable'],
+    ['Error', 'Incorrect API key provided.', 'Provider access failed'],
+    ['AI_APICallError', 'Request timed out.', 'Request timed out'],
+    ['AI_APICallError', 'prompt is too long: 210345 tokens > 200000 maximum', 'Conversation exceeds the model’s limit'],
     [
       'AI_APICallError',
       JSON.stringify({ error: { type: 'not_found_error', message: 'model: claude-x' } }),
       'Model configuration rejected',
-      'models',
     ],
-    ['AI_APICallError', 'Insufficient balance to complete this request', 'Provider quota exhausted', 'credentials'],
-    ['AI_APICallError', 'API credits exhausted', 'Provider quota exhausted', 'credentials'],
-    [
-      'AI_APICallError',
-      'Your weekly limit has been reached, try again later',
-      'Provider quota exhausted',
-      'credentials',
-    ],
-    ['AI_APICallError', 'You have exceeded your usage limit for Claude Max', 'Provider quota exhausted', 'credentials'],
-    ['AI_APICallError', 'You exceeded your request size limit', 'Model request failed', undefined],
-    ['AI_APICallError', 'ThrottlingException', 'Provider rate limit reached', 'continue'],
-    ['AI_APICallError', 'RESOURCE_EXHAUSTED', 'Provider rate limit reached', 'continue'],
-    ['AI_APICallError', 'ServiceUnavailableException', 'Model provider temporarily unavailable', 'continue'],
-  ])('%s %s → %s', (name, message, title, recovery) => {
+    ['AI_APICallError', 'Your weekly limit has been reached, try again later', 'Provider quota exhausted'],
+    ['AI_APICallError', 'ThrottlingException', 'Provider rate limit reached'],
+    ['AI_APICallError', 'You exceeded your request size limit', 'Model request failed'],
+  ])('%s %s → %s, with no Login', (name, message, title) => {
     const description = describeRunError({ name, message });
     expect(description.title).toBe(title);
-    expect(description.recovery).toBe(recovery);
+    expect(description.recovery).toBeUndefined();
+  });
+
+  it('offers Login only for a rejected provider sign-in, matched on its wire name', () => {
+    expect(describeRunError({ name: 'ProviderAuthRequiredError', message: 'Not logged in to Anthropic.' })).toEqual({
+      title: 'Provider sign-in required',
+      message: 'Not logged in to Anthropic.',
+      recovery: 'credentials',
+    });
   });
 
   it('keeps a rejected parameter terminal even when its name mentions a timeout', () => {

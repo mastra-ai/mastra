@@ -43,8 +43,6 @@ The processor checks the error and its cause chain for:
 
 When the error is retryable, the processor returns `{ retry: true }`. It doesn't mutate messages.
 
-Unless one of your own matchers matches it, the processor never retries a credential or quota refusal, even when provider metadata marks it retryable. The AI SDK marks every `429` retryable, including an exhausted quota.
-
 When `delayMs` is set, the processor waits before signaling a retry. This is useful for transient network errors like `ECONNRESET` where immediately retrying is likely to fail again. The delay can be a fixed number of milliseconds or a function evaluated with the error args (for example, to implement exponential backoff).
 
 ### Retry limits
@@ -61,7 +59,7 @@ For retryable errors with a `Retry-After` response header, the processor reads c
 
 ## Retry unknown errors
 
-Set `retryUnknownErrors` to retry errors that don't match provider metadata or the built-in OpenAI matcher, including a custom matcher. Unknown-error retries use the processor-level `maxRetries` and `delayMs` values. Known credential and quota refusals, including HTTP `401` and `403` responses, aren't retried:
+Set `retryUnknownErrors` to retry errors that don't match provider metadata or the built-in OpenAI matcher, including a custom matcher. Unknown-error retries use the processor-level `maxRetries` and `delayMs` values. Known authorization failures, including HTTP `401` and `403` responses, aren't retried:
 
 ```typescript title="src/mastra/agents/resilient-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -117,7 +115,7 @@ export const agent = new Agent({
 
 ## Default OpenAI Responses matcher
 
-`isRetryableOpenAIResponsesStreamError` matches OpenAI Responses stream error chunks with `type: 'error'` or `type: 'response.failed'`. It retries chunks whose error reads as a rate limit, a provider outage, or a timeout, and never a chunk the provider marked `invalid_request_error`. As a fallback, it retries errors with explicit retry guidance such as `You can retry your request`.
+`isRetryableOpenAIResponsesStreamError` matches OpenAI Responses stream error chunks with `type: 'error'` or `type: 'response.failed'`. It retries known transient OpenAI error codes. As a fallback, it retries errors with explicit retry guidance such as `You can retry your request`.
 
 `StreamErrorRetryProcessor` includes this matcher by default. You can also import it and reuse it in custom retry logic.
 

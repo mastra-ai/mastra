@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/client-js';
-import { screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
@@ -9,33 +9,25 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../context/ChatSessionContext';
 import { ChatConnectionContext } from '../../context/ChatConnectionContext';
-import { ChatModelsProvider } from '../../context/ChatModelsProvider';
 import { ChatTranscriptContext } from '../../context/ChatTranscriptContext';
-import type { ConnectionStatus } from '../../hooks/useAgentControllerConnection';
 import { useAgentControllerTranscript } from '../../hooks/useAgentControllerTranscript';
 import { initialTranscript, transcriptReducer } from '../../services/transcript';
 import { TranscriptEntries } from '../Transcript';
-import type { ThreadOwner } from '../../services/reply-credential';
-import { failedReply, modelsWithCredentialHolder, nextUserMessage, runErrorModels } from './fixtures/run-errors';
-
-// cmdk scrolls the highlighted model into view; jsdom has no scrolling implementation.
-Element.prototype.scrollIntoView ??= () => {};
 
 type LiveEvent = Extract<Parameters<typeof transcriptReducer>[1], { type: 'event' }>['event'];
 
-function ErrorSession({
-  messages,
-  liveEvent,
-  busy = false,
-  connectionStatus = 'ready',
-  owner,
-}: {
-  messages: MastraDBMessage[];
-  liveEvent?: LiveEvent;
-  busy?: boolean;
-  connectionStatus?: ConnectionStatus;
-  owner?: ThreadOwner;
-}) {
+const SIGN_IN_REJECTED = 'Anthropic rejected the stored sign-in.';
+
+function failedReply(message = 'Bad Request', name = 'AI_APICallError'): MastraDBMessage {
+  return {
+    id: 'failed-reply',
+    role: 'assistant',
+    createdAt: new Date('2026-10-19T10:00:00Z'),
+    content: { format: 2, parts: [{ type: 'error', error: { name, message } }] },
+  };
+}
+
+function ErrorSession({ messages, liveEvent }: { messages: MastraDBMessage[]; liveEvent?: LiveEvent }) {
   const api = useAgentControllerTranscript({ initialMessages: messages, initialThreadId: 'thread-1' });
   const entries = liveEvent
     ? transcriptReducer(initialTranscript, { type: 'event', event: liveEvent }).entries
@@ -54,13 +46,12 @@ function ErrorSession({
           resourceEnabled: true,
           baseUrl: TEST_BASE_URL,
           kind: 'user',
-          owner,
           factorySessionState: { factoryProjectId: 'factory-1' },
         }}
       >
         <ChatConnectionContext.Provider
           value={{
-            status: connectionStatus,
+            status: 'ready',
             state: {
               controllerId: 'code',
               sessionId: 'session-1',
@@ -70,20 +61,18 @@ function ErrorSession({
             },
           }}
         >
-          <ChatModelsProvider>
-            <ChatTranscriptContext.Provider
-              value={{
-                ...api,
-                busy: busy || api.transcript.pending,
-                phase: undefined,
-                initializing: false,
-                historyInitializing: false,
-                loadMore: { hasMore: false, isLoading: false },
-              }}
-            >
-              <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />
-            </ChatTranscriptContext.Provider>
-          </ChatModelsProvider>
+          <ChatTranscriptContext.Provider
+            value={{
+              ...api,
+              busy: api.transcript.pending,
+              phase: undefined,
+              initializing: false,
+              historyInitializing: false,
+              loadMore: { hasMore: false, isLoading: false },
+            }}
+          >
+            <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />
+          </ChatTranscriptContext.Provider>
         </ChatConnectionContext.Provider>
       </ChatSessionContext.Provider>
     </MemoryRouter>
@@ -93,15 +82,15 @@ function ErrorSession({
 describe('chat run errors', () => {
   beforeEach(() => {
     server.use(
-      http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-5' })),
       http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
         HttpResponse.json({ project: { id: 'factory-1', modelScope: 'user' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
-        HttpResponse.json({ models: runErrorModels, modelScope: 'user', defaultModelId: 'openai/gpt-5' }),
+        HttpResponse.json({ models: [], modelScope: 'user', defaultModelId: null }),
       ),
     );
   });
+
   it('explains a generic rejected request without inventing a cause, and preserves copyable diagnostics', async () => {
     const user = userEvent.setup();
     renderWithProviders(<ErrorSession messages={[failedReply()]} />);
@@ -109,7 +98,6 @@ describe('chat run errors', () => {
     expect(screen.getByText('Model request rejected')).toBeVisible();
     expect(screen.getByText(/specific reason isn’t available here/)).toBeVisible();
     expect(screen.queryByText('AI_APICallError')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Error details' }));
     expect(await screen.findByText(/AI_APICallError/)).toBeVisible();
@@ -126,172 +114,22 @@ describe('chat run errors', () => {
     });
   });
 
-  it('continues a transient failure through the real session API once, preserving the session', async () => {
-    const user = userEvent.setup();
-    const requests: unknown[] = [];
-    server.use(
-      http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions/session-1/messages`, async ({ request }) => {
-        requests.push(await request.json());
-        return HttpResponse.json({ ok: true });
-      }),
-    );
-    renderWithProviders(<ErrorSession messages={[failedReply('Internal Server Error')]} />);
-
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
-
-    await waitFor(() => expect(requests).toEqual([{ message: 'Continue from where you stopped.' }]));
-    expect(screen.getByText('Continue from where you stopped.')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
-  });
-
-  it('surfaces a failed continuation even after its button has been removed', async () => {
-    const user = userEvent.setup();
-    server.use(
-      http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions/session-1/messages`, () =>
-        HttpResponse.json({ error: 'Continuation refused' }, { status: 409 }),
-      ),
-    );
-    renderWithProviders(<ErrorSession messages={[failedReply('Internal Server Error')]} />);
-
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
-
-    expect(await screen.findByText(/Continuation refused/)).toBeVisible();
-  });
-
   it.each([
-    { reason: 'busy', busy: true, connectionStatus: 'ready' as const },
-    { reason: 'reconnecting', busy: false, connectionStatus: 'reconnecting' as const },
-  ])('disables continuing while the session is $reason', ({ busy, connectionStatus }) => {
-    renderWithProviders(
-      <ErrorSession
-        messages={[failedReply('Internal Server Error')]}
-        busy={busy}
-        connectionStatus={connectionStatus}
-      />,
-    );
-
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
-  });
-
-  it.each([
-    { failure: 'Internal Server Error', name: 'AI_APICallError', action: 'Continue', role: 'button' as const },
-    { failure: 'context_length_exceeded', name: 'AI_APICallError', action: 'Change model', role: 'button' as const },
+    { source: 'saved reply', messages: [failedReply(SIGN_IN_REJECTED, 'ProviderAuthRequiredError')] },
     {
-      failure: 'Sign-in rejected.',
-      name: 'ProviderAuthRequiredError',
-      action: 'Review credentials',
-      role: 'link' as const,
+      source: 'live error event',
+      messages: [],
+      liveEvent: { type: 'error', error: { name: 'ProviderAuthRequiredError', message: SIGN_IN_REJECTED } } as const,
     },
-  ])('offers $action on the latest failure only', async ({ failure, name, action, role }) => {
-    const earlierFailure = {
-      ...failedReply(failure, name),
-      id: 'earlier-failure',
-      createdAt: new Date('2026-10-19T09:00:00Z'),
-    };
-    const requestBetween = { ...nextUserMessage, id: 'request-between', createdAt: new Date('2026-10-19T09:30:00Z') };
-    renderWithProviders(<ErrorSession messages={[earlierFailure, requestBetween, failedReply(failure, name)]} />);
-
-    expect(await screen.findAllByRole(role, { name: action })).toHaveLength(1);
-    expect(screen.getAllByRole('button', { name: 'Error details' })).toHaveLength(2);
-  });
-
-  it('offers credential settings for an exhausted quota instead of retrying it', async () => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
-        HttpResponse.json({ project: { id: 'factory-1', modelScope: 'hybrid' } }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
-        HttpResponse.json({ models: [], modelScope: 'user', defaultModelId: null }),
-      ),
-    );
-    renderWithProviders(<ErrorSession messages={[failedReply('insufficient_quota')]} />);
-
-    expect(screen.getByText('Provider quota exhausted')).toBeVisible();
-    expect(await screen.findByRole('link', { name: 'Review credentials' })).toHaveAttribute(
-      'href',
-      '/factories/factory-1/settings/personal-models',
-    );
-    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
-  });
-
-  it('matches a rejected provider sign-in on its wire name, not its message', async () => {
-    renderWithProviders(
-      <ErrorSession messages={[failedReply('Anthropic rejected the stored sign-in.', 'ProviderAuthRequiredError')]} />,
-    );
+  ])('offers Login for a rejected provider sign-in from a $source', async ({ messages, liveEvent }) => {
+    renderWithProviders(<ErrorSession messages={messages} liveEvent={liveEvent} />);
 
     expect(screen.getByText('Provider sign-in required')).toBeVisible();
-    expect(await screen.findByRole('link', { name: 'Review credentials' })).toHaveAttribute(
+    expect(screen.getByText(SIGN_IN_REJECTED)).toBeVisible();
+    expect(await screen.findByRole('link', { name: 'Login' })).toHaveAttribute(
       'href',
       '/factories/factory-1/settings/personal-models',
     );
-  });
-
-  it.each([
-    { message: 'context_length_exceeded', title: 'Conversation exceeds the model’s limit' },
-    { message: "Unsupported_parameter: 'reasoning.effort'", title: 'Model configuration rejected' },
-  ])('changes this session’s model for $message', async ({ message, title }) => {
-    const user = userEvent.setup();
-    const changes: unknown[] = [];
-    server.use(
-      http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions/session-1/model`, async ({ request }) => {
-        changes.push(await request.json());
-        return HttpResponse.json({ ok: true });
-      }),
-    );
-    renderWithProviders(<ErrorSession messages={[failedReply(message)]} />);
-
-    expect(screen.getByText(title)).toBeVisible();
-    await user.click(await screen.findByRole('button', { name: 'Change model' }));
-    await user.click(await screen.findByRole('option', { name: /Claude Sonnet 4.6/ }));
-    await waitFor(() => expect(changes).toEqual([{ modelId: 'anthropic/claude-sonnet-4-6' }]));
-    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
-  });
-
-  it('explains when the session owner must repair a personal credential', async () => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, user: { userId: 'viewer', organizationId: 'org-1' } }),
-      ),
-    );
-    renderWithProviders(
-      <ErrorSession owner={{ id: 'owner', name: 'Damien' }} messages={[failedReply('invalid_api_key')]} />,
-    );
-
-    expect(await screen.findByText('Ask Damien to review the credentials used by this session.')).toBeVisible();
-    expect(screen.queryByRole('link', { name: 'Review credentials' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
-  });
-
-  it('sends the credential owner to their own model settings', async () => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, user: { userId: 'owner', organizationId: 'org-1' } }),
-      ),
-    );
-    renderWithProviders(
-      <ErrorSession owner={{ id: 'owner', name: 'Damien' }} messages={[failedReply('invalid_api_key')]} />,
-    );
-
-    expect(await screen.findByRole('link', { name: 'Review credentials' })).toHaveAttribute(
-      'href',
-      '/factories/factory-1/settings/personal-models',
-    );
-  });
-
-  it('directs a server credential failure to the administrator', async () => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
-        HttpResponse.json({
-          models: modelsWithCredentialHolder('deployment'),
-          modelScope: 'user',
-          defaultModelId: 'openai/gpt-5',
-        }),
-      ),
-    );
-    renderWithProviders(<ErrorSession messages={[failedReply('invalid_api_key')]} />);
-
-    expect(await screen.findByText(/This model uses server credentials/)).toBeVisible();
-    expect(screen.queryByRole('link', { name: 'Review credentials' })).not.toBeInTheDocument();
   });
 
   it('shows a detailed rejection reason instead of claiming it is unavailable', () => {
@@ -328,7 +166,6 @@ describe('chat run errors', () => {
     );
 
     expect(screen.getByText("Invalid value 'server_error' for parameter mode.")).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
   });
 
   it('extracts the reason from a nested Responses failure envelope', () => {
@@ -355,52 +192,11 @@ describe('chat run errors', () => {
     expect(screen.getByText('The request contains an unsupported input format.')).toBeVisible();
   });
 
-  it('links an organization credential to organization settings even in a personal-scoped session', async () => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, user: { userId: 'viewer', organizationId: 'org-1' } }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
-        HttpResponse.json({
-          models: modelsWithCredentialHolder('organization'),
-          modelScope: 'user',
-          defaultModelId: 'openai/gpt-5',
-        }),
-      ),
-    );
-    renderWithProviders(
-      <ErrorSession owner={{ id: 'owner', name: 'Damien' }} messages={[failedReply('invalid_api_key')]} />,
-    );
-
-    expect(await screen.findByRole('link', { name: 'Review credentials' })).toHaveAttribute(
-      'href',
-      '/factories/factory-1/settings/models',
-    );
-  });
-
-  it('explains a missing run identity without offering a provider login or continuation', () => {
-    renderWithProviders(
-      <ErrorSession
-        messages={[
-          failedReply(
-            'Tenant model credential policy could not be resolved: the request has no authenticated user.',
-            'Error',
-          ),
-        ]}
-      />,
-    );
-
-    expect(screen.getByText('Run started without an authenticated user')).toBeVisible();
-    expect(screen.queryByRole('link', { name: 'Review credentials' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
-  });
-
   it('keeps an unrelated error readable instead of labeling it as a provider problem', () => {
     renderWithProviders(<ErrorSession messages={[failedReply('Database connection refused', 'StorageError')]} />);
 
     expect(screen.getByText('Run stopped')).toBeVisible();
     expect(screen.getByText('Database connection refused')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
   });
 
   it('uses the same explanation for a live error event', () => {

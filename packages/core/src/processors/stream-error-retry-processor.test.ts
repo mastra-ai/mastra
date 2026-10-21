@@ -89,23 +89,6 @@ describe('StreamErrorRetryProcessor', () => {
     await expect(processor.processAPIError(makeArgs({ error }))).resolves.toEqual({ retry: true });
   });
 
-  it('never retries an exhausted quota, though the SDK marks every 429 retryable', async () => {
-    const processor = new StreamErrorRetryProcessor();
-    const quota = new APICallError({
-      message: 'You exceeded your current quota, please check your plan and billing details.',
-      url: 'https://api.openai.com/v1/responses',
-      requestBodyValues: {},
-      statusCode: 429,
-      responseBody: JSON.stringify({ error: { type: 'insufficient_quota', code: 'insufficient_quota' } }),
-      isRetryable: true,
-    });
-
-    await expect(processor.processAPIError(makeArgs({ error: quota }))).resolves.toBeUndefined();
-    await expect(processor.processAPIError(makeArgs({ error: makeRetryableError() }))).resolves.toEqual({
-      retry: true,
-    });
-  });
-
   it('does not retry status codes without provider metadata or a matcher', async () => {
     const processor = new StreamErrorRetryProcessor();
     const error = new Error('wrapped', {
@@ -129,61 +112,6 @@ describe('StreamErrorRetryProcessor', () => {
     };
 
     expect(isRetryableOpenAIResponsesStreamError(error)).toBe(true);
-  });
-
-  it('ignores explicit retry guidance on a frame the provider marked invalid', () => {
-    const frame = {
-      type: 'error',
-      sequence_number: 1,
-      error: {
-        type: 'invalid_request_error',
-        code: 'invalid_prompt',
-        message: 'Invalid prompt. You can retry your request.',
-      },
-    };
-
-    expect(isRetryableOpenAIResponsesStreamError(frame)).toBe(false);
-  });
-
-  it('never retries a frame the provider marked invalid, whatever passing condition its wording names', () => {
-    const cappedWording = {
-      type: 'error',
-      sequence_number: 1,
-      error: {
-        type: 'invalid_request_error',
-        code: 'invalid_prompt',
-        message: "Invalid value 'quota exceeded per minute' for parameter mode.",
-      },
-    };
-    const timeoutWording = {
-      type: 'error',
-      sequence_number: 1,
-      error: { code: 'invalid_prompt', message: 'Invalid timeout parameter' },
-    };
-
-    expect(isRetryableOpenAIResponsesStreamError(cappedWording)).toBe(false);
-    expect(isRetryableOpenAIResponsesStreamError(timeoutWording)).toBe(false);
-  });
-
-  it('retries a server_error frame whose wording mentions authentication', () => {
-    const frame = {
-      type: 'error',
-      sequence_number: 1,
-      error: { type: 'server_error', code: 'server_error', message: 'Upstream authentication service unavailable' },
-    };
-
-    expect(isRetryableOpenAIResponsesStreamError(frame)).toBe(true);
-  });
-
-  it('retries a rate-limit frame worded as a per-minute quota and never an exhausted billing quota', () => {
-    const frame = (code: string, message: string) => ({ type: 'error', sequence_number: 1, error: { code, message } });
-
-    expect(
-      isRetryableOpenAIResponsesStreamError(frame('rate_limit_exceeded', 'Quota exceeded for requests per minute.')),
-    ).toBe(true);
-    expect(isRetryableOpenAIResponsesStreamError(frame('insufficient_quota', 'You exceeded your current quota.'))).toBe(
-      false,
-    );
   });
 
   it('retries OpenAI Responses stream error chunks by default', async () => {
@@ -251,23 +179,6 @@ describe('StreamErrorRetryProcessor', () => {
     });
 
     expect(isBadRequestError(error)).toBe(true);
-  });
-
-  it('isBadRequestError never matches a 400 reporting an exhausted credit balance or usage cap', () => {
-    const anthropicRejection = (message: string) =>
-      new APICallError({
-        message,
-        url: 'https://api.anthropic.com/v1/messages',
-        requestBodyValues: {},
-        statusCode: 400,
-        responseBody: JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message } }),
-        isRetryable: false,
-      });
-
-    expect(isBadRequestError(anthropicRejection('Your credit balance is too low to access the Anthropic API.'))).toBe(
-      false,
-    );
-    expect(isBadRequestError(anthropicRejection('Your weekly limit has been reached, try again later'))).toBe(false);
   });
 
   it('isBadRequestError returns false for non-400 errors', () => {
@@ -426,13 +337,6 @@ describe('StreamErrorRetryProcessor', () => {
         await expect(processor.processAPIError(makeArgs({ error: { error: { code } } }))).resolves.toBeUndefined();
       },
     );
-
-    it('does not retry an exhausted quota', async () => {
-      const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true });
-      const error = { error: { type: 'insufficient_quota', message: 'You exceeded your current quota.' } };
-
-      await expect(processor.processAPIError(makeArgs({ error }))).resolves.toBeUndefined();
-    });
 
     it('detects terminal authorization codes in API call response bodies', async () => {
       const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true });

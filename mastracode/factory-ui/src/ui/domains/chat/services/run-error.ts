@@ -1,4 +1,3 @@
-import { readCredentialPolicyFailure } from '@mastra/code-sdk/auth/credential-policy-error';
 import { PROVIDER_AUTH_REQUIRED_ERROR } from '@mastra/code-sdk/auth/provider-auth-error';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
 import { classifyProviderError, providerErrorReason } from '@mastra/core/error';
@@ -6,7 +5,7 @@ import { classifyProviderError, providerErrorReason } from '@mastra/core/error';
 interface RunErrorDescription {
   title: string;
   message: string;
-  recovery?: 'credentials' | 'models' | 'continue';
+  recovery?: 'credentials';
 }
 
 const PROVIDER_ERROR_NAMES = new Set(['AI_APICallError', 'APICallError']);
@@ -14,13 +13,6 @@ const NO_REASON_AVAILABLE =
   'The provider rejected the request. A specific reason isn’t available here. Copy the error details and check the server logs.';
 
 export function describeRunError(error: MastraErrorPart['error']): RunErrorDescription {
-  if (readCredentialPolicyFailure(error.message) === 'missing-user-context') {
-    return {
-      title: 'Run started without an authenticated user',
-      message:
-        'Start the run again from a signed-in session. If this session belongs to someone else, ask its owner to restart it.',
-    };
-  }
   if (error.name === PROVIDER_AUTH_REQUIRED_ERROR) {
     return { title: 'Provider sign-in required', message: error.message, recovery: 'credentials' };
   }
@@ -29,25 +21,21 @@ export function describeRunError(error: MastraErrorPart['error']): RunErrorDescr
       return {
         title: 'Provider quota exhausted',
         message: 'Check the provider account’s billing or usage allowance before continuing.',
-        recovery: 'credentials',
       };
     case 'auth':
       return {
         title: 'Provider access failed',
         message: 'Review the credentials and model access configured for this session.',
-        recovery: 'credentials',
       };
     case 'context_overflow':
       return {
         title: 'Conversation exceeds the model’s limit',
         message: 'Choose a model with a larger context window or start a new session with a shorter prompt.',
-        recovery: 'models',
       };
     case 'model_rejected':
       return {
         title: 'Model configuration rejected',
         message: 'Choose another model or use the Thinking control in the composer to adjust this session’s settings.',
-        recovery: 'models',
       };
     case 'tool_history_rejected':
       return {
@@ -60,20 +48,17 @@ export function describeRunError(error: MastraErrorPart['error']): RunErrorDescr
     case 'timeout':
       return {
         title: 'Request timed out',
-        message: 'The request took too long to complete. You can try continuing the run.',
-        recovery: 'continue',
+        message: 'The request took too long to complete. Send a message to continue the run.',
       };
     case 'rate_limited':
       return {
         title: 'Provider rate limit reached',
-        message: 'Wait a moment, then continue the run.',
-        recovery: 'continue',
+        message: 'Wait a moment, then send a message to continue the run.',
       };
     case 'unavailable':
       return {
         title: 'Model provider temporarily unavailable',
-        message: 'The provider could not complete the request. You can try continuing the run.',
-        recovery: 'continue',
+        message: 'The provider could not complete the request. Send a message to continue the run.',
       };
     case 'unknown':
       return describeUnclassifiedError(error);

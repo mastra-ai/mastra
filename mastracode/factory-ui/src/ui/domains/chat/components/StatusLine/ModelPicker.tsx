@@ -45,7 +45,7 @@ function canSwitchModel(kind: ChatSessionContextApi['kind'], isDraft: boolean, s
   return sessionEnabled;
 }
 
-export function ModelPicker({ triggerLabel, showThinking = true }: { triggerLabel?: string; showThinking?: boolean }) {
+export function ModelPicker() {
   const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
   const { status } = useChatConnection();
   const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
@@ -137,12 +137,12 @@ export function ModelPicker({ triggerLabel, showThinking = true }: { triggerLabe
   const modelMenuLocked = busy || modelsQuery.isPending || scopeLoading;
 
   return (
-    <ButtonsGroup size="sm" aria-label={showThinking ? 'Model and thinking' : 'Model'}>
+    <ButtonsGroup size="sm" aria-label="Model and thinking">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           type="button"
           disabled={modelMenuLocked}
-          aria-label={triggerLabel ?? (notConfigured ? `Session model, ${label} is not configured` : 'Session model')}
+          aria-label={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
           aria-busy={modelMenuLocked}
           className={cn(
             buttonVariants({ variant: 'ghost', size: 'sm' }),
@@ -151,7 +151,7 @@ export function ModelPicker({ triggerLabel, showThinking = true }: { triggerLabe
           title={selectedModelId}
         >
           <span className="max-w-48 truncate">
-            {triggerLabel ?? label}
+            {label}
             {notConfigured ? ' · not configured' : null}
           </span>
           <ChevronDown aria-hidden size={12} />
@@ -204,7 +204,7 @@ export function ModelPicker({ triggerLabel, showThinking = true }: { triggerLabe
           </Command>
         </PopoverContent>
       </Popover>
-      {showThinking && activeModelId ? <SessionThinkingControl modelId={activeModelId} switchingModel={busy} /> : null}
+      {activeModelId ? <SessionThinkingControl modelId={activeModelId} switchingModel={busy} /> : null}
     </ButtonsGroup>
   );
 }

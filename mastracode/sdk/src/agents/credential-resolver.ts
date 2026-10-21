@@ -13,7 +13,6 @@
  */
 
 import type { RequestContext } from '@mastra/core/request-context';
-import { credentialPolicyFailureMessage } from '../auth/credential-policy-error.js';
 import type { CredentialStore } from '../auth/types.js';
 
 export type CredentialScope = 'factory' | 'user';
@@ -102,11 +101,14 @@ export async function prepareCredentialTenant(requestContext?: RequestContext): 
  */
 function unresolvedTenantError(sourceContext: RequestContext, inherited: boolean): Error {
   const authenticated = resolveAuthenticatedCredentialTenant(sourceContext) !== undefined;
-  const reason = authenticated ? 'no-policy-for-principal' : 'missing-user-context';
-  const error = new Error(credentialPolicyFailureMessage(reason));
+  const error = new Error(
+    authenticated
+      ? 'Tenant model credential policy could not be resolved: no credential policy applies to this request.'
+      : 'Tenant model credential policy could not be resolved: the request has no authenticated user.',
+  );
   const controller = sourceContext.get('controller') as { resourceId?: unknown; threadId?: unknown } | undefined;
   logger.error('[MastraCode] Tenant model credential policy could not be resolved', {
-    reason,
+    reason: authenticated ? 'no-policy-for-principal' : 'missing-user-context',
     hasUser: sourceContext.get('user') !== undefined,
     inheritedPolicy: inherited,
     hasControllerResource: typeof controller?.resourceId === 'string',

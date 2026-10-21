@@ -20,5 +20,3 @@ switch (classifyProviderError(error)) {
     // show the provider's reason
 }
 ```
-
-The stream error retry processor reads the same classifier and no longer retries a credential or quota refusal, even when the AI SDK marks it retryable, as it does every 429. `isBadRequestError` no longer matches a 400 that reports an exhausted credit balance or usage cap.
