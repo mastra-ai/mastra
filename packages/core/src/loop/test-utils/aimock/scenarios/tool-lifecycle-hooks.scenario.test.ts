@@ -218,6 +218,41 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
     expect(JSON.stringify(requests[1]!.body.messages)).toContain('blocked-by-hook');
   });
 
+  it('feeds the per-execution hook result back to the model through the assembled agent', async () => {
+    const execute = vi.fn(async () => ({ value: 'unprotected-result' }));
+    const beforeToolCall = vi.fn(() => ({ proceed: false as const, output: { value: 'protected-result' } }));
+    const guardedTool = createTool({
+      id: 'guarded_tool',
+      description: 'A tool protected by an execution hook.',
+      inputSchema: z.object({ key: z.string() }),
+      execute,
+    });
+
+    const { requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Use the guarded tool.',
+      tools: { guarded_tool: guardedTool },
+      defaultOptions: { hooks: { beforeToolCall } },
+      stopWhen: stepCountIs(5),
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_guarded', name: 'guarded_tool', arguments: { key: 'secret' } }] },
+        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call_guarded', hasToolResult: true }, { content: 'Done.' });
+      },
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(beforeToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: 'guarded_tool', input: { key: 'secret' } }),
+    );
+    expect(execute).not.toHaveBeenCalled();
+    expect(JSON.stringify(requests[1]!.body.messages)).toContain('protected-result');
+    expect(JSON.stringify(requests[1]!.body.messages)).not.toContain('unprotected-result');
+  });
+
   it('short-circuits execute from defaultOptions.hooks.beforeToolCall alone', async () => {
     const beforeToolCall = vi.fn(() => ({ proceed: false as const, output: { value: 'blocked-by-default' } }));
     const execute = vi.fn(async () => ({ value: 'executed' }));
