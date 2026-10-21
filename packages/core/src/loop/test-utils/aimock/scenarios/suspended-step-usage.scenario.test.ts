@@ -114,6 +114,34 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
   const resume = (agent: any, kind: Kind, runId: string, toolCallId: string, answer = 'blue'): Promise<RunHandle> =>
     kind === 'suspend' ? agent.resumeStream({ answer }, { runId }) : agent.approveToolCall({ runId, toolCallId });
 
+  if (engine === 'inngest') {
+    for (const kind of ['suspend', 'approval'] as const) {
+      it(`[${kind}] Inngest forwards the suspending step's tokens through the tool-call boundary`, async () => {
+        const { agent, toolCallId } = await setup(kind, { withPriorStep: true });
+        const first: RunHandle = await agent.stream('go');
+        const firstOutput = first.output ?? first;
+        const heldUsage = firstOutput.usage;
+        const heldTotalUsage = firstOutput.totalUsage;
+        let suspension: ChunkType | undefined;
+        for await (const chunk of first.fullStream) {
+          if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
+            suspension = chunk;
+            break;
+          }
+        }
+
+        expect(suspension).toBeDefined();
+        expect(tokens(suspension?.payload.usage)).toEqual(SUSPENDED);
+        expect(tokens(await settled(heldUsage))).toEqual(add(PRIOR, SUSPENDED));
+        expect(tokens(await settled(heldTotalUsage))).toEqual(add(PRIOR, SUSPENDED));
+
+        const resumed = await drain(await resume(agent, kind, first.runId, toolCallId));
+        expect(await resumed.text).toBe('done');
+        expect(tokens(await resumed.totalUsage)).toEqual(add(PRIOR, SUSPENDED, RESUMED));
+      });
+    }
+  }
+
   for (const kind of ['suspend', 'approval'] as const) {
     it(`[${kind}] stream() reports the suspended step usage`, async () => {
       const { agent } = await setup(kind);
