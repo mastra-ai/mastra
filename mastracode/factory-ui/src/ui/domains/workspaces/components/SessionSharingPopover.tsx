@@ -30,7 +30,7 @@ export function SessionSharingPopover({
           <Button
             variant="ghost"
             size={inHeader ? 'sm' : 'icon-sm'}
-            aria-label={inHeader && onShare ? 'Share session' : `Private session: ${name}`}
+            aria-label={inHeader ? 'Private session' : `Private session: ${name}`}
             disabled={disabled}
           >
             {inHeader ? (
@@ -40,7 +40,7 @@ export function SessionSharingPopover({
                 <Lock />
               </Icon>
             )}
-            {inHeader ? (onShare ? 'Share' : 'Private') : null}
+            {inHeader ? 'Private' : null}
           </Button>
         }
       />

@@ -224,18 +224,19 @@ describe('ThreadPage header', () => {
     await waitForMutationsIdle(client);
 
     const header = await findPageHeader();
-    const share = await within(header).findByRole('button', { name: 'Share session' });
-    await user.click(share);
+    const privacy = await within(header).findByRole('button', { name: 'Private session' });
+    expect(privacy).toHaveTextContent('Private');
+    await user.click(privacy);
     expect(await screen.findByRole('heading', { name: 'This session is private' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Share with organization' }));
     await waitFor(() =>
-      expect(within(header).queryByRole('button', { name: 'Share session' })).not.toBeInTheDocument(),
+      expect(within(header).queryByRole('button', { name: 'Private session' })).not.toBeInTheDocument(),
     );
     expect(screen.queryByRole('button', { name: `Private session: ${userSession.title}` })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: `Session actions for ${userSession.title}` }));
     await user.click(await screen.findByRole('menuitem', { name: 'Make private' }));
-    expect(await within(header).findByRole('button', { name: 'Share session' })).toBeInTheDocument();
+    expect(await within(header).findByRole('button', { name: 'Private session' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: `Private session: ${userSession.title}` })).toBeInTheDocument();
   });
 
@@ -246,7 +247,7 @@ describe('ThreadPage header', () => {
 
     const header = await findPageHeader();
     await within(header).findByText('salut ca va ?');
-    expect(within(header).queryByRole('button', { name: 'Share session' })).not.toBeInTheDocument();
+    expect(within(header).queryByRole('button', { name: 'Private session' })).not.toBeInTheDocument();
   });
 
   it('keeps source-managed private Slack sessions read-only in the header', async () => {
@@ -256,7 +257,7 @@ describe('ThreadPage header', () => {
     await waitForMutationsIdle(client);
 
     const header = await findPageHeader();
-    await user.click(await within(header).findByRole('button', { name: `Private session: ${userSession.title}` }));
+    await user.click(await within(header).findByRole('button', { name: 'Private session' }));
     expect(await screen.findByRole('heading', { name: 'This session is private' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Share with organization' })).not.toBeInTheDocument();
   });
