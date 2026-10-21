@@ -4,24 +4,15 @@ description: 'Subscribe to a Mastra agent thread to read stored history, live ou
 packages:
   - '@mastra/core'
   - '@mastra/client-js'
-  - '@mastra/code-sdk'
 ---
 
 # Thread streams
 
+A thread stream is the ordered output and lifecycle of a thread: model text, tool calls, approvals, errors, and run events. You read it through a subscription, which can include recent stored history before continuing with live output.
+
 ## Subscribe before you send
 
-:::note[Outline]
-
-Explain why a subscription must exist before a signal wakes the agent: the run starts in response to the input, so a subscription created afterward misses the beginning of the stream.
-
-Add an `Agent` example that subscribes first, then sends a message. The client SDK example below shows the same order.
-
-:::
-
-The JavaScript client exposes thread signal APIs.
-
-Use `subscribeToThread()` before sending thread input so the client can render the stream that receives the input or wakes in response to it.
+Subscribe before you send input. A run starts in response to a signal, so a subscription created afterward misses the beginning of the stream. The [overview quickstart](/docs/signals/overview#quickstart) shows the same order with `Agent`. The client SDK follows the same flow:
 
 ```typescript title="src/app/chat.ts"
 const agent = client.getAgent('supportAgent')
@@ -87,6 +78,12 @@ Compare `abort()` with `unsubscribe()`. Explain that pending signals survive an 
 
 Use `reconnect: true` for long-lived subscriptions. Visit [`client.getAgent().subscribeToThread()` reference](/reference/client-js/agents#subscribetothread) for reconnect options.
 
+:::note[Outline]
+
+Cover resumable streams and retained PubSub history: what a reconnect resumes, when missed parts are still available, and how that differs from the stored messages in thread history. Link to the streaming reference.
+
+:::
+
 If you expose your own Server-Sent Events (SSE) endpoint for thread subscriptions, send periodic heartbeat frames while the stream is idle. This keeps browsers, proxies, and load balancers from closing the connection before the next signal or model chunk arrives.
 
 The following example sends an SSE comment every 25 seconds:
@@ -123,9 +120,11 @@ State that the internal runtime event union is not public and is not documented.
 
 ## Related
 
-- [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions)
-- [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread)
-- [`client.getAgent().sendToolApproval()`](/reference/client-js/agents#sendtoolapproval)
-- [ChunkType reference](/reference/streaming/ChunkType#thread-history)
-- [Thread events reference](/reference/signals/thread-events)
-- [Sending signals](/docs/signals/sending-signals)
+| Goal | Start here |
+| - | - |
+| Subscribe to a thread from an Agent | [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions) |
+| Subscribe from the client SDK | [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread) |
+| Approve or decline a paused tool call | [`client.getAgent().sendToolApproval()`](/reference/client-js/agents#sendtoolapproval) |
+| Look up chunk shapes, including `thread-history` | [ChunkType reference](/reference/streaming/ChunkType#thread-history) |
+| Observe queued message counts | [Thread events reference](/reference/signals/thread-events) |
+| Send input into a subscribed thread | [Sending signals](/docs/signals/sending-signals) |
