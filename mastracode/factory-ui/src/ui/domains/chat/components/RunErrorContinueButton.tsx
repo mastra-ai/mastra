@@ -1,6 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 
 import { useSendAgentControllerMessageMutation } from '../../../../hooks/useAgentControllerRunMutations';
+import { useChatConnection } from '../context/useChatConnection';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -10,6 +11,7 @@ const CONTINUE_PROMPT = 'Continue from where you stopped.';
 export function RunErrorContinueButton() {
   const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
   const transcript = useChatTranscript();
+  const { status } = useChatConnection();
   const sendMessage = useSendAgentControllerMessageMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -17,7 +19,8 @@ export function RunErrorContinueButton() {
     baseUrl,
     enabled: sessionEnabled,
   });
-  const blocked = transcript.busy || sendMessage.isPending;
+  // A send before the live subscription is ready loses the run's completion events.
+  const blocked = transcript.busy || transcript.initializing || status !== 'ready' || sendMessage.isPending;
   const continueRun = async () => {
     if (blocked) return;
     const localId = transcript.localUser(CONTINUE_PROMPT);

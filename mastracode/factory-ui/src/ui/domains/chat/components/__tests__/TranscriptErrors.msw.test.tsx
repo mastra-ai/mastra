@@ -11,6 +11,7 @@ import { ChatSessionContext } from '../../context/ChatSessionContext';
 import { ChatConnectionContext } from '../../context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../context/ChatModelsProvider';
 import { ChatTranscriptContext } from '../../context/ChatTranscriptContext';
+import type { ConnectionStatus } from '../../hooks/useAgentControllerConnection';
 import { useAgentControllerTranscript } from '../../hooks/useAgentControllerTranscript';
 import { initialTranscript, transcriptReducer } from '../../services/transcript';
 import { TranscriptEntries } from '../Transcript';
@@ -23,10 +24,12 @@ Element.prototype.scrollIntoView ??= () => {};
 function ErrorSession({
   messages,
   busy = false,
+  connectionStatus = 'ready',
   owner,
 }: {
   messages: MastraDBMessage[];
   busy?: boolean;
+  connectionStatus?: ConnectionStatus;
   owner?: ThreadOwner;
 }) {
   const api = useAgentControllerTranscript({ initialMessages: messages, initialThreadId: 'thread-1' });
@@ -49,7 +52,7 @@ function ErrorSession({
       >
         <ChatConnectionContext.Provider
           value={{
-            status: 'ready',
+            status: connectionStatus,
             state: { controllerId: 'code', resourceId: 'session-1', modeId: 'build', modelId: 'openai/gpt-5' },
           }}
         >
@@ -142,10 +145,29 @@ describe('chat run errors', () => {
   });
 
   it.each([
-    { busy: true, messages: [failedReply('Internal Server Error')], disabled: true },
-    { busy: false, messages: [failedReply('Internal Server Error'), nextUserMessage], disabled: false },
-  ])('prevents continuing a busy or superseded failure ($busy)', ({ busy, messages, disabled }) => {
-    renderWithProviders(<ErrorSession messages={messages} busy={busy} />);
+    {
+      reason: 'busy',
+      busy: true,
+      connectionStatus: 'ready' as const,
+      messages: [failedReply('Internal Server Error')],
+      disabled: true,
+    },
+    {
+      reason: 'reconnecting',
+      busy: false,
+      connectionStatus: 'reconnecting' as const,
+      messages: [failedReply('Internal Server Error')],
+      disabled: true,
+    },
+    {
+      reason: 'superseded',
+      busy: false,
+      connectionStatus: 'ready' as const,
+      messages: [failedReply('Internal Server Error'), nextUserMessage],
+      disabled: false,
+    },
+  ])('prevents continuing a $reason failure', ({ busy, connectionStatus, messages, disabled }) => {
+    renderWithProviders(<ErrorSession messages={messages} busy={busy} connectionStatus={connectionStatus} />);
     const button = screen.queryByRole('button', { name: 'Continue' });
     if (disabled) expect(button).toBeDisabled();
     else expect(button).not.toBeInTheDocument();

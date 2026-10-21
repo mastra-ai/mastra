@@ -11,7 +11,9 @@ interface RunErrorDescription {
 const PROVIDER_ERROR_NAMES = new Set(['AI_APICallError', 'APICallError']);
 
 // Providers also use HTTP 429 for exhausted billing quota; waiting won't resolve it.
-const QUOTA_EXHAUSTED = /insufficient_quota|quota (exceeded|exhausted)|exceeded your current quota|credit balance/;
+// Same wordings as the SDK's account-rotation quota detector, minus plain rate limits.
+const QUOTA_EXHAUSTED =
+  /usage (?:limit|cap)|insufficient[_ ]quota|quota (?:exceeded|exhausted|reached)|exceeded (?:your )?current quota|insufficient (?:balance|credits?)|credits? exhausted|credit balance|weekly limit|monthly limit/;
 const ACCESS_DENIED =
   /invalid[_ ]api[_ ]key|incorrect api key|api key not valid|unauthorized|authentication|forbidden|permission[_ ]?(denied|error)|access[_ ]?denied/;
 // Same wordings as packages/memory's context-overflow detector (OpenAI, Anthropic, Google, Bedrock, xAI, local).
