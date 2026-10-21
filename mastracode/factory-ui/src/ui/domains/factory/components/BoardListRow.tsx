@@ -194,7 +194,7 @@ export function BoardListRow({
       className={cn(
         'group min-h-10 grid-cols-[auto_5rem_minmax(0,1fr)_var(--spacing-avatar-sm)_3.5rem] items-center gap-x-3 rounded-lg px-3 py-1 max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-y-1 max-sm:py-2',
         locked && 'cursor-wait opacity-70',
-        highlighted && 'inset-ring-2 inset-ring-warning-indicator/60',
+        highlighted && 'ring-2 ring-warning-indicator/60 ring-offset-2 ring-offset-background',
       )}
     >
       {activityStatus && <ActivityWick status={activityStatus} />}
