@@ -11,7 +11,10 @@ const componentFiles = import.meta.glob<Record<string, unknown>>(
 );
 
 /** Building blocks a card file exports for other files in this folder only. */
-const INTERNAL = new Set<string>([]);
+const INTERNAL = new Set<string>([
+  // The capability and filter gate every trace aggregate card wraps itself in; consumers use the cards.
+  'TraceAggregateCard',
+]);
 
 const exported = new Map<unknown, string>(Object.entries(entry).map(([name, value]) => [value, name]));
 
