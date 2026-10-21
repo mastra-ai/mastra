@@ -62,6 +62,7 @@ export function valueYAxis({
   formatter,
   domain,
   max,
+  integer = false,
   right = false,
 }: {
   id?: string | number;
@@ -72,11 +73,13 @@ export function valueYAxis({
   domain?: [number, number];
   /** Largest value plotted on this axis (a stack's total for stacked bars); the ticks round up from it. */
   max?: number;
+  /** Whole-number data (counts): ticks on whole numbers. */
+  integer?: boolean;
   right?: boolean;
 }) {
   const tickCount = chartYTickCount(size.height);
   // Recharts rounds its step up to fit the tick count, so a $4.40 peak got an $8 axis.
-  const ticks = domain || max === undefined ? undefined : niceYTicks(max, tickCount);
+  const ticks = domain || max === undefined ? undefined : niceYTicks(max, tickCount, integer);
   return (
     <YAxis
       yAxisId={id}
@@ -109,4 +112,14 @@ export function dataMax(data: Record<string, unknown>[], keys: string[], stacked
     if (stacked) max = Math.max(max, total);
   }
   return max;
+}
+
+/** Whether every number under `keys` is whole (counts), so the axis keeps to whole ticks. */
+export function isWholeData(data: Record<string, unknown>[], keys: string[]) {
+  return data.every(row =>
+    keys.every(key => {
+      const v = row[key];
+      return typeof v !== 'number' || Number.isInteger(v);
+    }),
+  );
 }

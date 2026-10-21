@@ -53,15 +53,18 @@ const MIN_Y_TICKS = 3;
 /**
  * Round y ticks from 0 to just above `max`, at most `maxCount` of them. Of the round steps whose
  * tick count fits, the one with the lowest top wins (a $4.40 peak gets a $5 axis, not $8); a tie
- * takes the finer step. Undefined when there's nothing to scale (no data, zeros, negatives).
+ * takes the finer step. With `integer` (counts), only whole steps, so labels never round to
+ * uneven values (2.5 printed as 3). Undefined when there's nothing to scale (no data, zeros,
+ * negatives) or no step fits.
  */
-export function niceYTicks(max: number, maxCount: number): number[] | undefined {
+export function niceYTicks(max: number, maxCount: number, integer = false): number[] | undefined {
   if (!Number.isFinite(max) || max <= 0) return undefined;
   const magnitude = 10 ** Math.floor(Math.log10(max));
   let best: { top: number; step: number; count: number } | undefined;
   for (const scale of [magnitude / 10, magnitude, magnitude * 10]) {
     for (const nice of NICE_STEPS) {
-      const step = nice * scale;
+      const step = Number((nice * scale).toPrecision(12));
+      if (integer && !Number.isInteger(step)) continue;
       const count = Math.ceil(max / step - 1e-9) + 1;
       if (count < MIN_Y_TICKS || count > maxCount) continue;
       const top = (count - 1) * step;

@@ -4,7 +4,7 @@ import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
 import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
 import { CHART_CURSOR_PROPS, CHART_GRID_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
 import type { ChartXLabels } from '@/ds/primitives/chart-axes';
-import { Y_AXIS_WIDTH, compactNumber, dataMax, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
+import { Y_AXIS_WIDTH, compactNumber, dataMax, isWholeData, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
 import { CHART_MARGIN } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
@@ -198,6 +198,10 @@ function LinePlot({
           formatter: axisFormatter ?? format,
           domain: yDomain,
           max: dataMax(
+            data,
+            series.map(s => s.dataKey),
+          ),
+          integer: isWholeData(
             data,
             series.map(s => s.dataKey),
           ),

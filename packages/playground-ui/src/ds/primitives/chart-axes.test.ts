@@ -169,6 +169,13 @@ describe('niceYTicks', () => {
     expect(niceYTicks(7, 3)).toEqual([0, 5, 10]);
   });
 
+  it('keeps counts on whole ticks', () => {
+    // 0, 2.5, 5, 7.5 would print as 0, 3, 5, 8.
+    expect(niceYTicks(7.2, 5, true)).toEqual([0, 2, 4, 6, 8]);
+    expect(niceYTicks(40, 5, true)).toEqual([0, 10, 20, 30, 40]);
+    expect(niceYTicks(140, 5, true)).toEqual([0, 50, 100, 150]);
+  });
+
   it('keeps small values free of float noise', () => {
     expect(niceYTicks(0.3, 5)).toEqual([0, 0.1, 0.2, 0.3]);
   });

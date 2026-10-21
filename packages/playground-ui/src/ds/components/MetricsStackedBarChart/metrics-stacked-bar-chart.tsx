@@ -8,7 +8,15 @@ import { CHART_GRID_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
 import type { ChartXLabels } from '@/ds/primitives/chart-axes';
 import { singleBarBox, stackedSegmentBox } from '@/ds/primitives/chart-column-layout';
 import type { SegmentBox } from '@/ds/primitives/chart-column-layout';
-import { CHART_TICK, Y_AXIS_WIDTH, compactNumber, dataMax, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
+import {
+  CHART_TICK,
+  Y_AXIS_WIDTH,
+  compactNumber,
+  dataMax,
+  isWholeData,
+  timeXAxis,
+  valueYAxis,
+} from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
 import { CHART_AXIS_FONT_SIZE, CHART_MARGIN } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
@@ -246,6 +254,10 @@ function BarPlot({
               ),
               referenceLine?.value ?? 0,
             ),
+            integer: isWholeData(
+              data,
+              series.map(s => s.dataKey),
+            ),
           })}
           {overlay &&
             valueYAxis({
@@ -254,6 +266,7 @@ function BarPlot({
               size,
               formatter: overlay.valueFormatter ?? compactNumber.format,
               max: dataMax(data, [overlay.dataKey]),
+              integer: isWholeData(data, [overlay.dataKey]),
               right: true,
             })}
           <Tooltip
