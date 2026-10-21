@@ -93,10 +93,14 @@ jobs:
       - name: Reject unknown or ignored changeset packages
         run: node .github/scripts/check-changeset-packages.mjs
 
-      # A PR without changesets (e.g. a Renovate devDependency or docker-compose
-      # bump) asks for no release, so there is no release plan to validate.
-      - name: Check for changesets in this PR
+      # Renovate only writes changesets for `dependencies` and `peerDependencies`.
+      # Its devDependency, lockfile and docker-compose bumps need no release, so
+      # skip the release-plan check when such a PR adds no changesets. Other PRs
+      # still fail when they change a package without one. Like the release-PR
+      # skip below, this requires the head to live in this repository.
+      - name: Check for changesets in Renovate PRs
         id: pr-changesets
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'renovate/') }}
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
@@ -116,7 +120,7 @@ jobs:
       #
       # actions/checkout fetches main as origin/main, not a local main branch.
       - name: Validate changeset release plan
-        if: ${{ steps.pr-changesets.outputs.found == 'true' && (github.event.pull_request.head.repo.full_name != github.repository || !startsWith(github.head_ref, 'changeset-release/')) }}
+        if: ${{ steps.pr-changesets.outputs.found != 'false' && (github.event.pull_request.head.repo.full_name != github.repository || !startsWith(github.head_ref, 'changeset-release/')) }}
         run: pnpm changeset-cli status --since origin/main
 
   new-package-npm-check:
