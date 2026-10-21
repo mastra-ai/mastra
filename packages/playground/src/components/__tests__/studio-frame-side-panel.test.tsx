@@ -177,6 +177,31 @@ describe('StudioFrame side panel', () => {
     expect(handleSpy.toggle).not.toHaveBeenCalled();
   });
 
+  it('starts the mobile drawer closed on the next page that registers a side panel', async () => {
+    mobileState.value = true;
+    const frame = (withPanel: boolean) => (
+      <RouteSidePanelProvider>
+        <Toggle />
+        <StudioFrame>
+          <div data-testid="frame-content">page</div>
+        </StudioFrame>
+        {withPanel && <RouteSidePanel owner="agent-detail">Panel content</RouteSidePanel>}
+      </RouteSidePanelProvider>
+    );
+    const { rerender } = render(frame(true));
+    await screen.findByTestId('panel-drawer');
+    fireEvent.click(screen.getByText('toggle'));
+    expect(screen.getByTestId('panel-drawer').getAttribute('data-open')).toBe('true');
+
+    // Leave for a page without a side panel, then open another agent page.
+    rerender(frame(false));
+    await waitFor(() => expect(screen.queryByTestId('panel-drawer')).toBeNull());
+    rerender(frame(true));
+
+    expect((await screen.findByTestId('panel-drawer')).getAttribute('data-open')).toBe('false');
+    expect(screen.getByText('toggle').getAttribute('aria-pressed')).toBe('false');
+  });
+
   it('keeps the page mounted when crossing the mobile breakpoint', async () => {
     const { rerender } = renderFrame({ withPanel: true });
     const before = screen.getByTestId('frame-content');

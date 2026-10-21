@@ -20,11 +20,10 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
   const [el, setEl] = useState<HTMLElement | null>(null);
   const [owners, setOwners] = useState<PanelOwner[]>([]);
   const [panelCollapsed, setPanelCollapsed] = useState(true);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  // The registration the mobile drawer was opened for. A page mounting again registers anew,
+  // so the drawer starts closed on the next page instead of covering it.
+  const [drawerOpenOrder, setDrawerOpenOrder] = useState<number>();
   const isMobile = useIsMobile();
-  // The mobile drawer owns its own open state, so the portal must not be gated on collapse there.
-  const isCollapsed = !isMobile && panelCollapsed;
-  const isOpen = isMobile ? isDrawerOpen : !panelCollapsed;
   const panelHandle = useRef<CollapsiblePanelHandle | null>(null);
   const orderRef = useRef(0);
 
@@ -39,7 +38,7 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const activeOwner = useMemo(() => {
+  const active = useMemo(() => {
     let active: PanelOwner | undefined;
     for (const owner of owners) {
       if (
@@ -51,13 +50,24 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    return active?.owner ?? null;
+    return active;
   }, [owners]);
+  const activeOwner = active?.owner ?? null;
+  const activeOrder = active?.order;
 
+  const isDrawerOpen = activeOrder !== undefined && drawerOpenOrder === activeOrder;
+  // The mobile drawer owns its own open state, so the portal must not be gated on collapse there.
+  const isCollapsed = !isMobile && panelCollapsed;
+  const isOpen = isMobile ? isDrawerOpen : !panelCollapsed;
+
+  const onDrawerOpenChange = useCallback(
+    (open: boolean) => setDrawerOpenOrder(open ? activeOrder : undefined),
+    [activeOrder],
+  );
   const toggle = useCallback(() => {
-    if (isMobile) setIsDrawerOpen(open => !open);
+    if (isMobile) onDrawerOpenChange(!isDrawerOpen);
     else panelHandle.current?.toggle();
-  }, [isMobile]);
+  }, [isMobile, isDrawerOpen, onDrawerOpenChange]);
   const onPanelResize = useCallback((sizeInPixels: number) => setPanelCollapsed(sizeInPixels <= 0), []);
 
   const value = useMemo(
@@ -71,10 +81,10 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
       isOpen,
       onPanelResize,
       isDrawerOpen,
-      onDrawerOpenChange: setIsDrawerOpen,
+      onDrawerOpenChange,
       toggle,
     }),
-    [activeOwner, el, isCollapsed, isOpen, onPanelResize, isDrawerOpen, register, toggle],
+    [activeOwner, el, isCollapsed, isOpen, onPanelResize, isDrawerOpen, onDrawerOpenChange, register, toggle],
   );
   return <SidePanelContext.Provider value={value}>{children}</SidePanelContext.Provider>;
 }
