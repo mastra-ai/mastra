@@ -42,6 +42,7 @@ import {
   agentThreadStreamRuntime,
   prepareForDurableExecution,
   createDurableAgentStream,
+  emitChunkEvent,
   emitErrorEvent,
   runDurableStreamUntilIdle,
   runResumeDurableStreamUntilIdle,
@@ -61,6 +62,7 @@ import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
+import { ChunkFrom } from '@mastra/core/stream';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
 import { deepMerge } from '@mastra/core/utils';
 import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
@@ -1119,7 +1121,16 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Track the trigger promise on the registry so generate() can await suspend
       // snapshot persistence before returning.
       const workflowExecution = ready
-        .then(() => triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor))
+        .then(async () => {
+          // Only initial runs open a message; resume continues the existing stream.
+          await emitChunkEvent(getPubsub(), runId, {
+            type: 'start',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: { id: workflowInput.agentId, messageId },
+          });
+          return triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
+        })
         .catch(error => {
           void emitError(runId, error);
         });
