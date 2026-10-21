@@ -335,7 +335,13 @@ function catalogPlatform(
       return Response.json({
         integrations: [
           { id: 'linear', capabilities: {}, displayName: 'Linear', logoUrl: 'https://logos.test/linear.svg' },
-          { id: 'notion', capabilities: {}, displayName: 'Notion', authType: 'OAUTH2' },
+          {
+            id: 'notion',
+            capabilities: {},
+            displayName: 'Notion',
+            authType: 'OAUTH2',
+            authFields: [{ name: 'workspace', target: 'params', label: 'Workspace', required: true }],
+          },
         ],
       });
     }
@@ -361,7 +367,12 @@ type PromptTool = {
   execute: (input: { provider?: string }) => Promise<{
     type: string;
     requestedProvider?: string;
-    providers: Array<{ id: string; connected: boolean; scope: string | null }>;
+    providers: Array<{
+      id: string;
+      authFields: Array<{ name: string; target?: 'credentials' | 'params' | null; required?: boolean | null }> | null;
+      connected: boolean;
+      scope: string | null;
+    }>;
   }>;
 };
 
@@ -385,7 +396,14 @@ describe('built-in connect-prompt tool', () => {
     rows = [makeConnection(), makeConnection({ id: 'c_not1', integrationId: 'notion', resourceId: 'end-user-42' })];
     const second = await prompt.execute({ provider: 'notion' });
     expect(second.requestedProvider).toBe('notion');
-    expect(second.providers).toEqual([expect.objectContaining({ id: 'notion', connected: true, scope: 'user' })]);
+    expect(second.providers).toEqual([
+      expect.objectContaining({
+        id: 'notion',
+        authFields: [{ name: 'workspace', target: 'params', label: 'Workspace', required: true }],
+        connected: true,
+        scope: 'user',
+      }),
+    ]);
   });
 
   it('uses fresh project provider configuration when code omits providers', async () => {

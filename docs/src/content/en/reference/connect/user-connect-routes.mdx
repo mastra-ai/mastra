@@ -36,7 +36,7 @@ The routes do no authentication of their own: the server's auth pipeline authent
     name: 'providers',
     type: 'string[]',
     description:
-      'Code-level allowlist of provider IDs exposed to end users. This value takes priority over the project provider list configured in Mastra Platform. Omit it to use the project setting: null or no setting inherits the full platform catalog, while an empty project list disables end-user connections. An explicit empty array in code is rejected.',
+      "Code-level allowlist of provider IDs available for new end-user connections. Provider-specific routes outside this set return 404, while existing connections remain visible and manageable. This value overrides the project's endUserProviders configuration in Mastra Platform. When omitted, an unset project configuration exposes the full catalog, a list restricts providers, and an empty list disables new connections. An explicit empty code array is rejected.",
     isOptional: true,
   },
   {
@@ -85,9 +85,9 @@ All routes are gated on the caller's resource ID and respond with `Cache-Control
 
 | Route | Description |
 | - | - |
-| `GET /connect/providers` | The connectable providers from the platform catalog, filtered by the effective provider policy: `{ providers: [{ id, displayName, logoUrl, authType, authFields }] }`. |
+| `GET /connect/providers` | The connectable providers from the platform catalog, filtered by the effective provider policy: `{ providers: [{ id, displayName, logoUrl, authType, authFields }] }`. A code allowlist overrides the project's `endUserProviders` configuration. When code omits it, an unset project configuration exposes the full catalog, a configured list restricts providers, and an empty list returns no providers. |
 | `GET /connect/connections` | Global connections plus the caller's own: `{ connections: [{ id, integrationId, displayName, logoUrl, status, accountLabel, scope }] }` where `scope` is `'global'` or `'user'`. Not filtered by the provider policy, because the policy gates new connects, not existing connections. `displayName` and `logoUrl` are resolved from the full catalog so rows for providers outside the policy still render. |
-| `POST /connect/:provider/sessions` | Creates a pending session owned by the caller and returns `{ connectionId, integrationId, launchUrl, expiresAt }` with status 201. `launchUrl` is a server-relative path to the launch gate. The session response contains neither the provider authorization URL nor its session token. Providers outside the effective policy, and unknown providers under the full-catalog policy, return 404. |
+| `POST /connect/:provider/sessions` | Creates a pending session owned by the caller and returns `{ connectionId, integrationId, launchUrl, expiresAt }` with status 201. `launchUrl` is a server-relative path to the launch gate. The session response contains neither the provider authorization URL nor its session token. Providers outside the effective code or project policy, and providers unknown to the catalog, return 404. |
 | `GET /connect/connections/:id/status` | Returns `{ id, status, scope }` for a visible global or caller-owned connection. Another user's connection, another project's connection, and an unknown ID return the same 404. During a newly created attempt, clients can treat a short-lived 404 as pending until the provider handshake makes the row visible. |
 | `DELETE /connect/connections/:id` | Disconnects the caller's own connection and returns 204. Global connections return 403. Invisible and unknown IDs return the same 404. |
 | `GET /connect/connections/:id/launch` | Verifies the caller owns the pending session. Normal navigation returns a 302 into the hosted provider flow. A request with `Accept: application/json` returns `{ sessionToken, expiresAt }` for provider-direct headless authorization. If the stored vendor URL doesn't contain an extractable token, `sessionToken` is null and the client can use the 302 flow. Another user's session, another project's session, an expired session, and an unknown ID return the same 404. |
@@ -130,7 +130,7 @@ Errors are JSON: `{ error: { code, message } }`. Platform failure details don't 
 | 401 | `unauthorized` | No resolvable resource ID for the request |
 | 400 | `invalid_return_to` | `returnTo` isn't a relative path or an allowlisted origin |
 | 403 | `forbidden` | Deleting a global connection |
-| 404 | `provider_not_found`, `connection_not_found` | Provider outside the effective policy (or unknown when the full catalog is inherited), or an invisible connection |
+| 404 | `provider_not_found`, `connection_not_found` | Provider outside the effective code or project policy, provider unknown to the catalog, or an invisible connection |
 | 409 | `conflict` | The platform refused the request as conflicting (for example the per-resource connection limit); the message carries the platform's specific detail |
 | 429 | `rate_limited` | The platform rate-limited the request |
 | 500 | `misconfigured` | Missing platform token or other configuration problem |

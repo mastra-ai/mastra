@@ -180,7 +180,7 @@ afterEach(() => {
 describe('userConnectRoutes construction', () => {
   it('rejects an explicit empty allowlist but accepts omitting providers entirely', () => {
     expect(() => userConnectRoutes({ providers: [], projectId: 'proj_1' })).toThrow(/non-empty allowlist/);
-    // Omitted providers = the full platform catalog is connectable.
+    // Omitted providers defer to the project's provider configuration at request time.
     expect(userConnectRoutes({ projectId: 'proj_1' }).length).toBeGreaterThan(0);
   });
 

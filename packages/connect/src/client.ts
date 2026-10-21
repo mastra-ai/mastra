@@ -388,6 +388,11 @@ export async function getProjectIntegrationSettings(
   projectId: string,
 ): Promise<ProjectIntegrationSettings> {
   const response = await platformFetch(client, `/v2/projects/${encodeURIComponent(projectId)}/integration-settings`);
+  if (response.status === 404) {
+    throw new MastraConnectError('platform_error', `Integration settings were not found for project ${projectId}.`, {
+      status: 404,
+    });
+  }
   if (!response.ok) {
     await throwPlatformError(response, `retrieving integration settings for project ${projectId}`);
   }

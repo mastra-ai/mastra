@@ -101,6 +101,8 @@ export interface ConnectPromptProvider {
   displayName: string | null;
   logoUrl: string | null;
   authType: string | null;
+  /** Fields the UI must collect before starting headless authorization. */
+  authFields: UserConnectAuthField[] | null;
   connected: boolean;
   scope: UserConnectionScope | null;
 }

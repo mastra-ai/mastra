@@ -118,7 +118,7 @@ export const mastra = new Mastra({
     apiRoutes: [
       ...userConnectRoutes({
         // Optional: override the project's provider policy in code.
-        // Omit to use the provider list configured in Mastra Platform.
+        // Omit to use endUserProviders from Mastra Platform.
         providers: ['linear', 'slack'],
       }),
     ],
@@ -274,7 +274,7 @@ Resource-scoped tool resolutions include a built-in `request_connection` tool. W
 
 Studio chat renders that payload as a connect card. The user selects **Connect**, authorizes through the mounted routes, and the agent can retry the task against fresh tools. Historical messages render the card read-only.
 
-The connectable set follows the effective provider policy: the `providers` array passed to `tools()` when present, otherwise the project's end-user provider list. An unconfigured project list inherits the full catalog. The tool reports what can be connected but doesn't create sessions or return authorization capabilities. Global-only resolutions never include it because they have no user scope.
+The connectable set follows the effective provider policy. A `providers` allowlist passed to `tools()` overrides the project's `endUserProviders` configuration in Mastra Platform. When code omits the allowlist, an unset project configuration exposes the full catalog, a configured list restricts providers, and an empty list disables new connections. The tool reports what can be connected but doesn't create sessions or return authorization capabilities. Global-only resolutions never include it because they have no user scope.
 
 Disable the prompt tool with `connectPrompt: false`. The [`tools()` reference](/reference/connect/tools) documents its configuration and output behavior.
 
