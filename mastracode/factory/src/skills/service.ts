@@ -59,24 +59,25 @@ async function findSkill(session: SkillSession, name: string) {
   return skills.get(name);
 }
 
-function escapeSkillBoundary(value: string): string {
-  return value.replaceAll('</skill>', '&lt;/skill&gt;');
+/** Wraps skill contents in the `<skill>` envelope a human-invoked skill sends as its own message. */
+export function formatSkillMessage(name: string, contents: string): string {
+  return `<skill name="${name}">\n${contents.replaceAll('</skill>', '&lt;/skill&gt;')}\n</skill>`;
 }
 
 /** Kicks a run off from a plain prompt, for runs that activate no skill. */
 export async function resolvePromptInvocation(
   controller: Pick<AgentController<MastraCodeState>, 'getSession'>,
   input: { sessionId: string; prompt: string },
-): Promise<{ session: SkillSession; message: string }> {
+): Promise<{ session: SkillSession; contents: string }> {
   const session = (await controller.getSession(input.sessionId)) as SkillSession | undefined;
   if (!session) throw new SkillInvocationError('session_not_found', 'Agent controller session not found.');
-  return { session, message: input.prompt };
+  return { session, contents: input.prompt };
 }
 
 export async function resolveSkillInvocation(
   controller: Pick<AgentController<MastraCodeState>, 'getSession'>,
   input: SkillInvocationInput,
-): Promise<{ session: SkillSession; skillName: string; message: string }> {
+): Promise<{ session: SkillSession; skillName: string; contents: string }> {
   const session = (await controller.getSession(input.sessionId)) as SkillSession | undefined;
   if (!session) throw new SkillInvocationError('session_not_found', 'Agent controller session not found.');
 
@@ -86,12 +87,8 @@ export async function resolveSkillInvocation(
   }
 
   const args = input.arguments?.trim();
-  const content = `${formatSkillActivation(skill)}${args ? `\n\nARGUMENTS: ${args}` : ''}`.trim();
-  return {
-    session,
-    skillName: skill.name,
-    message: `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`,
-  };
+  const contents = `${formatSkillActivation(skill)}${args ? `\n\nARGUMENTS: ${args}` : ''}`.trim();
+  return { session, skillName: skill.name, contents };
 }
 
 /**
@@ -104,7 +101,7 @@ export async function resolveSkillInvocation(
 export async function resolveSkillResumeInvocation(
   controller: Pick<AgentController<MastraCodeState>, 'getSession'>,
   input: SkillInvocationInput,
-): Promise<{ session: SkillSession; skillName: string; message: string }> {
+): Promise<{ session: SkillSession; skillName: string; contents: string }> {
   const session = (await controller.getSession(input.sessionId)) as SkillSession | undefined;
   if (!session) throw new SkillInvocationError('session_not_found', 'Agent controller session not found.');
 
@@ -114,24 +111,10 @@ export async function resolveSkillResumeInvocation(
   }
 
   const args = input.arguments?.trim();
-  const content = [
+  const contents = [
     `Resume the active ${skill.name} session — it is already open in this thread; continue it rather than restarting.`,
     `Re-open the ${skill.name} skill with the skill tool if its instructions are no longer in context.`,
     ...(args ? [`ARGUMENTS: ${args}`] : []),
   ].join('\n');
-  return {
-    session,
-    skillName: skill.name,
-    message: `<skill name="${skill.name}">\n${escapeSkillBoundary(content)}\n</skill>`,
-  };
-}
-
-export async function dispatchSkillInvocation(
-  controller: Pick<AgentController<MastraCodeState>, 'getSession'>,
-  input: SkillInvocationInput,
-  requestContext?: RequestContext,
-): Promise<{ skillName: string; message: string }> {
-  const resolved = await resolveSkillInvocation(controller, input);
-  await resolved.session.sendMessage({ content: resolved.message, ...(requestContext ? { requestContext } : {}) });
-  return { skillName: resolved.skillName, message: resolved.message };
+  return { session, skillName: skill.name, contents };
 }

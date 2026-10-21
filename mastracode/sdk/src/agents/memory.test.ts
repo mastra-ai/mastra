@@ -308,7 +308,8 @@ describe('getDynamicMemory', () => {
     const { config, requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', vector);
 
     expect(config.vector).toBe(vector);
-    expect(config.embedder).toBe('fastembed-small');
+    // fastembed.small, wrapped so @mastra/fastembed only loads on the first embedding.
+    expect(config.embedder).toMatchObject({ provider: 'fastembed', modelId: 'bge-small-en-v1.5' });
     expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
       defaultScope: 'resource',
       pins: true,

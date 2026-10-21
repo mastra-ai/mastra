@@ -50,7 +50,6 @@ import {
   MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability';
-import { PostgresStore } from '@mastra/pg';
 
 import { createSessionThreadAdvertisement } from './agent-connections/session-advertisement.js';
 import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
@@ -543,7 +542,8 @@ function resolveInjectedStorageBackend(
 ): 'libsql' | 'pg' {
   if (configuredBackend) return configuredBackend;
   if (storage instanceof LibSQLStore || hasAncestorClassNamed(storage, 'LibSQLStore')) return 'libsql';
-  if (storage instanceof PostgresStore || hasAncestorClassNamed(storage, 'PostgresStore')) return 'pg';
+  // By name only: an `instanceof` check would load `@mastra/pg` for every libsql session.
+  if (hasAncestorClassNamed(storage, 'PostgresStore')) return 'pg';
   throw new Error('storageBackend is required when injecting a custom storage instance.');
 }
 
@@ -1369,7 +1369,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
               })
             : undefined;
           const withOptions = streamOptions ? { ...decision, streamOptions } : decision;
-          if (!ownsNotificationDispatch) return withOptions;
+          // With a pubsub of its own the embedder runs no dispatch timer here,
+          // so this process delivers its own resources from the shared
+          // schedule. A resource no session here serves is left for the
+          // process that serves it: waking it from here would start the run
+          // with no session, and so no model.
+          if (!ownsNotificationDispatch) return owner ? withOptions : { ...withOptions, hold: true };
           // `hold` only applies at delivery time; it is ignored when a
           // notification is first sent.
           const hold = shouldHoldNotificationDelivery({

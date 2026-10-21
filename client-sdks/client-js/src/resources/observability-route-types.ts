@@ -26,6 +26,8 @@ export type TraceQueryKeysetTraceResponse = Extract<TraceQueryTraceResponse, { p
 export type TraceQueryGroupResponse = Extract<TraceQueryResponse, { groups: unknown[] }>;
 export type AggregateTracesArgs = Body<'POST /observability/traces/aggregate'>;
 export type AggregateTracesResponse = Response<'POST /observability/traces/aggregate'>;
+export type AggregateSpansArgs = Body<'POST /observability/spans/aggregate'>;
+export type AggregateSpansResponse = Response<'POST /observability/spans/aggregate'>;
 export type GetTraceQueryFieldsArgs = Body<'POST /observability/traces/query/fields'>;
 export type GetTraceQueryFieldsResponse = Extract<
   Response<'POST /observability/traces/query/fields'>,

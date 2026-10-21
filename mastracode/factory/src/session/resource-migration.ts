@@ -15,6 +15,8 @@ const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
  * session id, so the next start finds it by this flag and its session stamp and finishes the move.
  */
 const MOVE_PENDING_KEY = 'factoryResourceMovePending';
+/** How often a long resource migration reports how far it got. */
+const PROGRESS_LOG_INTERVAL_MS = 10_000;
 
 export interface SessionResourceMigrationDeps {
   sessions: {
@@ -122,6 +124,12 @@ export async function migrateSessionResources(
     resourceObservationsLeft: [],
   };
   const sessions = await deps.sessions.listSessionsAwaitingResourceMigration();
+  // This pass can take minutes against a remote database, so say what it is doing and
+  // how far it got.
+  if (sessions.length > 0) {
+    console.info(`[factory] session resource migration: moving ${sessions.length} sessions in the background`);
+  }
+  let lastProgressAt = Date.now();
 
   for (const session of sessions) {
     report.sessions += 1;
@@ -191,6 +199,14 @@ export async function migrateSessionResources(
       console.warn(
         `[factory] session resource migration: session ${sessionId} not moved: ${error instanceof Error ? error.message : error}`,
       );
+    } finally {
+      if (report.sessions < sessions.length && Date.now() - lastProgressAt >= PROGRESS_LOG_INTERVAL_MS) {
+        lastProgressAt = Date.now();
+        console.info(
+          `[factory] session resource migration: ${report.sessions}/${sessions.length} sessions checked, ` +
+            `${report.threads} threads moved`,
+        );
+      }
     }
   }
 
@@ -211,6 +227,46 @@ export async function migrateSessionResources(
     );
   }
   return report;
+}
+
+export interface SessionVisibilityBackfillDeps {
+  sessions: {
+    listSessionsAwaitingVisibilityCheck(): Promise<SourceControlSession[]>;
+    markVisibilityChecked(sessionId: string, options: { makePrivate: boolean }): Promise<void>;
+  };
+  workItems: Pick<SessionResourceMigrationDeps['workItems'], 'listRunBoundItems'>;
+  memory: Pick<MemoryStorage, 'getThreadById'>;
+}
+
+/**
+ * Mark shared user sessions private when their conversation lives on their owner's resource.
+ * The resource already keeps teammates out of such a session; this makes lists agree, so they
+ * stop seeing a session they can't open. Sessions shared onto their Factory, runs, Slack threads
+ * and side sessions are left alone. Each session is checked once: new sessions start checked,
+ * and a session that throws stays unchecked so the next start retries it.
+ */
+export async function privatizeOwnerResourceSessions(deps: SessionVisibilityBackfillDeps): Promise<number> {
+  let privatized = 0;
+  for (const session of await deps.sessions.listSessionsAwaitingVisibilityCheck()) {
+    try {
+      let makePrivate = false;
+      if (session.visibility !== 'private') {
+        const { owner } = sessionMemoryResource(session, await deps.workItems.listRunBoundItems(session.sessionId));
+        const thread = owner === 'user' ? await deps.memory.getThreadById({ threadId: session.sessionId }) : null;
+        makePrivate = thread?.resourceId === session.userId;
+      }
+      await deps.sessions.markVisibilityChecked(session.sessionId, { makePrivate });
+      if (makePrivate) privatized += 1;
+    } catch (error) {
+      console.warn(
+        `[factory] session visibility check: session ${session.sessionId} not checked: ${error instanceof Error ? error.message : error}`,
+      );
+    }
+  }
+  if (privatized > 0) {
+    console.info(`[factory] session visibility check: ${privatized} sessions on their owner's memory made private`);
+  }
+  return privatized;
 }
 
 async function moveThread(

@@ -21,7 +21,7 @@ async function getSnapshotsDir(): Promise<string> {
   if (!_snapshotsDir) {
     if (typeof import.meta.url !== 'string') {
       throw new Error(
-        'Snapshot functionality requires a Node.js environment. ' + 'import.meta.url is not available in this runtime.',
+        'Snapshot functionality requires a Node.js environment. import.meta.url is not available in this runtime.',
       );
     }
     const { fileURLToPath } = await import('node:url');
@@ -1291,9 +1291,7 @@ export class TestExporter extends BaseExporter {
       snapshotContent = await readFile(snapshotPath, 'utf-8');
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
-        throw new Error(
-          `Snapshot file not found: ${snapshotPath}\n` + `Run with { updateSnapshot: true } to create it.`,
-        );
+        throw new Error(`Snapshot file not found: ${snapshotPath}\nRun with { updateSnapshot: true } to create it.`);
       }
       throw err;
     }
@@ -1316,7 +1314,7 @@ export class TestExporter extends BaseExporter {
       expectedStructure = snapshotData.__structure__;
     } else {
       throw new Error(
-        `Invalid snapshot format in ${snapshotPath}.\n` + `Expected an array or object with 'spans' property.`,
+        `Invalid snapshot format in ${snapshotPath}.\nExpected an array or object with 'spans' property.`,
       );
     }
 

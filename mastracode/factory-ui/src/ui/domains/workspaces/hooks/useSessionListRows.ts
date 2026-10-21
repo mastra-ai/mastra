@@ -74,6 +74,7 @@ export function useSessionListRows(factoryId: string | undefined): {
   const userRows = (query.data?.userSessions ?? []).map(session =>
     buildUserSessionRow({
       session,
+      item: workItemBySessionId.get(session.sessionId)?.item,
       factoryId,
       pathname,
       running: runningById[session.sessionId] === true,

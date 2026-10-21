@@ -1,5 +1,19 @@
 # create-mastra
 
+## 1.35.0
+
+### Patch Changes
+
+- Platform sign-ins started from `create-mastra` are now attributed to `create-mastra`, so new Mastra accounts can be traced back to it. ([#27229](https://github.com/mastra-ai/mastra/pull/27229))
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.35.0-alpha.13
+
+## 1.35.0-alpha.12
+
+## 1.35.0-alpha.11
+
 ## 1.35.0-alpha.10
 
 ## 1.35.0-alpha.9

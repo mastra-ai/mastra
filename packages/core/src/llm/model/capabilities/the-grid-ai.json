@@ -1,5 +1,13 @@
 {
-  "attachment": ["agent-max", "claude-opus-latest", "code-max", "gemini-pro-latest", "gpt-sol-latest", "text-max"],
+  "attachment": [
+    "agent-max",
+    "claude-opus-latest",
+    "code-max",
+    "gemini-pro-latest",
+    "gpt-sol-latest",
+    "kimi-latest",
+    "text-max"
+  ],
   "temperature": ["agent-prime", "agent-standard", "code-prime", "code-standard", "text-prime", "text-standard"],
   "structuredOutput": [
     "agent-max",
@@ -14,19 +22,32 @@
     "gemini-pro-latest",
     "glm-latest",
     "gpt-sol-latest",
+    "kimi-latest",
     "minimax-latest",
     "text-max",
     "text-prime",
     "text-standard"
   ],
   "reasoning": {
+    "text-prime": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "bytedance-pro-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "glm-latest": [
+    "gemini-pro-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "minimax-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -38,43 +59,19 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "text-max": [
-      {
-        "type": "toggle"
-      },
+    "kimi-latest": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "minimax-latest": [
+    "glm-latest": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "agent-prime": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "text-standard": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "code-max": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "text-prime": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -92,13 +89,16 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "code-standard": [
+    "agent-max": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "code-prime": [
+    "code-standard": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -113,13 +113,28 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gemini-pro-latest": [
+    "text-standard": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "agent-max": [
+    "code-prime": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "text-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "code-max": [
       {
         "type": "toggle"
       },

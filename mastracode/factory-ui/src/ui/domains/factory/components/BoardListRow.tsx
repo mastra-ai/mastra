@@ -192,9 +192,9 @@ export function BoardListRow({
       }}
       onSelectRow={onToggleDetails}
       className={cn(
-        'group min-h-10 grid-cols-[auto_5rem_minmax(0,1fr)_var(--spacing-avatar-sm)_3.5rem] items-center gap-x-3 px-3 py-1 max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-y-1 max-sm:py-2',
+        'group min-h-10 grid-cols-[auto_5rem_minmax(0,1fr)_var(--spacing-avatar-sm)_3.5rem] items-center gap-x-3 rounded-lg px-3 py-1 max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-y-1 max-sm:py-2',
         locked && 'cursor-wait opacity-70',
-        highlighted && 'before:bg-warning-subtle',
+        highlighted && 'ring-2 ring-warning-indicator/60 ring-offset-2 ring-offset-background',
       )}
     >
       {activityStatus && <ActivityWick status={activityStatus} />}

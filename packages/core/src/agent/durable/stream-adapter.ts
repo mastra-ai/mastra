@@ -590,6 +590,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             payload: {
               output: data.output,
               stepResult: data.stepResult,
+              ...(data.messages ? { messages: data.messages } : {}),
             },
           } as ChunkType<OUTPUT>);
           safeClose(controller);
@@ -641,8 +642,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
                 object,
                 usedFallbackValue: output.usedFallbackValue,
                 error: output.error,
-                // Every step's streamed text, retried attempts included — matches the main loop,
-                // whose onFinish text is everything the run streamed.
+                // Aggregate accepted step text, excluding rejected attempts, like the main loop.
                 text: steps.length > 0 ? steps.map((s: any) => s?.text ?? '').join('') : (data.output?.text ?? ''),
                 steps,
                 toolResults: allToolResults,
