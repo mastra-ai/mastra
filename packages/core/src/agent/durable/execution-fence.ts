@@ -524,6 +524,8 @@ export class ExecutionFence implements RunFenceScope {
   #resolveSettled!: () => void;
   /** Resolves once {@link settle} has finished and the claim is released or left to its new holder. */
   readonly whenSettled: Promise<void>;
+  /** Set only by the winning total-deadline settlement, for late stream readers. */
+  deadlineError?: Error;
 
   private constructor(args: {
     backend: OwnershipBackend;

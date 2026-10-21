@@ -925,6 +925,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         maxSteps: 4,
         abortSignal: controller.signal,
         modelSettings: cancellation === 'timeout' ? { timeout: { totalMs: 1_200 } } : undefined,
+        savePerStep: true,
         onFinish,
         onAbort,
         onError,

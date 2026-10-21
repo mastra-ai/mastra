@@ -975,6 +975,8 @@ export interface RunRegistryEntry {
    * `createTimeoutAbortSignal` at install time.
    */
   timeoutTotalMs?: number;
+  /** A late subscriber re-publishes the winning deadline error at most once per segment. */
+  deadlineErrorRedelivered?: boolean;
   /**
    * Whether this process has already subscribed to cross-process abort
    * requests for the run. Set by `ensureRemoteAbortListener`, which every

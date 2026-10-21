@@ -175,11 +175,17 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     const pending = durableAgent.stream('hello', { runId, modelSettings: { timeout: { totalMs: 150 } }, onError });
     try {
       await subscribing.promise;
-      const signal = globalRunRegistry.get(runId)?.abortSignal;
+      const entry = globalRunRegistry.get(runId);
+      const signal = entry?.abortSignal;
       if (!signal) throw new Error('Missing timeout signal');
       if (!signal.aborted) {
         await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
       }
+      // Settlement must complete without waiting for the reader to subscribe.
+      await vi.waitFor(() =>
+        expect(entry?.executionFence?.deadlineError).toMatchObject({ name: 'MastraTimeoutError' }),
+      );
+      await entry?.executionFence?.whenSettled;
       releaseSubscription.resolve();
       const result = await pending;
       const chunks = await drain(result.fullStream);
@@ -224,6 +230,7 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
       await entry.workflowExecution;
       await pubsub.flush();
       expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+      expect(entry.executionFence?.deadlineError).toBeUndefined();
       expect(published.mock.calls.filter(([, event]) => event.type === AgentStreamEventTypes.ERROR)).toHaveLength(0);
     } finally {
       releaseDeletion.resolve();
@@ -369,9 +376,13 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     }
   });
 
-  it.each([false, true])(
-    're-arms the persisted run-level budget after a cold restart (memory: %s)',
-    async withMemory => {
+  it.each([
+    [false, false],
+    [true, false],
+    [false, true],
+  ])(
+    're-arms the persisted budget after a cold restart (memory: %s, late reader: %s)',
+    async (withMemory, lateReader) => {
       const storage = new InMemoryStore();
       const memory = new MockMemory({ storage });
       let secondStepEntered = false;
@@ -449,7 +460,15 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
       // ---- Process 2: recover the run; the model hangs again. Process 1's
       // claim is still within its lease, so recovering right away takes it over.
       const secondDurable = build();
-      const recovered = await secondDurable.recover(runId, { force: true });
+      const subscribe = pubsub.subscribe.bind(pubsub);
+      vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, callback, options) => {
+        if (lateReader && topic === AGENT_STREAM_TOPIC(runId)) {
+          await globalRunRegistry.get(runId)?.executionFence?.whenSettled;
+        }
+        return subscribe(topic, callback, options);
+      });
+      const onError = vi.fn();
+      const recovered = await secondDurable.recover(runId, { force: true, onError });
 
       // Read side: the rebuilt registry entry restored the budget from the
       // persisted snapshot.
@@ -461,6 +480,8 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
       const errorChunk = findTimeoutErrorChunk(chunks);
       expect(errorChunk, JSON.stringify(chunks)).toBeDefined();
       expect(errorChunk.payload.error.message).toContain('totalMs');
+      expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(1);
+      await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
       if (withMemory) {
         await vi.waitFor(async () => {
           const { messages } = await memory.recall({ threadId: 'timeout-thread', resourceId: 'timeout-resource' });

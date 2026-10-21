@@ -837,7 +837,6 @@ export class DurableAgent<
   /** The stream segment (stream() or resume()) that currently owns each run id's shared state. */
   #segmentOwner = new Map<string, symbol>();
   #timedOutExecutions = new WeakSet<ExecutionFence>();
-  #deadlineReaderReady = new WeakMap<ExecutionFence, (ready: Promise<void>) => void>();
 
   /** Timeout for auto-cleanup after stream finishes (0 = disabled) */
   readonly #cleanupTimeoutMs: number;
@@ -1277,10 +1276,18 @@ export class DurableAgent<
         requestContext: registryEntry.requestContext,
         returnScorerData: workflowInput.options?.returnScorerData,
       });
-      this.#deadlineReaderReady.get(executionFence)?.(stream.ready);
       streamCleanup = stream.cleanup;
       streamOutput = stream.output;
-      await this.#raceFenceLoss(stream.ready, executionFence);
+      await this.#raceFenceLoss(stream.ready, executionFence).catch(error => {
+        if (this.#timedOutExecutions.has(executionFence)) return stream.ready;
+        throw error;
+      });
+      if (
+        (await this.#redeliverDeadlineError(registryEntry, executionFence)) ||
+        this.#timedOutExecutions.has(executionFence)
+      ) {
+        return { stream, threadRegistration };
+      }
       this.#assertRecoveryActive();
 
       const recoverStreamOptions: AgentExecutionOptions<TOutput> = {
@@ -2663,6 +2670,7 @@ export class DurableAgent<
     let wrote = false;
     const writeTerminalState = async () => {
       wrote = true;
+      if (totalTimeout && fence) fence.deadlineError = error;
       // The observable deadline must not wait for snapshot I/O.
       if (error) await reportError(error);
       if (finished) await this.deleteRunSnapshots(runId);
@@ -2820,6 +2828,15 @@ export class DurableAgent<
     }
   }
 
+  async #redeliverDeadlineError(entry: RunRegistryEntry, fence: ExecutionFence): Promise<boolean> {
+    if (!fence.deadlineError) return false;
+    if (!entry.deadlineErrorRedelivered) {
+      entry.deadlineErrorRedelivered = true;
+      await this.emitError(fence.runId, fence.deadlineError, fence.generation);
+    }
+    return true;
+  }
+
   /**
    * Install `abortController` on a registry entry with the run-level execution
    * budget (`modelSettings.timeout.totalMs`, #21724 parity port) composed in.
@@ -2837,6 +2854,7 @@ export class DurableAgent<
     executionFence: ExecutionFence,
   ): void {
     entry.abortController = abortController;
+    entry.deadlineErrorRedelivered = false;
     const totalTimeout = createTimeoutAbortSignal({
       parentSignal: abortController.signal,
       timeoutMs: entry.timeoutTotalMs,
@@ -2848,25 +2866,15 @@ export class DurableAgent<
     });
     entry.abortSignal = totalTimeout.signal;
     if (totalTimeout.timeoutPromise) {
-      let resolveReaderReady!: (ready?: void | PromiseLike<void>) => void;
-      const readerReady = new Promise<void>(resolve => {
-        resolveReaderReady = resolve;
-      });
-      this.#deadlineReaderReady.set(executionFence, resolveReaderReady);
-      void readerReady.catch(() => {});
-      // A deadline may expire before an asynchronous pubsub subscription opens.
-      // Arm it now, but do not publish the terminal error before its reader exists.
       void totalTimeout.timeoutPromise
         .catch(async error => {
           if (!isMastraTimeoutError(error) || error.timeoutType !== 'total' || totalTimeout.signal?.reason !== error)
             return;
-          await readerReady;
           await this.settleExecution(executionFence.runId, executionFence, { status: 'failed', error });
         })
         .catch(error => {
           this.logger.warn('Failed to settle durable agent at its total deadline', { error });
         });
-      void executionFence.whenSettled.then(() => resolveReaderReady());
     }
     void executionFence.whenSettled.then(() => totalTimeout.cleanup());
     const previousCleanup = entry.cleanup;
@@ -3126,7 +3134,6 @@ export class DurableAgent<
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
     });
-    this.#deadlineReaderReady.get(executionFence)?.(ready);
     streamCleanup = createdStreamCleanup;
 
     // 4. Wait for subscription to be ready, then execute workflow
@@ -3134,6 +3141,7 @@ export class DurableAgent<
     const workflowExecution = executionFence.run(() =>
       ready
         .then(async () => {
+          if (await this.#redeliverDeadlineError(registryEntry, executionFence)) return;
           // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
           // Only the initial stream() path emits 'start'; resume() does not.
           await emitChunkEvent(fencePubSub(this.pubsub, executionFence), runId, {
@@ -3882,7 +3890,6 @@ export class DurableAgent<
       tracingContext: resumeSegmentSpan ? { currentSpan: resumeSegmentSpan } : undefined,
       messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
-    this.#deadlineReaderReady.get(executionFence)?.(ready);
     streamCleanup = createdStreamCleanup;
 
     // Wait for subscription to be ready, then resume workflow
@@ -3891,6 +3898,7 @@ export class DurableAgent<
     const workflowExecution = executionFence.run(() =>
       ready
         .then(async () => {
+          if (await this.#redeliverDeadlineError(entry, executionFence)) return;
           // Looked up inside the chain so a throw settles (releases) the claim.
           const workflow = this.getWorkflow();
           // The prior segment was settled above (before the event-offset
@@ -4691,13 +4699,13 @@ export class DurableAgent<
       tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
       messageList,
     });
-    this.#deadlineReaderReady.get(executionFence)?.(ready);
 
     // 4. Wait for subscription to be ready, then execute workflow
     // This prevents race conditions where events are published before subscription
     const workflowExecution = executionFence.run(() =>
       ready
         .then(async () => {
+          if (await this.#redeliverDeadlineError(registryEntry, executionFence)) return;
           // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
           // Only the initial generate()/stream() path emits 'start'; resume() does not.
           await emitChunkEvent(fencePubSub(this.pubsub, executionFence), runId, {
