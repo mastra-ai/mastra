@@ -52,7 +52,8 @@ const RATE_LIMITED = /rate[_ ]limit|too many requests|resource_exhausted|throttl
 const UNAVAILABLE =
   /internal server error|server_error|internal_error|service[_ ]?unavailable|temporarily[_ ]?unavailable|bad gateway|overloaded/i;
 // What an HTTP client reports when the body said nothing; not a reason a person can act on.
-const HTTP_REASON_PHRASE = /^(?:bad request|not found|unprocessable entity|payment required)\.?$/i;
+const HTTP_REASON_PHRASE =
+  /^(?:bad request|unauthorized|payment required|forbidden|not found|method not allowed|request timeout|conflict|unprocessable (?:entity|content)|too many requests|internal server error|bad gateway|service unavailable|gateway timeout)\.?$/i;
 
 interface CollectedFacts {
   statusCode?: number;

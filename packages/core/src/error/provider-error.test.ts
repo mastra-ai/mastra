@@ -386,6 +386,13 @@ describe('providerErrorFacts', () => {
     expect(providerErrorFacts(apiError(400, 'prompt is too long: 1 > 0 maximum'))).toEqual({ statusCode: 400 });
   });
 
+  it('never persists a bare HTTP phrase as the reason, wherever it sits', () => {
+    for (const phrase of ['Internal Server Error', 'Unauthorized', 'Service Unavailable', 'Gateway Timeout']) {
+      expect(providerErrorFacts({ name: 'AI_APICallError', message: 'Request failed', data: phrase })).toEqual({});
+      expect(providerErrorFacts(Object.assign(new Error('Request failed'), { cause: new Error(phrase) }))).toEqual({});
+    }
+  });
+
   it('returns no keys for an error without provider facts', () => {
     expect(providerErrorFacts(new Error('boom'))).toEqual({});
     expect(providerErrorFacts('boom')).toEqual({});
