@@ -92,7 +92,7 @@ Numbers are warm medians on the representative project per bucket, 30-day window
 | X46 | prod       | OBS-390 `aggregateSpans()` contract affordability (`mobs-span-aggregate.ts`): prototype SQL, 10 span shapes, p99 + largest project and largest org × 1–180 d, `querySpans()` collapse vs trace-scope-style collapse                                                  | Projects fit 1 GiB/9 s to 180 d (≤ 860 MiB) with window-bounded usage and spanType prefilter; largest org fits 7 d, fails from 30 d (1.1–1.3 GiB), fits to ~14 d; `model` grouping reads `attributes` (23 GiB at 7 d). Decided: window = retention for all scopes, OBS-392 must fit org scope; model/provider dropped (OBS-693)                                                       | done   |
 | X48 | prod       | OBS-696 Metrics page on `aggregateTraces()` (`mobs-metrics-page.ts`): 7 org card shapes + 5 project card shapes, p99/largest × project/org × 24 h/7 d/30 d, whole-page concurrent loads, `metrics` vs `aggregateTraces()` parity                                     | Every card fits alone (max 452 MiB / 3.8 s). The org page at 30 d on the largest org does not: fired together, the 6 token/cost cards time out at 9 s every load. Project page fits to 30 d, at the edge (6.6–9.3 s). Runs/failure cards stay on `metrics` (nested runs); tokens can move, cost/threads/usage-over-time cannot yet                                                    | done   |
 | X49 | prod       | OBS-696 org Metrics page fit at 30 d (`mobs-org-page-fit.ts`): usageId adoption, fallback statement split + rewrites, fallback off, token/cost from `metrics` by project, shared statement, load shapes, concurrency caps, `mastra_model_usage` back-fill assessment | Fits with `c2m` (token/cost from `metrics` grouped by `projectId`, O3s+O3f merged, KPIs from `metrics`) capped at 3 in flight: 24 h ≤ 0.75 s, 7 d ≤ 2 s, 30 d statements ≤ 3.5 s in 14/16 loads; the rest hit replication fetch bursts on the 3-vCPU bench node. Rewrites/load shapes alone don't fit; fallback off loses ≤ 72% of 30 d tokens. Back-fill `mastra_model_usage` (`'m:' |        | metricId`, + `spanId`) recommended for Platform | done |
-| X50 | prod       | OBS-698 project Metrics page as shipped in mastra#27908–#27910 (`mobs-obs698-page.ts`): 9 `aggregateTraces()` requests through the page's 3-in-flight limiter + the 15 `metrics` requests that stay, p99/largest × 24 h/7 d/30 d, cold ×1 + warm ×3, vs today's page | Memory fits (≤ 404 MiB/statement). 24 h and 7 d fit warm; 30 d does not (3 of 6 warm loads lose cards at 9 s, pages 8–21 s vs ~2 s today). Cold at 7 d it also fails 7 of today's cards. Cause: 6 of 9 requests read the token/cost fallback (~2 GiB each, largest project 30 d). PRs stay drafts                                                                                     |
+| X51 | prod       | OBS-698 project Metrics page as shipped in mastra#27908–#27910 (`mobs-obs698-page.ts`): 9 `aggregateTraces()` requests through the page's 3-in-flight limiter + the 15 `metrics` requests that stay, p99/largest × 24 h/7 d/30 d, cold ×1 + warm ×3, vs today's page | Memory fits (≤ 404 MiB/statement). 24 h and 7 d fit warm; 30 d does not (3 of 6 warm loads lose cards at 9 s, pages 8–21 s vs ~2 s today). Cold at 7 d it also fails 7 of today's cards. Cause: 6 of 9 requests read the token/cost fallback (~2 GiB each, largest project 30 d). PRs stay drafts                                                                                     |
 
 ## Entries
 
@@ -873,7 +873,7 @@ What makes the collector row safe:
 
 Unverified: the prod ack deadline, message retention and dead-letter settings of `prod.platform.ai-metrics-sub` (managed outside this repo). They affect how often duplicates and losses happen, not whether the per-message row stays correct.
 
-### X50: the project Metrics page as OBS-698 ships it (prod replica, read-only, 2026-10-20)
+### X51: the project Metrics page as OBS-698 ships it (prod replica, read-only, 2026-10-20)
 
 **Question.** OBS-698 (mastra#27908–#27910, drafts) moves the project page's Tokens KPI to `aggregateTraces()` and adds five `aggregateTraces()` cards. Does one whole page load, fired the way the browser fires it, keep every statement within mobs-query's 1 GiB / 9 s on the p99 and largest project at 24 h / 7 d / 30 d?
 
@@ -922,7 +922,7 @@ Largest project, 30 d, per aggregate card (warm median of the slowest statement 
 
 With 1 + 2 the initial load keeps two fallback readers (cost total and cost series). Re-run `mobs-obs698-page.ts page --windows 30d` on the changed page before the PRs leave draft.
 
-Reproduce: `npx tsx mobs-obs698-page.ts dry`, then `page --label x50 --windows 24h,7d,30d --variants obs698,today,exec --reps 3`, then `report --label x50` (results in `results/mobs-obs698-page.jsonl`).
+Reproduce: `npx tsx mobs-obs698-page.ts dry`, then `page --label x50 --windows 24h,7d,30d --variants obs698,today,exec --reps 3`, then `report --label x50` (results in `results/mobs-obs698-page.jsonl`). Run before renumbering, so the results keep the label `x50`.
 
 ### X46: `aggregateSpans()` contract affordability (prod replica, read-only, 2026-10-19)
 

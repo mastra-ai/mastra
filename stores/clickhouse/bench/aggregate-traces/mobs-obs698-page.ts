@@ -1,5 +1,5 @@
 /**
- * X50: the project Metrics page as OBS-698 ships it (mastra#27908–#27910), against the read-only replica.
+ * X51: the project Metrics page as OBS-698 ships it (mastra#27908–#27910), against the read-only replica.
  *
  * Fires every request of one page load the way the browser does: today's `metrics` requests that stay
  * (the tokens KPI pair moves off them) at once, plus the 9 `aggregateTraces()` requests through the
