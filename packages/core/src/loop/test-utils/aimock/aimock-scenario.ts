@@ -361,6 +361,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     defaultOptions,
     sharedAgent,
     pubsub,
+    cache,
+    durableOptions,
     engine = 'normal',
     fsRouted,
   } = opts;
@@ -415,6 +417,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       errorProcessors,
       defaultOptions,
       pubsub,
+      cache,
+      durableOptions,
       engine,
       inputProcessors,
       fsRouted,

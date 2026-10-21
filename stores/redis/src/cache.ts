@@ -253,7 +253,10 @@ export class RedisServerCache extends MastraServerCache {
   }
 
   async expire(key: string, ttlMs: number): Promise<void> {
-    if (ttlMs <= 0) return;
+    // A cache configured without expiry keeps that policy: granting a deadline
+    // here would silently shorten keys (including a persistent run log) that
+    // every writer treats as immortal.
+    if (ttlMs <= 0 || this.ttlSeconds <= 0) return;
     const fullKey = this.getKey(key);
     if (this.client.ttl) {
       const remainingSeconds = await this.client.ttl(fullKey);

@@ -22,12 +22,13 @@ import { createTextStreamModel } from '@internal/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { InMemoryServerCache } from '../../../cache';
-import type { CachingPubSub } from '../../../events/caching-pubsub';
+import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { AGENT_STREAM_TOPIC } from '../constants';
 import { createEventedAgent } from '../create-evented-agent';
 import type { EventedAgent } from '../evented-agent';
 
@@ -284,4 +285,66 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
 
     cleanup();
   }, 30_000);
+
+  it('reuses a CachingPubSub already wrapping the Mastra bus instead of double-caching', async () => {
+    const sharedCache = new InMemoryServerCache();
+    const transport = new EventEmitterPubSub();
+    const mastraPubsub = new CachingPubSub(transport, sharedCache);
+
+    const agent = createEventedAgent({
+      agent: new Agent({
+        id: 'reuse-wrapper-agent',
+        name: 'Reuse Wrapper Agent',
+        instructions: 'test',
+        model: createTextStreamModel('Hi'),
+      }),
+      pubsub: agentPubsub,
+    });
+    new Mastra({
+      agents: { 'reuse-wrapper-agent': agent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub: mastraPubsub,
+    });
+
+    // Wrapping the Mastra-level wrapper again would append every frame twice —
+    // once per layer, with consecutive indices — so the instance is reused.
+    // `mastra.pubsub` is a proxy, so compare what the wrapper wraps.
+    expect((agent.pubsub as CachingPubSub).getInner()).toBe(transport);
+    expect((agent.pubsub as CachingPubSub).getInner()).not.toBe(mastraPubsub);
+
+    const topic = AGENT_STREAM_TOPIC('reused-run');
+    await agent.pubsub.publish(topic, { type: 'chunk' });
+    expect(await sharedCache.listLength(`pubsub:{${topic}}`)).toBe(1);
+
+    await transport.close();
+  });
+
+  it('uses mastra.serverCache for evented run frames when the agent configures another cache', () => {
+    const agentCache = new InMemoryServerCache();
+    const serverCache = new InMemoryServerCache();
+
+    const agent = createEventedAgent({
+      agent: new Agent({
+        id: 'diverging-cache-agent',
+        name: 'Diverging Cache Agent',
+        instructions: 'test',
+        model: createTextStreamModel('Hi'),
+      }),
+      pubsub: agentPubsub,
+      cache: agentCache,
+    });
+    new Mastra({
+      agents: { 'diverging-cache-agent': agent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      cache: serverCache,
+    });
+
+    // Step frames are appended by the StepExecutor, which only knows
+    // `mastra.serverCache`. A separate agent cache would give the same run two
+    // logs with independent indices, so run frames stay on the shared cache.
+    expect(agent.cache).toBe(serverCache);
+    expect(agent.cache).not.toBe(agentCache);
+  });
 });

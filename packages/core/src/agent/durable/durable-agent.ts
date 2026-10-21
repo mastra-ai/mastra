@@ -1723,8 +1723,41 @@ export class DurableAgent<
         );
       }
     } else {
+      const runStreamBus = this.#runStreamBus();
+
+      if (runStreamBus instanceof CachingPubSub) {
+        // The bus a run's frames live on is already wrapped. This happens when
+        // the agent has its own pubsub but `new Mastra({ pubsub })` wrapped the
+        // shared bus in a CachingPubSub. Wrapping it again would store every
+        // frame twice — once per layer, with consecutive indices — so reuse the
+        // instance (issue #18148).
+        this.#cachingPubsub = runStreamBus;
+        this.#resolvedCache = runStreamBus.getCache();
+        if (this.#shouldCache) {
+          this.logger.warn(
+            `[DurableAgent:${this.id}] 'shouldCache' is ignored because the configured pubsub is already a CachingPubSub. Pass 'shouldCache' to that CachingPubSub instead.`,
+          );
+        }
+        return;
+      }
+
       // Resolve cache: user-provided > mastra's cache > default InMemoryServerCache
-      const resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? new InMemoryServerCache();
+      let resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? new InMemoryServerCache();
+
+      // On the evented engine, step frames are appended by the StepExecutor,
+      // which only knows `mastra.serverCache`. A different agent cache would
+      // give the same run two logs with independent indices: an observer
+      // advancing on lifecycle events could then drop step frames whose
+      // indices sit below its cursor. One run means one log, so the shared
+      // cache wins for run frames.
+      const serverCache = this.#mastra?.serverCache;
+      if (this.resolveWorkflowEngine() === 'evented' && serverCache && resolvedCache !== serverCache) {
+        this.logger.warn(
+          `[DurableAgent:${this.id}] 'cache' is not used for evented run frames; they use mastra.serverCache so step frames and observers share one log.`,
+        );
+        resolvedCache = serverCache;
+      }
+
       this.#resolvedCache = resolvedCache;
       // Run-local topics must never reach the cache. This wrapper sits *above*
       // the `mastra.pubsub` proxy that tags publishes `localOnly`, so that flag
@@ -1733,7 +1766,7 @@ export class DurableAgent<
       // events (cumulative step results, often megabytes) are RPUSHed into a
       // shared store that no other instance can ever read from (issue #20646).
       const userShouldCache = this.#shouldCache;
-      this.#cachingPubsub = new CachingPubSub(this.#runStreamBus(), resolvedCache, {
+      this.#cachingPubsub = new CachingPubSub(runStreamBus, resolvedCache, {
         shouldCache: topic => !isRunLocalTopic(topic) && (userShouldCache?.(topic) ?? true),
       });
     }
@@ -2208,6 +2241,7 @@ export class DurableAgent<
       cache: this.#cacheConfig,
       maxSteps: this.#maxSteps,
       cleanupTimeoutMs: this.#cleanupTimeoutMs,
+      suspendedRunLogRetentionMs: this.#suspendedRunLogRetentionMs,
       shouldCache: this.#shouldCache,
       shouldPersistSnapshot: this.userShouldPersistSnapshot,
     });

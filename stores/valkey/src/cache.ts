@@ -130,7 +130,10 @@ export class ValkeyServerCache extends MastraServerCache {
   }
 
   async expire(key: string, ttlMs: number): Promise<void> {
-    if (ttlMs <= 0) return;
+    // A cache configured without expiry keeps that policy: granting a deadline
+    // here would silently shorten keys (including a persistent run log) that
+    // every writer treats as immortal.
+    if (ttlMs <= 0 || this.ttlSeconds <= 0) return;
     const fullKey = this.getKey(key);
     const remainingSeconds = Number(await this.command(['TTL', fullKey]));
     // `-1` is a key without expiry and `-2` one that is already gone: neither

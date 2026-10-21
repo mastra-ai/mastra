@@ -293,6 +293,17 @@ describe('RedisServerCache', () => {
 
       expect(mockClient.expire).not.toHaveBeenCalled();
     });
+
+    it('leaves a cache configured without expiry persistent', async () => {
+      // The cache itself never grants deadlines, so a parked-run retention
+      // bump must not turn its keys into expiring ones.
+      const immortal = new RedisServerCache({ client: mockClient }, { ttlSeconds: 0 });
+
+      await immortal.expire('events', 24 * 60 * 60 * 1000);
+
+      expect(mockClient.ttl).not.toHaveBeenCalled();
+      expect(mockClient.expire).not.toHaveBeenCalled();
+    });
   });
 
   describe('delete', () => {

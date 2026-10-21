@@ -333,6 +333,23 @@ export class CachingPubSub extends PubSub {
       await nack?.().catch(() => {});
     };
 
+    /**
+     * Track a delivery chain so later frames queue behind it.
+     *
+     * The clear has to be conditional: a newer chain may already have replaced
+     * `pending`, and nulling it then would let the next frame reconcile
+     * concurrently with the in-flight one (two backfills racing on the same
+     * range, delivering the gap twice or out of order).
+     */
+    const track = (run: Promise<void>, nack?: () => Promise<void>) => {
+      const tracked = run.catch(error => failDelivery(error, nack));
+      pending = tracked;
+      void tracked.then(() => {
+        if (pending === tracked) pending = null;
+      });
+      return tracked;
+    };
+
     const wrappedCb: EventCallback = (event, ack, nack) => {
       if (closed) {
         // Nobody will process this delivery; acknowledge so it is not stranded.
@@ -340,9 +357,10 @@ export class CachingPubSub extends PubSub {
       }
 
       if (pending) {
-        const run = pending.then(() => reconcile(event, ack, nack));
-        pending = run.catch(error => failDelivery(error, nack));
-        return pending;
+        return track(
+          pending.then(() => reconcile(event, ack, nack)),
+          nack,
+        );
       }
 
       deferred = false;
@@ -350,12 +368,7 @@ export class CachingPubSub extends PubSub {
       if (!deferred) return result;
 
       // A gap triggered a backfill: hold later frames until it completes.
-      pending = (result as Promise<void>)
-        .catch(error => failDelivery(error, nack))
-        .then(() => {
-          pending = null;
-        });
-      return pending;
+      return track(result as Promise<void>, nack);
     };
 
     this.callbackMap.set(cb, wrappedCb);
@@ -378,7 +391,9 @@ export class CachingPubSub extends PubSub {
           await emit(entry);
         }
       } finally {
-        pending = null;
+        // Only release our own gate: a live frame that arrived during the read
+        // may already have queued behind it and replaced `pending`.
+        if (pending === historyGate) pending = null;
         releaseHistory();
       }
     } catch (error) {
@@ -499,6 +514,11 @@ export class CachingPubSub extends PubSub {
    */
   getInner(): PubSub {
     return this.inner;
+  }
+
+  /** The cache holding this bus's retained frames. */
+  getCache(): MastraServerCache {
+    return this.cache;
   }
 }
 

@@ -1336,6 +1336,76 @@ describe('CachingPubSub', () => {
       expect(received).toEqual([0, 1, 2]);
     });
 
+    it('serialises frames that arrive while the initial log read is in flight', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const frames: Event[] = [];
+      for (let n = 0; n < 9; n++) frames.push(await append(shared, n));
+
+      // The first read only returns the prefix, so the rest of the log is left
+      // for the live frames to backfill from.
+      const realListFromTo = shared.listFromTo.bind(shared);
+      let historyStarted = false;
+      let releaseHistory!: () => void;
+      const historyHeld = new Promise<void>(resolve => (releaseHistory = resolve));
+      (shared as any).listFromTo = async (key: string, from: number) => {
+        const entries = (await realListFromTo(key, from)) as Event[];
+        if (!historyStarted) {
+          historyStarted = true;
+          await historyHeld;
+          return entries.filter(entry => (entry.index ?? 0) < 3);
+        }
+        return entries;
+      };
+
+      const seen: number[] = [];
+      const gates = new Map<number, () => void>();
+      let active = 0;
+      let maxActive = 0;
+
+      const subscriber = new CachingPubSub(inner, shared);
+      const subscribed = subscriber.subscribeFromOffset(topic, 0, event => {
+        const index = event.index!;
+        seen.push(index);
+        // Frames below 6 (the replayed prefix and the backfill up to the live
+        // frame) are delivered immediately; 6 and up are held open so the test
+        // can see whether a second chain starts alongside them.
+        if (index < 6) return;
+        active++;
+        maxActive = Math.max(maxActive, active);
+        return new Promise<void>(resolve => {
+          gates.set(index, () => {
+            active--;
+            resolve();
+          });
+        });
+      });
+
+      await vi.waitFor(() => expect(historyStarted).toBe(true));
+
+      // A frame arrives while the log is being read: it queues behind the read.
+      void inner.publish(topic, frames[6]);
+      releaseHistory();
+      await vi.waitFor(() => expect(gates.has(6)).toBe(true));
+
+      // The read is long gone, but this frame still has to queue behind the
+      // in-flight one. Clearing the pending chain unconditionally would let a
+      // second backfill read the same range alongside the first.
+      void inner.publish(topic, frames[8]);
+      await flush();
+      expect(maxActive).toBe(1);
+
+      gates.get(6)!();
+      await vi.waitFor(() => expect(gates.has(7)).toBe(true));
+      gates.get(7)!();
+      await vi.waitFor(() => expect(gates.has(8)).toBe(true));
+      gates.get(8)!();
+
+      await subscribed;
+      expect(seen).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+      expect(maxActive).toBe(1);
+    });
+
     it('honours the offset and acknowledges retained copies before it', async () => {
       const inner = new RetainingPubSub();
       const publisher = new CachingPubSub(inner, cache);

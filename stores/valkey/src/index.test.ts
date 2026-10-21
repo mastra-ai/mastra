@@ -89,4 +89,14 @@ describe('ValkeyServerCache', () => {
     await cache.expire('events', 24 * 60 * 60 * 1000);
     expect(command).toHaveBeenCalledTimes(2);
   });
+
+  it('expire leaves a cache configured without expiry persistent', async () => {
+    // The cache itself never grants deadlines, so a parked-run retention bump
+    // must not turn its keys into expiring ones.
+    const immortal = new ValkeyServerCache({ client }, { ttlSeconds: 0 });
+
+    await immortal.expire('events', 91_000);
+
+    expect(command).not.toHaveBeenCalled();
+  });
 });
