@@ -233,6 +233,34 @@ describe('SignalProvider durable subscriptions', () => {
       expect(await first.listD()).toEqual([]);
     });
 
+    it('recovers a subscription on a replacement provider and retries an unfinished delivery exactly once', async () => {
+      const storage = new InMemoryStore();
+      const first = connected();
+      first.__registerMastra(mastraWith(storage));
+      const row = await first.subscribeD(target, 'ext-1', { cursor: 'start' });
+      first.stop();
+
+      const replacement = connected();
+      replacement.__registerMastra(mastraWith(storage));
+      expect((await replacement.forResourceD('ext-1')).map(sub => sub.id)).toEqual([row.id]);
+      expect(replacement.syncCount).toBe(0);
+
+      const delivery = { subscriptionId: row.id, deliveryId: 'event-1' };
+      await replacement.withStore(async scope => {
+        expect(await scope.claimDelivery({ ...delivery, owner: 'worker-1', ttlMs: 1_000 })).toBe('claimed');
+        expect(await scope.claimDelivery({ ...delivery, owner: 'worker-2', ttlMs: 1_000 })).toBe('in-progress');
+        expect(await scope.releaseDelivery({ ...delivery, owner: 'worker-1' })).toBe(true);
+      });
+
+      const retry = connected();
+      retry.__registerMastra(mastraWith(storage));
+      await retry.withStore(async scope => {
+        expect(await scope.claimDelivery({ ...delivery, owner: 'worker-2', ttlMs: 1_000 })).toBe('claimed');
+        expect(await scope.completeDelivery({ ...delivery, owner: 'worker-2' })).toBe(true);
+        expect(await scope.claimDelivery({ ...delivery, owner: 'worker-1', ttlMs: 1_000 })).toBe('delivered');
+      });
+    });
+
     it('resolves the store lazily on every call instead of caching it', async () => {
       const provider = connected();
       const before = new InMemorySignalSubscriptionsStorage();
