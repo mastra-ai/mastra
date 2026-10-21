@@ -1243,6 +1243,7 @@ describe('MastraFactory.prepare', () => {
       'factory_list_side_sessions',
       'factory_subscribe_session',
       'factory_unsubscribe_session',
+      'factory_recreate_sandbox',
     ];
 
     it('gives a user session every tool on every turn, and other sessions none', async () => {
@@ -1266,6 +1267,33 @@ describe('MastraFactory.prepare', () => {
       stranger.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
       const none = await extraTools({ requestContext: stranger });
       for (const name of [...READ_TOOLS, ...MANAGEMENT_TOOLS]) expect(none).not.toHaveProperty(name);
+    });
+
+    it('offers a session its own sandbox recreate only on Platform sandboxes', async () => {
+      class Sandbox extends FactorySandbox {
+        constructor(readonly provider: string) {
+          super();
+        }
+        create = vi.fn(() => ({ id: 'sb' }) as never);
+      }
+      const toolsWith = async (provider: string | undefined) => {
+        prepareMock.mockClear();
+        const storage = fakeStorage();
+        const config = await prepareFactory({
+          storage,
+          ...(provider ? { sandbox: new Sandbox(provider) } : {}),
+        });
+        await seedUserSession(storage);
+        const extraTools = config.extraTools as (args: {
+          requestContext: RequestContext;
+        }) => Promise<Record<string, unknown>>;
+        return extraTools({ requestContext: sessionContext(false) });
+      };
+
+      expect(await toolsWith('platform')).toHaveProperty('factory_recreate_sandbox');
+      expect(await toolsWith('e2b')).not.toHaveProperty('factory_recreate_sandbox');
+      expect(await toolsWith('local')).not.toHaveProperty('factory_recreate_sandbox');
+      expect(await toolsWith(undefined)).not.toHaveProperty('factory_recreate_sandbox');
     });
 
     it('refuses an approval answer on a woken turn, which a person in the same session could give', async () => {

@@ -316,22 +316,25 @@ export class SessionRetirementCoordinator {
     // The provider's own destroy, not the lifecycle wrapper: the wrapper marks
     // the instance destroyed for good. Bounded, so a VM that won't answer
     // can't hold the session lock.
-    if (!(await this.#settledWithin(this.#destroyDirectly(sandbox)))) {
-      throw new Error('Timed out destroying the sandbox. Try again.');
-    }
-    // A start still in flight on the old VM would set the status after this
-    // reset does. Its commands fail fast once the VM is gone.
+    const destroy = async () => {
+      if (!(await this.#settledWithin(this.#destroyDirectly(sandbox)))) {
+        throw new Error('Timed out destroying the sandbox. Try again.');
+      }
+    };
+    // Destroyed before waiting on a start in flight, so a start hung on the
+    // dead VM can't block recovery; its commands fail fast once the VM is gone.
+    await destroy();
     const starting = (sandbox as { _startPromise?: Promise<unknown> })._startPromise;
-    if (
-      starting &&
-      !(await this.#settledWithin(
+    if (starting) {
+      const settled = await this.#settledWithin(
         starting.then(
           () => {},
           () => {},
         ),
-      ))
-    ) {
-      throw new Error('The old sandbox is still starting. Try again.');
+      );
+      if (!settled) throw new Error('The old sandbox is still starting. Try again.');
+      // That start may have found the old VM gone and provisioned another.
+      await destroy();
     }
 
     sandbox.status = 'stopped';

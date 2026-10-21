@@ -917,6 +917,7 @@ class VmSandbox extends MastraSandbox {
   readonly deleted: string[] = [];
   destroyGate: Promise<void> | undefined;
   destroyError: unknown;
+  startGate: Promise<void> | undefined;
 
   constructor(options: { vmId?: string; onStart?: () => Promise<void> } = {}) {
     super({ name: 'VM sandbox', onStart: options.onStart });
@@ -924,6 +925,7 @@ class VmSandbox extends MastraSandbox {
   }
 
   async start(): Promise<void> {
+    await this.startGate;
     if (this.vmId) return;
     this.provisioned++;
     this.vmId = `vm-new-${this.provisioned}`;
@@ -1028,6 +1030,31 @@ describe('SessionRetirementCoordinator.resetSessionSandbox', () => {
 
     await expect(resetting).resolves.toBe('reset');
     expect(sandbox.status).toBe('stopped');
+  });
+
+  it('deletes a VM that a start in flight provisioned after the old one was deleted', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const reattach = deferred();
+    const sandbox = new VmSandbox({ vmId: 'vm-old' });
+    sandbox.startGate = reattach.promise;
+    getSessionSandbox(session.id, 'acme/mastra', () => sandbox);
+    const starting = sandbox.executeCommand();
+    await nextMacrotask();
+    const coordinator = new SessionRetirementCoordinator();
+
+    const resetting = reset(coordinator, storage, session.sessionId);
+    await nextMacrotask();
+    expect(sandbox.deleted).toEqual(['vm-old']);
+    // The reattach finds the old VM gone and provisions a replacement.
+    sandbox.startGate = undefined;
+    reattach.resolve();
+    expect((await starting).stdout).toBe('vm-new-1');
+
+    await expect(resetting).resolves.toBe('reset');
+    expect(sandbox.deleted).toEqual(['vm-old', 'vm-new-1']);
+    expect(sandbox.status).toBe('stopped');
+    expect((await sandbox.executeCommand()).stdout).toBe('vm-new-2');
   });
 
   it('treats a VM the provider already deleted as destroyed', async () => {
