@@ -1,6 +1,5 @@
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
-import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
@@ -76,8 +75,6 @@ export interface SourceControlSessionRoutesOptions {
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'>;
   /** Moves a thread, with everything keyed by its resource, when a session's visibility changes. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
-  /** Saves messages into a session's threads, such as the line marking an owner change. */
-  saveThreadMessages?: (messages: MastraDBMessage[]) => Promise<unknown>;
 }
 
 const ABORT_SETTLE_TIMEOUT_MS = 5_000;
@@ -143,19 +140,20 @@ async function markOwnerChange(
   session: SourceControlSession,
   newOwner: { id: string; name?: string },
 ) {
-  const { controller, saveThreadMessages } = options;
-  if (!controller || !saveThreadMessages) return;
+  const { controller } = options;
+  const memory = await controller?.getMastra()?.getStorage()?.getStore('memory');
+  if (!controller || !memory) return;
   const threads = await listFactorySessionThreads(controller, session, options.workItems);
   if (threads.length === 0) return;
   const contents = `${newOwner.name ?? 'A teammate'} took ownership`;
-  await saveThreadMessages(
-    threads.map(thread =>
+  await memory.saveMessages({
+    messages: threads.map(thread =>
       createSignal({ type: 'reactive', tagName: SESSION_OWNER_SIGNAL_TAG, contents, author: newOwner }).toDBMessage({
         threadId: thread.id,
         resourceId: thread.resourceId,
       }),
     ),
-  );
+  });
 }
 
 /** Abort the session's active run and wait (bounded) for it to stop. Returns whether a run was aborted. */

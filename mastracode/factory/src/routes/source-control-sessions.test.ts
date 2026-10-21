@@ -40,7 +40,7 @@ function buildApp(
   controller?: RouteOptions['controller'],
   workItems?: RouteOptions['workItems'],
   viewer: Viewer | ((headers: Headers) => Viewer) = user,
-  threadWrites: Pick<RouteOptions, 'moveThread' | 'saveThreadMessages'> = {},
+  moveThread?: RouteOptions['moveThread'],
 ) {
   const app = new Hono();
   app.use('*', async (context, next) => {
@@ -59,7 +59,7 @@ function buildApp(
       users,
       audit,
       ...(workItems ? { workItems } : {}),
-      ...threadWrites,
+      ...(moveThread ? { moveThread } : {}),
     }),
   );
   return app;
@@ -322,8 +322,7 @@ describe('source-control session routes', () => {
       baseBranch: 'main',
       visibility: 'org',
     });
-    const storage = new InMemoryStore({ id: 'factory-running-transfer' });
-    const controller = await startOwnershipController('factory-running-transfer', storage);
+    const controller = await startOwnershipController('factory-running-transfer');
     const liveSession = await controller.createSession({ id: sessionId, resourceId: sessionId, ownerId: 'user-1' });
     const threadId = liveSession.thread.getId()!;
     let running = true;
@@ -333,16 +332,11 @@ describe('source-control session routes', () => {
         running = false;
       }, 50);
     });
-    const memory = (await storage.getStore('memory'))!;
     const users = { getUser: async (id: string) => (id === 'user-2' ? { id, name: 'Shane Thomas' } : null) };
-    const app = buildApp(
-      [sourceControl],
-      { ...seed, users },
-      controller,
-      noRuns,
-      { workosId: 'user-2', organizationId: 'org-1' },
-      { saveThreadMessages: messages => memory.saveMessages({ messages }) },
-    );
+    const app = buildApp([sourceControl], { ...seed, users }, controller, noRuns, {
+      workosId: 'user-2',
+      organizationId: 'org-1',
+    });
 
     const response = await takeOwnership(app, sessionId, 'user-1');
 
@@ -483,7 +477,7 @@ describe('source-control session routes', () => {
       controller,
       noRuns,
       headers => ({ workosId: headers.get('x-viewer')!, organizationId: 'org-1' }),
-      { moveThread },
+      moveThread,
     );
 
     const madePrivate = app.request(`/web/user-sessions/${sessionId}/visibility`, {
@@ -1160,9 +1154,9 @@ describe('source-control session routes', () => {
       });
       await controller.init();
       const memory = (await storage.getStore('memory'))!;
-      const owner = buildApp([sourceControl], seed, controller, noRuns, user, {
-        moveThread: input => memory.updateThreadResourceId(input),
-      });
+      const owner = buildApp([sourceControl], seed, controller, noRuns, user, input =>
+        memory.updateThreadResourceId(input),
+      );
       const sessionId = '33333333-3333-4333-8333-333333333333';
       const created = await owner.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
         method: 'POST',
@@ -1207,11 +1201,9 @@ describe('source-control session routes', () => {
       // is still on the Factory, and a retry finishes the move.
       expect((await putVisibility(owner, sessionId, { visibility: 'org' })).status).toBe(200);
       let moves = 0;
-      const failing = buildApp([sourceControl], seed, controller, noRuns, user, {
-        moveThread: async input => {
-          if (++moves === 2) throw new Error('storage unavailable');
-          return memory.updateThreadResourceId(input);
-        },
+      const failing = buildApp([sourceControl], seed, controller, noRuns, user, async input => {
+        if (++moves === 2) throw new Error('storage unavailable');
+        return memory.updateThreadResourceId(input);
       });
       expect((await putVisibility(failing, sessionId, { visibility: 'private' })).status).toBe(500);
       await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ visibility: 'org' });
@@ -1231,7 +1223,7 @@ describe('source-control session routes', () => {
         listActiveThreadRuns: () => [{ runId: 'run-1', resourceId: 'user-1', threadId: session.sessionId }],
       } as unknown as RouteOptions['controller'];
       const moveThread = vi.fn(async () => undefined);
-      const owner = buildApp([sourceControl], seed, controller, noRuns, user, { moveThread });
+      const owner = buildApp([sourceControl], seed, controller, noRuns, user, moveThread);
 
       const res = await putVisibility(owner, session.sessionId, { visibility: 'org' });
       expect(res.status).toBe(409);
