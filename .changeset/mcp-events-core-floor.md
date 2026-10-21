@@ -3,4 +3,12 @@
 '@mastra/connect': patch
 ---
 
-`@mastra/mcp` now requires `@mastra/core` 1.79.0 or later, the first version that exports `MCP_SERVER_EVENT_ERROR_IDS`. `@mastra/connect` requires the same version, matching the `@mastra/mcp` version it depends on.
+`@mastra/mcp` and `@mastra/connect` now require `@mastra/core` 1.79.0 or later. Upgrade `@mastra/core` together with them:
+
+```bash
+# Before: @mastra/core 1.78.x with an older @mastra/mcp
+npm install @mastra/mcp@latest # peer dependency error
+
+# After
+npm install @mastra/core@latest @mastra/mcp@latest @mastra/connect@latest
+```
