@@ -1077,6 +1077,7 @@ export async function executeForeach(
   const prevForeachOutput = (prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput ||
     []) as PersistedForeachStepResult[];
   const foreachProgress: ForeachProgress = { ...restartProgress };
+  const checkpointWrites: Promise<void>[] = [];
   for (const [index, { output, nestedRunId }] of Object.entries(foreachProgress)) {
     prevForeachOutput[Number(index)] = {
       status: 'success',
@@ -1254,11 +1255,15 @@ export async function executeForeach(
           payload: prevOutput,
           startedAt: Date.now(),
           ...stepInfo,
+          // A resumed foreach keeps the per-item suspend state that resumed siblings read.
+          ...(prevPayload?.suspendPayload !== undefined ? { suspendPayload: prevPayload.suspendPayload } : {}),
           status: 'running',
           metadata: { ...stepInfo.metadata, foreachProgress },
         };
         executionContext.activeStepsPath[stepId] = executionContext.executionPath;
-        await engine.persistStepUpdate({
+        // Not awaited here: holding the queue slot for the write would change which
+        // items start before a sibling suspends and stops the queue.
+        const write = engine.persistStepUpdate({
           workflowId,
           runId,
           resourceId,
@@ -1269,6 +1274,8 @@ export async function executeForeach(
           requestContext,
           phase: `foreach-item-end.${k}`,
         });
+        write.catch(() => {});
+        checkpointWrites.push(write);
       }
     } catch (err) {
       const errorObj = err instanceof Error ? err : new Error(String(err));
@@ -1350,6 +1357,9 @@ export async function executeForeach(
       resolveCompletion = resolve;
     });
   }
+  await Promise.all(checkpointWrites);
+  // The item-end checkpoints mark the foreach as active; it is not once every item has ended.
+  delete executionContext.activeStepsPath[stepId];
 
   // Handle cancellation
   if (canceledResult) {
