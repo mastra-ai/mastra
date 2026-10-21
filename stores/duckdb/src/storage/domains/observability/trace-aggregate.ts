@@ -1,16 +1,19 @@
 import * as coreStorage from '@mastra/core/storage';
 import type {
-  TraceAggregateCountDistinctField,
-  TraceAggregateDimension,
+  SpanAggregateResponse,
+  TraceAggregateInterval,
   TraceAggregateResponse,
   TraceAggregateRow,
+  TraceQueryTenantScope,
+  TrustedAggregateMeasure,
+  TrustedSpanAggregatePlan,
   TrustedTraceAggregateHavingPredicate,
-  TrustedTraceAggregateMeasure,
-  TrustedTraceAggregateMeasureName,
+  TrustedTraceAggregateOrderBy,
   TrustedTraceAggregatePlan,
 } from '@mastra/core/storage';
 
 import type { DuckDBConnection } from '../../db/index';
+import { compileDuckDBSpanSelection } from './span-query';
 import {
   asIsoTimestamp,
   compileDuckDBTraceCandidates,
@@ -40,6 +43,56 @@ const DIMENSION_SQL: Record<string, string> = {
   organizationId: 'r.organizationId',
   experimentId: 'r.experimentId',
 };
+
+/** Span column expressions (alias `r`, a `selected` span row) for each groupable span dimension. */
+const SPAN_DIMENSION_SQL: Record<string, string> = Object.fromEntries(
+  [
+    'name',
+    'spanType',
+    'entityType',
+    'entityId',
+    'entityName',
+    'parentEntityType',
+    'parentEntityName',
+    'rootEntityType',
+    'rootEntityName',
+    'environment',
+    'status',
+    'serviceName',
+    'executionSource',
+    'threadId',
+    'resourceId',
+    'userId',
+    'sessionId',
+    'organizationId',
+    'experimentId',
+  ].map(field => [field, `r.${field}`]),
+);
+
+/** What `aggregateTraces()` and `aggregateSpans()` plans share; each scope's plan is assignable to it. */
+interface AggregatePlan {
+  timeRange: { from: string; to: string };
+  scope?: TraceQueryTenantScope;
+  dimensions: readonly string[];
+  interval?: TraceAggregateInterval;
+  measures: readonly TrustedAggregateMeasure<string>[];
+  having?: TrustedTraceAggregateHavingPredicate<string>;
+  orderBy: TrustedTraceAggregateOrderBy<string, string>;
+  limit: number;
+}
+
+/**
+ * The population an aggregate groups: `ctes` end with `from`, whose rows (alias `r`) carry
+ * `traceId`, `startedAt`, `endedAt`, `error`, the `usageKey` columns, and every dimension column.
+ */
+interface AggregateSource {
+  ctes: string[];
+  values: unknown[];
+  from: string;
+  dimensionSql: (field: string) => { sql: string; values: unknown[] };
+  /** Columns that tie a usage metric row to one population row: `traceId`, or `traceId` + `spanId`. */
+  usageKey: readonly ('traceId' | 'spanId')[];
+}
 
 const PERCENTILES: Record<string, number> = {
   'duration.p50': 0.5,
@@ -74,17 +127,51 @@ export function compileDuckDBTraceAggregate(
   options: DuckDBTraceAggregateOptions = {},
 ): CompiledDuckDBTraceQuery {
   const { ctes, values } = compileDuckDBTraceCandidates(plan, 'r.*');
+  return compileDuckDBAggregate(plan, options, {
+    ctes,
+    values,
+    from: 'candidates',
+    dimensionSql: field => {
+      if (field.startsWith('metadata.')) {
+        return { sql: TRACE_METADATA_VALUE_SQL, values: traceMetadataPathValues(field.slice('metadata.'.length)) };
+      }
+      return { sql: lookupDimensionSql(DIMENSION_SQL, field), values: [] };
+    },
+    usageKey: ['traceId'],
+  });
+}
 
-  const dimensionSql = (field: TraceAggregateDimension): { sql: string; values: unknown[] } => {
-    if (field.startsWith('metadata.')) {
-      return { sql: TRACE_METADATA_VALUE_SQL, values: traceMetadataPathValues(field.slice('metadata.'.length)) };
-    }
-    const sql = Object.hasOwn(DIMENSION_SQL, field) ? DIMENSION_SQL[field] : undefined;
-    if (sql === undefined) throw new Error(`Unsupported trusted trace-aggregate field: ${field}`);
-    return { sql, values: [] };
-  };
-  const distinctSql = (field: TraceAggregateCountDistinctField) =>
-    field === 'traceId' ? { sql: 'r.traceId', values: [] } : dimensionSql(field);
+/**
+ * Compiles a trusted span aggregate plan over the spans `querySpans()` selects. Usage is
+ * attributed by `(traceId, spanId)`, so only the span that recorded a metric row carries it.
+ */
+export function compileDuckDBSpanAggregate(
+  plan: TrustedSpanAggregatePlan,
+  options: DuckDBTraceAggregateOptions = {},
+): CompiledDuckDBTraceQuery {
+  const { ctes, values } = compileDuckDBSpanSelection(plan);
+  return compileDuckDBAggregate(plan, options, {
+    ctes,
+    values,
+    from: 'selected',
+    dimensionSql: field => ({ sql: lookupDimensionSql(SPAN_DIMENSION_SQL, field), values: [] }),
+    usageKey: ['traceId', 'spanId'],
+  });
+}
+
+function lookupDimensionSql(columns: Record<string, string>, field: string): string {
+  const sql = Object.hasOwn(columns, field) ? columns[field] : undefined;
+  if (sql === undefined) throw new Error(`Unsupported trusted aggregate field: ${field}`);
+  return sql;
+}
+
+function compileDuckDBAggregate(
+  plan: AggregatePlan,
+  options: DuckDBTraceAggregateOptions,
+  source: AggregateSource,
+): CompiledDuckDBTraceQuery {
+  const { ctes, values, dimensionSql } = source;
+  const distinctSql = (field: string) => (field === 'traceId' ? { sql: 'r.traceId', values: [] } : dimensionSql(field));
 
   const dimensionColumns = plan.dimensions.map((_, index) => `d${index}`);
   const distinctColumns = new Map<string, string>();
@@ -117,16 +204,17 @@ export function compileDuckDBTraceAggregate(
   if (!hasCost && !measureKinds.has('tokens')) {
     ctes.push(`facts AS (
     SELECT ${factColumns.join(',\n      ')}
-    FROM candidates r
+    FROM ${source.from} r
   )`);
   } else {
-    // `candidates` holds full-width root rows; read it once into narrow per-trace facts, which both
+    // The population holds full-width rows; read it once into narrow per-row facts, which both
     // the usage scan and the final join use. Its placeholders precede the usage stage's in the text.
+    const keyColumns = source.usageKey.map(key => `r.${key}`).join(', ');
     ctes.push(`base_facts AS (
-    SELECT r.traceId, ${factColumns.join(',\n      ')}
-    FROM candidates r
+    SELECT ${keyColumns}, ${factColumns.join(',\n      ')}
+    FROM ${source.from} r
   )`);
-    ctes.push(...compileUsageCtes(plan, values, { hasCost, dedupe: !options.metricIdsUnique }));
+    ctes.push(...compileUsageCtes(plan, values, { hasCost, dedupe: !options.metricIdsUnique, key: source.usageKey }));
     // NULL for traces without usage; 0 for a usage-bearing trace with no row of that name.
     const usageColumns = USAGE_METRIC_NAMES.map(
       (_, index) => `CASE WHEN u.traceId IS NOT NULL THEN COALESCE(u.t${index}, 0) END AS t${index}`,
@@ -144,12 +232,12 @@ export function compileDuckDBTraceAggregate(
     SELECT b.*,
       ${usageColumns.join(',\n      ')}
     FROM base_facts b
-    LEFT JOIN usage u ON u.traceId = b.traceId
+    LEFT JOIN usage u ON ${source.usageKey.map(key => `u.${key} = b.${key}`).join(' AND ')}
   )`);
   }
 
   // All measures are DOUBLE so having literals compare without integer-cast surprises.
-  const measureSql = (name: TrustedTraceAggregateMeasureName, alias = ''): string => {
+  const measureSql = (name: string, alias = ''): string => {
     const column = (name: string) => `${alias}${name}`;
     if (name === 'count') return 'CAST(count(*) AS DOUBLE)';
     if (name === 'errorCount') return `CAST(count_if(${column('isError')}) AS DOUBLE)`;
@@ -171,7 +259,7 @@ export function compileDuckDBTraceAggregate(
       return `CASE WHEN ${mixedUnitsSql(alias)} THEN NULL ELSE CAST(${aggregate}(${column('traceCost')}) AS DOUBLE) END`;
     }
     const measure = plan.measures.find(
-      (candidate): candidate is Extract<TrustedTraceAggregateMeasure, { type: 'countDistinct' }> =>
+      (candidate): candidate is Extract<TrustedAggregateMeasure<string>, { type: 'countDistinct' }> =>
         candidate.type === 'countDistinct' && candidate.name === name,
     );
     const distinctColumn = measure && distinctColumns.get(measure.field);
@@ -180,7 +268,7 @@ export function compileDuckDBTraceAggregate(
   };
 
   const havingValues: unknown[] = [];
-  const compileHaving = (predicate: TrustedTraceAggregateHavingPredicate): string => {
+  const compileHaving = (predicate: TrustedTraceAggregateHavingPredicate<string>): string => {
     if (predicate.type === 'boolean') {
       return predicate.args.map(arg => `(${compileHaving(arg)})`).join(predicate.operator === 'and' ? ' AND ' : ' OR ');
     }
@@ -294,8 +382,8 @@ function costColumns(alias: string): string[] {
 }
 
 /**
- * Builds `usage_bounds`, `usage_rows`, and `usage`: one row per candidate trace that has at least
- * one token metric row, holding per-name token sums (`t<i>`, indexed by
+ * Builds `usage_bounds`, `usage_rows`, and `usage`: one row per population row (trace, or span)
+ * that has at least one token metric row, keyed by the source's usage key, holding per-name token sums (`t<i>`, indexed by
  * `TRACE_AGGREGATE_USAGE_METRIC_NAMES`) and, for cost requests, the trace's pricing state. Metric
  * rows are matched by traceId, usage metric name, tenant scope, and `timestamp >= from` only: a
  * trace that starts in the window can emit metrics after `to`, and the semi-join bounds the scan.
@@ -310,9 +398,9 @@ function costColumns(alias: string): string[] {
  * Placeholders are bound in text order: `param` pushes each value as its placeholder is emitted.
  */
 function compileUsageCtes(
-  plan: TrustedTraceAggregatePlan,
+  plan: AggregatePlan,
   values: unknown[],
-  { hasCost, dedupe }: { hasCost: boolean; dedupe: boolean },
+  { hasCost, dedupe, key }: { hasCost: boolean; dedupe: boolean; key: readonly ('traceId' | 'spanId')[] },
 ): string[] {
   const param = (value: unknown) => {
     values.push(value);
@@ -348,7 +436,7 @@ function compileUsageCtes(
         COALESCE(json_extract_string(m.costMetadata, '$.error') = 'partial_cost', FALSE) AS partialCost`
     : '';
   const rows = `usage_rows AS (
-      SELECT ${dedupe ? 'DISTINCT ON (m.metricId) ' : ''}m.traceId, m.name, m.value${costSelect}
+      SELECT ${dedupe ? 'DISTINCT ON (m.metricId) ' : ''}${key.map(column => `m.${column}`).join(', ')}, m.name, m.value${costSelect}
       FROM metric_events m
       WHERE m.timestamp >= (SELECT minTs FROM usage_bounds)
         AND m.timestamp <= (SELECT maxTs FROM usage_bounds)
@@ -370,10 +458,10 @@ function compileUsageCtes(
     );
   }
   const usage = `usage AS (
-      SELECT traceId,
+      SELECT ${key.join(', ')},
         ${columns.join(',\n        ')}
       FROM usage_rows
-      GROUP BY traceId
+      GROUP BY ${key.join(', ')}
     )`;
   return [bounds, rows, usage];
 }
@@ -387,7 +475,22 @@ export async function aggregateTraces(
   plan: TrustedTraceAggregatePlan,
   options: DuckDBTraceAggregateOptions = {},
 ): Promise<TraceAggregateResponse> {
-  const compiled = compileDuckDBTraceAggregate(plan, options);
+  return runAggregate(db, plan, compileDuckDBTraceAggregate(plan, options));
+}
+
+export async function aggregateSpans(
+  db: DuckDBConnection,
+  plan: TrustedSpanAggregatePlan,
+  options: DuckDBTraceAggregateOptions = {},
+): Promise<SpanAggregateResponse> {
+  return runAggregate(db, plan, compileDuckDBSpanAggregate(plan, options));
+}
+
+async function runAggregate(
+  db: DuckDBConnection,
+  plan: AggregatePlan,
+  compiled: CompiledDuckDBTraceQuery,
+): Promise<TraceAggregateResponse> {
   let result: Record<string, unknown>[];
   try {
     result = await db.query<Record<string, unknown>>(compiled.sql, compiled.values);
