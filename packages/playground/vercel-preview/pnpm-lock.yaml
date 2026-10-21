@@ -34,7 +34,7 @@ importers:
         specifier: link:../../../packages/cli
         version: link:../../cli
       turbo:
-        specifier: ^2.9.12
+        specifier: ^2.11.9
         version: 2.11.9
       typescript:
         specifier: ^6.0.3
