@@ -16,6 +16,8 @@ The default in-memory pub/sub can't cross instance boundaries. On serverless pla
 
 Without a shared pub/sub, that instance can't reach the active run and starts its own, leaving the original run untouched and the thread processed twice.
 
+Reasoning interruption is process-local. The default loop can cancel and replace a model request, and durable or evented agents can do the same while their step runs in the process that accepted the input. It doesn't apply to the Inngest engine or to steps that run in a different process from the one that accepted the input. [Durable agents](/docs/harness/durable-agents) covers how those runs are recovered and resumed.
+
 ## Choose a topology
 
 :::note[Outline]
@@ -110,4 +112,3 @@ Document `MASTRA_AGENT_THREAD_LEASE_TTL_MS` and `MASTRA_AGENT_THREAD_LEASE_RENEW
 - [`RedisStreamsPubSub`](/reference/pubsub/redis-streams)
 - [`LeaseProvider`](/reference/pubsub/lease-provider)
 - [Sending signals](/docs/signals/sending-signals)
-- [Signals in the agent loop](/docs/signals/signals-in-the-agent-loop)

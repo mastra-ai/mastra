@@ -63,6 +63,8 @@ Describe the chunk families a subscriber sees: model output, tool calls and resu
 
 When a subscribed run pauses for tool approval, approve or decline the tool call with the subscription-native methods. The resumed chunks arrive through the existing thread subscription. Visit [`client.getAgent().sendToolApproval()` reference](/reference/client-js/agents#sendtoolapproval) and [server agent routes](/reference/server/routes#subscription-tool-approval-routes) for request and response shapes.
 
+A suspended run holds the thread. Until it resumes or is aborted, a new idle wake resolves `accepted` to `blocked`. Pending approvals and suspensions are replayed when you subscribe again; completed runs are not. [When the agent sees your input](/docs/signals/sending-signals#when-the-agent-sees-your-input) covers the interrupt and wait rules for input that arrives during a run.
+
 ### Filter signals in a subscription
 
 :::note[Outline]

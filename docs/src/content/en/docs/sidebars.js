@@ -267,11 +267,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'signals/signals-in-the-agent-loop',
-              label: 'Signals in the agent loop',
-            },
-            {
-              type: 'doc',
               id: 'signals/state-signals',
               label: 'State signals',
             },

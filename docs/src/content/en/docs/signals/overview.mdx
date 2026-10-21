@@ -76,12 +76,14 @@ Show the same subscribe-first flow through `client.getAgent()`. Keep this short 
 
 :::note[Outline]
 
-- **Durable thread:** the stored conversation that outlives a single request.
+Define the four terms, then state the spine:
+
+- **Thread:** the stored conversation that outlives a single request.
 - **Run:** one execution of the agent loop. One run owns a thread at a time.
 - **Signal:** typed input attached to a thread.
-- **Thread stream:** the ordered output and lifecycle events for a thread.
+- **Thread stream:** the ordered output and lifecycle events for that thread.
 
-State the spine: signals are input; thread streams are output.
+Signals are input; thread streams are output. Sending a signal changes what the agent knows, and subscribing to the thread stream shows what the agent does about it.
 
 :::
 
@@ -89,11 +91,13 @@ State the spine: signals are input; thread streams are output.
 
 :::note[Outline]
 
-Add a timeline diagram with three cases:
+Cover the three admission cases, then note the ownership and interrupt boundaries:
 
-- An idle thread receives a signal and wakes a new run.
-- An active run receives a signal that joins the run.
-- An active run receives a follow-up that waits for the next run.
+- An idle thread receives a signal and wakes a new run. `sendMessage()` and `sendSignal()` start that run only when this process owns the thread; otherwise the signal routes to the owner.
+- An active run receives the input. Before the request produces text or a tool call, Mastra can replace the request with one that includes the input. After content starts, the input waits for the next loop boundary.
+- A queued follow-up waits for the next run. `queueMessage()` and `queueSignal()` let the active run finish, then start a new run on the same thread.
+
+Only one process owns a thread at a time. Delivery policy can also persist input without running it, or discard it. Link to [Sending signals](/docs/signals/sending-signals#when-the-agent-sees-your-input) for the accepted result and interrupt rules, and to [Running across processes](/docs/signals/running-across-processes) for leases.
 
 :::
 
@@ -115,7 +119,7 @@ Use this table to find the right page for what you want to do next:
 | - | - |
 | Stream a thread's output and lifecycle into your app | [Thread streams](/docs/signals/thread-streams) |
 | Send a user message, typed signal, state signal, or notification | [Sending signals](/docs/signals/sending-signals) |
-| Understand when a signal interrupts a run or waits for the next step | [Signals in the agent loop](/docs/signals/signals-in-the-agent-loop) |
+| Understand when a signal interrupts a run or waits for the next step | [When the agent sees your input](/docs/signals/sending-signals#when-the-agent-sees-your-input) |
 | Keep named, thread-scoped context across turns | [State signals](/docs/signals/state-signals) |
 | Deliver external events through a durable inbox | [Notifications](/docs/signals/notifications) |
 | Connect polling sources or webhooks to agents | [Signal providers](/docs/signals/signal-providers) |

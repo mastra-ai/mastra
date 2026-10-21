@@ -716,8 +716,54 @@ await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
 ```
 
 :::note
-Reactive signals default to `tagName: 'system-reminder'`. Visit [Signals](/docs/signals/signals-in-the-agent-loop#processors-and-generated-signals) for more on processor-emitted signals.
+Reactive signals default to `tagName: 'system-reminder'`. [When the agent sees your input](/docs/signals/sending-signals#when-the-agent-sees-your-input) covers when processor-emitted signals reach the model.
 :::
+
+### Send context after a tool reads a file
+
+A processor can watch tool results and inject follow-up instructions once, rather than on every step. This example sends the contents of an `AGENTS.md` file after a tool call reads it, and skips the signal if the same file was already sent.
+
+Signals sent from `processInputStep()` follow the same interrupt and wait rules as any other input. The processor finishes before Mastra cancels the request it prepared; output processors settle before the next request, and processor side effects aren't undone. A processor that sends on every pass can duplicate context when a request is replaced, so inspect history and react to a specific trigger.
+
+```typescript title="src/mastra/processors/agents-md-reminder.ts"
+import type { Processor, ProcessInputStepArgs } from '@mastra/core/processors'
+
+export const agentsMdReminderProcessor: Processor = {
+  id: 'agents-md-reminder',
+  async processInputStep({ messageList, sendSignal }: ProcessInputStepArgs) {
+    const messages = messageList.get.all.db()
+    const agentsMdPath = findAgentsMdPathFromToolCalls(messages)
+
+    if (!agentsMdPath || hasAlreadySentAgentsMdReminder(messages, agentsMdPath)) {
+      return messageList
+    }
+
+    await sendSignal?.({
+      type: 'reactive',
+      contents: readAgentsMdInstructions(agentsMdPath),
+      attributes: {
+        type: 'dynamic-agents-md',
+        path: agentsMdPath,
+      },
+      metadata: {
+        path: agentsMdPath,
+      },
+    })
+
+    return messageList
+  },
+}
+```
+
+The model receives this context as:
+
+```xml
+<system-reminder type="dynamic-agents-md" path="packages/ui/AGENTS.md">
+  $agentsMdFileContents
+</system-reminder>
+```
+
+Awaiting `sendSignal()` preserves stream echo ordering when a subscribed thread is active.
 
 ### Deliver a reminder without retaining it
 

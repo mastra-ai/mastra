@@ -21,7 +21,7 @@ await agent.sendMessage('Compare that with the previous option.', {
 })
 ```
 
-Mastra checks the thread first. If it is idle, the message starts a new run. If a run is already active, the message joins it and the model sees it on the next request. When the agent has memory, the message is stored on the thread, so later runs and your UI see it too. [Signals in the agent loop](/docs/signals/signals-in-the-agent-loop) explains exactly when a run can take new input.
+Mastra checks the thread first. If it is idle, the message starts a new run. If a run is already active, the message joins it and the model sees it on the next request. When the agent has memory, the message is stored on the thread, so later runs and your UI see it too. [When the agent sees your input](#when-the-agent-sees-your-input) covers the interrupt and wait rules.
 
 When several people share a thread, add `attributes` so the model can tell their messages apart. Mastra renders them as XML attributes on the user message:
 
@@ -97,7 +97,19 @@ const result = agent.sendSignal(
 await result.persisted
 ```
 
-Every send returns an `accepted` promise. It resolves once Mastra has decided what to do, not when a run finishes: `wake` means this process started a run, `deliver` means the input joined an existing run, `persist` and `discard` mean nothing ran, and `blocked` means the thread couldn't accept the input. When the action is `wake`, the result also carries the run's `output` stream. A routing failure rejects `accepted`; a run that fails after starting reports the error on that output. Use [`persisted`](/reference/agents/agent#sendsignalsignal-options) to wait for a storage write.
+Every send returns an `accepted` promise. It resolves once Mastra has decided what to do, not when a run finishes: `wake` means this process started a run, `deliver` means the input joined an existing run or another process acknowledged an idle wake and now owns it, `persist` and `discard` mean nothing ran, and `blocked` means a suspended thread couldn't accept a new idle wake. When the action is `wake`, the result also carries the run's `output` stream. A routing failure rejects `accepted`; a run that fails after starting reports the error on that output. Use [`persisted`](/reference/agents/agent#sendsignalsignal-options) to wait for a storage write.
+
+## When the agent sees your input
+
+The delivery decision above resolves when Mastra accepts the input. How soon the model sees it depends on what the active run has already produced.
+
+While a model request has produced only reasoning or metadata, including while waiting for the first token, Mastra can cancel it, discard its response from history, and retry in the same run and step with the new input. Interrupted requests don't count toward `maxSteps` or advance `stepNumber`, so a single-step budget can still produce a replacement response. Mastra doesn't set a separate interruption limit, so repeated input can keep restarting reasoning until a request completes, the run is cancelled, or its timeout expires.
+
+The interrupt window closes as soon as the request produces text, a tool call, or other response content. From then on, input waits for the next loop boundary. Running tools are neither cancelled nor repeated, and queued input never jumps ahead of the active run. If the run reaches `maxSteps` before that boundary, Mastra may save queued input without producing a response.
+
+Reasoning that already streamed may remain visible until the client reloads history. Per-step input processors finish before Mastra cancels the request they prepared. Output processors settle before the next request, and their side effects aren't undone. Usage totals exclude interrupted requests, though providers may still bill for them.
+
+Signals reach the model as XML elements: user messages as `<user>`, reactive context as `<system-reminder>` by default, and external events as `<notification>`. Accepted signals are written into thread history, so later requests see them alongside the messages they followed. [State signals](/docs/signals/state-signals) and [Notifications](/docs/signals/notifications) have their own context shapes.
 
 ## Stop a run or clear queued input
 
@@ -107,7 +119,7 @@ Aborting a run preserves queued input by default. Pass `clearPendingSignals: tru
 subscription.abort({ clearPendingSignals: true })
 ```
 
-Without a subscription, call [`agent.abortThreadStream()`](/reference/agents/agent#abortthreadstreamoptions) with the same option. Listeners stay subscribed, and a later message can start a new run. With shared PubSub, the clear request is forwarded to the process that owns the run, but it only clears that process's local queue. Neither abort nor cancellation revokes an acceptance that already resolved.
+Without a subscription, call [`agent.abortThreadStream()`](/reference/agents/agent#abortthreadstreamoptions) with the same option. Listeners stay subscribed, and a later message can start a new run. With shared PubSub, the clear request is forwarded to the process that owns the run, but it only clears that process's local queue. Neither abort nor cancellation revokes an acceptance that already resolved. Continuation runs started with `continueWithMessages()` are separate from the run that was aborted, so aborting the original run doesn't cancel them.
 
 ## Input that outlives the conversation
 
