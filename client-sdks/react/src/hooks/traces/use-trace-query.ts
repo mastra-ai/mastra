@@ -329,8 +329,9 @@ const isCursorConflict = (error: unknown) => error instanceof MastraClientError 
  * starts over with a new cursor. A poll that returns while the list is loading a page keeps its
  * cursor and asks again on the next poll, because the page load would overwrite the merge.
  *
- * The cursor is keyed on the query without `orderBy` (delta polls cannot sort), so re-sorting the
- * list keeps polling from the same cursor.
+ * The cursor is keyed on the query without `orderBy` (delta polls cannot sort) and on `limit`, so
+ * re-sorting the list keeps polling from the same cursor, and lists with different page sizes each
+ * get their own cursor.
  *
  * Requires the `deltaPolling` capability (see `useTraceQueryDeltaPollingAvailable`). The list's
  * `timeRange.to` must not move between polls, so a live list needs a `to` in the future.
@@ -349,9 +350,10 @@ export function useTraceQueryLatest({
   const client = useMastraClient();
   const queryClient = useQueryClient();
   // Delta mode forbids `orderBy`, and the server cursor is bound to the rest of the query, so the key
-  // leaves out `orderBy` and `limit`: re-sorting the list keeps the cursor.
+  // leaves out `orderBy`: re-sorting the list keeps the cursor. `limit` stays in the key because it
+  // picks the list cache the traces merge into.
   const deltaQuery = query && omitOrderBy(query);
-  const queryKey = ['trace-query-latest', deltaQuery] as const;
+  const queryKey = ['trace-query-latest', deltaQuery, limit] as const;
 
   return useQuery<TraceQueryLatestData>({
     queryKey,

@@ -245,6 +245,39 @@ describe('useTraceQueryLatest', () => {
     });
   });
 
+  describe('when two lists show the same query with different page sizes', () => {
+    it('merges a new trace into both lists', async () => {
+      server.use(
+        http.post(QUERY_URL, async ({ request }) => {
+          const body = (await request.json()) as TraceQueryBody;
+          if (body.mode !== 'delta') return HttpResponse.json(traceQueryOnlyPage);
+          if (body.after === undefined) return HttpResponse.json(traceQueryDeltaBatch('delta-cursor-0'));
+          if (body.after === 'delta-cursor-0') {
+            return HttpResponse.json(traceQueryDeltaBatch('delta-cursor-1', [deltaTraceFresh]));
+          }
+          return HttpResponse.json(traceQueryDeltaBatch('delta-cursor-idle'));
+        }),
+      );
+      const live = (limit: number) => {
+        const list = useTraceQuery({ query, limit });
+        useTraceQueryLatest({ query, limit, refetchInterval: POLL_MS });
+        return list;
+      };
+      const { result } = renderHook(() => ({ wide: live(25), narrow: live(10) }), { wrapper: makeWrapper() });
+      await waitFor(() => {
+        expect(result.current.wide.data).toBeDefined();
+        expect(result.current.narrow.data).toBeDefined();
+      });
+
+      await nextPoll();
+
+      await waitFor(() => {
+        expect(traceIds(result.current.wide.data)?.[0]).toBe('trace-fresh');
+        expect(traceIds(result.current.narrow.data)?.[0]).toBe('trace-fresh');
+      });
+    });
+  });
+
   describe('when a poll lands while the next page is loading', () => {
     it('asks again from the same cursor once the page arrives, without losing the trace', async () => {
       let releaseNextPage = () => {};
