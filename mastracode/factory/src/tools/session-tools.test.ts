@@ -410,10 +410,11 @@ describe('factory_switch_session_model', () => {
       baseBranch: 'main',
       visibility: 'org',
     });
-    await expect(env.switchModel({ sessionId: 'other-user-session', modelId: 'openai/gpt-5.6' })).rejects.toThrow(
-      'not owned by you',
-    );
-    await expect(env.switchModel({ sessionId: 'missing', modelId: 'openai/gpt-5.6' })).rejects.toThrow('not found');
+    env.controller.listAvailableModels.mockClear();
+    await expect(env.switchModel({ sessionId: 'other-user-session' })).rejects.toThrow('not owned by you');
+    await expect(env.switchModel({ sessionId: 'missing' })).rejects.toThrow('not found');
+    expect(env.controller.listAvailableModels).not.toHaveBeenCalled();
+    expect(env.controller.setThreadModel).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -478,6 +479,12 @@ describe('factory_switch_session_model with stored credentials', () => {
       input: { providerId: 'acme', name: 'Acme', url: 'https://llm.acme.test/v1', apiKey: 'acme', models: ['acme-1'] },
     });
     env.controller.getSession.mockResolvedValue(null);
+
+    await expect(env.switchModel({ sessionId: env.sessionId })).resolves.toEqual({
+      sessionId: env.sessionId,
+      models: ['acme/acme-1', 'deepseek/deepseek-flash'],
+    });
+    expect(env.controller.setThreadModel).not.toHaveBeenCalled();
 
     await expect(
       env.switchModel({ sessionId: env.sessionId, modelId: 'deepseek/deepseek-flash' }),
@@ -1346,9 +1353,11 @@ describe('session tools on a turn nobody signed in started', () => {
     });
     const other = { ...env.scope, sessionId: 'other-session', resourceId: 'other-session', threadId: 'other-thread' };
 
-    await expect(
-      env.toolsFor(other).switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' }),
-    ).rejects.toThrow('only this session and the side sessions it started can switch models');
+    env.controller.listAvailableModels.mockClear();
+    await expect(env.toolsFor(other).switchModel({ sessionId: started.sessionId })).rejects.toThrow(
+      'only this session and the side sessions it started can switch models',
+    );
+    expect(env.controller.listAvailableModels).not.toHaveBeenCalled();
     expect(env.controller.setThreadModel).not.toHaveBeenCalled();
 
     await expect(
