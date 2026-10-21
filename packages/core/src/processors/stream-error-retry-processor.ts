@@ -102,7 +102,8 @@ export function isRetryableOpenAIResponsesStreamError(error: unknown): boolean {
     return false;
   }
 
-  return RETRYABLE_FAILURE_KINDS.has(classifyProviderError(payload)) || hasExplicitRetryMessage(payload);
+  const kind = classifyProviderError(payload);
+  return RETRYABLE_FAILURE_KINDS.has(kind) || (kind === 'unknown' && hasExplicitRetryMessage(payload));
 }
 
 /**

@@ -114,6 +114,20 @@ describe('StreamErrorRetryProcessor', () => {
     expect(isRetryableOpenAIResponsesStreamError(error)).toBe(true);
   });
 
+  it('ignores explicit retry guidance on a frame the provider marked invalid', () => {
+    const frame = {
+      type: 'error',
+      sequence_number: 1,
+      error: {
+        type: 'invalid_request_error',
+        code: 'invalid_prompt',
+        message: 'Invalid prompt. You can retry your request.',
+      },
+    };
+
+    expect(isRetryableOpenAIResponsesStreamError(frame)).toBe(false);
+  });
+
   it('retries a rate-limit frame worded as a per-minute quota and never an exhausted billing quota', () => {
     const frame = (code: string, message: string) => ({ type: 'error', sequence_number: 1, error: { code, message } });
 
