@@ -465,8 +465,9 @@ function buildToolMockHooks(agent: Agent, matcher: ToolMockMatcher, mockAbort: A
  *
  * The real tool never runs, so `CoreToolBuilder` never opens its span and the
  * trace would show only model steps. This span mirrors the builder's shape and
- * is flagged `mocked: true` so trace readers can tell a served mock from a live
- * call. Without a current span (observability off) nothing is recorded.
+ * is flagged `mocked: true` so trace readers can tell a mock-intercepted call
+ * (served, mismatched, exhausted or denied) from a live call. Without a current
+ * span (observability off) nothing is recorded.
  */
 function recordMockedToolCallSpan(context: ToolHookContext, output: unknown, success: boolean): void {
   const invocation = context.context as MastraToolInvocationOptions | undefined;
@@ -478,6 +479,8 @@ function recordMockedToolCallSpan(context: ToolHookContext, output: unknown, suc
     entityId: context.toolName,
     entityName: context.toolName,
     attributes: { toolType: 'tool', toolCallId: invocation?.toolCallId, mocked: true },
+    // Inherit the model step's policy so `InternalSpans.TOOL` hides mocked spans like live ones.
+    tracingPolicy: invocation?.tracingContext?.currentSpan?.tracingPolicy,
     tracingContext: invocation?.tracingContext,
     requestContext: invocation?.requestContext,
   });

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Agent } from '../../../agent';
-import { EntityType, SpanType } from '../../../observability';
+import { EntityType, InternalSpans, SpanType } from '../../../observability';
 import { executeTarget } from '../executor';
 import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED, TOOL_MOCK_NOT_DECLARED } from '../tool-mocks';
 import type { ItemToolMock } from '../tool-mocks';
@@ -181,7 +181,8 @@ describe('executeTarget agent tool mocks', () => {
 
   it('records a mocked tool_call span under the current span when a mock is served', async () => {
     const toolSpan = { end: vi.fn() };
-    const currentSpan = { createChildSpan: vi.fn().mockReturnValue(toolSpan) };
+    const tracingPolicy = { internal: InternalSpans.TOOL };
+    const currentSpan = { createChildSpan: vi.fn().mockReturnValue(toolSpan), tracingPolicy };
     const agent = createHookDrivenAgent({
       toolCalls: [{ toolName: 'getWeather', input: { city: 'Seattle' } }],
       liveExecutions: [],
@@ -201,6 +202,7 @@ describe('executeTarget agent tool mocks', () => {
         entityType: EntityType.TOOL,
         entityId: 'getWeather',
         attributes: { toolType: 'tool', toolCallId: 'call-1', mocked: true },
+        tracingPolicy,
       }),
     );
     expect(toolSpan.end).toHaveBeenCalledWith({ output: { temp: 52 }, attributes: { success: true } });
