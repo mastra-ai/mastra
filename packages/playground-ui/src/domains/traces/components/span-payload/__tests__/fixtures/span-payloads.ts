@@ -356,8 +356,75 @@ export const processorRequestErrorSpan = makeSpan({
   },
 });
 
+/** A created signal after span serialization: its methods are stored as `[Function]`. */
+function serializedSignal(signal: Record<string, unknown>) {
+  return {
+    ...signal,
+    createdAt: '2026-06-01T10:00:00.000Z',
+    __isCreatedSignal: true,
+    toDBMessage: '[Function]',
+    toLLMMessage: '[Function]',
+    toDataPart: '[Function]',
+  };
+}
+
+const SKILL_SIGNAL = {
+  id: 'signal-skill-1',
+  type: 'reactive',
+  tagName: 'skill',
+  attributes: { name: 'factory-triage' },
+};
+
+export const agentRunSkillSignalSpan = makeSpan({
+  spanId: 'span-agent-run-skill-signal',
+  attributes: { signal: SKILL_SIGNAL },
+  input: serializedSignal({
+    ...SKILL_SIGNAL,
+    contents: 'Read the issue and label it.\n\n## Steps\n1. Classify severity\n\nARGUMENTS: mastra-ai/mastra#123',
+  }),
+  output: { text: 'Labelled as bug.' },
+});
+
+const USER_SIGNAL = { id: 'signal-user-1', type: 'user', tagName: 'user' };
+
+export const agentRunUserSignalSpan = makeSpan({
+  spanId: 'span-agent-run-user-signal',
+  attributes: { signal: USER_SIGNAL },
+  input: serializedSignal({ ...USER_SIGNAL, contents: 'Can you summarize the open triage queue?' }),
+  output: { text: 'Three issues are waiting.' },
+});
+
+const REMINDER_SIGNAL = {
+  id: 'signal-reminder-1',
+  type: 'reactive',
+  tagName: 'system-reminder',
+  attributes: { type: 'ci-status' },
+};
+
+export const agentRunReminderSignalSpan = makeSpan({
+  spanId: 'span-agent-run-reminder-signal',
+  attributes: { signal: REMINDER_SIGNAL },
+  input: serializedSignal({ ...REMINDER_SIGNAL, contents: 'CI on main is red.' }),
+  output: { text: 'Noted.' },
+});
+
+/** Written before `attributes.signal` was recorded: only the input says it is a signal. */
+export const agentRunLegacySignalSpan = makeSpan({
+  spanId: 'span-agent-run-legacy-signal',
+  input: serializedSignal({
+    id: 'signal-legacy-1',
+    type: 'system-reminder',
+    attributes: { type: 'deploy' },
+    contents: 'Deploy finished.',
+  }),
+});
+
 export const ALL_SPAN_FIXTURES = {
   agentRunMessagesSpan,
+  agentRunSkillSignalSpan,
+  agentRunUserSignalSpan,
+  agentRunReminderSignalSpan,
+  agentRunLegacySignalSpan,
   agentRunResumeSpan,
   agentRunSuspendedSpan,
   agentRunAbortedSpan,

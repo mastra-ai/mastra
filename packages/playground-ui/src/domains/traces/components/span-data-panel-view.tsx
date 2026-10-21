@@ -1,4 +1,4 @@
-import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
+import { describeProcessorPipeline, describeSpanOutput } from '@mastra/core/observability';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { SpanRecord } from '../types';
@@ -6,6 +6,7 @@ import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils'
 import {
   SpanErrorRenderer,
   SpanInputRenderer,
+  hasSpanInputPreview,
   SpanOutputRenderer,
   SpanPayloadSection,
   SpanProcessorAttributes,
@@ -228,7 +229,7 @@ function SpanDataPanelContent({
           title="Input"
           icon={<FileInputIcon />}
           raw={span.input}
-          hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
+          hasPreview={hasSpanInputPreview(span)}
         >
           <SpanInputRenderer span={span} />
         </SpanPayloadSection>
