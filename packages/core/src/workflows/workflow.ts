@@ -2958,8 +2958,9 @@ export class Workflow<
       globalThis.crypto.randomUUID();
 
     // Return a new Run instance with object parameters
+    const cachedRun = this.#runs.get(runIdToUse);
     const run =
-      this.#runs.get(runIdToUse) ??
+      cachedRun ??
       new Run({
         workflowId: this.id,
         stateSchema: this.stateSchema,
@@ -2986,12 +2987,6 @@ export class Workflow<
         pubsub: options?.pubsub,
       });
 
-    this.#runs.set(runIdToUse, run);
-
-    if (options?.shouldPersistSnapshot) {
-      this.executionEngine.setRunPersistenceOverride(runIdToUse, options.shouldPersistSnapshot);
-    }
-
     const shouldPersistSnapshot = (options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot)({
       workflowStatus: run.workflowRunStatus,
       stepResults: {},
@@ -3009,12 +3004,31 @@ export class Workflow<
     // Check if run exists in persistent storage (not just in-memory)
     const existsInStorage = existingRun && !existingRun.isFromInMemory;
 
+    const workflowsStore = existsInStorage ? await this.mastra?.getStorage()?.getStore('workflows') : undefined;
+    const storedSnapshot = existsInStorage
+      ? await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.id, runId: runIdToUse })
+      : undefined;
+    if (options?.parentWorkflow && (cachedRun || existsInStorage)) {
+      const actualParent = storedSnapshot?.parentWorkflow ?? cachedRun?.parentWorkflow;
+      const requestedParent = options.parentWorkflow;
+      if (
+        actualParent?.workflowId !== requestedParent.workflowId ||
+        actualParent?.runId !== requestedParent.runId ||
+        actualParent?.stepId !== requestedParent.stepId ||
+        actualParent?.foreachIndex !== requestedParent.foreachIndex
+      ) {
+        throw new Error(`Run ID "${runIdToUse}" already belongs to another workflow execution`);
+      }
+    }
+
+    this.#runs.set(runIdToUse, run);
+    if (options?.shouldPersistSnapshot) {
+      this.executionEngine.setRunPersistenceOverride(runIdToUse, options.shouldPersistSnapshot);
+    }
+
     // If a run exists in storage, update the run's status to reflect the actual state
-    // This fixes the issue where createRun checks storage but doesn't use the stored data
     if (existsInStorage && existingRun.status) {
       run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-      const storedSnapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.id, runId: runIdToUse });
       run.parentWorkflow = storedSnapshot?.parentWorkflow ?? run.parentWorkflow;
     }
 
