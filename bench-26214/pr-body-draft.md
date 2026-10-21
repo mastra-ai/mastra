@@ -124,7 +124,7 @@ Items that finished within the last checkpoint interval (≤ ~1 s) before a cras
 
 ## Unverified
 
-- **Slow items:** coalescing caps checkpoint writes per second, not per item. A long foreach with large outputs still rewrites its growing progress about once a second, so bytes written scale with run duration × progress size (see the slow-item rows). An append-only progress API would remove this. That can be a follow-up.
+- **Long-running foreach cost** (measured above, but not bounded): with slow items, bytes written scale with run duration × progress size, about one full progress rewrite per second. A one-hour foreach with a 300 MB progress could write on the order of 1 TB. An append-only progress API, or a longer interval, would cap this. That can be a follow-up.
 - **Out-of-order start writes:** the per-run queue orders writes by call order. A progress-less start write that was issued before any item finished can still land before the first checkpoint. That costs at-least-once replay, not lost results.
 - Durable/Inngest engines: skipping item-start writes changes the sequence of `wrapDurableOperation` calls inside a foreach. The writes return void, so replay should be unaffected, but there was no Inngest dev server to run that suite.
 - Item `startedAt` is no longer persisted mid-foreach once an item has finished, so a snapshot read mid-run shows less per-item start detail.
