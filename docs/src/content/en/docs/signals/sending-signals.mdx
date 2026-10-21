@@ -4,26 +4,29 @@ description: 'Choose a Mastra agent method for messages, typed signals, state si
 packages:
   - '@mastra/core'
   - '@mastra/client-js'
-  - '@mastra/code-sdk'
 ---
 
 # Sending signals
+
+Sending a signal means choosing how input enters a thread. The method determines whether the agent sees the input now or after the active run, what type of input it is, and whether Mastra stores it. Start with [Choose a method](#choose-a-method), then use the payload and delivery sections below for the details. The [Agent reference](/reference/agents/agent#thread-signals) is canonical for signatures; the [client SDK reference](/reference/client-js/agents) covers the same methods over HTTP.
 
 ## Choose a method
 
 | Method | Use it for |
 | - | - |
-| `sendMessage()` | User-authored input that the agent should see now. |
-| `queueMessage()` | A user follow-up that should wait for the active run to finish. |
-| `sendSignal()` | Typed system context that follows the active-or-idle delivery policy. |
-| `queueSignal()` | Typed system context that should wait for the next turn. |
-| `sendNotificationSignal()` | An external event that should create a durable notification record. |
-| `sendStateSignal()` | A named, durable state lane. |
-| Tool approval | Resuming a run that paused for approval. |
+| [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options) | User-authored input that the agent should see now. |
+| [`queueMessage()`](/reference/agents/agent#queuemessagemessage-options) | A user follow-up that should wait for the active run to finish. |
+| [`sendSignal()`](/reference/agents/agent#sendsignalsignal-options) | Typed system context that follows the active-or-idle delivery policy. |
+| [`queueSignal()`](/reference/agents/agent#queuesignalsignal-options) | Typed system context that should wait for the next turn. |
+| [`sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) | An external event that should create a durable notification record. |
+| [`sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options) | A named, durable state lane. |
+| [Tool approval](/reference/client-js/agents#sendtoolapproval) | Resuming a run that paused for approval. |
 
 ## Signal payload
 
 ### Types and legacy aliases
+
+Every signal has a semantic `type`. `user` is user-authored input, `notification` is an external event, `reactive` is processor- or runtime-generated context, and `state` is a durable lane for structured context. [State signals](/docs/signals/state-signals) and [notifications](/docs/signals/notifications) have their own pages because their storage and lifecycle differ.
 
 Mastra still accepts legacy signal payloads such as `type: 'user-message'` and `type: 'system-reminder'`. It normalizes them internally to the new category and tag shape:
 
@@ -83,7 +86,7 @@ The model receives attributed messages as XML-wrapped user input:
 
 Messages without attributes are sent as plain user input.
 
-Use `queueMessage()` when a user sends a follow-up but the active model call should finish first. Mastra waits for the active run to complete, then starts a new run on the same thread.
+Use [`queueMessage()`](/reference/agents/agent#queuemessagemessage-options) when a user sends a follow-up but the active model call should finish first. Mastra waits for the active run to complete, then starts a new run on the same thread.
 
 ```typescript title="src/mastra/signals.ts"
 agent.queueMessage('Also check whether the tests need updates.', {
@@ -96,7 +99,7 @@ When the thread is idle, `queueMessage()` starts a run immediately. When the thr
 
 ### Typed signals
 
-Use `queueSignal()` when system-generated input needs the same turn ordering as `queueMessage()` but should keep its own signal type, tag, and attributes. For example, a skill invocation can render as a `<skill>` element instead of a plain user message:
+Use [`queueSignal()`](/reference/agents/agent#queuesignalsignal-options) when system-generated input needs the same turn ordering as `queueMessage()` but should keep its own signal type, tag, and attributes. For example, a skill invocation can render as a `<skill>` element instead of a plain user message:
 
 ```typescript title="src/mastra/signals.ts"
 agent.queueSignal(
@@ -205,7 +208,9 @@ With a shared PubSub backend, the runtime receives remote signals, cancellation,
 
 If you call Mastra over HTTP directly, use `POST /api/agents/:agentId/send-message` for immediate messages and `POST /api/agents/:agentId/queue-message` for next-turn messages. For subscription-native tool approval, use `POST /api/agents/:agentId/send-tool-approval`. See [Server routes reference](/reference/server/routes#agent-message-routes) for request and response schemas.
 
-`Agent` is the portable Signals API. `Session` is the higher-level AgentController and Mastra Code surface, not the recommended default. The [Agent reference](/reference/agents/agent#thread-signals) is canonical for method signatures.
+`Agent` is the portable Signals API. `Session` is the higher-level AgentController surface, not the recommended default. The [Agent reference](/reference/agents/agent#thread-signals) is canonical for method signatures.
+
+Over HTTP, the [client SDK](/reference/client-js/agents) exposes the same calls through `client.getAgent()`: [`sendMessage()`](/reference/client-js/agents#sendmessage), [`queueMessage()`](/reference/client-js/agents#queuemessage), [`queueSignal()`](/reference/client-js/agents#queuesignal), and [`sendSignal()`](/reference/client-js/agents#sendsignal).
 
 | Task | `Agent` | AgentController `Session` |
 | - | - | - |
@@ -216,17 +221,3 @@ If you call Mastra over HTTP directly, use `POST /api/agents/:agentId/send-messa
 | Send a notification signal | `agent.sendNotificationSignal()` | `session.sendNotificationSignal()` |
 | Write a state signal | `agent.sendStateSignal()` | Not exposed on `Session` |
 | Subscribe to a thread | `agent.subscribeToThread()` | Managed internally by `Session` and AgentController |
-
-## Related
-
-- [`Agent.sendMessage()`](/reference/agents/agent#sendmessagemessage-options)
-- [`Agent.queueMessage()`](/reference/agents/agent#queuemessagemessage-options)
-- [`Agent.queueSignal()`](/reference/agents/agent#queuesignalsignal-options)
-- [`Agent.sendSignal()`](/reference/agents/agent#sendsignalsignal-options)
-- [`Agent.sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options)
-- [`client.getAgent().sendMessage()`](/reference/client-js/agents#sendmessage)
-- [`client.getAgent().queueMessage()`](/reference/client-js/agents#queuemessage)
-- [`client.getAgent().queueSignal()`](/reference/client-js/agents#queuesignal)
-- [`client.getAgent().sendSignal()`](/reference/client-js/agents#sendsignal)
-- [Server agent routes](/reference/server/routes#agent-message-routes)
-- [Mastra signals workshop](https://www.youtube.com/watch?v=KLg6uFKz9aw\&t=3020s)
