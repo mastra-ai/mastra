@@ -240,6 +240,56 @@ export const LockedChip: Story = {
   },
 };
 
+export const UnsupportedFilters: Story = {
+  name: 'Unsupported filters',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Pass `unsupported` (the reason) to a chip or an advanced chip when the backend can’t run that filter. It shows muted with the reason on hover and can only be removed, so the filter stays in the value instead of being dropped. `advancedFilters={false}` keeps such groups on screen without offering new ones.',
+      },
+    },
+  },
+  render: function UnsupportedFiltersStory() {
+    const [value, setValue] = useState<FilterBarExpression>({
+      logic: 'and',
+      nodes: [
+        { id: '1', fieldId: 'environment', operatorId: 'is', value: 'prod' },
+        { id: '2', fieldId: 'duration', operatorId: 'gt', value: '1500' },
+        {
+          id: 'g1',
+          kind: 'group',
+          logic: 'or',
+          nodes: [
+            { id: '3', fieldId: 'status', operatorId: 'is', value: 'error' },
+            { id: '4', fieldId: 'environment', operatorId: 'is', value: 'staging' },
+          ],
+        },
+      ],
+    });
+    return (
+      <FilterBar
+        fields={FIELDS}
+        operators={DEFAULT_FILTER_OPERATORS}
+        value={value}
+        onValueChange={setValue}
+        advancedFilters={false}
+      >
+        <FilterBar.Chips
+          renderChip={item => (
+            <FilterBar.Chip
+              item={item}
+              unsupported={item.fieldId === 'duration' ? 'Not supported on this storage' : undefined}
+            />
+          )}
+          renderGroup={group => <FilterBar.AdvancedChip group={group} unsupported="Not supported on this storage" />}
+        />
+        <FilterBar.Input />
+      </FilterBar>
+    );
+  },
+};
+
 export const CustomLayout: Story = {
   name: 'Custom layout (segments and actions)',
   render: function CustomLayoutStory() {

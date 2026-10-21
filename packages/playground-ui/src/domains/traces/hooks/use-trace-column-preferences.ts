@@ -7,7 +7,7 @@ import {
 } from '../trace-list-columns';
 import type { TraceColumnPreferences, TraceCustomColumn, TraceOptionalColumn } from '../trace-list-columns';
 
-function readPreferences(storageKey: string): TraceColumnPreferences {
+export function readTraceColumnPreferences(storageKey: string): TraceColumnPreferences {
   if (typeof window === 'undefined') return DEFAULT_TRACE_COLUMN_PREFERENCES;
 
   try {
@@ -17,7 +17,7 @@ function readPreferences(storageKey: string): TraceColumnPreferences {
   }
 }
 
-function writePreferences(storageKey: string, preferences: TraceColumnPreferences): void {
+export function writeTraceColumnPreferences(storageKey: string, preferences: TraceColumnPreferences): void {
   if (typeof window === 'undefined') return;
 
   try {
@@ -28,82 +28,77 @@ function writePreferences(storageKey: string, preferences: TraceColumnPreference
   }
 }
 
+type TraceColumnPreferencesUpdate = (current: TraceColumnPreferences) => TraceColumnPreferences;
+
+/** The columns menu's actions, over whatever stores the preferences: each one hands `commit` an update. */
+export function traceColumnActions(commit: (update: TraceColumnPreferencesUpdate) => void) {
+  return {
+    toggleColumn: (column: TraceOptionalColumn) => {
+      commit(current => {
+        const isVisible = current.visibleColumns.includes(column);
+        return {
+          ...current,
+          visibleColumns: isVisible
+            ? current.visibleColumns.filter(visibleColumn => visibleColumn !== column)
+            : [...current.visibleColumns, column],
+        };
+      });
+    },
+    addMetadataColumn: (key: string) => {
+      const normalizedKey = key.trim();
+      if (!normalizedKey) return;
+      commit(current =>
+        current.metadataKeys.includes(normalizedKey)
+          ? current
+          : { ...current, metadataKeys: [...current.metadataKeys, normalizedKey] },
+      );
+    },
+    removeMetadataColumn: (key: string) => {
+      commit(current => ({
+        ...current,
+        metadataKeys: current.metadataKeys.filter(metadataKey => metadataKey !== key),
+      }));
+    },
+    addCustomColumn: (field: TraceCustomColumn) => {
+      commit(current =>
+        current.customColumns.includes(field)
+          ? current
+          : { ...current, customColumns: [...current.customColumns, field] },
+      );
+    },
+    removeCustomColumn: (field: TraceCustomColumn) => {
+      commit(current => ({
+        ...current,
+        customColumns: current.customColumns.filter(customColumn => customColumn !== field),
+      }));
+    },
+    resetColumns: () => commit(() => DEFAULT_TRACE_COLUMN_PREFERENCES),
+  };
+}
+
 export function useTraceColumnPreferences() {
   const storageKey = useTraceColumnPreferencesStorageKey();
   const [state, setState] = useState(() => ({
     storageKey,
-    preferences: readPreferences(storageKey),
+    preferences: readTraceColumnPreferences(storageKey),
     shouldPersist: false,
   }));
-  const preferences = state.storageKey === storageKey ? state.preferences : readPreferences(storageKey);
+  const preferences = state.storageKey === storageKey ? state.preferences : readTraceColumnPreferences(storageKey);
 
   useEffect(() => {
     if (state.storageKey === storageKey && state.shouldPersist) {
-      writePreferences(storageKey, state.preferences);
+      writeTraceColumnPreferences(storageKey, state.preferences);
     }
   }, [state, storageKey]);
 
-  const commit = (update: (current: TraceColumnPreferences) => TraceColumnPreferences) => {
+  const commit = (update: TraceColumnPreferencesUpdate) => {
     setState(current => {
-      const currentPreferences = current.storageKey === storageKey ? current.preferences : readPreferences(storageKey);
+      const currentPreferences =
+        current.storageKey === storageKey ? current.preferences : readTraceColumnPreferences(storageKey);
       const nextPreferences = update(currentPreferences);
       return { storageKey, preferences: nextPreferences, shouldPersist: true };
     });
   };
 
-  const toggleColumn = (column: TraceOptionalColumn) => {
-    commit(current => {
-      const isVisible = current.visibleColumns.includes(column);
-      return {
-        ...current,
-        visibleColumns: isVisible
-          ? current.visibleColumns.filter(visibleColumn => visibleColumn !== column)
-          : [...current.visibleColumns, column],
-      };
-    });
-  };
-
-  const addMetadataColumn = (key: string) => {
-    const normalizedKey = key.trim();
-    if (!normalizedKey) return;
-    commit(current =>
-      current.metadataKeys.includes(normalizedKey)
-        ? current
-        : { ...current, metadataKeys: [...current.metadataKeys, normalizedKey] },
-    );
-  };
-
-  const removeMetadataColumn = (key: string) => {
-    commit(current => ({
-      ...current,
-      metadataKeys: current.metadataKeys.filter(metadataKey => metadataKey !== key),
-    }));
-  };
-
-  const addCustomColumn = (field: TraceCustomColumn) => {
-    commit(current =>
-      current.customColumns.includes(field)
-        ? current
-        : { ...current, customColumns: [...current.customColumns, field] },
-    );
-  };
-
-  const removeCustomColumn = (field: TraceCustomColumn) => {
-    commit(current => ({
-      ...current,
-      customColumns: current.customColumns.filter(customColumn => customColumn !== field),
-    }));
-  };
-
-  const resetColumns = () => commit(() => DEFAULT_TRACE_COLUMN_PREFERENCES);
-
-  return {
-    preferences,
-    toggleColumn,
-    addCustomColumn,
-    removeCustomColumn,
-    addMetadataColumn,
-    removeMetadataColumn,
-    resetColumns,
-  };
+  return { preferences, ...traceColumnActions(commit) };
 }

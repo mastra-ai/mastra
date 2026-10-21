@@ -1,289 +1,430 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { SavedViewEditor } from './saved-view-editor';
-import { parseSavedViews } from './saved-view-schema';
+import { sameSavedViewState } from './saved-view-schema';
+import { SavedViewSummary, SavedViewSummaryFilters, SavedViewSummaryRow } from './saved-view-summary';
 import { SavedViewTabs } from './saved-view-tabs';
+import { localStorageSavedViewsBackend } from './saved-views-backend';
+import type { SavedViewsBackend } from './saved-views-backend';
 import { useSavedViews } from './use-saved-views';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar/types';
 
 const STORAGE_KEY = 'saved-views-test';
-const settingsSchema = z.object({ layout: z.enum(['list', 'board']) });
-type Settings = z.infer<typeof settingsSchema>;
+const scalarSchema = z.union([z.string(), z.number(), z.boolean()]);
+const stateSchema = z.object({
+  layout: z.enum(['list', 'board']),
+  filters: z.array(
+    z.object({
+      id: z.string(),
+      fieldId: z.string(),
+      operatorId: z.string(),
+      value: z.union([scalarSchema, z.array(scalarSchema)]),
+    }),
+  ),
+});
+type Layout = z.infer<typeof stateSchema>['layout'];
 
 const FIELDS: FilterBarField[] = [{ id: 'status', label: 'Status', operators: ['is'] }];
 const OPERATORS: FilterBarOperator[] = [{ id: 'is', label: 'is' }];
 const ERRORS: FilterBarItem = { id: 'status', fieldId: 'status', operatorId: 'is', value: 'error' };
 
-function Page({ storageKey = STORAGE_KEY }: { storageKey?: string }) {
+function Page({ backend = localStorageSavedViewsBackend(STORAGE_KEY) }: { backend?: SavedViewsBackend }) {
   const [activeViewId, setActiveViewId] = useState<string>();
-  const views = useSavedViews<Settings>({
-    storageKey,
-    settingsSchema,
+  const [filters, setFilters] = useState<FilterBarItem[]>([]);
+  const [layout, setLayout] = useState<Layout>('list');
+  const views = useSavedViews({
+    backend,
+    schema: stateSchema,
     activeViewId,
+    current: { filters, layout },
+    onApply: view => {
+      setActiveViewId(view?.id);
+      setFilters(view?.state.filters ?? []);
+      setLayout(view?.state.layout ?? 'list');
+    },
     onActiveViewChange: setActiveViewId,
   });
-  const applied = views.applied;
   return (
     <>
       <SavedViewTabs
         views={views}
-        fields={FIELDS}
-        operators={OPERATORS}
         defaultLabel="All"
-        newViewSettings={{ layout: 'board' }}
+        renderSummary={view => (
+          <SavedViewSummary>
+            <SavedViewSummaryFilters filters={view.state.filters} fields={FIELDS} operators={OPERATORS} />
+            <SavedViewSummaryRow label="Layout" value={view.state.layout} />
+          </SavedViewSummary>
+        )}
       />
       <SavedViewEditor views={views}>
-        <button type="button" onClick={() => views.change({ filters: [ERRORS] })}>
+        <button type="button" onClick={() => setFilters([ERRORS])}>
           Filter errors
         </button>
-        <button type="button" onClick={() => views.change({ filters: [], settings: { layout: 'list' } })}>
-          Clear draft filters
+        <button
+          type="button"
+          onClick={() => {
+            setFilters([]);
+            setLayout('board');
+          }}
+        >
+          Board without filters
         </button>
       </SavedViewEditor>
-      <button type="button" onClick={() => setActiveViewId(undefined)}>
-        Navigate to All
-      </button>
-      <output data-testid="applied">{applied ? JSON.stringify(applied) : 'page'}</output>
+      <output data-testid="page">{JSON.stringify({ filters, layout })}</output>
     </>
   );
 }
 
-const stored = () => parseSavedViews(localStorage.getItem(STORAGE_KEY), settingsSchema);
-const applied = () => screen.getByTestId('applied').textContent;
-const tab = (name: string) => within(screen.getByRole('group', { name: 'Views' })).getByRole('button', { name });
+function renderPage(backend?: SavedViewsBackend) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <Page backend={backend} />
+    </QueryClientProvider>,
+  );
+}
+
+function storedDocument(): unknown {
+  return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
+}
+const page = () => JSON.parse(screen.getByTestId('page').textContent ?? '');
+const tabs = () => screen.getByRole('group', { name: 'Views' });
+const tab = (name: string) => within(tabs()).getByRole('button', { name });
+const findTab = (name: string) => within(tabs()).findByRole('button', { name });
 
 async function createView(name: string) {
-  fireEvent.click(screen.getByRole('button', { name: 'New view' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Filter errors' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Rename view' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Create new view…' }));
   const input = screen.getByRole('textbox', { name: 'View name' });
   fireEvent.change(input, { target: { value: name } });
   fireEvent.keyDown(input, { key: 'Enter' });
-  fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+  await findTab(name);
+}
+
+function seedViews(views: unknown[], version = 2) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ version, views }));
 }
 
 afterEach(() => {
-  cleanup();
   vi.restoreAllMocks();
   localStorage.clear();
 });
 
-describe('parseSavedViews', () => {
-  it('drops only the views that no longer parse', () => {
-    const raw = JSON.stringify({
-      version: 1,
-      views: [
-        { id: 'a', name: 'Kept', filters: [ERRORS], settings: { layout: 'list' } },
-        { id: 'b', name: 'Bad settings', filters: [], settings: { layout: 'grid' } },
-        { id: 'c', name: '   ', filters: [], settings: { layout: 'list' } },
-        { id: 'd', name: 'Bad filter', filters: [{ id: 'x' }], settings: { layout: 'list' } },
-      ],
-    });
-    expect(parseSavedViews(raw, settingsSchema).map(view => view.id)).toEqual(['a']);
+describe('sameSavedViewState', () => {
+  it('ignores the order a database returned object keys in', () => {
+    expect(
+      sameSavedViewState(
+        { a: 1, nested: { x: 1, y: [1, 2] }, layout: 'list', sort: 'asc' },
+        { sort: 'asc', nested: { y: [1, 2], x: 1 }, layout: 'list', a: 1 },
+      ),
+    ).toBe(true);
   });
 
-  it('reads nothing from another storage version or from corrupt JSON', () => {
-    expect(parseSavedViews(JSON.stringify({ version: 2, views: [] }), settingsSchema)).toEqual([]);
-    expect(parseSavedViews('{not json', settingsSchema)).toEqual([]);
+  it('still tells arrays in another order apart', () => {
+    expect(sameSavedViewState({ order: [1, 2] }, { order: [2, 1] })).toBe(false);
+  });
+});
+
+describe('localStorageSavedViewsBackend', () => {
+  describe('when the browser holds views from the first version of the kit', () => {
+    it('reads their filters and settings back as one state', async () => {
+      seedViews([{ id: 'a', name: 'Errors', filters: [ERRORS], settings: { layout: 'board' } }], 1);
+
+      const views = await localStorageSavedViewsBackend(STORAGE_KEY).list();
+
+      expect(views).toEqual([{ id: 'a', name: 'Errors', state: { filters: [ERRORS], layout: 'board' } }]);
+    });
+  });
+
+  describe('when storage holds corrupt JSON or an unknown version', () => {
+    it('lists nothing', async () => {
+      localStorage.setItem(STORAGE_KEY, '{not json');
+      expect(await localStorageSavedViewsBackend(STORAGE_KEY).list()).toEqual([]);
+      seedViews([{ id: 'a', name: 'A', state: {} }], 3);
+      expect(await localStorageSavedViewsBackend(STORAGE_KEY).list()).toEqual([]);
+    });
+  });
+
+  describe('when a view no longer matches the page schemas', () => {
+    it('keeps it in storage when another view is written', async () => {
+      seedViews([{ id: 'old', name: 'Old', state: { filters: 'bad', layout: 'grid' } }]);
+
+      await localStorageSavedViewsBackend(STORAGE_KEY).create({ name: 'New', state: {} });
+
+      expect(storedDocument()).toMatchObject({ version: 2, views: [{ id: 'old' }, { name: 'New' }] });
+    });
+  });
+
+  describe('when browser storage is full', () => {
+    it('rejects with a message for people', async () => {
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('Storage full', 'QuotaExceededError');
+      });
+
+      await expect(localStorageSavedViewsBackend(STORAGE_KEY).create({ name: 'New', state: {} })).rejects.toThrow(
+        'Could not save changes. Check your browser storage settings and try again.',
+      );
+    });
   });
 });
 
 describe('SavedViews', () => {
-  it('starts a new view without filters, saves it and brings it back after a reload', async () => {
-    const page = render(<Page />);
-    fireEvent.click(screen.getByRole('button', { name: 'New view' }));
-    expect(JSON.parse(applied() ?? '')).toMatchObject({ filters: [], settings: { layout: 'board' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    await createView('Errors');
+  describe('when the page has filters and no view is active', () => {
+    it('saves them as a new view that comes back after a reload', async () => {
+      const first = renderPage();
+      fireEvent.click(screen.getByRole('button', { name: 'Filter errors' }));
+      await createView('Errors');
 
-    expect(stored()).toMatchObject([{ name: 'Errors', filters: [ERRORS], settings: { layout: 'board' } }]);
-    expect(tab('Errors').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.queryByRole('button', { name: 'Save view' })).toBeNull();
+      expect(storedDocument()).toMatchObject({
+        version: 2,
+        views: [{ name: 'Errors', state: { filters: [ERRORS], layout: 'list' } }],
+      });
+      expect(tab('Errors').getAttribute('aria-pressed')).toBe('true');
+      expect(screen.queryByText('Unsaved changes')).toBeNull();
 
-    page.unmount();
-    render(<Page />);
-    expect(applied()).toBe('page');
-    fireEvent.click(tab('Errors'));
-    expect(JSON.parse(applied() ?? '')).toMatchObject({ filters: [ERRORS], settings: { layout: 'board' } });
-  });
-
-  it('keeps a draft when browser storage fails and saves it after a retry', async () => {
-    render(<Page />);
-    fireEvent.click(screen.getByRole('button', { name: 'New view' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Filter errors' }));
-    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new DOMException('Storage full', 'QuotaExceededError');
+      first.unmount();
+      renderPage();
+      fireEvent.click(await findTab('Errors'));
+      expect(page()).toEqual({ filters: [ERRORS], layout: 'list' });
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+    it('cancels a new view on Escape', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Create new view…' }));
+      fireEvent.keyDown(screen.getByRole('textbox', { name: 'View name' }), { key: 'Escape' });
 
-    expect(screen.getByRole('alert').textContent).toContain('Could not save changes');
-    expect(stored()).toEqual([]);
-    expect(JSON.parse(applied() ?? '')).toMatchObject({ filters: [ERRORS] });
-    expect(screen.getByRole('button', { name: 'Save view' })).toBeTruthy();
-
-    write.mockRestore();
-    fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
-
-    expect(stored()).toMatchObject([{ filters: [ERRORS] }]);
-    expect(screen.queryByRole('alert')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Save view' })).toBeNull();
-  });
-
-  it('does not carry a failed save into another board', () => {
-    const page = render(<Page />);
-    fireEvent.click(screen.getByRole('button', { name: 'New view' }));
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new DOMException('Storage full', 'QuotaExceededError');
+      expect(screen.queryByRole('textbox', { name: 'View name' })).toBeNull();
+      expect(await localStorageSavedViewsBackend(STORAGE_KEY).list()).toEqual([]);
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
-    expect(screen.getByRole('alert')).toBeTruthy();
-
-    page.rerender(<Page storageKey="another-board" />);
-
-    expect(screen.queryByRole('alert')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Save view' })).toBeNull();
-    expect(applied()).toBe('page');
   });
 
-  it('applies edits live and drops them on cancel', async () => {
-    render(<Page />);
-    await createView('Errors');
+  describe('when the page changes while a view is active', () => {
+    it('marks the change and resets the page to the saved view', async () => {
+      renderPage();
+      fireEvent.click(screen.getByRole('button', { name: 'Filter errors' }));
+      await createView('Errors');
 
-    fireEvent.contextMenu(tab('Errors'));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit view' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Clear draft filters' }));
-    expect(JSON.parse(applied() ?? '')).toMatchObject({ filters: [], settings: { layout: 'list' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Board without filters' }));
+      expect(screen.getByText('Unsaved changes')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Reset changes' }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
-    expect(JSON.parse(applied() ?? '')).toMatchObject({ filters: [ERRORS], settings: { layout: 'board' } });
-    expect(stored()[0]?.filters).toEqual([ERRORS]);
-  });
-
-  it('keeps an edit only once saved', async () => {
-    render(<Page />);
-    await createView('Errors');
-
-    fireEvent.contextMenu(tab('Errors'));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit view' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Clear draft filters' }));
-    expect(stored()[0]?.filters).toEqual([ERRORS]);
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-
-    expect(stored()).toMatchObject([{ name: 'Errors', filters: [], settings: { layout: 'list' } }]);
-  });
-
-  it('keeps the selected tab mounted while marking changes that can be saved or reset', async () => {
-    render(<Page />);
-    await createView('Errors');
-
-    const selectedTab = tab('Errors');
-    fireEvent.contextMenu(selectedTab);
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit view' }));
-    expect(screen.queryByText('Unsaved changes')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Save changes' }).hasAttribute('disabled')).toBe(true);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Clear draft filters' }));
-    expect(screen.getByText('Unsaved changes')).toBeTruthy();
-    expect(tab('Errors')).toBe(selectedTab);
-    expect(selectedTab.getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Save changes' }).hasAttribute('disabled')).toBe(false);
-    fireEvent.click(selectedTab);
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit view' }));
-    expect(JSON.parse(applied() ?? '')).toMatchObject({ filters: [], settings: { layout: 'list' } });
-  });
-
-  it('drops an edit when the page navigates away from its view', async () => {
-    render(<Page />);
-    await createView('Errors');
-
-    fireEvent.contextMenu(tab('Errors'));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit view' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Clear draft filters' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Navigate to All' }));
-    fireEvent.click(tab('Errors'));
-
-    expect(JSON.parse(applied() ?? '')).toMatchObject({ filters: [ERRORS], settings: { layout: 'board' } });
-    expect(screen.queryByText('Unsaved changes')).toBeNull();
-  });
-
-  it('previews another view on hover and opens the active view menu on click', async () => {
-    render(<Page />);
-    await createView('Errors');
-
-    fireEvent.click(tab('Errors'));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit view' }));
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
-
-    fireEvent.click(tab('All'));
-    fireEvent.mouseEnter(tab('Errors'));
-    fireEvent.mouseMove(tab('Errors'));
-    expect(await screen.findByText('Status', undefined, { timeout: 2000 })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Edit view' })).toBeNull();
-
-    fireEvent.click(tab('Errors'));
-    fireEvent.click(tab('All'));
-    await waitFor(() => expect(screen.queryByText('Status')).toBeNull());
-  });
-
-  it('keeps focus on a tab when it becomes the active view', async () => {
-    render(<Page />);
-    await createView('Errors');
-    fireEvent.click(tab('All'));
-
-    const errors = tab('Errors');
-    errors.focus();
-    fireEvent.click(errors);
-
-    expect(errors.getAttribute('aria-pressed')).toBe('true');
-    expect(document.activeElement).toBe(errors);
-  });
-
-  it('renames from the context menu and restores the name on Escape', async () => {
-    render(<Page />);
-    await createView('Errors');
-
-    fireEvent.contextMenu(tab('Errors'));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
-    let input = screen.getByRole('textbox', { name: 'View name' });
-    fireEvent.change(input, { target: { value: 'Ignored' } });
-    fireEvent.keyDown(input, { key: 'Escape' });
-    expect(stored()[0]?.name).toBe('Errors');
-
-    fireEvent.contextMenu(tab('Errors'));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
-    input = screen.getByRole('textbox', { name: 'View name' });
-    fireEvent.change(input, { target: { value: 'Failures' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-    expect(stored()[0]?.name).toBe('Failures');
-  });
-
-  it('falls back to the page when the active view is deleted', async () => {
-    render(<Page />);
-    await createView('Errors');
-
-    fireEvent.contextMenu(tab('Errors'));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete view' }));
-
-    expect(stored()).toEqual([]);
-    expect(applied()).toBe('page');
-    expect(tab('All').getAttribute('aria-pressed')).toBe('true');
-  });
-
-  it('follows views written by another tab', () => {
-    render(<Page />);
-    act(() => {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ version: 1, views: [{ id: 'v', name: 'Shared', filters: [], settings: { layout: 'list' } }] }),
-      );
-      window.dispatchEvent(new StorageEvent('storage', { key: STORAGE_KEY }));
+      expect(page()).toEqual({ filters: [ERRORS], layout: 'list' });
+      expect(screen.queryByText('Unsaved changes')).toBeNull();
     });
-    expect(tab('Shared').textContent).toBe('Shared');
+
+    it('saves the change to the view', async () => {
+      renderPage();
+      fireEvent.click(screen.getByRole('button', { name: 'Filter errors' }));
+      await createView('Errors');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Board without filters' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save to this view' }));
+
+      await waitFor(() => expect(screen.queryByText('Unsaved changes')).toBeNull());
+      expect(storedDocument()).toMatchObject({ views: [{ state: { filters: [], layout: 'board' } }] });
+    });
+
+    it('offers the same save from the active view menu', async () => {
+      renderPage();
+      await createView('Errors');
+      fireEvent.click(screen.getByRole('button', { name: 'Board without filters' }));
+
+      fireEvent.click(tab('Errors'));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Save to this view' }));
+
+      await waitFor(() => expect(screen.queryByText('Unsaved changes')).toBeNull());
+      expect(storedDocument()).toMatchObject({ views: [{ state: { layout: 'board' } }] });
+    });
+  });
+
+  describe('when another tab is picked while the active view has unsaved changes', () => {
+    const unsavedDialog = () => screen.findByRole('alertdialog', { name: 'Unsaved changes to “Errors”' });
+    const editErrorsView = async () => {
+      renderPage();
+      fireEvent.click(screen.getByRole('button', { name: 'Filter errors' }));
+      await createView('Errors');
+      fireEvent.click(screen.getByRole('button', { name: 'Board without filters' }));
+      fireEvent.click(tab('All'));
+      return unsavedDialog();
+    };
+
+    it('asks first, and stays on the view with its changes on Cancel', async () => {
+      const dialog = await editErrorsView();
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+      expect(tab('Errors').getAttribute('aria-pressed')).toBe('true');
+      expect(page()).toEqual({ filters: [], layout: 'board' });
+    });
+
+    it('drops the changes and switches on Discard changes', async () => {
+      const dialog = await editErrorsView();
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Discard changes' }));
+
+      await waitFor(() => expect(tab('All').getAttribute('aria-pressed')).toBe('true'));
+      expect(page()).toEqual({ filters: [], layout: 'list' });
+      expect(storedDocument()).toMatchObject({ views: [{ state: { filters: [ERRORS], layout: 'list' } }] });
+    });
+
+    it('saves the changes to the view, then switches, on Save to this view', async () => {
+      const dialog = await editErrorsView();
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Save to this view' }));
+
+      await waitFor(() => expect(tab('All').getAttribute('aria-pressed')).toBe('true'));
+      expect(storedDocument()).toMatchObject({ views: [{ state: { filters: [], layout: 'board' } }] });
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+
+    it('switches without asking when nothing changed', async () => {
+      renderPage();
+      await createView('Errors');
+
+      fireEvent.click(tab('All'));
+
+      expect(tab('All').getAttribute('aria-pressed')).toBe('true');
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+  });
+
+  describe('when another view is hovered', () => {
+    it('previews its filters and settings as the view holds them', async () => {
+      seedViews([{ id: 'a', name: 'Board errors', state: { filters: [ERRORS], layout: 'board' } }]);
+      renderPage();
+
+      const boardErrors = await findTab('Board errors');
+      fireEvent.mouseEnter(boardErrors);
+      fireEvent.mouseMove(boardErrors);
+
+      expect(await screen.findByText('Status', undefined, { timeout: 2000 })).toBeTruthy();
+      expect(screen.getByText('board')).toBeTruthy();
+      expect(screen.queryByText('list')).toBeNull();
+    });
+  });
+
+  describe('when a view is renamed', () => {
+    it('restores the name on Escape and keeps it on Enter', async () => {
+      renderPage();
+      await createView('Errors');
+
+      fireEvent.contextMenu(tab('Errors'));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+      let input = screen.getByRole('textbox', { name: 'View name' });
+      fireEvent.change(input, { target: { value: 'Ignored' } });
+      fireEvent.keyDown(input, { key: 'Escape' });
+      expect(await findTab('Errors')).toBeTruthy();
+
+      fireEvent.contextMenu(tab('Errors'));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+      input = screen.getByRole('textbox', { name: 'View name' });
+      fireEvent.change(input, { target: { value: 'Failures' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      expect(await findTab('Failures')).toBeTruthy();
+      expect(storedDocument()).toMatchObject({ views: [{ name: 'Failures' }] });
+    });
+  });
+
+  describe('when a view is duplicated', () => {
+    it('shows the copy', async () => {
+      seedViews([{ id: 'a', name: 'Errors', state: { filters: [ERRORS], layout: 'board' } }]);
+      renderPage();
+
+      fireEvent.contextMenu(await findTab('Errors'));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Duplicate' }));
+
+      expect((await findTab('Errors copy')).getAttribute('aria-pressed')).toBe('true');
+      expect(page()).toEqual({ filters: [ERRORS], layout: 'board' });
+    });
+  });
+
+  describe('when the active view is deleted', () => {
+    it('asks first, then falls back to the default tab without changing the page', async () => {
+      renderPage();
+      fireEvent.click(screen.getByRole('button', { name: 'Filter errors' }));
+      await createView('Errors');
+
+      fireEvent.contextMenu(tab('Errors'));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete view…' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+      expect(tab('Errors')).toBeTruthy();
+
+      fireEvent.contextMenu(tab('Errors'));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete view…' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Delete view' }));
+
+      await waitFor(() => expect(within(tabs()).queryByRole('button', { name: 'Errors' })).toBeNull());
+      expect(tab('All').getAttribute('aria-pressed')).toBe('true');
+      expect(page()).toEqual({ filters: [ERRORS], layout: 'list' });
+    });
+  });
+
+  describe('when the backend rejects a save', () => {
+    it('shows its message and keeps the page as it was', async () => {
+      renderPage();
+      fireEvent.click(screen.getByRole('button', { name: 'Filter errors' }));
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('Storage full', 'QuotaExceededError');
+      });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Create new view…' }));
+      const input = screen.getByRole('textbox', { name: 'View name' });
+      fireEvent.change(input, { target: { value: 'Errors' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      expect((await screen.findByRole('alert')).textContent).toContain('Could not save changes');
+      expect(tab('All').getAttribute('aria-pressed')).toBe('true');
+      expect(page()).toEqual({ filters: [ERRORS], layout: 'list' });
+    });
+  });
+
+  describe('when the backend cannot list views', () => {
+    it('says so and still shows the default tab', async () => {
+      const backend: SavedViewsBackend = {
+        queryKey: ['saved-views', 'failing'],
+        list: () => Promise.reject(new Error('Not implemented')),
+        create: () => Promise.reject(new Error('unused')),
+        update: () => Promise.reject(new Error('unused')),
+        remove: () => Promise.reject(new Error('unused')),
+      };
+      renderPage(backend);
+
+      expect((await screen.findByRole('alert')).textContent).toBe('Could not load views.');
+      expect(tab('All').getAttribute('aria-pressed')).toBe('true');
+    });
+  });
+
+  describe('when another tab writes views', () => {
+    it('follows them', async () => {
+      renderPage();
+      await screen.findByRole('button', { name: 'Create new view…' });
+
+      act(() => {
+        seedViews([{ id: 'v', name: 'Shared', state: { filters: [], layout: 'list' } }]);
+        window.dispatchEvent(new StorageEvent('storage', { key: STORAGE_KEY }));
+      });
+
+      expect((await findTab('Shared')).textContent).toBe('Shared');
+    });
+  });
+
+  describe('when a tab becomes the active view', () => {
+    it('keeps focus on it', async () => {
+      seedViews([{ id: 'a', name: 'Errors', state: { filters: [ERRORS], layout: 'list' } }]);
+      renderPage();
+
+      const errors = await findTab('Errors');
+      errors.focus();
+      fireEvent.click(errors);
+
+      expect(errors.getAttribute('aria-pressed')).toBe('true');
+      expect(document.activeElement).toBe(errors);
+    });
   });
 });

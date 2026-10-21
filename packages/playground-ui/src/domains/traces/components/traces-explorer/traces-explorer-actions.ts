@@ -1,4 +1,10 @@
-import { buildTraceListFilters, ROOT_ENTITY_TYPE_OPTIONS, TRACE_STATUS_VALUES } from '../../trace-filters';
+import {
+  buildTraceListFilters,
+  ROOT_ENTITY_TYPE_OPTIONS,
+  TRACE_LEGACY_FILTER_FIELD_IDS,
+  TRACE_STATUS_VALUES,
+  traceFilterTokenOperator,
+} from '../../trace-filters';
 import type { EntityOptions, TraceFilterGroup, TraceFilterToken, TraceStatusFilter } from '../../trace-filters';
 import { buildTraceQueryRequest, TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from '../../trace-query-filters';
 import type { SpanTab, TraceDatePreset } from '../../types';
@@ -111,20 +117,56 @@ const NO_FIELD_IDS: ReadonlySet<string> = new Set();
 const serverUnqueryableFieldIds = (withRootDuration: boolean) =>
   withRootDuration ? NO_FIELD_IDS : ROOT_DURATION_FIELD_IDS;
 
-const isQueryableToken = (token: TraceFilterToken, withRootDuration: boolean) => {
-  if (token.fieldId === 'status' && token.value === 'running') return false;
-  if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId)) return false;
-  return !serverUnqueryableFieldIds(withRootDuration).has(token.fieldId);
+/** Which list API the server serves traces through, and what it can filter on. */
+export type TracesQuerySupport = {
+  /** The trace query API: AND/OR groups and every filter bar field. Otherwise the legacy list endpoint. */
+  withQueryTrace: boolean;
+  withRootDuration: boolean;
+};
+
+/** Shown on a filter this server's storage can't run, e.g. AND/OR groups without the trace query API. */
+export const TRACE_FILTER_NOT_ON_THIS_STORAGE = 'Not supported on this storage';
+const TRACE_FILTER_NEVER_QUERYABLE = "Traces can't be filtered this way";
+
+type TraceFilterCondition = { fieldId: string; operatorId: string; value: unknown };
+
+const legacyUnsupportedReason = ({ fieldId, operatorId, value }: TraceFilterCondition): string | undefined => {
+  if (!TRACE_LEGACY_FILTER_FIELD_IDS.has(fieldId)) return TRACE_FILTER_NOT_ON_THIS_STORAGE;
+  // Tags take a list; every other legacy field takes one value with `is`.
+  if (fieldId === 'tags') return undefined;
+  return operatorId === 'is' && typeof value === 'string' ? undefined : TRACE_FILTER_NOT_ON_THIS_STORAGE;
+};
+
+/** Why this server can't run a filter (a filter bar item, or a token with its operator), or `undefined` when it can. */
+export const unsupportedTraceFilterReason = (
+  filter: TraceFilterCondition,
+  support: TracesQuerySupport,
+): string | undefined => {
+  if (!support.withQueryTrace) return legacyUnsupportedReason(filter);
+  if (filter.fieldId === 'status' && filter.value === 'running') return TRACE_FILTER_NEVER_QUERYABLE;
+  if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(filter.fieldId)) return TRACE_FILTER_NEVER_QUERYABLE;
+  if (serverUnqueryableFieldIds(support.withRootDuration).has(filter.fieldId)) return TRACE_FILTER_NOT_ON_THIS_STORAGE;
+  return undefined;
 };
 
 /**
- * Drops the top-level tokens the trace query can't run, so no chip advertises a filter with no effect.
- * Groups pass through and stay visible in the bar: `buildTracesQueryRequest` leaves their unqueryable
- * conditions out of the query. Returns the same object when nothing is dropped.
+ * Drops what this server can't run, so it's left out of the list query: top-level tokens, and
+ * every group on the legacy endpoint. The filter bar still shows them, muted (see
+ * `useUnsupportedTraceFilterReason`), and edits keep them. With the trace query API,
+ * `buildTracesQueryRequest` leaves a group's unqueryable conditions out. Returns the same object
+ * when nothing is dropped.
  */
-export const sanitizeTracesFilters = (filters: TracesFilters, withRootDuration: boolean): TracesFilters => {
-  const tokens = filters.tokens.filter(token => isQueryableToken(token, withRootDuration));
-  return tokens.length === filters.tokens.length ? filters : { ...filters, tokens };
+export const sanitizeTracesFilters = (filters: TracesFilters, support: TracesQuerySupport): TracesFilters => {
+  const tokens = filters.tokens.filter(
+    token =>
+      unsupportedTraceFilterReason(
+        { fieldId: token.fieldId, operatorId: traceFilterTokenOperator(token), value: token.value },
+        support,
+      ) === undefined,
+  );
+  const groups = support.withQueryTrace ? filters.groups : [];
+  if (tokens.length === filters.tokens.length && groups.length === filters.groups.length) return filters;
+  return { ...filters, tokens, groups };
 };
 
 const tokenValue = (tokens: TraceFilterToken[], fieldId: string) => {

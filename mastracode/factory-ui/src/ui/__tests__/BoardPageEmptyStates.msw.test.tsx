@@ -8,7 +8,7 @@ import { server } from '../../../e2e/ui/msw-server';
 import { closePropertiesMenus, openPropertiesMenu } from '../../../e2e/ui/properties-menu';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
-import { saveKanbanView } from './boardLayoutQueries';
+import { confirmNewViewName, saveKanbanView } from './boardLayoutQueries';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 
 function renderBoard(search = '', board = 'work') {
@@ -100,11 +100,12 @@ describe('Board empty-state actions', () => {
       await screen.findByRole('button', { name: /^Board properties/ });
       await openPropertiesMenu(user, 'Board properties');
       await user.click(screen.getByRole('menuitem', { name: 'Save as view' }));
+      await confirmNewViewName(user);
       await openPropertiesMenu(user, 'Board properties');
       expect(screen.getByRole('menuitem', { name: /^Intake source\s*Manual$/ })).toBeVisible();
       await closePropertiesMenus(user);
       await user.click(screen.getByRole('radio', { name: 'Board' }));
-      await user.click(screen.getByRole('button', { name: 'Save view' }));
+      await user.click(screen.getByRole('button', { name: 'Save to this view' }));
       await screen.findByRole('group', { name: 'Board columns' });
     } else if (layout === 'board') {
       await saveKanbanView(user);
@@ -139,8 +140,7 @@ describe('Board empty-state actions', () => {
     await screen.findByText('Created later');
     await openPropertiesMenu(user, 'Board properties');
     await user.click(screen.getByRole('menuitem', { name: 'Save as view' }));
-    await user.click(await screen.findByRole('button', { name: 'Save view' }));
-    await screen.findByRole('button', { name: 'Untitled view', pressed: true });
+    await confirmNewViewName(user);
     await user.type(screen.getByRole('searchbox', { name: 'Search cards' }), 'missing');
 
     const intake = screen.getByTestId('board-column-intake');
@@ -149,8 +149,8 @@ describe('Board empty-state actions', () => {
     expect(await screen.findByText('Moved recently')).toBeVisible();
     expect(screen.getByText('Created later')).toBeVisible();
     expect(screen.getByRole('searchbox', { name: 'Search cards' })).toHaveValue('');
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Reset' }));
+    expect(screen.getByRole('button', { name: 'Save to this view' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Reset changes' }));
     await waitFor(() => expect(screen.queryByText('Moved recently')).not.toBeInTheDocument());
     expect(screen.getByText('Created later')).toBeVisible();
   });

@@ -24,7 +24,7 @@ export function BoardPropertiesMenu({
       .filter(field => view.filters[field.id].size > 0)
       .map(field => `${field.label}: ${boardFilterSummary(field, [...view.filters[field.id]])}`),
   ];
-  const canSaveAsView = !view.savedViews.applied && boardFiltersActive(view.filters);
+  const canSaveAsView = !view.savedViews.activeView && boardFiltersActive(view.filters);
 
   return (
     <PropertiesMenu

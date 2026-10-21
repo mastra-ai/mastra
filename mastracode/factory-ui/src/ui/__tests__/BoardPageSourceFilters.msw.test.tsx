@@ -23,6 +23,7 @@ import {
   hostedTeamId,
   otherHostedTeamId,
 } from './fixtures/hostedLinearProjectFilters';
+import { confirmNewViewName } from './boardLayoutQueries';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 
 function stubSources() {
@@ -105,7 +106,7 @@ async function saveAsView() {
   const user = userEvent.setup();
   await openPropertiesMenu(user, 'Board properties');
   await user.click(screen.getByRole('menuitem', { name: 'Save as view' }));
-  await user.click(await screen.findByRole('button', { name: 'Save view' }));
+  await confirmNewViewName(user);
 }
 
 async function intakeSourceOptions() {

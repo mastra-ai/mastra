@@ -1,68 +1,43 @@
 import { z } from 'zod/v4';
-import type { FilterBarItem } from '@/ds/components/FilterBar/types';
+import type { SavedViewRecord } from './saved-views-backend';
 
 export const MAX_SAVED_VIEW_NAME_CHARS = 80;
 
-const SAVED_VIEWS_STORAGE_VERSION = 1;
-
-const filterBarScalarSchema = z.union([z.string(), z.number(), z.boolean()]);
-
-const savedViewFilterSchema = z.object({
-  id: z.string().min(1),
-  fieldId: z.string().min(1),
-  operatorId: z.string().min(1),
-  value: z.union([filterBarScalarSchema, z.array(filterBarScalarSchema)]),
-}) satisfies z.ZodType<FilterBarItem>;
-
 export const savedViewNameSchema = z.string().trim().min(1).max(MAX_SAVED_VIEW_NAME_CHARS);
 
-const storedSavedViewSchema = z.object({
-  id: z.string().min(1),
-  name: savedViewNameSchema,
-  filters: z.array(savedViewFilterSchema),
-  settings: z.unknown(),
-});
-
-// Views stay `unknown` so one malformed view is dropped on its own, not the whole list.
-const savedViewsDocumentSchema = z.object({
-  version: z.literal(SAVED_VIEWS_STORAGE_VERSION),
-  views: z.array(z.unknown()),
-});
-
 // Only `safeParse` is used, so the consumer's Zod version never has to match this package's.
-export type SavedViewSettingsSchema<TSettings> = {
-  safeParse: (value: unknown) => { success: true; data: TSettings } | { success: false };
+export type SavedViewSchema<T> = {
+  safeParse: (value: unknown) => { success: true; data: T } | { success: false };
 };
 
-export type SavedView<TSettings> = {
+/** A saved view: its name and the `state` it restores on the page, such as filters and table setup. */
+export type SavedView<TState> = {
   id: string;
   name: string;
-  filters: FilterBarItem[];
-  settings: TSettings;
+  state: TState;
 };
 
-export function parseSavedViews<TSettings>(
-  raw: string | null,
-  settingsSchema: SavedViewSettingsSchema<TSettings>,
-): SavedView<TSettings>[] {
-  if (!raw) return [];
-  let json: unknown;
-  try {
-    json = JSON.parse(raw);
-  } catch {
-    return [];
-  }
-  const document = savedViewsDocumentSchema.safeParse(json);
-  if (!document.success) return [];
-  return document.data.views.flatMap(candidate => {
-    const view = storedSavedViewSchema.safeParse(candidate);
-    if (!view.success) return [];
-    const settings = settingsSchema.safeParse(view.data.settings);
-    if (!settings.success) return [];
-    return [{ ...view.data, settings: settings.data }];
+/** Checks a stored view against the page's schema. A view that no longer parses is skipped on its own. */
+export function parseSavedView<TState>(
+  record: SavedViewRecord,
+  schema: SavedViewSchema<TState>,
+): SavedView<TState> | undefined {
+  const name = savedViewNameSchema.safeParse(record.name);
+  if (!name.success) return undefined;
+  const state = schema.safeParse(record.state);
+  if (!state.success) return undefined;
+  return { id: record.id, name: name.data, state: state.data };
+}
+
+/** JSON with object keys sorted, so two values compare equal whatever order a database returned their keys in. */
+function stableStringify(value: unknown): string {
+  return JSON.stringify(value, (_key, nested: unknown) => {
+    if (typeof nested !== 'object' || nested === null || Array.isArray(nested)) return nested;
+    return Object.fromEntries(Object.entries(nested).toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
   });
 }
 
-export function serializeSavedViews<TSettings>(views: readonly SavedView<TSettings>[]): string {
-  return JSON.stringify({ version: SAVED_VIEWS_STORAGE_VERSION, views });
+/** Whether two states are the same JSON, whatever the key order. */
+export function sameSavedViewState<TState>(current: TState, saved: TState): boolean {
+  return stableStringify(current) === stableStringify(saved);
 }

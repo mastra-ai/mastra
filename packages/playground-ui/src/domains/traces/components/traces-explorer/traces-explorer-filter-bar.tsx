@@ -4,7 +4,7 @@ import type { TraceDatePreset } from '../../types';
 import { TRACE_TIME_RANGE_FIELD_ID, TraceTimeRangeChip } from '../trace-time-range-chip';
 import type { TraceTimeRangeChipProps } from '../trace-time-range-chip';
 import { useTracesConfig, useTracesFilters, useTracesList } from './traces-explorer-context';
-import { useTracesFilterBar, useTracesFilterBarFields } from './use-traces-filter-bar';
+import { useTracesFilterBar, useTracesFilterBarFields, useUnsupportedTraceFilterReason } from './use-traces-filter-bar';
 import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarItem } from '@/ds/components/FilterBar';
 
@@ -34,15 +34,16 @@ export type TracesExplorerFilterBarProps = {
 export function TracesExplorerFilterBar({ children }: TracesExplorerFilterBarProps) {
   const { withQueryTrace } = useTracesConfig();
   const filterBarFields = useTracesFilterBarFields();
-  const { filterBarValue, flatFilterBarValue, onFilterBarChange, onFlatFilterBarChange } = useTracesFilterBar();
+  const { filterBarValue, onFilterBarChange } = useTracesFilterBar();
 
   return (
     <FilterBar
       fields={filterBarFields}
       operators={TRACE_FILTER_BAR_OPERATORS}
-      {...(withQueryTrace
-        ? { value: filterBarValue, onValueChange: onFilterBarChange }
-        : { value: flatFilterBarValue, onValueChange: onFlatFilterBarChange })}
+      value={filterBarValue}
+      onValueChange={onFilterBarChange}
+      // The list endpoint can't run AND/OR groups: none are offered, the ones held show muted.
+      advancedFilters={withQueryTrace}
       createItemId={createItemId}
       maxDepth={3}
       aria-label="Trace filters"
@@ -61,23 +62,26 @@ export function TracesExplorerFilterBar({ children }: TracesExplorerFilterBarPro
 export type TracesExplorerFilterChipsProps = {
   /** Rendered for the time range item. Defaults to `<TracesExplorer.TimeRangeChip />`. */
   timeRange?: ReactNode;
-  /** Renders every other item. Defaults to the design-system chip. */
+  /** Renders every other item this server can run. Defaults to the design-system chip. */
   renderChip?: (item: FilterBarItem) => ReactNode;
 };
 
-/** The bar's chips: the time range chip in its slot, then one chip per filter. */
+/**
+ * The bar's chips: the time range chip in its slot, then one chip per filter. Filters this server
+ * can't run show muted with the reason, so they can be removed but are never silently dropped.
+ */
 export function TracesExplorerFilterChips({ timeRange, renderChip }: TracesExplorerFilterChipsProps) {
+  const unsupportedReason = useUnsupportedTraceFilterReason();
+  const chipFor = (item: FilterBarItem) => {
+    if (item.fieldId === TRACE_TIME_RANGE_FIELD_ID) return timeRange ?? <TracesExplorerTimeRangeChip />;
+    const unsupported = unsupportedReason(item);
+    if (unsupported) return <FilterBar.Chip item={item} unsupported={unsupported} />;
+    return renderChip ? renderChip(item) : <FilterBar.Chip item={item} />;
+  };
   return (
     <FilterBar.Chips
-      renderChip={item =>
-        item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
-          (timeRange ?? <TracesExplorerTimeRangeChip />)
-        ) : renderChip ? (
-          renderChip(item)
-        ) : (
-          <FilterBar.Chip item={item} />
-        )
-      }
+      renderChip={chipFor}
+      renderGroup={group => <FilterBar.AdvancedChip group={group} unsupported={unsupportedReason(group)} />}
     />
   );
 }

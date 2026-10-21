@@ -1,19 +1,33 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CircleDotIcon, KanbanIcon, ListIcon, UserIcon } from 'lucide-react';
 import { useState } from 'react';
 import { z } from 'zod/v4';
 import { SavedViewEditor } from './saved-view-editor';
+import { SavedViewSummary, SavedViewSummaryFilters, SavedViewSummaryRow } from './saved-view-summary';
 import { SavedViewTabs } from './saved-view-tabs';
+import { localStorageSavedViewsBackend } from './saved-views-backend';
 import { useSavedViews } from './use-saved-views';
 import { DEFAULT_FILTER_OPERATORS } from '@/ds/components/FilterBar/default-operators';
 import { FilterBar } from '@/ds/components/FilterBar/filter-bar';
 import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar/types';
 import { SegmentedControl, SegmentedControlItem } from '@/ds/components/SegmentedControl';
-import { Txt } from '@/ds/components/Txt';
 
+const scalarSchema = z.union([z.string(), z.number(), z.boolean()]);
 const layoutSchema = z.enum(['list', 'board']);
-const settingsSchema = z.object({ layout: layoutSchema.catch('list') });
-type Settings = z.infer<typeof settingsSchema>;
+const stateSchema = z.object({
+  layout: layoutSchema.catch('list'),
+  filters: z.array(
+    z.object({
+      id: z.string(),
+      fieldId: z.string(),
+      operatorId: z.string(),
+      value: z.union([scalarSchema, z.array(scalarSchema)]),
+    }),
+  ),
+});
+type Layout = z.infer<typeof layoutSchema>;
+const DEFAULT_LAYOUT: Layout = 'list';
 
 const FIELDS: FilterBarField[] = [
   {
@@ -37,17 +51,25 @@ const FIELDS: FilterBarField[] = [
   },
 ];
 
+const queryClient = new QueryClient();
+
 const meta: Meta = {
   title: 'Composite/SavedViews',
+  decorators: [
+    Story => (
+      <QueryClientProvider client={queryClient}>
+        <Story />
+      </QueryClientProvider>
+    ),
+  ],
   parameters: {
     layout: 'padded',
     docs: {
       description: {
         component: [
-          'Saved views for a `FilterBar` page, stored in localStorage and validated with Zod on every read.',
+          'Saved views for a `FilterBar` page. Views live in a backend (`localStorageSavedViewsBackend` here, or any async API) read through React Query, and every view’s `state` is checked with the page’s schema when it is read.',
           '',
-          'Clicking the active view tab opens its menu: edit, rename, duplicate or delete. Hovering another tab previews its filters, and right-clicking any tab opens the same menu. The layers button starts an empty view with the current page settings; `SavedViewEditor` holds the draft until it is saved.',
-          'Editing filters keeps the selected tab in place. Unsaved changes have explicit Save changes and Reset actions. Keep temporary content search separate from the saved filters so searching does not edit the view.',
+          'The page owns what it shows: pass it as `current` and put a view on the page in `onApply`. Changing the page while a view is active shows "Save to this view" and "Reset changes". The layers button saves what the page shows as a new view. Clicking the active view tab opens its menu: rename, duplicate or delete (after a confirmation). Hovering another tab previews its filters and settings.',
         ].join('\n'),
       },
     },
@@ -60,36 +82,34 @@ type Story = StoryObj;
 export const Default: Story = {
   render: function SavedViewsStory() {
     const [activeViewId, setActiveViewId] = useState<string>();
-    const [pageFilters, setPageFilters] = useState<FilterBarItem[]>([]);
-    const [pageLayout, setPageLayout] = useState<Settings['layout']>('list');
-    const views = useSavedViews<Settings>({
-      storageKey: 'storybook.savedViews',
-      settingsSchema,
+    const [filters, setFilters] = useState<FilterBarItem[]>([]);
+    const [layout, setLayout] = useState<Layout>(DEFAULT_LAYOUT);
+    const views = useSavedViews({
+      backend: localStorageSavedViewsBackend('storybook.savedViews'),
+      schema: stateSchema,
       activeViewId,
+      current: { filters, layout },
+      onApply: view => {
+        setActiveViewId(view?.id);
+        setFilters(view?.state.filters ?? []);
+        setLayout(view?.state.layout ?? DEFAULT_LAYOUT);
+      },
       onActiveViewChange: setActiveViewId,
     });
-    const settings = views.applied?.settings ?? { layout: pageLayout };
-    const filters = views.applied?.filters ?? pageFilters;
-    const setFilters = (next: FilterBarItem[]) => {
-      if (views.applied) views.change({ filters: next });
-      else setPageFilters(next);
-    };
-    const setLayout = (layout: Settings['layout']) => {
-      if (views.applied) views.change({ settings: { layout } });
-      else setPageLayout(layout);
-    };
     return (
       <div className="grid w-full max-w-3xl gap-3">
         <SavedViewTabs
           views={views}
-          fields={FIELDS}
-          operators={DEFAULT_FILTER_OPERATORS}
           defaultLabel="All issues"
-          newViewSettings={{ layout: pageLayout }}
-          describeSettings={viewSettings => (
-            <Txt variant="caption" tone="muted">
-              Layout: {viewSettings.layout}
-            </Txt>
+          renderSummary={view => (
+            <SavedViewSummary>
+              <SavedViewSummaryFilters
+                filters={view.state.filters}
+                fields={FIELDS}
+                operators={DEFAULT_FILTER_OPERATORS}
+              />
+              <SavedViewSummaryRow label="Layout" value={view.state.layout} />
+            </SavedViewSummary>
           )}
         />
         <SavedViewEditor views={views}>
@@ -97,7 +117,7 @@ export const Default: Story = {
             <FilterBar.Chips />
             <FilterBar.Input placeholder="Filter issues…" />
           </FilterBar>
-          <SegmentedControl aria-label="Layout" size="sm" iconOnly value={settings.layout} onValueChange={setLayout}>
+          <SegmentedControl aria-label="Layout" size="sm" iconOnly value={layout} onValueChange={setLayout}>
             <SegmentedControlItem value="list" aria-label="List" title="List">
               <ListIcon aria-hidden />
             </SegmentedControlItem>
@@ -107,7 +127,7 @@ export const Default: Story = {
           </SegmentedControl>
         </SavedViewEditor>
         <pre className="rounded-lg bg-card p-3 text-meta text-muted-foreground">
-          {JSON.stringify(views.applied ?? { filters, settings }, null, 2)}
+          {JSON.stringify({ activeViewId, unsaved: views.unsaved, state: { filters, layout } }, null, 2)}
         </pre>
       </div>
     );

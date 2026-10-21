@@ -10,11 +10,15 @@ import {
 } from '../../trace-filters';
 import type { TraceQueryRelatedScope } from '../../trace-query-filters';
 import { TRACE_TIME_RANGE_FIELD, TRACE_TIME_RANGE_FIELD_ID, TRACE_TIME_RANGE_ITEM } from '../trace-time-range-chip';
-import { getSelectedEntityOption } from './traces-explorer-actions';
+import {
+  getSelectedEntityOption,
+  TRACE_FILTER_NOT_ON_THIS_STORAGE,
+  unsupportedTraceFilterReason,
+} from './traces-explorer-actions';
 import { useTracesConfig, useTracesFilters } from './traces-explorer-context';
 import { useTracesDiscovery } from './use-traces-discovery';
 import { isFilterBarGroup } from '@/ds/components/FilterBar';
-import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
+import type { FilterBarExpression, FilterBarField, FilterBarItem, FilterBarNode } from '@/ds/components/FilterBar';
 
 const NO_SUGGESTIONS: string[] = [];
 
@@ -68,7 +72,9 @@ export function useTracesFilterBarFields(): FilterBarField[] {
  */
 export function useTracesFilterBar() {
   const { scopedFieldIds } = useTracesConfig();
-  const { filters, setFilterTokens } = useTracesFilters();
+  // Every filter the host holds, including the ones this server can't run: the bar shows those
+  // muted rather than dropping them, and edits write them back.
+  const { rawFilters: filters, setFilterTokens } = useTracesFilters();
 
   const items = traceTokensToFilterBarItems(filters.tokens).filter(item => !scopedFieldIds.has(item.fieldId));
   // The time-range chip is a synthetic, always-present item so it takes part in keyboard
@@ -103,5 +109,18 @@ export function useTracesFilterBar() {
       const groups = filterBarValue.nodes.filter(isFilterBarGroup);
       onFilterBarChange({ ...filterBarValue, nodes: [...withoutField, item, ...groups] });
     },
+  };
+}
+
+/**
+ * Why a filter bar chip or root group can't run on this server, for `FilterBar.Chip`'s and
+ * `FilterBar.AdvancedChip`'s `unsupported`. Nothing is marked until the capabilities load.
+ */
+export function useUnsupportedTraceFilterReason(): (node: FilterBarNode) => string | undefined {
+  const { withQueryTrace, withRootDuration, isCapabilitiesLoading } = useTracesConfig();
+  return node => {
+    if (isCapabilitiesLoading) return undefined;
+    if (isFilterBarGroup(node)) return withQueryTrace ? undefined : TRACE_FILTER_NOT_ON_THIS_STORAGE;
+    return unsupportedTraceFilterReason(node, { withQueryTrace, withRootDuration });
   };
 }

@@ -1,11 +1,9 @@
-import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
+import type { GetObservabilityCapabilitiesResponse, GetScoresScorers_Response } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
 import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { useLocation } from 'react-router';
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import TracesPage from '..';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   emptyTraceQueryFields,
   legacyTraceCapabilities,
@@ -24,13 +22,8 @@ import {
 } from './fixtures/trace-query';
 import {
   branchList,
-  emptyEntityNames,
-  emptyEnvironments,
   environmentsWithProd,
   emptyFeedback,
-  emptyScorers,
-  emptyServiceNames,
-  emptyTags,
   metricsCapableCapabilities,
   metricsUnavailableCapabilities,
   threadedTraceSpans,
@@ -40,16 +33,20 @@ import {
   traceListWithTwoTraces,
   traceSpanScores,
   emptyTraceSpanScores,
-  traceUsageBreakdown,
 } from './fixtures/traces';
-import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
-import { TestLinkProvider } from '@/test/link-provider';
+import {
+  registerTracesPageTestHooks,
+  renderTracesPage as renderPage,
+  setTracePageHandlers as setPageHandlers,
+} from './traces-page-harness';
 import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { TEST_BASE_URL } from '@/test/render';
 import { pickTraceSideView, traceSideViewLabel } from '@/test/trace-side-view';
 
 const TRACE_COLUMN_STORAGE_KEY = `mastra:traces:columns:${TEST_BASE_URL}:/api`;
 const onBreakdownRequest = vi.fn<() => void>();
+const setTracePageHandlers = (capabilities: GetObservabilityCapabilitiesResponse) =>
+  setPageHandlers(capabilities, { onBreakdownRequest });
 
 function createMemoryStorage(): Storage {
   const values = new Map<string, string>();
@@ -65,62 +62,15 @@ function createMemoryStorage(): Storage {
   };
 }
 
-const setTracePageHandlers = (capabilities: GetObservabilityCapabilitiesResponse) => {
-  server.use(
-    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(capabilities)),
-    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(emptyScorers)),
-    http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([]))),
-    http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () => HttpResponse.json(traceQueryPage)),
-    http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, () => HttpResponse.json(emptyTraceQueryFields)),
-    http.get(`${TEST_BASE_URL}/api/observability/traces`, () => HttpResponse.json(traceList)),
-    // The list fetches the lightweight projection first; serve the same rows there.
-    http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => HttpResponse.json(traceList)),
-    http.get(`${TEST_BASE_URL}/api/observability/branches`, () => HttpResponse.json(branchList)),
-    http.get(`${TEST_BASE_URL}/api/observability/discovery/tags`, () => HttpResponse.json(emptyTags)),
-    http.get(`${TEST_BASE_URL}/api/observability/discovery/entity-names`, () => HttpResponse.json(emptyEntityNames)),
-    http.get(`${TEST_BASE_URL}/api/observability/discovery/service-names`, () => HttpResponse.json(emptyServiceNames)),
-    http.get(`${TEST_BASE_URL}/api/observability/discovery/environments`, () => HttpResponse.json(emptyEnvironments)),
-    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, () =>
-      HttpResponse.json(emptyTraceSpanScores),
-    ),
-    // Opening a trace reads the whole trace. Registered after the literal `traces/light`
-    // so the list's endpoint isn't swallowed by the `:traceId` segment.
-    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceSpans)),
-    http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => {
-      onBreakdownRequest();
-      return HttpResponse.json(traceUsageBreakdown);
-    }),
-  );
-};
-
-const LocationProbe = () => {
-  const location = useLocation();
-  return <div data-testid="location">{location.search}</div>;
-};
-
-const renderPage = (initialEntry = '/traces', props: React.ComponentProps<typeof TracesPage> = {}) =>
-  renderWithProviders(
-    <TestLinkProvider>
-      <TracesPage {...props} />
-      <LocationProbe />
-    </TestLinkProvider>,
-    { router: { initialEntries: [initialEntry] } },
-  );
-
 const getFilterChips = () => document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-chip"]');
 const getFilterInput = () => screen.getByRole('combobox', { name: 'Add filter' });
 const focusFilterInput = () => act(() => getFilterInput().focus());
 const typeInFilter = (text: string) => fireEvent.change(getFilterInput(), { target: { value: text } });
 const pressInFilter = (key: string) => fireEvent.keyDown(getFilterInput(), { key });
 
+registerTracesPageTestHooks();
+
 beforeEach(() => {
-  // jsdom has no scrollIntoView; the timeline reveals the selected span row on mount.
-  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
-  // jsdom ships no PointerEvent, and Base UI constructs one on press.
-  if (typeof window.PointerEvent === 'undefined') {
-    class PointerEventStub extends MouseEvent {}
-    window.PointerEvent = PointerEventStub as unknown as typeof PointerEvent;
-  }
   Object.defineProperty(window, 'localStorage', {
     configurable: true,
     value: createMemoryStorage(),
@@ -130,17 +80,6 @@ beforeEach(() => {
     serializeTraceColumnPreferences({ visibleColumns: ['inputTokens'], customColumns: [], metadataKeys: [] }),
   );
   onBreakdownRequest.mockClear();
-});
-
-// `TracesListView` dispatches a synthetic `scroll` event on its scroll container to make the
-// virtualizer re-read `scrollTop` once a query settles. The virtualizer answers scroll events
-// through a trailing debounce of `isScrollingResetDelay` (150ms) that its `cleanup()` never
-// cancels, so a test that finishes right after a render leaves that timer pending. Vitest tears
-// the jsdom environment down when the file ends, and the timer then fires with the `window`
-// global already gone — an unhandled `ReferenceError: window is not defined` that fails the
-// whole run. Let the debounce expire while the environment is still alive.
-afterAll(async () => {
-  await new Promise(resolve => setTimeout(resolve, 200));
 });
 
 describe('Traces page usage columns', () => {
@@ -493,7 +432,7 @@ describe('Traces side panel header actions', () => {
               isRegistered: true,
               source: 'code',
             },
-          } satisfies typeof emptyScorers),
+          } satisfies GetScoresScorers_Response),
         ),
         http.post(`${TEST_BASE_URL}/api/observability/traces/score`, async ({ request }) => {
           onScore(await request.json());

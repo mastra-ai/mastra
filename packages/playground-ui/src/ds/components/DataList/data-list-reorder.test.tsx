@@ -53,6 +53,12 @@ function drag(source: HTMLElement, target: HTMLElement) {
   fireEvent.drop(target, { dataTransfer });
 }
 
+function draggableHeader(name: string): HTMLElement {
+  const header = screen.getByText(name).closest<HTMLElement>('[draggable]');
+  if (!header) throw new Error(`Expected the ${name} header to be draggable`);
+  return header;
+}
+
 describe('DataList reorderable', () => {
   it('leaves the list untouched without reorderable', () => {
     const { container } = render(<List />);
@@ -96,6 +102,25 @@ describe('DataList reorderable', () => {
     expect(getGrid(container).style.gridTemplateColumns).toBe('10rem minmax(0, 1fr) auto');
 
     fireEvent.keyDown(status, { key: 'ArrowRight', altKey: true });
+    expect(getGrid(container).style.gridTemplateColumns).toBe('10rem auto minmax(0, 1fr)');
+  });
+
+  it('follows a controlled column order and reports moves without persisting them', () => {
+    const onColumnOrderChange = vi.fn<(order: string[]) => void>();
+    const { container } = render(
+      <List
+        reorderable
+        columnKeys={['name', 'status', 'date']}
+        columnOrder={['name', 'date', 'status']}
+        onColumnOrderChange={onColumnOrderChange}
+      />,
+    );
+    expect(getGrid(container).style.gridTemplateColumns).toBe('10rem auto minmax(0, 1fr)');
+
+    drag(draggableHeader('Status'), draggableHeader('Date'));
+
+    expect(onColumnOrderChange).toHaveBeenCalledWith(['name', 'status', 'date']);
+    expect(localStorage.length).toBe(0);
     expect(getGrid(container).style.gridTemplateColumns).toBe('10rem auto minmax(0, 1fr)');
   });
 

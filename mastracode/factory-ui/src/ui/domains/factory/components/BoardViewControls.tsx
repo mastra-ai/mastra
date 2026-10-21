@@ -1,13 +1,17 @@
-import { SavedViewEditor, SavedViewTabs } from '@mastra/playground-ui/components/SavedViews';
+import {
+  SavedViewEditor,
+  SavedViewSummary,
+  SavedViewSummaryFilters,
+  SavedViewSummaryRow,
+  SavedViewTabs,
+} from '@mastra/playground-ui/components/SavedViews';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Kanban, List } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { BoardLayout } from '../boardLayout';
 import type { BoardParticipant } from '../boardPeople';
-import type { BoardViewSettings } from '../boardSavedViews';
 import { BOARD_SORT_LABELS } from '../boardSort';
 import type { BoardKind } from '../boardStages';
 import { useBoardFilterSources } from '../hooks/useBoardFilterSources';
@@ -17,14 +21,6 @@ import { BoardPropertiesMenu } from './BoardPropertiesMenu';
 import { BoardViewControlsLayout } from './BoardViewControlsLayout';
 
 const LAYOUT_LABELS: Record<BoardLayout, string> = { board: 'Board', list: 'List' };
-
-function ViewSettingsSummary({ settings }: { settings: BoardViewSettings }) {
-  return (
-    <Txt as="span" variant="caption" tone="muted">
-      {LAYOUT_LABELS[settings.layout]} · {BOARD_SORT_LABELS[settings.sort]}
-    </Txt>
-  );
-}
 
 export function BoardViewControls({
   kind,
@@ -61,11 +57,18 @@ export function BoardViewControls({
             aria-label="Board views"
             className="max-sm:w-full"
             views={savedViews}
-            fields={fields}
-            operators={BOARD_FILTER_OPERATORS}
             defaultLabel="All cards"
-            newViewSettings={view.newViewSettings}
-            describeSettings={settings => <ViewSettingsSummary settings={settings} />}
+            renderSummary={savedView => (
+              <SavedViewSummary>
+                <SavedViewSummaryFilters
+                  filters={savedView.state.filters}
+                  fields={fields}
+                  operators={BOARD_FILTER_OPERATORS}
+                />
+                <SavedViewSummaryRow label="Layout" value={LAYOUT_LABELS[savedView.state.layout]} />
+                <SavedViewSummaryRow label="Sort" value={BOARD_SORT_LABELS[savedView.state.sort]} />
+              </SavedViewSummary>
+            )}
           />
           <div className="flex shrink-0 items-center gap-2">
             <SegmentedControl aria-label="Layout" size="sm" iconOnly value={view.layout} onValueChange={view.setLayout}>
@@ -83,7 +86,7 @@ export function BoardViewControls({
       search={
         <SearchInput
           label="Search cards"
-          placeholder={savedViews.applied ? 'Search this view…' : 'Search cards…'}
+          placeholder={savedViews.activeView ? 'Search this view…' : 'Search cards…'}
           value={view.search}
           onValueChange={view.setSearch}
           size="sm"
@@ -97,7 +100,7 @@ export function BoardViewControls({
         />
       }
       aside={aside}
-      editor={savedViews.draft && <SavedViewEditor views={savedViews} />}
+      editor={savedViews.unsaved && <SavedViewEditor views={savedViews} />}
     />
   );
 }

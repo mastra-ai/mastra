@@ -1,4 +1,7 @@
-import { DEFAULT_TRACES_FILTERS } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+import {
+  DEFAULT_TRACES_FILTERS,
+  EMPTY_TRACES_SELECTION,
+} from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import type {
   TracesExplorerState,
   TracesFilters,
@@ -28,9 +31,11 @@ const SPAN_VIEW_PARAM = 'spanView';
 const SCORE_ID_PARAM = 'scoreId';
 const HIGHLIGHT_SPAN_IDS_PARAM = 'highlightSpanIds';
 const PAGE_PARAM = 'page';
+/** The active saved view. Its filters are in the URL too, so a copied link shows the same list. */
+export const TRACE_VIEW_PARAM = 'view';
 
 const TRACES_SORT_KEYS = ['startedAt'] as const;
-const DEFAULT_TRACES_SORT = { key: 'startedAt', direction: 'desc' } as const;
+export const DEFAULT_TRACES_SORT = { key: 'startedAt', direction: 'desc' } as const;
 
 const SELECTION_PARAMS = [
   TRACE_ID_PARAM,
@@ -41,7 +46,7 @@ const SELECTION_PARAMS = [
   SCORE_ID_PARAM,
   HIGHLIGHT_SPAN_IDS_PARAM,
 ];
-const NON_FILTER_PARAMS = new Set([...SELECTION_PARAMS, SORT_KEY_PARAM, SORT_DIR_PARAM, PAGE_PARAM]);
+const NON_FILTER_PARAMS = new Set([...SELECTION_PARAMS, SORT_KEY_PARAM, SORT_DIR_PARAM, PAGE_PARAM, TRACE_VIEW_PARAM]);
 
 function pickParams(params: URLSearchParams, keep: (key: string) => boolean): string {
   const picked = new URLSearchParams();
@@ -57,7 +62,7 @@ function parseDate(raw: string | null): Date | undefined {
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 }
 
-function decodeFilters(params: URLSearchParams): TracesFilters {
+export function decodeFilters(params: URLSearchParams): TracesFilters {
   const preset = params.get(TRACE_DATE_PRESET_PARAM);
   const datePreset =
     preset && preset !== 'all' && TRACE_DATE_PRESET_VALUES.has(preset as TraceDatePreset)
@@ -117,6 +122,30 @@ function encodeSelection(base: URLSearchParams, selection: TracesSelection): URL
   return next;
 }
 
+/** What a saved view puts on the page. `viewId: undefined` is the default tab. */
+export type TracesViewState = {
+  viewId: string | undefined;
+  filters: TracesFilters;
+  sortDirection: TracesSortDirection;
+};
+
+// A view's filters, sort and id land in one write, with the selection cleared like any filter change.
+function encodeView(base: URLSearchParams, view: TracesViewState): URLSearchParams {
+  // The span view is a display preference, so it survives like it does a filter edit.
+  const selection = { ...EMPTY_TRACES_SELECTION, spanView: decodeSelection(base).spanView };
+  const next = encodeSelection(encodeFilters(base, view.filters), selection);
+  if (view.sortDirection === DEFAULT_TRACES_SORT.direction) {
+    next.delete(SORT_KEY_PARAM);
+    next.delete(SORT_DIR_PARAM);
+  } else {
+    next.set(SORT_KEY_PARAM, DEFAULT_TRACES_SORT.key);
+    next.set(SORT_DIR_PARAM, view.sortDirection);
+  }
+  next.delete(PAGE_PARAM);
+  setOrDelete(next, TRACE_VIEW_PARAM, view.viewId);
+  return next;
+}
+
 function encodeSortDirection(base: URLSearchParams, direction: TracesSortDirection): URLSearchParams {
   const next = new URLSearchParams(base);
   next.set(SORT_KEY_PARAM, DEFAULT_TRACES_SORT.key);
@@ -133,7 +162,12 @@ function encodeSortDirection(base: URLSearchParams, direction: TracesSortDirecti
  * new filters and vice versa. The explorer emits its full state once per action, and each write
  * rewrites every filter and selection param, so when it emits twice in a tick the last write wins.
  *
- * `setState` goes through `setPersistedSearchParams`; sort is not persisted.
+ * `setState` and `applyView` go through `setPersistedSearchParams`; sort and `setActiveViewId` are
+ * not: changing which view is active changes no filter, so it must not become the filters All
+ * traces brings back (e.g. a deleted view's).
+ *
+ * `applyView` and `setActiveViewId` resolve against the latest params (not the render-time ones),
+ * so they can be held in a stable callback.
  */
 export function useTracesRouteState(
   searchParams: URLSearchParams,
@@ -154,6 +188,27 @@ export function useTracesRouteState(
     });
   const setSortDirection = (next: TracesSortDirection) =>
     setSearchParams(encodeSortDirection(searchParams, next), { replace: true });
+  const activeViewId = searchParams.get(TRACE_VIEW_PARAM) || undefined;
+  const applyView = (view: TracesViewState) =>
+    setPersistedSearchParams(prev => encodeView(prev, view), { replace: true });
+  const setActiveViewId = (viewId: string | undefined) =>
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev);
+        setOrDelete(next, TRACE_VIEW_PARAM, viewId);
+        return next;
+      },
+      { replace: true },
+    );
 
-  return { selection, filters, setState, sortDirection, setSortDirection };
+  return {
+    selection,
+    filters,
+    setState,
+    sortDirection,
+    setSortDirection,
+    activeViewId,
+    applyView,
+    setActiveViewId,
+  };
 }

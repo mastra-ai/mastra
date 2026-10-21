@@ -122,4 +122,23 @@ describe('useTraceFilterPersistence', () => {
       expect(currentSearch).toBe('status=error');
     });
   });
+
+  describe('when the URL has an active saved view', () => {
+    it('restores nothing, even when the URL has no filters', () => {
+      localStorage.setItem(KEY, 'status=error');
+
+      render(<Harness initial="view=view-errors" />);
+
+      expect(currentSearch).toBe('view=view-errors');
+    });
+
+    it("keeps the view's filters out of the saved filters", () => {
+      localStorage.setItem(KEY, 'status=success');
+      render(<Harness initial="view=view-errors" />);
+
+      act(() => setSearch(new URLSearchParams('view=view-errors&status=error')));
+
+      expect(localStorage.getItem(KEY)).toBe('status=success');
+    });
+  });
 });

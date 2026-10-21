@@ -283,4 +283,62 @@ describe('useTracesRouteState', () => {
       expect(persistedWrites).not.toHaveBeenCalled();
     });
   });
+
+  describe('when a saved view is applied', () => {
+    it('writes its filters, sort and id in one replace and clears the selection', () => {
+      const { result, params, navigations, persistedWrites } = renderRouteState(
+        '/traces?traceId=trace-a&spanView=timeline&filterThreadId=thread-1&foo=bar',
+      );
+
+      act(() =>
+        result.current.route.applyView({
+          viewId: 'view-errors',
+          filters: { datePreset: 'last-24h', tokens: [{ fieldId: 'status', value: 'error' }], groups: [] },
+          sortDirection: 'asc',
+        }),
+      );
+
+      expect(params().get('view')).toBe('view-errors');
+      expect(params().get('status')).toBe('error');
+      expect(params().get('filterThreadId')).toBeNull();
+      expect(params().get('datePreset')).toBe('last-24h');
+      expect(params().get('sort')).toBe('startedAt');
+      expect(params().get('dir')).toBe('asc');
+      expect(params().get('traceId')).toBeNull();
+      expect(params().get('spanView')).toBe('timeline');
+      expect(params().get('foo')).toBe('bar');
+      expect(result.current.route.activeViewId).toBe('view-errors');
+      expect(navigations).toEqual([{ replace: true }]);
+      expect(persistedWrites).toHaveBeenCalledTimes(1);
+    });
+
+    it('drops the sort params for the default sort', () => {
+      const { result, params } = renderRouteState('/traces?sort=startedAt&dir=asc');
+
+      act(() =>
+        result.current.route.applyView({
+          viewId: undefined,
+          filters: { datePreset: 'last-7d', tokens: [], groups: [] },
+          sortDirection: 'desc',
+        }),
+      );
+
+      expect(params().get('sort')).toBeNull();
+      expect(params().get('dir')).toBeNull();
+      expect(params().get('view')).toBeNull();
+    });
+  });
+
+  describe('when only the active view changes', () => {
+    it('keeps the filters reference and the other params', () => {
+      const { result, params } = renderRouteState('/traces?status=error');
+      const filters = result.current.route.filters;
+
+      act(() => result.current.route.setActiveViewId('view-new'));
+
+      expect(params().get('view')).toBe('view-new');
+      expect(params().get('status')).toBe('error');
+      expect(result.current.route.filters).toBe(filters);
+    });
+  });
 });

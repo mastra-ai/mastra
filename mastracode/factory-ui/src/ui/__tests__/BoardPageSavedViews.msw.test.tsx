@@ -14,7 +14,7 @@ import {
   openPropertySubmenu,
   togglePropertyOption,
 } from '../../../e2e/ui/properties-menu';
-import { stageToggle } from './boardLayoutQueries';
+import { confirmNewViewName, createBoardView, stageToggle } from './boardLayoutQueries';
 
 describe('Factory board saved views', () => {
   it('switches All cards between list and board and starts a new view with that layout', async () => {
@@ -31,31 +31,29 @@ describe('Factory board saved views', () => {
     expect(await screen.findByRole('group', { name: 'Board columns' })).toBeInTheDocument();
     expect(router.state.location.search).toBe('?layout=board');
 
-    await user.click(screen.getByRole('button', { name: 'New view' }));
+    await createBoardView(user);
     expect(await screen.findByRole('radio', { name: 'Board' })).toBeChecked();
   });
 
   it('saves filters, sort and layout as a view that survives a reload', async () => {
     stubWorkBoard();
     const first = createMemoryRouter(createAppRoutes(), {
-      initialEntries: [`/factories/${FACTORY_ID}/work?label=later&sort=created-newest`],
+      initialEntries: [`/factories/${FACTORY_ID}/work?sort=created-newest`],
     });
     const firstView = renderWithProviders(<RouterProvider router={first} />);
     const user = userEvent.setup();
     const triageBeforeView = await screen.findByTestId('board-column-triage');
     await within(triageBeforeView).findByText('Created later');
 
-    await user.click(screen.getByRole('button', { name: 'New view' }));
-    await screen.findByRole('group', { name: /^Edit view/ });
+    await createBoardView(user);
     await within(triageBeforeView).findByText('Moved recently');
     await togglePropertyOption(user, 'Board properties', 'Label', 'later');
     await waitFor(() => expect(within(triageBeforeView).queryByText('Moved recently')).not.toBeInTheDocument());
     await user.click(screen.getByRole('radio', { name: 'Board' }));
-    await user.click(screen.getByRole('button', { name: 'Save view' }));
+    await user.click(screen.getByRole('button', { name: 'Save to this view' }));
 
-    await screen.findByRole('button', { name: 'Untitled view', pressed: true });
-    expect(screen.queryByRole('group', { name: /^Edit view/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Save view' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Save to this view' })).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Untitled view', pressed: true })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Board columns' })).toBeInTheDocument();
     const viewId = new URLSearchParams(first.state.location.search).get('view');
     expect(viewId).toBeTruthy();
@@ -69,7 +67,7 @@ describe('Factory board saved views', () => {
     await within(triage).findByText('Created later');
     expect(within(triage).queryByText('Moved recently')).not.toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Board columns' })).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: /^Edit view/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'All cards' }));
     await within(await screen.findByTestId('board-column-triage')).findByText('Moved recently');
@@ -85,24 +83,20 @@ describe('Factory board saved views', () => {
     const user = userEvent.setup();
     const triage = await screen.findByTestId('board-column-triage');
     await within(triage).findByText('Created later');
-    await user.click(screen.getByRole('button', { name: 'New view' }));
-    await screen.findByRole('group', { name: /^Edit view/ });
-    await togglePropertyOption(user, 'Board properties', 'Label', 'later');
-    await user.click(screen.getByRole('button', { name: 'Save view' }));
-    await screen.findByRole('button', { name: 'Untitled view', pressed: true });
-    expect(screen.queryByRole('button', { name: 'Save view' })).not.toBeInTheDocument();
+    await createBoardView(user);
+    expect(screen.queryByRole('button', { name: 'Save to this view' })).not.toBeInTheDocument();
     const selectedView = screen.getByRole('button', { name: 'Untitled view', pressed: true });
 
     await openPropertiesMenu(user, 'Board properties');
     await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
     await closePropertiesMenus(user);
     await within(triage).findByText('Moved recently');
-    expect(await screen.findByRole('button', { name: 'Save changes' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Save to this view' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Untitled view', pressed: true })).toBe(selectedView);
-    await user.click(screen.getByRole('button', { name: 'Reset' }));
+    await user.click(screen.getByRole('button', { name: 'Reset changes' }));
 
     await waitFor(() => expect(within(triage).queryByText('Moved recently')).not.toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save to this view' })).not.toBeInTheDocument();
     expect(new URLSearchParams(router.state.location.search).get('label')).toBe('later');
   });
 
@@ -117,13 +111,11 @@ describe('Factory board saved views', () => {
 
     await openPropertiesMenu(user, 'Board properties');
     await user.click(screen.getByRole('menuitem', { name: 'Save as view' }));
-    await screen.findByRole('group', { name: /^Edit view/ });
+    await confirmNewViewName(user);
     await openPropertiesMenu(user, 'Board properties');
     expect(screen.getByRole('menuitem', { name: /^Label\s*later$/ })).toBeInTheDocument();
     await closePropertiesMenus(user);
-    await user.click(screen.getByRole('button', { name: 'Save view' }));
 
-    await screen.findByRole('button', { name: 'Untitled view', pressed: true });
     await openPropertySubmenu(user, 'Board properties', 'Sort');
     expect(screen.queryByRole('menuitem', { name: 'Save as view' })).not.toBeInTheDocument();
     expect(await screen.findByRole('menuitemradio', { name: 'Newest on board' })).toHaveAttribute(
@@ -144,7 +136,7 @@ describe('Factory board saved views', () => {
     await within(triage).findByText('Created later');
     await openPropertiesMenu(user, 'Board properties');
     await user.click(screen.getByRole('menuitem', { name: 'Save as view' }));
-    await user.click(screen.getByRole('button', { name: 'Save view' }));
+    await confirmNewViewName(user);
     const selectedView = screen.getByRole('button', { name: 'Untitled view', pressed: true });
     const search = screen.getByRole('searchbox', { name: 'Search cards' });
 
@@ -152,8 +144,7 @@ describe('Factory board saved views', () => {
     expect(within(triage).getByText('Created later')).toBeInTheDocument();
     expect(search).toHaveFocus();
     expect(screen.getByRole('button', { name: 'Untitled view', pressed: true })).toBe(selectedView);
-    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: /^Edit view/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save to this view' })).not.toBeInTheDocument();
 
     await user.clear(search);
     await user.type(search, 'Moved');
@@ -182,8 +173,7 @@ describe('Factory board saved views', () => {
     const user = userEvent.setup();
     const triage = await screen.findByTestId('board-column-triage');
     await within(triage).findByText('Moved recently');
-    await user.click(screen.getByRole('button', { name: 'New view' }));
-    await user.click(screen.getByRole('button', { name: 'Save view' }));
+    await createBoardView(user);
     await user.type(screen.getByRole('searchbox', { name: 'Search cards' }), 'Created');
     expect(within(triage).queryByText('Moved recently')).not.toBeInTheDocument();
 
@@ -302,7 +292,7 @@ describe('Factory board list layout', () => {
     await openListBoard();
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole('button', { name: 'New view' }));
+    await createBoardView(user);
 
     expect(await screen.findByRole('radio', { name: 'List' })).toBeChecked();
     expect(screen.queryByRole('group', { name: 'Board columns' })).not.toBeInTheDocument();

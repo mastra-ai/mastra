@@ -76,6 +76,13 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
    * Without it, the order is persisted by index and resets when the column count changes.
    */
   columnKeys?: string[];
+  /**
+   * Controlled column order: column keys in visual order. With `reorderable` and `columnKeys`,
+   * DataList stops persisting the order itself and reports each move through `onColumnOrderChange`.
+   * Keys that are not rendered are skipped; rendered columns missing from it keep their default position.
+   */
+  columnOrder?: string[];
+  onColumnOrderChange?: (order: string[]) => void;
 };
 
 type DataListRootStyle = CSSProperties & {
@@ -138,9 +145,31 @@ const dataListFitClasses: Record<DataListFit, string> = {
 
 const disabledReorder: DataListReorderContextValue = { reorderable: false, order: [], move: () => {} };
 
-export function DataListRoot({ reorderable, id, columns, columnKeys, ...props }: DataListRootProps) {
-  const tracks = reorderable && id ? splitGridTracks(columns) : null;
-  if (id && tracks && columnKeys && columnKeys.length === tracks.length) {
+export function DataListRoot({
+  reorderable,
+  id,
+  columns,
+  columnKeys,
+  columnOrder,
+  onColumnOrderChange,
+  ...props
+}: DataListRootProps) {
+  const tracks = reorderable ? splitGridTracks(columns) : null;
+  const keyed = tracks && columnKeys && columnKeys.length === tracks.length;
+  if (tracks && keyed && columnOrder) {
+    return (
+      <DataListControlledReorderableRoot
+        tracks={tracks}
+        columnKeys={columnKeys}
+        columnOrder={columnOrder}
+        onColumnOrderChange={onColumnOrderChange}
+        id={id}
+        columns={columns}
+        {...props}
+      />
+    );
+  }
+  if (id && tracks && keyed) {
     return (
       <DataListKeyedReorderableRoot
         key={id}
@@ -161,7 +190,6 @@ export function DataListRoot({ reorderable, id, columns, columnKeys, ...props }:
 
 function DataListKeyedReorderableRoot({
   storageId,
-  tracks,
   columnKeys,
   ...props
 }: DataListReorderableRootProps & { columnKeys: string[] }) {
@@ -170,24 +198,45 @@ function DataListKeyedReorderableRoot({
     defaultValue: columnKeys,
     schema: keyedColumnOrderSchema,
   });
+  return (
+    <DataListControlledReorderableRoot
+      {...props}
+      columnKeys={columnKeys}
+      columnOrder={stored}
+      onColumnOrderChange={setStored}
+    />
+  );
+}
+
+/** Reorders by column key; the order lives with the caller (or `DataListKeyedReorderableRoot`'s storage). */
+function DataListControlledReorderableRoot({
+  tracks,
+  columnKeys,
+  columnOrder,
+  onColumnOrderChange,
+  ...props
+}: Omit<DataListRootProps, 'reorderable'> & { tracks: string[]; columnKeys: string[]; columnOrder: string[] }) {
   const keysSignature = columnKeys.join('\u0000');
   // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by content, not array identity
-  const order = useMemo(() => resolveKeyedOrder(stored, columnKeys), [stored, keysSignature]);
+  const order = useMemo(() => resolveKeyedOrder(columnOrder, columnKeys), [columnOrder, keysSignature]);
 
   const reorder = useMemo<DataListReorderContextValue>(
     () => ({
       reorderable: true,
       order,
-      move: (from, to) => setStored(current => moveKeyedOrder(current, columnKeys, from, to)),
+      move: (from, to) => onColumnOrderChange?.(moveKeyedOrder(columnOrder, columnKeys, from, to)),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by content, not array identity
-    [order, keysSignature, setStored],
+    [order, columnOrder, keysSignature, onColumnOrderChange],
   );
 
   return <DataListBase {...props} columns={order.map(i => tracks[i]).join(' ')} reorder={reorder} />;
 }
 
-type DataListReorderableRootProps = Omit<DataListRootProps, 'reorderable' | 'columnKeys'> & {
+type DataListReorderableRootProps = Omit<
+  DataListRootProps,
+  'reorderable' | 'columnKeys' | 'columnOrder' | 'onColumnOrderChange'
+> & {
   storageId: string;
   tracks: string[];
 };
@@ -213,7 +262,10 @@ function DataListReorderableRoot({ storageId, tracks, ...props }: DataListReorde
   return <DataListBase {...props} columns={order.map(i => tracks[i]).join(' ')} reorder={reorder} />;
 }
 
-type DataListBaseProps = Omit<DataListRootProps, 'reorderable' | 'columnKeys'> & {
+type DataListBaseProps = Omit<
+  DataListRootProps,
+  'reorderable' | 'columnKeys' | 'columnOrder' | 'onColumnOrderChange'
+> & {
   reorder: DataListReorderContextValue;
 };
 

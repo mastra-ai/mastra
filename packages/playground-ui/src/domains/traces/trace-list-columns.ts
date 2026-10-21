@@ -1,3 +1,6 @@
+/** The unscoped traces list's id, which its column order is stored under. */
+export const ALL_TRACES_LIST_ID = 'all-traces';
+
 export const TRACE_OPTIONAL_COLUMNS = [
   'type',
   'input',
@@ -12,6 +15,19 @@ export const TRACE_OPTIONAL_COLUMNS = [
 ] as const;
 
 export type TraceOptionalColumn = (typeof TRACE_OPTIONAL_COLUMNS)[number];
+
+export const TRACE_OPTIONAL_COLUMN_LABELS: Record<TraceOptionalColumn, string> = {
+  type: 'Primitive type',
+  input: 'Input',
+  output: 'Output',
+  duration: 'Duration',
+  endTime: 'End',
+  environment: 'Environment',
+  inputTokens: 'Input tokens',
+  outputTokens: 'Output tokens',
+  totalTokens: 'Total tokens',
+  estimatedCost: 'Estimated cost',
+};
 
 export const TRACE_USAGE_COLUMNS = [
   'inputTokens',

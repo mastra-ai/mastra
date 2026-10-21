@@ -12,6 +12,7 @@ import {
   insertItem,
   mergeCondition,
   normalize,
+  operatorsForField,
   pruneEmptyGroups,
   removeNode,
   setGroupLogic,
@@ -62,7 +63,7 @@ export type FilterBarContextValue = {
   items: FilterBarItem[];
   /** The rendered tree, including the pending commit and leaving nodes. */
   expression: FilterBarExpression;
-  /** False when the consumer passed a flat `FilterBarItem[]`: no groups are offered. */
+  /** False when the consumer passed a flat `FilterBarItem[]` or `advancedFilters={false}`: no groups are offered. */
   groupsEnabled: boolean;
   /** Deepest allowed group nesting (root-level group = 1). */
   maxDepth: number;
@@ -159,6 +160,8 @@ export type FilterBarProviderProps = {
   createItemId?: (fieldId: string) => string;
   /** Deepest allowed group nesting (root-level group = 1). Defaults to 3. */
   maxDepth?: number;
+  /** `false` offers no new groups; groups already in `value` still render. */
+  advancedFilters?: boolean;
   ariaLabel: string;
   /**
    * Text shown when a field's `suggestions` resolver rejects. Return `undefined` to keep the
@@ -210,6 +213,7 @@ export function FilterBarProvider({
   onValueChange,
   createItemId,
   maxDepth = DEFAULT_MAX_GROUP_DEPTH,
+  advancedFilters = true,
   ariaLabel,
   describeSuggestionsError,
   children,
@@ -232,14 +236,7 @@ export function FilterBarProvider({
 
   const getField = useCallback((fieldId: string) => fields.find(f => f.id === fieldId), [fields]);
   const getOperator = useCallback((operatorId: string) => operators.find(o => o.id === operatorId), [operators]);
-  const getFieldOperators = useCallback(
-    (field: FilterBarField) => {
-      if (!field.operators) return operators;
-      const allowed = new Set(field.operators);
-      return operators.filter(o => allowed.has(o.id));
-    },
-    [operators],
-  );
+  const getFieldOperators = useCallback((field: FilterBarField) => operatorsForField(field, operators), [operators]);
 
   const announce = useCallback((message: string) => setAnnouncement(message), []);
 
@@ -543,7 +540,7 @@ export function FilterBarProvider({
       operators,
       items,
       expression: rendered,
-      groupsEnabled: !flat,
+      groupsEnabled: !flat && advancedFilters,
       maxDepth,
       draft,
       setDraft,
@@ -584,6 +581,7 @@ export function FilterBarProvider({
       items,
       rendered,
       flat,
+      advancedFilters,
       maxDepth,
       draft,
       setDraft,

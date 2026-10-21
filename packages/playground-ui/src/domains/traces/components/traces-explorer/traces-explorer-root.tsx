@@ -1,6 +1,8 @@
 import { EntityType } from '@mastra/core/observability';
 import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import type { TracesColumnsState } from '../../hooks/use-trace-columns-state';
+import { ALL_TRACES_LIST_ID } from '../../trace-list-columns';
 import { resolveTraceQueryTimeRange } from '../../trace-query-filters';
 import {
   applyDate,
@@ -60,6 +62,12 @@ export type TracesExplorerRootProps = {
   features?: TracesExplorerFeatures;
   /** The host's default filters. Filters matching them don't count as applied (e.g. in empty states). */
   initialFilters?: TracesFilters;
+  /**
+   * Host-controlled columns and column order (e.g. to save them in a view, see `useTraceColumnsState`).
+   * Pass both or neither; without them the explorer keeps its own in browser storage.
+   */
+  columns?: TracesColumnsState;
+  onColumnsChange?: (next: TracesColumnsState) => void;
   children: ReactNode;
 };
 
@@ -73,7 +81,7 @@ const listIdForScope = (scope?: TracesExplorerScope) =>
     ? 'agent-traces'
     : scope?.entityType === EntityType.WORKFLOW_RUN
       ? 'workflows-traces'
-      : 'all-traces';
+      : ALL_TRACES_LIST_ID;
 
 type Latest = Pick<TracesExplorerRootProps, 'selection' | 'filters' | 'onChange' | 'onSortDirectionChange'> & {
   scopedFieldIds: ReadonlySet<string>;
@@ -89,6 +97,8 @@ export function TracesExplorerRoot({
   metricsSupport,
   features,
   initialFilters = DEFAULT_TRACES_FILTERS,
+  columns,
+  onColumnsChange,
   children,
 }: TracesExplorerRootProps) {
   // Servers without the trace-query API list through `listTracesLight` and don't expose feedback.
@@ -98,8 +108,11 @@ export function TracesExplorerRoot({
   const { enabled: withRootDuration } = useTraceQueryRootDurationAvailable();
   const withDiscovery = useTraceQueryDiscoveryAvailable().enabled && withQueryTrace;
 
-  // Entries the server can't query are ignored, never written back: the host keeps its raw value.
-  const filters = useMemo(() => sanitizeTracesFilters(rawFilters, withRootDuration), [rawFilters, withRootDuration]);
+  // Entries the server can't query are left out of the list query; the bar still shows them.
+  const filters = useMemo(
+    () => sanitizeTracesFilters(rawFilters, { withQueryTrace, withRootDuration }),
+    [rawFilters, withQueryTrace, withRootDuration],
+  );
 
   const isScoped = !!scope;
   const scopedFieldIds = isScoped ? SCOPED_FIELD_IDS : NO_FIELD_IDS;
@@ -213,12 +226,13 @@ export function TracesExplorerRoot({
     () => ({
       ...filtersActions,
       filters,
+      rawFilters,
       dateFrom,
       dateTo,
       filtersApplied,
       contentFiltersApplied,
     }),
-    [filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied],
+    [filtersActions, filters, rawFilters, dateFrom, dateTo, filtersApplied, contentFiltersApplied],
   );
 
   // Not memoized: the selection consumers (Layout, List, Panel) also re-render on filter and list
@@ -234,7 +248,9 @@ export function TracesExplorerRoot({
       <TracesFiltersContext.Provider value={filtersValue}>
         <TracesSelectionContext.Provider value={selectionValue}>
           <TracesListProvider sortDirection={sortDirection} onSortChange={onSortChange}>
-            <TracesColumnsProvider>{children}</TracesColumnsProvider>
+            <TracesColumnsProvider columns={columns} onColumnsChange={onColumnsChange}>
+              {children}
+            </TracesColumnsProvider>
           </TracesListProvider>
         </TracesSelectionContext.Provider>
       </TracesFiltersContext.Provider>

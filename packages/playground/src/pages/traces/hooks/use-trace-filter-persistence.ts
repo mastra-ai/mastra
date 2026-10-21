@@ -6,6 +6,7 @@ import {
 } from '@mastra/playground-ui/domains/traces/trace-filters';
 import type { SetURLSearchParamsLike } from '@mastra/playground-ui/sort/use-url-sort';
 import { useCallback, useEffect, useRef } from 'react';
+import { TRACE_VIEW_PARAM } from './use-traces-route-state';
 
 export interface TraceFilterPersistenceOptions {
   /** Override the localStorage key. Default: traces filters storage. */
@@ -36,7 +37,7 @@ function withoutParams(params: URLSearchParams, excludeParams: readonly string[]
  *   Route every filter mutation through the returned setter (e.g. hand it to `useTracesRouteState`).
  *
  * Pass `storageKey` to scope persistence (e.g. per-entity), and `excludeParams` to keep
- * context filters out of it.
+ * context filters out of it. While a saved view is active (`?view=`), nothing is saved or restored.
  */
 export function useTraceFilterPersistence(
   searchParams: URLSearchParams,
@@ -53,6 +54,8 @@ export function useTraceFilterPersistence(
     if (skipHydration) return;
     if (hydratedRef.current) return;
     hydratedRef.current = true;
+    // A saved view's link carries its own filters.
+    if (searchParams.has(TRACE_VIEW_PARAM)) return;
     if (hasAnyTraceFilterParams(searchParams)) return;
     const loaded = loadTraceFiltersFromStorage(storageKey);
     const saved = loaded && withoutParams(loaded, excludeParams);
@@ -78,7 +81,9 @@ export function useTraceFilterPersistence(
     (next, setOptions) => {
       setSearchParams(prev => {
         const resolved = typeof next === 'function' ? next(prev) : next;
-        saveTraceFiltersToStorage(withoutParams(resolved, excludeParams), storageKey);
+        // A saved view's filters belong to the view: the last filters are what the user chose without one.
+        if (!resolved.has(TRACE_VIEW_PARAM))
+          saveTraceFiltersToStorage(withoutParams(resolved, excludeParams), storageKey);
         return resolved;
       }, setOptions);
     },

@@ -167,9 +167,10 @@ test.describe('Factory board virtualization', () => {
           await page.goto('/factories/fp-1/work');
           await expect(page.getByRole('article', { name: 'Candidate 0', exact: true })).toBeVisible();
           if (layout === 'board') {
-            await page.getByRole('button', { name: 'New view', exact: true }).click();
+            await page.getByRole('button', { name: 'Create new view…', exact: true }).click();
+            await page.getByRole('textbox', { name: 'View name' }).press('Enter');
             await page.getByRole('radio', { name: 'Board', exact: true }).click();
-            await page.getByRole('button', { name: 'Save view', exact: true }).click();
+            await page.getByRole('button', { name: 'Save to this view', exact: true }).click();
             await expect(page.getByRole('group', { name: 'Board columns' })).toBeVisible();
           }
           const cards = page.getByTestId('candidate-card');
@@ -231,9 +232,10 @@ test.describe('Factory board virtualization', () => {
           await page.goto('/factories/fp-1/work');
           await expect(page.getByRole('article', { name: 'Large task 1999', exact: true })).toBeVisible();
           if (layout === 'board') {
-            await page.getByRole('button', { name: 'New view', exact: true }).click();
+            await page.getByRole('button', { name: 'Create new view…', exact: true }).click();
+            await page.getByRole('textbox', { name: 'View name' }).press('Enter');
             await page.getByRole('radio', { name: 'Board', exact: true }).click();
-            await page.getByRole('button', { name: 'Save view', exact: true }).click();
+            await page.getByRole('button', { name: 'Save to this view', exact: true }).click();
             await expect(page.getByRole('group', { name: 'Board columns' })).toBeVisible();
           }
           const cards = page.getByTestId('work-item-card');

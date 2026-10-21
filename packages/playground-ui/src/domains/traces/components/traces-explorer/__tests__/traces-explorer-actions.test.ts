@@ -228,7 +228,9 @@ describe('applyDateRange', () => {
 });
 
 describe('sanitizeTracesFilters', () => {
-  describe('when the filters hold entries the query cannot run', () => {
+  const traceQuery = { withQueryTrace: true, withRootDuration: false };
+
+  describe('when the filters hold entries the trace query cannot run', () => {
     it('drops a running status, unsupported fields and root duration without support', () => {
       const filters: TracesFilters = {
         ...baseFilters,
@@ -240,14 +242,50 @@ describe('sanitizeTracesFilters', () => {
         ],
       };
 
-      expect(sanitizeTracesFilters(filters, false).tokens).toEqual([{ fieldId: 'threadId', value: 'thread-1' }]);
+      expect(sanitizeTracesFilters(filters, traceQuery).tokens).toEqual([{ fieldId: 'threadId', value: 'thread-1' }]);
     });
   });
 
   describe('when the server supports root duration', () => {
     it('keeps the duration token', () => {
       const filters: TracesFilters = { ...baseFilters, tokens: [{ fieldId: 'durationMs', value: '100' }] };
-      expect(sanitizeTracesFilters(filters, true)).toBe(filters);
+      expect(sanitizeTracesFilters(filters, { ...traceQuery, withRootDuration: true })).toBe(filters);
+    });
+  });
+
+  describe('when the server lists traces through the legacy endpoint', () => {
+    const legacy = { withQueryTrace: false, withRootDuration: false };
+
+    it('keeps the fields that endpoint filters on, with is, and tags with any of', () => {
+      const filters: TracesFilters = {
+        ...baseFilters,
+        tokens: [
+          { fieldId: 'runId', value: 'run-1' },
+          { fieldId: 'status', value: 'running' },
+          { fieldId: 'tags', value: ['a', 'b'] },
+        ],
+      };
+
+      expect(sanitizeTracesFilters(filters, legacy)).toBe(filters);
+    });
+
+    it('drops other fields, other operators and every group', () => {
+      const filters: TracesFilters = {
+        ...baseFilters,
+        tokens: [
+          { fieldId: 'environment', value: ['development'], operatorId: 'in' },
+          { fieldId: 'environment', value: 'staging', operatorId: 'isNot' },
+          { fieldId: 'spans.name', value: 'llm' },
+          { fieldId: 'traceId', value: 'trace-a' },
+        ],
+        groups: [{ id: 'g', logic: 'or', nodes: [{ id: 'n', fieldId: 'status', value: 'error' }] }],
+      };
+
+      expect(sanitizeTracesFilters(filters, legacy)).toEqual({
+        ...baseFilters,
+        tokens: [{ fieldId: 'traceId', value: 'trace-a' }],
+        groups: [],
+      });
     });
   });
 });

@@ -1,13 +1,16 @@
 export { SavedViewTabs } from './saved-view-tabs';
 export type { SavedViewTabsProps } from './saved-view-tabs';
+export { SavedViewActions } from './saved-view-actions';
+export type { SavedViewActionsProps } from './saved-view-actions';
+export { SavedViewUnsavedDialog } from './saved-view-unsaved-dialog';
+export type { SavedViewUnsavedDialogProps } from './saved-view-unsaved-dialog';
 export { SavedViewEditor } from './saved-view-editor';
 export type { SavedViewEditorProps } from './saved-view-editor';
-export { useSavedViews } from './use-saved-views';
-export type {
-  SavedViewContent,
-  SavedViewDraft,
-  SavedViewDraftChange,
-  SavedViewsController,
-  UseSavedViewsOptions,
-} from './use-saved-views';
-export type { SavedView, SavedViewSettingsSchema } from './saved-view-schema';
+export { SavedViewSummary, SavedViewSummaryFilters, SavedViewSummaryRow } from './saved-view-summary';
+export type { SavedViewSummaryFiltersProps, SavedViewSummaryRowProps } from './saved-view-summary';
+export { NEW_SAVED_VIEW_NAME, useSavedViews } from './use-saved-views';
+export type { SavedViewsController, UseSavedViewsOptions } from './use-saved-views';
+export { localStorageSavedViewsBackend } from './saved-views-backend';
+export type { SavedViewRecord, SavedViewRecordInput, SavedViewsBackend } from './saved-views-backend';
+export { MAX_SAVED_VIEW_NAME_CHARS, sameSavedViewState } from './saved-view-schema';
+export type { SavedView, SavedViewSchema } from './saved-view-schema';
