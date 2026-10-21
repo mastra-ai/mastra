@@ -25,6 +25,11 @@ const COMMAND_NAMES = [
   'help',
 ];
 
+/** jsdom has no stylesheet, so an option's label and description spans read as one word in its accessible name. */
+function commandOptionName(name: string) {
+  return new RegExp(`^/${name}(?![a-z-])`);
+}
+
 function renderComposer() {
   return renderWithProviders(
     <OverlayTestProviders>
@@ -62,7 +67,7 @@ describe('Composer slash-command suggestions', () => {
       await user.type(input, '/');
 
       for (const name of COMMAND_NAMES) {
-        expect(await screen.findByRole('option', { name: new RegExp(`^/${name}\\s`) })).toBeInTheDocument();
+        expect(await screen.findByRole('option', { name: commandOptionName(name) })).toBeInTheDocument();
       }
     });
   });
@@ -75,12 +80,12 @@ describe('Composer slash-command suggestions', () => {
       const input = await findReadyInput();
       await user.type(input, '/goa');
 
-      expect(await screen.findByRole('option', { name: /^\/goal\s/ })).toBeInTheDocument();
-      expect(screen.queryByRole('option', { name: /^\/help\s/ })).not.toBeInTheDocument();
+      expect(await screen.findByRole('option', { name: commandOptionName('goal') })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: commandOptionName('help') })).not.toBeInTheDocument();
 
       await user.keyboard('{Tab}');
       expect(input).toHaveValue('/goal ');
-      expect(screen.queryByRole('option', { name: /^\/goal\s/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: commandOptionName('goal') })).not.toBeInTheDocument();
     });
 
     it('opens command options as a second step and returns with Escape', async () => {
