@@ -20,7 +20,6 @@ import {
 import { useRef, useState } from 'react';
 import { Sidebar, useSidebar } from '.';
 import { Avatar } from '@/ds/components/Avatar';
-import { Badge } from '@/ds/components/Badge';
 import {
   Dialog,
   DialogBody,
@@ -131,7 +130,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
                 title={
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate">Mastra</span>
-                    <Badge size="sm">Beta</Badge>
+                    <Sidebar.Badge>Beta</Sidebar.Badge>
                   </span>
                 }
               />
@@ -143,7 +142,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
             <a href="/projects" aria-label="Project list" className={cn('flex min-w-0 flex-1 rounded-md', focusRing)}>
               <Sidebar.Brand logo={<LogoWithoutText className="size-6" />} title="Mastra Platform" />
             </a>
-            <Badge size="sm">Staging</Badge>
+            <Sidebar.Badge>Staging</Sidebar.Badge>
             <Sidebar.Trigger />
           </Sidebar.Header>
         )}
