@@ -27,7 +27,9 @@ type TraceQueryBody = Record<string, unknown> & {
   orderBy?: TraceQueryArgs['orderBy'];
   page?: { after?: string | null };
 };
-type ListReply = TraceQueryKeysetTraceResponse | ((body: TraceQueryBody) => Promise<TraceQueryKeysetTraceResponse>);
+type ListReply =
+  | TraceQueryKeysetTraceResponse
+  | ((body: TraceQueryBody) => Promise<TraceQueryKeysetTraceResponse | Response>);
 type DeltaReply = Extract<TraceQueryResponse, { delta: unknown }> | Response;
 
 const BASE_URL = 'http://localhost:4111';
@@ -58,7 +60,8 @@ function serveTraceQuery({ list, deltas }: { list: ListReply; deltas: DeltaReply
       const body = (await request.json()) as TraceQueryBody;
       if (body.mode !== 'delta') {
         listRequests.push(body);
-        return HttpResponse.json(typeof list === 'function' ? await list(body) : list);
+        const reply = typeof list === 'function' ? await list(body) : list;
+        return reply instanceof Response ? reply : HttpResponse.json(reply);
       }
       deltaRequests.push(body);
       const reply = deltas[deltaRequests.length - 1] ?? traceQueryDeltaBatch('delta-cursor-idle');
@@ -322,6 +325,39 @@ describe('useTraceQueryLatest', () => {
       );
       expect(deltaRequests.map(body => body.after)).toEqual([undefined, 'delta-cursor-0', 'delta-cursor-0']);
       expect(result.current.latest.data).toEqual({ deltaCursor: 'delta-cursor-1' });
+    });
+  });
+
+  describe('when a poll lands while the list failed to load', () => {
+    it('keeps the cursor so the trace shows up once the list loads', async () => {
+      let listCalls = 0;
+      const { deltaRequests } = serveTraceQuery({
+        list: async () =>
+          ++listCalls === 1 ? HttpResponse.json({ error: 'unavailable' }, { status: 503 }) : traceQueryFirstPage,
+        // The server answers the same cursor with the same traces.
+        deltas: [
+          traceQueryDeltaBatch('delta-cursor-0'),
+          traceQueryDeltaBatch('delta-cursor-1', [deltaTraceFresh]),
+          traceQueryDeltaBatch('delta-cursor-1', [deltaTraceFresh]),
+        ],
+      });
+      const { result } = renderLiveList();
+      await waitFor(() => {
+        expect(result.current.list.isError).toBe(true);
+        expect(result.current.latest.isSuccess).toBe(true);
+      });
+
+      await nextPoll();
+      await waitFor(() => expect(deltaRequests).toHaveLength(2));
+      await waitFor(() => expect(result.current.latest.isFetching).toBe(false));
+      expect(result.current.latest.data).toEqual({ deltaCursor: 'delta-cursor-0' });
+
+      await act(() => result.current.list.refetch());
+      await waitFor(() => expect(traceIds(result.current.list.data)).toEqual(['trace-newest', 'trace-oldest']));
+      await nextPoll();
+
+      await waitFor(() => expect(traceIds(result.current.list.data)?.[0]).toBe('trace-fresh'));
+      expect(deltaRequests.map(body => body.after)).toEqual([undefined, 'delta-cursor-0', 'delta-cursor-0']);
     });
   });
 

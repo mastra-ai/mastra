@@ -330,8 +330,8 @@ const isCursorConflict = (error: unknown) => error instanceof MastraClientError 
  * Polls `queryTraces({ mode: 'delta' })` and merges new or updated traces into the list of a
  * `useTraceQuery` rendered with the same `query` and `limit`. The first request only establishes
  * the server cursor; each later poll drains every batch since that cursor. A cursor conflict (409)
- * starts over with a new cursor. A poll that returns while the list is loading a page keeps its
- * cursor and asks again on the next poll, because the page load would overwrite the merge.
+ * starts over with a new cursor. A poll that returns while the list is loading a page, or before
+ * the list has loaded at all, keeps its cursor and asks again on the next poll.
  *
  * The cursor is keyed on the query without `orderBy` (delta polls cannot sort) and on `limit`, so
  * re-sorting the list keeps polling from the same cursor, and lists with different page sizes each
@@ -394,9 +394,10 @@ export function useTraceQueryLatest({
 
             const listKey = traceQueryKey(query, limit);
             // A list fetch in flight (first page or next page) would overwrite the merge with its own copy of
-            // the pages. Keep the previous cursor instead: the next poll asks again from that cursor and gets
-            // the same traces back, so nothing is lost.
-            if (queryClient.getQueryState(listKey)?.fetchStatus === 'fetching') return previous;
+            // the pages, and a list that has not loaded has nowhere to merge into. Keep the previous cursor
+            // instead: the next poll asks again from that cursor and gets the same traces back.
+            const listState = queryClient.getQueryState<InfiniteData<TraceQueryKeysetTraceResponse>>(listKey);
+            if (!listState?.data || listState.fetchStatus === 'fetching') return previous;
             queryClient.setQueryData<InfiniteData<TraceQueryKeysetTraceResponse>>(listKey, data =>
               data ? mergeTraceQueryDelta(data, traces, query.orderBy) : data,
             );
