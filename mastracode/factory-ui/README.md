@@ -63,12 +63,6 @@ Successful run completions continue to use the live Ready indicator and completi
 
 Opening a Factory lands on its first board; **Boards** lead the sidebar, followed by Supervisor and Knowledge.
 
-## Chat connection status
-
-When a session loses its connection, a notice appears above the chat composer while it reconnects. The notice disappears when the connection recovers. If reconnection stops, the notice explains how to reconnect. The working animation pauses until the connection returns.
-
-The notice uses Playground UI's composable `ComposerHeader` and renders one `ComposerHeaderRow`. The shared header owns the surface, spacing, and overlap, and can also hold ownership controls, tasks, or other context. It collapses when its children render nothing. Wrapped content stays in the dock's layout without covering messages or the jump-to-latest button.
-
 ## Session titles
 
 Slack sessions use the same automatic title generation as web sessions, including the preceding Slack thread context available to the agent. Until naming succeeds, the sidebar shows the session's work item title, or its branch when it has none. Older sessions that still show the generic `slack conversation` label keep it until observational memory retitles the conversation or the owner regenerates the title.

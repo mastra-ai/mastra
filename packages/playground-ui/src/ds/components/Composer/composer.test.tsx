@@ -61,11 +61,19 @@ function OptionalContext({ visible }: { visible: boolean }) {
   );
 }
 
-function ContextualComposer({ visible, onSubmit }: { visible: boolean; onSubmit: FormEventHandler<HTMLFormElement> }) {
+function ContextualComposer({
+  visible,
+  onSubmit,
+  mode,
+}: {
+  visible: boolean;
+  onSubmit: FormEventHandler<HTMLFormElement>;
+  mode: 'conditional' | 'animated';
+}) {
   return (
     <Composer onSubmit={onSubmit}>
-      <ComposerHeader>
-        <OptionalContext visible={visible} />
+      <ComposerHeader open={mode === 'conditional' || visible}>
+        <OptionalContext visible={mode === 'animated' || visible} />
       </ComposerHeader>
       <ComposerBox>
         <ComposerInput name="message" aria-label="Message" />
@@ -78,36 +86,39 @@ function ContextualComposer({ visible, onSubmit }: { visible: boolean; onSubmit:
 }
 
 describe('Composer', () => {
-  it('keeps the draft and focus when interactive header content changes without submitting a message', async () => {
-    const messages: FormDataEntryValue[] = [];
-    const onSubmit: FormEventHandler<HTMLFormElement> = event => {
-      event.preventDefault();
-      const message = new FormData(event.currentTarget).get('message');
-      if (message !== null) messages.push(message);
-    };
-    const view = render(<ContextualComposer visible onSubmit={onSubmit} />);
-    const input = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
+  it.each(['conditional', 'animated'] as const)(
+    'keeps the draft and focus when the %s header changes without submitting a message',
+    async mode => {
+      const messages: FormDataEntryValue[] = [];
+      const onSubmit: FormEventHandler<HTMLFormElement> = event => {
+        event.preventDefault();
+        const message = new FormData(event.currentTarget).get('message');
+        if (message !== null) messages.push(message);
+      };
+      const view = render(<ContextualComposer visible onSubmit={onSubmit} mode={mode} />);
+      const input = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
 
-    await act(async () => {
-      fireEvent.change(input, { target: { value: 'Please review this plan.' } });
-      fireEvent.click(screen.getByRole('checkbox', { name: 'Review the plan' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Take ownership' }));
-    });
-    expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Review the plan' }).checked).toBe(true);
-    expect(screen.getByText('You own this session.')).not.toBeNull();
-    expect(messages).toEqual([]);
+      await act(async () => {
+        fireEvent.change(input, { target: { value: 'Please review this plan.' } });
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Review the plan' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Take ownership' }));
+      });
+      expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Review the plan' }).checked).toBe(true);
+      expect(screen.getByText('You own this session.')).not.toBeNull();
+      expect(messages).toEqual([]);
 
-    await act(async () => input.focus());
-    view.rerender(<ContextualComposer visible={false} onSubmit={onSubmit} />);
+      await act(async () => input.focus());
+      view.rerender(<ContextualComposer visible={false} onSubmit={onSubmit} mode={mode} />);
 
-    expect(screen.queryByRole('checkbox')).toBeNull();
-    expect(screen.getByRole('textbox', { name: 'Message' })).toBe(input);
-    expect(document.activeElement).toBe(input);
-    expect(input.value).toBe('Please review this plan.');
+      expect(screen.queryByRole('checkbox')).toBeNull();
+      expect(screen.getByRole('textbox', { name: 'Message' })).toBe(input);
+      expect(document.activeElement).toBe(input);
+      expect(input.value).toBe('Please review this plan.');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
-    expect(messages).toEqual(['Please review this plan.']);
-  });
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+      expect(messages).toEqual(['Please review this plan.']);
+    },
+  );
 
   describe('when composed with all regions', () => {
     it('renders a semantic form with stable slots', () => {

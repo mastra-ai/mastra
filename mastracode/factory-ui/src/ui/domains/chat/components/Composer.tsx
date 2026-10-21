@@ -30,6 +30,7 @@ import { useChatConnection } from '../context/useChatConnection';
 import { useChatModels } from '../context/useChatModels';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
+import { useComposerConnectionNotice } from '../hooks/useComposerConnectionNotice';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
 import { clearPendingHandoff } from '../hooks/useHandoffPrompt';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
@@ -52,6 +53,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
+  const connectionNotice = useComposerConnectionNotice(status);
   const connectionLost = status === 'reconnecting' || status === 'error';
   const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const chatPreparing = phase === 'initializing';
@@ -242,8 +244,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerHeader>
-        <ComposerConnectionNotice />
+      <ComposerHeader open={connectionNotice.open}>
+        <ComposerConnectionNotice notice={connectionNotice.notice} />
       </ComposerHeader>
       <ComposerRing busy={(busy || chatPreparing) && !connectionLost}>
         <ComposerBox>

@@ -105,9 +105,7 @@ export const OwnershipAndTasks: Story = {
   ),
 };
 
-function OptionalContext({ visible }: { visible: boolean }) {
-  if (!visible) return null;
-
+function OptionalContext() {
   return (
     <ComposerHeaderRow>
       <ComposerHeaderContent>Optional session context</ComposerHeaderContent>
@@ -124,8 +122,8 @@ function ToggleHeaderPreview() {
         Toggle context
       </Button>
       <Composer aria-label="Message composer">
-        <ComposerHeader>
-          <OptionalContext visible={visible} />
+        <ComposerHeader open={visible}>
+          <OptionalContext />
         </ComposerHeader>
         <ComposerBox>
           <ComposerInput aria-label="Message" placeholder="Your draft stays when context changes…" />

@@ -1,12 +1,34 @@
-@keyframes composer-header-enter {
-  from {
+/* The composer covers the surface's square lower edge throughout the transition. */
+.composer-header {
+  margin-bottom: 0;
+  transition: margin-bottom var(--duration-normal) var(--ease-out-custom);
+
+  &[data-open] {
+    margin-bottom: -24px;
+  }
+
+  &:has([data-slot='composer-header-surface']:empty) {
+    display: none;
+  }
+}
+
+.composer-header-panel {
+  height: var(--collapsible-panel-height);
+  overflow: hidden;
+  transition:
+    height var(--duration-normal) var(--ease-out-custom),
+    opacity var(--duration-normal) var(--ease-out-custom);
+
+  &[data-starting-style],
+  &[data-ending-style] {
+    height: 0;
     opacity: 0;
   }
 }
 
-/* Moving the surface would expose its lower edge during the join. */
-@media (prefers-reduced-motion: no-preference) {
-  .composer-header {
-    animation: composer-header-enter var(--duration-normal) var(--ease-out-custom) backwards;
+@media (prefers-reduced-motion: reduce) {
+  .composer-header,
+  .composer-header-panel {
+    transition: none;
   }
 }

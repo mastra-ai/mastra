@@ -1,3 +1,4 @@
+import { Collapsible } from '@base-ui/react/collapsible';
 import type { ComponentPropsWithoutRef } from 'react';
 import { forwardRef } from 'react';
 
@@ -5,24 +6,36 @@ import { cn } from '@/lib/utils';
 
 import './composer-header.css';
 
-export type ComposerHeaderProps = ComponentPropsWithoutRef<'div'>;
+export interface ComposerHeaderProps extends ComponentPropsWithoutRef<'div'> {
+  /** Animate visibility while retaining content through the closing transition. */
+  open?: boolean;
+}
 
 /** Optional context above ComposerRing or ComposerBox. Empty rendered content occupies no space. */
-export const ComposerHeader = forwardRef<HTMLDivElement, ComposerHeaderProps>(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    data-slot="composer-header"
-    className={cn(
-      'composer-header relative isolate mx-auto -mb-6 flex w-full max-w-3xl flex-col gap-3 overflow-hidden rounded-t-[23px] border border-b-0 border-surface-rim bg-card px-3 pt-3 pb-8 text-body-sm text-muted-foreground empty:hidden',
-      className,
-    )}
-    {...props}
-  />
-));
+export const ComposerHeader = forwardRef<HTMLDivElement, ComposerHeaderProps>(
+  ({ className, children, open = true, ...props }, ref) => (
+    <Collapsible.Root
+      ref={ref}
+      open={open}
+      data-slot="composer-header"
+      className={cn('composer-header relative isolate mx-auto w-full max-w-3xl', className)}
+      {...props}
+    >
+      <Collapsible.Panel className="composer-header-panel">
+        <div
+          data-slot="composer-header-surface"
+          className="flex flex-col gap-3 overflow-hidden rounded-t-[23px] border border-b-0 border-surface-rim bg-card px-3 pt-3 pb-8 text-body-sm text-muted-foreground empty:hidden"
+        >
+          {children}
+        </div>
+      </Collapsible.Panel>
+    </Collapsible.Root>
+  ),
+);
 ComposerHeader.displayName = 'ComposerHeader';
 
 export interface ComposerHeaderRowProps extends ComponentPropsWithoutRef<'div'> {
-  tone?: 'default' | 'destructive';
+  tone?: 'default' | 'destructive' | 'success';
 }
 
 export const ComposerHeaderRow = forwardRef<HTMLDivElement, ComposerHeaderRowProps>(
@@ -33,6 +46,7 @@ export const ComposerHeaderRow = forwardRef<HTMLDivElement, ComposerHeaderRowPro
       className={cn(
         'flex min-w-0 flex-wrap items-center gap-2 [&>svg]:size-icon-sm [&>svg]:shrink-0',
         tone === 'destructive' && 'text-destructive-foreground',
+        tone === 'success' && 'text-success-indicator',
         className,
       )}
       {...props}

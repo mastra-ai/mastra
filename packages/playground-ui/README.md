@@ -66,7 +66,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 </Composer>;
 ```
 
-All four header parts accept ordinary React children, native `div` props, and refs. `ComposerHeaderRow` optionally accepts `tone="destructive"`. Its content wraps, and actions can wrap onto another line. Use the row, content, and actions parts when useful; arbitrary content such as `SessionTasks` can render directly inside the header.
+All four header parts accept ordinary React children, native `div` props, and refs. `ComposerHeaderRow` optionally accepts `tone="destructive"` or `tone="success"`. Its content wraps, and actions can wrap onto another line. Use the row, content, and actions parts when useful; arbitrary content such as `SessionTasks` can render directly inside the header.
+
+Use `<ComposerHeader open={visible}>` to animate the header's height and opacity, keeping its children rendered through the exit transition. The input stays mounted, and reduced-motion preferences disable the transition. The caller owns visibility and timing, so short connection drops can be suppressed and recovery confirmations can stay readable without delaying connection readiness.
 
 Callers own data, conditional rendering, controls, and accessibility announcements. Set `role="status"` and `aria-live="polite"` on a status row; ownership controls and task lists do not become live regions automatically. Header buttons inside the composer form should use `type="button"` unless they send a message. The header collapses when all its children render nothing, including child components that return `null`, without remounting the input or resetting its draft. Storybook's **AI / Composer Header** includes connection, ownership with tasks, and conditional content examples.
 
