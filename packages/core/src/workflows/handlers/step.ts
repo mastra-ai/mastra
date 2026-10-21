@@ -236,26 +236,26 @@ export async function executeStep(
     skipEmits,
   });
 
-  // For a foreach item, carry over the progress that sibling items checkpointed while this
-  // item was starting, so this write cannot drop items that already finished (#26214).
-  const foreachProgress =
-    executionContext.foreachIndex !== undefined ? getForeachProgress(stepResults[step.id]) : undefined;
+  // Once a sibling foreach item has finished, the foreach checkpoint owns the stored snapshot.
+  // A start write here would either drop that progress or copy every finished output again,
+  // which grows with items x output size (#26214).
+  const foreachCheckpointOwnsSnapshot =
+    executionContext.foreachIndex !== undefined && getForeachProgress(stepResults[step.id]) !== undefined;
 
-  await engine.persistStepUpdate({
-    workflowId,
-    runId,
-    resourceId,
-    serializedStepGraph,
-    stepResults: {
-      ...stepResults,
-      [step.id]: foreachProgress ? { ...stepInfo, metadata: { ...stepInfo.metadata, foreachProgress } } : stepInfo,
-    } as Record<string, StepResult<any, any, any, any>>,
-    executionContext,
-    workflowStatus: 'running',
-    requestContext,
-    phase: 'start',
-    recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
-  });
+  if (!foreachCheckpointOwnsSnapshot) {
+    await engine.persistStepUpdate({
+      workflowId,
+      runId,
+      resourceId,
+      serializedStepGraph,
+      stepResults: { ...stepResults, [step.id]: stepInfo } as Record<string, StepResult<any, any, any, any>>,
+      executionContext,
+      workflowStatus: 'running',
+      requestContext,
+      phase: 'start',
+      recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
+    });
+  }
 
   // Check if this is a nested workflow that requires special handling
   if (engine.isNestedWorkflowStep(step)) {

@@ -20,6 +20,7 @@ import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
 import { DefaultExecutionEngine } from './default';
+import { FOREACH_CHECKPOINT_INTERVAL_MS } from './handlers/control-flow';
 import type { WorkflowRunState } from './types';
 import { createStep } from './workflow';
 
@@ -36,14 +37,14 @@ function step(id: string, execute: (params: { inputData: any }) => Promise<any>)
 }
 
 /** Lets pending persists settle so the captured checkpoint reflects everything written so far. */
-const settle = () => new Promise(resolve => setTimeout(resolve, 50));
+const settle = (ms = 50) => new Promise(resolve => setTimeout(resolve, ms));
 
-async function crashAndRestart(build: (crash?: Crash) => Built, inputData: unknown) {
+async function crashAndRestart(build: (crash?: Crash) => Built, inputData: unknown, crashAfterMs?: number) {
   const storage = new MockStore();
   let crashSnapshot: WorkflowRunState | undefined;
   let latest: WorkflowRunState | undefined;
   const crash: Crash = async () => {
-    await settle();
+    await settle(crashAfterMs);
     crashSnapshot = JSON.parse(JSON.stringify(latest));
   };
 
@@ -192,7 +193,12 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
   it.each([1, 3])(
     'does not re-run foreach items that finished before the crash (concurrency %i)',
     async concurrency => {
-      const { original, restarted, stored, fns } = await crashAndRestart(foreachBuild(concurrency), [0, 1, 2, 3, 4]);
+      // Crash once the checkpoint interval has passed, so every finished item has been checkpointed.
+      const { original, restarted, stored, fns } = await crashAndRestart(
+        foreachBuild(concurrency),
+        [0, 1, 2, 3, 4],
+        FOREACH_CHECKPOINT_INTERVAL_MS + 200,
+      );
 
       const ranItems = fns.item.mock.calls.map(call => call[0].inputData).sort();
       expect(ranItems).toEqual([2, 3, 4]);
@@ -206,6 +212,38 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
       expect(JSON.stringify(stored)).not.toContain('foreachProgress');
     },
   );
+
+  it('re-runs items that finished within the last checkpoint interval before the crash', async () => {
+    // Item 0 is checkpointed at once; item 1 waits for the next interval, and the crash comes first.
+    const { restarted, fns } = await crashAndRestart(foreachBuild(1), [0, 1, 2, 3, 4]);
+
+    expect(fns.item.mock.calls.map(call => call[0].inputData).sort()).toEqual([1, 2, 3, 4]);
+    expect(restarted.status).toBe('success');
+  });
+
+  it('keeps foreach snapshot writes linear in the number of items', async () => {
+    const storage = new MockStore();
+    const payload = 'x'.repeat(1000);
+    const item = step('item', async ({ inputData }) => ({ i: inputData, payload }));
+    const workflow = createWorkflow({ id: 'foreach-write-volume', inputSchema: anySchema, outputSchema: anySchema })
+      .foreach(item.step, { concurrency: 1 })
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { wf: workflow } });
+    const store = (await storage.getStore('workflows'))!;
+    let bytes = 0;
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
+      bytes += JSON.stringify(args.snapshot).length;
+      return persist(args);
+    });
+
+    const items = 200;
+    const result = await (await workflow.createRun()).start({ inputData: Array.from({ length: items }, (_, i) => i) });
+
+    expect(result.status).toBe('success');
+    // Rewriting every finished output on each item would be ~items^2 / 2 * 1000 bytes (~20 MB).
+    expect(bytes).toBeLessThan(10 * items * payload.length);
+  });
 
   const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 

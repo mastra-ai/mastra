@@ -43,7 +43,7 @@ import type { ForeachProgress } from '../utils';
 import type { ExecuteStepParams } from './step';
 
 /** Minimum time between two item-end checkpoints of one foreach (#26214). */
-const FOREACH_CHECKPOINT_INTERVAL_MS = 1000;
+export const FOREACH_CHECKPOINT_INTERVAL_MS = 1000;
 
 function publishStepEvent(
   engine: DefaultExecutionEngine,
