@@ -314,6 +314,24 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     'invalid_request',
   ],
   [
+    'Anthropic-shaped 400 weekly limit',
+    apiError(
+      400,
+      'Your weekly limit has been reached, try again later',
+      '{"type":"error","error":{"type":"invalid_request_error","message":"Your weekly limit has been reached, try again later"}}',
+    ),
+    'quota',
+  ],
+  [
+    '400 invalid_prompt frame quoting a monthly limit',
+    apiError(
+      400,
+      "Invalid value 'monthly limit' for parameter mode.",
+      '{"error":{"type":"invalid_request_error","code":"invalid_prompt","message":"Invalid value \'monthly limit\' for parameter mode."}}',
+    ),
+    'invalid_request',
+  ],
+  [
     '400 invalid_prompt that mentions a timeout',
     apiError(400, 'Invalid timeout parameter', undefined, { error: { code: 'invalid_prompt' } }),
     'invalid_request',

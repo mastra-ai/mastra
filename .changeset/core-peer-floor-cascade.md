@@ -21,4 +21,11 @@
 
 Fixed compatibility by requiring @mastra/core 1.80.0 or newer. These packages build on @mastra/server or @mastra/memory, which now need core 1.80.0 for the shared provider-error classifier, but they still advertised support for older core versions. Installing one of those older pairings produced a broken setup instead of a clear version conflict.
 
-If your package manager reports a peer conflict after this release, upgrade @mastra/core to 1.80.0 or newer.
+If your package manager reports a peer conflict after this release, upgrade @mastra/core first, then the package:
+
+```bash
+pnpm add @mastra/core@^1.80.0
+pnpm add @mastra/deployer@latest
+```
+
+Before, a project could pair @mastra/deployer with @mastra/core 1.78 and install cleanly; after, that pairing is refused at install time instead of failing at runtime.
