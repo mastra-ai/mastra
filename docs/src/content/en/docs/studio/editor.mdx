@@ -159,7 +159,7 @@ See the [Editor tools reference](/reference/editor/tools) for MCP configuration,
 
 ## Decide what collaborators can edit
 
-The `editor` field decides which fields Studio owns. When it is omitted, collaborators can change an agent's instructions and manage its tools, including their descriptions, starting from the values in code. The agent's `id`, `name`, and `model` always come from code.
+The `editor` field decides which fields Studio owns. When omitted, collaborators can change an agent's instructions and manage its tools, including their descriptions, starting from the values in code. The agent's `id`, `name`, and `model` always come from code.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
