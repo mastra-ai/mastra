@@ -1,5 +1,65 @@
 # @mastra/core
 
+## 1.79.0-alpha.12
+
+### Minor Changes
+
+- Added optional, experimental `getEventsInfo()` and `getEventsInspector()` members to `MCPServerBase`, plus the event info types (`MCPServerEventInfo`, `MCPServerEventStreamFrame`, `MCPServerEventsInspector`, …) and `MCP_SERVER_EVENT_ERROR_IDS`. Servers that declare MCP events use them to let Studio list, poll, stream and test-emit their event types. Servers without events don't need to implement them. ([#27674](https://github.com/mastra-ai/mastra/pull/27674))
+
+  ```ts
+  const info = server.getEventsInfo?.();
+  console.log(info?.events.map(event => event.name));
+
+  const inspector = server.getEventsInspector?.();
+  const { events, cursor } = await inspector!.poll('ticket.created', { arguments: { project: 'web' } });
+  ```
+
+- Agent schedules can now send an idle wake to the worker that has claimed the thread. Set `ifIdle.requireClaimedOwner: true` on the schedule, or return it from the `prepare` hook. This works the same way as `agent.sendSignal`: the claim holder runs the turn with its own claim stream options. If no owner answers, the fire fails with `outcome: 'failed'`. Before this change, the option was dropped, so whichever worker took the fire ran the turn itself. ([#27896](https://github.com/mastra-ai/mastra/pull/27896))
+
+  ```ts
+  await mastra.schedules.create({
+    agentId: 'support',
+    cron: '0 * * * *',
+    prompt: 'Check in',
+    threadId,
+    resourceId,
+    ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+  });
+  ```
+
+- Added an opt-in `apply_patch` workspace tool that creates, updates, moves and deletes several files in one call. The tool checks the whole patch before it writes anything. If a write fails partway, it tries to undo the changes it already made. The tool is off by default. Enable it per tool: ([#27913](https://github.com/mastra-ai/mastra/pull/27913))
+
+  ```ts
+  new Workspace({
+    filesystem: new LocalFilesystem({ basePath: './workspace' }),
+    tools: { [WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH]: { enabled: true } },
+  });
+  ```
+
+  Setting the top-level `tools.enabled` does not turn it on, so existing agents keep using `write_file` and `edit_file`. Paths follow the same containment, read-before-write and write-lock rules as the other filesystem tools.
+
+### Patch Changes
+
+- Fixed `autoResumeSuspendedTools` leaving a resumed plain tool marked as suspended. This happened when the model resumed a regular (non-agent, non-workflow) tool under a new tool call id. The original suspension was never cleared. Every later turn asked the model to resume the tool again. Reloaded clients also showed the call as still pending. The original suspension is now cleared, and a `tool-call-resumed` chunk is emitted for it. This applies to the standard, evented and durable agents. ([#27784](https://github.com/mastra-ai/mastra/pull/27784))
+
+- Fixed approval after a host disconnect without cancelling the parked agent run. ([#27907](https://github.com/mastra-ai/mastra/pull/27907))
+
+- Fixed evented workflow restarts replaying completed steps and ensured recovered durable-agent streams finish without repeating saved effects. ([#27852](https://github.com/mastra-ai/mastra/pull/27852))
+
+- xAI models now accept `xhigh` reasoning effort. Groq, xAI, Together AI, DeepInfra, Cerebras and Alibaba models now run on the AI SDK v7 provider packages, like DeepSeek. ([#26530](https://github.com/mastra-ai/mastra/pull/26530))
+
+  ```ts
+  await agent.generate('Prove that there are infinitely many primes.', {
+    providerOptions: { xai: { reasoningEffort: 'xhigh' } },
+  });
+  ```
+
+- Fixed assistant message merging slowing down quadratically with the number of message parts. A step with thousands of reasoning items (common with OpenAI Responses reasoning) could previously block the event loop for tens of seconds; merging is now linear and produces the same merged messages. ([#27912](https://github.com/mastra-ai/mastra/pull/27912))
+
+- Fixed `observe()` hanging forever on a durable or evented agent run that was aborted while waiting for tool approval. Once the rejected approval or resume releases the run, observers now receive the `abort` and `finish` chunks and close. ([#27923](https://github.com/mastra-ai/mastra/pull/27923))
+
+- Fixed paused tool calls picking up a different mode's tools when they resume. Approving, declining, or answering a paused tool call now uses the tools of the mode the run was paused in. Before, switching modes while a call waited gave the continuation the new mode's tools. A switch to an unrestricted mode could expose every tool to a run that started in a restricted one. The same applied when answering a suspension from another thread. Approving a plan still moves the run to the plan's transition mode. Fixes #27873. ([#27911](https://github.com/mastra-ai/mastra/pull/27911))
+
 ## 1.79.0-alpha.11
 
 ### Minor Changes
