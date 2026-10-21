@@ -106,11 +106,6 @@ function withCapabilities<T extends object>(session: T, capabilities: SessionCap
   return { ...session, capabilities };
 }
 
-/**
- * Factory runs and Slack threads keep the owner and visibility they were created with:
- * Slack finds a thread's session by its sender and branch, a run bills its owner, and
- * channel threads stay with the team while Slack DMs stay private.
- */
 async function isUserStartedSession(
   session: SourceControlSession,
   workItems: NonNullable<SourceControlSessionRoutesOptions['workItems']>,
@@ -124,14 +119,27 @@ async function isUserStartedSession(
   }));
 }
 
-/** A teammate's shared, user-started session on a Factory is the one the viewer may take over. */
-async function canTakeOwnership(
+type OwnershipRefusal = { status: 409 | 503; error: string };
+
+async function ownershipRefusal(
   session: SourceControlSession,
-  viewerUserId: string,
   options: SourceControlSessionRoutesOptions,
-): Promise<boolean> {
-  if (session.userId === viewerUserId || session.factoryProjectId === null || !options.workItems) return false;
-  return isUserStartedSession(session, options.workItems);
+): Promise<OwnershipRefusal | null> {
+  // Shared threads live on the Factory's memory resource, which an owner change keeps; without one they sit on the owner's.
+  if (!session.factoryProjectId) {
+    return { status: 409, error: "This session isn't linked to a Factory, so it can't change owner." };
+  }
+  if (!options.workItems) {
+    return {
+      status: 503,
+      error: "Session ownership can't change yet: Factory storage is still starting up. Try again in a moment.",
+    };
+  }
+  // Slack finds a thread's session by its sender, and a Factory run's session follows its work item.
+  if (!(await isUserStartedSession(session, options.workItems))) {
+    return { status: 409, error: 'Only user sessions can change owner' };
+  }
+  return null;
 }
 
 /** Abort the session's active run and wait (bounded) for it to stop. Returns whether a run was aborted. */
@@ -289,23 +297,6 @@ const OWNER_CONFLICT_MESSAGES = {
   stale_owner: 'Someone else owns this session now',
   branch_owned: 'You already have a session on this branch',
 } as const;
-
-/** One owner or visibility change per session at a time, so neither lands on a row the other moved under it. */
-function createSessionChangeQueue() {
-  const tails = new Map<string, Promise<void>>();
-  return <T>(sessionId: string, run: () => Promise<T>): Promise<T> => {
-    const result = (tails.get(sessionId) ?? Promise.resolve()).then(run);
-    const settled = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    tails.set(sessionId, settled);
-    void settled.then(() => {
-      if (tails.get(sessionId) === settled) tails.delete(sessionId);
-    });
-    return result;
-  };
-}
 
 function titleModel(modelId: string) {
   return ({ requestContext }: { requestContext: RequestContext }) =>
@@ -514,7 +505,6 @@ function projectSessionRoutes(
 
 export function buildSourceControlSessionRoutes(options: SourceControlSessionRoutesOptions): ApiRoute[] {
   const nameSession = createSessionNaming();
-  const changeSessionSerially = createSessionChangeQueue();
   const resolveOwnerProfiles = createSessionOwnerProfileResolver(options.users);
   return [
     registerApiRoute('/web/factory/projects/:id/sessions', {
@@ -562,7 +552,8 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const recreateSandbox =
           canRecreateSandbox(options) &&
           (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
-        const takeOwnership = await canTakeOwnership(session, resolved.tenant.userId, options);
+        const takeOwnership =
+          session.userId !== resolved.tenant.userId && (await ownershipRefusal(session, options)) === null;
         return c.json({
           session: {
             ...withCapabilities(withOwnerProfile(session, owners), { recreateSandbox, takeOwnership }),
@@ -673,7 +664,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const sessionId = c.req.param('sessionId');
         const match = await resolveSession(options.sourceControls, sessionId);
         const session = match?.session;
-        if (!match || !session || session.orgId !== orgId) {
+        if (!match || !session || !canViewSourceControlSession(session, resolved.tenant)) {
           return c.json({ error: 'Session not found' }, 404);
         }
         let body: unknown;
@@ -686,127 +677,57 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: 'Invalid expectedOwnerId' }, 400);
         }
         const expectedOwnerId = body.expectedOwnerId;
-        if (session.visibility === 'private' && session.userId !== userId) {
-          return c.json({ error: 'Session not found' }, 404);
+        if (session.userId === userId) return c.json({ session });
+        const refusal = await ownershipRefusal(session, options);
+        if (refusal) return c.json({ error: refusal.error }, refusal.status);
+        const controller = options.controller;
+        // A turn reads its payer from the row on every model call, and a parked one dies with its live host.
+        if (controller) {
+          const threads = await listFactorySessionThreads(controller, session, options.workItems);
+          const threadIds = threads.map(thread => thread.id);
+          if (controller.listActiveThreadRuns().some(run => threadIds.includes(run.threadId))) {
+            return c.json({ error: 'Wait for the session to finish its run before taking ownership' }, 409);
+          }
         }
-        if (session.visibility === 'private') return c.json({ session });
-        // Shared sessions live on their Factory's memory, which an owner change keeps; without one the threads sit on the owner's.
-        if (!session.factoryProjectId) {
-          return c.json({ error: "This session isn't linked to a Factory, so it can't change owner." }, 409);
-        }
-        if (!options.workItems) {
+        const transferred = await match.sourceControl.sessions.transferOwner({
+          sessionId,
+          expectedUserId: expectedOwnerId,
+          toUserId: userId,
+        });
+        if (transferred.status === 'conflict') {
+          const current = transferred.session;
+          if (!current || !canViewSourceControlSession(current, resolved.tenant)) {
+            return c.json({ error: 'Session not found' }, 404);
+          }
+          if (current.userId === userId) return c.json({ session: current });
           return c.json(
             {
-              error: "Session ownership can't change yet: Factory storage is still starting up. Try again in a moment.",
+              error: OWNER_CONFLICT_MESSAGES[transferred.reason],
+              reason: transferred.reason,
+              currentOwnerId: current.userId,
             },
-            503,
+            409,
           );
         }
-        if (!(await isUserStartedSession(session, options.workItems))) {
-          return c.json({ error: 'Only user sessions can change owner' }, 409);
-        }
-        const controller = options.controller;
-
-        return changeSessionSerially(sessionId, async () => {
-          // A run reads its payer from the row on every model call, and a parked one dies with its live host.
-          if (controller) {
-            const threads = await listFactorySessionThreads(controller, session, options.workItems);
-            const threadIds = threads.map(thread => thread.id);
-            if (controller.listActiveThreadRuns().some(run => threadIds.includes(run.threadId))) {
-              return c.json({ error: 'Wait for the session to finish its run before taking ownership' }, 409);
-            }
-          }
-          const transferred = await match.sourceControl.sessions.transferOwner({
-            sessionId,
-            expectedUserId: expectedOwnerId,
-            toUserId: userId,
+        // The live host acts as the old owner; the next message starts one as the new.
+        if (controller && (await controller.getSession(sessionId))) {
+          await controller.deleteSession({ sessionId }).catch(error => {
+            console.error('[Factory Sessions] Failed to recycle transferred live session', { sessionId, error });
           });
-          if (transferred.status === 'conflict') {
-            const current = transferred.session;
-            // Made private under the transfer: it now looks missing, like any private session of someone else.
-            if (current?.visibility === 'private' && current.userId !== userId) {
-              return c.json({ error: 'Session not found' }, 404);
-            }
-            return c.json(
-              {
-                error: OWNER_CONFLICT_MESSAGES[transferred.reason],
-                reason: transferred.reason,
-                currentOwnerId: current?.userId,
-              },
-              409,
-            );
-          }
-          if (expectedOwnerId === userId) return c.json({ session: transferred.session });
-
-          let liveSession = await controller?.getSession(sessionId);
-          try {
-            if (!liveSession && controller) {
-              const resourceId = await sessionMemoryResourceId(controller, session, options.workItems);
-              liveSession = await startUserSessionConversation(controller, transferred.session, resourceId);
-            }
-            if (liveSession) await liveSession.thread.transferOwnership({ toOwnerId: userId });
-          } catch (mirrorError) {
-            let authoritativeOwnerId: string | undefined;
-            try {
-              const rollback = await match.sourceControl.sessions.transferOwner({
-                sessionId,
-                expectedUserId: userId,
-                toUserId: expectedOwnerId,
-              });
-              authoritativeOwnerId = rollback.session?.userId;
-            } catch (rollbackError) {
-              throw new AggregateError(
-                [mirrorError, rollbackError],
-                `Factory session ${sessionId} ownership is inconsistent after a failed transfer and rollback.`,
-              );
-            }
-
-            if (!authoritativeOwnerId) {
-              try {
-                if (liveSession && controller) await controller.deleteSession({ sessionId });
-              } catch (teardownError) {
-                throw new AggregateError(
-                  [mirrorError, teardownError],
-                  `Factory session ${sessionId} was deleted during a failed ownership transfer, and its live host could not be removed.`,
-                );
-              }
-              throw mirrorError;
-            }
-
-            if (liveSession) {
-              try {
-                await liveSession.thread.transferOwnership({ toOwnerId: authoritativeOwnerId });
-              } catch (reconciliationError) {
-                throw new AggregateError(
-                  [mirrorError, reconciliationError],
-                  `Factory session ${sessionId} ownership is inconsistent after a failed transfer.`,
-                );
-              }
-            }
-            throw mirrorError;
-          }
-
-          // The live host still carries the old owner; the next message starts one for the new.
-          if (liveSession && controller) {
-            await controller.deleteSession({ sessionId }).catch(error => {
-              console.error('[Factory Sessions] Failed to recycle transferred live session', { sessionId, error });
-            });
-          }
-
-          await options.audit
-            ?.record({
-              orgId,
-              actorId: userId,
-              action: 'factory.session.owner_transferred',
-              targets: [{ type: 'session', id: session.id, name: session.title ?? session.branch }],
-              metadata: { fromOwnerId: expectedOwnerId, toOwnerId: userId, createdByUserId: session.createdByUserId },
-              projectRepositoryId: session.projectRepositoryId ?? undefined,
-            })
-            .catch(error => {
-              console.error('[Factory Sessions] Failed to record ownership transfer audit event', { sessionId, error });
-            });
-          return c.json({ session: transferred.session });
-        });
+        }
+        await options.audit
+          ?.record({
+            orgId,
+            actorId: userId,
+            action: 'factory.session.owner_transferred',
+            targets: [{ type: 'session', id: session.id, name: session.title ?? session.branch }],
+            metadata: { fromOwnerId: expectedOwnerId, toOwnerId: userId },
+            projectRepositoryId: session.projectRepositoryId ?? undefined,
+          })
+          .catch(error => {
+            console.error('[Factory Sessions] Failed to record ownership transfer audit event', { sessionId, error });
+          });
+        return c.json({ session: transferred.session });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {
@@ -875,62 +796,71 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: "visibility must be 'private' or 'org'" }, 400);
         }
         const sessionId = c.req.param('sessionId');
-        return changeSessionSerially(sessionId, async () => {
-          const match = await resolveSession(options.sourceControls, sessionId);
-          const row = match?.session;
-          // Only the owner may share or unshare; everyone else gets the same 404
-          // as a missing session so org-visible ids are not confirmed either.
-          if (!match || !row || row.orgId !== resolved.tenant.orgId || row.userId !== resolved.tenant.userId) {
-            return c.json({ error: 'Session not found' }, 404);
-          }
-          // Without work-item storage there's no telling whether this is a Factory
-          // run, so refuse rather than let a run be made private.
-          if (!options.workItems) {
-            return c.json(
-              {
-                error:
-                  "Session visibility can't be changed yet: Factory storage is still starting up. Try again in a moment.",
-              },
-              503,
-            );
-          }
-          if (!(await isUserStartedSession(row, options.workItems))) {
-            return c.json({ error: 'Only user sessions can change visibility' }, 409);
-          }
-          // Sharing puts the session on its Factory's memory; without a Factory there is nowhere to share it to.
-          if (visibility === 'org' && !row.factoryProjectId) {
-            return c.json({ error: "This session isn't linked to a Factory, so it can't be shared." }, 409);
-          }
-          const resourceId = userSessionResourceFor(row, visibility);
-          const controller = options.controller;
-          // The resource says who may read a session, so its threads move with it.
-          const threadIds = controller ? await sessionThreadsToMove(controller, row, resourceId) : [];
-          if (threadIds.length > 0 && !options.moveThread) {
-            return c.json({ error: 'Changing session visibility is not available on this server.' }, 503);
-          }
-          if (controller?.listActiveThreadRuns().some(run => threadIds.includes(run.threadId))) {
-            return c.json({ error: 'Wait for the session to finish its run before changing visibility' }, 409);
-          }
-          // Write in the order that fails closed: threads leave the Factory before the
-          // row says private, and the row says shared before threads reach the Factory.
-          // A failed move then leaves the session less visible, never more, and a retry
-          // moves what is left.
-          const moveThreads = async () => {
-            for (const threadId of threadIds) await options.moveThread!({ threadId, resourceId });
-          };
-          if (visibility === 'private') await moveThreads();
-          const updated = await match.sourceControl.sessions.setVisibility({ sessionId, visibility });
-          if (!updated) return c.json({ error: 'Session not found' }, 404);
-          if (visibility === 'org') await moveThreads();
-          // A live session keeps the resource it started on. Drop it so the next
-          // request resumes on its moved thread, or point it at the new resource
-          // when it has no thread to resume from yet.
-          const live = await controller?.getSession(sessionId);
-          if (live && threadIds.length > 0) await controller!.deleteSession({ sessionId });
-          else if (live) await controller!.setResourceId(live, { resourceId });
-          const owners = await resolveOwnerProfiles([updated.userId]);
-          return c.json({ session: withOwnerProfile(updated, owners) });
+        const match = await resolveSession(options.sourceControls, sessionId);
+        const row = match?.session;
+        // Only the owner may share or unshare; everyone else gets the same 404
+        // as a missing session so org-visible ids are not confirmed either.
+        if (!match || !row || row.orgId !== resolved.tenant.orgId || row.userId !== resolved.tenant.userId) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        // Without work-item storage there's no telling whether this is a Factory
+        // run, so refuse rather than let a run be made private.
+        if (!options.workItems) {
+          return c.json(
+            {
+              error:
+                "Session visibility can't be changed yet: Factory storage is still starting up. Try again in a moment.",
+            },
+            503,
+          );
+        }
+        // Only sessions a person started in the UI can change. Factory runs and
+        // Slack threads keep the visibility they were created with: runs and
+        // channel threads stay with the team, Slack DMs stay private.
+        if (!(await isUserStartedSession(row, options.workItems))) {
+          return c.json({ error: 'Only user sessions can change visibility' }, 409);
+        }
+        // Sharing puts the session on its Factory's memory; without a Factory there is nowhere to share it to.
+        if (visibility === 'org' && !row.factoryProjectId) {
+          return c.json({ error: "This session isn't linked to a Factory, so it can't be shared." }, 409);
+        }
+        const resourceId = userSessionResourceFor(row, visibility);
+        const controller = options.controller;
+        // The resource says who may read a session, so its threads move with it.
+        const threadIds = controller ? await sessionThreadsToMove(controller, row, resourceId) : [];
+        if (threadIds.length > 0 && !options.moveThread) {
+          return c.json({ error: 'Changing session visibility is not available on this server.' }, 503);
+        }
+        if (controller?.listActiveThreadRuns().some(run => threadIds.includes(run.threadId))) {
+          return c.json({ error: 'Wait for the session to finish its run before changing visibility' }, 409);
+        }
+        // Write in the order that fails closed: threads leave the Factory before the
+        // row says private, and the row says shared before threads reach the Factory.
+        // A failed move then leaves the session less visible, never more, and a retry
+        // moves what is left.
+        const moveThreads = async (to: string) => {
+          for (const threadId of threadIds) await options.moveThread!({ threadId, resourceId: to });
+        };
+        if (visibility === 'private') await moveThreads(resourceId);
+        const updated = await match.sourceControl.sessions.setVisibility({
+          sessionId,
+          visibility,
+          expectedUserId: row.userId,
         });
+        if (!updated) {
+          // A teammate took the shared session after the read: its threads go back to the Factory.
+          if (visibility === 'private') await moveThreads(userSessionResourceFor(row, 'org'));
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        if (visibility === 'org') await moveThreads(resourceId);
+        // A live session keeps the resource it started on. Drop it so the next
+        // request resumes on its moved thread, or point it at the new resource
+        // when it has no thread to resume from yet.
+        const live = await controller?.getSession(sessionId);
+        if (live && threadIds.length > 0) await controller!.deleteSession({ sessionId });
+        else if (live) await controller!.setResourceId(live, { resourceId });
+        const owners = await resolveOwnerProfiles([updated.userId]);
+        return c.json({ session: withOwnerProfile(updated, owners) });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId/title', {

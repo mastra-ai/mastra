@@ -403,7 +403,7 @@ describe('SourceControlStorage', () => {
     ).resolves.toMatchObject({ visibility: 'private' });
   });
 
-  it('updates session visibility in place and reports missing sessions', async () => {
+  it('updates session visibility in place and refuses missing or reassigned sessions', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
     const created = await github.sessions.create({
@@ -415,15 +415,29 @@ describe('SourceControlStorage', () => {
       baseBranch: 'main',
     });
 
-    const shared = await github.sessions.setVisibility({ sessionId: created.sessionId, visibility: 'org' });
+    const shared = await github.sessions.setVisibility({
+      sessionId: created.sessionId,
+      visibility: 'org',
+      expectedUserId: 'user-1',
+    });
     expect(shared).toMatchObject({ id: created.id, visibility: 'org' });
     await expect(github.sessions.list({ projectRepositoryId: link.id, viewerUserId: 'user-2' })).resolves.toEqual([
       expect.objectContaining({ id: created.id }),
     ]);
 
-    await github.sessions.setVisibility({ sessionId: created.sessionId, visibility: 'private' });
+    await github.sessions.setVisibility({
+      sessionId: created.sessionId,
+      visibility: 'private',
+      expectedUserId: 'user-1',
+    });
     await expect(github.sessions.list({ projectRepositoryId: link.id, viewerUserId: 'user-2' })).resolves.toEqual([]);
-    await expect(github.sessions.setVisibility({ sessionId: 'missing', visibility: 'org' })).resolves.toBeNull();
+    await expect(
+      github.sessions.setVisibility({ sessionId: 'missing', visibility: 'org', expectedUserId: 'user-1' }),
+    ).resolves.toBeNull();
+    await expect(
+      github.sessions.setVisibility({ sessionId: created.sessionId, visibility: 'org', expectedUserId: 'user-2' }),
+    ).resolves.toBeNull();
+    await expect(github.sessions.getBySessionId(created.sessionId)).resolves.toMatchObject({ visibility: 'private' });
   });
 
   it('reads NULL visibility as org for rows created before the column existed', async () => {
@@ -549,7 +563,7 @@ describe('SourceControlStorage', () => {
     expect(ids).not.toContain(privateOther.sessionId);
   });
 
-  it('transfers session ownership with CAS and preserves the creator', async () => {
+  it('transfers session ownership with CAS', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
     const session = await github.sessions.create({
@@ -560,16 +574,19 @@ describe('SourceControlStorage', () => {
       branch: 'user/session-owner-transfer',
       baseBranch: 'main',
     });
-    expect(session.createdByUserId).toBe('user-1');
 
     await expect(
       github.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'stale', toUserId: 'user-2' }),
     ).resolves.toMatchObject({ status: 'conflict', reason: 'stale_owner' });
-    await github.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'private' });
+    await github.sessions.setVisibility({
+      sessionId: session.sessionId,
+      visibility: 'private',
+      expectedUserId: 'user-1',
+    });
     await expect(
       github.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-2' }),
     ).resolves.toMatchObject({ status: 'conflict', reason: 'stale_owner', session: { userId: 'user-1' } });
-    await github.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'org' });
+    await github.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'org', expectedUserId: 'user-1' });
     await github.sessions.create({
       sessionId: '00000000-0000-4000-8000-000000000033',
       projectRepositoryId: link.id,
@@ -583,41 +600,10 @@ describe('SourceControlStorage', () => {
     ).resolves.toMatchObject({ status: 'conflict', reason: 'branch_owned' });
     await expect(
       github.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-2' }),
-    ).resolves.toMatchObject({
-      status: 'updated',
-      session: { userId: 'user-2', createdByUserId: 'user-1' },
-    });
+    ).resolves.toMatchObject({ status: 'updated', session: { userId: 'user-2' } });
     await expect(
       github.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-3' }),
     ).resolves.toMatchObject({ status: 'conflict', reason: 'stale_owner', session: { userId: 'user-2' } });
-  });
-
-  it('reads legacy session creators from the original owner', async () => {
-    const project = await createProject();
-    const link = await linkRepository({ factoryProjectId: project.id });
-    const session = await github.sessions.create({
-      sessionId: '00000000-0000-4000-8000-000000000032',
-      projectRepositoryId: link.id,
-      orgId: 'org-1',
-      userId: 'user-1',
-      branch: 'user/session-legacy-creator',
-      baseBranch: 'main',
-    });
-    await backend.ops.updateMany(
-      'source_control_sessions',
-      { session_id: session.sessionId },
-      { created_by_user_id: null },
-    );
-    await expect(github.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
-      userId: 'user-1',
-      createdByUserId: 'user-1',
-    });
-    await expect(
-      github.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-2' }),
-    ).resolves.toMatchObject({
-      status: 'updated',
-      session: { userId: 'user-2', createdByUserId: 'user-1' },
-    });
   });
 
   it('transfers a legacy shared session whose visibility was never written', async () => {
@@ -1633,7 +1619,7 @@ describe('SourceControlStorageInMemory sessions', () => {
     expect((await store.sessions.getBySessionId(session.sessionId))?.originMutedAt).toBeNull();
   });
 
-  it('transfers ownership with CAS and preserves createdByUserId', async () => {
+  it('transfers ownership with CAS', async () => {
     const store = new SourceControlStorageInMemory();
     const installation = await store.installations.upsert({
       orgId: 'org-1',
@@ -1701,18 +1687,22 @@ describe('SourceControlStorageInMemory sessions', () => {
     await expect(
       store.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-4' }),
     ).resolves.toMatchObject({ status: 'conflict', reason: 'branch_owned' });
-    await store.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'private' });
+    await store.sessions.setVisibility({
+      sessionId: session.sessionId,
+      visibility: 'private',
+      expectedUserId: 'user-1',
+    });
     await expect(
       store.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-2' }),
     ).resolves.toMatchObject({ status: 'conflict', reason: 'stale_owner', session: { userId: 'user-1' } });
-    await store.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'org' });
+    await store.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'org', expectedUserId: 'user-1' });
     await expect(
       store.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-2' }),
-    ).resolves.toMatchObject({
-      status: 'updated',
-      session: { userId: 'user-2', createdByUserId: 'user-1' },
-    });
+    ).resolves.toMatchObject({ status: 'updated', session: { userId: 'user-2' } });
     expect(session.userId).toBe('user-1');
+    await expect(
+      store.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'private', expectedUserId: 'user-1' }),
+    ).resolves.toBeNull();
     await expect(
       store.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-3' }),
     ).resolves.toMatchObject({ status: 'conflict', reason: 'stale_owner', session: { userId: 'user-2' } });

@@ -104,11 +104,11 @@ async function seedGitLabRepository() {
   return { seed, sourceControl, projectRepository, project };
 }
 
-async function startOwnershipController(id: string) {
+async function startOwnershipController(id: string, storage = new InMemoryStore({ id })) {
   const controller = new AgentController<MastraCodeState>({
     id,
     stateSchema,
-    storage: new InMemoryStore({ id }),
+    storage,
     workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
     modes: [
       {
@@ -338,7 +338,6 @@ describe('source-control session routes', () => {
       error: 'Wait for the session to finish its run before taking ownership',
     });
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ userId: 'user-1' });
-    await expect(liveSession.thread.getOwner()).resolves.toBe('user-1');
     expect(await controller.getSession(sessionId)).toBe(liveSession);
     expect(audit.record).not.toHaveBeenCalled();
   });
@@ -359,7 +358,7 @@ describe('source-control session routes', () => {
     const liveSession = await controller.createSession({ id: sessionId, resourceId: sessionId, ownerId: 'user-1' });
     const transferOwner = sourceControl.sessions.transferOwner.bind(sourceControl.sessions);
     vi.spyOn(sourceControl.sessions, 'transferOwner').mockImplementationOnce(async input => {
-      await sourceControl.sessions.setVisibility({ sessionId, visibility: 'private' });
+      await sourceControl.sessions.setVisibility({ sessionId, visibility: 'private', expectedUserId: 'user-1' });
       return transferOwner(input);
     });
     const audit = { record: vi.fn().mockResolvedValue(null) };
@@ -374,12 +373,11 @@ describe('source-control session routes', () => {
       userId: 'user-1',
       visibility: 'private',
     });
-    await expect(liveSession.thread.getOwner()).resolves.toBe('user-1');
     expect(await controller.getSession(sessionId)).toBe(liveSession);
     expect(audit.record).not.toHaveBeenCalled();
   });
 
-  it('takes org-visible ownership with DB CAS, mirrors the thread, audits, and recycles the live host', async () => {
+  it('takes a shared session with a compare-and-set on its owner, audits, and recycles the live host', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     const sessionId = 'factory-session-transfer';
     await sourceControl.sessions.create({
@@ -392,8 +390,7 @@ describe('source-control session routes', () => {
       visibility: 'org',
     });
     const controller = await startOwnershipController('factory-owner-transfer');
-    const liveSession = await controller.createSession({ id: sessionId, resourceId: sessionId, ownerId: 'user-1' });
-    const threadId = liveSession.thread.getId()!;
+    await controller.createSession({ id: sessionId, resourceId: sessionId, ownerId: 'user-1' });
     const audit = { record: vi.fn().mockResolvedValue(null) };
     const app = buildApp([sourceControl], { ...seed, audit }, controller, noRuns, {
       workosId: 'user-2',
@@ -402,72 +399,24 @@ describe('source-control session routes', () => {
 
     const response = await takeOwnership(app, sessionId, 'user-1');
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      session: { userId: 'user-2', createdByUserId: 'user-1' },
-    });
-    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
-      userId: 'user-2',
-      createdByUserId: 'user-1',
-    });
-    await expect(controller.queryThreadById({ threadId })).resolves.toMatchObject({
-      metadata: expect.objectContaining({ ownerId: 'user-2', createdBy: 'user-1' }),
-    });
+    await expect(response.json()).resolves.toMatchObject({ session: { userId: 'user-2' } });
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ userId: 'user-2' });
     expect(await controller.getSession(sessionId)).toBeUndefined();
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: 'user-2',
         action: 'factory.session.owner_transferred',
-        metadata: { fromOwnerId: 'user-1', toOwnerId: 'user-2', createdByUserId: 'user-1' },
+        metadata: { fromOwnerId: 'user-1', toOwnerId: 'user-2' },
       }),
     );
 
-    const stale = await takeOwnership(app, sessionId, 'user-1');
-    expect(stale.status).toBe(409);
-    await expect(stale.json()).resolves.toMatchObject({
-      error: 'Someone else owns this session now',
-      reason: 'stale_owner',
-      currentOwnerId: 'user-2',
-    });
+    const repeated = await takeOwnership(app, sessionId, 'user-1');
+    expect(repeated.status).toBe(200);
+    await expect(repeated.json()).resolves.toMatchObject({ session: { userId: 'user-2' } });
+    expect(audit.record).toHaveBeenCalledTimes(1);
   });
 
-  it('serializes overlapping transfers so the thread never ends on an older owner', async () => {
-    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
-    const sessionId = 'factory-overlapping-transfer';
-    await sourceControl.sessions.create({
-      sessionId,
-      projectRepositoryId: projectRepository.id,
-      orgId: 'org-1',
-      userId: 'user-1',
-      branch: 'factory/overlapping-transfer',
-      baseBranch: 'main',
-      visibility: 'org',
-    });
-    const controller = await startOwnershipController('factory-overlapping-transfer');
-    await controller.createSession({ id: sessionId, resourceId: sessionId, ownerId: 'user-1', threadId: sessionId });
-    // The first transfer stalls between its row write and its thread mirror, where a second one could overtake it.
-    const getSession = controller.getSession.bind(controller);
-    vi.spyOn(controller, 'getSession').mockImplementationOnce(async input => {
-      await new Promise(resolve => setTimeout(resolve, 50));
-      return getSession(input);
-    });
-    const app = buildApp([sourceControl], seed, controller, noRuns, headers => ({
-      workosId: headers.get('x-viewer')!,
-      organizationId: 'org-1',
-    }));
-
-    const [first, second] = await Promise.all([
-      takeOwnership(app, sessionId, 'user-1', { 'x-viewer': 'user-2' }),
-      takeOwnership(app, sessionId, 'user-2', { 'x-viewer': 'user-3' }),
-    ]);
-    expect([first.status, second.status]).toEqual([200, 200]);
-    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ userId: 'user-3' });
-    await expect(controller.queryThreadById({ threadId: sessionId })).resolves.toMatchObject({
-      metadata: expect.objectContaining({ ownerId: 'user-3', createdBy: 'user-1' }),
-    });
-    expect(await controller.getSession(sessionId)).toBeUndefined();
-  });
-
-  it('runs a visibility change and a transfer of the same session one after the other', async () => {
+  it('refuses to make a session private once a teammate took it, and puts its thread back on the Factory', async () => {
     const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
     const sessionId = 'factory-visibility-vs-transfer';
     await sourceControl.sessions.create({
@@ -480,51 +429,58 @@ describe('source-control session routes', () => {
       baseBranch: 'main',
       visibility: 'org',
     });
-    const controller = await startOwnershipController('factory-visibility-vs-transfer');
-    await controller.createSession({ id: sessionId, resourceId: sessionId, ownerId: 'user-1', threadId: sessionId });
-    let markStallReached = () => {};
-    const stallReached = new Promise<void>(resolve => {
-      markStallReached = resolve;
+    const storage = new InMemoryStore({ id: 'factory-visibility-vs-transfer' });
+    const controller = await startOwnershipController('factory-visibility-vs-transfer', storage);
+    const memory = (await storage.getStore('memory'))!;
+    await memory.saveThread({
+      thread: { id: sessionId, resourceId: project.id, title: 'Shared', createdAt: new Date(), updatedAt: new Date() },
     });
-    let markTransferSettled = () => {};
-    const transferSettled = new Promise<void>(resolve => {
-      markTransferSettled = resolve;
+    // The owner's request parks after moving the thread off the Factory and before writing the row private.
+    let markParked = () => {};
+    const parked = new Promise<void>(resolve => {
+      markParked = resolve;
     });
-    // The owner's request parks between reading the row and writing it private, where a transfer could slip in.
-    // Unqueued, the transfer lands and lifts the park; queued, it cannot move until the timer does.
-    // The transfer's own thread lookup asks the same question and must not park.
-    let visibilityParked = false;
-    const workItems: RouteOptions['workItems'] = {
-      clearSessionReferences: async () => 0,
-      hasRunBindingForSession: async () => {
-        if (visibilityParked) return false;
-        visibilityParked = true;
-        markStallReached();
-        await Promise.race([transferSettled, new Promise(resolve => setTimeout(resolve, 200))]);
-        return false;
-      },
+    let releaseMove = () => {};
+    const released = new Promise<void>(resolve => {
+      releaseMove = resolve;
+    });
+    let moves = 0;
+    const moveThread: RouteOptions['moveThread'] = async input => {
+      await memory.updateThreadResourceId(input);
+      if (++moves === 1) {
+        markParked();
+        await released;
+      }
     };
-    const app = buildApp([sourceControl], seed, controller, workItems, headers => ({
-      workosId: headers.get('x-viewer')!,
-      organizationId: 'org-1',
-    }));
+    const app = buildApp(
+      [sourceControl],
+      seed,
+      controller,
+      noRuns,
+      headers => ({ workosId: headers.get('x-viewer')!, organizationId: 'org-1' }),
+      moveThread,
+    );
 
     const madePrivate = app.request(`/web/user-sessions/${sessionId}/visibility`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json', 'x-viewer': 'user-1' },
       body: JSON.stringify({ visibility: 'private' }),
     });
-    await stallReached;
-    const taken = await takeOwnership(app, sessionId, 'user-1', { 'x-viewer': 'user-2' }).finally(markTransferSettled);
-    expect((await madePrivate).status).toBe(200);
-    expect(taken.status).toBe(404);
+    await parked;
+    const taken = await takeOwnership(app, sessionId, 'user-1', { 'x-viewer': 'user-2' });
+    releaseMove();
+    expect(taken.status).toBe(200);
+    expect((await madePrivate).status).toBe(404);
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
-      userId: 'user-1',
-      visibility: 'private',
+      userId: 'user-2',
+      visibility: 'org',
+    });
+    await expect(controller.queryThreadById({ threadId: sessionId })).resolves.toMatchObject({
+      resourceId: project.id,
     });
   });
 
-  it('treats acquisition by the current owner as a CAS-checked no-op', async () => {
+  it('answers a takeover by the current owner without touching the session', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     const session = await sourceControl.sessions.create({
       sessionId: 'factory-same-owner-session',
@@ -542,9 +498,6 @@ describe('source-control session routes', () => {
       ownerId: 'user-1',
     });
     const initialUpdatedAt = session.updatedAt;
-    const transferOwner = vi.spyOn(sourceControl.sessions, 'transferOwner');
-    const mirrorOwner = vi.spyOn(liveSession.thread, 'transferOwnership');
-    const createSession = vi.spyOn(controller, 'createSession');
     const deleteSession = vi.spyOn(controller, 'deleteSession');
     const audit = { record: vi.fn().mockResolvedValue(null) };
     const app = buildApp([sourceControl], { ...seed, audit }, controller, noRuns, {
@@ -556,17 +509,10 @@ describe('source-control session routes', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ session: { userId: 'user-1' } });
-    expect(transferOwner).toHaveBeenCalledWith({
-      sessionId: session.sessionId,
-      expectedUserId: 'user-1',
-      toUserId: 'user-1',
-    });
     await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
       userId: 'user-1',
       updatedAt: initialUpdatedAt,
     });
-    expect(mirrorOwner).not.toHaveBeenCalled();
-    expect(createSession).not.toHaveBeenCalled();
     expect(deleteSession).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
     expect(await controller.getSession(session.sessionId)).toBe(liveSession);
@@ -579,30 +525,6 @@ describe('source-control session routes', () => {
     const staleResponse = await takeOwnership(app, session.sessionId, 'user-1');
     expect(staleResponse.status).toBe(409);
     await expect(staleResponse.json()).resolves.toMatchObject({ currentOwnerId: 'user-2', reason: 'stale_owner' });
-  });
-
-  it('starts the session as its new owner when nobody is live, stamps the thread, and recycles it', async () => {
-    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
-    const sessionId = 'factory-cold-transfer';
-    await sourceControl.sessions.create({
-      sessionId,
-      projectRepositoryId: projectRepository.id,
-      orgId: 'org-1',
-      userId: 'user-1',
-      branch: 'factory/cold-transfer',
-      baseBranch: 'main',
-      visibility: 'org',
-    });
-    const controller = await startOwnershipController('factory-cold-transfer');
-    const app = buildApp([sourceControl], seed, controller, noRuns, { workosId: 'user-2', organizationId: 'org-1' });
-
-    const response = await takeOwnership(app, sessionId, 'user-1');
-    expect(response.status).toBe(200);
-    await expect(controller.queryThreadById({ threadId: sessionId })).resolves.toMatchObject({
-      resourceId: project.id,
-      metadata: expect.objectContaining({ ownerId: 'user-2' }),
-    });
-    expect(await controller.getSession(sessionId)).toBeUndefined();
   });
 
   it('rejects takeover of an org-visible session from another organization', async () => {
@@ -636,10 +558,7 @@ describe('source-control session routes', () => {
     const app = buildApp([sourceControl], seed, undefined, undefined, { workosId: 'user-2', organizationId: 'org-1' });
     const response = await takeOwnership(app, session.sessionId, 'user-1');
     expect(response.status).toBe(404);
-    await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
-      userId: 'user-1',
-      createdByUserId: 'user-1',
-    });
+    await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({ userId: 'user-1' });
   });
 
   it('keeps Slack thread and Factory run sessions with their owner, and says so before the click', async () => {
@@ -1145,7 +1064,11 @@ describe('source-control session routes', () => {
 
     it('404s non-owners, including teammates who can see an org session', async () => {
       const { seed, sourceControl, session } = await seedPrivateSession();
-      await sourceControl.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'org' });
+      await sourceControl.sessions.setVisibility({
+        sessionId: session.sessionId,
+        visibility: 'org',
+        expectedUserId: 'user-1',
+      });
       const viewer = buildApp([sourceControl], seed, undefined, noRuns, teammate);
 
       const res = await putVisibility(viewer, session.sessionId, { visibility: 'private' });

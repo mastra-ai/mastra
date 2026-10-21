@@ -449,12 +449,14 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     setVisibility: async ({
       sessionId,
       visibility,
+      expectedUserId,
     }: {
       sessionId: string;
       visibility: SourceControlSessionVisibility;
+      expectedUserId: string;
     }): Promise<SourceControlSession | null> => {
       const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
-      if (!row) return null;
+      if (!row || row.userId !== expectedUserId) return null;
       row.visibility = visibility;
       row.updatedAt = new Date();
       return row;
@@ -508,7 +510,6 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         originSessionId: origin?.sessionId ?? null,
         originThreadId: origin?.threadId ?? null,
         originMutedAt: null,
-        createdByUserId: input.userId,
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,

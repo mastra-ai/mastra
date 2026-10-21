@@ -146,7 +146,6 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       factory_project_id: { type: 'text', nullable: true },
       org_id: { type: 'text' },
       user_id: { type: 'text' },
-      created_by_user_id: { type: 'text', nullable: true },
       branch: { type: 'text' },
       base_branch: { type: 'text' },
       title: { type: 'text', nullable: true },
@@ -353,10 +352,7 @@ export interface SourceControlSession {
   /** The factory the session belongs to. Null only on rows the backfill could not resolve. */
   factoryProjectId: string | null;
   orgId: string;
-  /** Current session owner. */
   userId: string;
-  /** User who created the session. Immutable across ownership transfers. */
-  createdByUserId: string;
   branch: string;
   title: string | null;
   visibility: SourceControlSessionVisibility;
@@ -520,10 +516,11 @@ export interface SourceControlStorageHandle {
     rename(args: { sessionId: string; title: string }): Promise<void>;
     /** Mute or unmute the side session's reports to its origin. Keyed by the controller-facing `sessionId`. */
     setOriginMuted(args: { sessionId: string; muted: boolean }): Promise<void>;
-    /** Change who can see the session. Returns the updated row, or null when it does not exist. */
+    /** Change who can see the session while `expectedUserId` still owns it. Null when it does not exist or changed owner. */
     setVisibility(args: {
       sessionId: string;
       visibility: SourceControlSessionVisibility;
+      expectedUserId: string;
     }): Promise<SourceControlSession | null>;
     /** Keyed by the link (today's callers) or by the factory. */
     getForBranch(args: SessionBranchKey): Promise<SourceControlSession | null>;
@@ -632,7 +629,6 @@ interface SessionDbRow extends Record<string, unknown> {
   factory_project_id?: string | null;
   org_id: string;
   user_id: string;
-  created_by_user_id: string | null;
   branch: string;
   title: string | null;
   visibility: string | null;
@@ -753,7 +749,6 @@ function toSession(row: SessionDbRow): SourceControlSession {
     factoryProjectId: row.factory_project_id ?? null,
     orgId: row.org_id,
     userId: row.user_id,
-    createdByUserId: row.created_by_user_id ?? row.user_id,
     branch: row.branch,
     title: row.title,
     visibility: row.visibility === 'private' ? 'private' : 'org',
@@ -1506,11 +1501,12 @@ export class SourceControlStorage extends FactoryStorageDomain {
             updated_at: new Date(),
           }));
         },
-        setVisibility: async ({ sessionId, visibility }) => {
-          const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
-            visibility,
-            updated_at: new Date(),
-          }));
+        setVisibility: async ({ sessionId, visibility, expectedUserId }) => {
+          const row = await db().updateAtomic<SessionDbRow>(
+            SESSIONS,
+            { session_id: sessionId, user_id: expectedUserId },
+            () => ({ visibility, updated_at: new Date() }),
+          );
           return row ? toSession(row) : null;
         },
         getForBranch: async args => {
@@ -1562,7 +1558,6 @@ export class SourceControlStorage extends FactoryStorageDomain {
               factory_project_id: factoryProjectId,
               org_id: input.orgId,
               user_id: input.userId,
-              created_by_user_id: input.userId,
               branch: input.branch,
               title: input.title ?? null,
               visibility: input.visibility ?? 'org',
@@ -1600,13 +1595,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
                   refusedPrivate = true;
                   return null;
                 }
-                return current.user_id === toUserId
-                  ? null
-                  : {
-                      user_id: toUserId,
-                      created_by_user_id: current.created_by_user_id ?? current.user_id,
-                      updated_at: new Date(),
-                    };
+                return current.user_id === toUserId ? null : { user_id: toUserId, updated_at: new Date() };
               },
             );
             if (updated) {
