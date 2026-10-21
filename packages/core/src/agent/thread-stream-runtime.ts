@@ -168,6 +168,9 @@ export class AgentThreadLeaseConflictError extends Error {
   }
 }
 
+/** The `reason` an `abort` chunk carries when its run stopped because another run holds its thread lease. */
+export const THREAD_LEASE_LOST_ABORT_REASON = 'thread-lease-lost';
+
 export class AgentThreadLeaseLostError extends Error {
   constructor(runId: string) {
     super(`Thread run ${runId} lost its lease before publishing a terminal event`);
@@ -538,6 +541,10 @@ type AgentThreadRuntimeState = {
    */
   leaseDeadlines: Map<string, { timer: ReturnType<typeof setTimeout>; confirmedSentAt: number }>;
   leaseFences: Map<string, () => Promise<void>>;
+  /** A run's in-flight attempt to take back a lease that lapsed, so the renewal, deadline and fence share one. */
+  leaseRetakes: Map<string, Promise<boolean>>;
+  /** Runs this runtime stopped because another run holds their thread lease, until their abort is broadcast. */
+  leaseLostRunIds: Set<string>;
   threadEventListeners: Set<ThreadEventListenerRegistration>;
   threadControlSubscriptions: Map<string, ThreadControlSubscription>;
   /**
@@ -747,6 +754,8 @@ function createRuntimeState(): AgentThreadRuntimeState {
     leaseRenewalTimers: new Map(),
     leaseDeadlines: new Map(),
     leaseFences: new Map(),
+    leaseRetakes: new Map(),
+    leaseLostRunIds: new Set(),
     threadEventListeners: new Set(),
     threadControlSubscriptions: new Map(),
     runStreamReaders: new Map(),
@@ -893,12 +902,21 @@ export class AgentThreadStreamRuntime {
             // A renewal that settles after the run ended or re-registered speaks for no live run, and must not
             // leave a rejecting fence behind for a later run with this id.
             if (state.leaseRenewalTimers.get(runId) !== timer) return;
-            // Another process may already own the thread, so stop this run instead of letting it keep
+            // Sent after the lease had already run out by this process's own clock, the renewal found the lease
+            // lapsed because this process was late (a stall under load); it can take it back if nobody else did.
+            // Sent while the lease should still have been live, it means the backend lost or gave away a live
+            // lease, and another process may already own the thread: stop this run instead of letting it keep
             // calling the model and tools beside its successor.
-            this.#stopLeaseRenewal(pubsub, runId, timer);
-            this.#abortLeaseLostRun(state, runId);
+            const confirmed = state.leaseDeadlines.get(runId)?.confirmedSentAt;
+            const lapsedHere = confirmed === undefined || sentAt >= confirmed + AGENT_THREAD_LEASE_TTL_MS;
+            const retaken = lapsedHere ? this.#retakeLease(pubsub, key, runId, timer) : Promise.resolve(false);
+            void retaken.then(kept => {
+              if (kept || state.leaseRenewalTimers.get(runId) !== timer) return;
+              this.#stopLeaseRenewal(pubsub, runId, timer);
+              this.#abortLeaseLostRun(state, runId);
+            });
           } else {
-            if (state.leaseRenewalTimers.get(runId) === timer) this.#armLeaseDeadline(pubsub, runId, sentAt);
+            if (state.leaseRenewalTimers.get(runId) === timer) this.#armLeaseDeadline(pubsub, key, runId, sentAt);
             if (state.sweptLeasedRunIds.has(runId)) {
               // A renewal in flight when the sweep stopped this timer still extended the lease.
               state.sweptLeasedRunIds.set(runId, Date.now());
@@ -920,7 +938,7 @@ export class AgentThreadStreamRuntime {
     }
     state.leaseRenewalTimers.set(runId, timer);
     // The lease was acquired or transferred just before this call.
-    this.#armLeaseDeadline(pubsub, runId, Date.now());
+    this.#armLeaseDeadline(pubsub, key, runId, Date.now());
     // A pubsub that can't lease has no owner to check, so every tool call would look like a takeover.
     if (!this.#resolveLeaseProvider(pubsub).isFallback) {
       const fence = this.#leaseFence(pubsub, key, runId, timer);
@@ -933,6 +951,7 @@ export class AgentThreadStreamRuntime {
    * Checked before each tool call. Renewals run every TTL/3, so a lease that was
    * taken over is otherwise only noticed after the run may have called tools beside
    * its successor. A backend that can't answer leaves the decision to the deadline.
+   * A lease that lapsed past the run's deadline with no other owner is taken back rather than stopping the run.
    */
   #leaseFence(pubsub: PubSub, key: string, runId: string, timer: ReturnType<typeof setInterval>): () => Promise<void> {
     const state = this.#getState(pubsub);
@@ -953,9 +972,14 @@ export class AgentThreadStreamRuntime {
       if (owner === runId) return;
       // A backend error only passes while the last confirmed renewal still covers this call.
       if (owner === unreachable) {
-        const current = state.leaseDeadlines.get(runId);
-        if (current && Date.now() < current.confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS) return;
+        const covering = state.leaseDeadlines.get(runId);
+        if (covering && Date.now() < covering.confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS) return;
       }
+      // Past the deadline with no owner, or no answer: the lease lapsed while this process was late, and is this
+      // run's again if nobody took it. No owner before the deadline means the backend lost a live lease.
+      const current = state.leaseDeadlines.get(runId);
+      const pastDeadline = !current || Date.now() >= current.confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS;
+      if (typeof owner !== 'string' && pastDeadline && (await this.#retakeLease(pubsub, key, runId, timer))) return;
       // Only the registration that owns this fence may stop the run.
       if (state.leaseRenewalTimers.get(runId) === timer) {
         this.#stopLeaseRenewal(pubsub, runId, timer);
@@ -965,7 +989,7 @@ export class AgentThreadStreamRuntime {
     };
   }
 
-  #armLeaseDeadline(pubsub: PubSub, runId: string, confirmedSentAt: number): void {
+  #armLeaseDeadline(pubsub: PubSub, key: string, runId: string, confirmedSentAt: number): void {
     const state = this.#getState(pubsub);
     const previous = state.leaseDeadlines.get(runId);
     // A slow renewal that settles after a newer one must not pull the deadline back.
@@ -974,8 +998,14 @@ export class AgentThreadStreamRuntime {
     const timer = setTimeout(
       () => {
         if (state.leaseDeadlines.get(runId)?.timer !== timer) return;
-        this.#stopLeaseRenewal(pubsub, runId);
-        this.#abortLeaseLostRun(state, runId);
+        // The lease may have lapsed, say while this process stalled past the TTL. The run keeps going only
+        // if it gets the lease back, which it can't when another run took the thread.
+        const renewal = state.leaseRenewalTimers.get(runId);
+        void (renewal ? this.#retakeLease(pubsub, key, runId, renewal) : Promise.resolve(false)).then(kept => {
+          if (kept || (renewal && state.leaseRenewalTimers.get(runId) !== renewal)) return;
+          this.#stopLeaseRenewal(pubsub, runId);
+          this.#abortLeaseLostRun(state, runId);
+        });
       },
       Math.max(0, confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS - Date.now()),
     );
@@ -985,7 +1015,45 @@ export class AgentThreadStreamRuntime {
     state.leaseDeadlines.set(runId, { timer, confirmedSentAt });
   }
 
+  /**
+   * Takes back a lease that lapsed while its run was still going because this process was late:
+   * it stalled past the TTL, so a renewal went out after the lease had run out, or not at all
+   * before the deadline. Acquiring succeeds only when the lease is free or
+   * still this run's, so a run another process took over is still stopped. A backend that doesn't
+   * answer within a TTL counts as a lost lease, as the deadline did before.
+   */
+  #retakeLease(pubsub: PubSub, key: string, runId: string, timer: ReturnType<typeof setInterval>): Promise<boolean> {
+    const state = this.#getState(pubsub);
+    const inFlight = state.leaseRetakes.get(runId);
+    if (inFlight) return inFlight;
+    const sentAt = Date.now();
+    const retake = (async () => {
+      let giveUp: ReturnType<typeof setTimeout> | undefined;
+      const lease = await Promise.race([
+        this.#getLeaseProvider(pubsub)
+          .acquireLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)
+          .catch(() => undefined),
+        new Promise<undefined>(resolve => (giveUp = setTimeout(() => resolve(undefined), AGENT_THREAD_LEASE_TTL_MS))),
+      ]).finally(() => clearTimeout(giveUp));
+      if (!lease?.acquired) return false;
+      if (state.leaseRenewalTimers.get(runId) !== timer) {
+        // The run ended meanwhile: don't hold its thread for a TTL. A later registration of the run keeps its own.
+        if (!state.leaseRenewalTimers.has(runId)) {
+          void this.#getLeaseProvider(pubsub)
+            .releaseLease(key, runId)
+            .catch(() => {});
+        }
+        return false;
+      }
+      this.#armLeaseDeadline(pubsub, key, runId, sentAt);
+      return true;
+    })().finally(() => state.leaseRetakes.delete(runId));
+    state.leaseRetakes.set(runId, retake);
+    return retake;
+  }
+
   #abortLeaseLostRun(state: AgentThreadRuntimeState, runId: string): void {
+    state.leaseLostRunIds.add(runId);
     // Tool calls the step already queued check the fence after this, so they must keep failing until the
     // run ends, not find no fence and run beside the successor.
     const lost = async () => {
@@ -2480,8 +2548,16 @@ export class AgentThreadStreamRuntime {
           });
         }
       }
-      const part = sanitizeBroadcastPart(rawPart);
+      let part = sanitizeBroadcastPart(rawPart);
       const producedAt = getChunkProducedAt(rawPart) ?? Date.now();
+      // Say why a run stopped when it lost its thread lease, so a subscriber can show more than "aborted".
+      if ((part as { type?: string } | null)?.type === 'abort') {
+        const runState = runtime.#getState(pubsub);
+        if (runState.leaseLostRunIds.delete(output.runId)) {
+          const abortPart = part as { payload?: Record<string, unknown> };
+          part = { ...abortPart, payload: { ...abortPart.payload, reason: THREAD_LEASE_LOST_ABORT_REASON } };
+        }
+      }
       stampPartProducedAt(part, producedAt);
       parts.push(part);
       if ((part as { type?: string } | null | undefined)?.type === 'start') startPart = part;

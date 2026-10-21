@@ -590,7 +590,10 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     }
     const shared = new SharedLeases();
     let stall = false;
-    /** The event loop stalls past the lease TTL while an owner check is in flight, then the check errors. */
+    /**
+     * The event loop stalls past the lease TTL while an owner check is in flight, then the check errors, and so
+     * does taking the lapsed lease back: nothing can prove the run still holds the thread.
+     */
     class StallingPubSub extends ReplicaPubSub {
       override async getLeaseOwner(key: string) {
         if (!stall || !key.startsWith(`${RESOURCE}\u0000`)) return super.getLeaseOwner(key);
@@ -599,6 +602,10 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
           // stall
         }
         throw new Error('lease backend unreachable');
+      }
+      override async acquireLease(key: string, owner: string, ttlMs: number) {
+        if (stall && key.startsWith(`${RESOURCE}\u0000`)) throw new Error('lease backend unreachable');
+        return super.acquireLease(key, owner, ttlMs);
       }
     }
     let ticks = 0;
@@ -936,4 +943,160 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     },
     20_000,
   );
+
+  it('keeps a run going when its renewals stall past the lease TTL and no other run took the thread', async () => {
+    const thread = 'stalled-renewal-thread';
+    for (let i = 0; i < 8; i++) {
+      llm.on(
+        { userMessage: 'stalled renewals', sequenceIndex: i },
+        { toolCalls: [{ id: `call_stalled_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    llm.on({ userMessage: 'stalled renewals', sequenceIndex: 8 }, { content: 'stalled renewals done' });
+
+    const shared = new SharedLeases();
+    /** Renewals that hang until released, as on a machine too loaded to finish one in time. */
+    class StallingRenewalsPubSub extends ReplicaPubSub {
+      stalled: Promise<void> | undefined;
+      override async renewLease(key: string, owner: string, ttlMs: number) {
+        if (this.stalled && key.startsWith(`${RESOURCE}\u0000`)) await this.stalled;
+        return super.renewLease(key, owner, ttlMs);
+      }
+    }
+    const pubsub = new StallingRenewalsPubSub(shared);
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return 'ticked';
+      },
+    });
+    const { output, drain } = await startStream(
+      replica(shared, new MockMemory(), { tick }, pubsub),
+      'stalled renewals',
+      { maxSteps: 12, memory: { thread, resource: RESOURCE } },
+    );
+    const done = drain();
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+
+    let resume!: () => void;
+    pubsub.stalled = new Promise<void>(resolve => (resume = resolve));
+    // No renewal confirms for well past the TTL (300ms), so the lease expires and the run's deadline passes.
+    await new Promise(resolve => setTimeout(resolve, 700));
+    pubsub.stalled = undefined;
+    resume();
+    await done;
+
+    expect(ticks).toBe(8);
+    expect(await output.text).toBe('stalled renewals done');
+    expect(await output.finishReason).not.toBe('aborted');
+  }, 20_000);
+
+  it('keeps a run going when a late renewal finds its lease expired and no other run took the thread', async () => {
+    const thread = 'late-renewal-expired-thread';
+    for (let i = 0; i < 8; i++) {
+      llm.on(
+        { userMessage: 'late renewal expired', sequenceIndex: i },
+        { toolCalls: [{ id: `call_late_expired_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    llm.on({ userMessage: 'late renewal expired', sequenceIndex: 8 }, { content: 'late renewal expired done' });
+
+    const shared = new SharedLeases();
+    /** Every renewal waits until the lease has run out, as a renewal queued behind a stalled process does. */
+    class LateRenewalsPubSub extends ReplicaPubSub {
+      late = false;
+      falseRenewals = 0;
+      override async renewLease(key: string, owner: string, ttlMs: number) {
+        if (this.late && key.startsWith(`${RESOURCE}\u0000`)) {
+          const expiresAt = shared.leases.get(key)?.expiresAt ?? 0;
+          await new Promise(resolve => setTimeout(resolve, Math.max(0, expiresAt - Date.now()) + 20));
+        }
+        const renewed = await super.renewLease(key, owner, ttlMs);
+        if (!renewed) this.falseRenewals++;
+        return renewed;
+      }
+    }
+    const pubsub = new LateRenewalsPubSub(shared);
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return 'ticked';
+      },
+    });
+    const { output, drain } = await startStream(
+      replica(shared, new MockMemory(), { tick }, pubsub),
+      'late renewal expired',
+      { maxSteps: 12, memory: { thread, resource: RESOURCE } },
+    );
+    const done = drain();
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+    pubsub.late = true;
+    await vi.waitFor(() => expect(pubsub.falseRenewals).toBeGreaterThan(0), { timeout: 5_000 });
+    pubsub.late = false;
+    await done;
+
+    expect(ticks).toBe(8);
+    expect(await output.text).toBe('late renewal expired done');
+    expect(await output.finishReason).not.toBe('aborted');
+  }, 20_000);
+
+  it('says the run stopped because another run holds its thread lease', async () => {
+    const thread = 'lease-lost-reason-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    for (let i = 0; i < 100; i++) {
+      llm.on(
+        { userMessage: 'reason run', sequenceIndex: i },
+        { toolCalls: [{ id: `call_reason_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return 'ticked';
+      },
+    });
+    const agent = replica(shared, new MockMemory(), { tick });
+    const subscription = await agent.subscribeToThread({ resourceId: RESOURCE, threadId: thread });
+    const aborts: unknown[] = [];
+    const watching = (async () => {
+      for await (const chunk of subscription.stream as AsyncIterable<any>) {
+        if (chunk?.type === 'abort') {
+          aborts.push(chunk.payload);
+          break;
+        }
+      }
+    })();
+
+    const { output, drain } = await startStream(agent, 'reason run', {
+      maxSteps: 100,
+      memory: { thread, resource: RESOURCE },
+    });
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+
+    // Another process's run takes the thread.
+    shared.leases.set(key, { owner: 'successor-run', expiresAt: Date.now() + 60_000 });
+    await done;
+    await watching;
+    subscription.unsubscribe();
+
+    expect(await output.finishReason).toBe('aborted');
+    expect(aborts).toEqual([expect.objectContaining({ reason: 'thread-lease-lost' })]);
+  }, 20_000);
 });
