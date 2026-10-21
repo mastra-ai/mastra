@@ -53,23 +53,27 @@ export class StepExecutor extends MastraBase {
    * replayed or resumed from an offset — the duplicates and hangs COR-1474
    * reports.
    *
-   * Wrapping the bus in a `CachingPubSub` that shares `mastra.serverCache` puts
-   * every frame through the one atomic append path, whichever worker produced
-   * it. The wrapper self-checks `supportsAtomicAppend` and publishes unnumbered
-   * (live-only) through a cache that cannot allocate and append in one step.
+   * Reusing an existing `CachingPubSub`, or wrapping the bus with one that
+   * shares `mastra.serverCache`, puts every frame through one atomic append
+   * path. The wrapper self-checks `supportsAtomicAppend` and publishes
+   * unnumbered (live-only) through a cache that cannot append atomically.
    */
   #getStepPubsub(): PubSub {
     if (this.#stepPubsub) return this.#stepPubsub;
     const inner = this.mastra!.pubsub;
     const cache = this.mastra?.serverCache;
-    this.#stepPubsub = cache
-      ? new CachingPubSub(inner, cache, {
-          // Run-local watch events are per-process fan-out (often megabytes of
-          // cumulative step results) and must never land in a shared cache.
-          shouldCache: topic => !isRunLocalTopic(topic),
-          logger: this.logger,
-        })
-      : inner;
+    if (inner instanceof CachingPubSub) {
+      this.#stepPubsub = inner;
+    } else if (cache) {
+      this.#stepPubsub = new CachingPubSub(inner, cache, {
+        // Run-local watch events are per-process fan-out (often megabytes of
+        // cumulative step results) and must never land in a shared cache.
+        shouldCache: topic => !isRunLocalTopic(topic),
+        logger: this.logger,
+      });
+    } else {
+      this.#stepPubsub = inner;
+    }
     return this.#stepPubsub;
   }
 

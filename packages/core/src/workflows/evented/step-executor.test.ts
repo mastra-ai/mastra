@@ -5,6 +5,7 @@ import type { ActorSignal } from '../../auth/ee';
 import { InMemoryServerCache } from '../../cache/inmemory';
 import { MastraError } from '../../error';
 import { CachingPubSub } from '../../events/caching-pubsub';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import { Mastra } from '../../mastra';
@@ -570,6 +571,31 @@ describe('StepExecutor', () => {
 
       const cached = await cache.listFromTo(`pubsub:{${topic}}`, 0);
       expect(cached.map(event => event.index)).toEqual([0, 1]);
+    });
+
+    it('reuses a configured caching pubsub so one step frame is cached once', async () => {
+      const cache = new InMemoryServerCache();
+      const pubsub = new CachingPubSub(new EventEmitterPubSub(), cache);
+      const target = new Mastra({ pubsub, cache });
+      const context = await captureStepPubsub(target);
+      const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
+      const topic = AGENT_STREAM_TOPIC('run-prewrapped');
+      const live: Event[] = [];
+      await target.pubsub.subscribe(topic, event => {
+        live.push(event);
+      });
+
+      await stepPubsub.publish(topic, {
+        type: 'chunk',
+        runId: 'run-prewrapped',
+        data: { n: 0 },
+      } as any);
+
+      expect(live).toHaveLength(1);
+      const cached = await cache.listFromTo(`pubsub:{${topic}}`, 0);
+      expect(cached.map(event => event.index)).toEqual([0]);
+      expect(live[0]?.index).toBe(0);
+      expect(stepPubsub).toBe(target.pubsub);
     });
 
     it('does not cache run-local step events even when the cache is atomic', async () => {
