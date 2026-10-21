@@ -54,6 +54,8 @@ export async function createReplyTool(
         await render.chatThread.post({
           markdown: link ? `${input.text}\n\n[${SESSION_LINK_LABEL}](${link})` : input.text!,
         });
+        // Marked only once posted, so a failed first post still gets the link on the retry.
+        if (link) requestContext.set(LINKED_KEY, true);
         return { posted: true };
       },
     }),
@@ -67,7 +69,6 @@ export async function createReplyTool(
  */
 function firstReplyLink(requestContext: RequestContext): string | undefined {
   if (!requestContext.get(NEW_CHANNEL_SESSION_KEY) || requestContext.get(LINKED_KEY)) return undefined;
-  requestContext.set(LINKED_KEY, true);
   const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
   if (!controller?.threadId) return undefined;
   return sessionLink({

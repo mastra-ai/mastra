@@ -92,6 +92,21 @@ describe('reply_in_thread', () => {
     expect(post).toHaveBeenNthCalledWith(2, { markdown: 'Done.' });
   });
 
+  it('keeps the session link for the retry when the first post fails', async () => {
+    const post = vi.fn().mockRejectedValueOnce(new Error('rate_limited')).mockResolvedValue({});
+    const { requestContext } = channelRun({ post });
+    markNewChannelSession(requestContext);
+    const tool = await replyTool(requestContext);
+
+    await expect(tool.execute({ text: 'On it.' }, {})).rejects.toThrow('rate_limited');
+    await tool.execute({ text: 'On it.' }, {});
+
+    expect(post).toHaveBeenLastCalledWith({
+      markdown:
+        'On it.\n\n[Open session ↗](https://mc.example.com/factories/factory-1/workspaces/session-1/threads/thread-1)',
+    });
+  });
+
   it('leaves the link off follow-ups in an existing session', async () => {
     const { requestContext, post } = channelRun();
     const tool = await replyTool(requestContext);
