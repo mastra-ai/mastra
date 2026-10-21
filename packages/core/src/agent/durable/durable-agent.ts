@@ -3095,7 +3095,7 @@ export class DurableAgent<
         }
         if (getRunRegistryEntry(runId, this.#mastra) === globalRegistryEntry) {
           globalRunRegistry.delete(runId);
-          if (!globalRegistryEntry.executionFence?.isLost()) this.#clearPubsubTopic(runId);
+          if (globalRegistryEntry.executionFence?.ownsRunTopics() ?? true) this.#clearPubsubTopic(runId);
         }
       }
       cleanedUp = true;
@@ -3790,7 +3790,7 @@ export class DurableAgent<
         }
         if (getRunRegistryEntry(runId, this.#mastra) === globalEntryForAbort) {
           globalRunRegistry.delete(runId);
-          if (!lostResumeRace && !(globalEntryForAbort?.executionFence ?? executionFence).isLost()) {
+          if (!lostResumeRace && (globalEntryForAbort?.executionFence ?? executionFence).ownsRunTopics()) {
             this.#clearPubsubTopic(runId);
           }
         }
@@ -4306,7 +4306,7 @@ export class DurableAgent<
         globalRunRegistry.delete(runId);
         // The topic stays when the run's latest execution here (this one or a
         // later resume()) lost the run: whoever took it over writes to it.
-        if (!registryEntry.executionFence?.isLost()) this.#clearPubsubTopic(runId);
+        if (registryEntry.executionFence?.ownsRunTopics() ?? true) this.#clearPubsubTopic(runId);
       }
       cleanedUp = true;
     };
@@ -4439,7 +4439,10 @@ export class DurableAgent<
             // the same runId and owns the run's topic: leave both to it.
             await threadRegistration?.rollback({ releaseLease: false });
             performCleanup();
-          } else if (!(await this.#reportRecoveryFailure(runId, executionError, executionFence.generation))) {
+          } else if (
+            !this.#timedOutExecutions.has(executionFence) &&
+            !(await this.#reportRecoveryFailure(runId, executionError, executionFence.generation))
+          ) {
             await threadRegistration?.rollback();
             performCleanup();
           }
@@ -4666,7 +4669,7 @@ export class DurableAgent<
       }
       if (getRunRegistryEntry(runId, this.#mastra) === globalRegistryEntry) {
         globalRunRegistry.delete(runId);
-        if (!globalRegistryEntry.executionFence?.isLost()) this.#clearPubsubTopic(runId);
+        if (globalRegistryEntry.executionFence?.ownsRunTopics() ?? true) this.#clearPubsubTopic(runId);
       }
     };
 

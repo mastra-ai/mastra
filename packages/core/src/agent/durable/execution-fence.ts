@@ -655,6 +655,11 @@ export class ExecutionFence implements RunFenceScope {
     return this.#lossError !== undefined;
   }
 
+  /** An owned deadline settlement revokes writes without handing its topics to another execution. */
+  ownsRunTopics(): boolean {
+    return this.#settledAs === 'owned' || !this.#lossError;
+  }
+
   /** Throw the loss error once this execution lost the run. Checks local state only. */
   throwIfLost(): void {
     if (this.#lossError) throw this.#lossError;

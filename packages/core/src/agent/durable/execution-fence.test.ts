@@ -472,6 +472,8 @@ describe('storage-backed ExecutionFence', () => {
 
     const writes = vi.fn(async () => {});
     expect(await original.settle(writes)).toBe('superseded');
+    expect(original.ownsRunTopics()).toBe(false);
+    expect(recovered.ownsRunTopics()).toBe(true);
     expect(writes).not.toHaveBeenCalled();
     expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
       generation: recovered.generation,
@@ -553,6 +555,7 @@ describe('storage-backed ExecutionFence', () => {
       await fence.whenSettled;
       expect(terminalWrite).toHaveBeenCalledTimes(1);
       expect(fence.isLost()).toBe(true);
+      expect(fence.ownsRunTopics()).toBe(true);
       expect(ExecutionFence.getLocalActive('run-1')).toBeUndefined();
       await expect(memoryStore.saveThread({ thread, fence: staleFence })).rejects.toSatisfy(isRunFenceConflictError);
       expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({ live: false });

@@ -135,12 +135,13 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     return durableAgent;
   }
 
-  it('terminates a hanging run as a failure with a total-timeout error chunk', async () => {
+  it.each(['stream', 'resume'] as const)('%s releases a timed-out run’s cached topic after cleanup', async method => {
     const durableAgent = setup(hangingModel() as LanguageModelV2);
-
-    const result = await durableAgent.stream('hello', {
-      modelSettings: { timeout: { totalMs: 150 } },
-    });
+    const options = { modelSettings: { timeout: { totalMs: 150 } } };
+    const result =
+      method === 'stream'
+        ? await durableAgent.stream('hello', options)
+        : await durableAgent.resume((await durableAgent.prepare('hello', options)).runId, { approved: true });
     const chunks = await drain(result.fullStream);
 
     const errorChunk = findTimeoutErrorChunk(chunks);
@@ -149,7 +150,11 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     // Fails through the error path — not a clean stop, and not masked as a
     // caller abort.
     expect(chunks.some((c: any) => c.type === 'finish')).toBe(false);
+    expect(await durableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(result.runId))).not.toHaveLength(0);
     result.cleanup();
+    await vi.waitFor(async () => {
+      expect(await durableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(result.runId))).toHaveLength(0);
+    });
   });
 
   it('delivers an expired deadline once the pubsub subscription becomes ready', async () => {
@@ -381,6 +386,9 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     expect(errorChunk).toBeDefined();
     expect(errorChunk.payload.error.message).toContain('totalMs');
     recovered.cleanup();
+    await vi.waitFor(async () => {
+      expect(await secondDurable.pubsub.getHistory(AGENT_STREAM_TOPIC(runId))).toHaveLength(0);
+    });
   }, 30000);
 
   it('keeps abort() reaching an in-flight tool after the run registry entry is evicted (#26126)', async () => {
