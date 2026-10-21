@@ -3020,14 +3020,14 @@ export class Workflow<
     const storedSnapshot = existsInStorage
       ? await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.id, runId: runIdToUse })
       : undefined;
-    if (options?.parentWorkflow && (cachedRun || existsInStorage)) {
+    if (cachedRun || existsInStorage) {
       const actualParent = storedSnapshot?.parentWorkflow ?? cachedRun?.parentWorkflow;
-      const requestedParent = options.parentWorkflow;
+      const requestedParent = options?.parentWorkflow;
       if (
-        actualParent?.workflowId !== requestedParent.workflowId ||
-        actualParent?.runId !== requestedParent.runId ||
-        actualParent?.stepId !== requestedParent.stepId ||
-        actualParent?.foreachIndex !== requestedParent.foreachIndex
+        actualParent?.workflowId !== requestedParent?.workflowId ||
+        actualParent?.runId !== requestedParent?.runId ||
+        actualParent?.stepId !== requestedParent?.stepId ||
+        actualParent?.foreachIndex !== requestedParent?.foreachIndex
       ) {
         throw new Error(`Run ID "${runIdToUse}" already belongs to another workflow execution`);
       }

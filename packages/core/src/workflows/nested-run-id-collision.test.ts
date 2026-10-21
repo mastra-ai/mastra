@@ -47,6 +47,25 @@ describe('nested workflow run ID collisions', () => {
     ).rejects.toThrow('already belongs to another workflow execution');
   });
 
+  it('rejects a caller-created run ID that belongs to a cached nested run', async () => {
+    const child = setup();
+    await child.createRun({ runId: 'parent-run-iter-2', parentWorkflow });
+
+    await expect(child.createRun({ runId: 'parent-run-iter-2' })).rejects.toThrow(
+      'already belongs to another workflow execution',
+    );
+  });
+
+  it('rejects a caller-created run ID that belongs to a persisted nested run', async () => {
+    const storage = new MockStore();
+    await setup(storage).createRun({ runId: 'parent-run-iter-2', parentWorkflow });
+    const reloadedChild = setup(storage);
+
+    await expect(reloadedChild.createRun({ runId: 'parent-run-iter-2' })).rejects.toThrow(
+      'already belongs to another workflow execution',
+    );
+  });
+
   it('allows a nested run to reopen the same persisted child run', async () => {
     const storage = new MockStore();
     await setup(storage).createRun({ runId: 'parent-run-iter-2', parentWorkflow });
