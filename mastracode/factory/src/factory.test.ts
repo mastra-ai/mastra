@@ -10,7 +10,7 @@ import { AgentController } from '@mastra/core/agent-controller';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
-import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
+import type { ApiRoute, AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 
@@ -24,6 +24,7 @@ import {
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
+import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
@@ -34,6 +35,7 @@ import { invalidateCustomProvidersSnapshots } from './routes/custom-provider-sou
 import type * as projectRoutesModule from './routes/projects.js';
 import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
+import { mountApiRoutes } from './routes/test-utils.js';
 import type * as dispatcherModule from './rules/dispatcher.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
 import type * as terminalCleanupModule from './rules/terminal-cleanup.js';
@@ -1111,6 +1113,34 @@ describe('MastraFactory.prepare', () => {
     expect(paths).toContain('/auth/callback');
     expect(paths).toContain('/auth/logout');
     expect(paths).toContain('/auth/me');
+  });
+
+  it('tells the UI it serves MCP exactly when it mounts the MCP endpoint', async () => {
+    const cases = [
+      { auth: fakeProvider(), mcp: { authorizationServers: ['https://auth.example.com'] }, serves: true },
+      // An auth provider with no authorization server for MCP clients to sign in through.
+      { auth: fakeProvider(), mcp: undefined, serves: false },
+      {
+        auth: fakeProvider(),
+        mcp: { enabled: false, authorizationServers: ['https://auth.example.com'] },
+        serves: false,
+      },
+      { auth: null, mcp: { authorizationServers: ['https://auth.example.com'] }, serves: false },
+    ];
+    for (const { auth, mcp, serves } of cases) {
+      prepareMock.mockClear();
+      const config = await prepareFactory({ storage: fakeStorage(), auth, ...(mcp ? { mcp } : {}) });
+      const routes = (config.buildApiRoutes as (deps: object) => ApiRoute[])({
+        controller: sessionNotifierStub,
+        authStorage: {},
+      });
+      const app = new Hono();
+      mountApiRoutes(app as never, routes);
+
+      const features = await (await app.request('/web/config/features')).json();
+      const mountsMcp = routes.some(route => route.path === '/web/factory/projects/:projectId/mcp');
+      expect({ features: features.mcp, mountsMcp }).toEqual({ features: serves, mountsMcp: serves });
+    }
   });
 
   it('registers the Factory transition tool only for exact active bindings', async () => {
