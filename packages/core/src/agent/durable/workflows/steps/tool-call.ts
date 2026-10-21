@@ -739,7 +739,8 @@ export function createDurableToolCallStep() {
       const assertNotSuperseded = () =>
         assertExecutionNotSuperseded({ runId, agentId: initData.agentId, requestContext, mastra: mastra as Mastra });
 
-      const doFlush = async (messagesToFlush = messageList) => {
+      // Remote workers have no registry message list; persist updates through the recovered resume list.
+      const doFlush = async (messagesToFlush = messageList ?? resumeMessageList) => {
         if (
           saveQueueManager &&
           messagesToFlush &&
@@ -815,7 +816,8 @@ export function createDurableToolCallStep() {
         approvalToolName?: string;
         approvalArgs?: unknown;
       }) => {
-        if (!messageList) return;
+        const metadataMessageList = messageList ?? resumeMessageList;
+        if (!metadataMessageList) return;
         const metadataKey = opts.type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         const entry = {
           toolCallId,
@@ -839,7 +841,7 @@ export function createDurableToolCallStep() {
             (part: any) => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
           );
 
-        const responseMessages = messageList.get.response.db();
+        const responseMessages = metadataMessageList.get.response.db();
         const lastAssistantMessage = [...responseMessages].reverse().find(carriesToolCall);
         if (lastAssistantMessage?.content) {
           let metadata: Record<string, any>;
@@ -864,7 +866,7 @@ export function createDurableToolCallStep() {
         // the entry into the assistant message that carries this tool call via
         // updateMessageMetadataByToolCallId, which also re-marks the message
         // unsaved so the following flush persists this write too.
-        const allMessages = messageList.get.all.db();
+        const allMessages = metadataMessageList.get.all.db();
         const target = [...allMessages].reverse().find(carriesToolCall);
         if (!target?.content) {
           logger?.warn?.(
@@ -877,7 +879,7 @@ export function createDurableToolCallStep() {
             ? (target.content.metadata as Record<string, any>)
             : {};
         const existingEntries = (existingMeta[metadataKey] ?? {}) as Record<string, any>;
-        messageList.updateMessageMetadataByToolCallId(toolCallId, {
+        metadataMessageList.updateMessageMetadataByToolCallId(toolCallId, {
           [metadataKey]: { ...existingEntries, [toolCallId]: entry },
         });
       };
