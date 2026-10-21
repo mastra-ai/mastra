@@ -1,6 +1,8 @@
 import { defineEvent } from '@mastra/mcp';
 import { z } from 'zod';
 
+import { canViewSourceControlSession } from '../routes/session-access.js';
+import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import { parseAuditAction } from '../storage/domains/audit/actions.js';
 import { AUDIT_ACTOR_TYPES } from '../storage/domains/audit/actors.js';
 import type { AuditStorage, AuditEventRow } from '../storage/domains/audit/base.js';
@@ -10,6 +12,7 @@ import {
   decodeAuditAfterCursor,
   encodeAuditCursor,
 } from '../storage/domains/audit/base.js';
+import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 const activityArgs = z
@@ -31,7 +34,8 @@ const activityPayload = z.object({
     id: z.string(),
     name: z.string().optional(),
   }),
-  workItemId: z.string(),
+  workItemId: z.string().optional(),
+  sessionId: z.string().optional(),
   summary: z.string(),
 });
 
@@ -42,13 +46,14 @@ export interface FactoryActivityEventDeps {
   factoryProjectId: string;
   audit: Pick<AuditStorage, 'list'>;
   workItems: Pick<WorkItemsStorage, 'getForProject'>;
+  sessions: Pick<SourceControlSessionLookup, 'getBySessionId'>;
+  /** Who is polling: sessions they can't view keep their activity out. */
+  viewer: { orgId: string; userId: string };
 }
 
-function workItemTarget(event: AuditEventRow) {
-  return event.targets.find(target => target.type === 'work_item');
-}
+type Subject = { workItem?: { id: string; name?: string }; session?: SourceControlSession };
 
-function toActivity(event: AuditEventRow, workItem: { id: string; name?: string }): FactoryActivity {
+function toActivity(event: AuditEventRow, { workItem, session }: Subject): FactoryActivity {
   const profile = event.metadata[ACTOR_PROFILE_METADATA_KEY] as { name?: unknown } | undefined;
   const parsed = parseAuditAction(event.action);
   const verb = parsed
@@ -62,8 +67,9 @@ function toActivity(event: AuditEventRow, workItem: { id: string; name?: string 
       id: event.actorId,
       ...(typeof profile?.name === 'string' ? { name: profile.name } : {}),
     },
-    workItemId: workItem.id,
-    summary: `${verb}: ${workItem.name ?? workItem.id}`,
+    ...(workItem ? { workItemId: workItem.id } : {}),
+    ...(session ? { sessionId: session.sessionId } : {}),
+    summary: `${verb}: ${workItem ? (workItem.name ?? workItem.id) : (session?.title ?? session?.branch ?? session?.sessionId)}`,
   };
 }
 
@@ -77,10 +83,12 @@ export const ACTIVITY_SETTLE_MS = 5_000;
 /**
  * `factory.activity`: the Factory's audit trail as polled MCP events (SEP-3415, experimental).
  *
- * Only work item activity is served — the same events `factory_inspect_work_item`
- * already shows any member of the Factory — and without session ids. Session
- * activity (signals, git pushes from private sessions) stays out until the
- * trail has a visibility rule.
+ * Serves activity on work items and sessions. Sessions follow the same rule as the
+ * session routes (`canViewSourceControlSession`): another member's private session,
+ * or a session that can't be found, keeps the whole event out, even when it also
+ * names a work item. An agent's activity counts as its session's when the agent's
+ * thread is a session. Events naming neither (intake settings, rule bindings'
+ * own actions) are not served.
  *
  * Poll-only by design: the MCP server is built per request, so there is nothing
  * to push from, and every poll reads storage from the client's cursor. Events are
@@ -90,7 +98,7 @@ export function factoryActivityEvent(deps: FactoryActivityEventDeps) {
   const project = { orgId: deps.orgId, factoryProjectId: deps.factoryProjectId };
   return defineEvent({
     description:
-      'Activity on this Factory’s work items: created, updated, moved between stages, commented on, and the runs working on them.',
+      'Activity on this Factory’s work items and the sessions you can see: items created, updated, moved and commented on, runs, approvals, signals and agent commits, pushes and pull requests.',
     inputSchema: activityArgs,
     payloadSchema: activityPayload,
     // The server is already scoped to the caller's Factory; this only rejects a work item outside it.
@@ -110,6 +118,30 @@ export function factoryActivityEvent(deps: FactoryActivityEventDeps) {
         after: cursor,
         limit: maxEvents,
       });
+      const sessionCache = new Map<string, Promise<SourceControlSession | null>>();
+      const lookup = (sessionId: string) => {
+        let found = sessionCache.get(sessionId);
+        if (!found) sessionCache.set(sessionId, (found = deps.sessions.getBySessionId(sessionId)));
+        return found;
+      };
+      const visible = (session: SourceControlSession | null): session is SourceControlSession =>
+        session !== null && canViewSourceControlSession(session, deps.viewer);
+      /** What the event is about, or `undefined` when the caller may not see it. */
+      const subjectOf = async (event: AuditEventRow): Promise<Subject | undefined> => {
+        const workItem = event.targets.find(target => target.type === 'work_item');
+        const named = event.targets.filter(target => target.type === 'session').map(target => target.id);
+        const sessions = await Promise.all(named.map(lookup));
+        if (!sessions.every(visible)) return undefined;
+        let session = sessions[0];
+        if (event.actorType === 'agent' && event.actorId.startsWith('agent:')) {
+          const actorSession = await lookup(event.actorId.slice('agent:'.length));
+          if (actorSession && !visible(actorSession)) return undefined;
+          session ??= actorSession ?? undefined;
+        }
+        if (!workItem && !session) return undefined;
+        return { ...(workItem ? { workItem } : {}), ...(session ? { session } : {}) };
+      };
+
       const settledUntil = now - ACTIVITY_SETTLE_MS;
       const expiredBefore = maxAgeMs === undefined ? -Infinity : now - maxAgeMs;
       const events = [];
@@ -128,9 +160,10 @@ export function factoryActivityEvent(deps: FactoryActivityEventDeps) {
           expired = true;
           continue;
         }
-        const workItem = workItemTarget(event);
-        if (!workItem || (args.workItemId && workItem.id !== args.workItemId)) continue;
-        events.push({ eventId: event.id, timestamp: event.occurredAt, data: toActivity(event, workItem) });
+        if (args.workItemId && !event.targets.some(t => t.type === 'work_item' && t.id === args.workItemId)) continue;
+        const subject = await subjectOf(event);
+        if (!subject) continue;
+        events.push({ eventId: event.id, timestamp: event.occurredAt, data: toActivity(event, subject) });
       }
       return {
         events,

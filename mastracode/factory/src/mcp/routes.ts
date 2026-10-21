@@ -250,6 +250,8 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
     version: FACTORY_MCP_SERVER_VERSION,
     description: 'Manage work items, sessions and decisions in a Mastra Factory.',
     instructions: FACTORY_MCP_INSTRUCTIONS,
+    // VS Code and Cursor still open with 2025-era `initialize`; serve them statelessly.
+    legacy: 'stateless',
     tools: createFactoryMcpTools(scope, deps, { persistedSession: persisted }),
     events: {
       'factory.activity': factoryActivityEvent({
@@ -257,6 +259,8 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
         factoryProjectId,
         audit: deps.tools.audit,
         workItems: deps.tools.workItems,
+        sessions: deps.tools.sessions,
+        viewer: { orgId: tenant.orgId, userId: tenant.userId },
       }),
     },
   });

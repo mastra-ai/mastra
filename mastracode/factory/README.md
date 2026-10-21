@@ -746,7 +746,7 @@ To connect a client:
 - **Claude** (claude.ai and Claude Desktop): open **Settings → Connectors → Add custom connector**, paste the endpoint URL, then sign in when asked. Claude connects from Anthropic's servers, so the Factory must be reachable over public HTTPS.
 - **ChatGPT**: open **Plugins**, select **+ → Add custom MCP server**, paste the endpoint URL, and choose OAuth. ChatGPT also connects from its own servers and speaks MCP `2026-07-28`.
 
-The endpoint speaks MCP `2026-07-28` (clients open with `server/discover`). Older clients that open with a 2025-era `initialize` request get an unsupported-protocol-version error naming `2026-07-28`. CORS allows the `Mcp-Protocol-Version`, `Mcp-Method` and `Mcp-Name` request headers and exposes `WWW-Authenticate`, so browser-based clients can connect too, from any origin the server's CORS settings accept.
+The endpoint speaks MCP `2026-07-28` (clients open with `server/discover`). Clients that still open with a 2025-era `initialize` request, such as VS Code and Cursor, are served too, statelessly: they sign in the same way and get the same tools, but no session id, no `GET` event stream and no activity events. CORS allows the `Mcp-Protocol-Version`, `Mcp-Method` and `Mcp-Name` request headers and exposes `WWW-Authenticate`, so browser-based clients can connect too, from any origin the server's CORS settings accept.
 
 Factories on Mastra Platform auth advertise Platform's AuthKit (`https://auth-kit.mastra.ai`) automatically. With other auth providers, set the authorization server the metadata advertises, or the endpoint isn't served:
 
@@ -776,8 +776,8 @@ Claude and ChatGPT don't consume these events yet: Claude connectors have no eve
 - A `null` or missing cursor starts from now and returns no events. Pass back the returned `cursor` on each poll. Any other cursor the Factory can't read, including `""`, restarts from now and marks the result `truncated`.
 - An event is delivered once it is 5 seconds old, so events written while a poll runs aren't skipped.
 - With `maxAgeMs`, older events are skipped and the result is marked `truncated`.
-- Each event's `eventId` is its audit row id, and the payload has `action`, `occurredAt`, `actor`, `workItemId` and a one-line `summary`.
-- Only activity on work items is served. Activity that only touches a session (signals, pushes from private sessions) is left out.
+- Each event's `eventId` is its audit row id, and the payload has `action`, `occurredAt`, `actor`, a one-line `summary`, and `workItemId` and `sessionId` when the event is about a work item or session.
+- Work item and session activity is served: item changes, runs, approvals, signals, and agents' commits, pushes and pull requests. Sessions follow the same rule as everywhere else in the Factory: you see your own sessions and shared ones, never another member's private session. An event that names a session you can't see is left out entirely, even when it also names a work item.
 
 ### Development
 

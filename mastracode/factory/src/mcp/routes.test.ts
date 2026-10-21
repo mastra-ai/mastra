@@ -65,6 +65,7 @@ const PUBLIC_ORIGIN = 'https://factory.example.com';
  */
 const USERS: Record<string, { orgId?: string; userId: string }> = {
   'token-alice': { orgId: 'org-1', userId: 'alice' },
+  'token-bob': { orgId: 'org-1', userId: 'bob' },
   'token-mallory': { orgId: 'org-2', userId: 'mallory' },
   'token-no-org': { userId: 'drifter' },
 };
@@ -148,7 +149,45 @@ async function setup() {
     );
   }
   const base = await serve(app);
-  return { ...seed, project, item, base, url: mcpUrl(base, project.id) };
+  /** Link a repository and file sessions under it, the way starting a session does. */
+  const createSessions = async (
+    sessions: Array<{ sessionId: string; userId: string; visibility: 'org' | 'private'; title?: string }>,
+  ) => {
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'alice',
+      externalId: '1',
+    });
+    const repository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '2', slug: 'acme/app', defaultBranch: 'main' },
+    });
+    const connection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'alice',
+    });
+    const link = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'alice',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/app',
+    });
+    for (const session of sessions) {
+      await sourceControl.sessions.create({
+        ...session,
+        projectRepositoryId: link.id,
+        factoryProjectId: project.id,
+        orgId: 'org-1',
+        branch: `user/${session.sessionId}`,
+        baseBranch: 'main',
+      });
+    }
+  };
+  return { ...seed, project, item, base, url: mcpUrl(base, project.id), createSessions };
 }
 
 const servers: Server[] = [];
@@ -388,35 +427,58 @@ describe('Factory MCP server', () => {
     ]);
   });
 
-  it('an older MCP client gets a clear unsupported-version error', async () => {
-    const { url } = await setup();
+  it('an older MCP client (VS Code, Cursor) signs in, lists and runs the tools', async () => {
+    const { url, item, project } = await setup();
 
     // A 2025-era opening: `initialize`, no `_meta` envelope, no 2026 headers.
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: 'Bearer token-alice',
-        'Content-Type': 'application/json',
-        Accept: 'application/json, text/event-stream',
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: {
-          protocolVersion: '2025-11-25',
-          capabilities: {},
-          clientInfo: { name: 'vscode', version: '1.0.0' },
+    const opening = (token?: string) =>
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
         },
-      }),
-    });
-    const body = await readJsonRpc(response);
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'vscode', version: '1.0.0' } },
+        }),
+      });
 
-    expect(response.status).toBe(400);
-    expect(body?.error).toMatchObject({
-      message: 'Unsupported protocol version: 2025-11-25',
-      data: { supported: [PROTOCOL_VERSION], requested: '2025-11-25' },
+    const anonymous = await opening();
+    expect(anonymous.status).toBe(401);
+    expect(anonymous.headers.get('www-authenticate')).toContain('resource_metadata=');
+
+    const signedIn = await opening('token-alice');
+    expect(signedIn.status).toBe(200);
+    expect(signedIn.headers.has('mcp-session-id')).toBe(false);
+    expect((await readJsonRpc(signedIn))?.result).toMatchObject({
+      protocolVersion: '2025-11-25',
+      serverInfo: { name: 'Acme Factory' },
     });
+
+    const mcp = new MCPClient({
+      id: `factory-mcp-legacy-${Math.random()}`,
+      servers: {
+        factory: {
+          url: new URL(url),
+          protocolVersion: 'legacy',
+          requestInit: { headers: { Authorization: 'Bearer token-alice' } },
+        },
+      },
+    });
+    clients.push(mcp);
+    const tools = await mcp.listTools();
+    expect(mcp.getServerProtocolVersions().factory).not.toBe(PROTOCOL_VERSION);
+    expect(Object.keys(tools)).not.toContain('factory_factory_message_origin');
+    const result = (await tools.factory_search!.execute!({ query: 'login' }, {} as never)) as {
+      content: Array<{ type: string; text: string }>;
+    };
+    expect(toolText(result).results).toEqual([
+      { id: item.id, title: 'Fix the login page', url: `${PUBLIC_ORIGIN}/factory/${project.id}/work-items/${item.id}` },
+    ]);
   });
 
   it('denies a user from another organization', async () => {
@@ -457,6 +519,8 @@ describe('Factory activity over MCP events', () => {
       { name: 'factory.activity', arguments: args, ...(cursor === undefined ? {} : { cursor }), ...options },
       token,
     );
+
+  const activity = (action: string) => ({ action, occurredAt: expect.any(String), actor: expect.any(Object) });
 
   const renameItem = (url: string, workItem: string, title: string) =>
     claudeRequest(
@@ -628,28 +692,70 @@ describe('Factory activity over MCP events', () => {
     expect(targeted.body?.error).toMatchObject({ code: -32024 });
   });
 
-  it('a private session’s activity isn’t visible to other users', async () => {
-    const { url, project, item, audit } = await setup();
-    const start = await poll(url, 'token-alice', null);
-    tick(1000);
+  it('session activity reaches the members who can see the session, and a private session only its owner', async () => {
+    const { url, project, item, audit, createSessions } = await setup();
+    await createSessions([
+      { sessionId: 'alice-private', userId: 'alice', visibility: 'private', title: 'Alice’s spike' },
+      { sessionId: 'bob-private', userId: 'bob', visibility: 'private', title: 'Bob’s spike' },
+      { sessionId: 'shared', userId: 'bob', visibility: 'org', title: 'Pairing on login' },
+    ]);
+    const aliceStart = await poll(url, 'token-alice', null);
+    const bobStart = await poll(url, 'token-bob', null);
 
-    // Another member's agent signals a private session: activity on the session, not on a work item.
-    await audit.record({
-      orgId: 'org-1',
-      actorId: 'agent:thread-bob',
+    const record = async (event: Omit<Parameters<typeof audit.record>[0], 'orgId' | 'factoryProjectId'>) => {
+      tick(1);
+      await audit.record({ orgId: 'org-1', factoryProjectId: project.id, ...event });
+    };
+    const signal = (sessionId: string) =>
+      record({
+        actorId: 'agent:thread-x',
+        actorType: 'agent',
+        action: 'factory.agent.signaled',
+        targets: [{ type: 'session', id: sessionId }],
+      });
+    await signal('bob-private');
+    await signal('shared');
+    await signal('ghost-session');
+    // An agent's own git activity names no session; its thread is the session.
+    await record({
+      actorId: 'agent:alice-private',
       actorType: 'agent',
-      action: 'factory.agent.signaled',
-      targets: [{ type: 'session', id: 'bob-private-session' }],
-      metadata: { targetSessionId: 'bob-private-session' },
-      factoryProjectId: project.id,
+      action: 'factory.agent.push',
+      targets: [{ type: 'worktree', id: '/sandbox/app' }],
     });
+    // A run approval inside Bob's private session also names the work item; it stays Bob's.
+    await record({
+      actorId: 'bob',
+      actorType: 'human',
+      action: 'factory.run.approved',
+      targets: [
+        { type: 'session', id: 'bob-private' },
+        { type: 'work_item', id: item.id, name: item.title },
+      ],
+    });
+    tick(1);
     await renameItem(url, item.id, 'Fix the sign-in page');
 
     settle();
-    const next = await poll(url, 'token-alice', start.body!.result.cursor);
-    expect(next.body?.result.events.map((event: { data: { action: string } }) => event.data.action)).toEqual([
-      'factory.work_item.updated',
+    const seen = async (token: string, cursor: string) =>
+      (await poll(url, token, cursor)).body?.result.events.map(
+        (event: { data: { action: string; sessionId?: string; workItemId?: string; summary: string } }) => event.data,
+      );
+    expect(await seen('token-alice', aliceStart.body!.result.cursor)).toEqual([
+      { ...activity('factory.agent.signaled'), sessionId: 'shared', summary: 'agent signaled: Pairing on login' },
+      { ...activity('factory.agent.push'), sessionId: 'alice-private', summary: 'agent push: Alice’s spike' },
+      { ...activity('factory.work_item.updated'), workItemId: item.id, summary: 'updated: Fix the sign-in page' },
     ]);
-    expect(JSON.stringify(next.body?.result)).not.toContain('bob-private-session');
+    expect(await seen('token-bob', bobStart.body!.result.cursor)).toEqual([
+      { ...activity('factory.agent.signaled'), sessionId: 'bob-private', summary: 'agent signaled: Bob’s spike' },
+      { ...activity('factory.agent.signaled'), sessionId: 'shared', summary: 'agent signaled: Pairing on login' },
+      {
+        ...activity('factory.run.approved'),
+        sessionId: 'bob-private',
+        workItemId: item.id,
+        summary: 'run approved: Fix the login page',
+      },
+      { ...activity('factory.work_item.updated'), workItemId: item.id, summary: 'updated: Fix the sign-in page' },
+    ]);
   });
 });
