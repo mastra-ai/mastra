@@ -53,7 +53,7 @@
     "react-grab": "^0.1.37",
     "tailwindcss": "4.3.3",
     "typescript": "catalog:ts6",
-    "vite": "^7.3.1",
+    "vite": "^8.0.0",
     "vitest": "catalog:"
   },
   "engines": {

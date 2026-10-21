@@ -2252,12 +2252,18 @@ describe('createMastraCode', () => {
     expect(decision.streamOptions).toBeDefined();
   });
 
-  it('does not hold notifications when the embedder configured its own PubSub', async () => {
-    for (const ownedHere of [true, false]) {
-      expect(await decideDelivery({ pubsub: {} as any, crossProcessPubSub: true }, { ownedHere })).not.toHaveProperty(
-        'hold',
-      );
-    }
+  it("delivers this resource's notifications from the shared schedule when the embedder configured its own PubSub", async () => {
+    const decision = await decideDelivery({ pubsub: {} as any, crossProcessPubSub: true }, { ownedHere: true });
+
+    expect(decision).not.toHaveProperty('hold');
+    expect(decision.streamOptions).toBeDefined();
+  });
+
+  it('leaves a resource no session here serves for its own process when the embedder configured its own PubSub', async () => {
+    const decision = await decideDelivery({ pubsub: {} as any, crossProcessPubSub: true }, { ownedHere: false });
+
+    expect(decision).toMatchObject({ action: 'deliver', hold: true });
+    expect(decision.streamOptions).toBeUndefined();
   });
 
   it("holds another project's thread on a shared resource, and runs it as that project's session once one is live here", async () => {

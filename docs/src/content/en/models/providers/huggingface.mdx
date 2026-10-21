@@ -7,7 +7,7 @@ description: "Browse Hugging Face model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/huggingface.svg" alt="Hugging Face logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Hugging Face
 
-Access 82 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
+Access 84 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
 
 Learn more in the [Hugging Face documentation](https://huggingface.co).
 
@@ -286,6 +286,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.79
   },
   {
+    "model": "huggingface/meta-llama/Llama-Guard-4-12B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.18,
+    "outputCost": 0.18
+  },
+  {
     "model": "huggingface/MiniMaxAI/MiniMax-M1-80k",
     "imageInput": false,
     "audioInput": false,
@@ -536,6 +548,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 16384,
     "inputCost": 0.29,
     "outputCost": 0.59
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3-8B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 32768,
+    "inputCost": 0.07,
+    "outputCost": 0.18
   },
   {
     "model": "huggingface/Qwen/Qwen3-Coder-30B-A3B-Instruct",

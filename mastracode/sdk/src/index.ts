@@ -1369,7 +1369,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
               })
             : undefined;
           const withOptions = streamOptions ? { ...decision, streamOptions } : decision;
-          if (!ownsNotificationDispatch) return withOptions;
+          // With a pubsub of its own the embedder runs no dispatch timer here,
+          // so this process delivers its own resources from the shared
+          // schedule. A resource no session here serves is left for the
+          // process that serves it: waking it from here would start the run
+          // with no session, and so no model.
+          if (!ownsNotificationDispatch) return owner ? withOptions : { ...withOptions, hold: true };
           // `hold` only applies at delivery time; it is ignored when a
           // notification is first sent.
           const hold = shouldHoldNotificationDelivery({

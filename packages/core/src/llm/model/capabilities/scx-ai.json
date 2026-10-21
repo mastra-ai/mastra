@@ -3,18 +3,6 @@
   "temperature": ["GLM-5.2", "MiniMax-M2.7", "Qwen3.8-Max", "gpt-oss-120b"],
   "structuredOutput": ["GLM-5.2", "MiniMax-M2.7", "Qwen3.8-Max", "gpt-oss-120b"],
   "reasoning": {
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "Qwen3.8-Max": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
     "MiniMax-M2.7": [
       {
         "type": "effort",
@@ -25,6 +13,18 @@
       {
         "type": "effort",
         "values": ["none", "high", "max"]
+      }
+    ],
+    "Qwen3.8-Max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

@@ -124,6 +124,7 @@ import { FactoryReplyCredentialProcessor } from './session/reply-credential-proc
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
+import { createShareFileTool } from './session/share-file-tool.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
@@ -474,6 +475,8 @@ export class MastraFactory {
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
+  /** The background session resource migration; resolves `true` when it moved run bindings. */
+  #sessionResourceMigration: Promise<boolean> | undefined;
   #preparing = false;
 
   constructor(config: MastraFactoryConfig) {
@@ -774,17 +777,19 @@ export class MastraFactory {
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     // Sessions from before shared resources ran under their own id. Move them
-    // onto their Factory or owner before any session is served. Run bindings
-    // decide which sessions belong to a Factory, so it waits for work items.
+    // onto their Factory or owner in the background: it can take minutes on a
+    // remote database, and an unmoved session keeps working under its own id
+    // meanwhile. Run bindings decide which sessions belong to a Factory, so it
+    // waits for work items.
     if (storage.isDomainReady('source-control') && storage.isDomainReady('work-items')) {
-      await timedPhase('prepare.migrate.sessionResources', async () => {
+      this.#sessionResourceMigration = timedPhase('background.migrate.sessionResources', async () => {
         try {
           const mastraStorage = storage.getMastraStorage();
           const memory = await mastraStorage.getStore('memory');
-          if (!memory) return;
+          if (!memory) return false;
           // The sessions' own Memory, so a moved thread takes its observation vectors along.
           const sessionMemory = getDynamicMemory(mastraStorage, vector);
-          await migrateSessionResources({
+          const report = await migrateSessionResources({
             sessions: sourceControlStorage,
             workItems: workItemsStorage,
             ...(storage.isDomainReady('integrations') ? { integrations: integrationStorage } : {}),
@@ -793,11 +798,13 @@ export class MastraFactory {
           });
           await sessionMemory.settled();
           await privatizeOwnerResourceSessions({ sessions: sourceControlStorage, workItems: workItemsStorage, memory });
+          return report.runBindings > 0;
         } catch (error) {
           // Unmoved sessions keep working under their own id; the next start retries.
           console.warn(
             `[factory] session resource migration stopped early: ${error instanceof Error ? error.message : error}`,
           );
+          return false;
         }
       });
     }
@@ -1452,167 +1459,168 @@ export class MastraFactory {
         },
         outputProcessors: [new FactoryChannelSessionLinkProcessor(), new FactoryReplyCredentialProcessor()],
         ...(vector ? { vector } : {}),
-        ...(toolIntegrations.length > 0 ||
-        sourceControlToolProviders.length > 0 ||
-        (workItemsStorage && transitionService)
-          ? {
-              extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
-                const tools: IntegrationTools = {};
-                const toolOwners = new Map<string, string>();
-                const mergeTools = (ownerId: string, contributed: IntegrationTools) => {
-                  for (const [name, tool] of Object.entries(contributed)) {
-                    const owner = toolOwners.get(name);
-                    if (owner) {
-                      throw new Error(
-                        `MastraFactory: integration tool '${name}' from '${ownerId}' conflicts with '${owner}'.`,
-                      );
-                    }
-                    toolOwners.set(name, ownerId);
-                    tools[name] = tool;
-                  }
-                };
-                if (storage.isDomainReady('source-control')) {
-                  mergeTools(
-                    'source-control',
-                    await createSourceControlTools({
-                      requestContext,
-                      providers: sourceControlToolProviders,
-                      audit: auditDomain,
-                      testChecksEnabled: async ({ orgId, factoryProjectId }) => {
-                        await factoryProjectsStorage.ensureReady();
-                        const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-                        return project?.reviewTestChecksEnabled ?? false;
-                      },
-                      ...(workItemsStorage
-                        ? {
-                            selfReviewApprovedHead: async () => {
-                              const resolution = await resolveFactorySessionAddress({
-                                requestContext,
-                                storage: workItemsStorage,
-                              });
-                              if (!resolution) return undefined;
-                              const binding =
-                                resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
-                              if (!binding) return undefined;
-                              const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                              if (!item || boardForWorkItem(item) !== 'work') return undefined;
-                              if (typeof item.metadata?.openPullRequestNumber === 'number') return undefined;
-                              // A verdict already recorded still binds the change request to its head.
-                              if (item.metadata?.selfReviewVerdict === undefined) {
-                                await factoryProjectsStorage.ensureReady();
-                                const project = await factoryProjectsStorage.get({
-                                  orgId: binding.orgId,
-                                  id: binding.factoryProjectId,
-                                });
-                                if (!project?.selfReviewEnabled) return undefined;
-                              }
-                              const sha = item.metadata?.selfReviewedHeadSha;
-                              return item.metadata?.selfReviewVerdict === 'approve' && typeof sha === 'string'
-                                ? sha
-                                : null;
-                            },
-                            boundChangeRequestId: async () => {
-                              const resolution = await resolveFactorySessionAddress({
-                                requestContext,
-                                storage: workItemsStorage,
-                              });
-                              if (!resolution) return undefined;
-                              const binding =
-                                resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
-                              if (binding?.role !== 'review') return undefined;
-                              const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                              const source = item?.externalSource;
-                              if (!source || !/pull-request|merge-request/.test(source.type)) return undefined;
-                              return /(\d+)$/.exec(source.externalId)?.[1];
-                            },
-                          }
-                        : {}),
-                    }),
-                  );
-                }
-                if (workItemsStorage && transitionService) {
-                  mergeTools(
-                    'factory',
-                    await createFactoryTransitionTools({
-                      requestContext,
-                      storage: workItemsStorage,
-                      transitionService,
-                      boards: this.#boards,
-                      // Heals crash-resumed sessions: recovered addresses re-seed
-                      // projectRepositoryId/baseRef from the source session record.
-                      // Only offered while the source-control domain is ready — a
-                      // throwing lookup would abort recovery's catch block and also
-                      // skip the metadata baseRef fallback.
-                      ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
-                    }),
-                  );
-                  // Review-role sessions get `factory_review_source` so the
-                  // published review can carry the session URL that produced it
-                  // — the affordance that lets a suspicious review (e.g. one
-                  // that lands on the wrong PR) be traced back to its run.
-                  //
-                  // The session URL is browser-facing (a human opens it from a
-                  // GitHub/GitLab review comment), so it needs the UI host —
-                  // the same origin Slack session deep-links resolve against
-                  // (`integrations/slack/slack.ts:168-171`, `:809-812`). In a
-                  // separate-SPA deployment `publicUrl` (i.e. `publicOrigin`)
-                  // is the API host, so we read `MASTRACODE_PUBLIC_URL` and
-                  // mirror Slack's behavior: when it is unset, pass `null` so
-                  // the tool is omitted from the toolset rather than fall back
-                  // to the API/localhost origin and publish that URL into a
-                  // public review body. The skill's tool-not-available branch
-                  // handles the absence as stop-don't-publish. Blank counts as
-                  // unset: `.env.schema` ships `MASTRACODE_PUBLIC_URL=`, so an
-                  // empty/whitespace value must not register the tool with a
-                  // hostless `sessionUrl`.
-                  const reviewSourceUiOrigin = resolveReviewSourceUiOrigin(process.env.MASTRACODE_PUBLIC_URL);
-                  mergeTools(
-                    'factory-review-source',
-                    await createReviewSourceTool({
-                      requestContext,
-                      storage: workItemsStorage,
-                      uiOrigin: reviewSourceUiOrigin,
-                      ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
-                    }),
-                  );
-                  if (storage.isDomainReady('source-control')) {
-                    const scope = await resolveFactoryToolScope({
-                      requestContext,
-                      authEnabled: routeAuth.enabled(),
-                      sessions: sourceControlSessions,
-                      projects: factoryProjectsStorage,
-                      workItems: workItemsStorage,
-                    });
-                    if (scope) {
-                      mergeTools(
-                        'factory-tools',
-                        createFactoryTools({
-                          scope,
-                          deps: factoryToolDeps,
-                        }),
-                      );
-                    }
-                  }
-                }
-                for (const { integration, ready, ensureReady } of toolIntegrations) {
-                  if (!ready && ensureReady) {
-                    try {
-                      await ensureReady();
-                    } catch {
-                      continue;
-                    }
-                  }
-                  if (integration.agentTools) {
-                    mergeTools(integration.id, await integration.agentTools({ requestContext }));
-                  }
-                  if (integration.sessionTools) {
-                    mergeTools(integration.id, integration.sessionTools({ requestContext }));
-                  }
-                }
-                return tools;
-              },
+        extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
+          const tools: IntegrationTools = {};
+          const toolOwners = new Map<string, string>();
+          const mergeTools = (ownerId: string, contributed: IntegrationTools) => {
+            for (const [name, tool] of Object.entries(contributed)) {
+              const owner = toolOwners.get(name);
+              if (owner) {
+                throw new Error(
+                  `MastraFactory: integration tool '${name}' from '${ownerId}' conflicts with '${owner}'.`,
+                );
+              }
+              toolOwners.set(name, ownerId);
+              tools[name] = tool;
             }
-          : {}),
+          };
+          // Channel runs get attach_file so a produced file can go to the sender
+          // rather than a sandbox path. Signal-woken runs rebuild the thread from
+          // the controller's channels.
+          mergeTools(
+            'factory-attach-file',
+            await createShareFileTool(requestContext, {
+              channels: () => this.#prepared?.base.controller.getChannels(),
+            }),
+          );
+          if (storage.isDomainReady('source-control')) {
+            mergeTools(
+              'source-control',
+              await createSourceControlTools({
+                requestContext,
+                providers: sourceControlToolProviders,
+                audit: auditDomain,
+                testChecksEnabled: async ({ orgId, factoryProjectId }) => {
+                  await factoryProjectsStorage.ensureReady();
+                  const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
+                  return project?.reviewTestChecksEnabled ?? false;
+                },
+                ...(workItemsStorage
+                  ? {
+                      selfReviewApprovedHead: async () => {
+                        const resolution = await resolveFactorySessionAddress({
+                          requestContext,
+                          storage: workItemsStorage,
+                        });
+                        if (!resolution) return undefined;
+                        const binding =
+                          resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
+                        if (!binding) return undefined;
+                        const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+                        if (!item || boardForWorkItem(item) !== 'work') return undefined;
+                        if (typeof item.metadata?.openPullRequestNumber === 'number') return undefined;
+                        // A verdict already recorded still binds the change request to its head.
+                        if (item.metadata?.selfReviewVerdict === undefined) {
+                          await factoryProjectsStorage.ensureReady();
+                          const project = await factoryProjectsStorage.get({
+                            orgId: binding.orgId,
+                            id: binding.factoryProjectId,
+                          });
+                          if (!project?.selfReviewEnabled) return undefined;
+                        }
+                        const sha = item.metadata?.selfReviewedHeadSha;
+                        return item.metadata?.selfReviewVerdict === 'approve' && typeof sha === 'string' ? sha : null;
+                      },
+                      boundChangeRequestId: async () => {
+                        const resolution = await resolveFactorySessionAddress({
+                          requestContext,
+                          storage: workItemsStorage,
+                        });
+                        if (!resolution) return undefined;
+                        const binding =
+                          resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
+                        if (binding?.role !== 'review') return undefined;
+                        const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
+                        const source = item?.externalSource;
+                        if (!source || !/pull-request|merge-request/.test(source.type)) return undefined;
+                        return /(\d+)$/.exec(source.externalId)?.[1];
+                      },
+                    }
+                  : {}),
+              }),
+            );
+          }
+          if (workItemsStorage && transitionService) {
+            mergeTools(
+              'factory',
+              await createFactoryTransitionTools({
+                requestContext,
+                storage: workItemsStorage,
+                transitionService,
+                boards: this.#boards,
+                // Heals crash-resumed sessions: recovered addresses re-seed
+                // projectRepositoryId/baseRef from the source session record.
+                // Only offered while the source-control domain is ready — a
+                // throwing lookup would abort recovery's catch block and also
+                // skip the metadata baseRef fallback.
+                ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+              }),
+            );
+            // Review-role sessions get `factory_review_source` so the
+            // published review can carry the session URL that produced it
+            // — the affordance that lets a suspicious review (e.g. one
+            // that lands on the wrong PR) be traced back to its run.
+            //
+            // The session URL is browser-facing (a human opens it from a
+            // GitHub/GitLab review comment), so it needs the UI host —
+            // the same origin Slack session deep-links resolve against
+            // (`integrations/slack/slack.ts:168-171`, `:809-812`). In a
+            // separate-SPA deployment `publicUrl` (i.e. `publicOrigin`)
+            // is the API host, so we read `MASTRACODE_PUBLIC_URL` and
+            // mirror Slack's behavior: when it is unset, pass `null` so
+            // the tool is omitted from the toolset rather than fall back
+            // to the API/localhost origin and publish that URL into a
+            // public review body. The skill's tool-not-available branch
+            // handles the absence as stop-don't-publish. Blank counts as
+            // unset: `.env.schema` ships `MASTRACODE_PUBLIC_URL=`, so an
+            // empty/whitespace value must not register the tool with a
+            // hostless `sessionUrl`.
+            const reviewSourceUiOrigin = resolveReviewSourceUiOrigin(process.env.MASTRACODE_PUBLIC_URL);
+            mergeTools(
+              'factory-review-source',
+              await createReviewSourceTool({
+                requestContext,
+                storage: workItemsStorage,
+                uiOrigin: reviewSourceUiOrigin,
+                ...(storage.isDomainReady('source-control') ? { sessions: sourceControlSessions } : {}),
+              }),
+            );
+            if (storage.isDomainReady('source-control')) {
+              const scope = await resolveFactoryToolScope({
+                requestContext,
+                authEnabled: routeAuth.enabled(),
+                sessions: sourceControlSessions,
+                projects: factoryProjectsStorage,
+                workItems: workItemsStorage,
+              });
+              if (scope) {
+                mergeTools(
+                  'factory-tools',
+                  createFactoryTools({
+                    scope,
+                    deps: factoryToolDeps,
+                  }),
+                );
+              }
+            }
+          }
+          for (const { integration, ready, ensureReady } of toolIntegrations) {
+            if (!ready && ensureReady) {
+              try {
+                await ensureReady();
+              } catch {
+                continue;
+              }
+            }
+            if (integration.agentTools) {
+              mergeTools(integration.id, await integration.agentTools({ requestContext }));
+            }
+            if (integration.sessionTools) {
+              mergeTools(integration.id, integration.sessionTools({ requestContext }));
+            }
+          }
+          return tools;
+        },
         postToolObserver: async (toolContext: IntegrationPostToolContext) => {
           const requestContext = (toolContext.context as { requestContext?: RequestContext } | undefined)
             ?.requestContext;
@@ -2050,6 +2058,15 @@ export class MastraFactory {
       'finalize.reconcileBoundThreads',
       () => this.#factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
     );
+    // A thread's messages move before its run binding does, so a reconcile that
+    // overlapped the migration can miss them. Catch up once the bindings moved.
+    void this.#sessionResourceMigration
+      ?.then(movedRunBindings => (movedRunBindings ? this.#factoryProcessor?.reconcileAllBoundThreads() : undefined))
+      .catch(error =>
+        console.warn(
+          `[factory] reconciling bound threads after the session resource migration failed: ${error instanceof Error ? error.message : error}`,
+        ),
+      );
     this.#dispatcher?.start();
   }
 

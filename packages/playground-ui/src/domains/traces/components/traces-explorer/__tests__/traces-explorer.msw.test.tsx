@@ -5,7 +5,10 @@ import { http, HttpResponse } from 'msw';
 import { Profiler, useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TRACES_LIST_REFETCH_INTERVAL_MS } from '../../../hooks/use-traces-list-source';
+import {
+  TRACES_LIST_DELTA_POLL_INTERVAL_MS,
+  TRACES_LIST_REFETCH_INTERVAL_MS,
+} from '../../../hooks/use-traces-list-source';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../../trace-filters';
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
 import { TracesExplorer, useTracesFilterBar, useTracesFilterBarFields } from '../index';
@@ -28,6 +31,8 @@ import {
   emptyScores,
   emptyTraceQueryFields,
   emptyTracesPage,
+  idleDeltaBatch,
+  noDeltaPollingCapabilities,
   noRootDurationCapabilities,
   traceQueryCapabilities,
   twoTracesPage,
@@ -47,7 +52,11 @@ const SCOPE_TOKENS: TracesFilters['tokens'] = [
   { fieldId: 'entityId', value: 'weather-agent' },
 ];
 
+/** List (page) requests only; delta polls go to `onDeltaPoll`. */
 const onTraceQuery = vi.fn<(body: unknown) => void>();
+const onDeltaPoll = vi.fn<(body: unknown) => void>();
+
+const isDeltaPoll = (body: unknown) => (body as { mode?: string } | null)?.mode === 'delta';
 const onUsageRequest = vi.fn<() => void>();
 const onHostFilterChange = vi.fn<(expression: FilterBarExpression) => void>();
 
@@ -89,7 +98,12 @@ const setExplorerHandlers = (
   server.use(
     http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(capabilities)),
     http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
-      onTraceQuery(await request.json());
+      const body = await request.json();
+      if (isDeltaPoll(body)) {
+        onDeltaPoll(body);
+        return HttpResponse.json(idleDeltaBatch);
+      }
+      onTraceQuery(body);
       return HttpResponse.json(tracesPage);
     }),
     http.get(`${TEST_BASE_URL}/api/observability/traces/light`, () => {
@@ -237,6 +251,7 @@ beforeEach(() => {
     serializeTraceColumnPreferences({ visibleColumns: ['input', 'inputTokens'], customColumns: [], metadataKeys: [] }),
   );
   onTraceQuery.mockClear();
+  onDeltaPoll.mockClear();
   onUsageRequest.mockClear();
   onFeedbackRequest.mockClear();
   onLightListRequest.mockClear();
@@ -269,7 +284,8 @@ describe('TracesExplorer', () => {
       const held = new Promise<void>(resolve => (release = resolve));
       let calls = 0;
       server.use(
-        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async () => {
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          if (isDeltaPoll(await request.json())) return HttpResponse.json(idleDeltaBatch);
           const response = responses[Math.min(calls, responses.length - 1)];
           calls += 1;
           if (response === 'fail') return HttpResponse.json({ error: 'Service busy' }, { status: 503 });
@@ -855,9 +871,22 @@ describe('TracesExplorer', () => {
     });
   });
 
-  describe('when the auto-refresh tick fires', () => {
+  describe.each([
+    {
+      server: 'polls deltas',
+      capabilities: traceQueryCapabilities,
+      tickRequests: onDeltaPoll,
+      interval: TRACES_LIST_DELTA_POLL_INTERVAL_MS,
+    },
+    {
+      server: 'reloads the list',
+      capabilities: noDeltaPollingCapabilities,
+      tickRequests: onTraceQuery,
+      interval: TRACES_LIST_REFETCH_INTERVAL_MS,
+    },
+  ])('when the auto-refresh tick fires and the explorer $server', ({ capabilities, tickRequests, interval }) => {
     it('does not re-render the filter bar or the columns menu', async () => {
-      setExplorerHandlers();
+      setExplorerHandlers(capabilities);
       // Only the poll interval is faked: MSW, React Query and waitFor keep real timeouts.
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
       const onToolbarRender = vi.fn();
@@ -870,14 +899,14 @@ describe('TracesExplorer', () => {
       try {
         const { queryClient } = renderExplorer({ filterBar: toolbar });
         await settle(queryClient);
-        const queriesBefore = onTraceQuery.mock.calls.length;
+        const requestsBefore = tickRequests.mock.calls.length;
         onToolbarRender.mockClear();
 
         act(() => {
-          vi.advanceTimersByTime(TRACES_LIST_REFETCH_INTERVAL_MS);
+          vi.advanceTimersByTime(interval);
         });
         vi.useRealTimers();
-        await waitFor(() => expect(onTraceQuery.mock.calls.length).toBeGreaterThan(queriesBefore));
+        await waitFor(() => expect(tickRequests.mock.calls.length).toBeGreaterThan(requestsBefore));
         await settle(queryClient);
 
         expect(onToolbarRender).not.toHaveBeenCalled();
