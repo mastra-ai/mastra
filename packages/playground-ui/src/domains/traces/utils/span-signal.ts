@@ -1,5 +1,5 @@
 import { SpanType } from '@mastra/core/observability';
-import { isRecord } from '@/domains/chat/messages/signal-data';
+import { isRecord, signalContentsToText } from '@/domains/chat/messages/signal-data';
 import type { SignalData } from '@/domains/chat/messages/signal-data';
 import type { SpanRecord } from '@/domains/traces/types';
 
@@ -47,4 +47,29 @@ export function getSpanSignal(span: SignalSpan): SignalData | undefined {
     ...(Object.keys(attributes).length > 0 ? { attributes: attributes as SignalData['attributes'] } : {}),
     ...(isRecord(input.metadata) ? { metadata: input.metadata } : {}),
   };
+}
+
+/**
+ * Short label for what started a run, for a non-user signal: `Skill <name>` for a skill, else the
+ * signal's tag. `undefined` for a user signal, which is ordinary user input.
+ */
+export function getSignalLabel(signal: SignalData): string | undefined {
+  if (signal.type === 'user') return undefined;
+  const name = signal.attributes?.name;
+  if (signal.tagName === 'skill' && typeof name === 'string') return `Skill ${name}`;
+  return signal.tagName ?? signal.type;
+}
+
+/**
+ * Traces list preview of a run input that is a signal, matching core's stored `inputPreview`:
+ * `Skill <name>: <contents>`, `<tag>: <contents>`, or just the contents for a user signal.
+ */
+export function getSignalInputPreview(input: unknown): string | undefined {
+  if (!isRecord(input) || input.__isCreatedSignal !== true) return undefined;
+  const signal = getSpanSignal({ spanType: SpanType.AGENT_RUN, input, attributes: null, metadata: null });
+  if (!signal) return undefined;
+  const text = signalContentsToText(signal.contents);
+  const label = getSignalLabel(signal);
+  if (!label) return text;
+  return text ? `${label}: ${text}` : label;
 }

@@ -51,7 +51,7 @@ export interface TraceDataPanelViewProps {
   /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
   traceId?: string;
   /** Lightweight spans for the trace. Caller fetches via useTraceLightSpans. */
-  spans: LightSpanRecord[] | undefined;
+  spans: (LightSpanRecord & { signalLabel?: string })[] | undefined;
   isLoading?: boolean;
   onClose: () => void;
   onSpanSelect?: (spanId: string | undefined) => void;

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { createSignal } from '@mastra/core/agent';
 import { SpanType } from '@mastra/core/observability';
 import { cleanup, render, screen } from '@testing-library/react';
 
@@ -12,6 +13,8 @@ import {
   agentRunSkillSignalSpan,
   agentRunUserSignalSpan,
   makeSpan,
+  modelGenerationSkillSpan,
+  modelGenerationSpan,
 } from './fixtures/span-payloads';
 
 beforeAll(() => vi.stubGlobal('PointerEvent', MouseEvent));
@@ -89,5 +92,37 @@ describe('Agent run started by a signal', () => {
     const section = screen.getByText('Input').closest('[data-slot="span-payload-section"]');
     expect(section?.querySelector('[data-slot="span-payload-view-toggle"]')).not.toBeNull();
     expect(section?.querySelector('[data-slot="span-signal-input"]')).not.toBeNull();
+  });
+});
+
+describe('Model call whose user message is a skill', () => {
+  it('uses the message core renders a skill signal to', () => {
+    const message = createSignal({
+      type: 'reactive',
+      tagName: 'skill',
+      attributes: { name: 'factory-triage' },
+      contents:
+        'Read the issue and label it.\n\nARGUMENTS: mastra-ai/mastra#123\n\n<work-item-feed>\n@alice: this blocks the release\n</work-item-feed>',
+    }).toLLMMessage();
+    expect((modelGenerationSkillSpan.input as { messages: unknown[] }).messages[1]).toEqual(message);
+  });
+
+  it('renders the skill markup as a skill row with its arguments, instructions and feed', () => {
+    render(<SpanInputRenderer span={modelGenerationSkillSpan} />);
+
+    const skill = screen.getByLabelText('Skill: factory-triage');
+    expect(skill.textContent).toContain('factory-triage mastra-ai/mastra#123');
+    expect(screen.getByText('Work item feed')).toBeTruthy();
+    expect(document.body.textContent).toContain('Read the issue and label it.');
+    expect(document.body.textContent).not.toContain('<skill');
+    expect(document.body.textContent).not.toContain('ARGUMENTS:');
+    expect(document.querySelector('[data-role="skill"]')).not.toBeNull();
+  });
+
+  it('leaves ordinary user messages as user bubbles', () => {
+    render(<SpanInputRenderer span={modelGenerationSpan} />);
+
+    expect(screen.queryByLabelText(/^Skill:/)).toBeNull();
+    expect(document.querySelector('[data-role="user"]')).not.toBeNull();
   });
 });

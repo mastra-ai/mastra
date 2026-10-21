@@ -141,6 +141,24 @@ export const modelGenerationSpan = makeSpan({
   },
 });
 
+/** A skill signal reaches the model as the `<skill name="…">` user message core renders it to. */
+export const modelGenerationSkillSpan = makeSpan({
+  spanId: 'span-model-generation-skill',
+  spanType: SpanType.MODEL_GENERATION,
+  name: 'llm generation',
+  input: {
+    messages: [
+      { role: 'system', content: 'You triage issues.' },
+      {
+        role: 'user',
+        content:
+          '<skill name="factory-triage">Read the issue and label it.\n\nARGUMENTS: mastra-ai/mastra#123\n\n<work-item-feed>\n@alice: this blocks the release\n</work-item-feed></skill>',
+      },
+    ],
+  },
+  output: { text: 'Labelled as bug.' },
+});
+
 export const modelStepSpan = makeSpan({
   spanId: 'span-model-step',
   spanType: SpanType.MODEL_STEP,
@@ -430,6 +448,7 @@ export const ALL_SPAN_FIXTURES = {
   agentRunAbortedSpan,
   agentRunTripwireSpan,
   modelGenerationSpan,
+  modelGenerationSkillSpan,
   modelStepSpan,
   modelInferenceSpan,
   toolCallSpan,

@@ -337,6 +337,30 @@ describe('TraceSpanPanel', () => {
     expect(document.body.textContent).not.toContain('[Function]');
   });
 
+  it('when a skill signal started the run, then its row in the span tree is badged with the skill', async () => {
+    installHandlers();
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () =>
+        HttpResponse.json({
+          ...panelTraceSpans,
+          spans: panelTraceSpans.spans.map(span => (span.spanId === 'span-root' ? skillSignalRootDetail.span : span)),
+        }),
+      ),
+    );
+    const { queryClient } = renderPanel();
+
+    const badge = await waitFor(() => {
+      const element = document.querySelector('[data-slot="span-signal-badge"]');
+      expect(element).not.toBeNull();
+      return element;
+    });
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    expect(badge?.textContent).toBe('Skill weather-check');
+    expect(badge?.closest('[aria-label="View details for span Root agent run"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-slot="span-signal-badge"]')).toHaveLength(1);
+  });
+
   it('when the selected span is clicked again, then onSpanSelect(undefined) clears the selection', async () => {
     installHandlers();
     const onSpanSelect = vi.fn<(spanId: string | undefined) => void>();
