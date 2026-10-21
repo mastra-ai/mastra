@@ -1,0 +1,3 @@
+{"label":"main","store":"libsql","n":200,"size":2000,"c":1,"writes":203,"bytes":1448265,"largest":809667,"wallMs":72,"storeMs":38,"diskGrowth":2084720}
+{"label":"pr","store":"libsql","n":200,"size":2000,"c":1,"writes":403,"bytes":83243832,"largest":809667,"wallMs":795,"storeMs":848,"diskGrowth":5139920}
+{"label":"coalesce","store":"libsql","n":200,"size":2000,"c":1,"writes":204,"bytes":41961259,"largest":809667,"wallMs":437,"storeMs":379,"diskGrowth":4635632}

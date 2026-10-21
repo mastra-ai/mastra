@@ -1,0 +1,2 @@
+{"label":"coalesce","store":"libsql","n":200,"size":2000,"c":1,"writes":5,"bytes":1220853,"largest":809667,"wallMs":50,"storeMs":14,"diskGrowth":1268960}
+{"label":"coalesce","store":"libsql","n":200,"size":2000,"c":10,"writes":14,"bytes":1276072,"largest":809668,"wallMs":70,"storeMs":28,"diskGrowth":1359600}
