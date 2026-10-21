@@ -162,6 +162,81 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     5_000,
   );
 
+  it.each([false, true])(
+    'only completed steps reach memory at the deadline (savePerStep: %s)',
+    async savePerStep => {
+      const memory = new MockMemory();
+      const threadId = `deadline-memory-${engine}-${savePerStep}`;
+      const resourceId = RESOURCE;
+      const llm = getMock();
+      let completedTool = false;
+      let hangingTool = false;
+      const result = await runLoopScenario({
+        engine,
+        llm,
+        memory,
+        threadId,
+        resourceId,
+        prompt: 'Look up the order, then check the courier.',
+        maxSteps: 3,
+        savePerStep,
+        modelSettings: { timeout: { totalMs: 500 } },
+        collectChunks: true,
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Look up an order.',
+            inputSchema: z.object({}),
+            execute: async () => {
+              completedTool = true;
+              return { status: 'shipped' };
+            },
+          }),
+          courier: createTool({
+            id: 'courier',
+            description: 'Check the courier.',
+            inputSchema: z.object({}),
+            execute: async () => {
+              hangingTool = true;
+              return new Promise<never>(() => {});
+            },
+          }),
+        },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            {
+              content: 'The order lookup is complete.',
+              toolCalls: [{ id: 'call_lookup', name: 'lookup', arguments: {} }],
+            },
+          );
+          llm.on(
+            { endpoint: 'chat', hasToolResult: true },
+            {
+              content: 'Checking the courier now.',
+              toolCalls: [{ id: 'call_courier', name: 'courier', arguments: {} }],
+            },
+          );
+        },
+      });
+
+      expect(completedTool).toBe(true);
+      expect(hangingTool).toBe(true);
+      expect(result.requests).toHaveLength(2);
+      const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+      const { messages } = await memory.recall({ threadId, resourceId });
+      const saved = JSON.stringify(messages);
+      expect(saved.includes('Look up the order, then check the courier.')).toBe(
+        savePerStep || engine === 'durable' || engine === 'evented',
+      );
+      expect(saved.includes('The order lookup is complete.')).toBe(savePerStep);
+      expect(saved.includes('Checking the courier now.')).toBe(false);
+    },
+    5_000,
+  );
+
   it.each(['generate', 'resumeStream', 'resumeGenerate'] as const)(
     '%s settles at the deadline without waiting for the tool',
     async method => {
