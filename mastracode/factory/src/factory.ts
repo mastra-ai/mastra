@@ -164,6 +164,7 @@ import {
 } from './tools/reports.js';
 import type { FactoryReporting } from './tools/reports.js';
 import { observeSessionRunReports } from './tools/run-watch.js';
+import { createFactorySandboxTools } from './tools/sandbox-tools.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
 import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
@@ -346,6 +347,13 @@ export interface MastraFactoryDispatcherConfig {
 }
 
 const CONTROLLER_ID = 'code';
+
+/**
+ * Providers whose sandbox a session's agent may recreate itself. Each needs
+ * its `destroy()` to leave the instance able to start a fresh VM, proven
+ * against the real provider.
+ */
+const SELF_RECREATE_SANDBOX_PROVIDERS: ReadonlySet<string> = new Set(['platform']);
 
 /** Why a wake couldn't be run as its Factory session's owner. */
 const WAKE_OWNER_UNRESOLVED = {
@@ -1601,6 +1609,15 @@ export class MastraFactory {
                     deps: factoryToolDeps,
                   }),
                 );
+                if (sessionRetirement && sandboxConfig && SELF_RECREATE_SANDBOX_PROVIDERS.has(sandboxConfig.provider)) {
+                  mergeTools(
+                    'factory-sandbox-tools',
+                    createFactorySandboxTools(scope, {
+                      sessions: sourceControlSessions,
+                      resetSandbox: input => sessionRetirement.resetSessionSandbox(input),
+                    }),
+                  );
+                }
               }
             }
           }

@@ -10,7 +10,7 @@ import type {
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { requireExec } from './materialization.js';
-import { evictSessionSandbox, peekSessionSandbox } from './session-sandbox.js';
+import { clearFailedSetupCommands, evictSessionSandbox, peekSessionSandbox } from './session-sandbox.js';
 
 type WarningLogger = (message: string, details: Record<string, unknown>) => void;
 
@@ -102,6 +102,20 @@ export class SessionRetirementCoordinator {
    */
   async recreateSessionSandbox(input: RecreateSessionSandboxInput): Promise<'recreated' | 'not-found'> {
     return this.#withSessionLock(input.sessionId, () => this.#recreateSessionSandbox(input));
+  }
+
+  /**
+   * Replace the session's VM while keeping its sandbox instance, for the
+   * session's own agent. A run holds the instance it started with until the
+   * run ends, so recreate (which destroys the instance) would leave every
+   * later command in that run failing. Here the VM is destroyed and the
+   * instance is left `stopped` with no VM id, so the run's next command starts
+   * a fresh VM and the start hook sets it up again.
+   *
+   * `not-here` means this process holds no instance for the session.
+   */
+  async resetSessionSandbox(input: RecreateSessionSandboxInput): Promise<'reset' | 'not-found' | 'not-here'> {
+    return this.#withSessionLock(input.sessionId, () => this.#resetSessionSandbox(input));
   }
 
   async #withSessionLock<T>(sessionId: string, run: () => Promise<T>): Promise<T> {
@@ -291,6 +305,44 @@ export class SessionRetirementCoordinator {
     evictSessionSandbox(session.id);
     await this.#invalidate(session);
     return 'recreated';
+  }
+
+  async #resetSessionSandbox(input: RecreateSessionSandboxInput): Promise<'reset' | 'not-found' | 'not-here'> {
+    const session = await input.sourceControl.sessions.getBySessionId(input.sessionId);
+    if (!session || session.orgId !== input.orgId) return 'not-found';
+    const sandbox = peekSessionSandbox(session.id)?.sandbox;
+    if (!sandbox) return 'not-here';
+
+    // The provider's own destroy, not the lifecycle wrapper: the wrapper marks
+    // the instance destroyed for good. Bounded, so a VM that won't answer
+    // can't hold the session lock.
+    if (!(await this.#settledWithin(this.#destroyDirectly(sandbox)))) {
+      throw new Error('Timed out destroying the sandbox. Try again.');
+    }
+    // A start still in flight on the old VM would set the status after this
+    // reset does. Its commands fail fast once the VM is gone.
+    const starting = (sandbox as { _startPromise?: Promise<unknown> })._startPromise;
+    if (
+      starting &&
+      !(await this.#settledWithin(
+        starting.then(
+          () => {},
+          () => {},
+        ),
+      ))
+    ) {
+      throw new Error('The old sandbox is still starting. Try again.');
+    }
+
+    sandbox.status = 'stopped';
+    // The new VM runs setup from scratch, including commands that failed on the old one.
+    clearFailedSetupCommands(session.id);
+    await input.sourceControl.sessions.setSandbox({
+      id: session.id,
+      sandboxId: null,
+      sandboxWorkdir: session.sandboxWorkdir ?? '',
+    });
+    return 'reset';
   }
 
   /**

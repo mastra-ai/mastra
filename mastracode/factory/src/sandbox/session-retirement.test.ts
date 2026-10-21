@@ -12,7 +12,13 @@ import type { SourceControlSession } from '../storage/domains/source-control/bas
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { SessionRetirementCoordinator } from './session-retirement.js';
-import { __clearSessionSandboxesForTests, getSessionSandbox, peekSessionSandbox } from './session-sandbox.js';
+import {
+  __clearSessionSandboxesForTests,
+  getSessionSandbox,
+  hasFailedSetupCommand,
+  peekSessionSandbox,
+  recordFailedSetupCommand,
+} from './session-sandbox.js';
 
 afterEach(() => {
   __clearSessionSandboxesForTests();
@@ -892,5 +898,175 @@ describe('SessionRetirementCoordinator.recreateSessionSandbox', () => {
     await Promise.all([recreating, retiring]);
 
     expect(calls).toEqual(['invalidate', 'destroy:detached', 'destroy-finished', 'invalidate', 'invalidate']);
+  });
+});
+
+/**
+ * A sandbox backed by fake VMs: `start()` reattaches to its VM or provisions
+ * a new one, `destroy()` deletes the VM, and commands report which VM ran
+ * them. A real `MastraSandbox`, so `ensureRunning()` and the start hook run
+ * as they do in production.
+ */
+class VmSandbox extends MastraSandbox {
+  readonly id = 'vm-sandbox';
+  readonly name = 'VM sandbox';
+  readonly provider = 'test';
+  status: ProviderStatus = 'pending';
+  vmId: string | undefined;
+  provisioned = 0;
+  readonly deleted: string[] = [];
+  destroyGate: Promise<void> | undefined;
+  destroyError: unknown;
+
+  constructor(options: { vmId?: string; onStart?: () => Promise<void> } = {}) {
+    super({ name: 'VM sandbox', onStart: options.onStart });
+    this.vmId = options.vmId;
+  }
+
+  async start(): Promise<void> {
+    if (this.vmId) return;
+    this.provisioned++;
+    this.vmId = `vm-new-${this.provisioned}`;
+  }
+
+  async destroy(): Promise<void> {
+    await this.destroyGate;
+    if (this.destroyError) throw this.destroyError;
+    if (this.vmId) this.deleted.push(this.vmId);
+    this.vmId = undefined;
+  }
+
+  async executeCommand(): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+    await this.ensureRunning();
+    return { exitCode: 0, stdout: this.vmId ?? '', stderr: '' };
+  }
+}
+
+describe('SessionRetirementCoordinator.resetSessionSandbox', () => {
+  async function seedStartedSession(storage: SourceControlStorageInMemory): Promise<SourceControlSession> {
+    seedRepositoryLink(storage);
+    const session = await seedSession(storage);
+    await storage.sessions.setSandbox({ id: session.id, sandboxId: 'vm-old', sandboxWorkdir: '/workspace/mastra' });
+    return (await storage.sessions.getBySessionId(session.sessionId))!;
+  }
+
+  function reset(coordinator: SessionRetirementCoordinator, storage: SourceControlStorageInMemory, sessionId: string) {
+    return coordinator.resetSessionSandbox({ sourceControl: storage, orgId: 'org-1', sessionId });
+  }
+
+  it('replaces the VM under the instance a run already holds, so its next command starts a fresh one and sets it up', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const setups: string[] = [];
+    const sandbox: VmSandbox = new VmSandbox({
+      vmId: 'vm-old',
+      onStart: async () => {
+        setups.push(sandbox.vmId!);
+      },
+    });
+    const entry = getSessionSandbox(session.id, 'acme/mastra', () => sandbox);
+    entry.workdir = '/workspace/mastra';
+    expect((await sandbox.executeCommand()).stdout).toBe('vm-old');
+    recordFailedSetupCommand(session.id, 'pnpm install');
+    const invalidate = vi.fn();
+    const coordinator = new SessionRetirementCoordinator({ invalidateSession: invalidate });
+
+    await expect(reset(coordinator, storage, session.sessionId)).resolves.toBe('reset');
+
+    expect(sandbox.deleted).toEqual(['vm-old']);
+    expect(sandbox.status).toBe('stopped');
+    expect(peekSessionSandbox(session.id)).toBe(entry);
+    expect(entry.workdir).toBe('/workspace/mastra');
+    expect(hasFailedSetupCommand(session.id, 'pnpm install')).toBe(false);
+    const row = await storage.sessions.getBySessionId(session.sessionId);
+    expect(row?.sandboxId).toBeNull();
+    expect(row?.sandboxWorkdir).toBe('/workspace/mastra');
+    // The start hook guards against retired sessions by generation; a reset must not retire it.
+    expect(invalidate).not.toHaveBeenCalled();
+
+    expect((await sandbox.executeCommand()).stdout).toBe('vm-new-1');
+    expect(setups).toEqual(['vm-old', 'vm-new-1']);
+  });
+
+  it('replaces a VM whose start hook failed', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    let failSetup = true;
+    const sandbox = new VmSandbox({
+      vmId: 'vm-old',
+      onStart: async () => {
+        if (failSetup) throw new Error('The operation was aborted due to timeout');
+      },
+    });
+    getSessionSandbox(session.id, 'acme/mastra', () => sandbox);
+    await expect(sandbox.executeCommand()).rejects.toThrow('onStart hook failed');
+    expect(sandbox.status).toBe('error');
+    const coordinator = new SessionRetirementCoordinator();
+
+    await expect(reset(coordinator, storage, session.sessionId)).resolves.toBe('reset');
+    failSetup = false;
+
+    expect((await sandbox.executeCommand()).stdout).toBe('vm-new-1');
+  });
+
+  it('waits for a start still running on the old VM before resetting, so it cannot overwrite the reset', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const hook = deferred();
+    const sandbox = new VmSandbox({ vmId: 'vm-old', onStart: () => hook.promise });
+    getSessionSandbox(session.id, 'acme/mastra', () => sandbox);
+    const starting = sandbox.executeCommand();
+    await nextMacrotask();
+    const coordinator = new SessionRetirementCoordinator();
+
+    const resetting = reset(coordinator, storage, session.sessionId);
+    await nextMacrotask();
+    expect(sandbox.deleted).toEqual(['vm-old']);
+    // The old VM is gone, so its setup fails.
+    hook.reject(new Error('sandbox not found'));
+    await expect(starting).rejects.toThrow('onStart hook failed');
+
+    await expect(resetting).resolves.toBe('reset');
+    expect(sandbox.status).toBe('stopped');
+  });
+
+  it('treats a VM the provider already deleted as destroyed', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const sandbox = new VmSandbox({ vmId: 'vm-old' });
+    sandbox.destroyError = Object.assign(new Error('Sandbox not found'), { status: 404, code: 'not_found' });
+    getSessionSandbox(session.id, 'acme/mastra', () => sandbox);
+    const coordinator = new SessionRetirementCoordinator();
+
+    await expect(reset(coordinator, storage, session.sessionId)).resolves.toBe('reset');
+    expect(sandbox.status).toBe('stopped');
+  });
+
+  it('fails, keeps the persisted id and releases the session lock when the destroy hangs', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const sandbox = new VmSandbox({ vmId: 'vm-old' });
+    sandbox.destroyGate = new Promise(() => {});
+    getSessionSandbox(session.id, 'acme/mastra', () => sandbox);
+    const coordinator = new SessionRetirementCoordinator({ destroyTimeoutMs: 10 });
+
+    await expect(reset(coordinator, storage, session.sessionId)).rejects.toThrow('Timed out destroying the sandbox');
+    expect((await storage.sessions.getBySessionId(session.sessionId))?.sandboxId).toBe('vm-old');
+
+    sandbox.destroyGate = undefined;
+    await expect(reset(coordinator, storage, session.sessionId)).resolves.toBe('reset');
+  });
+
+  it('answers not-here without an instance in this process, and not-found for another org', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const session = await seedStartedSession(storage);
+    const coordinator = new SessionRetirementCoordinator();
+
+    await expect(reset(coordinator, storage, session.sessionId)).resolves.toBe('not-here');
+    getSessionSandbox(session.id, 'acme/mastra', () => new VmSandbox({ vmId: 'vm-old' }));
+    await expect(
+      coordinator.resetSessionSandbox({ sourceControl: storage, orgId: 'org-2', sessionId: session.sessionId }),
+    ).resolves.toBe('not-found');
+    expect((await storage.sessions.getBySessionId(session.sessionId))?.sandboxId).toBe('vm-old');
   });
 });
