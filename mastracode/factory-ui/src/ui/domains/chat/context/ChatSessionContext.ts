@@ -71,6 +71,8 @@ export interface ChatSessionContextApi {
   kind: 'factory' | 'user';
   /** Who the stored session belongs to; absent where no session row backs the chat (supervisor, `?resourceId=` override). */
   owner?: ThreadOwner;
+  /** The viewer steers someone else's session, so its model and thinking level stay the owner's to change. */
+  modelLocked?: boolean;
 }
 
 export const ChatSessionContext = createContext<ChatSessionContextApi | null>(null);

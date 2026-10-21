@@ -149,6 +149,7 @@ export function ChatSessionConfigProvider({
     baseUrl,
     kind: userScoped ? ('user' as const) : ('factory' as const),
     owner,
+    modelLocked: storedSession?.capabilities?.switchModel === false,
   };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;

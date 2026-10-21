@@ -46,7 +46,7 @@ function canSwitchModel(kind: ChatSessionContextApi['kind'], isDraft: boolean, s
 }
 
 export function ModelPicker() {
-  const { kind, sessionEnabled, draftSessionId } = useChatSessionContext();
+  const { kind, sessionEnabled, draftSessionId, modelLocked } = useChatSessionContext();
   const { status } = useChatConnection();
   const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -77,7 +77,7 @@ export function ModelPicker() {
     Boolean(selectedModelId) &&
     modelsQuery.isSuccess &&
     !modelsQuery.data.some(model => model.id === selectedModelId);
-  const switchable = canSwitchModel(kind, Boolean(draftSessionId), sessionEnabled);
+  const switchable = !modelLocked && canSwitchModel(kind, Boolean(draftSessionId), sessionEnabled);
   const canReset =
     kind === 'user' &&
     modelScope !== 'factory' &&

@@ -12,6 +12,10 @@ import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
 
+if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'ghp-1';
 const SESSION_ID = 'sess-ward';
@@ -33,7 +37,7 @@ const wardSession = {
   materializedAt: '2026-10-01T00:00:00.000Z',
   createdAt: '2026-10-01T00:00:00.000Z',
   updatedAt: '2026-10-01T00:00:00.000Z',
-  capabilities: { recreateSandbox: false, takeOwnership: true },
+  capabilities: { recreateSandbox: false, takeOwnership: true, switchModel: false },
 };
 
 const wardSessionWithoutProfile = { ...wardSession, owner: undefined };
@@ -198,12 +202,56 @@ describe("a teammate's Factory session", () => {
         session: {
           ...wardSession,
           branch: 'slack/C123-1700000000.000100',
-          capabilities: { recreateSandbox: false, takeOwnership: false },
+          capabilities: { recreateSandbox: false, takeOwnership: false, switchModel: false },
         },
       });
 
       expect(await screen.findByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Take ownership' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when a teammate tries to change its model', () => {
+    it("shows the owner's model without a picker, and refuses /model and /think", async () => {
+      const modelChanges: unknown[] = [];
+      server.use(
+        http.post(`${AC}/sessions/:resourceId/model`, async ({ request }) => {
+          modelChanges.push(await request.json());
+          return HttpResponse.json({ ok: true });
+        }),
+        http.put(`${AC}/sessions/:resourceId/state`, async ({ request }) => {
+          const body = await request.json();
+          if (JSON.stringify(body).includes('thinkingLevel')) modelChanges.push(body);
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+      serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
+      openWardSessionAs('user-damien');
+      const user = userEvent.setup();
+
+      expect(await screen.findByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
+      expect(await screen.findByTitle('openai/gpt-4o-mini')).toHaveTextContent('GPT-4o Mini');
+      expect(screen.queryByRole('button', { name: 'Session model' })).not.toBeInTheDocument();
+
+      const input = await screen.findByRole('textbox', { name: 'Message' });
+      await waitFor(() => expect(input).toBeEnabled());
+      await user.type(input, '/model openai/gpt-5-mini');
+      await user.keyboard('{Enter}');
+      await user.type(input, '/think high');
+      await user.keyboard('{Enter}');
+
+      const refusal = 'Only Ward Peeters can change this session’s model or thinking level.';
+      await waitFor(() => expect(screen.getAllByText(refusal)).toHaveLength(2));
+      expect(modelChanges).toEqual([]);
+    });
+
+    it('keeps the picker for the owner', async () => {
+      serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
+      openWardSessionAs('user-ward', {
+        session: { ...wardSession, capabilities: { recreateSandbox: false, takeOwnership: false, switchModel: true } },
+      });
+
+      expect(await screen.findByRole('button', { name: 'Session model' })).toBeInTheDocument();
     });
   });
 

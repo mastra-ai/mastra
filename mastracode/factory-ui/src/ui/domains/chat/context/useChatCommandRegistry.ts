@@ -46,7 +46,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const factoryQuery = useFactoryQuery(factoryId);
   const navigate = useNavigate();
   const location = useLocation();
-  const { sessionId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl, owner, modelLocked } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
   const { activeModelId, setModel } = useChatModels();
@@ -101,6 +101,12 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     return result.data;
   };
 
+  const refuseLockedModel = () =>
+    pushNotice(
+      `Only ${owner?.name ?? 'the session owner'} can change this session’s model or thinking level.`,
+      'error',
+    );
+
   const commandsWithoutHelp: SlashCommand[] = [
     {
       name: 'model',
@@ -108,7 +114,9 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       description: 'Switch model',
       requiresSession: true,
       execute: async rawArguments => {
-        if (rawArguments) await setModel(rawArguments);
+        if (!rawArguments) return;
+        if (modelLocked) return refuseLockedModel();
+        await setModel(rawArguments);
       },
     },
     {
@@ -200,6 +208,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
             );
             return;
           }
+          if (modelLocked && (action.kind === 'set' || action.kind === 'clear')) return refuseLockedModel();
           if (action.kind === 'set') {
             await ensureSettings();
             await updateSettingsMutation.mutateAsync({ thinkingLevel: action.level });

@@ -104,6 +104,8 @@ const outsider = buildApp({ workosId: 'outsider', organizationId: 'org-2' });
 
 const post = (app: Hono, path: string, body: unknown) =>
   app.request(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+const put = (app: Hono, path: string, body: unknown) =>
+  app.request(path, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 describe('canViewSourceControlSession', () => {
   it('lets the owner and same-org teammates see org sessions, and only the owner see private ones', () => {
@@ -149,6 +151,23 @@ describe('createSessionAccessGuard', () => {
   it("404s a teammate addressing one of the owner's threads as a session", async () => {
     expect((await teammate.request(sessionPath('owner-side-thread', 'threads'))).status).toBe(404);
     expect((await owner.request(sessionPath('owner-side-thread', 'threads'))).status).toBe(200);
+  });
+
+  it("403s a teammate changing a shared session's model or thinking level, while they still steer it", async () => {
+    const switchModel = { modelId: 'openai/gpt-5-mini' };
+    expect((await post(teammate, sessionPath(SHARED_ID, 'model'), switchModel)).status).toBe(403);
+    const refused = await put(teammate, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: 'high' } });
+    expect(refused.status).toBe(403);
+    await expect(refused.json()).resolves.toEqual({ error: 'Only the session’s owner can change its model' });
+    expect((await put(teammate, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: null } })).status).toBe(403);
+
+    expect(
+      (await put(teammate, sessionPath(SHARED_ID, 'state'), { state: { factoryProjectId: FACTORY_ID } })).status,
+    ).toBe(200);
+    expect((await post(teammate, sessionPath(SHARED_ID, 'messages'), { content: 'Ship it' })).status).toBe(200);
+    expect((await post(owner, sessionPath(SHARED_ID, 'model'), switchModel)).status).toBe(200);
+    expect((await put(owner, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: 'high' } })).status).toBe(200);
+    expect((await post(teammate, sessionPath('teammate-scratch', 'model'), switchModel)).status).toBe(200);
   });
 
   it('passes through a session on its own id that no Factory session row claims', async () => {
