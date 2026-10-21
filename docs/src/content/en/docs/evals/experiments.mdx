@@ -438,7 +438,7 @@ In [Studio](/docs/studio/overview), edit a dataset item to author tool mocks as 
 
 ### Limitations
 
-- **No tool span for mocked calls.** A mocked call returns its output before the tool executes, so it doesn't create a tool span. Trajectory scorers backed by stored traces may therefore not see mocked tool calls. Trajectory extraction that falls back to the agent's message output still sees them, so trajectory scoring can differ depending on your observability configuration.
+- **Mocked tool spans are flat.** A served mock records a `tool_call` span with the mocked output and the attribute `mocked: true`; a mismatched or exhausted mock records one with `success: false`. The real tool never runs, so the span has no child spans and no `toolDescription`.
 - **Storage support.** The LibSQL, PostgreSQL, MongoDB, and Spanner adapters persist tool mocks and tool mock reports, while the MySQL adapter rejects writes that carry either one. All dataset storage adapters persist `unmockedToolPolicy`.
 
 ## Async experiments
