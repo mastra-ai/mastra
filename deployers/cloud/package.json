@@ -37,7 +37,7 @@
     "@mastra/loggers": "workspace:*",
     "execa": "^9.6.1",
     "fs-extra": "^11.3.5",
-    "pino": "^10.3.1",
+    "pino": "^10.4.0",
     "redis": "^5.12.1"
   },
   "devDependencies": {
