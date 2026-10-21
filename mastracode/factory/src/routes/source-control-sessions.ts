@@ -255,6 +255,28 @@ function createSessionNaming() {
   };
 }
 
+const OWNER_CONFLICT_MESSAGES = {
+  stale_owner: 'Someone else owns this session now',
+  branch_owned: 'You already have a session on this branch',
+} as const;
+
+/** One ownership transfer per session at a time, so a later transfer never mirrors an older owner onto the thread. */
+function createSessionTransferQueue() {
+  const tails = new Map<string, Promise<void>>();
+  return <T>(sessionId: string, run: () => Promise<T>): Promise<T> => {
+    const result = (tails.get(sessionId) ?? Promise.resolve()).then(run);
+    const settled = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    tails.set(sessionId, settled);
+    void settled.then(() => {
+      if (tails.get(sessionId) === settled) tails.delete(sessionId);
+    });
+    return result;
+  };
+}
+
 function titleModel(modelId: string) {
   return ({ requestContext }: { requestContext: RequestContext }) =>
     resolveModel(modelId, { remapForCodexOAuth: true, requestContext });
@@ -455,6 +477,7 @@ function projectSessionRoutes(
 
 export function buildSourceControlSessionRoutes(options: SourceControlSessionRoutesOptions): ApiRoute[] {
   const nameSession = createSessionNaming();
+  const transferOwnerSerially = createSessionTransferQueue();
   const resolveOwnerProfiles = createSessionOwnerProfileResolver(options.users);
   return [
     registerApiRoute('/web/factory/projects/:id/sessions', {
@@ -621,6 +644,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if (!isJsonObject(body) || typeof body.expectedOwnerId !== 'string' || !body.expectedOwnerId.trim()) {
           return c.json({ error: 'Invalid expectedOwnerId' }, 400);
         }
+        const expectedOwnerId = body.expectedOwnerId;
         if (session.visibility === 'private' && session.userId !== userId) {
           return c.json({ error: 'Session not found' }, 404);
         }
@@ -629,123 +653,103 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if (!session.factoryProjectId) {
           return c.json({ error: "This session isn't linked to a Factory, so it can't change owner." }, 409);
         }
+        const controller = options.controller;
 
-        const transferred = await match.sourceControl.sessions.transferOwner({
-          sessionId,
-          expectedUserId: body.expectedOwnerId,
-          toUserId: userId,
-        });
-        if (transferred.status === 'conflict') {
-          return c.json(
-            {
-              error: 'Session ownership conflict',
-              reason: transferred.reason,
-              currentOwnerId: transferred.session?.userId,
-            },
-            409,
-          );
-        }
-        if (body.expectedOwnerId === userId) return c.json({ session: transferred.session });
-
-        let liveSession = await options.controller?.getSession(sessionId);
-        try {
-          if (!liveSession && options.controller) {
-            const resourceId = await sessionMemoryResourceId(options.controller, session, options.workItems);
-            liveSession = await startUserSessionConversation(options.controller, transferred.session, resourceId);
+        return transferOwnerSerially(sessionId, async () => {
+          // A run reads its payer from the row on every model call, and a parked one dies with its live host.
+          if (controller) {
+            const threads = await listFactorySessionThreads(controller, session, options.workItems);
+            const threadIds = threads.map(thread => thread.id);
+            if (controller.listActiveThreadRuns().some(run => threadIds.includes(run.threadId))) {
+              return c.json({ error: 'Wait for the session to finish its run before taking ownership' }, 409);
+            }
           }
-          if (liveSession) {
-            await liveSession.thread.transferOwnership({ toOwnerId: userId });
-          }
-        } catch (mirrorError) {
-          let authoritativeOwnerId: string | undefined;
-          try {
-            const rollback = await match.sourceControl.sessions.transferOwner({
-              sessionId,
-              expectedUserId: userId,
-              toUserId: session.userId,
-            });
-            authoritativeOwnerId = rollback.session?.userId;
-          } catch (rollbackError) {
-            throw new AggregateError(
-              [mirrorError, rollbackError],
-              `Factory session ${sessionId} ownership is inconsistent after a failed transfer and rollback.`,
+          const transferred = await match.sourceControl.sessions.transferOwner({
+            sessionId,
+            expectedUserId: expectedOwnerId,
+            toUserId: userId,
+          });
+          if (transferred.status === 'conflict') {
+            return c.json(
+              {
+                error: OWNER_CONFLICT_MESSAGES[transferred.reason],
+                reason: transferred.reason,
+                currentOwnerId: transferred.session?.userId,
+              },
+              409,
             );
           }
+          if (expectedOwnerId === userId) return c.json({ session: transferred.session });
 
-          if (!authoritativeOwnerId) {
+          let liveSession = await controller?.getSession(sessionId);
+          try {
+            if (!liveSession && controller) {
+              const resourceId = await sessionMemoryResourceId(controller, session, options.workItems);
+              liveSession = await startUserSessionConversation(controller, transferred.session, resourceId);
+            }
+            if (liveSession) await liveSession.thread.transferOwnership({ toOwnerId: userId });
+          } catch (mirrorError) {
+            let authoritativeOwnerId: string | undefined;
             try {
-              if (liveSession && options.controller) {
-                await options.controller.deleteSession({ sessionId });
-              }
-            } catch (teardownError) {
+              const rollback = await match.sourceControl.sessions.transferOwner({
+                sessionId,
+                expectedUserId: userId,
+                toUserId: expectedOwnerId,
+              });
+              authoritativeOwnerId = rollback.session?.userId;
+            } catch (rollbackError) {
               throw new AggregateError(
-                [mirrorError, teardownError],
-                `Factory session ${sessionId} was deleted during a failed ownership transfer, and its live host could not be removed.`,
+                [mirrorError, rollbackError],
+                `Factory session ${sessionId} ownership is inconsistent after a failed transfer and rollback.`,
               );
+            }
+
+            if (!authoritativeOwnerId) {
+              try {
+                if (liveSession && controller) await controller.deleteSession({ sessionId });
+              } catch (teardownError) {
+                throw new AggregateError(
+                  [mirrorError, teardownError],
+                  `Factory session ${sessionId} was deleted during a failed ownership transfer, and its live host could not be removed.`,
+                );
+              }
+              throw mirrorError;
+            }
+
+            if (liveSession) {
+              try {
+                await liveSession.thread.transferOwnership({ toOwnerId: authoritativeOwnerId });
+              } catch (reconciliationError) {
+                throw new AggregateError(
+                  [mirrorError, reconciliationError],
+                  `Factory session ${sessionId} ownership is inconsistent after a failed transfer.`,
+                );
+              }
             }
             throw mirrorError;
           }
 
-          if (liveSession) {
-            try {
-              await liveSession.thread.transferOwnership({ toOwnerId: authoritativeOwnerId });
-            } catch (reconciliationError) {
-              throw new AggregateError(
-                [mirrorError, reconciliationError],
-                `Factory session ${sessionId} ownership is inconsistent after a failed transfer.`,
-              );
-            }
+          // The live host still carries the old owner; the next message starts one for the new.
+          if (liveSession && controller) {
+            await controller.deleteSession({ sessionId }).catch(error => {
+              console.error('[Factory Sessions] Failed to recycle transferred live session', { sessionId, error });
+            });
           }
-          throw mirrorError;
-        }
 
-        if (liveSession && options.controller) {
-          let recycleStarted = false;
-          let recycleAttempt = 0;
-          let unsubscribe = () => {};
-          const tryRecycle = async (): Promise<void> => {
-            try {
-              const currentSession = await options.controller!.getSession(sessionId);
-              if (currentSession !== liveSession) return;
-              await options.controller!.deleteSession({ sessionId });
-            } catch (error) {
-              recycleAttempt++;
-              const delayMs = Math.min(100 * 2 ** (recycleAttempt - 1), 5_000);
-              console.error('[Factory Sessions] Failed to recycle transferred live session; retrying', {
-                sessionId,
-                attempt: recycleAttempt,
-                delayMs,
-                error,
-              });
-              const timer = setTimeout(() => void tryRecycle(), delayMs);
-              timer.unref?.();
-            }
-          };
-          const recycle = async () => {
-            if (recycleStarted) return;
-            recycleStarted = true;
-            unsubscribe();
-            await tryRecycle();
-          };
-          unsubscribe = liveSession.subscribe(event => {
-            if (event.type === 'agent_end') void recycle();
-          });
-          if (!liveSession.stream.isActive()) await recycle();
-        }
-
-        await options.audit
-          ?.record({
-            orgId,
-            actorId: userId,
-            action: 'factory.session.owner_transferred',
-            targets: [{ type: 'session', id: session.id, name: session.title ?? session.branch }],
-            metadata: { fromOwnerId: session.userId, toOwnerId: userId, createdByUserId: session.createdByUserId },
-            projectRepositoryId: session.projectRepositoryId ?? undefined,
-          })
-          .catch(error => {
-            console.error('[Factory Sessions] Failed to record ownership transfer audit event', { sessionId, error });
-          });
-        return c.json({ session: transferred.session });
+          await options.audit
+            ?.record({
+              orgId,
+              actorId: userId,
+              action: 'factory.session.owner_transferred',
+              targets: [{ type: 'session', id: session.id, name: session.title ?? session.branch }],
+              metadata: { fromOwnerId: expectedOwnerId, toOwnerId: userId, createdByUserId: session.createdByUserId },
+              projectRepositoryId: session.projectRepositoryId ?? undefined,
+            })
+            .catch(error => {
+              console.error('[Factory Sessions] Failed to record ownership transfer audit event', { sessionId, error });
+            });
+          return c.json({ session: transferred.session });
+        });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {

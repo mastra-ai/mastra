@@ -30,6 +30,8 @@ vi.mock('../session/filesystem-capture.js', async importOriginal => {
 
 const user = { workosId: 'user-1', organizationId: 'org-1' };
 
+type Viewer = typeof user;
+
 type RouteOptions = Parameters<typeof buildSourceControlSessionRoutes>[0];
 
 function buildApp(
@@ -37,12 +39,13 @@ function buildApp(
   { memorySettings, projects, users, audit }: Pick<RouteOptions, 'memorySettings' | 'projects' | 'users' | 'audit'>,
   controller?: RouteOptions['controller'],
   workItems?: RouteOptions['workItems'],
-  viewer: { workosId: string; organizationId: string } = user,
+  viewer: Viewer | ((headers: Headers) => Viewer) = user,
   moveThread?: RouteOptions['moveThread'],
 ) {
   const app = new Hono();
   app.use('*', async (context, next) => {
-    context.set('factoryAuthUser' as never, viewer as never);
+    const authUser = typeof viewer === 'function' ? viewer(context.req.raw.headers) : viewer;
+    context.set('factoryAuthUser' as never, authUser as never);
     await next();
   });
   mountApiRoutes(
@@ -99,6 +102,38 @@ async function seedGitLabRepository() {
     sandboxWorkdir: '/workspace/factory-gitlab-primary',
   });
   return { seed, sourceControl, projectRepository, project };
+}
+
+async function startOwnershipController(id: string) {
+  const controller = new AgentController<MastraCodeState>({
+    id,
+    stateSchema,
+    storage: new InMemoryStore({ id }),
+    workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+    modes: [
+      {
+        id: 'build',
+        name: 'Build',
+        default: true,
+        agent: new Agent({
+          id: 'test-agent',
+          name: 'Test agent',
+          instructions: 'Test Factory session ownership.',
+          model: { id: 'openai/gpt-5.5' },
+        }),
+      },
+    ],
+  });
+  await controller.init();
+  return controller;
+}
+
+function takeOwnership(app: Hono, sessionId: string, expectedOwnerId: string, headers: Record<string, string> = {}) {
+  return app.request(`/web/user-sessions/${sessionId}/owner`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...headers },
+    body: JSON.stringify({ expectedOwnerId }),
+  });
 }
 
 describe('source-control session routes', () => {
@@ -270,7 +305,40 @@ describe('source-control session routes', () => {
     await expect(sourceControl.sessions.getBySessionId(threadId)).resolves.toBeNull();
   });
 
-  it('takes org-visible ownership with DB CAS, mirrors the thread, audits, and recycles after the active run', async () => {
+  it('refuses to change owner while the session is running', async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const sessionId = 'factory-running-transfer';
+    await sourceControl.sessions.create({
+      sessionId,
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/running-transfer',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const controller = await startOwnershipController('factory-running-transfer');
+    const liveSession = await controller.createSession({ id: sessionId, resourceId: sessionId, ownerId: 'user-1' });
+    const threadId = liveSession.thread.getId()!;
+    vi.spyOn(controller, 'listActiveThreadRuns').mockReturnValue([{ runId: 'run-1', resourceId: sessionId, threadId }]);
+    const audit = { record: vi.fn().mockResolvedValue(null) };
+    const app = buildApp([sourceControl], { ...seed, audit }, controller, undefined, {
+      workosId: 'user-2',
+      organizationId: 'org-1',
+    });
+
+    const response = await takeOwnership(app, sessionId, 'user-1');
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Wait for the session to finish its run before taking ownership',
+    });
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ userId: 'user-1' });
+    await expect(liveSession.thread.getOwner()).resolves.toBe('user-1');
+    expect(await controller.getSession(sessionId)).toBe(liveSession);
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('takes org-visible ownership with DB CAS, mirrors the thread, audits, and recycles the live host', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     const sessionId = 'factory-session-transfer';
     await sourceControl.sessions.create({
@@ -282,43 +350,16 @@ describe('source-control session routes', () => {
       baseBranch: 'main',
       visibility: 'org',
     });
-    const controller = new AgentController<MastraCodeState>({
-      id: 'code-owner-transfer',
-      stateSchema,
-      storage: new InMemoryStore({ id: 'factory-owner-transfer' }),
-      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
-      modes: [
-        {
-          id: 'build',
-          name: 'Build',
-          default: true,
-          agent: new Agent({
-            id: 'test-agent',
-            name: 'Test agent',
-            instructions: 'Test Factory session ownership.',
-            model: { id: 'openai/gpt-5.5' },
-          }),
-        },
-      ],
-    });
-    await controller.init();
-    const liveSession = await controller.createSession({
-      id: sessionId,
-      resourceId: sessionId,
-      ownerId: 'user-1',
-    });
-    vi.spyOn(liveSession.stream, 'isActive').mockReturnValue(true);
+    const controller = await startOwnershipController('factory-owner-transfer');
+    const liveSession = await controller.createSession({ id: sessionId, resourceId: sessionId, ownerId: 'user-1' });
+    const threadId = liveSession.thread.getId()!;
     const audit = { record: vi.fn().mockResolvedValue(null) };
     const app = buildApp([sourceControl], { ...seed, audit }, controller, undefined, {
       workosId: 'user-2',
       organizationId: 'org-1',
     });
 
-    const response = await app.request(`/web/user-sessions/${sessionId}/owner`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ expectedOwnerId: 'user-1' }),
-    });
+    const response = await takeOwnership(app, sessionId, 'user-1');
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       session: { userId: 'user-2', createdByUserId: 'user-1' },
@@ -327,8 +368,10 @@ describe('source-control session routes', () => {
       userId: 'user-2',
       createdByUserId: 'user-1',
     });
-    await expect(liveSession.thread.getOwner()).resolves.toBe('user-2');
-    expect(await controller.getSession(sessionId)).toBe(liveSession);
+    await expect(controller.queryThreadById({ threadId })).resolves.toMatchObject({
+      metadata: expect.objectContaining({ ownerId: 'user-2', createdBy: 'user-1' }),
+    });
+    expect(await controller.getSession(sessionId)).toBeUndefined();
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: 'user-2',
@@ -337,17 +380,50 @@ describe('source-control session routes', () => {
       }),
     );
 
-    const stale = await app.request(`/web/user-sessions/${sessionId}/owner`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ expectedOwnerId: 'user-1' }),
-    });
+    const stale = await takeOwnership(app, sessionId, 'user-1');
     expect(stale.status).toBe(409);
-
-    liveSession.emit({ type: 'agent_end', reason: 'complete' });
-    await vi.waitFor(async () => {
-      expect(await controller.getSession(sessionId)).toBeUndefined();
+    await expect(stale.json()).resolves.toMatchObject({
+      error: 'Someone else owns this session now',
+      reason: 'stale_owner',
+      currentOwnerId: 'user-2',
     });
+  });
+
+  it('serializes overlapping transfers so the thread never ends on an older owner', async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const sessionId = 'factory-overlapping-transfer';
+    await sourceControl.sessions.create({
+      sessionId,
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/overlapping-transfer',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const controller = await startOwnershipController('factory-overlapping-transfer');
+    await controller.createSession({ id: sessionId, resourceId: sessionId, ownerId: 'user-1', threadId: sessionId });
+    // The first transfer stalls between its row write and its thread mirror, where a second one could overtake it.
+    const getSession = controller.getSession.bind(controller);
+    vi.spyOn(controller, 'getSession').mockImplementationOnce(async input => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      return getSession(input);
+    });
+    const app = buildApp([sourceControl], seed, controller, undefined, headers => ({
+      workosId: headers.get('x-viewer')!,
+      organizationId: 'org-1',
+    }));
+
+    const [first, second] = await Promise.all([
+      takeOwnership(app, sessionId, 'user-1', { 'x-viewer': 'user-2' }),
+      takeOwnership(app, sessionId, 'user-2', { 'x-viewer': 'user-3' }),
+    ]);
+    expect([first.status, second.status]).toEqual([200, 200]);
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ userId: 'user-3' });
+    await expect(controller.queryThreadById({ threadId: sessionId })).resolves.toMatchObject({
+      metadata: expect.objectContaining({ ownerId: 'user-3', createdBy: 'user-1' }),
+    });
+    expect(await controller.getSession(sessionId)).toBeUndefined();
   });
 
   it('treats acquisition by the current owner as a CAS-checked no-op', async () => {
@@ -361,26 +437,7 @@ describe('source-control session routes', () => {
       baseBranch: 'main',
       visibility: 'org',
     });
-    const controller = new AgentController<MastraCodeState>({
-      id: 'code-same-owner-transfer',
-      stateSchema,
-      storage: new InMemoryStore({ id: 'factory-same-owner-transfer' }),
-      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
-      modes: [
-        {
-          id: 'build',
-          name: 'Build',
-          default: true,
-          agent: new Agent({
-            id: 'test-agent',
-            name: 'Test agent',
-            instructions: 'Test idempotent Factory session ownership.',
-            model: { id: 'openai/gpt-5.5' },
-          }),
-        },
-      ],
-    });
-    await controller.init();
+    const controller = await startOwnershipController('factory-same-owner-transfer');
     const liveSession = await controller.createSession({
       id: session.sessionId,
       resourceId: session.sessionId,
@@ -397,11 +454,7 @@ describe('source-control session routes', () => {
       organizationId: 'org-1',
     });
 
-    const response = await app.request(`/web/user-sessions/${session.sessionId}/owner`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ expectedOwnerId: 'user-1' }),
-    });
+    const response = await takeOwnership(app, session.sessionId, 'user-1');
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ session: { userId: 'user-1' } });
@@ -425,67 +478,9 @@ describe('source-control session routes', () => {
       expectedUserId: 'user-1',
       toUserId: 'user-2',
     });
-    const staleResponse = await app.request(`/web/user-sessions/${session.sessionId}/owner`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ expectedOwnerId: 'user-1' }),
-    });
+    const staleResponse = await takeOwnership(app, session.sessionId, 'user-1');
     expect(staleResponse.status).toBe(409);
     await expect(staleResponse.json()).resolves.toMatchObject({ currentOwnerId: 'user-2', reason: 'stale_owner' });
-  });
-
-  it('recycles when an active run ends during the active-state check', async () => {
-    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
-    const sessionId = 'factory-idle-transfer';
-    await sourceControl.sessions.create({
-      sessionId,
-      projectRepositoryId: projectRepository.id,
-      orgId: 'org-1',
-      userId: 'user-1',
-      branch: 'factory/idle-transfer',
-      baseBranch: 'main',
-      visibility: 'org',
-    });
-    const controller = new AgentController<MastraCodeState>({
-      id: 'code-idle-transfer',
-      stateSchema,
-      storage: new InMemoryStore({ id: 'factory-idle-transfer' }),
-      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
-      modes: [
-        {
-          id: 'build',
-          name: 'Build',
-          default: true,
-          agent: new Agent({
-            id: 'test-agent',
-            name: 'Test agent',
-            instructions: 'Test idle Factory session ownership.',
-            model: { id: 'openai/gpt-5.5' },
-          }),
-        },
-      ],
-    });
-    await controller.init();
-    const liveSession = await controller.createSession({ id: sessionId, resourceId: sessionId, ownerId: 'user-1' });
-    const threadId = liveSession.thread.getId()!;
-    vi.spyOn(liveSession.stream, 'isActive').mockImplementation(() => {
-      liveSession.emit({ type: 'agent_end', reason: 'complete' });
-      return false;
-    });
-    const app = buildApp([sourceControl], seed, controller, undefined, { workosId: 'user-2', organizationId: 'org-1' });
-
-    const response = await app.request(`/web/user-sessions/${sessionId}/owner`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ expectedOwnerId: 'user-1' }),
-    });
-    expect(response.status).toBe(200);
-    await vi.waitFor(async () => {
-      expect(await controller.getSession(sessionId)).toBeUndefined();
-    });
-    await expect(controller.queryThreadById({ threadId })).resolves.toMatchObject({
-      metadata: expect.objectContaining({ ownerId: 'user-2', createdBy: 'user-1' }),
-    });
   });
 
   it('starts the session as its new owner when nobody is live, stamps the thread, and recycles it', async () => {
@@ -500,41 +495,16 @@ describe('source-control session routes', () => {
       baseBranch: 'main',
       visibility: 'org',
     });
-    const controller = new AgentController<MastraCodeState>({
-      id: 'code-cold-transfer',
-      stateSchema,
-      storage: new InMemoryStore({ id: 'factory-cold-transfer' }),
-      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
-      modes: [
-        {
-          id: 'build',
-          name: 'Build',
-          default: true,
-          agent: new Agent({
-            id: 'test-agent',
-            name: 'Test agent',
-            instructions: 'Test cold Factory session ownership.',
-            model: { id: 'openai/gpt-5.5' },
-          }),
-        },
-      ],
-    });
-    await controller.init();
+    const controller = await startOwnershipController('factory-cold-transfer');
     const app = buildApp([sourceControl], seed, controller, undefined, { workosId: 'user-2', organizationId: 'org-1' });
 
-    const response = await app.request(`/web/user-sessions/${sessionId}/owner`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ expectedOwnerId: 'user-1' }),
-    });
+    const response = await takeOwnership(app, sessionId, 'user-1');
     expect(response.status).toBe(200);
     await expect(controller.queryThreadById({ threadId: sessionId })).resolves.toMatchObject({
       resourceId: project.id,
       metadata: expect.objectContaining({ ownerId: 'user-2' }),
     });
-    await vi.waitFor(async () => {
-      expect(await controller.getSession(sessionId)).toBeUndefined();
-    });
+    expect(await controller.getSession(sessionId)).toBeUndefined();
   });
 
   it('rejects takeover of an org-visible session from another organization', async () => {
@@ -549,11 +519,7 @@ describe('source-control session routes', () => {
       visibility: 'org',
     });
     const app = buildApp([sourceControl], seed, undefined, undefined, { workosId: 'user-2', organizationId: 'org-2' });
-    const response = await app.request(`/web/user-sessions/${session.sessionId}/owner`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ expectedOwnerId: 'user-1' }),
-    });
+    const response = await takeOwnership(app, session.sessionId, 'user-1');
     expect(response.status).toBe(404);
     await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({ userId: 'user-1' });
   });
@@ -570,11 +536,7 @@ describe('source-control session routes', () => {
       visibility: 'private',
     });
     const app = buildApp([sourceControl], seed, undefined, undefined, { workosId: 'user-2', organizationId: 'org-1' });
-    const response = await app.request(`/web/user-sessions/${session.sessionId}/owner`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ expectedOwnerId: 'user-1' }),
-    });
+    const response = await takeOwnership(app, session.sessionId, 'user-1');
     expect(response.status).toBe(404);
     await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
       userId: 'user-1',
