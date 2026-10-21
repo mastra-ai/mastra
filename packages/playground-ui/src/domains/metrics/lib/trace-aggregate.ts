@@ -7,6 +7,7 @@ import type { TraceQueryPredicate, TraceQueryScalarPredicate } from '@mastra/cor
 import type { MetricsDimensionalFilter } from '@mastra/react/hooks/metrics';
 import type { BucketLabels } from './metrics-buckets';
 import { bucketGrid, bucketPlan, gridIndex, intervalHours } from './metrics-buckets';
+import type { AggregateCost } from '@/lib/cost';
 
 export type TraceAggregateRow = AggregateTracesResponse['rows'][number];
 
@@ -106,4 +107,13 @@ export function bucketTraceAggregateRows(rows: TraceAggregateRow[], window: Wind
     buckets[indexOf({ timestamp: row.bucket, value: 0 }) ?? -1]?.rows.push(row);
   }
   return buckets;
+}
+
+/** A row's `cost.sum` with its pricing info, reading the API's nulls as absent. */
+export function traceAggregateRowCost(row: TraceAggregateRow | undefined): AggregateCost {
+  return {
+    value: row?.measures['cost.sum'] ?? undefined,
+    coverage: row?.cost?.coverage ?? undefined,
+    unit: row?.cost?.unit ?? undefined,
+  };
 }

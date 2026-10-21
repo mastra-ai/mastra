@@ -6,6 +6,7 @@ import {
   TRACE_AGGREGATE_SERIES_LIMIT,
   toTraceAggregateTimeRange,
   traceAggregateInterval,
+  traceAggregateRowCost,
 } from './trace-aggregate';
 
 const HOUR = 3_600_000;
@@ -120,5 +121,27 @@ describe('grouped time series limits', () => {
 
   it.each([1, 14, 30, 365])('fits a %i-day window at the series limit', days => {
     expect(plan(days, TRACE_AGGREGATE_SERIES_LIMIT)).not.toThrow();
+  });
+});
+
+describe('traceAggregateRowCost', () => {
+  describe('when the row has a priced total', () => {
+    it('keeps the total, coverage and currency', () => {
+      const row = { measures: { 'cost.sum': 4.2 }, cost: { coverage: 0.5, unit: 'USD' } };
+      expect(traceAggregateRowCost(row)).toEqual({ value: 4.2, coverage: 0.5, unit: 'USD' });
+    });
+  });
+
+  describe('when the row has nothing priced', () => {
+    it('reads the nulls as absent', () => {
+      const row = { measures: { 'cost.sum': null }, cost: { coverage: null, unit: null } };
+      expect(traceAggregateRowCost(row)).toEqual({});
+    });
+  });
+
+  describe('when there is no row', () => {
+    it('has no cost', () => {
+      expect(traceAggregateRowCost(undefined)).toEqual({});
+    });
   });
 });
