@@ -3,17 +3,15 @@ title: 'Signals'
 description: 'Send real-time messages or contextual data into a Mastra agent thread immediately or queue them for the next turn with configurable signal behavior.'
 packages:
   - '@mastra/core'
-  - '@mastra/client-js'
-  - '@mastra/code-sdk'
 ---
 
 # Signals
 
 **Added in:** `@mastra/core@1.39.0`
 
-Signals let you interact with an agent through a thread. Instead of starting every interaction with `agent.stream()`, subscribe to a thread and send messages or signals. Mastra wakes an idle agent or delivers input to its running loop; alternatively, it queues the input for the next turn.
+Signals are typed input you send into an agent thread instead of packing everything into a single `agent.stream()` call. A signal can be a user follow-up, an event from another system, a policy reminder, or state that a processor computed. Because the thread stores the conversation, Mastra can wake an idle agent with the signal, deliver it into a run that is already active, or hold it for the next turn. A thread subscription streams the output and lifecycle back to your app, so the UI stays current while the agent keeps working.
 
-Use message APIs for user-authored input. Use `sendSignal()` for lower-level system context, such as background task notifications, policy reminders, or processor-generated context.
+The value is one durable thread that accepts input from many sources. Users can steer a run, background jobs can attach context, and external systems can wake or notify the agent without restarting the conversation. Subscribers see a single ordered stream regardless of where that input came from. For the method-by-method choice, see [Choose a method](/docs/signals/sending-signals#choose-a-method).
 
 :::tip[📹 Watch]
 
@@ -53,8 +51,6 @@ Add a timeline diagram with three cases:
 Use signals when an agent thread needs new input or context outside the original `stream()` call. Signals are useful when users send follow-up messages while a run is active, when background systems need to add context to a thread, or when external events should wake, update, or notify the agent.
 
 Use `sendMessage()` and `queueMessage()` for user-authored input. Use `sendSignal()` for lower-level system context. Use `sendStateSignal()` for durable state lanes, and use `sendNotificationSignal()` when an external event should create a durable notification inbox record.
-
-For help picking between these methods, see [Choose a method](/docs/signals/sending-signals#choose-a-method).
 
 ## Quickstart
 
@@ -102,18 +98,18 @@ Show the same subscribe-first flow through `client.getAgent()`. Keep this short 
 | - | - | - |
 | Direct `Agent` methods | Server-side code that owns the agent instance | [Agent reference](/reference/agents/agent#thread-signals) |
 | HTTP or the JavaScript client SDK | Applications that call a running Mastra server | [Server agent routes](/reference/server/routes#agent-message-routes), [`client.getAgent()`](/reference/client-js/agents) |
-| AgentController `Session` | Mastra Code and other AgentController surfaces | [Agent Controller](/docs/harness/agent-controller) |
+| AgentController `Session` | Long-running assistants and coding agents built on AgentController | [Agent Controller](/docs/harness/agent-controller) |
 
-The `Agent` methods are the canonical Signals API. `Session` is a higher-level convenience surface that manages a thread and subscription for you. See [Agent and AgentController surfaces](/docs/signals/sending-signals#agent-and-agentcontroller-surfaces) for the method mapping.
+The `Agent` methods are the canonical Signals API. `Session` is a higher-level convenience surface built on AgentController that manages a thread and subscription for you. It is not the recommended starting point for most applications; see [Agent and AgentController surfaces](/docs/signals/sending-signals#agent-and-agentcontroller-surfaces) for the method mapping.
 
 ## How signals relate to other features
 
-- [Memory](/docs/memory/overview): signals are stored as messages on a memory-backed thread.
+- [Memory](/docs/memory/overview): signal input is stored as messages on a memory-backed thread; state signals and notifications keep their own durable lanes and records.
 - [Processors](/docs/agents/processors): processors can send signals and compute state during a run.
 - [Workflows](/docs/workflows/overview): workflows can send signals into a thread as part of a larger process.
 - [PubSub](/docs/server/pubsub): a shared PubSub backend coordinates signals across processes.
 - [Harness](/docs/harness/overview): harness features such as goals and schedules deliver input through signals.
-- [Agent Controller](/docs/harness/agent-controller): `Session` wraps thread signals for Mastra Code.
+- [Agent Controller](/docs/harness/agent-controller): `Session` wraps thread signals for long-running assistants.
 
 ## Next steps
 
@@ -122,7 +118,3 @@ The `Agent` methods are the canonical Signals API. `Session` is a higher-level c
 - [Notifications](/docs/signals/notifications)
 - [Notifications reference](/reference/signals/notifications)
 - [Thread events reference](/reference/signals/thread-events)
-
-## Cross-agent communication in Mastra Code
-
-Cross-agent communication is a Mastra Code feature. Visit [Cross-agent communication](https://code.mastra.ai/configuration#cross-agent-communication) in the Mastra Code configuration docs.
