@@ -8,6 +8,7 @@ import { useTracesRouteState } from './hooks/use-traces-route-state';
 import { useTracesScopeParams } from './hooks/use-traces-scope-params';
 import { TracesPageContent } from './traces-page-content';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
+import { StudioTracePanelHost } from '@/domains/traces/components/studio-trace-panel-host';
 
 type TracesPageProps = {
   scopedEntityId?: string;
@@ -40,16 +41,18 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   );
 
   return (
-    <TracesExplorer
-      metricsSupport={metricsSupport}
-      selection={route.selection}
-      filters={route.filters}
-      onChange={route.setState}
-      sortDirection={route.sortDirection}
-      onSortDirectionChange={route.setSortDirection}
-      scope={scope}
-    >
-      <TracesPageContent isScoped={isScoped} />
-    </TracesExplorer>
+    <StudioTracePanelHost>
+      <TracesExplorer
+        metricsSupport={metricsSupport}
+        selection={route.selection}
+        filters={route.filters}
+        onChange={route.setState}
+        sortDirection={route.sortDirection}
+        onSortDirectionChange={route.setSortDirection}
+        scope={scope}
+      >
+        <TracesPageContent isScoped={isScoped} />
+      </TracesExplorer>
+    </StudioTracePanelHost>
   );
 }

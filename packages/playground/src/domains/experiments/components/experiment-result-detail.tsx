@@ -8,6 +8,7 @@ import type { ExperimentResultPanelProps } from '@/domains/experiments/component
 import { ExperimentScorePanel } from '@/domains/experiments/components/experiment-score-panel';
 import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
 import type { ExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
+import { StudioTracePanelHost } from '@/domains/traces/components/studio-trace-panel-host';
 
 export type ExperimentResultDetailProps = Omit<
   ExperimentResultPanelProps,
@@ -107,31 +108,33 @@ export function ExperimentResultDetail({
         onShowTrace={featuredScore ? () => showTrace(featuredScore.traceId) : undefined}
       />
 
-      <TraceSpanPanel
-        size="wide"
-        depth={2}
-        traceId={featuredTraceId ?? undefined}
-        spans={traceSpans}
-        isLoadingSpans={isTraceLoading}
-        selectedSpanId={featuredSpanId ?? null}
-        onClose={() => {
-          setFeaturedTraceId(null);
-          setFeaturedSpanId(undefined);
-        }}
-        onSpanSelect={setFeaturedSpanId}
-        showUnavailableFeaturesMsg={false}
-        traceHref={featuredTraceId ? `/traces?traceId=${encodeURIComponent(featuredTraceId)}` : undefined}
-        anchorSpanId={anchorSpan?.spanId}
-        withQueryTrace={withQueryTrace}
-        withFeedback={withFeedback}
-        onScoreSelect={scoreId => {
-          if (scores?.some(score => score.id === scoreId)) {
+      <StudioTracePanelHost>
+        <TraceSpanPanel
+          size="wide"
+          depth={2}
+          traceId={featuredTraceId ?? undefined}
+          spans={traceSpans}
+          isLoadingSpans={isTraceLoading}
+          selectedSpanId={featuredSpanId ?? null}
+          onClose={() => {
             setFeaturedTraceId(null);
             setFeaturedSpanId(undefined);
-            setFeaturedScoreId(scoreId);
-          }
-        }}
-      />
+          }}
+          onSpanSelect={setFeaturedSpanId}
+          showUnavailableFeaturesMsg={false}
+          traceHref={featuredTraceId ? `/traces?traceId=${encodeURIComponent(featuredTraceId)}` : undefined}
+          anchorSpanId={anchorSpan?.spanId}
+          withQueryTrace={withQueryTrace}
+          withFeedback={withFeedback}
+          onScoreSelect={scoreId => {
+            if (scores?.some(score => score.id === scoreId)) {
+              setFeaturedTraceId(null);
+              setFeaturedSpanId(undefined);
+              setFeaturedScoreId(scoreId);
+            }
+          }}
+        />
+      </StudioTracePanelHost>
     </>
   );
 }

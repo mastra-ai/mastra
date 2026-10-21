@@ -1,6 +1,7 @@
 import { TraceSpanPanel } from '@mastra/playground-ui/domains/traces/components/trace-span-panel';
 import { useExperimentTrace } from '@mastra/react/hooks/experiments';
 import { useState } from 'react';
+import { StudioTracePanelHost } from '@/domains/traces/components/studio-trace-panel-host';
 
 export interface ComparisonTracePanelProps {
   /** Trace to show. The panel stays closed while undefined. */
@@ -29,19 +30,21 @@ export function ComparisonTracePanel({ traceId, onClose, withQueryTrace, withFee
   };
 
   return (
-    <TraceSpanPanel
-      size="wide"
-      traceId={traceId}
-      spans={spans}
-      isLoadingSpans={isLoading}
-      selectedSpanId={selectedSpanId ?? null}
-      onClose={close}
-      onSpanSelect={setSelectedSpanId}
-      showUnavailableFeaturesMsg={false}
-      traceHref={traceId ? `/traces?traceId=${encodeURIComponent(traceId)}` : undefined}
-      anchorSpanId={anchorSpan?.spanId}
-      withQueryTrace={withQueryTrace}
-      withFeedback={withFeedback}
-    />
+    <StudioTracePanelHost>
+      <TraceSpanPanel
+        size="wide"
+        traceId={traceId}
+        spans={spans}
+        isLoadingSpans={isLoading}
+        selectedSpanId={selectedSpanId ?? null}
+        onClose={close}
+        onSpanSelect={setSelectedSpanId}
+        showUnavailableFeaturesMsg={false}
+        traceHref={traceId ? `/traces?traceId=${encodeURIComponent(traceId)}` : undefined}
+        anchorSpanId={anchorSpan?.spanId}
+        withQueryTrace={withQueryTrace}
+        withFeedback={withFeedback}
+      />
+    </StudioTracePanelHost>
   );
 }

@@ -99,7 +99,6 @@ import { PlaygroundConfigGuard } from '@/domains/configuration/components/playgr
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
-import { StudioTracePanelHost } from '@/domains/traces/components/studio-trace-panel-host';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
 import { Processors } from '@/pages/processors';
 import { Processor } from '@/pages/processors/processor';
@@ -136,16 +135,14 @@ const RootLayout = () => {
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
-      <StudioTracePanelHost>
-        <KeyboardShortcutsProvider>
-          <GlobalShortcuts />
-          <Layout>
-            <RoutePermissionGuard>
-              <Outlet />
-            </RoutePermissionGuard>
-          </Layout>
-        </KeyboardShortcutsProvider>
-      </StudioTracePanelHost>
+      <KeyboardShortcutsProvider>
+        <GlobalShortcuts />
+        <Layout>
+          <RoutePermissionGuard>
+            <Outlet />
+          </RoutePermissionGuard>
+        </Layout>
+      </KeyboardShortcutsProvider>
     </LinkComponentProvider>
   );
 };
@@ -157,11 +154,9 @@ const MinimalRootLayout = () => {
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
-      <StudioTracePanelHost>
-        <MinimalLayout>
-          <Outlet />
-        </MinimalLayout>
-      </StudioTracePanelHost>
+      <MinimalLayout>
+        <Outlet />
+      </MinimalLayout>
     </LinkComponentProvider>
   );
 };

@@ -25,6 +25,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
+import { StudioTracePanelHost } from '@/domains/traces/components/studio-trace-panel-host';
 
 const crumbs = [navCrumb('/logs')];
 
@@ -218,17 +219,19 @@ export default function LogsPage() {
         onPrevious={handlePreviousLog}
         onNext={handleNextLog}
       />
-      <TraceSpanPanel
-        depth={2}
-        traceId={featuredLog ? (url.featuredTraceId ?? undefined) : undefined}
-        spans={traceSpansData?.spans}
-        isLoadingSpans={isLoadingTraceSpans}
-        selectedSpanId={url.featuredSpanId ?? null}
-        onSpanSelect={handleSpanSelect}
-        onClose={handleTraceClose}
-        withQueryTrace={traceQuery.enabled}
-        withFeedback={traceQuery.enabled}
-      />
+      <StudioTracePanelHost>
+        <TraceSpanPanel
+          depth={2}
+          traceId={featuredLog ? (url.featuredTraceId ?? undefined) : undefined}
+          spans={traceSpansData?.spans}
+          isLoadingSpans={isLoadingTraceSpans}
+          selectedSpanId={url.featuredSpanId ?? null}
+          onSpanSelect={handleSpanSelect}
+          onClose={handleTraceClose}
+          withQueryTrace={traceQuery.enabled}
+          withFeedback={traceQuery.enabled}
+        />
+      </StudioTracePanelHost>
     </PageLayout>
   );
 }
