@@ -2066,9 +2066,10 @@ export function createDurableToolCallStep() {
                 type: 'tool-result' as const,
                 runId,
                 from: ChunkFrom.AGENT,
-                payload: { toolCallId, toolName, args, result, providerExecuted },
+                payload: { toolCallId, toolName, args, result, providerMetadata, providerExecuted },
               },
               {
+                transformInput: { args, providerMetadata: typedInput.providerMetadata },
                 policy: toolPayloadTransform,
                 toolTransform: (tool as { transform?: any })?.transform,
                 tools: toolsForTransform,

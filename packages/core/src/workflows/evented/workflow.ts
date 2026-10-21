@@ -2505,9 +2505,7 @@ export class EventedRun<
     // Validate label exists if provided
     if (params.label && !snapshotResumeLabel) {
       const availableLabels = Object.keys(snapshot?.resumeLabels ?? {});
-      throw new Error(
-        `Resume label "${params.label}" not found. ` + `Available labels: [${availableLabels.join(', ')}]`,
-      );
+      throw new Error(`Resume label "${params.label}" not found. Available labels: [${availableLabels.join(', ')}]`);
     }
 
     // Label takes precedence over step param
