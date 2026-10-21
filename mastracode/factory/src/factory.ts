@@ -24,6 +24,7 @@ import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
+import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
@@ -260,6 +261,15 @@ export interface MastraFactoryConfig {
    * approval cannot bypass that gate.
    */
   disableBuiltinTools?: BuiltinToolId[];
+  /**
+   * Browser for Factory session agents, such as
+   * `new AgentBrowser({ headless: true, scope: 'thread' })` from
+   * `@mastra/agent-browser`. Sessions get the browser tools when set. The
+   * browser runs in the Factory Server process, not in the session sandbox.
+   * It must use `scope: 'thread'`: a shared browser would share pages and
+   * cookies across every Factory user.
+   */
+  browser?: MastraBrowser;
   /** Background Factory dispatcher configuration. */
   dispatcher?: MastraFactoryDispatcherConfig;
   /**
@@ -503,6 +513,11 @@ export class MastraFactory {
       throw new Error(
         "MastraFactory: 'rules' was removed. Set 'configVersion' for the audit label and declare tool-result " +
           'rules on the owning board via defineBoard({ tools }).',
+      );
+    }
+    if (config.browser && config.browser.getScope() !== 'thread') {
+      throw new Error(
+        "MastraFactory: 'browser' must use scope: 'thread'. A shared browser would share pages and cookies across Factory users.",
       );
     }
     this.#configVersion = assertFactoryConfigVersion(config.configVersion ?? DEFAULT_FACTORY_CONFIG_VERSION);
@@ -1270,6 +1285,7 @@ export class MastraFactory {
         controllerId: CONTROLLER_ID,
         coAuthor: { name: 'mastra-platform[bot]' },
         ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
+        ...(this.#config.browser ? { browser: this.#config.browser } : {}),
         modes: false,
         // Subagents are disabled, matching the Mastra Code TUI default.
         subagents: [],

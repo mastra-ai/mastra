@@ -2444,6 +2444,9 @@ importers:
       '@internal/workspace':
         specifier: workspace:*
         version: link:../../packages/_internals/workspace
+      '@mastra/agent-browser':
+        specifier: workspace:*
+        version: link:../../browser/agent-browser
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
