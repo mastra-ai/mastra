@@ -2922,6 +2922,18 @@ export class Workflow<
     return this.serializedStepFlow;
   }
 
+  /** Reopens an existing run, including nested children, after the caller has authorized access to its run ID. */
+  async createRunForExistingRun(options: { runId: string; resourceId?: string }) {
+    const existing = await this.getWorkflowRunById(options.runId, { withNestedWorkflows: false });
+    if (!existing) {
+      throw new Error(`Workflow run "${options.runId}" does not exist`);
+    }
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.id, runId: options.runId });
+    const parentWorkflow = snapshot?.parentWorkflow ?? this.#runs.get(options.runId)?.parentWorkflow;
+    return this.createRun({ ...options, parentWorkflow });
+  }
+
   /**
    * Creates a new workflow run instance and stores a snapshot of the workflow in the storage
    * @param options Optional configuration for the run
@@ -3031,16 +3043,17 @@ export class Workflow<
       if (cachedRun || existsInStorage) {
         const actualParent = storedSnapshot?.parentWorkflow ?? cachedRun?.parentWorkflow;
         const requestedParent = options?.parentWorkflow;
-        // Direct child resume omits parentWorkflow. Older nested snapshots also lack it,
-        // but only the original parent's shared run ID can be reopened as legacy.
+        // Legacy nested snapshots lack parent metadata; only the original parent's shared
+        // run ID may reopen one. A known nested run must name its parent to be reused.
         if (
-          requestedParent &&
-          (actualParent
-            ? actualParent.workflowId !== requestedParent.workflowId ||
-              actualParent.runId !== requestedParent.runId ||
-              actualParent.stepId !== requestedParent.stepId ||
-              actualParent.foreachIndex !== requestedParent.foreachIndex
-            : runIdToUse !== requestedParent.runId)
+          requestedParent
+            ? actualParent
+              ? actualParent.workflowId !== requestedParent.workflowId ||
+                actualParent.runId !== requestedParent.runId ||
+                actualParent.stepId !== requestedParent.stepId ||
+                actualParent.foreachIndex !== requestedParent.foreachIndex
+              : runIdToUse !== requestedParent.runId
+            : !!actualParent
         ) {
           throw new Error(`Run ID "${runIdToUse}" already belongs to another workflow execution`);
         }
@@ -3971,7 +3984,7 @@ export class Run<
         return;
       }
 
-      const parentRun = await parentWorkflow.createRun({ runId: parent.runId });
+      const parentRun = await parentWorkflow.createRunForExistingRun({ runId: parent.runId });
       await parentRun.resume({
         step: parent.stepId,
         forEachIndex: parent.foreachIndex,
@@ -5428,7 +5441,7 @@ export class Run<
         throw new Error(`No snapshot found for parent workflow run: ${this.parentWorkflow.runId}`);
       }
 
-      const parentRun = await parentWorkflow.createRun({ runId: this.parentWorkflow.runId });
+      const parentRun = await parentWorkflow.createRunForExistingRun({ runId: this.parentWorkflow.runId });
       try {
         await parentRun.#claimRun({ workflowsStore, snapshot: parentSnapshot });
       } catch (error) {

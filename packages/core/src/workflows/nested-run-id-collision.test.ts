@@ -47,18 +47,26 @@ describe('nested workflow run ID collisions', () => {
     ).rejects.toThrow('already belongs to another workflow execution');
   });
 
-  it('allows direct reopening of a cached nested child run without parent metadata', async () => {
+  it('rejects foreign parentless reuse of a cached nested child run', async () => {
     const child = setup();
     const nested = await child.createRun({ runId: 'parent-run-iter-2', parentWorkflow });
-    expect(await child.createRun({ runId: nested.runId })).toBe(nested);
+    await expect(child.createRun({ runId: nested.runId })).rejects.toThrow(
+      'already belongs to another workflow execution',
+    );
+    expect(await child.createRunForExistingRun({ runId: nested.runId })).toBe(nested);
   });
 
-  it('allows direct reopening of a persisted nested child run without parent metadata', async () => {
+  it('rejects foreign parentless reuse of a persisted nested child run', async () => {
     const storage = new MockStore();
     await setup(storage).createRun({ runId: 'parent-run-iter-2', parentWorkflow });
     const reloadedChild = setup(storage);
 
-    await expect(reloadedChild.createRun({ runId: 'parent-run-iter-2' })).resolves.toBeDefined();
+    await expect(reloadedChild.createRun({ runId: 'parent-run-iter-2' })).rejects.toThrow(
+      'already belongs to another workflow execution',
+    );
+    await expect(reloadedChild.createRunForExistingRun({ runId: 'parent-run-iter-2' })).resolves.toMatchObject({
+      parentWorkflow,
+    });
   });
 
   it('allows restarting a legacy nested child whose snapshot has no parent metadata', async () => {
