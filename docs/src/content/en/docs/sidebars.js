@@ -678,6 +678,14 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'guides/mcp-events',
+              label: 'MCP events',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
               id: 'guides/streaming',
               label: 'Streaming',
             },
@@ -747,6 +755,11 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/connect/channels',
           label: 'Channels',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/connect/end-user-connections',
+          label: 'End-user connections',
         },
       ],
     },

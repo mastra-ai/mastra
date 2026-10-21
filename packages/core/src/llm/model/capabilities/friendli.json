@@ -19,23 +19,15 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "MiniMaxAI/MiniMax-M2.5": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
     "deepseek-ai/DeepSeek-V3.2": [
       {
         "type": "toggle"
       },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "google/gemma-4-31B-it": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "MiniMaxAI/MiniMax-M2.5": [
       {
         "type": "budget_tokens"
       }
@@ -73,6 +65,14 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "google/gemma-4-31B-it": [
+      {
+        "type": "toggle"
       },
       {
         "type": "budget_tokens"

@@ -102,6 +102,7 @@ function sessionLinkFromRequest(requestContext: RequestContext): string | undefi
   if (!controller?.threadId) return undefined;
   return sessionLink({
     threadId: controller.threadId,
+    sessionId: controller.sessionId,
     resourceId: controller.resourceId,
     factoryProjectId: readFactorySessionScope(requestContext)?.factoryProjectId,
   });

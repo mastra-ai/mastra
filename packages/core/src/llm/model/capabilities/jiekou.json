@@ -163,21 +163,16 @@
     "zai-org/glm-4.7-flash"
   ],
   "reasoning": {
-    "gemini-2.5-flash-lite-preview-09-2025": [
+    "gemini-2.5-pro-preview-06-05": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "claude-opus-4-6": [
+    "gemini-2.5-flash-lite-preview-06-17": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 127999
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "gemini-2.5-flash-lite": [
@@ -198,16 +193,15 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "gemini-2.5-pro-preview-06-05": [
+    "claude-opus-4-6": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "gemini-2.5-flash-lite-preview-06-17": [
+        "values": ["low", "medium", "high", "max"]
+      },
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 127999
       }
     ],
     "gemini-2.5-flash-preview-05-20": [
@@ -216,11 +210,10 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "moonshotai/kimi-k2.5": [
+    "gemini-2.5-flash-lite-preview-09-2025": [
       {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 262143
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "minimax/minimax-m2.1": [
@@ -230,6 +223,11 @@
         "max": 131071
       }
     ],
+    "zai-org/glm-4.5": [
+      {
+        "type": "toggle"
+      }
+    ],
     "deepseek/deepseek-v3.1": [
       {
         "type": "budget_tokens",
@@ -237,9 +235,11 @@
         "max": 32767
       }
     ],
-    "zai-org/glm-4.5": [
+    "moonshotai/kimi-k2.5": [
       {
-        "type": "toggle"
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 262143
       }
     ]
   }

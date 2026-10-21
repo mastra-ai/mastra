@@ -393,17 +393,19 @@ import type { Processor } from '@mastra/core/processors'
 export class ResponseValidator implements Processor {
   id = 'response-validator'
 
-  async processOutputStep({ text, abort, retryCount }) {
+  async processOutputStep({ messages, text, abort, retryCount }) {
     const isValid = await validateResponse(text)
 
     if (!isValid && retryCount < 3) {
       abort('Response did not meet requirements. Try again.', { retry: true })
     }
 
-    return []
+    return messages
   }
 }
 ```
+
+Return `messages` to leave the conversation unchanged. Returning `[]` replaces the message list with an empty array, removing the conversation history and the latest response.
 
 For more on retry behavior, see [Retry mechanism](#retry-mechanism) in Advanced patterns.
 
@@ -928,7 +930,7 @@ import type { Processor } from '@mastra/core/processors'
 export class QualityChecker implements Processor {
   id = 'quality-checker'
 
-  async processOutputStep({ text, abort, retryCount }) {
+  async processOutputStep({ messages, text, abort, retryCount }) {
     const qualityScore = await evaluateQuality(text)
 
     if (qualityScore < 0.7 && retryCount < 3) {
@@ -939,7 +941,7 @@ export class QualityChecker implements Processor {
       })
     }
 
-    return []
+    return messages
   }
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.48.0-alpha.9",
+  "version": "0.48.0-alpha.12",
   "description": "",
   "type": "module",
   "files": [
@@ -119,9 +119,9 @@
     "@mastra/voice-openai": "workspace:*",
     "ai": "^6.0.309",
     "chalk": "^5.5.0",
-    "cli-highlight": "^2.1.11",
     "execa": "^9.6.1",
     "fastest-levenshtein": "^1.0.16",
+    "highlight.js": "^10.7.3",
     "jsonriver": "^1.1.1",
     "posthog-node": "^5.46.1",
     "strip-ansi": "^7.2.0",

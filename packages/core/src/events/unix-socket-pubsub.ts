@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { link, mkdir, open, readFile, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import net from 'node:net';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 
 import { decode, encode } from './codec';
 import { PubSub } from './pubsub';
@@ -1197,7 +1197,10 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       const hex = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(6))).toString('hex');
       const name = nameLength > 1 ? `.${hex.slice(0, nameLength - 1)}` : hex.slice(0, 1);
       if (name === sharedName) continue;
-      const privatePath = join(dirname(this.socketPath), name);
+      // join() normalizes `.`-equivalent directories away, and listen() reads
+      // a bare numeric-looking name such as `.28381e422682` as a TCP port.
+      const joined = join(dirname(this.socketPath), name);
+      const privatePath = joined.includes(sep) ? joined : `.${sep}${joined}`;
       try {
         return { server: await this.#listen(privatePath), privatePath };
       } catch (error) {

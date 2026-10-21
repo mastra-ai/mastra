@@ -77,10 +77,10 @@
   "overrides": {
     "nanoid": "5.1.16",
     "shadcn": {
-      "undici": "8.11.2"
+      "undici": "8.12.2"
     },
     "@dotenvx/dotenvx": {
-      "undici": "8.11.2"
+      "undici": "8.12.2"
     },
     "oxfmt": {
       "tinypool": "2.1.2"
