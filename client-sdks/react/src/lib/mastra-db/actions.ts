@@ -131,6 +131,19 @@ export const actionsToMessages = (actions: MastraAction[]): MastraDBMessage[] =>
     for (const chunk of toChunks(action)) {
       messages = accumulateChunk({ chunk, conversation: messages, metadata: { mode: 'stream', runId: action.runId } });
     }
+    if (action.type === 'tool-denied') messages = clearPendingApproval(messages, action.toolCallId);
   }
   return finishStreamingAssistantMessage(messages);
 };
+
+/** A declined call is answered: drop it from the message's pending approvals so replay doesn't ask again. */
+const clearPendingApproval = (messages: MastraDBMessage[], toolCallId: string): MastraDBMessage[] =>
+  messages.map(message => {
+    const pending = message.content.metadata?.requireApprovalMetadata as Record<string, unknown> | undefined;
+    if (!pending || !(toolCallId in pending)) return message;
+    const { [toolCallId]: _answered, ...stillPending } = pending;
+    return {
+      ...message,
+      content: { ...message.content, metadata: { ...message.content.metadata, requireApprovalMetadata: stillPending } },
+    };
+  });
